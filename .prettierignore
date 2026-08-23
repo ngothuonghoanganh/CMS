@@ -1,0 +1,8 @@
+.next
+.coverage
+coverage
+dist
+node_modules
+.serena
+pnpm-lock.yaml
+**/next-env.d.ts

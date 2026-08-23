@@ -1,0 +1,39 @@
+{
+  "name": "payload-landing-page-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Foundation monorepo for the Payload Landing Page Platform",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.15.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "start": "turbo start",
+    "start:api": "pnpm --filter @payload/api start",
+    "start:cms": "pnpm --filter @payload/cms start",
+    "start:renderer": "pnpm --filter @payload/renderer start",
+    "install:global": "npm install --global ./packages/cli",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0",
+    "@typescript-eslint/eslint-plugin": "8.67.0",
+    "@typescript-eslint/parser": "8.67.0",
+    "eslint": "9.39.5",
+    "prettier": "3.9.6",
+    "turbo": "2.10.11",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

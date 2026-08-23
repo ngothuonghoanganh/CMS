@@ -1,0 +1,20 @@
+{
+  "name": "payload-landing-page-platform-cli",
+  "version": "0.1.0",
+  "description": "Global launcher for the Payload Landing Page Platform workspace",
+  "private": false,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.15.0"
+  },
+  "bin": {
+    "payload-platform": "./bin/payload-platform.mjs"
+  },
+  "files": [
+    "bin"
+  ],
+  "scripts": {
+    "build": "node --check bin/payload-platform.mjs"
+  }
+}
