@@ -33,6 +33,10 @@ import {
   type PageVersionDocument,
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
+import { TenantContext } from '../tenancy/tenant-context';
+import { UsageService } from '../billing/usage.service';
+import { platformLogger } from '../common/logging/platform-logger';
 
 const ANALYTICS_MAX_EVENT_BYTES = 8 * 1024;
 const ANALYTICS_RATE_WINDOW_MS = 60_000;
@@ -72,6 +76,10 @@ export class AnalyticsService {
     private readonly pageModel: Model<LandingPageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
+    @InjectModel(WorkspaceRecord.name)
+    private readonly workspaceModel: Model<WorkspaceRecord>,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(UsageService) private readonly usage: UsageService,
   ) {}
 
   async ingestClientEvent(
@@ -110,6 +118,18 @@ export class AnalyticsService {
       node?.type,
     );
     await this.repository.insertEvent(stored);
+    if (event.event === 'page.viewed') {
+      try {
+        await this.usage.increment(
+          this.tenantContext.require().id,
+          'page_views_monthly',
+          1,
+          receivedAt,
+        );
+      } catch (error) {
+        platformLogger.warn({ err: error }, 'page-view billing usage increment failed');
+      }
+    }
     return AnalyticsIngestResponseSchema.parse({ accepted: true });
   }
 
@@ -145,6 +165,9 @@ export class AnalyticsService {
     const sites = await this.siteModel.find({ slug: siteSlug }).limit(2).exec();
     if (sites.length !== 1 || !sites[0]) throw this.publicNotFound();
     const site = sites[0];
+    if (!(await this.workspaceModel.exists({ _id: site.workspaceId }))) {
+      throw this.publicNotFound();
+    }
     const page = await this.pageModel
       .findOne({
         siteId: site._id.toString(),

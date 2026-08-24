@@ -105,6 +105,59 @@ test('valid login and logout protect the CMS shell', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test('CMS bootstrap settles after the authenticated shell is ready', async ({ page }) => {
+  const apiRequests: string[] = [];
+  page.on('request', (request) => {
+    if (
+      request.url().startsWith('http://127.0.0.1:3001/api/v1/') &&
+      request.method() === 'GET'
+    ) {
+      apiRequests.push(request.url());
+    }
+  });
+
+  await login(page);
+  const requestsAtReady = apiRequests.length;
+  await page.waitForTimeout(750);
+
+  expect(apiRequests.slice(requestsAtReady)).toEqual([]);
+  await expect(page.getByText('Authenticated')).toBeVisible();
+});
+
+test('stale auth cookies do not redirect login back into a loop', async ({ browser }) => {
+  const context = await browser.newContext();
+  await context.addCookies([
+    {
+      domain: '127.0.0.1',
+      name: process.env.AUTH_ACCESS_TOKEN_COOKIE_NAME ?? 'payload_access_token',
+      path: '/',
+      value: 'stale-access-token',
+    },
+    {
+      domain: '127.0.0.1',
+      name: process.env.AUTH_REFRESH_TOKEN_COOKIE_NAME ?? 'payload_refresh_token',
+      path: '/',
+      value: 'stale-refresh-token',
+    },
+  ]);
+  const page = await context.newPage();
+  const navigationRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.isNavigationRequest()) navigationRequests.push(request.url());
+  });
+
+  await page.goto('http://127.0.0.1:3000/login');
+  await expect(
+    page.getByRole('heading', { name: 'Sign in to your workspace' }),
+  ).toBeVisible();
+  const requestsAtReady = navigationRequests.length;
+  await page.waitForTimeout(750);
+
+  expect(page.url()).toBe('http://127.0.0.1:3000/login');
+  expect(navigationRequests.slice(requestsAtReady)).toEqual([]);
+  await context.close();
+});
+
 test('refreshes an active session when the access cookie is no longer present', async ({
   context,
   page,

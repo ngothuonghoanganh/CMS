@@ -1,31 +1,8 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthenticationModule } from '../common/guards/authentication.module';
-import {
-  AssetRecord,
-  AssetSchema,
-  AnalyticsEventRecord,
-  AnalyticsEventSchema,
-  FormSubmissionRecord,
-  FormSubmissionSchema,
-  FormIntegrationBindingRecord,
-  FormIntegrationBindingSchema,
-  IntegrationDeliveryRecord,
-  IntegrationDeliverySchema,
-  IntegrationRecord,
-  IntegrationSchema,
-  LandingPageRecord,
-  LandingPageSchema,
-  PageVersionRecord,
-  PageVersionSchema,
-  SiteRecord,
-  SiteSchema,
-  TemplateRecord,
-  TemplateSchema,
-  WorkspaceRecord,
-  WorkspaceSchema,
-} from '../persistence/schemas';
+import { BillingModule } from '../billing/billing.module';
+import { env } from '../config/env';
 import {
   PageController,
   PreviewPageController,
@@ -33,6 +10,19 @@ import {
   SitePagesController,
 } from './page.controller';
 import { PageService } from './page.service';
+import { PublicPageResolver } from './public-page.resolver';
+import {
+  CustomDomainController,
+  PublicDomainController,
+} from './custom-domain.controller';
+import { CustomDomainService } from './custom-domain.service';
+import {
+  DOMAIN_VERIFICATION_RESOLVER,
+  InMemoryDomainVerificationResolver,
+  NodeDomainVerificationResolver,
+} from './domain-verification-resolver';
+import { SeoController } from './seo.controller';
+import { SeoService } from './seo.service';
 import { SiteController } from './site.controller';
 import { SiteService } from './site.service';
 import { AssetController } from './asset.controller';
@@ -60,23 +50,19 @@ import { AnalyticsController } from './analytics.controller';
 import { AnalyticsQueryService } from './analytics-query.service';
 import { AnalyticsRepository } from './analytics.repository';
 import { AnalyticsService } from './analytics.service';
+import { OrganizationController } from './organization.controller';
+import { OrganizationService } from './organization.service';
+import { TenantModelsModule } from '../tenancy/tenant-models.module';
+import { TenantModule } from '../tenancy/tenant.module';
+import { ControlPlaneModule } from '../tenancy/control-plane.module';
 
 @Module({
   imports: [
     AuthenticationModule,
-    MongooseModule.forFeature([
-      { name: AssetRecord.name, schema: AssetSchema },
-      { name: AnalyticsEventRecord.name, schema: AnalyticsEventSchema },
-      { name: FormSubmissionRecord.name, schema: FormSubmissionSchema },
-      { name: FormIntegrationBindingRecord.name, schema: FormIntegrationBindingSchema },
-      { name: IntegrationDeliveryRecord.name, schema: IntegrationDeliverySchema },
-      { name: IntegrationRecord.name, schema: IntegrationSchema },
-      { name: LandingPageRecord.name, schema: LandingPageSchema },
-      { name: PageVersionRecord.name, schema: PageVersionSchema },
-      { name: SiteRecord.name, schema: SiteSchema },
-      { name: TemplateRecord.name, schema: TemplateSchema },
-      { name: WorkspaceRecord.name, schema: WorkspaceSchema },
-    ]),
+    BillingModule,
+    ControlPlaneModule,
+    TenantModelsModule,
+    TenantModule,
   ],
   controllers: [
     AssetController,
@@ -93,6 +79,10 @@ import { AnalyticsService } from './analytics.service';
     IntegrationDeliveryController,
     FormIntegrationBindingController,
     AnalyticsController,
+    CustomDomainController,
+    PublicDomainController,
+    SeoController,
+    OrganizationController,
   ],
   providers: [
     AssetService,
@@ -107,7 +97,18 @@ import { AnalyticsService } from './analytics.service';
     WebhookIntegrationAdapter,
     AnalyticsRepository,
     AnalyticsService,
+    OrganizationService,
     AnalyticsQueryService,
+    CustomDomainService,
+    PublicPageResolver,
+    SeoService,
+    {
+      provide: DOMAIN_VERIFICATION_RESOLVER,
+      useFactory: () =>
+        env.DOMAIN_VERIFICATION_PROVIDER === 'fake'
+          ? new InMemoryDomainVerificationResolver()
+          : new NodeDomainVerificationResolver(),
+    },
     {
       provide: EMAIL_PROVIDER,
       useFactory: createEmailProvider,

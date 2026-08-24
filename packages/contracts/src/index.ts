@@ -10,7 +10,11 @@ const timestampSchema = z.string().datetime({ offset: true });
 export const AuthPrincipalSchema = z.object({
   subject: z.string().min(1),
   sessionId: z.string().min(1).optional(),
+  tenantId: EntityIdSchema.optional(),
   workspaceId: EntityIdSchema.optional(),
+  organizationId: EntityIdSchema.optional(),
+  organizationRole: z.enum(['owner', 'admin', 'member']).optional(),
+  organizationStatus: z.enum(['active', 'suspended']).optional(),
 });
 
 export type AuthPrincipal = z.infer<typeof AuthPrincipalSchema>;
@@ -19,6 +23,7 @@ export const ApiErrorSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1),
   requestId: z.string().uuid().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const ErrorResponseSchema = z.object({
@@ -42,6 +47,7 @@ export const LoginRequestSchema = z
   .object({
     email: z.string().trim().email(),
     password: z.string().min(1).max(200),
+    tenantSlug: z.string().trim().min(1).max(80).optional(),
   })
   .strict();
 
@@ -56,8 +62,23 @@ export const PAGE_PAYLOAD_MAX_STYLE_VALUE_LENGTH = 512;
 export const PAGE_PAYLOAD_MAX_NODE_ID_LENGTH = 128;
 export const DEFAULT_PAGE_LIMIT = 20;
 export const MAX_PAGE_LIMIT = 100;
+export const MAX_HOSTNAME_LENGTH = 253;
+export const MAX_SEO_TITLE_LENGTH = 200;
+export const MAX_SEO_DESCRIPTION_LENGTH = 500;
+export const MAX_SEO_URL_LENGTH = 2_048;
 
 const nonEmptyText = z.string().trim().min(1);
+
+export const OrganizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+
+export function normalizeOrganizationSlug(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
 const styleValue = z.string().trim().min(1).max(PAGE_PAYLOAD_MAX_STYLE_VALUE_LENGTH);
 const pageNodeId = z
   .string()
@@ -65,6 +86,50 @@ const pageNodeId = z
 
 function isRelativePath(value: string): boolean {
   return value.startsWith('/') && !value.startsWith('//') && !value.includes('\\');
+}
+
+/**
+ * Normalizes the hostname representation used by public domain ownership and
+ * routing. This intentionally accepts DNS hostnames only; protocol, path,
+ * port, IP literals and internal-host policy are enforced by the API boundary.
+ */
+export function normalizeHostname(input: string): string | null {
+  const value = input.trim().toLowerCase().replace(/\.$/, '');
+  if (
+    value.length === 0 ||
+    value.length > MAX_HOSTNAME_LENGTH ||
+    value.includes('://') ||
+    /[/?#\s:]/.test(value) ||
+    !/^[a-z0-9.-]+$/.test(value) ||
+    value.startsWith('.') ||
+    value.endsWith('.') ||
+    value.includes('..')
+  ) {
+    return null;
+  }
+
+  const labels = value.split('.');
+  if (
+    labels.length < 2 ||
+    labels.some(
+      (label) =>
+        label.length === 0 ||
+        label.length > 63 ||
+        !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    )
+  ) {
+    return null;
+  }
+
+  return value;
+}
+
+function isSafeMetadataUrl(value: string): boolean {
+  if (isRelativePath(value)) {
+    return true;
+  }
+
+  return isSafeAbsoluteUrl(value, ['http:', 'https:']);
 }
 
 function isAnchor(value: string): boolean {
@@ -718,16 +783,64 @@ export function deserializePagePayload(serialized: string): PagePayload {
 export const WorkspaceSchema = z
   .object({
     id: EntityIdSchema,
+    organizationId: EntityIdSchema,
     name: nonEmptyText.max(200),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
   .strict();
 
+export const OrganizationStatusSchema = z.enum(['active', 'suspended']);
+export type OrganizationStatus = z.infer<typeof OrganizationStatusSchema>;
+
+export const OrganizationRoleSchema = z.enum(['owner', 'admin', 'member']);
+export type OrganizationRole = z.infer<typeof OrganizationRoleSchema>;
+
+export const OrganizationSchema = z
+  .object({
+    id: EntityIdSchema,
+    name: nonEmptyText.max(200),
+    slug: OrganizationSlugSchema,
+    status: OrganizationStatusSchema,
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type Organization = z.infer<typeof OrganizationSchema>;
+
+export const OrganizationMembershipSchema = z
+  .object({
+    id: EntityIdSchema,
+    organizationId: EntityIdSchema,
+    userId: z.string().trim().min(1).max(320),
+    role: OrganizationRoleSchema,
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type OrganizationMembership = z.infer<typeof OrganizationMembershipSchema>;
+
+export const OrganizationListResponseSchema = z
+  .object({ items: z.array(OrganizationSchema) })
+  .strict();
+export const OrganizationMembershipListResponseSchema = z
+  .object({ items: z.array(OrganizationMembershipSchema) })
+  .strict();
+export const WorkspaceListResponseSchema = z
+  .object({ items: z.array(WorkspaceSchema) })
+  .strict();
+export type OrganizationListResponse = z.infer<typeof OrganizationListResponseSchema>;
+export type OrganizationMembershipListResponse = z.infer<
+  typeof OrganizationMembershipListResponseSchema
+>;
+export type WorkspaceListResponse = z.infer<typeof WorkspaceListResponseSchema>;
+
 export const AuthUserSchema = z
   .object({
     subject: z.string().min(1),
     email: z.string().email(),
+    tenantId: EntityIdSchema.optional(),
+    tenantSlug: z.string().trim().min(1).max(80).optional(),
     workspaceId: EntityIdSchema,
   })
   .strict();
@@ -743,6 +856,218 @@ export const AuthSessionResponseSchema = z
   .strict();
 
 export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;
+
+export const TenantStatusSchema = z.enum([
+  'provisioning',
+  'active',
+  'suspended',
+  'failed',
+  'archived',
+]);
+export type TenantStatus = z.infer<typeof TenantStatusSchema>;
+
+export const TenantSchema = z
+  .object({
+    id: EntityIdSchema,
+    name: nonEmptyText.max(200),
+    slug: OrganizationSlugSchema,
+    status: TenantStatusSchema,
+    databaseKey: z.string().trim().min(1).max(200),
+    databaseName: z.string().trim().min(1).max(63),
+    clusterKey: z.string().trim().min(1).max(100),
+    schemaVersion: z.number().int().nonnegative(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type Tenant = z.infer<typeof TenantSchema>;
+
+export const TenantListResponseSchema = z
+  .object({ items: z.array(TenantSchema) })
+  .strict();
+export type TenantListResponse = z.infer<typeof TenantListResponseSchema>;
+
+export const PlanStatusSchema = z.enum(['active', 'inactive', 'archived']);
+export type PlanStatus = z.infer<typeof PlanStatusSchema>;
+
+const quotaLimitSchema = z.number().int().nonnegative().nullable();
+
+export const PlanEntitlementsSchema = z
+  .object({
+    maxWorkspaces: quotaLimitSchema,
+    maxLandingPages: quotaLimitSchema,
+    maxCustomDomains: quotaLimitSchema,
+    maxIntegrations: quotaLimitSchema,
+    monthlyPageViews: quotaLimitSchema,
+    monthlyFormSubmissions: quotaLimitSchema,
+  })
+  .strict();
+export type PlanEntitlements = z.infer<typeof PlanEntitlementsSchema>;
+
+export const PlanSchema = z
+  .object({
+    id: EntityIdSchema,
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    name: nonEmptyText.max(200),
+    status: PlanStatusSchema,
+    entitlements: PlanEntitlementsSchema,
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type Plan = z.infer<typeof PlanSchema>;
+
+export const PlanListResponseSchema = z.object({ items: z.array(PlanSchema) }).strict();
+export type PlanListResponse = z.infer<typeof PlanListResponseSchema>;
+
+export const CreatePlanRequestSchema = z
+  .object({
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    name: nonEmptyText.max(200),
+    entitlements: PlanEntitlementsSchema,
+    status: PlanStatusSchema.default('active'),
+  })
+  .strict();
+export type CreatePlanRequest = z.infer<typeof CreatePlanRequestSchema>;
+
+export const UpdatePlanRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    entitlements: PlanEntitlementsSchema.optional(),
+    status: PlanStatusSchema.optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export type UpdatePlanRequest = z.infer<typeof UpdatePlanRequestSchema>;
+
+export const SubscriptionStatusSchema = z.enum([
+  'trialing',
+  'active',
+  'past_due',
+  'canceled',
+  'suspended',
+]);
+export type SubscriptionStatus = z.infer<typeof SubscriptionStatusSchema>;
+
+export const BillingProviderSchema = z.enum(['manual', 'stripe']);
+export type BillingProvider = z.infer<typeof BillingProviderSchema>;
+
+export const TenantSubscriptionSchema = z
+  .object({
+    id: EntityIdSchema,
+    tenantId: EntityIdSchema,
+    planId: EntityIdSchema,
+    status: SubscriptionStatusSchema,
+    currentPeriodStart: timestampSchema,
+    currentPeriodEnd: timestampSchema,
+    cancelAtPeriodEnd: z.boolean(),
+    provider: BillingProviderSchema,
+    providerCustomerId: z.string().trim().min(1).max(200).optional(),
+    providerSubscriptionId: z.string().trim().min(1).max(200).optional(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type TenantSubscription = z.infer<typeof TenantSubscriptionSchema>;
+
+export const SubscriptionStatusResponseSchema = z
+  .object({ subscription: TenantSubscriptionSchema, plan: PlanSchema })
+  .strict();
+export type SubscriptionStatusResponse = z.infer<typeof SubscriptionStatusResponseSchema>;
+
+export const AssignSubscriptionRequestSchema = z
+  .object({
+    planKey: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    status: SubscriptionStatusSchema.default('active'),
+    currentPeriodStart: timestampSchema.optional(),
+    currentPeriodEnd: timestampSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (request) =>
+      !request.currentPeriodStart ||
+      !request.currentPeriodEnd ||
+      request.currentPeriodStart < request.currentPeriodEnd,
+    'currentPeriodStart must be before currentPeriodEnd',
+  );
+export type AssignSubscriptionRequest = z.infer<typeof AssignSubscriptionRequestSchema>;
+
+export const BillingUsageMetricSchema = z.enum([
+  'workspaces',
+  'landing_pages',
+  'custom_domains',
+  'integrations',
+  'page_views_monthly',
+  'form_submissions_monthly',
+]);
+export type BillingUsageMetric = z.infer<typeof BillingUsageMetricSchema>;
+
+export const TenantUsageSchema = z
+  .object({
+    id: EntityIdSchema,
+    tenantId: EntityIdSchema,
+    metric: BillingUsageMetricSchema,
+    periodStart: timestampSchema,
+    periodEnd: timestampSchema,
+    value: z.number().int().nonnegative(),
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type TenantUsage = z.infer<typeof TenantUsageSchema>;
+
+export const BillingUsageItemSchema = z
+  .object({
+    metric: BillingUsageMetricSchema,
+    value: z.number().int().nonnegative(),
+    limit: quotaLimitSchema,
+    enforcement: z.enum(['hard', 'soft']),
+    periodStart: timestampSchema,
+    periodEnd: timestampSchema,
+  })
+  .strict();
+export type BillingUsageItem = z.infer<typeof BillingUsageItemSchema>;
+
+export const BillingUsageResponseSchema = z
+  .object({
+    tenantId: EntityIdSchema,
+    periodStart: timestampSchema,
+    periodEnd: timestampSchema,
+    items: z.array(BillingUsageItemSchema),
+  })
+  .strict();
+export type BillingUsageResponse = z.infer<typeof BillingUsageResponseSchema>;
+
+export const BillingEntitlementsResponseSchema = z
+  .object({
+    tenantId: EntityIdSchema,
+    planId: EntityIdSchema,
+    planKey: z.string().min(1),
+    entitlements: PlanEntitlementsSchema,
+  })
+  .strict();
+export type BillingEntitlementsResponse = z.infer<
+  typeof BillingEntitlementsResponseSchema
+>;
+
+export const BillingSummarySchema = z
+  .object({
+    subscription: TenantSubscriptionSchema,
+    plan: PlanSchema,
+    usage: BillingUsageResponseSchema,
+  })
+  .strict();
+export type BillingSummary = z.infer<typeof BillingSummarySchema>;
+
+export const CreateTenantRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200),
+    slug: z.string().trim().min(1).max(80).optional(),
+    ownerEmail: z.string().trim().email(),
+    ownerPassword: z.string().min(8).max(200),
+    workspaceName: nonEmptyText.max(200).optional(),
+  })
+  .strict();
+export type CreateTenantRequest = z.infer<typeof CreateTenantRequestSchema>;
 
 export const SiteSchema = z
   .object({
@@ -789,11 +1114,145 @@ const PublicPageSchema = z
   })
   .strict();
 
+export const CustomDomainStatusSchema = z.enum([
+  'pending',
+  'verifying',
+  'active',
+  'failed',
+]);
+export type CustomDomainStatus = z.infer<typeof CustomDomainStatusSchema>;
+
+export const DomainVerificationMethodSchema = z.literal('dns_txt');
+
+const SafeMetadataUrlSchema = z
+  .string()
+  .trim()
+  .max(MAX_SEO_URL_LENGTH)
+  .refine(isSafeMetadataUrl, 'URL must use http(s) or a safe relative path');
+
+const OptionalSeoText = (max: number) => z.string().trim().max(max).optional();
+const NullableSeoText = (max: number) => z.string().trim().max(max).nullable().optional();
+
+export const CustomDomainSchema = z
+  .object({
+    id: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    hostname: z.string().trim().max(MAX_HOSTNAME_LENGTH),
+    status: CustomDomainStatusSchema,
+    verificationMethod: DomainVerificationMethodSchema,
+    verificationHostname: z.string().trim().max(MAX_HOSTNAME_LENGTH),
+    verificationToken: z.string().trim().min(32).max(256).optional(),
+    verifiedAt: timestampSchema.optional(),
+    lastCheckedAt: timestampSchema.optional(),
+    failureReason: z.string().trim().max(500).optional(),
+    landingPageId: EntityIdSchema.optional(),
+    isPrimary: z.boolean(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+
+export type CustomDomain = z.infer<typeof CustomDomainSchema>;
+
+export const CreateCustomDomainRequestSchema = z
+  .object({
+    hostname: z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_HOSTNAME_LENGTH + 32),
+    landingPageId: EntityIdSchema.optional(),
+    isPrimary: z.boolean().optional(),
+  })
+  .strict();
+
+export const UpdateCustomDomainRequestSchema = z
+  .object({
+    landingPageId: EntityIdSchema.nullable().optional(),
+    isPrimary: z.boolean().optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+
+export const CustomDomainListResponseSchema = z
+  .object({ items: z.array(CustomDomainSchema) })
+  .strict();
+
+export type CreateCustomDomainRequest = z.infer<typeof CreateCustomDomainRequestSchema>;
+export type UpdateCustomDomainRequest = z.infer<typeof UpdateCustomDomainRequestSchema>;
+export type CustomDomainListResponse = z.infer<typeof CustomDomainListResponseSchema>;
+
+export const PageSeoSettingsSchema = z
+  .object({
+    pageId: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    title: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
+    description: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    canonicalUrl: SafeMetadataUrlSchema.optional(),
+    noIndex: z.boolean(),
+    noFollow: z.boolean(),
+    ogTitle: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
+    ogDescription: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    ogImage: SafeMetadataUrlSchema.optional(),
+    twitterCard: z.enum(['summary', 'summary_large_image']).optional(),
+    twitterTitle: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
+    twitterDescription: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    twitterImage: SafeMetadataUrlSchema.optional(),
+    favicon: SafeMetadataUrlSchema.optional(),
+  })
+  .strict();
+
+export type PageSeoSettings = z.infer<typeof PageSeoSettingsSchema>;
+
+export const UpdatePageSeoSettingsRequestSchema = z
+  .object({
+    title: NullableSeoText(MAX_SEO_TITLE_LENGTH),
+    description: NullableSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    canonicalUrl: SafeMetadataUrlSchema.nullable().optional(),
+    noIndex: z.boolean().optional(),
+    noFollow: z.boolean().optional(),
+    ogTitle: NullableSeoText(MAX_SEO_TITLE_LENGTH),
+    ogDescription: NullableSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    ogImage: SafeMetadataUrlSchema.nullable().optional(),
+    twitterCard: z.enum(['summary', 'summary_large_image']).nullable().optional(),
+    twitterTitle: NullableSeoText(MAX_SEO_TITLE_LENGTH),
+    twitterDescription: NullableSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    twitterImage: SafeMetadataUrlSchema.nullable().optional(),
+    favicon: SafeMetadataUrlSchema.nullable().optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+
+export type UpdatePageSeoSettingsRequest = z.infer<
+  typeof UpdatePageSeoSettingsRequestSchema
+>;
+
+export const PublicSeoSettingsSchema = z
+  .object({
+    title: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
+    description: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    canonicalUrl: SafeMetadataUrlSchema.optional(),
+    noIndex: z.boolean().optional(),
+    noFollow: z.boolean().optional(),
+    ogTitle: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
+    ogDescription: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    ogImage: SafeMetadataUrlSchema.optional(),
+    twitterCard: z.enum(['summary', 'summary_large_image']).optional(),
+    twitterTitle: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
+    twitterDescription: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
+    twitterImage: SafeMetadataUrlSchema.optional(),
+    favicon: SafeMetadataUrlSchema.optional(),
+  })
+  .strict();
+
 export const PublicLandingPageSchema = z
   .object({
+    tenantSlug: z.string().trim().min(1).max(80).optional(),
     site: PublicSiteSchema,
     page: PublicPageSchema,
     payload: PagePayloadSchema,
+    seo: PublicSeoSettingsSchema.optional(),
+    canonicalUrl: z.string().url().optional(),
   })
   .strict();
 
@@ -890,6 +1349,35 @@ export type TemplateListResponse = z.infer<typeof TemplateListResponseSchema>;
 export const CreateWorkspaceRequestSchema = z
   .object({ name: nonEmptyText.max(200) })
   .strict();
+export const CreateOrganizationRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200),
+    slug: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+export const UpdateOrganizationRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    slug: z.string().trim().min(1).max(80).optional(),
+    status: OrganizationStatusSchema.optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export const CreateOrganizationMembershipRequestSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(320),
+    role: OrganizationRoleSchema.default('member'),
+  })
+  .strict();
+export const UpdateOrganizationMembershipRequestSchema = z
+  .object({ role: OrganizationRoleSchema })
+  .strict();
+export const SwitchAuthContextRequestSchema = z
+  .object({
+    organizationId: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+  })
+  .strict();
 export const CreateSiteRequestSchema = z
   .object({
     name: nonEmptyText.max(200),
@@ -943,6 +1431,15 @@ export const PublishPageRequestSchema = z
   .strict();
 
 export type CreateWorkspaceRequest = z.infer<typeof CreateWorkspaceRequestSchema>;
+export type CreateOrganizationRequest = z.infer<typeof CreateOrganizationRequestSchema>;
+export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequestSchema>;
+export type CreateOrganizationMembershipRequest = z.infer<
+  typeof CreateOrganizationMembershipRequestSchema
+>;
+export type UpdateOrganizationMembershipRequest = z.infer<
+  typeof UpdateOrganizationMembershipRequestSchema
+>;
+export type SwitchAuthContextRequest = z.infer<typeof SwitchAuthContextRequestSchema>;
 export type CreateSiteRequest = z.infer<typeof CreateSiteRequestSchema>;
 export type UpdateSiteRequest = z.infer<typeof UpdateSiteRequestSchema>;
 export type CreatePageRequest = z.infer<typeof CreatePageRequestSchema>;

@@ -9,6 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('admin@example.com');
   const [password, setPassword] = useState('');
+  const [tenantSlug, setTenantSlug] = useState(process.env.NEXT_PUBLIC_TENANT_SLUG ?? '');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -18,9 +19,12 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await api.post('/auth/login', { email, password });
+      await api.post('/auth/login', {
+        email,
+        password,
+        ...(tenantSlug.trim() ? { tenantSlug: tenantSlug.trim() } : {}),
+      });
       router.replace('/');
-      router.refresh();
     } catch (caughtError) {
       setError(
         caughtError instanceof ApiClientError
@@ -50,6 +54,17 @@ export default function LoginPage() {
               required
               type="email"
               value={email}
+            />
+          </label>
+          <label>
+            Tenant slug
+            <input
+              autoComplete="organization"
+              name="tenantSlug"
+              onChange={(event) => setTenantSlug(event.target.value)}
+              placeholder="demo"
+              type="text"
+              value={tenantSlug}
             />
           </label>
           <label>

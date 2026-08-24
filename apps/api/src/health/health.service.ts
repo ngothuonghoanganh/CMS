@@ -3,10 +3,13 @@ import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 
 import type { HealthResponse } from '@payload/contracts';
+import { MASTER_CONNECTION } from '../tenancy/master-connection';
 
 @Injectable()
 export class HealthService {
-  constructor(@InjectConnection() private readonly connection: Connection) {}
+  constructor(
+    @InjectConnection(MASTER_CONNECTION) private readonly connection: Connection,
+  ) {}
 
   getLiveness(requestId?: string): HealthResponse {
     return {

@@ -17,12 +17,6 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isLoginRoute && hasSessionCookie) {
-    const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = '/';
-    return NextResponse.redirect(homeUrl);
-  }
-
   return NextResponse.next();
 }
 

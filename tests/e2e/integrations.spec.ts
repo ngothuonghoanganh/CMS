@@ -86,6 +86,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await page.getByRole('button', { name: '← Pages' }).click();
 
   await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByLabel('Site').selectOption({ label: siteName });
   await page.getByRole('button', { name: pageName }).click();
   await expect(page.getByRole('heading', { name: 'Form integrations' })).toBeVisible();
   const formSettings = page.locator('section[aria-label="Form integration settings"]');

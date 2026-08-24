@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -32,7 +33,9 @@ import {
   type UpdatePageRequest,
 } from '@payload/contracts';
 
+import { QuotaService } from '../billing/quota.service';
 import { assertExpectedVersionNumber, nextVersionNumber } from './versioning';
+import { PublicPageResolver } from './public-page.resolver';
 import {
   LandingPageRecord,
   type LandingPageDocument,
@@ -52,6 +55,9 @@ export class PageService {
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
+    @Inject(PublicPageResolver)
+    private readonly publicPageResolver: PublicPageResolver,
+    @Inject(QuotaService) private readonly quotas: QuotaService,
   ) {}
 
   async create(
@@ -59,29 +65,31 @@ export class PageService {
     input: CreatePageRequest,
     workspaceId: string,
   ): Promise<LandingPage> {
-    const site = await this.requireSite(siteId, workspaceId);
-    const payload = this.parsePayload(input.payload);
-    const pageId = randomUUID();
-    const versionId = randomUUID();
-    const page = await this.pageModel.create({
-      _id: pageId,
-      workspaceId: site.workspaceId,
-      siteId,
-      name: input.name,
-      ...(input.slug ? { slug: input.slug } : {}),
-    });
-    await this.versionModel.create({
-      _id: versionId,
-      workspaceId: site.workspaceId,
-      siteId,
-      landingPageId: pageId,
-      versionNumber: 1,
-      payload,
-    });
-    page.currentDraftVersionId = versionId;
-    await page.save();
+    return this.quotas.withHardQuota('landing_pages', async () => {
+      const site = await this.requireSite(siteId, workspaceId);
+      const payload = this.parsePayload(input.payload);
+      const pageId = randomUUID();
+      const versionId = randomUUID();
+      const page = await this.pageModel.create({
+        _id: pageId,
+        workspaceId: site.workspaceId,
+        siteId,
+        name: input.name,
+        ...(input.slug ? { slug: input.slug } : {}),
+      });
+      await this.versionModel.create({
+        _id: versionId,
+        workspaceId: site.workspaceId,
+        siteId,
+        landingPageId: pageId,
+        versionNumber: 1,
+        payload,
+      });
+      page.currentDraftVersionId = versionId;
+      await page.save();
 
-    return this.toPageContract(page);
+      return this.toPageContract(page);
+    });
   }
 
   async listBySite(
@@ -93,12 +101,12 @@ export class PageService {
     const query = PaginationQuerySchema.parse(input);
     const [records, total] = await Promise.all([
       this.pageModel
-        .find({ siteId })
+        .find({ siteId, workspaceId })
         .sort({ createdAt: -1, _id: -1 })
         .skip(query.offset)
         .limit(query.limit)
         .exec(),
-      this.pageModel.countDocuments({ siteId }).exec(),
+      this.pageModel.countDocuments({ siteId, workspaceId }).exec(),
     ]);
 
     return PageListResponseSchema.parse({
@@ -128,7 +136,7 @@ export class PageService {
   ): Promise<LandingPage> {
     const parsedInput = UpdatePageRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
-    const latestVersion = await this.findLatestVersion(pageId);
+    const latestVersion = await this.findLatestVersion(pageId, workspaceId);
 
     assertExpectedVersionNumber(
       parsedInput.expectedVersionNumber,
@@ -166,7 +174,7 @@ export class PageService {
   ): Promise<PageVersion> {
     const parsedInput = CreatePageVersionRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
-    const latestVersion = await this.findLatestVersion(pageId);
+    const latestVersion = await this.findLatestVersion(pageId, workspaceId);
 
     assertExpectedVersionNumber(
       parsedInput.expectedVersionNumber,
@@ -220,40 +228,7 @@ export class PageService {
     siteSlug: string,
     pageSlug: string,
   ): Promise<PublicLandingPage> {
-    const sites = await this.siteModel.find({ slug: siteSlug }).limit(2).exec();
-
-    // Site slugs are workspace-scoped in the existing domain. Without a hostname
-    // or workspace slug, an ambiguous public path must not select an arbitrary tenant.
-    if (sites.length !== 1) {
-      throw this.publicPageNotFound();
-    }
-
-    const site = sites[0];
-    if (!site) {
-      throw this.publicPageNotFound();
-    }
-    const page = await this.pageModel
-      .findOne({ siteId: site._id.toString(), slug: pageSlug })
-      .exec();
-
-    if (!page?.publishedVersionId) {
-      throw this.publicPageNotFound();
-    }
-
-    const version = await this.versionModel
-      .findOne({
-        _id: page.publishedVersionId,
-        landingPageId: page._id.toString(),
-        siteId: site._id.toString(),
-        workspaceId: site.workspaceId,
-      })
-      .exec();
-
-    if (!version) {
-      throw this.invalidPublishedPage();
-    }
-
-    return this.toPublicContract(site, page, version);
+    return this.publicPageResolver.resolveByPath(siteSlug, pageSlug);
   }
 
   async resolvePreview(pageId: string, workspaceId: string): Promise<PublicLandingPage> {
@@ -284,12 +259,12 @@ export class PageService {
     const query = PaginationQuerySchema.parse(input);
     const [records, total] = await Promise.all([
       this.versionModel
-        .find({ landingPageId: pageId })
+        .find({ landingPageId: pageId, workspaceId })
         .sort({ versionNumber: -1, _id: -1 })
         .skip(query.offset)
         .limit(query.limit)
         .exec(),
-      this.versionModel.countDocuments({ landingPageId: pageId }).exec(),
+      this.versionModel.countDocuments({ landingPageId: pageId, workspaceId }).exec(),
     ]);
 
     return PageVersionListResponseSchema.parse({
@@ -309,7 +284,7 @@ export class PageService {
   ): Promise<PageVersion> {
     await this.requirePageDocument(pageId, workspaceId);
     const record = await this.versionModel
-      .findOne({ landingPageId: pageId, versionNumber })
+      .findOne({ landingPageId: pageId, workspaceId, versionNumber })
       .exec();
 
     if (!record) {
@@ -396,9 +371,12 @@ export class PageService {
     return page;
   }
 
-  private async findLatestVersion(pageId: string): Promise<PageVersionDocument | null> {
+  private async findLatestVersion(
+    pageId: string,
+    workspaceId: string,
+  ): Promise<PageVersionDocument | null> {
     return this.versionModel
-      .findOne({ landingPageId: pageId })
+      .findOne({ landingPageId: pageId, workspaceId })
       .sort({ versionNumber: -1 })
       .exec();
   }

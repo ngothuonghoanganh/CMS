@@ -113,4 +113,6 @@ Known limitations are documented in `docs/phase-8.md`: session is not a unique-h
 metric, attribution is simple first-touch, bot detection is intentionally basic, and
 the public site slug remains the current tenant discriminator.
 
-Phase 9 has not been started.
+Phase 9 is implemented in [`docs/phase-9.md`](../phase-9.md). Its custom-domain and
+SEO settings remain outside the canonical page payload and do not change the Phase 7
+notification boundary.

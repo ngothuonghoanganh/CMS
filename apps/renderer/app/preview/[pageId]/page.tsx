@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { renderPage } from '../../renderer';
 import { getPreviewPage } from '../../lib/page-api';
+import { publicPageMetadata } from '../../lib/seo';
 
 type PreviewPageProps = {
   params: Promise<{ pageId: string }>;
@@ -24,8 +25,7 @@ export async function generateMetadata({ params }: PreviewPageProps): Promise<Me
     return { robots: { index: false, follow: false }, title: 'Preview unavailable' };
   }
   return {
-    description: page.payload.metadata.documentDescription,
-    robots: { index: false, follow: false },
+    ...publicPageMetadata(page, { preview: true }),
     title: `Preview — ${page.payload.metadata.documentTitle}`,
   };
 }

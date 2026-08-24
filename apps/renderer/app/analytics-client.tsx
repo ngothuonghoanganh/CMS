@@ -8,8 +8,14 @@ const SESSION_STORAGE_KEY = 'payload.analytics.session.v1';
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
 
 type AnalyticsEventInput =
-  | { event: 'page.viewed'; siteSlug: string; pageSlug: string }
-  | { event: 'element.clicked'; siteSlug: string; pageSlug: string; nodeId: string };
+  | { event: 'page.viewed'; siteSlug: string; pageSlug: string; tenantSlug?: string }
+  | {
+      event: 'element.clicked';
+      siteSlug: string;
+      pageSlug: string;
+      nodeId: string;
+      tenantSlug?: string;
+    };
 
 type StoredSession = {
   id: string;
@@ -39,14 +45,15 @@ export function trackAnalyticsEvent(input: AnalyticsEventInput): void {
     ...(session.utmContent ? { utmContent: session.utmContent } : {}),
     deviceType: clientDeviceType(),
   };
+  const { tenantSlug, ...eventInput } = input;
   const payload = {
     version: 1 as const,
-    ...input,
+    ...eventInput,
     sessionId: session.id,
     context,
   } as AnalyticsEventV1;
   const body = JSON.stringify(payload);
-  const url = `${apiBaseUrl}/analytics/events`;
+  const url = `${apiBaseUrl}/analytics/events${tenantSlug ? `?tenantSlug=${encodeURIComponent(tenantSlug)}` : ''}`;
   try {
     const sent =
       typeof navigator.sendBeacon === 'function' &&
@@ -66,9 +73,11 @@ export function trackAnalyticsEvent(input: AnalyticsEventInput): void {
 export function AnalyticsTracker({
   siteSlug,
   pageSlug,
+  tenantSlug,
 }: {
   siteSlug: string;
   pageSlug: string;
+  tenantSlug?: string;
 }): ReactNode {
   const markerRef = useRef<HTMLSpanElement>(null);
   const pageViewSent = useRef(false);
@@ -76,7 +85,12 @@ export function AnalyticsTracker({
   useEffect(() => {
     if (!pageViewSent.current) {
       pageViewSent.current = true;
-      trackAnalyticsEvent({ event: 'page.viewed', siteSlug, pageSlug });
+      trackAnalyticsEvent({
+        event: 'page.viewed',
+        siteSlug,
+        pageSlug,
+        ...(tenantSlug ? { tenantSlug } : {}),
+      });
     }
     const root = markerRef.current?.parentElement;
     if (!root) return undefined;
@@ -89,11 +103,17 @@ export function AnalyticsTracker({
       if (!button || !root.contains(button)) return;
       const nodeId = button.dataset.payloadNodeId;
       if (nodeId)
-        trackAnalyticsEvent({ event: 'element.clicked', siteSlug, pageSlug, nodeId });
+        trackAnalyticsEvent({
+          event: 'element.clicked',
+          siteSlug,
+          pageSlug,
+          nodeId,
+          ...(tenantSlug ? { tenantSlug } : {}),
+        });
     };
     root.addEventListener('click', onClick);
     return () => root.removeEventListener('click', onClick);
-  }, [pageSlug, siteSlug]);
+  }, [pageSlug, siteSlug, tenantSlug]);
 
   return <span aria-hidden="true" hidden ref={markerRef} />;
 }

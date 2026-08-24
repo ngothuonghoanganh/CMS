@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -23,6 +24,7 @@ import {
 } from '@payload/contracts';
 
 import { env } from '../config/env';
+import { QuotaService } from '../billing/quota.service';
 import { FormIntegrationBindingRecord } from '../persistence/schemas/form-integration-binding.schema';
 import {
   IntegrationRecord,
@@ -41,6 +43,7 @@ export class IntegrationService {
     private readonly bindingModel: Model<FormIntegrationBindingRecord>,
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
+    @Inject(QuotaService) private readonly quotas: QuotaService,
   ) {}
 
   async create(
@@ -50,16 +53,18 @@ export class IntegrationService {
     await this.requireWorkspace(workspaceId);
     const parsed = CreateIntegrationRequestSchema.parse(input);
     await this.validateConfig(parsed.type, parsed.config);
-    const record = await this.integrationModel.create({
-      _id: randomUUID(),
-      workspaceId,
-      type: parsed.type,
-      name: parsed.name,
-      enabled: parsed.enabled,
-      config: parsed.config,
-      ...(parsed.secret ? { secretCiphertext: this.encryptSecret(parsed.secret) } : {}),
+    return this.quotas.withHardQuota('integrations', async () => {
+      const record = await this.integrationModel.create({
+        _id: randomUUID(),
+        workspaceId,
+        type: parsed.type,
+        name: parsed.name,
+        enabled: parsed.enabled,
+        config: parsed.config,
+        ...(parsed.secret ? { secretCiphertext: this.encryptSecret(parsed.secret) } : {}),
+      });
+      return this.toContract(record);
     });
-    return this.toContract(record);
   }
 
   async list(

@@ -17,6 +17,7 @@ export class ApiClientError extends Error {
 }
 
 let refreshInFlight: Promise<void> | null = null;
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
 const refreshableAuthErrorCodes = new Set([
   'ACCESS_TOKEN_EXPIRED',
@@ -76,6 +77,30 @@ async function request<T>(
   init?: RequestInit,
   allowRefresh = true,
 ): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method === 'GET' && allowRefresh) {
+    const existing = inFlightGetRequests.get(path);
+    if (existing) return existing as Promise<T>;
+
+    const pending = requestWithoutDedup<T>(path, init, allowRefresh);
+    inFlightGetRequests.set(path, pending);
+    try {
+      return await pending;
+    } finally {
+      if (inFlightGetRequests.get(path) === pending) {
+        inFlightGetRequests.delete(path);
+      }
+    }
+  }
+
+  return requestWithoutDedup<T>(path, init, allowRefresh);
+}
+
+async function requestWithoutDedup<T>(
+  path: string,
+  init?: RequestInit,
+  allowRefresh = true,
+): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     credentials: 'include',
@@ -98,7 +123,7 @@ async function request<T>(
     if (canRefresh) {
       try {
         await refreshSession();
-        return request<T>(path, init, false);
+        return requestWithoutDedup<T>(path, init, false);
       } catch (refreshError) {
         await clearAuthAndRedirect();
         throw refreshError;

@@ -45,6 +45,9 @@ import {
   type PageVersionDocument,
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
+import { UsageService } from '../billing/usage.service';
+import { TenantContext } from '../tenancy/tenant-context';
 import { IntegrationDispatcher } from './integration-dispatcher';
 import { AnalyticsService } from './analytics.service';
 import { platformLogger } from '../common/logging/platform-logger';
@@ -85,6 +88,10 @@ export class SubmissionService {
     private readonly integrationDispatcher: IntegrationDispatcher,
     @Inject(AnalyticsService)
     private readonly analyticsService: AnalyticsService,
+    @InjectModel(WorkspaceRecord.name)
+    private readonly workspaceModel: Model<WorkspaceRecord>,
+    @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
   async submitPublic(
@@ -116,6 +123,19 @@ export class SubmissionService {
       status: 'new',
       submittedAt,
     });
+    try {
+      await this.usage.increment(
+        this.tenantContextId(),
+        'form_submissions_monthly',
+        1,
+        submittedAt,
+      );
+    } catch (error) {
+      platformLogger.warn(
+        { err: error },
+        'form-submission billing usage increment failed',
+      );
+    }
     try {
       await this.integrationDispatcher.enqueueForSubmission(
         submission._id.toString(),
@@ -151,6 +171,10 @@ export class SubmissionService {
     }
 
     return { success: true };
+  }
+
+  private tenantContextId(): string {
+    return this.tenantContext.require().id;
   }
 
   async list(
@@ -230,6 +254,9 @@ export class SubmissionService {
     const sites = await this.siteModel.find({ slug: siteSlug }).limit(2).exec();
     if (sites.length !== 1 || !sites[0]) throw this.publicNotFound();
     const site = sites[0];
+    if (!(await this.workspaceModel.exists({ _id: site.workspaceId }))) {
+      throw this.publicNotFound();
+    }
     const page = await this.pageModel
       .findOne({
         siteId: site._id.toString(),

@@ -14,11 +14,18 @@ import {
   PagePayloadV1Schema,
   PagePayloadV2Schema,
   CreateIntegrationRequestSchema,
+  CreateCustomDomainRequestSchema,
   FormSubmittedWebhookV1Schema,
   IntegrationSchema,
+  UpdatePageSeoSettingsRequestSchema,
   apiVersion,
   deserializePagePayload,
   serializePagePayload,
+  normalizeHostname,
+  OrganizationSchema,
+  OrganizationMembershipSchema,
+  CreateOrganizationRequestSchema,
+  SwitchAuthContextRequestSchema,
   type PageNode,
 } from './index';
 
@@ -130,6 +137,35 @@ describe('foundation contracts', () => {
     expect(
       AuthPrincipalSchema.parse({ subject: 'user-123', sessionId: 'session-456' }),
     ).toEqual({ subject: 'user-123', sessionId: 'session-456' });
+  });
+
+  it('validates the organization and membership foundation without payload coupling', () => {
+    const organizationId = randomUUID();
+    const organization = OrganizationSchema.parse({
+      id: organizationId,
+      name: 'Acme Corporation',
+      slug: 'acme-corporation',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(organization.status).toBe('active');
+    expect(
+      OrganizationMembershipSchema.parse({
+        id: randomUUID(),
+        organizationId,
+        userId: 'admin@example.com',
+        role: 'owner',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }).role,
+    ).toBe('owner');
+    expect(CreateOrganizationRequestSchema.parse({ name: 'Acme Corporation' })).toEqual({
+      name: 'Acme Corporation',
+    });
+    expect(() =>
+      SwitchAuthContextRequestSchema.parse({ organizationId, workspaceId: 'foreign' }),
+    ).toThrow();
   });
 
   it('accepts a versioned health response', () => {
@@ -472,5 +508,22 @@ describe('foundation contracts', () => {
     };
 
     expect(PagePayloadV2Schema.safeParse(invalid).success).toBe(false);
+  });
+
+  it('normalizes public hostnames and rejects URL-shaped input', () => {
+    expect(normalizeHostname(' Example.COM. ')).toBe('example.com');
+    expect(normalizeHostname('https://example.com/path')).toBeNull();
+    expect(normalizeHostname('example.com:443')).toBeNull();
+    expect(normalizeHostname('localhost')).toBeNull();
+    expect(normalizeHostname('promo.example.com')).toBe('promo.example.com');
+    expect(
+      CreateCustomDomainRequestSchema.safeParse({ hostname: 'example.com' }).success,
+    ).toBe(true);
+    expect(
+      UpdatePageSeoSettingsRequestSchema.safeParse({
+        title: 'Safe title',
+        canonicalUrl: 'javascript:alert(1)',
+      }).success,
+    ).toBe(false);
   });
 });

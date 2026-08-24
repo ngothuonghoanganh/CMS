@@ -1,24 +1,13 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthenticationGuard } from './authentication.guard';
 import { AuthenticationService } from './authentication.service';
-import {
-  AuthSessionRecord,
-  AuthSessionSchema,
-} from '../../persistence/schemas/auth-session.schema';
-import {
-  WorkspaceRecord,
-  WorkspaceSchema,
-} from '../../persistence/schemas/workspace.schema';
+import { ControlPlaneModule } from '../../tenancy/control-plane.module';
+import { TenantModelsModule } from '../../tenancy/tenant-models.module';
+import { TenantModule } from '../../tenancy/tenant.module';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: WorkspaceRecord.name, schema: WorkspaceSchema },
-      { name: AuthSessionRecord.name, schema: AuthSessionSchema },
-    ]),
-  ],
+  imports: [ControlPlaneModule, TenantModelsModule, TenantModule],
   exports: [AuthenticationGuard, AuthenticationService],
   providers: [AuthenticationGuard, AuthenticationService],
 })

@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
   type OnModuleDestroy,
-  type OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -33,6 +32,7 @@ import { IntegrationRecord } from '../persistence/schemas/integration.schema';
 import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { FormIntegrationBindingRecord } from '../persistence/schemas/form-integration-binding.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import type {
   DeliveryOutcome,
   DeliverySubmissionContext,
@@ -43,14 +43,12 @@ export const INTEGRATION_ADAPTERS = Symbol('INTEGRATION_ADAPTERS');
 export const DELIVERY_MAX_ATTEMPTS = 4;
 const DELIVERY_BATCH_SIZE = 20;
 const DELIVERY_LEASE_MS = 60_000;
-const PROCESS_INTERVAL_MS = 1_000;
 const RETRY_DELAYS_MS = [0, 30_000, 120_000, 600_000] as const;
 
 @Injectable()
-export class IntegrationDispatcher implements OnModuleInit, OnModuleDestroy {
+export class IntegrationDispatcher implements OnModuleDestroy {
   private readonly adaptersByType: Map<IntegrationRecord['type'], IntegrationAdapter>;
   private processing = false;
-  private timer?: ReturnType<typeof setInterval>;
 
   constructor(
     @InjectModel(IntegrationDeliveryRecord.name)
@@ -65,19 +63,16 @@ export class IntegrationDispatcher implements OnModuleInit, OnModuleDestroy {
     private readonly pageModel: Model<LandingPageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
+    @InjectModel(WorkspaceRecord.name)
+    private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(INTEGRATION_ADAPTERS) adapters: IntegrationAdapter[],
   ) {
     this.adaptersByType = new Map(adapters.map((adapter) => [adapter.type, adapter]));
   }
 
-  onModuleInit(): void {
-    void this.processPending();
-    this.timer = setInterval(() => void this.processPending(), PROCESS_INTERVAL_MS);
-    this.timer.unref?.();
-  }
-
   onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    // Delivery processing is request/context scoped. A future multi-tenant
+    // worker must iterate active tenant registries and enter each context.
   }
 
   async enqueueForSubmission(submissionId: string, workspaceId: string): Promise<void> {
@@ -232,6 +227,14 @@ export class IntegrationDispatcher implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processClaimed(delivery: IntegrationDeliveryDocument): Promise<void> {
+    const workspace = await this.workspaceModel.findById(delivery.workspaceId).exec();
+    if (!workspace) {
+      await this.finish(delivery, {
+        kind: 'permanent',
+        error: 'Workspace is unavailable',
+      });
+      return;
+    }
     const integration = await this.integrationModel
       .findOne({ _id: delivery.integrationId, workspaceId: delivery.workspaceId })
       .select('+secretCiphertext')

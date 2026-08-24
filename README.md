@@ -1,7 +1,8 @@
 # Payload Landing Page Platform
 
 Greenfield monorepo for a modular landing-page platform. The current implementation
-includes the Phase 6 forms/submissions foundation and Phase 7 notifications:
+includes the Phase 6 forms/submissions foundation, Phase 7 notifications, Phase 8
+analytics and Phase 9 custom-domain/SEO hardening:
 versioned page payloads, Mongo persistence, authenticated REST management APIs, CMS
 page management and builder, public publishing, semantic forms, workspace-scoped
 submissions, email/webhook integrations and durable delivery records.
@@ -108,13 +109,16 @@ The monorepo contains `apps/api`, `apps/cms`, `apps/renderer`, `packages/contrac
 
 ## Phase boundary
 
-Phase 7 is complete for the scoped email/webhook notification foundation, and Phase 8
-is complete for first-party analytics and tracking.
+Phase 7 is complete for the scoped email/webhook notification foundation, Phase 8 is
+complete for first-party analytics and tracking, and Phase 9 is complete for
+custom-domain/SEO production readiness. Phase 10 adds a Master control plane and
+database-per-tenant tenancy while keeping resources workspace-owned inside each
+tenant database.
 `PagePayloadV1` remains frozen; forms use the minimum explicit `PagePayloadV2`
 extension, published snapshots drive server-side validation, and notification
-bindings/deliveries remain outside the canonical page payload. Automation, CRM/social
-integrations, billing, collaboration and microservices remain deferred.
-Phase 9 has not been started. See
+bindings/deliveries remain outside the canonical page payload. Domain and SEO settings
+are also separate records. Automation, CRM/social integrations, billing,
+collaboration and microservices remain deferred. See
 [`docs/architecture/phase-3.md`](docs/architecture/phase-3.md),
 [`docs/architecture/phase-4.md`](docs/architecture/phase-4.md),
 [`docs/architecture/phase-5.md`](docs/architecture/phase-5.md),
@@ -122,6 +126,39 @@ Phase 9 has not been started. See
 [`docs/architecture/phase-7.md`](docs/architecture/phase-7.md),
 [`docs/continuity/phase-7-handoff.md`](docs/continuity/phase-7-handoff.md),
 [`docs/phase-8.md`](docs/phase-8.md),
+[`docs/phase-9.md`](docs/phase-9.md),
+[`docs/continuity/phase-9-handoff.md`](docs/continuity/phase-9-handoff.md),
+[`docs/phase-10.md`](docs/phase-10.md),
+[`docs/continuity/phase-10-handoff.md`](docs/continuity/phase-10-handoff.md),
 [`docs/architecture/phase-2.md`](docs/architecture/phase-2.md) and
 [`docs/architecture/page-payload-v1.md`](docs/architecture/page-payload-v1.md) for the
 implementation boundary and domain decisions.
+
+## Custom domains and SEO
+
+The CMS exposes Settings → Domains and Settings → SEO. Domains use a DNS TXT
+ownership check and serve only an active, page-bound domain whose page has a published
+version. The platform does not provision DNS records or TLS certificates; the edge or
+hosting proxy terminates HTTPS and forwards the validated host boundary to the
+renderer. `DOMAIN_VERIFICATION_PROVIDER=fake` is test-only and is rejected when
+`NODE_ENV=production`.
+
+SEO metadata is stored separately from page payloads and drives document title,
+description, canonical, Open Graph, Twitter/X, favicon, robots and domain-specific
+sitemap responses. Public reads remain correctness-first with request-time resolution
+and `no-store` caching; a shared cache or CDN invalidation service is intentionally
+deferred until its invalidation contract is defined.
+
+## Tenants and workspaces
+
+Authenticated CMS ownership follows `Tenant → tenant-local membership → Workspace →
+Resources`. The Master DB stores tenant registry, lifecycle, hostname mappings and
+platform-admin records; each tenant has a separate MongoDB database containing its
+users, sessions, workspaces and business resources. `PagePayloadV1/V2` remain pure
+rendering contracts and contain no tenant metadata.
+
+Tenant provisioning is available under `/api/v1/control-plane/tenants`; authenticated
+context switching creates a session in the target tenant database. The legacy
+`/api/v1/organizations` routes are a temporary compatibility adapter backed by the
+new tenant model, not the old Organization collections. Billing, invitations and
+advanced RBAC remain deferred to Phase 11+.

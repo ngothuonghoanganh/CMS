@@ -33,7 +33,7 @@ const stylePropertyMap = {
 } as const;
 
 type RenderableNode = PageNode | PageNodeV2;
-type RenderContext = { siteSlug?: string; pageSlug?: string };
+type RenderContext = { siteSlug?: string; pageSlug?: string; tenantSlug?: string };
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
 function isSafeCssValue(value: string): boolean {
@@ -171,7 +171,7 @@ function renderForm(node: FormNode, context: RenderContext): ReactElement {
     process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
   const submissionUrl =
     context.siteSlug && context.pageSlug
-      ? `${apiBaseUrl}/public/sites/${encodeURIComponent(context.siteSlug)}/pages/${encodeURIComponent(context.pageSlug)}/forms/${encodeURIComponent(node.id)}/submissions`
+      ? `${apiBaseUrl}/public/sites/${encodeURIComponent(context.siteSlug)}/pages/${encodeURIComponent(context.pageSlug)}/forms/${encodeURIComponent(node.id)}/submissions${context.tenantSlug ? `?tenantSlug=${encodeURIComponent(context.tenantSlug)}` : ''}`
       : undefined;
   return <FormRenderer node={node} {...(submissionUrl ? { submissionUrl } : {})} />;
 }

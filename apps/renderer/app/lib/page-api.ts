@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 
 import { PublicLandingPageSchema, type PublicLandingPage } from '@payload/contracts';
 
@@ -7,7 +8,7 @@ const apiBaseUrl = process.env.RENDERER_API_BASE_URL ?? 'http://127.0.0.1:3001/a
 function uncachedApiUrl(path: string): string {
   // The request is already no-store; the nonce also bypasses Next dev's HMR
   // fetch cache so a publish/unpublish is visible on the very next request.
-  return `${apiBaseUrl}${path}?_rendererRequest=${Date.now()}`;
+  return `${apiBaseUrl}${path}${path.includes('?') ? '&' : '?'}_rendererRequest=${Date.now()}`;
 }
 
 async function readPageResponse(response: Response): Promise<PublicLandingPage | null> {
@@ -27,7 +28,7 @@ async function readPageResponse(response: Response): Promise<PublicLandingPage |
   return parsed.data;
 }
 
-export async function getPublicPage(
+export const getPublicPage = cache(async function getPublicPage(
   siteSlug: string,
   pageSlug: string,
 ): Promise<PublicLandingPage | null> {
@@ -38,9 +39,21 @@ export async function getPublicPage(
     { cache: 'no-store' },
   );
   return readPageResponse(response);
-}
+});
 
-export async function getPreviewPage(pageId: string): Promise<PublicLandingPage | null> {
+export const getPublicPageForHostname = cache(async function getPublicPageForHostname(
+  hostname: string,
+): Promise<PublicLandingPage | null> {
+  const response = await fetch(
+    uncachedApiUrl(`/public/domains/resolve?hostname=${encodeURIComponent(hostname)}`),
+    { cache: 'no-store' },
+  );
+  return readPageResponse(response);
+});
+
+export const getPreviewPage = cache(async function getPreviewPage(
+  pageId: string,
+): Promise<PublicLandingPage | null> {
   const cookieHeader = (await cookies()).toString();
   const requestInit: RequestInit = { cache: 'no-store' };
   if (cookieHeader) {
@@ -51,4 +64,4 @@ export async function getPreviewPage(pageId: string): Promise<PublicLandingPage 
     requestInit,
   );
   return readPageResponse(response);
-}
+});

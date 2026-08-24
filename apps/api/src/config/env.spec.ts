@@ -16,4 +16,13 @@ describe('parseEnvironment', () => {
       'MONGODB_URI must be a MongoDB connection string',
     );
   });
+
+  it('rejects the fake domain verifier in production', () => {
+    expect(() =>
+      parseEnvironment({
+        DOMAIN_VERIFICATION_PROVIDER: 'fake',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow('Fake domain verification is not allowed in production');
+  });
 });

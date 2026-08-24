@@ -3,10 +3,13 @@ import {
   createHmac,
   randomBytes,
   randomUUID,
+  scrypt as nodeScrypt,
   timingSafeEqual,
 } from 'node:crypto';
+import { promisify } from 'node:util';
 
 import {
+  Inject,
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -18,10 +21,12 @@ import {
   AuthPrincipalSchema,
   AuthSessionResponseSchema,
   AuthUserSchema,
+  SwitchAuthContextRequestSchema,
   WorkspaceSchema,
   type AuthPrincipal,
   type AuthSessionResponse,
   type LoginRequest,
+  type SwitchAuthContextRequest,
   type Workspace,
 } from '@payload/contracts';
 
@@ -34,10 +39,15 @@ import {
   WorkspaceRecord,
   type WorkspaceDocument,
 } from '../../persistence/schemas/workspace.schema';
+import { TenantMembershipRecord } from '../../tenancy/schemas/tenant-membership.schema';
+import { TenantUserRecord } from '../../tenancy/schemas/tenant-user.schema';
+import { TenantContext } from '../../tenancy/tenant-context';
+import { TenantResolver } from '../../tenancy/tenant-resolver';
 
 type AccessTokenClaims = {
   sub: string;
   sid: string;
+  tid: string;
   iat: number;
   exp: number;
 };
@@ -48,11 +58,10 @@ type SessionTokens = {
   accessTokenExpiresAt: number;
 };
 
-export type LoginResult = SessionTokens & {
-  response: AuthSessionResponse;
-};
+export type LoginResult = SessionTokens & { response: AuthSessionResponse };
 
 const ACCESS_TOKEN_HEADER = { alg: 'HS256', typ: 'JWT' } as const;
+const scrypt = promisify(nodeScrypt);
 
 function encodeBase64Url(value: string | Buffer): string {
   return Buffer.from(value).toString('base64url');
@@ -76,140 +85,152 @@ export class AuthenticationService {
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @InjectModel(AuthSessionRecord.name)
     private readonly sessionModel: Model<AuthSessionRecord>,
+    @InjectModel(TenantUserRecord.name)
+    private readonly userModel: Model<TenantUserRecord>,
+    @InjectModel(TenantMembershipRecord.name)
+    private readonly membershipModel: Model<TenantMembershipRecord>,
+    @Inject(TenantResolver) private readonly resolver: TenantResolver,
+    @Inject(TenantContext) private readonly context: TenantContext,
   ) {}
 
   async login(input: LoginRequest): Promise<LoginResult> {
-    if (!this.hasValidCredentials(input)) {
-      throw new UnauthorizedException({
-        code: 'INVALID_CREDENTIALS',
-        message: 'The email or password is invalid',
-      });
-    }
+    const scope = await this.resolver.resolveForLogin({ tenantSlug: input.tenantSlug });
+    await this.resolver.ensureConnection(scope);
+    return this.context.run(scope, async () => {
+      const user = await this.userModel
+        .findOne({ email: input.email.toLowerCase(), status: 'active' })
+        .select('+passwordHash')
+        .exec();
+      if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+        throw new UnauthorizedException({
+          code: 'INVALID_CREDENTIALS',
+          message: 'The email or password is invalid',
+        });
+      }
+      const membership = await this.membershipModel
+        .findOne({ tenantId: scope.id, userId: user.email })
+        .exec();
+      if (!membership) {
+        throw new UnauthorizedException({
+          code: 'TENANT_MEMBERSHIP_REQUIRED',
+          message: 'The user is not a member of this tenant',
+        });
+      }
 
-    const workspaceRecord = await this.workspaceModel
-      .findOne()
-      .sort({ createdAt: 1, _id: 1 })
-      .exec();
-    if (!workspaceRecord) {
-      throw new ServiceUnavailableException({
-        code: 'AUTH_WORKSPACE_UNAVAILABLE',
-        message: 'Authentication is temporarily unavailable',
-      });
-    }
+      const workspaceRecord = await this.workspaceModel
+        .findOne()
+        .sort({ createdAt: 1, _id: 1 })
+        .exec();
+      if (!workspaceRecord) {
+        throw new ServiceUnavailableException({
+          code: 'AUTH_WORKSPACE_UNAVAILABLE',
+          message: 'Authentication is temporarily unavailable',
+        });
+      }
 
-    const workspace = this.toWorkspace(workspaceRecord);
-    const principalId = input.email.toLowerCase();
-    const { session, refreshToken } = await this.createSession({
-      email: principalId,
-      principalId,
-      workspaceId: workspace.id,
-    });
-    const tokens = this.issueAccessToken(session._id, principalId, refreshToken);
-    const principal = this.toPrincipal(session, principalId);
-
-    return {
-      ...tokens,
-      response: this.toSessionResponse(
-        principal,
+      const principalId = user.email;
+      const workspace = this.toWorkspace(workspaceRecord);
+      const { session, refreshToken } = await this.createSession({
+        email: principalId,
         principalId,
-        workspace,
-        tokens.accessTokenExpiresAt,
-      ),
-    };
+        workspaceId: workspace.id,
+        tenantId: scope.id,
+      });
+      const tokens = this.issueAccessToken(
+        session._id,
+        principalId,
+        scope.id,
+        refreshToken,
+      );
+      const principal = this.toPrincipal(session, principalId, scope.id);
+      return {
+        ...tokens,
+        response: this.toSessionResponse(
+          principal,
+          principalId,
+          workspace,
+          scope.slug,
+          tokens.accessTokenExpiresAt,
+        ),
+      };
+    });
   }
 
   async refresh(refreshToken: string | undefined): Promise<LoginResult> {
-    if (!refreshToken) {
-      throw this.refreshTokenError('REFRESH_TOKEN_INVALID');
-    }
+    const tenantId = this.tenantIdFromRefreshToken(refreshToken);
+    const scope = await this.resolver.resolveById(tenantId);
+    await this.resolver.ensureConnection(scope);
+    return this.context.run(scope, async () => {
+      if (!refreshToken) throw this.refreshTokenError('REFRESH_TOKEN_INVALID');
+      const tokenHash = hashRefreshToken(refreshToken);
+      const session = await this.sessionModel
+        .findOne({ refreshTokenHash: tokenHash })
+        .exec();
+      if (!session) throw this.refreshTokenError('REFRESH_TOKEN_INVALID');
+      this.assertSessionActive(session);
 
-    const tokenHash = hashRefreshToken(refreshToken);
-    const session = await this.sessionModel
-      .findOne({ refreshTokenHash: tokenHash })
-      .exec();
-    if (!session) {
-      throw this.refreshTokenError('REFRESH_TOKEN_INVALID');
-    }
-
-    const now = new Date();
-    if (session.revokedAt) {
-      throw this.refreshTokenError(
-        session.replacedBySessionId ? 'REFRESH_TOKEN_INVALID' : 'SESSION_REVOKED',
-      );
-    }
-    if (session.expiresAt.getTime() <= now.getTime()) {
-      throw this.refreshTokenError('REFRESH_TOKEN_EXPIRED');
-    }
-
-    const nextSessionId = randomUUID();
-    const nextRefreshToken = randomBytes(48).toString('base64url');
-    const nextSession = {
-      _id: nextSessionId,
-      principalId: session.principalId,
-      email: session.email,
-      workspaceId: session.workspaceId,
-      refreshTokenHash: hashRefreshToken(nextRefreshToken),
-      createdAt: now,
-      lastUsedAt: now,
-      expiresAt: new Date(now.getTime() + env.AUTH_REFRESH_TOKEN_TTL_SECONDS * 1000),
-      revokedAt: null,
-      replacedBySessionId: null,
-    };
-
-    // The conditional update makes rotation single-use even when two refresh
-    // requests race. Only the winner may create the replacement session.
-    const rotated = await this.sessionModel
-      .findOneAndUpdate(
-        {
-          _id: session._id,
-          refreshTokenHash: tokenHash,
-          revokedAt: null,
-        },
-        {
-          $set: {
-            lastUsedAt: now,
-            replacedBySessionId: nextSessionId,
-            revokedAt: now,
+      const now = new Date();
+      const nextSessionId = randomUUID();
+      const nextRefreshToken = `${scope.id}.${randomBytes(48).toString('base64url')}`;
+      const rotated = await this.sessionModel
+        .findOneAndUpdate(
+          { _id: session._id, refreshTokenHash: tokenHash, revokedAt: null },
+          {
+            $set: {
+              lastUsedAt: now,
+              replacedBySessionId: nextSessionId,
+              revokedAt: now,
+            },
           },
-        },
-        { new: true },
-      )
-      .exec();
-    if (!rotated) {
-      throw this.refreshTokenError('SESSION_REVOKED');
-    }
+          { new: true },
+        )
+        .exec();
+      if (!rotated) throw this.refreshTokenError('SESSION_REVOKED');
 
-    const createdSession = await this.sessionModel.create(nextSession);
-    const workspace = await this.getWorkspace(createdSession.workspaceId);
-    const principal = this.toPrincipal(createdSession, createdSession.principalId);
-    const tokens = this.issueAccessToken(
-      createdSession._id,
-      createdSession.principalId,
-      nextRefreshToken,
-    );
-
-    return {
-      ...tokens,
-      response: this.toSessionResponse(
-        principal,
-        createdSession.email,
-        workspace,
-        tokens.accessTokenExpiresAt,
-      ),
-    };
+      const createdSession = await this.sessionModel.create({
+        _id: nextSessionId,
+        principalId: session.principalId,
+        email: session.email,
+        workspaceId: session.workspaceId,
+        refreshTokenHash: hashRefreshToken(nextRefreshToken),
+        createdAt: now,
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + env.AUTH_REFRESH_TOKEN_TTL_SECONDS * 1000),
+        revokedAt: null,
+        replacedBySessionId: null,
+      });
+      const workspace = await this.getWorkspace(createdSession.workspaceId);
+      const principal = this.toPrincipal(
+        createdSession,
+        createdSession.principalId,
+        scope.id,
+      );
+      const tokens = this.issueAccessToken(
+        createdSession._id,
+        createdSession.principalId,
+        scope.id,
+        nextRefreshToken,
+      );
+      return {
+        ...tokens,
+        response: this.toSessionResponse(
+          principal,
+          createdSession.email,
+          workspace,
+          scope.slug,
+          tokens.accessTokenExpiresAt,
+        ),
+      };
+    });
   }
 
   async authenticate(token: string | undefined): Promise<AuthPrincipal> {
-    if (!token) {
-      throw this.unauthorized();
-    }
-
+    if (!token) throw this.unauthorized();
     const claims = this.verifyAccessToken(token);
+    const scope = await this.resolver.resolveById(claims.tid);
+    await this.resolver.ensureConnection(scope);
     const session = await this.sessionModel
-      .findOne({
-        _id: claims.sid,
-        principalId: claims.sub,
-      })
+      .findOne({ _id: claims.sid, principalId: claims.sub })
       .exec();
     if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
       throw this.unauthorized(
@@ -217,17 +238,14 @@ export class AuthenticationService {
         'The authentication session is no longer active',
       );
     }
-
-    return this.toPrincipal(session, claims.sub);
+    return this.toPrincipal(session, claims.sub, scope.id);
   }
 
   async getSessionResponse(principal: AuthPrincipal): Promise<AuthSessionResponse> {
     const workspaceId = principal.workspaceId;
     const sessionId = principal.sessionId;
-    if (!workspaceId || !sessionId) {
-      throw this.unauthorized();
-    }
-
+    const tenantId = principal.tenantId;
+    if (!workspaceId || !sessionId || !tenantId) throw this.unauthorized();
     const session = await this.sessionModel
       .findOne({ _id: sessionId, principalId: principal.subject, revokedAt: null })
       .exec();
@@ -237,60 +255,127 @@ export class AuthenticationService {
         'The authentication session is no longer active',
       );
     }
-
     const workspace = await this.getWorkspace(workspaceId);
+    const scope = this.context.require();
     return this.toSessionResponse(
       principal,
       session.email,
       workspace,
+      scope.slug,
       Date.now() + env.AUTH_ACCESS_TOKEN_TTL_SECONDS * 1000,
     );
+  }
+
+  async switchContext(
+    principal: AuthPrincipal,
+    input: SwitchAuthContextRequest,
+  ): Promise<LoginResult> {
+    // The old request field is retained as a wire-compatibility alias while the
+    // value is now a Master Tenant id. Workspace remains tenant-local.
+    const parsed = SwitchAuthContextRequestSchema.parse(input);
+    if (!principal.sessionId) throw this.unauthorized();
+    const scope = await this.resolver.resolveById(parsed.organizationId);
+    await this.resolver.ensureConnection(scope);
+    return this.context.run(scope, async () => {
+      const membership = await this.membershipModel
+        .findOne({ tenantId: scope.id, userId: principal.subject })
+        .exec();
+      if (!membership) {
+        throw new UnauthorizedException({
+          code: 'AUTH_CONTEXT_INVALID',
+          message: 'The user is not a member of the requested tenant',
+        });
+      }
+      const user = await this.userModel
+        .findOne({ email: principal.subject, status: 'active' })
+        .exec();
+      if (!user) {
+        throw new UnauthorizedException({
+          code: 'AUTH_CONTEXT_INVALID',
+          message: 'The user is not active in the requested tenant',
+        });
+      }
+      const workspace = await this.workspaceModel.findById(parsed.workspaceId).exec();
+      if (!workspace) {
+        throw new UnauthorizedException({
+          code: 'AUTH_CONTEXT_INVALID',
+          message: 'The requested tenant or workspace is not available',
+        });
+      }
+      const { session, refreshToken } = await this.createSession({
+        email: user.email,
+        principalId: user.email,
+        workspaceId: parsed.workspaceId,
+        tenantId: scope.id,
+      });
+      const tokens = this.issueAccessToken(
+        session._id,
+        user.email,
+        scope.id,
+        refreshToken,
+      );
+      const nextPrincipal = this.toPrincipal(session, user.email, scope.id);
+      return {
+        ...tokens,
+        response: this.toSessionResponse(
+          nextPrincipal,
+          user.email,
+          this.toWorkspace(workspace),
+          scope.slug,
+          tokens.accessTokenExpiresAt,
+        ),
+      };
+    });
   }
 
   async logout(
     accessToken: string | undefined,
     refreshToken: string | undefined,
   ): Promise<void> {
-    const sessionIds = new Set<string>();
-
-    if (accessToken) {
-      try {
-        sessionIds.add(this.verifyAccessToken(accessToken, true).sid);
-      } catch {
-        // Logout still clears cookies when the access token has expired.
+    const tenantId = this.tenantIdFromTokens(accessToken, refreshToken);
+    if (!tenantId) return;
+    const scope = await this.resolver.resolveById(tenantId);
+    await this.resolver.ensureConnection(scope);
+    await this.context.run(scope, async () => {
+      const sessionIds = new Set<string>();
+      if (accessToken) {
+        try {
+          sessionIds.add(this.verifyAccessToken(accessToken, true).sid);
+        } catch {
+          // Cookie clearing remains successful for expired access tokens.
+        }
       }
-    }
-
-    if (refreshToken) {
-      const session = await this.sessionModel
-        .findOne({ refreshTokenHash: hashRefreshToken(refreshToken) })
-        .select({ _id: 1 })
-        .exec();
-      if (session) {
-        sessionIds.add(session._id);
+      if (refreshToken) {
+        const session = await this.sessionModel
+          .findOne({ refreshTokenHash: hashRefreshToken(refreshToken) })
+          .select({ _id: 1 })
+          .exec();
+        if (session) sessionIds.add(session._id);
       }
-    }
-
-    if (sessionIds.size > 0) {
-      await this.sessionModel
-        .updateMany(
-          { _id: { $in: [...sessionIds] }, revokedAt: null },
-          { $set: { revokedAt: new Date() } },
-        )
-        .exec();
-    }
+      if (sessionIds.size > 0) {
+        await this.sessionModel
+          .updateMany(
+            { _id: { $in: [...sessionIds] }, revokedAt: null },
+            { $set: { revokedAt: new Date() } },
+          )
+          .exec();
+      }
+    });
   }
 
   private async createSession(input: {
     email: string;
     principalId: string;
     workspaceId: string;
+    tenantId: string;
   }): Promise<{ session: AuthSessionDocument; refreshToken: string }> {
     const now = new Date();
-    const refreshToken = randomBytes(48).toString('base64url');
+    const refreshToken = `${input.tenantId}.${randomBytes(48).toString('base64url')}`;
     const session = await this.sessionModel.create({
       _id: randomUUID(),
-      ...input,
+      email: input.email,
+      principalId: input.principalId,
+      workspaceId: input.workspaceId,
       refreshTokenHash: hashRefreshToken(refreshToken),
       createdAt: now,
       lastUsedAt: now,
@@ -304,17 +389,16 @@ export class AuthenticationService {
   private issueAccessToken(
     sessionId: string,
     principalId: string,
+    tenantId: string,
     refreshToken: string,
   ): SessionTokens {
-    // The refresh token is accepted here only to make accidental omission at
-    // call sites visible in the type signature; it is never placed in a JWT.
-    void refreshToken;
     const now = Math.floor(Date.now() / 1000);
     const claims: AccessTokenClaims = {
       exp: now + env.AUTH_ACCESS_TOKEN_TTL_SECONDS,
       iat: now,
       sid: sessionId,
       sub: principalId,
+      tid: tenantId,
     };
     const encodedHeader = encodeBase64Url(JSON.stringify(ACCESS_TOKEN_HEADER));
     const encodedPayload = encodeBase64Url(JSON.stringify(claims));
@@ -322,7 +406,6 @@ export class AuthenticationService {
     const signature = createHmac('sha256', env.AUTH_ACCESS_TOKEN_SECRET)
       .update(signingInput)
       .digest();
-
     return {
       accessToken: `${signingInput}.${encodeBase64Url(signature)}`,
       accessTokenExpiresAt: claims.exp * 1000,
@@ -332,13 +415,13 @@ export class AuthenticationService {
 
   private verifyAccessToken(token: string, allowExpired = false): AccessTokenClaims {
     const parts = token.split('.');
-    if (parts.length !== 3) {
+    if (parts.length !== 3)
       throw this.unauthorized('ACCESS_TOKEN_INVALID', 'The access token is invalid');
-    }
-
-    const encodedHeader = parts[0]!;
-    const encodedPayload = parts[1]!;
-    const encodedSignature = parts[2]!;
+    const [encodedHeader, encodedPayload, encodedSignature] = parts as [
+      string,
+      string,
+      string,
+    ];
     const expectedSignature = createHmac('sha256', env.AUTH_ACCESS_TOKEN_SECRET)
       .update(`${encodedHeader}.${encodedPayload}`)
       .digest();
@@ -349,7 +432,6 @@ export class AuthenticationService {
     ) {
       throw this.unauthorized('ACCESS_TOKEN_INVALID', 'The access token is invalid');
     }
-
     try {
       const header = JSON.parse(decodeBase64Url(encodedHeader).toString('utf8')) as {
         alg?: unknown;
@@ -358,6 +440,7 @@ export class AuthenticationService {
       const payload = JSON.parse(decodeBase64Url(encodedPayload).toString('utf8')) as {
         sub?: unknown;
         sid?: unknown;
+        tid?: unknown;
         iat?: unknown;
         exp?: unknown;
       };
@@ -366,11 +449,11 @@ export class AuthenticationService {
         header.typ !== ACCESS_TOKEN_HEADER.typ ||
         typeof payload.sub !== 'string' ||
         typeof payload.sid !== 'string' ||
+        typeof payload.tid !== 'string' ||
         typeof payload.iat !== 'number' ||
         typeof payload.exp !== 'number'
-      ) {
+      )
         throw new Error('invalid claims');
-      }
       if (!allowExpired && payload.exp <= Math.floor(Date.now() / 1000)) {
         throw this.unauthorized('ACCESS_TOKEN_EXPIRED', 'The access token has expired');
       }
@@ -379,47 +462,38 @@ export class AuthenticationService {
         iat: payload.iat,
         sid: payload.sid,
         sub: payload.sub,
+        tid: payload.tid,
       };
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
+      if (error instanceof UnauthorizedException) throw error;
       throw this.unauthorized('ACCESS_TOKEN_INVALID', 'The access token is invalid');
     }
   }
 
   private async getWorkspace(workspaceId: string): Promise<Workspace> {
     const record = await this.workspaceModel.findById(workspaceId).exec();
-    if (!record) {
-      throw this.unauthorized();
-    }
+    if (!record) throw this.unauthorized();
     return this.toWorkspace(record);
   }
 
-  private toPrincipal(session: AuthSessionDocument, subject: string): AuthPrincipal {
+  private toPrincipal(
+    session: AuthSessionDocument,
+    subject: string,
+    tenantId: string,
+  ): AuthPrincipal {
     return AuthPrincipalSchema.parse({
       sessionId: session._id,
       subject,
+      tenantId,
       workspaceId: session.workspaceId,
     });
-  }
-
-  private hasValidCredentials(input: LoginRequest): boolean {
-    const expectedEmail = env.AUTH_EMAIL.toLowerCase();
-    const providedEmail = input.email.toLowerCase();
-    const expectedPassword = Buffer.from(env.AUTH_PASSWORD);
-    const providedPassword = Buffer.from(input.password);
-    const passwordMatches =
-      expectedPassword.length === providedPassword.length &&
-      timingSafeEqual(expectedPassword, providedPassword);
-
-    return providedEmail === expectedEmail && passwordMatches;
   }
 
   private toWorkspace(record: WorkspaceDocument): Workspace {
     return WorkspaceSchema.parse({
       createdAt: record.createdAt.toISOString(),
       id: record._id.toString(),
+      organizationId: this.context.require().id,
       name: record.name,
       updatedAt: record.updatedAt.toISOString(),
     });
@@ -429,6 +503,7 @@ export class AuthenticationService {
     principal: AuthPrincipal,
     email: string,
     workspace: Workspace,
+    tenantSlug: string,
     accessTokenExpiresAt: number,
   ): AuthSessionResponse {
     return AuthSessionResponseSchema.parse({
@@ -436,10 +511,43 @@ export class AuthenticationService {
       user: AuthUserSchema.parse({
         email,
         subject: principal.subject,
+        tenantId: principal.tenantId,
+        tenantSlug,
         workspaceId: workspace.id,
       }),
       workspace,
     });
+  }
+
+  private assertSessionActive(session: AuthSessionDocument): void {
+    if (session.revokedAt) {
+      throw this.refreshTokenError(
+        session.replacedBySessionId ? 'REFRESH_TOKEN_INVALID' : 'SESSION_REVOKED',
+      );
+    }
+    if (session.expiresAt.getTime() <= Date.now()) {
+      throw this.refreshTokenError('REFRESH_TOKEN_EXPIRED');
+    }
+  }
+
+  private tenantIdFromRefreshToken(token: string | undefined): string {
+    const tenantId = token?.split('.', 1)[0];
+    if (!tenantId) throw this.refreshTokenError('REFRESH_TOKEN_INVALID');
+    return tenantId;
+  }
+
+  private tenantIdFromTokens(
+    accessToken?: string,
+    refreshToken?: string,
+  ): string | undefined {
+    if (accessToken) {
+      try {
+        return this.verifyAccessToken(accessToken, true).tid;
+      } catch {
+        // Try the refresh token below when access has expired.
+      }
+    }
+    return refreshToken?.split('.', 1)[0];
   }
 
   private refreshTokenError(
@@ -459,4 +567,16 @@ export class AuthenticationService {
   ): UnauthorizedException {
     return new UnauthorizedException({ code, message });
   }
+}
+
+async function verifyPassword(
+  password: string,
+  storedHash: string | undefined,
+): Promise<boolean> {
+  if (!storedHash || !/^scrypt\$[^$]+\$[0-9a-f]+$/.test(storedHash)) return false;
+  const [, salt, expectedHex] = storedHash.split('$');
+  if (!salt || !expectedHex) return false;
+  const expected = Buffer.from(expectedHex, 'hex');
+  const derived = (await scrypt(password, salt, expected.length)) as Buffer;
+  return expected.length === derived.length && timingSafeEqual(expected, derived);
 }

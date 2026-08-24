@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { renderPage } from '../../renderer';
 import { getPublicPage } from '../../lib/page-api';
 import { AnalyticsTracker } from '../../analytics-client';
+import { publicPageMetadata } from '../../lib/seo';
 
 type PublicPageProps = {
   params: Promise<{ siteSlug: string; pageSlug: string }>;
@@ -24,10 +25,7 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
   if (!page) {
     return { robots: { index: false, follow: false }, title: 'Page not found' };
   }
-  return {
-    description: page.payload.metadata.documentDescription,
-    title: page.payload.metadata.documentTitle,
-  };
+  return publicPageMetadata(page, { fallbackPath: `/${siteSlug}/${pageSlug}` });
 }
 
 export default async function PublicPage({ params }: PublicPageProps) {
@@ -39,10 +37,15 @@ export default async function PublicPage({ params }: PublicPageProps) {
       data-page-slug={page.page.slug}
       data-site-slug={page.site.slug}
     >
-      <AnalyticsTracker pageSlug={pageSlug} siteSlug={siteSlug} />
+      <AnalyticsTracker
+        pageSlug={pageSlug}
+        siteSlug={siteSlug}
+        {...(page.tenantSlug ? { tenantSlug: page.tenantSlug } : {})}
+      />
       {renderPage(page.payload, {
         pageSlug: pageSlug,
         siteSlug: siteSlug,
+        ...(page.tenantSlug ? { tenantSlug: page.tenantSlug } : {}),
       })}
     </div>
   );

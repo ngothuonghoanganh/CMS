@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        'INTEGRATION_EMAIL_PROVIDER=fake INTEGRATION_ALLOW_HTTP_WEBHOOKS=true INTEGRATION_ALLOW_LOCAL_WEBHOOKS=true pnpm --filter @payload/api dev',
+        'INTEGRATION_EMAIL_PROVIDER=fake INTEGRATION_ALLOW_HTTP_WEBHOOKS=true INTEGRATION_ALLOW_LOCAL_WEBHOOKS=true DOMAIN_VERIFICATION_PROVIDER=fake TRUST_PROXY=true pnpm --filter @payload/api dev',
       url: 'http://127.0.0.1:3001/api/v1/health/live',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
@@ -28,7 +28,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'pnpm --filter @payload/renderer dev',
+      command: 'TRUST_PROXY=true pnpm --filter @payload/renderer dev',
       url: 'http://127.0.0.1:3002',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

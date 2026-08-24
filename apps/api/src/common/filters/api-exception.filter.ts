@@ -17,6 +17,7 @@ type NestErrorBody = {
   code?: string;
   message?: string | string[];
   error?: string;
+  details?: Record<string, unknown>;
 };
 
 @Catch()
@@ -69,12 +70,14 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const exceptionBody = exception.getResponse();
     const message = this.readMessage(exceptionBody) ?? exception.message;
     const code = this.readCode(exceptionBody) ?? this.statusCodeToErrorCode(status);
+    const details = this.readDetails(exceptionBody);
 
     return {
       error: {
         code,
         message,
         requestId,
+        ...(details ? { details } : {}),
       },
     };
   }
@@ -85,6 +88,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
 
     return body.code;
+  }
+
+  private readDetails(body: string | object): Record<string, unknown> | undefined {
+    if (!this.isNestErrorBody(body) || !body.details) return undefined;
+    return body.details;
   }
 
   private isDuplicateKeyError(exception: unknown): boolean {

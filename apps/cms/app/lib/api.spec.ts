@@ -56,4 +56,30 @@ describe('api client authentication recovery', () => {
       'http://127.0.0.1:3001/api/v1/auth/me',
     ]);
   });
+
+  it('coalesces concurrent GETs without caching completed responses', async () => {
+    let release: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      release?.();
+      await fetchStarted;
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    });
+
+    const first = api.get('/auth/me');
+    const second = api.get('/auth/me');
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { ok: true },
+      { ok: true },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await expect(api.get('/auth/me')).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

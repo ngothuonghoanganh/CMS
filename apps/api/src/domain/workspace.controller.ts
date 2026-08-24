@@ -7,7 +7,11 @@ import {
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
 import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { requireWorkspaceId } from '../common/guards/workspace-context';
+import {
+  requireOrganizationId,
+  requireOrganizationRole,
+  requireRequestedWorkspace,
+} from '../common/guards/workspace-context';
 import type { PlatformRequest } from '../common/interfaces/request';
 import { WorkspaceService } from './workspace.service';
 
@@ -24,8 +28,10 @@ export class WorkspaceController {
     input: CreateWorkspaceRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    requireWorkspaceId(principal);
-    return this.workspaceService.create(input);
+    return this.workspaceService.create(
+      input,
+      requireOrganizationRole(principal, ['owner', 'admin']),
+    );
   }
 
   @Get(':workspaceId')
@@ -33,6 +39,10 @@ export class WorkspaceController {
     @Param('workspaceId') workspaceId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.workspaceService.getById(workspaceId, requireWorkspaceId(principal));
+    return this.workspaceService.getById(
+      workspaceId,
+      requireRequestedWorkspace(principal, workspaceId),
+      requireOrganizationId(principal),
+    );
   }
 }

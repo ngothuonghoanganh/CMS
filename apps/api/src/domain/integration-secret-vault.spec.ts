@@ -14,7 +14,9 @@ describe('IntegrationSecretVault', () => {
   it('rejects tampered ciphertext', () => {
     const vault = new IntegrationSecretVault('unit-test-key-with-at-least-32-characters');
     const ciphertext = vault.encrypt('secret');
-    const tampered = `${ciphertext.slice(0, -1)}x`;
+    const lastCharacter = ciphertext.at(-1);
+    const replacement = lastCharacter === 'x' ? 'y' : 'x';
+    const tampered = `${ciphertext.slice(0, -1)}${replacement}`;
 
     expect(() => vault.decrypt(tampered)).toThrow();
   });

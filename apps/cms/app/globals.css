@@ -166,6 +166,54 @@ button {
 .metric-card strong {
   font-size: 2.2rem;
 }
+.billing-plan-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.billing-plan-card h2 {
+  margin: 0.35rem 0 0.6rem;
+}
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.usage-card {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid #273453;
+  border-radius: 0.8rem;
+  padding: 1rem;
+  background: #10172a;
+}
+.usage-card.near-limit {
+  border-color: #e6b566;
+}
+.usage-card .panel-heading {
+  margin-bottom: 0;
+}
+.usage-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.usage-value .muted {
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.usage-bar {
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #273453;
+}
+.usage-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #8cf0c5;
+}
 .linkish {
   color: #8cf0c5;
   font-size: 0.85rem;
@@ -1132,6 +1180,13 @@ textarea {
   }
   .analytics-breakdown-grid {
     grid-template-columns: 1fr;
+  }
+  .usage-grid {
+    grid-template-columns: 1fr;
+  }
+  .billing-plan-card {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

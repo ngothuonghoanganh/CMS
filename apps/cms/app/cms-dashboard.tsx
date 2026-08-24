@@ -3,15 +3,24 @@
 import {
   AssetListResponseSchema,
   AuthSessionResponseSchema,
+  OrganizationListResponseSchema,
+  OrganizationMembershipListResponseSchema,
+  WorkspaceListResponseSchema,
+  CustomDomainListResponseSchema,
   FormIntegrationBindingListResponseSchema,
   IntegrationListResponseSchema,
   SubmissionListResponseSchema,
   PageListResponseSchema,
+  PageSeoSettingsSchema,
   PageVersionListResponseSchema,
   SiteListResponseSchema,
   TemplateListResponseSchema,
   type Asset,
   type AuthSessionResponse,
+  type Organization,
+  type OrganizationMembership,
+  type Workspace,
+  type CustomDomain,
   type FormSubmission,
   type FormIntegrationBinding,
   type FormNode,
@@ -19,15 +28,19 @@ import {
   type PageNodeV2,
   type LandingPage,
   type PageVersion,
+  type PageSeoSettings,
   type Site,
   type Template,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { ApiClientError, api } from './lib/api';
 import { IntegrationsView } from './integrations-view';
 import { AnalyticsView } from './analytics-view';
+import { DomainsView } from './domains-view';
+import { SeoView } from './seo-view';
+import { BillingView } from './billing-view';
 
 type View =
   | 'dashboard'
@@ -37,11 +50,16 @@ type View =
   | 'templates'
   | 'submissions'
   | 'integrations'
-  | 'analytics';
+  | 'analytics'
+  | 'domains'
+  | 'seo'
+  | 'billing'
+  | 'organization';
 type SiteForm = { name: string; slug: string };
 type PageForm = { name: string; slug: string };
 type AssetForm = { filename: string; mimeType: string; size: string; storageKey: string };
 type TemplateForm = { name: string; description: string };
+type DomainForm = { hostname: string; landingPageId: string; isPrimary: boolean };
 
 const blankSite: SiteForm = { name: '', slug: '' };
 const blankPage: PageForm = { name: '', slug: '' };
@@ -52,6 +70,7 @@ const blankAsset: AssetForm = {
   storageKey: '/assets/',
 };
 const blankTemplate: TemplateForm = { name: '', description: '' };
+const blankDomain: DomainForm = { hostname: '', landingPageId: '', isPrimary: false };
 const rendererBaseUrl =
   process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
 
@@ -75,12 +94,25 @@ export default function CmsDashboard() {
   const router = useRouter();
   const [view, setView] = useState<View>('dashboard');
   const [session, setSession] = useState<AuthSessionResponse | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [managementOrganizationId, setManagementOrganizationId] = useState('');
+  const [organizationMembers, setOrganizationMembers] = useState<
+    OrganizationMembership[]
+  >([]);
+  const [organizationName, setOrganizationName] = useState('');
+  const [organizationSlug, setOrganizationSlug] = useState('');
+  const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [newMemberUserId, setNewMemberUserId] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState<'admin' | 'member'>('member');
   const [sites, setSites] = useState<Site[]>([]);
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [domains, setDomains] = useState<CustomDomain[]>([]);
+  const [seoSettings, setSeoSettings] = useState<PageSeoSettings | null>(null);
   const [formBindings, setFormBindings] = useState<FormIntegrationBinding[]>([]);
   const [bindingSaving, setBindingSaving] = useState(false);
   const [submissionPage, setSubmissionPage] = useState({
@@ -101,12 +133,14 @@ export default function CmsDashboard() {
   const [pageForm, setPageForm] = useState<PageForm>(blankPage);
   const [assetForm, setAssetForm] = useState<AssetForm>(blankAsset);
   const [templateForm, setTemplateForm] = useState<TemplateForm>(blankTemplate);
+  const [domainForm, setDomainForm] = useState<DomainForm>(blankDomain);
   const [editingSiteId, setEditingSiteId] = useState('');
   const [editingTemplateId, setEditingTemplateId] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const pagesRequestId = useRef(0);
 
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   const counts = useMemo(
@@ -124,21 +158,35 @@ export default function CmsDashboard() {
   }, []);
 
   useEffect(() => {
+    if (view !== 'organization' || !managementOrganizationId) return;
+    void refreshOrganizationManagement(managementOrganizationId);
+  }, [managementOrganizationId, view]);
+
+  useEffect(() => {
     if (selectedSiteId) {
       void refreshPages(selectedSiteId);
     } else {
+      pagesRequestId.current += 1;
       setPages([]);
       setSelectedPageId('');
     }
   }, [selectedSiteId]);
 
   useEffect(() => {
+    if ((view === 'domains' || view === 'seo') && selectedSiteId) {
+      void refreshPages(selectedSiteId);
+    }
+  }, [selectedSiteId, view]);
+
+  useEffect(() => {
     if (selectedPageId) {
       void refreshVersions(selectedPageId);
       void refreshFormBindings(selectedPageId);
+      void refreshSeo(selectedPageId);
     } else {
       setVersions([]);
       setFormBindings([]);
+      setSeoSettings(null);
     }
   }, [selectedPageId]);
 
@@ -153,16 +201,30 @@ export default function CmsDashboard() {
     try {
       const currentSession = AuthSessionResponseSchema.parse(await api.get('/auth/me'));
       setSession(currentSession);
+      setManagementOrganizationId(currentSession.workspace.organizationId);
+      const organizationResponse = OrganizationListResponseSchema.parse(
+        await api.get('/organizations'),
+      );
+      setOrganizations(organizationResponse.items);
+      const workspaceResponse = WorkspaceListResponseSchema.parse(
+        await api.get(
+          `/organizations/${currentSession.workspace.organizationId}/workspaces`,
+        ),
+      );
+      setWorkspaces(workspaceResponse.items);
       const workspaceId = currentSession.workspace.id;
-      const [siteResponse, assetResponse, templateResponse] = await Promise.all([
-        api.get(`/workspaces/${workspaceId}/sites?limit=100`),
-        api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-        api.get(`/workspaces/${workspaceId}/templates?limit=100`),
-      ]);
+      const [siteResponse, assetResponse, templateResponse, domainResponse] =
+        await Promise.all([
+          api.get(`/workspaces/${workspaceId}/sites?limit=100`),
+          api.get(`/workspaces/${workspaceId}/assets?limit=100`),
+          api.get(`/workspaces/${workspaceId}/templates?limit=100`),
+          api.get(`/workspaces/${workspaceId}/domains`),
+        ]);
       const nextSites = SiteListResponseSchema.parse(siteResponse).items;
       setSites(nextSites);
       setAssets(AssetListResponseSchema.parse(assetResponse).items);
       setTemplates(TemplateListResponseSchema.parse(templateResponse).items);
+      setDomains(CustomDomainListResponseSchema.parse(domainResponse).items);
       const integrationResponse = await api.get(
         `/workspaces/${workspaceId}/integrations?limit=100`,
       );
@@ -179,15 +241,123 @@ export default function CmsDashboard() {
     }
   }
 
+  async function refreshOrganizationManagement(organizationId: string) {
+    try {
+      const [workspaceResponse, memberResponse] = await Promise.all([
+        api.get(`/organizations/${organizationId}/workspaces`),
+        api.get(`/organizations/${organizationId}/members`),
+      ]);
+      setWorkspaces(WorkspaceListResponseSchema.parse(workspaceResponse).items);
+      setOrganizationMembers(
+        OrganizationMembershipListResponseSchema.parse(memberResponse).items,
+      );
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function createOrganization(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runBusy(async () => {
+      const created = await api.post<Organization>('/organizations', {
+        name: organizationName,
+        ...(organizationSlug ? { slug: organizationSlug } : {}),
+      });
+      setOrganizations((current) => [...current, created]);
+      setManagementOrganizationId(created.id);
+      setOrganizationName('');
+      setOrganizationSlug('');
+      setNotice('Organization created. Create a workspace to start using it.');
+    });
+  }
+
+  async function createWorkspaceForOrganization(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!managementOrganizationId) return;
+    await runBusy(async () => {
+      const created = await api.post<Workspace>(
+        `/organizations/${managementOrganizationId}/workspaces`,
+        { name: newWorkspaceName },
+      );
+      setWorkspaces((current) => [...current, created]);
+      setNewWorkspaceName('');
+      setNotice('Workspace created.');
+    });
+  }
+
+  async function addOrganizationMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!managementOrganizationId) return;
+    await runBusy(async () => {
+      const created = await api.post<OrganizationMembership>(
+        `/organizations/${managementOrganizationId}/members`,
+        { userId: newMemberUserId, role: newMemberRole },
+      );
+      setOrganizationMembers((current) => [...current, created]);
+      setNewMemberUserId('');
+      setNotice('Member added.');
+    });
+  }
+
+  async function updateOrganizationMember(
+    member: OrganizationMembership,
+    role: OrganizationMembership['role'],
+  ) {
+    await runBusy(async () => {
+      const updated = await api.patch<OrganizationMembership>(
+        `/organizations/${managementOrganizationId}/members/${member.id}`,
+        { role },
+      );
+      setOrganizationMembers((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setNotice('Member role updated.');
+    });
+  }
+
+  async function removeOrganizationMember(member: OrganizationMembership) {
+    await runBusy(async () => {
+      await api.delete(`/organizations/${managementOrganizationId}/members/${member.id}`);
+      setOrganizationMembers((current) =>
+        current.filter((item) => item.id !== member.id),
+      );
+      setNotice('Member removed.');
+    });
+  }
+
+  async function switchContext(organizationId: string, workspaceId: string) {
+    if (!organizationId || !workspaceId) return;
+    setError(null);
+    try {
+      await api.post('/auth/context', { organizationId, workspaceId });
+      // Clear every tenant-sensitive view before the new server context is read.
+      setSites([]);
+      setPages([]);
+      setAssets([]);
+      setTemplates([]);
+      setSubmissions([]);
+      setIntegrations([]);
+      setDomains([]);
+      setSelectedSiteId('');
+      setSelectedPageId('');
+      window.location.reload();
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
   async function refreshPages(siteId: string) {
+    const requestId = ++pagesRequestId.current;
     try {
       const response = await api.get(`/sites/${siteId}/pages?limit=100`);
       const nextPages = PageListResponseSchema.parse(response).items;
+      if (requestId !== pagesRequestId.current) return;
       setPages(nextPages);
       setSelectedPageId((current) =>
         nextPages.some((page) => page.id === current) ? current : '',
       );
     } catch (caughtError) {
+      if (requestId !== pagesRequestId.current) return;
       setError(toErrorMessage(caughtError));
     }
   }
@@ -222,6 +392,15 @@ export default function CmsDashboard() {
     try {
       const response = await api.get(`/pages/${pageId}/form-integrations`);
       setFormBindings(FormIntegrationBindingListResponseSchema.parse(response).items);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function refreshSeo(pageId: string) {
+    try {
+      const response = await api.get(`/pages/${pageId}/seo`);
+      setSeoSettings(PageSeoSettingsSchema.parse(response));
     } catch (caughtError) {
       setError(toErrorMessage(caughtError));
     }
@@ -306,7 +485,6 @@ export default function CmsDashboard() {
       await api.post('/auth/logout');
     } finally {
       router.replace('/login');
-      router.refresh();
     }
   }
 
@@ -358,6 +536,7 @@ export default function CmsDashboard() {
           ...(pageForm.slug ? { slug: pageForm.slug } : {}),
           payload: defaultPayload(pageForm.name),
         });
+        pagesRequestId.current += 1;
         setPages((current) => [created, ...current]);
         setSelectedPageId(created.id);
         setNotice('Landing page and draft version 1 created.');
@@ -428,6 +607,104 @@ export default function CmsDashboard() {
     });
   }
 
+  async function handleDomainSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session) return;
+    await runBusy(async () => {
+      const created = await api.post<CustomDomain>(
+        `/workspaces/${session.workspace.id}/domains`,
+        {
+          hostname: domainForm.hostname,
+          ...(domainForm.landingPageId
+            ? { landingPageId: domainForm.landingPageId }
+            : {}),
+          ...(domainForm.isPrimary ? { isPrimary: true } : {}),
+        },
+      );
+      setDomains((current) => [created, ...current]);
+      setDomainForm(blankDomain);
+      setNotice('Domain added. Add the DNS TXT record before verifying it.');
+    });
+  }
+
+  async function verifyDomain(domain: CustomDomain) {
+    if (!session) return;
+    await runBusy(async () => {
+      const updated = await api.post<CustomDomain>(
+        `/workspaces/${session.workspace.id}/domains/${domain.id}/verify`,
+      );
+      setDomains((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setNotice(
+        updated.status === 'active'
+          ? 'Domain verified and active.'
+          : 'Verification record not found yet.',
+      );
+    });
+  }
+
+  async function updateDomain(
+    domain: CustomDomain,
+    input: { landingPageId: string | null; isPrimary: boolean },
+  ) {
+    if (!session) return;
+    await runBusy(async () => {
+      const updated = await api.patch<CustomDomain>(
+        `/workspaces/${session.workspace.id}/domains/${domain.id}`,
+        input,
+      );
+      setDomains((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setNotice('Domain assignment updated.');
+    });
+  }
+
+  async function removeDomain(domain: CustomDomain) {
+    if (
+      !session ||
+      !window.confirm(`Remove ${domain.hostname}? It will stop serving immediately.`)
+    )
+      return;
+    await runBusy(async () => {
+      await api.delete(`/workspaces/${session.workspace.id}/domains/${domain.id}`);
+      setDomains((current) => current.filter((item) => item.id !== domain.id));
+      setNotice('Domain removed.');
+    });
+  }
+
+  async function handleSeoSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPageId) return;
+    await runBusy(async () => {
+      const formData = new FormData(event.currentTarget);
+      const text = (name: string) => {
+        const value = formData.get(name);
+        return typeof value === 'string' && value.trim() ? value.trim() : null;
+      };
+      const card = formData.get('twitterCard');
+      const saved = await api.patch<PageSeoSettings>(`/pages/${selectedPageId}/seo`, {
+        title: text('title'),
+        description: text('description'),
+        canonicalUrl: text('canonicalUrl'),
+        noIndex: formData.get('noIndex') === 'on',
+        noFollow: formData.get('noFollow') === 'on',
+        ogTitle: text('ogTitle'),
+        ogDescription: text('ogDescription'),
+        ogImage: text('ogImage'),
+        twitterCard:
+          card === 'summary_large_image' ? card : card === 'summary' ? card : null,
+        twitterTitle: text('twitterTitle'),
+        twitterDescription: text('twitterDescription'),
+        twitterImage: text('twitterImage'),
+        favicon: text('favicon'),
+      });
+      setSeoSettings(saved);
+      setNotice('SEO settings saved.');
+    });
+  }
+
   async function runBusy(action: () => Promise<void>) {
     setBusy(true);
     setError(null);
@@ -463,6 +740,7 @@ export default function CmsDashboard() {
           {(
             [
               ['dashboard', 'Dashboard'],
+              ['organization', 'Organization'],
               ['sites', 'Sites'],
               ['pages', 'Landing Pages'],
               ['assets', 'Assets'],
@@ -470,6 +748,9 @@ export default function CmsDashboard() {
               ['submissions', 'Submissions'],
               ['integrations', 'Integrations'],
               ['analytics', 'Analytics'],
+              ['domains', 'Domains'],
+              ['seo', 'SEO'],
+              ['billing', 'Billing & Usage'],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -496,8 +777,43 @@ export default function CmsDashboard() {
       <main className="content-area">
         <header className="topbar">
           <div>
-            <span className="muted small">Active workspace</span>
-            <strong>{session.workspace.name}</strong>
+            <span className="muted small">Organization</span>
+            <select
+              aria-label="Current organization"
+              onChange={(event) => {
+                const organizationId = event.target.value;
+                void api
+                  .get(`/organizations/${organizationId}/workspaces`)
+                  .then((response) => {
+                    const next = WorkspaceListResponseSchema.parse(response).items;
+                    setWorkspaces(next);
+                    if (next[0]) void switchContext(organizationId, next[0].id);
+                  })
+                  .catch((caughtError) => setError(toErrorMessage(caughtError)));
+              }}
+              value={session.workspace.organizationId}
+            >
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                  {organization.status === 'suspended' ? ' (suspended)' : ''}
+                </option>
+              ))}
+            </select>
+            <span className="muted small">Workspace</span>
+            <select
+              aria-label="Current workspace"
+              onChange={(event) =>
+                void switchContext(session.workspace.organizationId, event.target.value)
+              }
+              value={session.workspace.id}
+            >
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
           </div>
           <span className="status-dot">Authenticated</span>
         </header>
@@ -511,6 +827,33 @@ export default function CmsDashboard() {
             <div className="alert alert-success" role="status">
               {notice}
             </div>
+          ) : null}
+          {view === 'organization' ? (
+            <OrganizationView
+              busy={busy}
+              members={organizationMembers}
+              memberRole={newMemberRole}
+              memberUserId={newMemberUserId}
+              name={organizationName}
+              onAddMember={addOrganizationMember}
+              onChangeMemberRole={(member, role) =>
+                void updateOrganizationMember(member, role)
+              }
+              onCreate={createOrganization}
+              onCreateWorkspace={createWorkspaceForOrganization}
+              onRemoveMember={(member) => void removeOrganizationMember(member)}
+              onSelectOrganization={setManagementOrganizationId}
+              onSetName={setOrganizationName}
+              onSetMemberRole={setNewMemberRole}
+              onSetMemberUserId={setNewMemberUserId}
+              onSetSlug={setOrganizationSlug}
+              onSetWorkspaceName={setNewWorkspaceName}
+              organizations={organizations}
+              selectedOrganizationId={managementOrganizationId}
+              slug={organizationSlug}
+              workspaceName={newWorkspaceName}
+              workspaces={workspaces}
+            />
           ) : null}
           {view === 'dashboard' ? (
             <Dashboard counts={counts} onNavigate={setView} sites={sites} />
@@ -630,9 +973,231 @@ export default function CmsDashboard() {
           {view === 'analytics' ? (
             <AnalyticsView workspaceId={session.workspace.id} />
           ) : null}
+          {view === 'domains' ? (
+            <DomainsView
+              busy={busy}
+              domains={domains}
+              form={domainForm}
+              onChange={setDomainForm}
+              onRemove={(domain) => void removeDomain(domain)}
+              onSubmit={handleDomainSubmit}
+              onUpdate={(domain, input) => void updateDomain(domain, input)}
+              onVerify={(domain) => void verifyDomain(domain)}
+              pages={pages}
+            />
+          ) : null}
+          {view === 'seo' ? (
+            <SeoView
+              busy={busy}
+              onSave={handleSeoSubmit}
+              onSelectPage={(pageId) => {
+                setSelectedPageId(pageId);
+                const page = pages.find((candidate) => candidate.id === pageId);
+                if (page) setPageForm({ name: page.name, slug: page.slug ?? '' });
+              }}
+              pages={pages}
+              selectedPageId={selectedPageId}
+              settings={seoSettings}
+            />
+          ) : null}
+          {view === 'billing' ? <BillingView workspaceId={session.workspace.id} /> : null}
         </section>
       </main>
     </div>
+  );
+}
+
+function OrganizationView({
+  organizations,
+  selectedOrganizationId,
+  workspaces,
+  members,
+  memberRole,
+  memberUserId,
+  name,
+  slug,
+  workspaceName,
+  busy,
+  onSelectOrganization,
+  onCreate,
+  onSetName,
+  onSetMemberRole,
+  onSetMemberUserId,
+  onSetSlug,
+  onCreateWorkspace,
+  onSetWorkspaceName,
+  onAddMember,
+  onChangeMemberRole,
+  onRemoveMember,
+}: {
+  organizations: Organization[];
+  selectedOrganizationId: string;
+  workspaces: Workspace[];
+  members: OrganizationMembership[];
+  memberRole: 'admin' | 'member';
+  memberUserId: string;
+  name: string;
+  slug: string;
+  workspaceName: string;
+  busy: boolean;
+  onSelectOrganization: (id: string) => void;
+  onCreate: (event: FormEvent<HTMLFormElement>) => void;
+  onSetName: (value: string) => void;
+  onSetMemberRole: (value: 'admin' | 'member') => void;
+  onSetMemberUserId: (value: string) => void;
+  onSetSlug: (value: string) => void;
+  onCreateWorkspace: (event: FormEvent<HTMLFormElement>) => void;
+  onSetWorkspaceName: (value: string) => void;
+  onAddMember: (event: FormEvent<HTMLFormElement>) => void;
+  onChangeMemberRole: (
+    member: OrganizationMembership,
+    role: OrganizationMembership['role'],
+  ) => void;
+  onRemoveMember: (member: OrganizationMembership) => void;
+}) {
+  const organization = organizations.find((item) => item.id === selectedOrganizationId);
+  return (
+    <>
+      <PageHeading
+        eyebrow="Organization"
+        title={organization?.name ?? 'Organizations'}
+        description="Manage organization ownership, workspaces and members."
+      />
+      <div className="toolbar">
+        <label className="inline-field">
+          Organization
+          <select
+            aria-label="Organization management context"
+            onChange={(event) => onSelectOrganization(event.target.value)}
+            value={selectedOrganizationId}
+          >
+            {organizations.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {item.status}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="two-column">
+        <section className="panel">
+          <PanelTitle title="Create an organization" />
+          <form className="stack" onSubmit={onCreate}>
+            <label>
+              Organization name
+              <input
+                value={name}
+                onChange={(event) => onSetName(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Slug <span className="muted">(optional)</span>
+              <input value={slug} onChange={(event) => onSetSlug(event.target.value)} />
+            </label>
+            <button className="button button-primary" disabled={busy} type="submit">
+              Create organization
+            </button>
+          </form>
+        </section>
+        <section className="panel">
+          <PanelTitle title="Workspaces" count={workspaces.length} />
+          <form className="form-actions" onSubmit={onCreateWorkspace}>
+            <input
+              aria-label="New workspace name"
+              onChange={(event) => onSetWorkspaceName(event.target.value)}
+              placeholder="Workspace name"
+              required
+              value={workspaceName}
+            />
+            <button className="button button-secondary" disabled={busy} type="submit">
+              Add workspace
+            </button>
+          </form>
+          {workspaces.length ? (
+            <div className="list">
+              {workspaces.map((workspace) => (
+                <div className="list-row" key={workspace.id}>
+                  <strong>{workspace.name}</strong>
+                  <span className="muted">{workspace.id.slice(0, 8)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No workspaces"
+              description="Create a workspace for this organization."
+            />
+          )}
+        </section>
+      </div>
+      <section className="panel">
+        <PanelTitle title="Members" count={members.length} />
+        <form className="form-actions" onSubmit={onAddMember}>
+          <input
+            aria-label="Member user id"
+            onChange={(event) => onSetMemberUserId(event.target.value)}
+            placeholder="Existing user id or email"
+            required
+            value={memberUserId}
+          />
+          <select
+            aria-label="Member role"
+            onChange={(event) =>
+              onSetMemberRole(event.target.value as 'admin' | 'member')
+            }
+            value={memberRole}
+          >
+            <option value="member">member</option>
+            <option value="admin">admin</option>
+          </select>
+          <button className="button button-secondary" disabled={busy} type="submit">
+            Add member
+          </button>
+        </form>
+        {members.length ? (
+          <div className="list">
+            {members.map((member) => (
+              <div className="list-row" key={member.id}>
+                <div>
+                  <strong>{member.userId}</strong>
+                  <span className="muted">{member.role}</span>
+                </div>
+                <div className="row-actions">
+                  {member.role !== 'owner' ? (
+                    <select
+                      aria-label={`Role for ${member.userId}`}
+                      onChange={(event) =>
+                        onChangeMemberRole(
+                          member,
+                          event.target.value as OrganizationMembership['role'],
+                        )
+                      }
+                      value={member.role}
+                    >
+                      <option value="admin">admin</option>
+                      <option value="member">member</option>
+                    </select>
+                  ) : null}
+                  <button
+                    className="button button-small button-danger"
+                    onClick={() => onRemoveMember(member)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No members"
+            description="The organization has no readable members."
+          />
+        )}
+      </section>
+    </>
   );
 }
 
@@ -731,6 +1296,7 @@ function SitesView({
             <label>
               Site name
               <input
+                aria-label="Site name"
                 name="name"
                 onChange={(event) => onChange({ ...form, name: event.target.value })}
                 required
@@ -740,6 +1306,7 @@ function SitesView({
             <label>
               Slug
               <input
+                aria-label="Slug"
                 name="slug"
                 onChange={(event) => onChange({ ...form, slug: event.target.value })}
                 pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
@@ -849,6 +1416,7 @@ function PagesView({
         <label className="inline-field">
           Site
           <select
+            aria-label="Site"
             onChange={(event) => onSelectSite(event.target.value)}
             value={selectedSiteId}
           >
@@ -876,6 +1444,7 @@ function PagesView({
               <label>
                 Page name
                 <input
+                  aria-label="Page name"
                   onChange={(event) => onChange({ ...form, name: event.target.value })}
                   required
                   value={form.name}
@@ -884,6 +1453,7 @@ function PagesView({
               <label>
                 Slug <span className="muted">(optional)</span>
                 <input
+                  aria-label="Slug"
                   onChange={(event) => onChange({ ...form, slug: event.target.value })}
                   pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
                   value={form.slug}

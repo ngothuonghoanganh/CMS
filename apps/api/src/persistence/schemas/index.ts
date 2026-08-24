@@ -6,6 +6,8 @@ export { PageVersionRecord, PageVersionSchema } from './page-version.schema';
 export { SiteRecord, SiteSchema } from './site.schema';
 export { TemplateRecord, TemplateSchema } from './template.schema';
 export { WorkspaceRecord, WorkspaceSchema } from './workspace.schema';
+export { CustomDomainRecord, CustomDomainSchema } from './custom-domain.schema';
+export { PageSeoSettingsRecord, PageSeoSettingsSchema } from './page-seo-settings.schema';
 export {
   FormSubmissionRecord,
   FormSubmissionSchema,

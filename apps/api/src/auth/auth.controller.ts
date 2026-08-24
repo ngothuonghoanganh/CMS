@@ -13,6 +13,8 @@ import {
 import type { Request, Response } from 'express';
 import {
   LoginRequestSchema,
+  SwitchAuthContextRequestSchema,
+  type SwitchAuthContextRequest,
   type AuthSessionResponse,
   type LoginRequest,
 } from '@payload/contracts';
@@ -64,6 +66,21 @@ export class AuthController {
       throw new Error('Authentication guard did not attach a principal');
     }
     return this.authenticationService.getSessionResponse(principal);
+  }
+
+  @Post('context')
+  @UseGuards(AuthenticationGuard)
+  @HttpCode(HttpStatus.OK)
+  async switchContext(
+    @Body(new ZodValidationPipe(SwitchAuthContextRequestSchema))
+    input: SwitchAuthContextRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<AuthSessionResponse> {
+    if (!principal) throw new Error('Authentication guard did not attach a principal');
+    const result = await this.authenticationService.switchContext(principal, input);
+    this.setAuthCookies(response, result.accessToken, result.refreshToken);
+    return result.response;
   }
 
   @Post('logout')
