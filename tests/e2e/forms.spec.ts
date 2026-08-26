@@ -145,7 +145,7 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await page
     .getByRole('button', { name: new RegExp(`jane\\.e2e@example\\.com.*${pageName}`) })
     .click();
-  await expect(page.getByRole('region', { name: 'Submission detail' })).toContainText(
+  await expect(page.getByRole('dialog', { name: pageName })).toContainText(
     'Jane Visitor',
   );
 

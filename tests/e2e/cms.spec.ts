@@ -98,7 +98,8 @@ test('invalid login shows a structured error', async ({ page }) => {
 
 test('valid login and logout protect the CMS shell', async ({ page }) => {
   await login(page);
-  await expect(page.getByText('Authenticated')).toBeVisible();
+  await expect(page.getByLabel('Current company')).toBeVisible();
+  await expect(page.locator('select[aria-label="Current organization"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/');
@@ -121,7 +122,256 @@ test('CMS bootstrap settles after the authenticated shell is ready', async ({ pa
   await page.waitForTimeout(750);
 
   expect(apiRequests.slice(requestsAtReady)).toEqual([]);
-  await expect(page.getByText('Authenticated')).toBeVisible();
+  await expect(page.getByLabel('Current company')).toBeVisible();
+});
+
+test('CMS shell groups navigation and stays usable across desktop and tablet widths', async ({
+  page,
+}) => {
+  await login(page);
+
+  const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByText('Workspace', { exact: true })).toBeVisible();
+  await expect(navigation.getByText('Operations', { exact: true })).toBeVisible();
+  await expect(navigation.getByText('Management', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Current workspace')).toBeVisible();
+  await expect(page.locator('.topbar-page-context')).toHaveCount(0);
+  await expect(page.getByText('Authenticated', { exact: true })).toHaveCount(0);
+
+  const workspaceTrigger = page.getByRole('button', { name: 'Current workspace' });
+  if (await workspaceTrigger.count()) {
+    await workspaceTrigger.click();
+    await expect(page.getByRole('listbox', { name: 'Workspace options' })).toBeVisible();
+    await page.keyboard.press('Escape');
+  }
+
+  await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
+  await page.getByRole('button', { name: 'Expand sidebar' }).click();
+
+  for (const width of [1920, 1440, 1280, 1024, 768, 390]) {
+    await page.setViewportSize({ height: 900, width });
+    if (width < 1024) {
+      const openNavigation = page.getByRole('button', { name: 'Open navigation' });
+      await expect(openNavigation).toBeVisible();
+      if (width === 390) {
+        await openNavigation.click();
+        await expect(navigation).toBeVisible();
+        await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Landing pages' })).toBeVisible();
+        const mobileWorkspaceTrigger = page.getByRole('button', {
+          name: 'Current workspace',
+        });
+        if (await mobileWorkspaceTrigger.count()) {
+          await mobileWorkspaceTrigger.click();
+          await expect(
+            page.getByRole('listbox', { name: 'Workspace options' }),
+          ).toBeVisible();
+          await page.keyboard.press('Escape');
+        }
+      }
+    }
+    const pageWidth = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(pageWidth.scrollWidth).toBeLessThanOrEqual(pageWidth.clientWidth + 1);
+  }
+
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await page.getByRole('button', { name: 'Roles', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Submissions', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Submissions', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Users', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'View details', exact: true }).first().click();
+  await expect(page.getByText('User details', { exact: true })).toBeVisible();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Edit', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Save profile', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Close dialog', exact: true })
+    .click();
+  await page.setViewportSize({ height: 900, width: 390 });
+  const mobileUsersWidth = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(mobileUsersWidth.scrollWidth).toBeLessThanOrEqual(
+    mobileUsersWidth.clientWidth + 1,
+  );
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await page.getByRole('button', { name: 'Billing & Usage', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Billing & usage', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Audit Log', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
+  await expect(page.getByLabel('Filter audit by action')).toBeVisible();
+});
+
+test('extension management settles without a request loop and stays responsive', async ({
+  page,
+}) => {
+  const extensionRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/v1/extensions') && request.method() === 'GET') {
+      extensionRequests.push(request.url());
+    }
+  });
+  await login(page);
+  await page.getByRole('button', { name: 'Extensions', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Extensions' })).toBeVisible();
+  await expect(page.getByText('Countdown Builder Element')).toBeVisible();
+  await expect(page.getByText('Demo Analytics Subscriber')).toBeVisible();
+  await expect(page.getByText('Demo Webhook Integration')).toBeVisible();
+  const settledCount = extensionRequests.length;
+  await page.waitForTimeout(750);
+  expect(extensionRequests.length).toBe(settledCount);
+
+  for (const width of [1440, 1280, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole('heading', { name: 'Extensions' })).toBeVisible();
+    expect(
+      await page.locator('body').evaluate((element) => element.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+  }
+});
+
+test('uses the enabled Countdown extension through builder save and public payload delivery', async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const tenantSlug = `countdown-tenant-${suffix}`;
+  const siteSlug = `countdown-site-${suffix}`;
+  const pageSlug = `countdown-page-${suffix}`;
+  const pageName = `Countdown Page ${suffix}`;
+  const apiBase = 'http://127.0.0.1:3001/api/v1';
+
+  await login(page);
+  const organizationResponse = await page.request.post(`${apiBase}/organizations`, {
+    data: { name: `Countdown Tenant ${suffix}`, slug: tenantSlug },
+  });
+  expect(organizationResponse.status()).toBe(201);
+  const organization = (await organizationResponse.json()) as { id: string };
+  const workspaceResponse = await page.request.post(
+    `${apiBase}/organizations/${organization.id}/workspaces`,
+    { data: { name: `Countdown Workspace ${suffix}` } },
+  );
+  expect(workspaceResponse.status()).toBe(201);
+  const workspace = (await workspaceResponse.json()) as { id: string };
+  const contextResponse = await page.request.post(`${apiBase}/auth/context`, {
+    data: { organizationId: organization.id, workspaceId: workspace.id },
+  });
+  expect(contextResponse.status()).toBe(200);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Extensions', exact: true }).click();
+  const countdownCard = page
+    .locator('.extension-card')
+    .filter({ hasText: 'Countdown Builder Element' });
+  await expect(countdownCard.getByRole('button', { name: 'Enable' })).toBeVisible();
+  await countdownCard.getByRole('button', { name: 'Enable' }).click();
+  await expect(countdownCard.getByText('Enabled', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByLabel('Site name').fill(`Countdown Site ${suffix}`);
+  await page.getByLabel('Slug').fill(siteSlug);
+  await page.getByRole('button', { name: 'Create site' }).click();
+  await expect(page.getByRole('status')).toContainText('Site created');
+  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByLabel('Page name').fill(pageName);
+  await page.getByLabel('Slug').fill(pageSlug);
+  await page.getByRole('button', { name: 'Create page' }).click();
+  await expect(page.getByRole('status')).toContainText('draft version 1 created');
+  await page.getByRole('button', { name: 'Open Builder' }).click();
+  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  const builderPageId = page.url().match(/pages\/([^/]+)\/builder/)?.[1];
+  expect(builderPageId).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Countdown add' }).click();
+  await expect(page.getByLabel('Countdown label')).toBeVisible();
+  await page.getByLabel('Countdown label').fill('Launch day');
+  const builderPayload = await readBuilderModel(page);
+  const serializedBuilderPayload = JSON.stringify(builderPayload);
+  expect(serializedBuilderPayload).toContain('countdown');
+  expect(serializedBuilderPayload).toContain('Launch day');
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
+  const pageExtensionsResponse = await page.request.get(
+    `${apiBase}/pages/${builderPageId}/extensions`,
+  );
+  expect(pageExtensionsResponse.status()).toBe(200);
+  expect(
+    (
+      (await pageExtensionsResponse.json()) as {
+        items: Array<{ extensionId: string; enabled: boolean; runtimeIds: string[] }>;
+      }
+    ).items,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        extensionId: 'demo-builder-countdown',
+        enabled: true,
+        runtimeIds: ['countdown.runtime'],
+      }),
+    ]),
+  );
+  const capabilityResponse = await page.request.get(
+    `${apiBase}/pages/${builderPageId}/extensions/capabilities`,
+  );
+  expect(capabilityResponse.status()).toBe(200);
+  expect((await capabilityResponse.json()) as Record<string, unknown>).toMatchObject({
+    pageId: builderPageId,
+    runtimeIds: ['countdown.runtime'],
+  });
+
+  await page.reload();
+  await expect(page.locator('iframe.gjs-frame')).toBeVisible();
+  await expect(
+    page.frameLocator('iframe.gjs-frame').locator('[data-payload-node-type="countdown"]'),
+  ).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole('button', { name: '← Pages' }).click();
+  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByLabel('Site').selectOption({ label: `Countdown Site ${suffix}` });
+  await page.getByRole('button', { name: pageName }).click();
+  await page.getByRole('button', { name: 'Publish draft' }).click();
+  await expect(page.getByRole('status')).toContainText('Landing page published');
+
+  const publicResponse = await page.request.get(
+    `${apiBase}/public/sites/${siteSlug}/pages/${pageSlug}?tenantSlug=${tenantSlug}`,
+  );
+  expect(publicResponse.status()).toBe(200);
+  const publicPayload = (await publicResponse.json()) as {
+    extensions?: Array<{
+      extensionId: string;
+      runtimeIds: string[];
+      styleAssetIds: string[];
+      slots: string[];
+    }>;
+    payload: Record<string, unknown>;
+  };
+  expect(JSON.stringify(publicPayload)).toContain('Launch day');
+  expect(publicPayload.extensions).toEqual([
+    {
+      extensionId: 'demo-builder-countdown',
+      runtimeIds: ['countdown.runtime'],
+      styleAssetIds: [],
+      slots: ['PAGE_BODY_END'],
+    },
+  ]);
 });
 
 test('stale auth cookies do not redirect login back into a loop', async ({ browser }) => {
@@ -170,7 +420,7 @@ test('refreshes an active session when the access cookie is no longer present', 
   await page.reload();
 
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
-  await expect(page.getByText('Authenticated')).toBeVisible();
+  await expect(page.getByLabel('Current company')).toBeVisible();
 });
 
 test('creates and edits a site', async ({ page }) => {
@@ -254,6 +504,29 @@ test('opens the visual builder, saves a draft, and restores it after reload', as
       .locator('p')
       .filter({ hasText: 'Persisted builder content' }),
   ).toBeVisible({ timeout: 15_000 });
+});
+
+test('Builder visual QA stays readable without horizontal overflow across viewports', async ({
+  page,
+}) => {
+  await openBuilder(page, 'Viewport QA');
+  await page.getByRole('button', { name: 'Text add' }).click();
+  await expect(page.getByLabel('Text content')).toBeVisible();
+
+  for (const width of [1440, 1280, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator('.builder-frame')).toBeVisible();
+    expect(
+      await page.locator('body').evaluate((element) => element.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await expect(
+      page.locator('.builder-properties-panel').getByText('Properties', { exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: `test-results/builder-visual-qa-${width}.png`,
+      fullPage: true,
+    });
+  }
 });
 
 test('supports true block drag and a second edit after save and reload', async ({
@@ -502,7 +775,7 @@ test('auto-scrolls the Canvas while a real pointer drag reaches the viewport edg
 }) => {
   await openBuilder(page, 'Auto Scroll Builder');
   await page.getByRole('button', { name: 'Section add' }).click();
-  await page.getByLabel('Min height').fill('1600px');
+  await page.getByLabel('Min height').fill('1600');
   await page.getByRole('button', { name: 'Text add' }).click();
   const canvas = page.frameLocator('iframe.gjs-frame');
   const text = canvas.locator('p[data-payload-node-type="text"]');
@@ -625,7 +898,7 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
   await openBuilder(page, 'Responsive Builder');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
-  await page.getByLabel('Width', { exact: true }).fill('320px');
+  await page.getByLabel('Width', { exact: true }).fill('320');
 
   const frame = page.locator('iframe.gjs-frame');
   const canvasWidth = () =>
@@ -637,13 +910,13 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
   await expect.poll(canvasWidth).toBeLessThan(desktopWidth);
   const tabletWidth = await canvasWidth();
   expect(tabletWidth).toBeLessThan(desktopWidth);
-  await page.getByLabel('Width', { exact: true }).fill('280px');
+  await page.getByLabel('Width', { exact: true }).fill('280');
 
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
   await expect.poll(canvasWidth).toBeLessThan(tabletWidth);
   const mobileWidth = await canvasWidth();
   expect(mobileWidth).toBeLessThan(tabletWidth);
-  await page.getByLabel('Width', { exact: true }).fill('240px');
+  await page.getByLabel('Width', { exact: true }).fill('240');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
 
@@ -654,9 +927,9 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
     .filter({ hasText: 'Edit this text' })
     .click();
   await page.getByRole('button', { name: 'Tablet', exact: true }).click();
-  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('280px');
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('280');
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
-  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('240px');
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('240');
 });
 
 test('applies multiple inspector properties immediately and persists them after reload', async ({
@@ -670,12 +943,20 @@ test('applies multiple inspector properties immediately and persists them after 
     .frameLocator('iframe.gjs-frame')
     .locator('p[data-payload-node-type="text"]');
   await page.getByLabel('Text content').fill('Persisted inspector content');
-  await page.getByRole('button', { name: 'Align text center' }).click();
-  await page.getByLabel('Width', { exact: true }).fill('320px');
-  await page.getByText('Spacing', { exact: true }).click();
-  await page.getByLabel('Margin', { exact: true }).fill('12px 0');
+  const textAlignment = page.getByRole('group', { name: 'Text alignment' });
+  await textAlignment.getByRole('button', { name: 'Center', exact: true }).click();
+  await page.getByLabel('Width', { exact: true }).fill('320');
+  const spacing = page
+    .locator('.builder-inspector-section')
+    .filter({ hasText: 'Spacing' });
+  const marginField = spacing.locator('.ui-field').filter({ hasText: /^Margin/ });
+  await marginField.getByRole('button', { name: 'Linked', exact: true }).click();
+  await spacing.getByLabel('Top', { exact: true }).fill('12');
+  await spacing.getByLabel('Right', { exact: true }).fill('0');
+  await spacing.getByLabel('Bottom', { exact: true }).fill('12');
+  await spacing.getByLabel('Left', { exact: true }).fill('0');
   await page.getByText('Appearance', { exact: true }).click();
-  await page.getByLabel('Background', { exact: true }).fill('#fef3c7');
+  await page.getByLabel('Background hex value').fill('#fef3c7');
 
   await expect(canvasText).toHaveText('Persisted inspector content');
   await expect
@@ -708,7 +989,7 @@ test('applies multiple inspector properties immediately and persists them after 
               style: {
                 base: {
                   width: '320px',
-                  margin: '12px 0',
+                  margin: '12px 0px',
                   backgroundColor: '#fef3c7',
                 },
               },
@@ -728,18 +1009,22 @@ test('applies multiple inspector properties immediately and persists them after 
     .locator('p[data-payload-node-type="text"]');
   await expect(reloadedText).toHaveText('Persisted inspector content');
   await reloadedText.click();
-  await page.getByText('Spacing', { exact: true }).click();
   await page.getByText('Appearance', { exact: true }).click();
   await expect(page.getByLabel('Text content')).toHaveValue(
     'Persisted inspector content',
   );
-  await expect(page.getByRole('button', { name: 'Align text center' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('320px');
-  await expect(page.getByLabel('Margin', { exact: true })).toHaveValue('12px 0');
-  await expect(page.getByLabel('Background', { exact: true })).toHaveValue('#fef3c7');
+  await expect(
+    page
+      .getByRole('group', { name: 'Text alignment' })
+      .getByRole('button', { name: 'Center', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('320');
+  const reloadedSpacing = page
+    .locator('.builder-inspector-section')
+    .filter({ hasText: 'Spacing' });
+  await expect(reloadedSpacing.getByLabel('Top', { exact: true })).toHaveValue('12');
+  await expect(reloadedSpacing.getByLabel('Right', { exact: true })).toHaveValue('0');
+  await expect(page.getByLabel('Background hex value')).toHaveValue('#fef3c7');
   await expect
     .poll(() =>
       reloadedText.evaluate((element) => {
@@ -769,7 +1054,7 @@ test('applies multiple inspector properties immediately and persists them after 
               style: {
                 base: {
                   width: '320px',
-                  margin: '12px 0',
+                  margin: '12px 0px',
                   backgroundColor: '#fef3c7',
                 },
               },
@@ -919,7 +1204,7 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
   await expect(minimap.locator('.builder-minimap-zoom-label')).toHaveText('100%');
 
   await page.locator('[data-builder-layer-id]').filter({ hasText: 'Section' }).click();
-  await page.getByLabel('Min height').fill('1400px');
+  await page.getByLabel('Min height').fill('1400');
   const viewport = minimap.locator('.builder-minimap-viewport');
   const viewportBeforeScroll = await viewport.getAttribute('style');
   await page

@@ -35,7 +35,14 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   return (
     <div className="preview-page" data-page-slug={page.page.slug}>
       <div className="preview-banner">Draft preview</div>
-      {renderPage(page.payload)}
+      {renderPage(page.payload, {
+        ...(page.extensions
+          ? {
+              runtimeIds: page.extensions.flatMap((extension) => extension.runtimeIds),
+              extensions: page.extensions,
+            }
+          : {}),
+      })}
     </div>
   );
 }

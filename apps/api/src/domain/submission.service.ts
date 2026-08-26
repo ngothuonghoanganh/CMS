@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import {
-  PagePayloadV2Schema,
+  PagePayloadSchema,
   PaginationSchema,
   SubmissionListQuerySchema,
   SubmissionListResponseSchema,
@@ -21,7 +21,7 @@ import {
   FormSubmissionSchema,
   UpdateSubmissionRequestSchema,
   type FormField,
-  type FormNode,
+  type PageNodeV3,
   type PageNodeV2,
   type FormProps,
   type FormSubmission,
@@ -51,19 +51,27 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { IntegrationDispatcher } from './integration-dispatcher';
 import { AnalyticsService } from './analytics.service';
 import { platformLogger } from '../common/logging/platform-logger';
+import { EventBus } from '../extensions/event-bus';
 
 type ResolvedForm = {
   site: SiteDocument;
   page: LandingPageDocument;
   version: PageVersionDocument;
-  form: FormNode;
+  form: AnyFormNode;
 };
 
 type SubmissionContext = {
   site?: SiteDocument;
   page?: LandingPageDocument;
   version?: PageVersionDocument;
-  form?: FormNode;
+  form?: AnyFormNode;
+};
+
+type AnyFormNode = {
+  id: string;
+  type: 'form';
+  props: FormProps;
+  children: [];
 };
 
 type RateBucket = { startedAt: number; count: number };
@@ -92,6 +100,7 @@ export class SubmissionService {
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(UsageService) private readonly usage: UsageService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async submitPublic(
@@ -169,6 +178,24 @@ export class SubmissionService {
         'analytics conversion recording failed after form submission',
       );
     }
+
+    await this.events.publish('form.submitted', {
+      tenantId: this.tenantContext.require().id,
+      eventId: submission._id.toString(),
+      submissionId: submission._id.toString(),
+      workspaceId: resolved.site.workspaceId,
+      siteId: resolved.site._id.toString(),
+      pageId: resolved.page._id.toString(),
+      formNodeId: resolved.form.id,
+      occurredAt: submittedAt.toISOString(),
+    });
+    await this.events.publish('lead.created', {
+      tenantId: this.tenantContext.require().id,
+      eventId: `lead:${submission._id.toString()}`,
+      submissionId: submission._id.toString(),
+      workspaceId: resolved.site.workspaceId,
+      occurredAt: submittedAt.toISOString(),
+    });
 
     return { success: true };
   }
@@ -274,7 +301,7 @@ export class SubmissionService {
       })
       .exec();
     if (!version) throw this.publicNotFound();
-    const payload = PagePayloadV2Schema.safeParse(version.payload);
+    const payload = PagePayloadSchema.safeParse(version.payload);
     if (!payload.success) throw this.publicNotFound();
     const form = findForm(payload.data.root, formNodeId);
     if (!form) throw this.publicNotFound();
@@ -419,8 +446,12 @@ export class SubmissionService {
   }
 }
 
-function findForm(node: PageNodeV2, formNodeId: string): FormNode | null {
-  if (node.type === 'form') return node.id === formNodeId ? node : null;
+function findForm(node: PageNodeV2 | PageNodeV3, formNodeId: string): AnyFormNode | null {
+  if (node.type === 'form') {
+    return node.id === formNodeId
+      ? { id: node.id, type: 'form', props: node.props, children: [] }
+      : null;
+  }
   for (const child of node.children) {
     const form = findForm(child, formNodeId);
     if (form) return form;
@@ -431,8 +462,8 @@ function findForm(node: PageNodeV2, formNodeId: string): FormNode | null {
 function findFormFromVersion(
   version: PageVersionDocument,
   formNodeId: string,
-): FormNode | undefined {
-  const payload = PagePayloadV2Schema.safeParse(version.payload);
+): AnyFormNode | undefined {
+  const payload = PagePayloadSchema.safeParse(version.payload);
   return payload.success
     ? (findForm(payload.data.root, formNodeId) ?? undefined)
     : undefined;

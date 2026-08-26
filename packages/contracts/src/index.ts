@@ -1,4 +1,15 @@
 import { z } from 'zod';
+import {
+  CustomExtensionNodePropsSchema,
+  PageRuntimeExtensionSchema,
+  type CustomExtensionNodeProps,
+} from './page-extensions';
+import {
+  PageActionSchema,
+  PageBindingSchema,
+  PageExtensionAttachmentSchema,
+  PageResourceSchema,
+} from './extension-platform';
 
 export const apiVersion = 'v1' as const;
 
@@ -6,6 +17,7 @@ export const EntityIdSchema = z.string().uuid();
 export type EntityId = z.infer<typeof EntityIdSchema>;
 
 const timestampSchema = z.string().datetime({ offset: true });
+const nonEmptyText = z.string().trim().min(1);
 
 export const AuthPrincipalSchema = z.object({
   subject: z.string().min(1),
@@ -18,6 +30,402 @@ export const AuthPrincipalSchema = z.object({
 });
 
 export type AuthPrincipal = z.infer<typeof AuthPrincipalSchema>;
+
+export const TenantPermissions = {
+  ExtensionsRead: 'extensions.read',
+  ExtensionsManage: 'extensions.manage',
+  WorkspaceRead: 'workspace.read',
+  WorkspaceCreate: 'workspace.create',
+  WorkspaceUpdate: 'workspace.update',
+  WorkspaceDelete: 'workspace.delete',
+  MemberRead: 'member.read',
+  MemberAdd: 'member.add',
+  MemberUpdate: 'member.update',
+  MemberRemove: 'member.remove',
+  UserRead: 'user.read',
+  UserCreate: 'user.create',
+  UserUpdate: 'user.update',
+  UserDisable: 'user.disable',
+  UserRemove: 'user.remove',
+  RoleRead: 'role.read',
+  RoleCreate: 'role.create',
+  RoleUpdate: 'role.update',
+  RoleDelete: 'role.delete',
+  RoleAssign: 'role.assign',
+  PageRead: 'page.read',
+  PageCreate: 'page.create',
+  PageUpdate: 'page.update',
+  PageDelete: 'page.delete',
+  PagePublish: 'page.publish',
+  PageRollback: 'page.rollback',
+  LeadRead: 'lead.read',
+  LeadUpdate: 'lead.update',
+  AnalyticsRead: 'analytics.read',
+  IntegrationRead: 'integration.read',
+  IntegrationCreate: 'integration.create',
+  IntegrationUpdate: 'integration.update',
+  IntegrationDelete: 'integration.delete',
+  IntegrationDeliveryRead: 'integration.delivery.read',
+  IntegrationDeliveryRetry: 'integration.delivery.retry',
+  DomainRead: 'domain.read',
+  DomainCreate: 'domain.create',
+  DomainUpdate: 'domain.update',
+  DomainDelete: 'domain.delete',
+  DomainVerify: 'domain.verify',
+  SeoRead: 'seo.read',
+  SeoUpdate: 'seo.update',
+  BillingRead: 'billing.read',
+  AuditRead: 'audit.read',
+  SiteRead: 'site.read',
+  SiteCreate: 'site.create',
+  SiteUpdate: 'site.update',
+  AssetRead: 'asset.read',
+  AssetCreate: 'asset.create',
+  AssetDelete: 'asset.delete',
+  TemplateRead: 'template.read',
+  TemplateCreate: 'template.create',
+  TemplateUpdate: 'template.update',
+  TemplateDelete: 'template.delete',
+  FormIntegrationRead: 'form-integration.read',
+  FormIntegrationUpdate: 'form-integration.update',
+  WorkflowRead: 'workflow.read',
+  WorkflowCreate: 'workflow.create',
+  WorkflowUpdate: 'workflow.update',
+  WorkflowPublish: 'workflow.publish',
+  WorkflowEnable: 'workflow.enable',
+  WorkflowDisable: 'workflow.disable',
+  WorkflowExecutionRead: 'workflow.execution.read',
+  WorkflowExecutionRetry: 'workflow.execution.retry',
+} as const;
+
+export const TenantPermissionSchema = z.enum(
+  Object.values(TenantPermissions) as [string, ...string[]],
+);
+export type TenantPermission = z.infer<typeof TenantPermissionSchema>;
+
+export * from './extensions';
+export * from './extension-platform';
+export * from './page-extensions';
+export * from './workflows';
+
+export const RoleTypeSchema = z.enum(['system', 'custom']);
+export type RoleType = z.infer<typeof RoleTypeSchema>;
+export const RoleScopeSchema = z.enum(['tenant', 'workspace']);
+export type RoleScope = z.infer<typeof RoleScopeSchema>;
+
+export const RoleSchema = z
+  .object({
+    id: EntityIdSchema,
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    type: RoleTypeSchema,
+    permissions: z.array(TenantPermissionSchema).max(100),
+    userCount: z.number().int().nonnegative().default(0),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type Role = z.infer<typeof RoleSchema>;
+
+export const RoleListResponseSchema = z.object({ items: z.array(RoleSchema) }).strict();
+export type RoleListResponse = z.infer<typeof RoleListResponseSchema>;
+
+export const RoleAssignmentSchema = z
+  .object({
+    id: EntityIdSchema,
+    userId: z.string().trim().min(1).max(320),
+    roleId: EntityIdSchema,
+    roleKey: z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    scope: RoleScopeSchema,
+    workspaceId: EntityIdSchema.optional(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type RoleAssignment = z.infer<typeof RoleAssignmentSchema>;
+
+export const RoleAssignmentListResponseSchema = z
+  .object({ items: z.array(RoleAssignmentSchema) })
+  .strict();
+export type RoleAssignmentListResponse = z.infer<typeof RoleAssignmentListResponseSchema>;
+
+export const CreateRoleRequestSchema = z
+  .object({
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    permissions: z.array(TenantPermissionSchema).max(100),
+  })
+  .strict();
+export const UpdateRoleRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+    permissions: z.array(TenantPermissionSchema).max(100).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'At least one field is required');
+export const AssignRoleRequestSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(320),
+    roleId: EntityIdSchema,
+    scope: RoleScopeSchema,
+    workspaceId: EntityIdSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.scope === 'workspace' && !value.workspaceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['workspaceId'],
+        message: 'Workspace scope requires workspaceId',
+      });
+    }
+    if (value.scope === 'tenant' && value.workspaceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['workspaceId'],
+        message: 'Tenant scope cannot include workspaceId',
+      });
+    }
+  });
+export const AssignMemberRoleRequestSchema = z
+  .object({
+    roleId: EntityIdSchema,
+    scope: RoleScopeSchema,
+    workspaceId: EntityIdSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.scope === 'workspace' && !value.workspaceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['workspaceId'],
+        message: 'Workspace scope requires workspaceId',
+      });
+    }
+    if (value.scope === 'tenant' && value.workspaceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['workspaceId'],
+        message: 'Tenant scope cannot include workspaceId',
+      });
+    }
+  });
+export type CreateRoleRequest = z.infer<typeof CreateRoleRequestSchema>;
+export type UpdateRoleRequest = z.infer<typeof UpdateRoleRequestSchema>;
+export type AssignRoleRequest = z.infer<typeof AssignRoleRequestSchema>;
+
+export const TenantUserStatusSchema = z.enum(['active', 'disabled']);
+export type TenantUserStatus = z.infer<typeof TenantUserStatusSchema>;
+
+export const TenantUserSchema = z
+  .object({
+    id: EntityIdSchema,
+    email: z.string().email(),
+    displayName: z.string().trim().max(200).optional(),
+    status: TenantUserStatusSchema,
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type TenantUser = z.infer<typeof TenantUserSchema>;
+
+export const TenantUserListItemSchema = TenantUserSchema.extend({
+  tenantRoleKeys: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)),
+  workspaceAccessCount: z.number().int().nonnegative(),
+}).strict();
+export type TenantUserListItem = z.infer<typeof TenantUserListItemSchema>;
+
+export const TenantUserWorkspaceAccessSchema = z
+  .object({
+    workspaceId: EntityIdSchema,
+    workspaceName: nonEmptyText.max(200),
+    roleKeys: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)),
+    permissions: z.array(TenantPermissionSchema),
+  })
+  .strict();
+export type TenantUserWorkspaceAccess = z.infer<typeof TenantUserWorkspaceAccessSchema>;
+
+export const TenantUserDetailResponseSchema = z
+  .object({
+    user: TenantUserSchema,
+    tenantRoles: z.array(RoleAssignmentSchema),
+    workspaceAccess: z.array(TenantUserWorkspaceAccessSchema),
+  })
+  .strict();
+export type TenantUserDetailResponse = z.infer<typeof TenantUserDetailResponseSchema>;
+
+const tenantUserPaginationSchema = z
+  .object({
+    limit: z.number().int().min(1).max(100),
+    offset: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    hasNextPage: z.boolean(),
+  })
+  .strict();
+const tenantUserPaginationQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .strict();
+
+export const TenantUserListResponseSchema = z
+  .object({
+    items: z.array(TenantUserListItemSchema),
+    pagination: tenantUserPaginationSchema,
+  })
+  .strict();
+export type TenantUserListResponse = z.infer<typeof TenantUserListResponseSchema>;
+
+export const TenantUserListQuerySchema = tenantUserPaginationQuerySchema
+  .extend({
+    search: z.string().trim().max(200).optional(),
+    status: TenantUserStatusSchema.optional(),
+    roleId: EntityIdSchema.optional(),
+    workspaceId: EntityIdSchema.optional(),
+  })
+  .strict();
+export type TenantUserListQuery = z.infer<typeof TenantUserListQuerySchema>;
+
+export const CreateTenantUserRequestSchema = z
+  .object({
+    email: z.string().trim().email().max(320),
+    displayName: z.string().trim().max(200).optional(),
+    password: z.string().min(8).max(200),
+    roleId: EntityIdSchema.optional(),
+    scope: RoleScopeSchema.optional(),
+    workspaceId: EntityIdSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.scope === 'workspace' && !value.workspaceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['workspaceId'],
+        message: 'Workspace scope requires workspaceId',
+      });
+    }
+    if (value.scope === 'tenant' && value.workspaceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['workspaceId'],
+        message: 'Tenant scope cannot include workspaceId',
+      });
+    }
+    if (value.workspaceId && !value.roleId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['roleId'],
+        message: 'workspaceId requires roleId',
+      });
+    }
+  });
+export type CreateTenantUserRequest = z.infer<typeof CreateTenantUserRequestSchema>;
+
+export const UpdateTenantUserRequestSchema = z
+  .object({ displayName: z.string().trim().max(200).nullable().optional() })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'At least one field is required');
+export type UpdateTenantUserRequest = z.infer<typeof UpdateTenantUserRequestSchema>;
+export type AssignMemberRoleRequest = z.infer<typeof AssignMemberRoleRequestSchema>;
+
+export const EffectivePermissionsResponseSchema = z
+  .object({
+    userId: z.string().trim().min(1),
+    tenantId: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    permissions: z.array(TenantPermissionSchema),
+    assignments: z.array(RoleAssignmentSchema),
+  })
+  .strict();
+export type EffectivePermissionsResponse = z.infer<
+  typeof EffectivePermissionsResponseSchema
+>;
+
+export const PlatformPermissions = {
+  TenantRead: 'platform.tenant.read',
+  TenantCreate: 'platform.tenant.create',
+  TenantUpdate: 'platform.tenant.update',
+  PlanRead: 'platform.plan.read',
+  PlanCreate: 'platform.plan.create',
+  PlanUpdate: 'platform.plan.update',
+  SubscriptionRead: 'platform.subscription.read',
+  SubscriptionUpdate: 'platform.subscription.update',
+  AuditRead: 'platform.audit.read',
+} as const;
+export const PlatformPermissionSchema = z.enum(
+  Object.values(PlatformPermissions) as [string, ...string[]],
+);
+export type PlatformPermission = z.infer<typeof PlatformPermissionSchema>;
+export const PlatformRoleSchema = z
+  .object({
+    id: EntityIdSchema,
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    name: nonEmptyText.max(200),
+    permissions: z.array(PlatformPermissionSchema),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type PlatformRole = z.infer<typeof PlatformRoleSchema>;
+
+export const AuditActorTypeSchema = z.enum(['user', 'system', 'platform_user']);
+export type AuditActorType = z.infer<typeof AuditActorTypeSchema>;
+export const AuditResultSchema = z.enum(['success', 'failure', 'denied']);
+export type AuditResult = z.infer<typeof AuditResultSchema>;
+export const AuditLogSchema = z
+  .object({
+    id: EntityIdSchema,
+    actorType: AuditActorTypeSchema,
+    actorId: z.string().trim().min(1),
+    action: z.string().regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/),
+    workspaceId: EntityIdSchema.optional(),
+    resourceType: z.string().trim().min(1).max(100),
+    resourceId: z.string().trim().min(1).max(200).optional(),
+    result: AuditResultSchema,
+    requestId: z.string().uuid().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    ipAddress: z.string().trim().max(100).optional(),
+    userAgent: z.string().trim().max(500).optional(),
+    createdAt: timestampSchema,
+  })
+  .strict();
+export type AuditLog = z.infer<typeof AuditLogSchema>;
+const auditPaginationQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+const auditPaginationSchema = z.object({
+  limit: z.number().int().min(1).max(100),
+  offset: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  hasNextPage: z.boolean(),
+});
+export const AuditLogQuerySchema = auditPaginationQuerySchema
+  .extend({
+    workspaceId: EntityIdSchema.optional(),
+    actorId: z.string().trim().min(1).max(320).optional(),
+    action: z
+      .string()
+      .regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/)
+      .optional(),
+    resourceType: z.string().trim().min(1).max(100).optional(),
+    resourceId: z.string().trim().min(1).max(200).optional(),
+    from: timestampSchema.optional(),
+    to: timestampSchema.optional(),
+  })
+  .strict();
+export const AuditLogListResponseSchema = z
+  .object({ items: z.array(AuditLogSchema), pagination: auditPaginationSchema })
+  .strict();
+export type AuditLogQuery = z.infer<typeof AuditLogQuerySchema>;
+export type AuditLogListResponse = z.infer<typeof AuditLogListResponseSchema>;
 
 export const ApiErrorSchema = z.object({
   code: z.string().min(1),
@@ -66,8 +474,6 @@ export const MAX_HOSTNAME_LENGTH = 253;
 export const MAX_SEO_TITLE_LENGTH = 200;
 export const MAX_SEO_DESCRIPTION_LENGTH = 500;
 export const MAX_SEO_URL_LENGTH = 2_048;
-
-const nonEmptyText = z.string().trim().min(1);
 
 export const OrganizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
@@ -762,11 +1168,296 @@ export const PagePayloadV2Schema = z
   });
 
 export type PagePayloadV2 = z.infer<typeof PagePayloadV2Schema>;
+
+// V3 is the first extension-capable payload discriminator. Existing V1/V2
+// payloads remain untouched; the Countdown node is intentionally isolated in
+// V3 so a tenant can opt into it without widening an older contract.
+export const CountdownPropsSchema = z
+  .object({
+    targetAt: z.string().datetime({ offset: true }),
+    label: nonEmptyText.max(200),
+  })
+  .strict();
+export type CountdownProps = z.infer<typeof CountdownPropsSchema>;
+
+type PageNodeV3Base = {
+  id: string;
+  style?: PageNodeStyle | undefined;
+  children: PageNodeV3[];
+};
+export type RootNodeV3 = PageNodeV3Base & { type: 'root'; props: {} };
+export type SectionNodeV3 = PageNodeV3Base & { type: 'section'; props: {} };
+export type ContainerNodeV3 = PageNodeV3Base & { type: 'container'; props: {} };
+export type TextNodeV3 = PageNodeV3Base & {
+  type: 'text';
+  props: { text: string; align?: 'left' | 'center' | 'right' | undefined };
+};
+export type ImageNodeV3 = PageNodeV3Base & {
+  type: 'image';
+  props: { src: string; alt: string };
+};
+export type ButtonNodeV3 = PageNodeV3Base & {
+  type: 'button';
+  props: { label: string; href: string; target: '_self' | '_blank' };
+};
+export type FormNodeV3 = PageNodeV3Base & { type: 'form'; props: FormProps };
+export type CountdownNode = PageNodeV3Base & {
+  type: 'countdown';
+  props: CountdownProps;
+};
+export type ExtensionNode = PageNodeV3Base & {
+  type: 'extension';
+  props: CustomExtensionNodeProps;
+};
+export type PageNodeV3 =
+  | RootNodeV3
+  | SectionNodeV3
+  | ContainerNodeV3
+  | TextNodeV3
+  | ImageNodeV3
+  | ButtonNodeV3
+  | FormNodeV3
+  | CountdownNode
+  | ExtensionNode;
+
+const pageNodeV3Children = () => z.array(PageNodeV3Schema);
+export const PageNodeV3Schema: z.ZodType<PageNodeV3> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('root'),
+        props: z.object({}).strict(),
+        style: PageNodeStyleSchema.optional(),
+        children: pageNodeV3Children(),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('section'),
+        props: z.object({}).strict(),
+        style: PageNodeStyleSchema.optional(),
+        children: pageNodeV3Children(),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('container'),
+        props: z.object({}).strict(),
+        style: PageNodeStyleSchema.optional(),
+        children: pageNodeV3Children(),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('text'),
+        props: z
+          .object({
+            text: nonEmptyText.max(PAGE_PAYLOAD_MAX_TEXT_LENGTH),
+            align: z.enum(['left', 'center', 'right']).optional(),
+          })
+          .strict(),
+        style: PageNodeStyleSchema.optional(),
+        children: pageNodeV3Children(),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('image'),
+        props: z
+          .object({ src: safeImageSource, alt: z.string().trim().max(500) })
+          .strict(),
+        style: PageNodeStyleSchema.optional(),
+        children: pageNodeV3Children(),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('button'),
+        props: z
+          .object({
+            label: nonEmptyText.max(200),
+            href: safeButtonHref,
+            target: z.enum(['_self', '_blank']),
+          })
+          .strict(),
+        style: PageNodeStyleSchema.optional(),
+        children: pageNodeV3Children(),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('form'),
+        props: FormPropsSchema,
+        style: PageNodeStyleSchema.optional(),
+        children: z.array(z.never()).length(0),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('countdown'),
+        props: CountdownPropsSchema,
+        style: PageNodeStyleSchema.optional(),
+        children: z.array(z.never()).length(0),
+      })
+      .strict(),
+    z
+      .object({
+        id: pageNodeId,
+        type: z.literal('extension'),
+        props: CustomExtensionNodePropsSchema,
+        style: PageNodeStyleSchema.optional(),
+        children: z.array(z.never()).length(0),
+      })
+      .strict(),
+  ]),
+);
+
+const pageNodeV3TypeToChildren: Record<
+  PageNodeV3['type'],
+  readonly PageNodeV3['type'][]
+> = {
+  root: ['section', 'container'],
+  section: ['container', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
+  container: ['section', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
+  text: [],
+  image: [],
+  button: [],
+  form: [],
+  countdown: [],
+  extension: [],
+};
+
+export const PagePayloadV3Schema = z
+  .object({
+    version: z.literal(3),
+    metadata: PagePayloadV1Schema.shape.metadata,
+    root: PageNodeV3Schema,
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.root.type !== 'root' || payload.root.id !== 'root') {
+      context.addIssue({
+        code: 'custom',
+        message: 'The payload root must have type root and id root',
+        path: ['root'],
+      });
+    }
+    const nodeIds = new Set<string>();
+    const pending: Array<{ node: PageNodeV3; path: (string | number)[]; depth: number }> =
+      [{ node: payload.root, path: ['root'], depth: 1 }];
+    let nodeCount = 0;
+    let nodeLimitReported = false;
+    let depthLimitReported = false;
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current) continue;
+      nodeCount += 1;
+      if (nodeCount > PAGE_PAYLOAD_MAX_NODES) {
+        if (!nodeLimitReported) {
+          context.addIssue({
+            code: 'custom',
+            message: `PAGE_PAYLOAD_NODE_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_NODES}`,
+            path: current.path,
+          });
+          nodeLimitReported = true;
+        }
+        continue;
+      }
+      if (current.depth > PAGE_PAYLOAD_MAX_TREE_DEPTH) {
+        if (!depthLimitReported) {
+          context.addIssue({
+            code: 'custom',
+            message: `PAGE_PAYLOAD_DEPTH_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_TREE_DEPTH}`,
+            path: current.path,
+          });
+          depthLimitReported = true;
+        }
+        continue;
+      }
+      if (nodeIds.has(current.node.id)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate page node id: ${current.node.id}`,
+          path: [...current.path, 'id'],
+        });
+      }
+      nodeIds.add(current.node.id);
+      const allowedChildren = pageNodeV3TypeToChildren[current.node.type];
+      current.node.children.forEach((child, index) => {
+        if (!allowedChildren.includes(child.type)) {
+          context.addIssue({
+            code: 'custom',
+            message: `Node type ${current.node.type} cannot contain ${child.type} children`,
+            path: [...current.path, 'children', index, 'type'],
+          });
+        }
+        pending.push({
+          node: child,
+          path: [...current.path, 'children', index],
+          depth: current.depth + 1,
+        });
+      });
+    }
+    const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
+    if (serializedSize > PAGE_PAYLOAD_MAX_SERIALIZED_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        message: `PAGE_PAYLOAD_TOO_LARGE: maximum serialized size is ${PAGE_PAYLOAD_MAX_SERIALIZED_BYTES} bytes`,
+        path: [],
+      });
+    }
+  });
+
+export type PagePayloadV3 = z.infer<typeof PagePayloadV3Schema>;
 export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV1Schema,
   PagePayloadV2Schema,
+  PagePayloadV3Schema,
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
+
+export const PageCompositionSchema = z
+  .object({
+    pageId: EntityIdSchema,
+    payload: PagePayloadSchema,
+    attachments: z.array(PageExtensionAttachmentSchema).max(100),
+    bindings: z.array(PageBindingSchema).max(200),
+    actions: z.array(PageActionSchema).max(200),
+    resources: z.array(PageResourceSchema).max(200),
+  })
+  .strict();
+export type PageComposition = z.infer<typeof PageCompositionSchema>;
+
+export const PublishedPageBundleSchema = z
+  .object({
+    bundleVersion: z.literal(1),
+    pageId: EntityIdSchema,
+    versionNumber: z.number().int().positive(),
+    payload: PagePayloadSchema,
+    attachments: z.array(PageExtensionAttachmentSchema).max(100),
+    bindings: z.array(PageBindingSchema).max(200),
+    actions: z.array(PageActionSchema).max(200),
+    resources: z.array(PageResourceSchema).max(200),
+    extensions: z.array(PageRuntimeExtensionSchema).max(100),
+    extensionVersions: z.record(
+      z.string().trim().min(1).max(120),
+      z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/),
+    ),
+    capabilities: z.array(z.string().trim().min(1).max(150)).max(200),
+    runtimeIds: z.array(z.string().trim().min(1).max(150)).max(100),
+    styleAssetIds: z.array(z.string().trim().min(1).max(150)).max(100),
+    compiledAt: timestampSchema,
+  })
+  .strict();
+export type PublishedPageBundle = z.infer<typeof PublishedPageBundleSchema>;
 
 export function parsePagePayload(input: unknown): PagePayload {
   return PagePayloadSchema.parse(input);
@@ -1251,6 +1942,7 @@ export const PublicLandingPageSchema = z
     site: PublicSiteSchema,
     page: PublicPageSchema,
     payload: PagePayloadSchema,
+    extensions: z.array(PageRuntimeExtensionSchema).optional(),
     seo: PublicSeoSettingsSchema.optional(),
     canonicalUrl: z.string().url().optional(),
   })

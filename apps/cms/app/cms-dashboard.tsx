@@ -2,7 +2,9 @@
 
 import {
   AssetListResponseSchema,
+  AuditLogListResponseSchema,
   AuthSessionResponseSchema,
+  EffectivePermissionsResponseSchema,
   OrganizationListResponseSchema,
   OrganizationMembershipListResponseSchema,
   WorkspaceListResponseSchema,
@@ -15,8 +17,12 @@ import {
   PageVersionListResponseSchema,
   SiteListResponseSchema,
   TemplateListResponseSchema,
+  RoleListResponseSchema,
+  TenantUserDetailResponseSchema,
+  TenantUserListResponseSchema,
   type Asset,
   type AuthSessionResponse,
+  type AuditLog,
   type Organization,
   type OrganizationMembership,
   type Workspace,
@@ -29,8 +35,14 @@ import {
   type LandingPage,
   type PageVersion,
   type PageSeoSettings,
+  type Role,
+  type TenantUserDetailResponse,
+  type TenantUserListItem,
+  type TenantUserListQuery,
+  type TenantUserStatus,
   type Site,
   type Template,
+  type TenantPermission,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -41,6 +53,14 @@ import { AnalyticsView } from './analytics-view';
 import { DomainsView } from './domains-view';
 import { SeoView } from './seo-view';
 import { BillingView } from './billing-view';
+import { RolesView } from './roles-view';
+import { AuditView } from './audit-view';
+import { UsersView } from './users-view';
+import { StatusBadge } from './status-badge';
+import { AppHeader } from './app-header';
+import { ExtensionsView } from './extensions-view';
+import { WorkflowsView } from './workflows-view';
+import { Drawer, PageHeader, ResourceToolbar } from './ui/surfaces';
 
 type View =
   | 'dashboard'
@@ -54,6 +74,11 @@ type View =
   | 'domains'
   | 'seo'
   | 'billing'
+  | 'roles'
+  | 'audit'
+  | 'users'
+  | 'extensions'
+  | 'workflows'
   | 'organization';
 type SiteForm = { name: string; slug: string };
 type PageForm = { name: string; slug: string };
@@ -73,6 +98,26 @@ const blankTemplate: TemplateForm = { name: '', description: '' };
 const blankDomain: DomainForm = { hostname: '', landingPageId: '', isPrimary: false };
 const rendererBaseUrl =
   process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
+
+const viewLabels: Record<View, string> = {
+  analytics: 'Analytics',
+  assets: 'Assets',
+  audit: 'Audit log',
+  billing: 'Billing & usage',
+  dashboard: 'Overview',
+  domains: 'Domains',
+  integrations: 'Integrations',
+  organization: 'Organization',
+  pages: 'Landing pages',
+  roles: 'Roles',
+  seo: 'SEO',
+  sites: 'Sites',
+  submissions: 'Submissions',
+  templates: 'Templates',
+  users: 'Users',
+  extensions: 'Extensions',
+  workflows: 'Workflows',
+};
 
 function defaultPayload(title: string) {
   return {
@@ -94,6 +139,26 @@ export default function CmsDashboard() {
   const router = useRouter();
   const [view, setView] = useState<View>('dashboard');
   const [session, setSession] = useState<AuthSessionResponse | null>(null);
+  const [permissions, setPermissions] = useState<TenantPermission[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [users, setUsers] = useState<TenantUserListItem[]>([]);
+  const [userPagination, setUserPagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasNextPage: false,
+  });
+  const [userSearch, setUserSearch] = useState('');
+  const [userStatus, setUserStatusFilter] = useState<TenantUserStatus | undefined>();
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditPagination, setAuditPagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasNextPage: false,
+  });
+  const [auditActionFilter, setAuditActionFilter] = useState('');
+  const [auditResourceFilter, setAuditResourceFilter] = useState('');
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [managementOrganizationId, setManagementOrganizationId] = useState('');
@@ -140,7 +205,12 @@ export default function CmsDashboard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const pagesRequestId = useRef(0);
+  const mobileSidebarCloseRef = useRef<HTMLButtonElement>(null);
+  const permissionSet = useMemo(() => new Set(permissions), [permissions]);
+  const can = (permission: TenantPermission) => permissionSet.has(permission);
 
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   const counts = useMemo(
@@ -156,6 +226,52 @@ export default function CmsDashboard() {
   useEffect(() => {
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem('cms.sidebar.collapsed');
+    if (stored === 'true') setSidebarCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('cms.sidebar.collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    mobileSidebarCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileSidebarOpen(false);
+      if (event.key !== 'Tab') return;
+      const sidebar = document.getElementById('cms-sidebar');
+      if (!sidebar) return;
+      const focusable = Array.from(
+        sidebar.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mobileSidebarOpen]);
+
+  useEffect(() => {
+    document.title = session ? `${viewLabels[view]} · Payload CMS` : 'Payload CMS';
+  }, [session, view]);
 
   useEffect(() => {
     if (view !== 'organization' || !managementOrganizationId) return;
@@ -201,34 +317,61 @@ export default function CmsDashboard() {
     try {
       const currentSession = AuthSessionResponseSchema.parse(await api.get('/auth/me'));
       setSession(currentSession);
-      setManagementOrganizationId(currentSession.workspace.organizationId);
-      const organizationResponse = OrganizationListResponseSchema.parse(
-        await api.get('/organizations'),
+      const permissionResponse = EffectivePermissionsResponseSchema.parse(
+        await api.get(`/me/permissions?workspaceId=${currentSession.workspace.id}`),
       );
-      setOrganizations(organizationResponse.items);
-      const workspaceResponse = WorkspaceListResponseSchema.parse(
-        await api.get(
-          `/organizations/${currentSession.workspace.organizationId}/workspaces`,
-        ),
-      );
-      setWorkspaces(workspaceResponse.items);
+      setPermissions(permissionResponse.permissions);
+      const hasPermission = (permission: TenantPermission) =>
+        permissionResponse.permissions.includes(permission);
+      if (hasPermission('workspace.read')) {
+        setManagementOrganizationId(currentSession.workspace.organizationId);
+        const organizationResponse = OrganizationListResponseSchema.parse(
+          await api.get('/organizations'),
+        );
+        setOrganizations(organizationResponse.items);
+        const workspaceResponse = WorkspaceListResponseSchema.parse(
+          await api.get(
+            `/organizations/${currentSession.workspace.organizationId}/workspaces`,
+          ),
+        );
+        setWorkspaces(workspaceResponse.items);
+      } else {
+        setManagementOrganizationId('');
+        setOrganizations([]);
+        setWorkspaces([]);
+      }
       const workspaceId = currentSession.workspace.id;
-      const [siteResponse, assetResponse, templateResponse, domainResponse] =
-        await Promise.all([
-          api.get(`/workspaces/${workspaceId}/sites?limit=100`),
-          api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-          api.get(`/workspaces/${workspaceId}/templates?limit=100`),
-          api.get(`/workspaces/${workspaceId}/domains`),
-        ]);
-      const nextSites = SiteListResponseSchema.parse(siteResponse).items;
+      const siteResponse = hasPermission('site.read')
+        ? await api.get(`/workspaces/${workspaceId}/sites?limit=100`)
+        : null;
+      const assetResponse = hasPermission('asset.read')
+        ? await api.get(`/workspaces/${workspaceId}/assets?limit=100`)
+        : null;
+      const templateResponse = hasPermission('template.read')
+        ? await api.get(`/workspaces/${workspaceId}/templates?limit=100`)
+        : null;
+      const domainResponse = hasPermission('domain.read')
+        ? await api.get(`/workspaces/${workspaceId}/domains`)
+        : null;
+      const nextSites = siteResponse
+        ? SiteListResponseSchema.parse(siteResponse).items
+        : [];
       setSites(nextSites);
-      setAssets(AssetListResponseSchema.parse(assetResponse).items);
-      setTemplates(TemplateListResponseSchema.parse(templateResponse).items);
-      setDomains(CustomDomainListResponseSchema.parse(domainResponse).items);
-      const integrationResponse = await api.get(
-        `/workspaces/${workspaceId}/integrations?limit=100`,
+      setAssets(assetResponse ? AssetListResponseSchema.parse(assetResponse).items : []);
+      setTemplates(
+        templateResponse ? TemplateListResponseSchema.parse(templateResponse).items : [],
       );
-      setIntegrations(IntegrationListResponseSchema.parse(integrationResponse).items);
+      setDomains(
+        domainResponse ? CustomDomainListResponseSchema.parse(domainResponse).items : [],
+      );
+      if (hasPermission('integration.read')) {
+        const integrationResponse = await api.get(
+          `/workspaces/${workspaceId}/integrations?limit=100`,
+        );
+        setIntegrations(IntegrationListResponseSchema.parse(integrationResponse).items);
+      } else {
+        setIntegrations([]);
+      }
       setSelectedSiteId((current) => current || nextSites[0]?.id || '');
     } catch (caughtError) {
       if (caughtError instanceof ApiClientError && caughtError.status === 401) {
@@ -241,16 +384,191 @@ export default function CmsDashboard() {
     }
   }
 
+  async function refreshRoles() {
+    try {
+      const response = await api.get('/roles');
+      setRoles(RoleListResponseSchema.parse(response).items);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function refreshUsers(
+    input: Pick<TenantUserListQuery, 'search' | 'status'> = {},
+    offset = 0,
+  ) {
+    try {
+      const params = new URLSearchParams({ limit: '20', offset: String(offset) });
+      if (input.search) params.set('search', input.search);
+      if (input.status) params.set('status', input.status);
+      const response = TenantUserListResponseSchema.parse(
+        await api.get(`/users?${params.toString()}`),
+      );
+      setUsers(response.items);
+      setUserPagination(response.pagination);
+      setUserSearch(input.search ?? '');
+      setUserStatusFilter(input.status);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function loadUserDetail(
+    userId: string,
+  ): Promise<TenantUserDetailResponse | null> {
+    try {
+      return TenantUserDetailResponseSchema.parse(await api.get(`/users/${userId}`));
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+      return null;
+    }
+  }
+
+  async function refreshAudit(
+    offset = 0,
+    filters: { action?: string | undefined; resourceType?: string | undefined } = {},
+  ) {
+    try {
+      const params = new URLSearchParams({ limit: '20', offset: String(offset) });
+      if (filters.action) params.set('action', filters.action);
+      if (filters.resourceType) params.set('resourceType', filters.resourceType);
+      const response = AuditLogListResponseSchema.parse(
+        await api.get(`/audit-logs?${params.toString()}`),
+      );
+      setAuditLogs(response.items);
+      setAuditPagination(response.pagination);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  useEffect(() => {
+    if (view === 'roles' && can('role.read')) void refreshRoles();
+    if (view === 'users' && can('user.read')) {
+      void refreshUsers({ search: userSearch || undefined, status: userStatus });
+      if (can('role.read')) void refreshRoles();
+    }
+    if (view === 'audit' && can('audit.read')) {
+      void refreshAudit(0, {
+        action: auditActionFilter || undefined,
+        resourceType: auditResourceFilter || undefined,
+      });
+    }
+  }, [auditActionFilter, auditResourceFilter, view, permissions]);
+
+  async function createUser(input: {
+    email: string;
+    displayName?: string;
+    password: string;
+    roleId?: string;
+    scope?: 'tenant' | 'workspace';
+    workspaceId?: string;
+  }) {
+    await runBusy(async () => {
+      await api.post('/users', input);
+      await refreshUsers({ search: userSearch || undefined, status: userStatus });
+      setNotice('User created.');
+    });
+  }
+
+  async function updateUser(userId: string, input: { displayName?: string | null }) {
+    await runBusy(async () => {
+      await api.patch(`/users/${userId}`, input);
+      await refreshUsers({ search: userSearch || undefined, status: userStatus });
+      setNotice('User profile updated.');
+    });
+  }
+
+  async function changeUserStatus(userId: string, status: TenantUserStatus) {
+    await runBusy(async () => {
+      await api.post(`/users/${userId}/${status === 'active' ? 'enable' : 'disable'}`);
+      await refreshUsers({ search: userSearch || undefined, status: userStatus });
+      setNotice(status === 'active' ? 'User enabled.' : 'User disabled.');
+    });
+  }
+
+  async function removeUser(userId: string) {
+    await runBusy(async () => {
+      await api.delete(`/users/${userId}`);
+      await refreshUsers({ search: userSearch || undefined, status: userStatus });
+      setNotice('User removed and retained as a disabled audit record.');
+    });
+  }
+
+  async function assignUserRole(
+    userId: string,
+    input: { roleId: string; scope: 'tenant' | 'workspace'; workspaceId?: string },
+  ) {
+    await runBusy(async () => {
+      await api.post(`/users/${userId}/role-assignments`, input);
+      setNotice('Role assigned.');
+    });
+  }
+
+  async function unassignUserRole(userId: string, assignmentId: string) {
+    await runBusy(async () => {
+      await api.delete(`/users/${userId}/role-assignments/${assignmentId}`);
+      setNotice('Role unassigned.');
+    });
+  }
+
+  async function createRole(input: {
+    key: string;
+    name: string;
+    description?: string;
+    permissions: TenantPermission[];
+  }) {
+    await runBusy(async () => {
+      const created = await api.post<Role>('/roles', input);
+      setRoles((current) => [...current, created]);
+      setNotice('Role created.');
+    });
+  }
+
+  async function updateRole(
+    roleId: string,
+    input: {
+      name?: string;
+      description?: string | null;
+      permissions?: TenantPermission[];
+    },
+  ) {
+    await runBusy(async () => {
+      const updated = await api.patch<Role>(`/roles/${roleId}`, input);
+      setRoles((current) =>
+        current.map((role) => (role.id === updated.id ? updated : role)),
+      );
+      setNotice('Role updated.');
+    });
+  }
+
+  async function assignRole(input: {
+    userId: string;
+    roleId: string;
+    scope: 'tenant' | 'workspace';
+    workspaceId?: string;
+  }) {
+    await runBusy(async () => {
+      await api.post('/role-assignments', input);
+      setNotice('Role assigned.');
+      await refreshRoles();
+    });
+  }
+
   async function refreshOrganizationManagement(organizationId: string) {
     try {
-      const [workspaceResponse, memberResponse] = await Promise.all([
-        api.get(`/organizations/${organizationId}/workspaces`),
-        api.get(`/organizations/${organizationId}/members`),
-      ]);
-      setWorkspaces(WorkspaceListResponseSchema.parse(workspaceResponse).items);
-      setOrganizationMembers(
-        OrganizationMembershipListResponseSchema.parse(memberResponse).items,
+      const workspaceResponse = await api.get(
+        `/organizations/${organizationId}/workspaces`,
       );
+      setWorkspaces(WorkspaceListResponseSchema.parse(workspaceResponse).items);
+      if (can('member.read')) {
+        const memberResponse = await api.get(`/organizations/${organizationId}/members`);
+        setOrganizationMembers(
+          OrganizationMembershipListResponseSchema.parse(memberResponse).items,
+        );
+      } else {
+        setOrganizationMembers([]);
+      }
     } catch (caughtError) {
       setError(toErrorMessage(caughtError));
     }
@@ -721,116 +1039,203 @@ export default function CmsDashboard() {
   if (loading)
     return (
       <main className="loading-page" aria-busy="true">
-        Loading CMS…
+        <div className="shell-loading" aria-label="Loading CMS">
+          <div className="skeleton skeleton-mark" />
+          <div className="skeleton skeleton-heading" />
+          <div className="skeleton skeleton-copy" />
+          <div className="skeleton-grid">
+            <div className="skeleton skeleton-card" />
+            <div className="skeleton skeleton-card" />
+            <div className="skeleton skeleton-card" />
+          </div>
+        </div>
       </main>
     );
   if (!session) return <main className="loading-page">Redirecting to sign in…</main>;
 
+  const navigationSections: Array<{
+    label: string;
+    items: Array<{ key: View; label: string; icon: string }>;
+  }> = [
+    {
+      label: 'Workspace',
+      items: [
+        { icon: '⌂', key: 'dashboard' as const, label: 'Dashboard' },
+        ...(can('workspace.read')
+          ? [{ icon: '▦', key: 'organization' as const, label: 'Organization' }]
+          : []),
+        ...(can('site.read')
+          ? [{ icon: '◫', key: 'sites' as const, label: 'Sites' }]
+          : []),
+        ...(can('page.read')
+          ? [{ icon: '▤', key: 'pages' as const, label: 'Landing Pages' }]
+          : []),
+        ...(can('asset.read')
+          ? [{ icon: '◈', key: 'assets' as const, label: 'Assets' }]
+          : []),
+        ...(can('template.read')
+          ? [{ icon: '◇', key: 'templates' as const, label: 'Templates' }]
+          : []),
+        ...(can('lead.read')
+          ? [{ icon: '✉', key: 'submissions' as const, label: 'Submissions' }]
+          : []),
+      ],
+    },
+    {
+      label: 'Operations',
+      items: [
+        ...(can('workflow.read')
+          ? [{ icon: '⤢', key: 'workflows' as const, label: 'Workflows' }]
+          : []),
+        ...(can('integration.read')
+          ? [{ icon: '↔', key: 'integrations' as const, label: 'Integrations' }]
+          : []),
+        ...(can('analytics.read')
+          ? [{ icon: '◒', key: 'analytics' as const, label: 'Analytics' }]
+          : []),
+        ...(can('domain.read')
+          ? [{ icon: '⌁', key: 'domains' as const, label: 'Domains' }]
+          : []),
+        ...(can('seo.read') ? [{ icon: '⌕', key: 'seo' as const, label: 'SEO' }] : []),
+      ],
+    },
+    {
+      label: 'Management',
+      items: [
+        ...(can('billing.read')
+          ? [{ icon: '$', key: 'billing' as const, label: 'Billing & Usage' }]
+          : []),
+        ...(can('user.read')
+          ? [{ icon: '●', key: 'users' as const, label: 'Users' }]
+          : []),
+        ...(can('role.read')
+          ? [{ icon: '◆', key: 'roles' as const, label: 'Roles' }]
+          : []),
+        ...(can('audit.read')
+          ? [{ icon: '≡', key: 'audit' as const, label: 'Audit Log' }]
+          : []),
+        ...(can('extensions.read')
+          ? [{ icon: '⊞', key: 'extensions' as const, label: 'Extensions' }]
+          : []),
+      ],
+    },
+  ].filter((section) => section.items.length > 0);
+
+  const currentOrganization = organizations.find(
+    (organization) => organization.id === session.workspace.organizationId,
+  );
+  const currentCompanyName =
+    currentOrganization?.name ?? session.user.tenantSlug ?? 'Current company';
+
   return (
-    <div className="app-frame">
-      <aside className="sidebar">
+    <div className={sidebarCollapsed ? 'app-frame sidebar-is-collapsed' : 'app-frame'}>
+      {mobileSidebarOpen ? (
+        <button
+          aria-label="Close navigation"
+          className="sidebar-overlay"
+          onClick={() => setMobileSidebarOpen(false)}
+          type="button"
+        />
+      ) : null}
+      <aside
+        className={`${sidebarCollapsed ? 'sidebar collapsed' : 'sidebar'}${
+          mobileSidebarOpen ? ' mobile-open' : ''
+        }`}
+        id="cms-sidebar"
+      >
         <div className="brand">
           <div className="brand-mark">PL</div>
           <div className="brand-copy">
             <strong>Payload CMS</strong>
             <span>Landing page platform</span>
           </div>
-        </div>
-        <nav aria-label="Primary navigation" className="nav-list">
-          {(
-            [
-              ['dashboard', 'Dashboard'],
-              ['organization', 'Organization'],
-              ['sites', 'Sites'],
-              ['pages', 'Landing Pages'],
-              ['assets', 'Assets'],
-              ['templates', 'Templates'],
-              ['submissions', 'Submissions'],
-              ['integrations', 'Integrations'],
-              ['analytics', 'Analytics'],
-              ['domains', 'Domains'],
-              ['seo', 'SEO'],
-              ['billing', 'Billing & Usage'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              className={view === key ? 'nav-item active' : 'nav-item'}
-              key={key}
-              onClick={() => setView(key)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <span className="muted small">{session.user.email}</span>
           <button
-            className="button button-ghost"
-            onClick={() => void handleLogout()}
+            ref={mobileSidebarCloseRef}
+            aria-label="Close navigation"
+            className="sidebar-close"
+            onClick={() => setMobileSidebarOpen(false)}
             type="button"
           >
-            Log out
+            ×
+          </button>
+          <button
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            type="button"
+          >
+            {sidebarCollapsed ? '→' : '←'}
           </button>
         </div>
+        <nav aria-label="Primary navigation" className="nav-list">
+          {navigationSections.map((section) => (
+            <div className="nav-section" key={section.label}>
+              <span className="nav-section-label">{section.label}</span>
+              {section.items.map((item) => (
+                <button
+                  aria-current={view === item.key ? 'page' : undefined}
+                  className={view === item.key ? 'nav-item active' : 'nav-item'}
+                  key={item.key}
+                  onClick={() => {
+                    setView(item.key);
+                    setMobileSidebarOpen(false);
+                  }}
+                  title={sidebarCollapsed ? item.label : undefined}
+                  type="button"
+                >
+                  <span aria-hidden="true" className="nav-icon">
+                    {item.icon}
+                  </span>
+                  <span className="nav-label">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
       </aside>
       <main className="content-area">
-        <header className="topbar">
-          <div>
-            <span className="muted small">Organization</span>
-            <select
-              aria-label="Current organization"
-              onChange={(event) => {
-                const organizationId = event.target.value;
-                void api
-                  .get(`/organizations/${organizationId}/workspaces`)
-                  .then((response) => {
-                    const next = WorkspaceListResponseSchema.parse(response).items;
-                    setWorkspaces(next);
-                    if (next[0]) void switchContext(organizationId, next[0].id);
-                  })
-                  .catch((caughtError) => setError(toErrorMessage(caughtError)));
-              }}
-              value={session.workspace.organizationId}
-            >
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
-                  {organization.status === 'suspended' ? ' (suspended)' : ''}
-                </option>
-              ))}
-            </select>
-            <span className="muted small">Workspace</span>
-            <select
-              aria-label="Current workspace"
-              onChange={(event) =>
-                void switchContext(session.workspace.organizationId, event.target.value)
-              }
-              value={session.workspace.id}
-            >
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <span className="status-dot">Authenticated</span>
-        </header>
+        <AppHeader
+          companyName={currentCompanyName}
+          currentWorkspaceId={session.workspace.id}
+          mobileSidebarOpen={mobileSidebarOpen}
+          onLogout={() => void handleLogout()}
+          onOpenSidebar={() => setMobileSidebarOpen((current) => !current)}
+          onSwitchWorkspace={(workspaceId) =>
+            void switchContext(session.workspace.organizationId, workspaceId)
+          }
+          userEmail={session.user.email}
+          workspaces={workspaces}
+        />
         <section className="content-inner">
           {error ? (
             <div className="alert alert-error" role="alert">
-              {error}
+              <div>
+                <strong>We couldn’t load this workspace.</strong>
+                <span className="muted">{error}</span>
+              </div>
+              <button
+                className="button button-small button-ghost"
+                onClick={() => void bootstrap()}
+                type="button"
+              >
+                Retry
+              </button>
             </div>
           ) : null}
           {notice ? (
-            <div className="alert alert-success" role="status">
+            <div aria-live="polite" className="alert alert-success" role="status">
               {notice}
             </div>
           ) : null}
           {view === 'organization' ? (
             <OrganizationView
               busy={busy}
+              canAddMember={can('member.add')}
+              canCreateOrganization={can('workspace.create')}
+              canCreateWorkspace={can('workspace.create')}
+              canRemoveMember={can('member.remove')}
+              canUpdateMember={can('member.update')}
               members={organizationMembers}
               memberRole={newMemberRole}
               memberUserId={newMemberUserId}
@@ -879,6 +1284,10 @@ export default function CmsDashboard() {
           {view === 'pages' ? (
             <PagesView
               busy={busy}
+              canCreatePage={can('page.create')}
+              canPublishPage={can('page.publish')}
+              canUpdatePage={can('page.update')}
+              canReadWorkflows={can('workflow.read')}
               form={pageForm}
               onChange={setPageForm}
               onOpenBuilder={(page) =>
@@ -886,6 +1295,10 @@ export default function CmsDashboard() {
                   `/workspaces/${session.workspace.id}/sites/${page.siteId}/pages/${page.id}/builder`,
                 )
               }
+              onOpenWorkflows={(page) => {
+                setSelectedPageId(page.id);
+                setView('workflows');
+              }}
               onPreview={previewPage}
               onPublish={(page) => void publishPage(page)}
               onSelectPage={(page) => {
@@ -1001,6 +1414,90 @@ export default function CmsDashboard() {
             />
           ) : null}
           {view === 'billing' ? <BillingView workspaceId={session.workspace.id} /> : null}
+          {view === 'users' ? (
+            <UsersView
+              busy={busy}
+              canAssign={can('role.assign')}
+              canCreate={can('user.create')}
+              canDisable={can('user.disable')}
+              canRemove={can('user.remove')}
+              canUpdate={can('user.update')}
+              currentUserEmail={session.user.email}
+              onAssign={(userId, input) => assignUserRole(userId, input)}
+              onCreate={(input) => void createUser(input)}
+              onLoadDetail={loadUserDetail}
+              onPage={(offset) =>
+                void refreshUsers(
+                  { search: userSearch || undefined, status: userStatus },
+                  offset,
+                )
+              }
+              onRemove={(userId) => removeUser(userId)}
+              onSearch={(input) => void refreshUsers(input)}
+              onStatus={(userId, status) => changeUserStatus(userId, status)}
+              onUnassign={(userId, assignmentId) =>
+                unassignUserRole(userId, assignmentId)
+              }
+              onUpdate={(userId, input) => updateUser(userId, input)}
+              pagination={userPagination}
+              roles={roles}
+              users={users}
+              workspaces={workspaces}
+            />
+          ) : null}
+          {view === 'roles' ? (
+            <RolesView
+              canAssign={can('role.assign')}
+              canManage={can('role.create') && can('role.update')}
+              currentUserId={session.user.email}
+              onAssign={(input) => void assignRole(input)}
+              onCreate={(input) => void createRole(input)}
+              onUpdate={(roleId, input) => void updateRole(roleId, input)}
+              roles={roles}
+              workspaceId={session.workspace.id}
+            />
+          ) : null}
+          {view === 'audit' ? (
+            <AuditView
+              auditLogs={auditLogs}
+              onNext={() =>
+                void refreshAudit(auditPagination.offset + auditPagination.limit, {
+                  action: auditActionFilter || undefined,
+                  resourceType: auditResourceFilter || undefined,
+                })
+              }
+              onPrevious={() =>
+                void refreshAudit(
+                  Math.max(0, auditPagination.offset - auditPagination.limit),
+                  {
+                    action: auditActionFilter || undefined,
+                    resourceType: auditResourceFilter || undefined,
+                  },
+                )
+              }
+              actionFilter={auditActionFilter}
+              pagination={auditPagination}
+              onFilter={(filters) => {
+                setAuditActionFilter(filters.action);
+                setAuditResourceFilter(filters.resourceType);
+              }}
+              resourceFilter={auditResourceFilter}
+            />
+          ) : null}
+          {view === 'extensions' ? (
+            <ExtensionsView canManage={can('extensions.manage')} />
+          ) : null}
+          {view === 'workflows' ? (
+            <WorkflowsView
+              canEnable={can('workflow.enable') || can('workflow.disable')}
+              canManage={can('workflow.create') && can('workflow.update')}
+              canPublish={can('workflow.publish')}
+              canReadExecutions={can('workflow.execution.read')}
+              canRetry={can('workflow.execution.retry')}
+              {...(selectedPageId ? { pageId: selectedPageId } : {})}
+              workspaceId={session.workspace.id}
+            />
+          ) : null}
         </section>
       </main>
     </div>
@@ -1029,6 +1526,11 @@ function OrganizationView({
   onAddMember,
   onChangeMemberRole,
   onRemoveMember,
+  canAddMember,
+  canCreateOrganization,
+  canCreateWorkspace,
+  canRemoveMember,
+  canUpdateMember,
 }: {
   organizations: Organization[];
   selectedOrganizationId: string;
@@ -1054,6 +1556,11 @@ function OrganizationView({
     role: OrganizationMembership['role'],
   ) => void;
   onRemoveMember: (member: OrganizationMembership) => void;
+  canAddMember: boolean;
+  canCreateOrganization: boolean;
+  canCreateWorkspace: boolean;
+  canRemoveMember: boolean;
+  canUpdateMember: boolean;
 }) {
   const organization = organizations.find((item) => item.id === selectedOrganizationId);
   return (
@@ -1082,38 +1589,48 @@ function OrganizationView({
       <div className="two-column">
         <section className="panel">
           <PanelTitle title="Create an organization" />
-          <form className="stack" onSubmit={onCreate}>
-            <label>
-              Organization name
-              <input
-                value={name}
-                onChange={(event) => onSetName(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Slug <span className="muted">(optional)</span>
-              <input value={slug} onChange={(event) => onSetSlug(event.target.value)} />
-            </label>
-            <button className="button button-primary" disabled={busy} type="submit">
-              Create organization
-            </button>
-          </form>
+          {canCreateOrganization ? (
+            <form className="stack" onSubmit={onCreate}>
+              <label>
+                Organization name
+                <input
+                  value={name}
+                  onChange={(event) => onSetName(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Slug <span className="muted">(optional)</span>
+                <input value={slug} onChange={(event) => onSetSlug(event.target.value)} />
+              </label>
+              <button className="button button-primary" disabled={busy} type="submit">
+                Create organization
+              </button>
+            </form>
+          ) : (
+            <p className="muted">You do not have permission to create organizations.</p>
+          )}
         </section>
         <section className="panel">
           <PanelTitle title="Workspaces" count={workspaces.length} />
-          <form className="form-actions" onSubmit={onCreateWorkspace}>
-            <input
-              aria-label="New workspace name"
-              onChange={(event) => onSetWorkspaceName(event.target.value)}
-              placeholder="Workspace name"
-              required
-              value={workspaceName}
-            />
-            <button className="button button-secondary" disabled={busy} type="submit">
-              Add workspace
-            </button>
-          </form>
+          {canCreateWorkspace ? (
+            <form className="form-actions" onSubmit={onCreateWorkspace}>
+              <input
+                aria-label="New workspace name"
+                onChange={(event) => onSetWorkspaceName(event.target.value)}
+                placeholder="Workspace name"
+                required
+                value={workspaceName}
+              />
+              <button className="button button-secondary" disabled={busy} type="submit">
+                Add workspace
+              </button>
+            </form>
+          ) : (
+            <p className="muted">
+              Workspace creation is restricted to workspace administrators.
+            </p>
+          )}
           {workspaces.length ? (
             <div className="list">
               {workspaces.map((workspace) => (
@@ -1133,28 +1650,32 @@ function OrganizationView({
       </div>
       <section className="panel">
         <PanelTitle title="Members" count={members.length} />
-        <form className="form-actions" onSubmit={onAddMember}>
-          <input
-            aria-label="Member user id"
-            onChange={(event) => onSetMemberUserId(event.target.value)}
-            placeholder="Existing user id or email"
-            required
-            value={memberUserId}
-          />
-          <select
-            aria-label="Member role"
-            onChange={(event) =>
-              onSetMemberRole(event.target.value as 'admin' | 'member')
-            }
-            value={memberRole}
-          >
-            <option value="member">member</option>
-            <option value="admin">admin</option>
-          </select>
-          <button className="button button-secondary" disabled={busy} type="submit">
-            Add member
-          </button>
-        </form>
+        {canAddMember ? (
+          <form className="form-actions" onSubmit={onAddMember}>
+            <input
+              aria-label="Member user id"
+              onChange={(event) => onSetMemberUserId(event.target.value)}
+              placeholder="Existing user id or email"
+              required
+              value={memberUserId}
+            />
+            <select
+              aria-label="Member role"
+              onChange={(event) =>
+                onSetMemberRole(event.target.value as 'admin' | 'member')
+              }
+              value={memberRole}
+            >
+              <option value="member">member</option>
+              <option value="admin">admin</option>
+            </select>
+            <button className="button button-secondary" disabled={busy} type="submit">
+              Add member
+            </button>
+          </form>
+        ) : (
+          <p className="muted">You do not have permission to add members.</p>
+        )}
         {members.length ? (
           <div className="list">
             {members.map((member) => (
@@ -1164,7 +1685,7 @@ function OrganizationView({
                   <span className="muted">{member.role}</span>
                 </div>
                 <div className="row-actions">
-                  {member.role !== 'owner' ? (
+                  {canUpdateMember && member.role !== 'owner' ? (
                     <select
                       aria-label={`Role for ${member.userId}`}
                       onChange={(event) =>
@@ -1179,13 +1700,15 @@ function OrganizationView({
                       <option value="member">member</option>
                     </select>
                   ) : null}
-                  <button
-                    className="button button-small button-danger"
-                    onClick={() => onRemoveMember(member)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
+                  {canRemoveMember ? (
+                    <button
+                      className="button button-small button-danger"
+                      onClick={() => onRemoveMember(member)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -1369,9 +1892,14 @@ function PagesView({
   bindingSaving,
   integrations,
   onSaveFormBinding,
+  canCreatePage,
+  canUpdatePage,
+  canPublishPage,
+  canReadWorkflows,
   form,
   busy,
   onOpenBuilder,
+  onOpenWorkflows,
   onPreview,
   onPublish,
   onSelectSite,
@@ -1399,12 +1927,28 @@ function PagesView({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUnpublish: (page: LandingPage) => void;
   onSaveFormBinding: (formNodeId: string, integrationIds: string[]) => void;
+  canCreatePage: boolean;
+  canUpdatePage: boolean;
+  canPublishPage: boolean;
+  canReadWorkflows: boolean;
+  onOpenWorkflows: (page: LandingPage) => void;
 }) {
+  const [pageSearch, setPageSearch] = useState('');
+  const [pageStatus, setPageStatus] = useState('');
   const draftVersion = selectedPage
     ? versions.find((version) => version.id === selectedPage.currentDraftVersionId)
     : undefined;
   const formNodes =
     draftVersion?.payload.version === 2 ? findFormNodes(draftVersion.payload.root) : [];
+  const visiblePages = pages.filter((page) => {
+    const query = pageSearch.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      page.name.toLowerCase().includes(query) ||
+      (page.slug ?? '').toLowerCase().includes(query);
+    const matchesStatus = !pageStatus || publicationStatus(page) === pageStatus;
+    return matchesSearch && matchesStatus;
+  });
   return (
     <>
       <PageHeading
@@ -1412,7 +1956,7 @@ function PagesView({
         title="Landing pages"
         description="Manage page identity and draft history without opening the visual builder."
       />
-      <div className="toolbar">
+      <div className="toolbar page-toolbar">
         <label className="inline-field">
           Site
           <select
@@ -1428,6 +1972,28 @@ function PagesView({
             ))}
           </select>
         </label>
+        <label className="inline-field page-search-field">
+          Search
+          <input
+            aria-label="Search pages"
+            onChange={(event) => setPageSearch(event.target.value)}
+            placeholder="Name or slug"
+            value={pageSearch}
+          />
+        </label>
+        <label className="inline-field">
+          Status
+          <select
+            aria-label="Filter pages by status"
+            onChange={(event) => setPageStatus(event.target.value)}
+            value={pageStatus}
+          >
+            <option value="">All statuses</option>
+            <option value="Published">Published</option>
+            <option value="Newer draft">Draft pending</option>
+            <option value="Unpublished">Unpublished</option>
+          </select>
+        </label>
       </div>
       <div className="two-column">
         <section className="panel">
@@ -1439,7 +2005,7 @@ function PagesView({
               title="Select a site first"
               description="Landing pages belong to a site."
             />
-          ) : (
+          ) : (selectedPage ? canUpdatePage : canCreatePage) ? (
             <form className="stack" onSubmit={onSubmit}>
               <label>
                 Page name
@@ -1463,18 +2029,20 @@ function PagesView({
                 {busy ? 'Saving…' : selectedPage ? 'Save metadata' : 'Create page'}
               </button>
             </form>
+          ) : (
+            <p className="muted">You have read-only access to landing pages.</p>
           )}
         </section>
         <section className="panel">
-          <PanelTitle title="Page inventory" count={pages.length} />
-          {pages.length ? (
+          <PanelTitle title="Page inventory" count={visiblePages.length} />
+          {visiblePages.length ? (
             <div className="list">
-              {pages.map((page) => (
+              {visiblePages.map((page) => (
                 <div
                   className={
                     selectedPage?.id === page.id
-                      ? 'list-row selectable selected'
-                      : 'list-row selectable'
+                      ? 'list-row selectable selected page-list-row'
+                      : 'list-row selectable page-list-row'
                   }
                   key={page.id}
                 >
@@ -1487,7 +2055,7 @@ function PagesView({
                       <strong>{page.name}</strong>
                       <span className="muted">/{page.slug ?? 'no-slug'}</span>
                     </div>
-                    <span className="pill">{publicationStatus(page)}</span>
+                    <StatusBadge status={publicationStatus(page)} />
                   </button>
                   <button
                     className="button button-secondary button-small"
@@ -1496,13 +2064,20 @@ function PagesView({
                   >
                     Open Builder
                   </button>
+                  <span className="muted small page-updated-at">
+                    Updated {new Date(page.updatedAt).toLocaleDateString()}
+                  </span>
                 </div>
               ))}
             </div>
           ) : (
             <EmptyState
-              title="No landing pages"
-              description="Create a page to see its draft and metadata here."
+              title={pages.length ? 'No matching pages' : 'No landing pages'}
+              description={
+                pages.length
+                  ? 'Try a different name, slug or publication status.'
+                  : 'Create a page to see its draft and metadata here.'
+              }
             />
           )}
         </section>
@@ -1515,7 +2090,7 @@ function PagesView({
               <h2>Version history</h2>
             </div>
             <div className="row-actions">
-              <span className="pill">{publicationStatus(selectedPage)}</span>
+              <StatusBadge status={publicationStatus(selectedPage)} />
               <button
                 className="button button-secondary button-small"
                 onClick={() => onPreview(selectedPage)}
@@ -1523,7 +2098,7 @@ function PagesView({
               >
                 Preview draft
               </button>
-              {publicationStatus(selectedPage) === 'Published' ? (
+              {canPublishPage && publicationStatus(selectedPage) === 'Published' ? (
                 <button
                   className="button button-ghost button-small"
                   disabled={busy}
@@ -1532,7 +2107,7 @@ function PagesView({
                 >
                   Unpublish
                 </button>
-              ) : (
+              ) : canPublishPage ? (
                 <button
                   className="button button-primary button-small"
                   disabled={busy}
@@ -1541,7 +2116,16 @@ function PagesView({
                 >
                   Publish draft
                 </button>
-              )}
+              ) : null}
+              {canReadWorkflows ? (
+                <button
+                  className="button button-secondary button-small"
+                  onClick={() => onOpenWorkflows(selectedPage)}
+                  type="button"
+                >
+                  Manage workflows
+                </button>
+              ) : null}
             </div>
           </div>
           <p className="muted small">
@@ -1874,43 +2458,43 @@ function SubmissionsView({
   status: string;
   onSearch: (value: string) => void;
   onStatusFilter: (value: string) => void;
-  onSelect: (submission: FormSubmission) => void;
+  onSelect: (submission: FormSubmission | null) => void;
   onPrevious: () => void;
   onNext: () => void;
   onUpdateStatus: (submission: FormSubmission, status: FormSubmission['status']) => void;
 }) {
   return (
     <>
-      <PageHeading
+      <PageHeader
         eyebrow="Leads"
         title="Submissions"
         description="Review form submissions captured by published landing pages."
       />
+      <ResourceToolbar>
+        <label className="inline-field">
+          Search
+          <input
+            aria-label="Search submissions"
+            onChange={(event) => onSearch(event.target.value)}
+            placeholder="Name, email or phone"
+            value={search}
+          />
+        </label>
+        <label className="inline-field">
+          Status
+          <select
+            aria-label="Filter submissions by status"
+            onChange={(event) => onStatusFilter(event.target.value)}
+            value={status}
+          >
+            <option value="">All statuses</option>
+            <option value="new">New</option>
+            <option value="read">Read</option>
+            <option value="archived">Archived</option>
+          </select>
+        </label>
+      </ResourceToolbar>
       <section className="panel">
-        <div className="toolbar">
-          <label className="inline-field">
-            Search
-            <input
-              aria-label="Search submissions"
-              onChange={(event) => onSearch(event.target.value)}
-              placeholder="Name, email or phone"
-              value={search}
-            />
-          </label>
-          <label className="inline-field">
-            Status
-            <select
-              aria-label="Filter submissions by status"
-              onChange={(event) => onStatusFilter(event.target.value)}
-              value={status}
-            >
-              <option value="">All statuses</option>
-              <option value="new">New</option>
-              <option value="read">Read</option>
-              <option value="archived">Archived</option>
-            </select>
-          </label>
-        </div>
         {submissions.length ? (
           <div className="list" aria-label="Submission list">
             {submissions.map((submission) => (
@@ -1935,7 +2519,7 @@ function SubmissionsView({
                     {new Date(submission.submittedAt).toLocaleString()}
                   </span>
                 </span>
-                <span className="pill">{submission.status}</span>
+                <StatusBadge status={submission.status} />
               </button>
             ))}
           </div>
@@ -1971,38 +2555,52 @@ function SubmissionsView({
         </div>
       </section>
       {selected ? (
-        <section className="panel" aria-label="Submission detail">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Submission detail</span>
-              <h2>{selected.pageName}</h2>
+        <Drawer
+          description={`${selected.siteName} · ${selected.pageName}`}
+          eyebrow="Submission detail"
+          onClose={() => onSelect(null)}
+          open
+          title={selected.pageName}
+        >
+          <div className="detail-drawer-section">
+            <span className="muted small">Status</span>
+            <div className="detail-drawer-status-row">
+              <StatusBadge status={selected.status} />
+              <select
+                aria-label="Submission status"
+                onChange={(event) =>
+                  onUpdateStatus(selected, event.target.value as FormSubmission['status'])
+                }
+                value={selected.status}
+              >
+                <option value="new">New</option>
+                <option value="read">Read</option>
+                <option value="archived">Archived</option>
+              </select>
             </div>
-            <select
-              aria-label="Submission status"
-              onChange={(event) =>
-                onUpdateStatus(selected, event.target.value as FormSubmission['status'])
-              }
-              value={selected.status}
-            >
-              <option value="new">New</option>
-              <option value="read">Read</option>
-              <option value="archived">Archived</option>
-            </select>
           </div>
-          <p className="muted small">
-            {selected.siteName} · submitted{' '}
-            {new Date(selected.submittedAt).toLocaleString()} · published version{' '}
-            {selected.pageVersionId.slice(0, 8)}
-          </p>
-          <div className="submission-detail-fields">
-            {selected.fields.map((field) => (
-              <div className="list-row" key={field.fieldId}>
-                <strong>{field.label}</strong>
-                <span>{String(field.value)}</span>
-              </div>
-            ))}
+          <div className="detail-drawer-section">
+            <span className="muted small">Source</span>
+            <span>
+              {selected.siteName} · {selected.pageName}
+            </span>
+            <span className="muted small">
+              Submitted {new Date(selected.submittedAt).toLocaleString()} · published
+              version {selected.pageVersionId.slice(0, 8)}
+            </span>
           </div>
-        </section>
+          <div className="detail-drawer-section">
+            <strong>Submitted fields</strong>
+            <div className="submission-detail-fields">
+              {selected.fields.map((field) => (
+                <div className="detail-field" key={field.fieldId}>
+                  <span className="muted small">{field.label}</span>
+                  <span>{String(field.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Drawer>
       ) : null}
     </>
   );

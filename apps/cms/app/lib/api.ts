@@ -150,6 +150,9 @@ export const api = {
   patch<T>(path: string, body: unknown): Promise<T> {
     return request<T>(path, { body: JSON.stringify(body), method: 'PATCH' });
   },
+  put<T>(path: string, body: unknown): Promise<T> {
+    return request<T>(path, { body: JSON.stringify(body), method: 'PUT' });
+  },
   post<T>(path: string, body?: unknown): Promise<T> {
     return request<T>(path, {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),

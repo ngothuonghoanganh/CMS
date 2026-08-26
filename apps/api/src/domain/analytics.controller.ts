@@ -26,6 +26,7 @@ import type { PlatformRequest } from '../common/interfaces/request';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { AnalyticsQueryService } from './analytics-query.service';
 import { AnalyticsService } from './analytics.service';
+import { AuthorizationService } from '../security/authorization.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -33,6 +34,7 @@ export class AnalyticsController {
     @Inject(AnalyticsService) private readonly analyticsService: AnalyticsService,
     @Inject(AnalyticsQueryService)
     private readonly queryService: AnalyticsQueryService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
   ) {}
 
   @Post('events')
@@ -55,6 +57,7 @@ export class AnalyticsController {
     @Query(new ZodValidationPipe(AnalyticsRangeQuerySchema)) query: AnalyticsRangeQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'analytics.read');
     return this.queryService.overview(requireWorkspaceId(principal), query);
   }
 
@@ -65,6 +68,7 @@ export class AnalyticsController {
     @Query(new ZodValidationPipe(AnalyticsRangeQuerySchema)) query: AnalyticsRangeQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'analytics.read');
     return this.queryService.page(requireWorkspaceId(principal), pageId, query);
   }
 }

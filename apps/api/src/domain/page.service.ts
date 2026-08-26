@@ -45,6 +45,10 @@ import {
   type PageVersionDocument,
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
+import { EventBus } from '../extensions/event-bus';
+import { PageExtensionService } from '../extensions/page-extension.service';
+import { TenantContext } from '../tenancy/tenant-context';
+import { WorkflowService } from '../workflows/workflow.service';
 
 @Injectable()
 export class PageService {
@@ -58,6 +62,11 @@ export class PageService {
     @Inject(PublicPageResolver)
     private readonly publicPageResolver: PublicPageResolver,
     @Inject(QuotaService) private readonly quotas: QuotaService,
+    @Inject(EventBus) private readonly events: EventBus,
+    @Inject(PageExtensionService)
+    private readonly pageExtensions: PageExtensionService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(WorkflowService) private readonly workflows: WorkflowService,
   ) {}
 
   async create(
@@ -87,6 +96,15 @@ export class PageService {
       });
       page.currentDraftVersionId = versionId;
       await page.save();
+      await this.pageExtensions.synchronizePayload(pageId, site.workspaceId, payload);
+
+      await this.events.publish('page.created', {
+        tenantId: this.tenantContext.require().id,
+        pageId,
+        workspaceId: site.workspaceId,
+        siteId,
+        occurredAt: new Date().toISOString(),
+      });
 
       return this.toPageContract(page);
     });
@@ -158,6 +176,16 @@ export class PageService {
     }
     await page.save();
 
+    await this.events.publish('page.updated', {
+      tenantId: this.tenantContext.require().id,
+      pageId,
+      workspaceId,
+      ...(parsedInput.payload !== undefined && latestVersion
+        ? { versionNumber: latestVersion.versionNumber + 1 }
+        : {}),
+      occurredAt: new Date().toISOString(),
+    });
+
     return this.toPageContract(page);
   }
 
@@ -211,8 +239,29 @@ export class PageService {
       });
     }
 
+    const payload = PagePayloadSchema.parse(version.payload);
+    await this.workflows.validatePagePublishDependencies(pageId, workspaceId);
+    await this.pageExtensions.validateBeforePublish(pageId, workspaceId, payload);
+    const publishedBundle = await this.pageExtensions.compilePublishedBundle(
+      pageId,
+      workspaceId,
+      version.versionNumber,
+      payload,
+    );
+    version.set('publishedBundle', publishedBundle);
+    await version.save();
+
     page.publishedVersionId = version._id.toString();
     await page.save();
+
+    await this.events.publish('page.published', {
+      tenantId: this.tenantContext.require().id,
+      pageId,
+      workspaceId,
+      versionNumber: version.versionNumber,
+      occurredAt: new Date().toISOString(),
+    });
+    await this.pageExtensions.afterPublish(pageId, workspaceId, version.versionNumber);
 
     return this.toPageContract(page);
   }
@@ -313,6 +362,11 @@ export class PageService {
     });
     page.currentDraftVersionId = record._id.toString();
     await page.save();
+    await this.pageExtensions.synchronizePayload(
+      page._id.toString(),
+      page.workspaceId,
+      payload,
+    );
     return this.toVersionContract(record);
   }
 
@@ -420,13 +474,17 @@ export class PageService {
     });
   }
 
-  private toPublicContract(
+  private async toPublicContract(
     site: SiteDocument,
     page: LandingPageDocument,
     version: PageVersionDocument,
-  ): PublicLandingPage {
+  ): Promise<PublicLandingPage> {
     try {
       const versionContract = this.toVersionContract(version);
+      const extensions = await this.pageExtensions.resolveRuntime(
+        page._id.toString(),
+        page.workspaceId,
+      );
       return PublicLandingPageSchema.parse({
         site: { name: site.name, slug: site.slug },
         page: {
@@ -434,6 +492,7 @@ export class PageService {
           ...(page.slug ? { slug: page.slug } : {}),
         },
         payload: versionContract.payload,
+        ...(extensions.length ? { extensions } : {}),
       });
     } catch {
       throw this.invalidPublishedPage();

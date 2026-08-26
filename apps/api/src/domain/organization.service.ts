@@ -29,6 +29,7 @@ import {
   type UpdateOrganizationMembershipRequest,
   type UpdateOrganizationRequest,
   type Tenant,
+  type TenantPermission,
   type Workspace,
 } from '@payload/contracts';
 
@@ -47,6 +48,9 @@ import { TenantRecord, type TenantDocument } from '../tenancy/schemas/tenant.sch
 import { TenantContext } from '../tenancy/tenant-context';
 import { TenantProvisioningService } from '../tenancy/tenant-provisioning.service';
 import { TenantResolver } from '../tenancy/tenant-resolver';
+import { AuthorizationService } from '../security/authorization.service';
+import { RoleService } from '../security/role.service';
+import { EventBus } from '../extensions/event-bus';
 
 /**
  * Compatibility adapter for the pre-Phase 10 `/organizations` routes.
@@ -72,6 +76,9 @@ export class OrganizationService {
     @Inject(TenantProvisioningService)
     private readonly provisioning: TenantProvisioningService,
     @Inject(QuotaService) private readonly quotas: QuotaService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(RoleService) private readonly roles: RoleService,
+    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async listForUser(userId: string) {
@@ -132,6 +139,7 @@ export class OrganizationService {
   }
 
   async get(userId: string, tenantId: string): Promise<Organization> {
+    await this.requirePermission(userId, tenantId, 'workspace.read');
     const { tenant } = await this.requireMembership(userId, tenantId);
     return this.toOrganization(tenant);
   }
@@ -142,15 +150,15 @@ export class OrganizationService {
     input: UpdateOrganizationRequest,
   ): Promise<Organization> {
     const parsed = UpdateOrganizationRequestSchema.parse(input);
-    const { tenant, membership } = await this.requireMembership(userId, tenantId);
-    if (
-      parsed.status === undefined &&
-      membership.role !== 'owner' &&
-      membership.role !== 'admin'
-    ) {
+    const { tenant, effective } = await this.requireTenantPermission(
+      userId,
+      tenantId,
+      'workspace.update',
+    );
+    if (parsed.status === undefined && !this.isOwner(effective)) {
       throw this.forbidden('Only tenant administrators can update a tenant');
     }
-    if (parsed.status !== undefined && membership.role !== 'owner') {
+    if (parsed.status !== undefined && !this.isOwner(effective)) {
       throw this.forbidden('Only a tenant owner can change tenant status');
     }
     if (tenant.status === 'suspended' && parsed.status !== 'active') {
@@ -193,7 +201,7 @@ export class OrganizationService {
   }
 
   async listMembers(userId: string, tenantId: string) {
-    await this.requireActiveMember(userId, tenantId);
+    await this.requirePermission(userId, tenantId, 'member.read');
     const members = await this.inTenant(tenantId, () =>
       this.membershipModel.find({ tenantId }).sort({ createdAt: 1, _id: 1 }).exec(),
     );
@@ -207,8 +215,8 @@ export class OrganizationService {
     tenantId: string,
     input: CreateOrganizationMembershipRequest,
   ): Promise<OrganizationMembership> {
-    const actor = await this.requireAdmin(userId, tenantId);
-    if (input.role === 'owner' && actor.role !== 'owner') {
+    const { effective } = await this.requirePermission(userId, tenantId, 'member.add');
+    if (input.role === 'owner' && !this.isOwner(effective)) {
       throw this.forbidden('Only a tenant owner can add another owner');
     }
     try {
@@ -220,6 +228,7 @@ export class OrganizationService {
           role: input.role,
         }),
       );
+      await this.roles.syncLegacyMembershipRole(member.userId, input.role);
       return this.toMembership(member);
     } catch (error) {
       if (isDuplicateKey(error)) {
@@ -239,10 +248,14 @@ export class OrganizationService {
     input: UpdateOrganizationMembershipRequest,
   ): Promise<OrganizationMembership> {
     return this.withOwnerLock(tenantId, async () => {
-      const actor = await this.requireAdmin(actorId, tenantId);
+      const { effective } = await this.requirePermission(
+        actorId,
+        tenantId,
+        'member.update',
+      );
       const parsed = UpdateOrganizationMembershipRequestSchema.parse(input);
       const member = await this.requireMembershipById(tenantId, memberId);
-      if (parsed.role === 'owner' && actor.role !== 'owner') {
+      if (parsed.role === 'owner' && !this.isOwner(effective)) {
         throw this.forbidden('Only a tenant owner can promote an owner');
       }
       if (member.role === 'owner' && parsed.role !== 'owner') {
@@ -250,16 +263,18 @@ export class OrganizationService {
       }
       member.role = parsed.role;
       await member.save();
+      await this.roles.syncLegacyMembershipRole(member.userId, parsed.role);
       return this.toMembership(member);
     });
   }
 
   async removeMember(actorId: string, tenantId: string, memberId: string): Promise<void> {
     await this.withOwnerLock(tenantId, async () => {
-      await this.requireAdmin(actorId, tenantId);
+      await this.requirePermission(actorId, tenantId, 'member.remove');
       const member = await this.requireMembershipById(tenantId, memberId);
       if (member.role === 'owner') await this.assertNotLastOwner(tenantId);
       await member.deleteOne();
+      await this.roles.removeLegacyMembershipRoles(member.userId);
     });
   }
 
@@ -270,8 +285,21 @@ export class OrganizationService {
         .find()
         .sort({ createdAt: 1, _id: 1 })
         .exec();
+      const visible = await Promise.all(
+        workspaces.map(async (workspace) =>
+          (await this.authorization.can(
+            userId,
+            workspace._id.toString(),
+            'workspace.read',
+          ))
+            ? workspace
+            : null,
+        ),
+      );
       return WorkspaceListResponseSchema.parse({
-        items: workspaces.map((workspace) => this.toWorkspace(workspace)),
+        items: visible
+          .filter((workspace): workspace is WorkspaceDocument => workspace !== null)
+          .map((workspace) => this.toWorkspace(workspace)),
       });
     });
   }
@@ -281,12 +309,17 @@ export class OrganizationService {
     tenantId: string,
     input: CreateWorkspaceRequest,
   ): Promise<Workspace> {
-    await this.requireAdmin(userId, tenantId);
+    await this.requirePermission(userId, tenantId, 'workspace.create');
     return this.inTenant(tenantId, async () => {
       return this.quotas.withHardQuota('workspaces', async () => {
         const workspace = await this.workspaceModel.create({
           _id: randomUUID(),
           name: input.name,
+        });
+        await this.events.publish('workspace.created', {
+          tenantId: this.context.require().id,
+          workspaceId: workspace._id.toString(),
+          occurredAt: new Date().toISOString(),
         });
         return this.toWorkspace(workspace);
       });
@@ -317,15 +350,54 @@ export class OrganizationService {
         message: 'Workspace was not found',
       });
     }
+    if (!(await this.authorization.can(userId, workspaceId, 'workspace.read'))) {
+      throw this.forbidden('The user does not have access to this workspace');
+    }
     return workspace;
   }
 
-  private async requireAdmin(userId: string, tenantId: string) {
+  private async requirePermission(
+    userId: string,
+    tenantId: string,
+    permission: TenantPermission,
+  ) {
     const membership = await this.requireActiveMember(userId, tenantId);
-    if (membership.role !== 'owner' && membership.role !== 'admin') {
-      throw this.forbidden('Tenant administration requires owner or admin role');
+    const effective = await this.effectiveForTenant(userId, tenantId);
+    if (!effective.permissions.includes(permission)) {
+      throw this.forbidden('The current role does not allow this action');
     }
-    return membership;
+    return { membership, effective };
+  }
+
+  private async requireTenantPermission(
+    userId: string,
+    tenantId: string,
+    permission: TenantPermission,
+  ) {
+    const { tenant, membership } = await this.requireMembership(userId, tenantId);
+    if (tenant.status !== 'active') throw this.suspended();
+    const effective = await this.effectiveForTenant(userId, tenantId);
+    if (!effective.permissions.includes(permission)) {
+      throw this.forbidden('The current role does not allow this action');
+    }
+    return { tenant, membership, effective };
+  }
+
+  private async effectiveForTenant(userId: string, tenantId: string) {
+    return this.inTenant(tenantId, async () => {
+      const workspace = await this.workspaceModel
+        .findOne()
+        .sort({ createdAt: 1, _id: 1 })
+        .exec();
+      if (!workspace) throw this.forbidden('The tenant has no workspace context');
+      return this.authorization.getEffectivePermissions(userId, workspace._id.toString());
+    });
+  }
+
+  private isOwner(
+    effective: Awaited<ReturnType<AuthorizationService['getEffectivePermissions']>>,
+  ): boolean {
+    return effective.assignments.some((assignment) => assignment.roleKey === 'owner');
   }
 
   private async requireMembership(userId: string, tenantId: string) {

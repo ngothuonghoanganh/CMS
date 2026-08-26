@@ -58,10 +58,17 @@ types.
 ## Versioning and evolution
 
 Persisted payloads use a literal numeric discriminator (`version: 1`). The public
-`PagePayloadSchema` is a discriminated union, currently containing only V1. A future V2
-can be added as a new schema and union member without changing V1 data or making the
-persisted value depend on a `latest` alias. Migration tooling is intentionally deferred
-until a real V2 exists.
+`PagePayloadSchema` is a discriminated union. V1 and V2 remain closed contracts; Phase 13 adds
+V3 as a separate schema for extension-capable nodes. A payload never depends on a `latest` alias,
+so an existing V1/V2 document keeps its original semantics. Migration tooling is intentionally
+deferred until a compatibility migration is actually required.
+
+PagePayloadV3 currently adds the explicit `countdown` node. Its props are only `targetAt` and
+`label`, and its legal parents are explicitly listed in the schema. The renderer and builder use
+the same discriminator; no extension can inject arbitrary HTML, CSS, JavaScript or `eval` into a
+payload. A disabled builder extension does not make an already persisted V3 document unreadable:
+the renderer keeps the safe, registered countdown renderer available while the CMS hides new
+countdown insertion.
 
 ## Example
 

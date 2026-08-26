@@ -32,11 +32,17 @@ import { AuthenticationGuard } from '../common/guards/authentication.guard';
 import { requireWorkspaceId } from '../common/guards/workspace-context';
 import type { PlatformRequest } from '../common/interfaces/request';
 import { PageService } from './page.service';
+import { AuthorizationService } from '../security/authorization.service';
+import { AuditService } from '../security/audit.service';
 
 @Controller('sites/:siteId/pages')
 @UseGuards(AuthenticationGuard)
 export class SitePagesController {
-  constructor(@Inject(PageService) private readonly pageService: PageService) {}
+  constructor(
+    @Inject(PageService) private readonly pageService: PageService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
   @Post()
   async create(
@@ -44,7 +50,24 @@ export class SitePagesController {
     @Body(new ZodValidationPipe(CreatePageRequestSchema)) input: CreatePageRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.pageService.create(siteId, input, requireWorkspaceId(principal));
+    await this.authorization.assertCan(principal, 'page.create');
+    const result = await this.pageService.create(
+      siteId,
+      input,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.create',
+        resourceType: 'page',
+        resourceId: result.id,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Get()
@@ -53,6 +76,7 @@ export class SitePagesController {
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'page.read');
     return this.pageService.listBySite(siteId, query, requireWorkspaceId(principal));
   }
 }
@@ -60,13 +84,18 @@ export class SitePagesController {
 @Controller('pages')
 @UseGuards(AuthenticationGuard)
 export class PageController {
-  constructor(@Inject(PageService) private readonly pageService: PageService) {}
+  constructor(
+    @Inject(PageService) private readonly pageService: PageService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
   @Get(':pageId')
   async get(
     @Param('pageId') pageId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'page.read');
     return this.pageService.getById(pageId, requireWorkspaceId(principal));
   }
 
@@ -76,7 +105,25 @@ export class PageController {
     @Body(new ZodValidationPipe(UpdatePageRequestSchema)) input: UpdatePageRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.pageService.update(pageId, input, requireWorkspaceId(principal));
+    await this.authorization.assertCan(principal, 'page.update');
+    const result = await this.pageService.update(
+      pageId,
+      input,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.update',
+        resourceType: 'page',
+        resourceId: pageId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: { changedFields: Object.keys(input) },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Delete(':pageId')
@@ -85,7 +132,19 @@ export class PageController {
     @Param('pageId') pageId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ): Promise<void> {
+    await this.authorization.assertCan(principal, 'page.delete');
     await this.pageService.remove(pageId, requireWorkspaceId(principal));
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.delete',
+        resourceType: 'page',
+        resourceId: pageId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+      })
+      .catch(() => undefined);
   }
 
   @Post(':pageId/versions')
@@ -95,7 +154,25 @@ export class PageController {
     input: CreatePageVersionRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.pageService.createVersion(pageId, input, requireWorkspaceId(principal));
+    await this.authorization.assertCan(principal, 'page.update');
+    const result = await this.pageService.createVersion(
+      pageId,
+      input,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.update',
+        resourceType: 'page_version',
+        resourceId: result.id,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: { pageId, versionNumber: result.versionNumber },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Post(':pageId/publish')
@@ -104,7 +181,25 @@ export class PageController {
     @Body(new ZodValidationPipe(PublishPageRequestSchema)) input: PublishPageRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.pageService.publish(pageId, input, requireWorkspaceId(principal));
+    await this.authorization.assertCan(principal, 'page.publish');
+    const result = await this.pageService.publish(
+      pageId,
+      input,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.publish',
+        resourceType: 'page',
+        resourceId: pageId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: { versionNumber: input.versionNumber },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Post(':pageId/unpublish')
@@ -112,7 +207,24 @@ export class PageController {
     @Param('pageId') pageId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.pageService.unpublish(pageId, requireWorkspaceId(principal));
+    await this.authorization.assertCan(principal, 'page.publish');
+    const result = await this.pageService.unpublish(
+      pageId,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.publish',
+        resourceType: 'page',
+        resourceId: pageId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: { action: 'unpublish' },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Get(':pageId/versions')
@@ -121,6 +233,7 @@ export class PageController {
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'page.read');
     return this.pageService.listVersions(pageId, query, requireWorkspaceId(principal));
   }
 
@@ -130,6 +243,7 @@ export class PageController {
     @Param('versionNumber', ParseIntPipe) versionNumber: number,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'page.read');
     return this.pageService.getVersion(
       pageId,
       versionNumber,
@@ -154,13 +268,17 @@ export class PublicPageController {
 @Controller('preview/pages')
 @UseGuards(AuthenticationGuard)
 export class PreviewPageController {
-  constructor(@Inject(PageService) private readonly pageService: PageService) {}
+  constructor(
+    @Inject(PageService) private readonly pageService: PageService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+  ) {}
 
   @Get(':pageId')
   async getPreviewPage(
     @Param('pageId') pageId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'page.read');
     return this.pageService.resolvePreview(pageId, requireWorkspaceId(principal));
   }
 }

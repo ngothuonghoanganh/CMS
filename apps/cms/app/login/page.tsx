@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import { ApiClientError, api } from '../lib/api';
+import { TextField } from '../ui/fields';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,39 +46,32 @@ export default function LoginPage() {
           Manage sites, landing pages, drafts and assets from one place.
         </p>
         <form className="stack" onSubmit={handleSubmit}>
-          <label>
-            Email
-            <input
-              autoComplete="email"
-              name="email"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              value={email}
-            />
-          </label>
-          <label>
-            Tenant slug
-            <input
-              autoComplete="organization"
-              name="tenantSlug"
-              onChange={(event) => setTenantSlug(event.target.value)}
-              placeholder="demo"
-              type="text"
-              value={tenantSlug}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              autoComplete="current-password"
-              name="password"
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </label>
+          <TextField
+            autoComplete="email"
+            label="Email"
+            name="email"
+            onChange={(event) => setEmail(event.target.value)}
+            required
+            type="email"
+            value={email}
+          />
+          <TextField
+            autoComplete="organization"
+            label="Tenant slug"
+            name="tenantSlug"
+            onChange={(event) => setTenantSlug(event.target.value)}
+            placeholder="demo"
+            value={tenantSlug}
+          />
+          <TextField
+            autoComplete="current-password"
+            label="Password"
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            type="password"
+            value={password}
+          />
           {error ? (
             <div className="alert alert-error" role="alert">
               {error}

@@ -30,12 +30,16 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { CustomDomainService } from './custom-domain.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { TenantResolver } from '../tenancy/tenant-resolver';
+import { AuthorizationService } from '../security/authorization.service';
+import { AuditService } from '../security/audit.service';
 
 @Controller('workspaces/:workspaceId/domains')
 @UseGuards(AuthenticationGuard)
 export class CustomDomainController {
   constructor(
     @Inject(CustomDomainService) private readonly domainService: CustomDomainService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Get()
@@ -43,6 +47,7 @@ export class CustomDomainController {
     @Param('workspaceId') workspaceId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'domain.read', workspaceId);
     return this.domainService.list(requireRequestedWorkspace(principal, workspaceId));
   }
 
@@ -53,10 +58,24 @@ export class CustomDomainController {
     input: CreateCustomDomainRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.domainService.create(
+    await this.authorization.assertCan(principal, 'domain.create', workspaceId);
+    const result = await this.domainService.create(
       requireRequestedWorkspace(principal, workspaceId),
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'domain.create',
+        resourceType: 'custom_domain',
+        resourceId: result.id,
+        workspaceId,
+        result: 'success',
+        metadata: { hostname: result.hostname },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Get(':domainId')
@@ -65,6 +84,7 @@ export class CustomDomainController {
     @Param('domainId') domainId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'domain.read', workspaceId);
     return this.domainService.get(
       requireRequestedWorkspace(principal, workspaceId),
       domainId,
@@ -79,11 +99,25 @@ export class CustomDomainController {
     input: UpdateCustomDomainRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.domainService.update(
+    await this.authorization.assertCan(principal, 'domain.update', workspaceId);
+    const result = await this.domainService.update(
       requireRequestedWorkspace(principal, workspaceId),
       domainId,
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'domain.update',
+        resourceType: 'custom_domain',
+        resourceId: domainId,
+        workspaceId,
+        result: 'success',
+        metadata: { changedFields: Object.keys(input) },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Post(':domainId/verify')
@@ -92,10 +126,23 @@ export class CustomDomainController {
     @Param('domainId') domainId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.domainService.verify(
+    await this.authorization.assertCan(principal, 'domain.verify', workspaceId);
+    const result = await this.domainService.verify(
       requireRequestedWorkspace(principal, workspaceId),
       domainId,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'domain.verify',
+        resourceType: 'custom_domain',
+        resourceId: domainId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Delete(':domainId')
@@ -105,10 +152,22 @@ export class CustomDomainController {
     @Param('domainId') domainId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ): Promise<void> {
+    await this.authorization.assertCan(principal, 'domain.delete', workspaceId);
     await this.domainService.remove(
       requireRequestedWorkspace(principal, workspaceId),
       domainId,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'domain.delete',
+        resourceType: 'custom_domain',
+        resourceId: domainId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
   }
 }
 

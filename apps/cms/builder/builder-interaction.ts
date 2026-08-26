@@ -40,7 +40,8 @@ export function isBuilderNodeType(value: unknown): value is BuilderNodeType {
     value === 'text' ||
     value === 'image' ||
     value === 'button' ||
-    value === 'form'
+    value === 'form' ||
+    value === 'countdown'
   );
 }
 

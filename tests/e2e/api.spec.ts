@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, request as playwrightRequest, test } from '@playwright/test';
 
 test('API liveness is reachable', async ({ request }) => {
   const response = await request.get('http://127.0.0.1:3001/api/v1/health/live');
@@ -90,4 +90,366 @@ test('refresh tokens rotate once and stale tokens are rejected', async ({ reques
     },
   });
   expect(revokedRefreshResponse.status()).toBe(401);
+});
+
+test('tenant RBAC exposes effective permissions and audits role changes', async ({
+  request,
+}) => {
+  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const loginResponse = await request.post(`${baseUrl}/auth/login`, {
+    data: {
+      email: process.env.AUTH_EMAIL ?? 'admin@example.com',
+      password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
+    },
+  });
+  expect(loginResponse.status()).toBe(200);
+
+  const me = (await request
+    .get(`${baseUrl}/auth/me`)
+    .then((response) => response.json())) as {
+    workspace: { id: string };
+  };
+  const permissionsResponse = await request.get(
+    `${baseUrl}/me/permissions?workspaceId=${me.workspace.id}`,
+  );
+  expect(permissionsResponse.status()).toBe(200);
+  expect(
+    ((await permissionsResponse.json()) as { permissions: string[] }).permissions,
+  ).toContain('role.create');
+
+  const rolesResponse = await request.get(`${baseUrl}/roles`);
+  expect(rolesResponse.status()).toBe(200);
+  expect(
+    ((await rolesResponse.json()) as { items: Array<{ key: string }> }).items.map(
+      (role) => role.key,
+    ),
+  ).toEqual(expect.arrayContaining(['owner', 'admin', 'editor', 'viewer']));
+
+  const key = `rbac-e2e-${Date.now()}`;
+  const createRoleResponse = await request.post(`${baseUrl}/roles`, {
+    data: { key, name: 'RBAC E2E', permissions: ['page.read'] },
+  });
+  expect(createRoleResponse.status()).toBe(201);
+  const createdRole = (await createRoleResponse.json()) as { id: string };
+
+  const auditResponse = await request.get(`${baseUrl}/audit-logs?action=role.create`);
+  expect(auditResponse.status()).toBe(200);
+  expect(
+    ((await auditResponse.json()) as { items: Array<{ action: string }> }).items.some(
+      (entry) => entry.action === 'role.create',
+    ),
+  ).toBe(true);
+
+  const deleteRoleResponse = await request.delete(`${baseUrl}/roles/${createdRole.id}`);
+  expect([200, 204]).toContain(deleteRoleResponse.status());
+});
+
+test('tenant extensions are registry-backed, tenant-scoped and auditable', async ({
+  request,
+}) => {
+  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const loginResponse = await request.post(`${baseUrl}/auth/login`, {
+    data: {
+      email: process.env.AUTH_EMAIL ?? 'admin@example.com',
+      password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
+    },
+  });
+  expect(loginResponse.status()).toBe(200);
+
+  const extensionsResponse = await request.get(`${baseUrl}/extensions`);
+  expect(extensionsResponse.status()).toBe(200);
+  const extensions = (await extensionsResponse.json()) as {
+    items: Array<{
+      manifest: { id: string; capabilities: string[] };
+      tenantEnabled: boolean;
+    }>;
+  };
+  expect(extensions.items.map((item) => item.manifest.id)).toEqual(
+    expect.arrayContaining(['demo-builder-countdown', 'demo-analytics', 'demo-webhook']),
+  );
+
+  const currentContext = (await (await request.get(`${baseUrl}/auth/me`)).json()) as {
+    workspace: { organizationId: string; id: string };
+  };
+  const tenantSuffix = Date.now();
+  const tenantBResponse = await request.post(`${baseUrl}/organizations`, {
+    data: {
+      name: `Extension Tenant B ${tenantSuffix}`,
+      slug: `extension-tenant-b-${tenantSuffix}`,
+    },
+  });
+  expect(tenantBResponse.status()).toBe(201);
+  const tenantB = (await tenantBResponse.json()) as { id: string };
+  const tenantBWorkspacesResponse = await request.get(
+    `${baseUrl}/organizations/${tenantB.id}/workspaces`,
+  );
+  expect(tenantBWorkspacesResponse.status()).toBe(200);
+  const tenantBWorkspaces = (await tenantBWorkspacesResponse.json()) as {
+    items: Array<{ id: string }>;
+  };
+  expect(tenantBWorkspaces.items[0]).toBeTruthy();
+  const switchToBResponse = await request.post(`${baseUrl}/auth/context`, {
+    data: {
+      organizationId: tenantB.id,
+      workspaceId: tenantBWorkspaces.items[0]?.id,
+    },
+  });
+  expect(switchToBResponse.status()).toBe(200);
+  const tenantBExtensions = (await (
+    await request.get(`${baseUrl}/extensions`)
+  ).json()) as {
+    items: Array<{ tenantEnabled: boolean; manifest: { id: string } }>;
+  };
+  expect(tenantBExtensions.items.every((item) => item.tenantEnabled === false)).toBe(
+    true,
+  );
+  const switchToAResponse = await request.post(`${baseUrl}/auth/context`, {
+    data: {
+      organizationId: currentContext.workspace.organizationId,
+      workspaceId: currentContext.workspace.id,
+    },
+  });
+  expect(switchToAResponse.status()).toBe(200);
+
+  const webhookEnableResponse = await request.post(
+    `${baseUrl}/extensions/demo-webhook/enable`,
+    {
+      data: {
+        configuration: { endpoint: `https://tenant-a-${tenantSuffix}.example/hook` },
+      },
+    },
+  );
+  expect(webhookEnableResponse.status()).toBe(201);
+  const tenantAWebhook = (await webhookEnableResponse.json()) as {
+    configuredFields: string[];
+  };
+  expect(tenantAWebhook.configuredFields).toContain('endpoint');
+  const switchToBAfterConfigResponse = await request.post(`${baseUrl}/auth/context`, {
+    data: {
+      organizationId: tenantB.id,
+      workspaceId: tenantBWorkspaces.items[0]?.id,
+    },
+  });
+  expect(switchToBAfterConfigResponse.status()).toBe(200);
+  const tenantBWebhook = (await (
+    await request.get(`${baseUrl}/extensions/demo-webhook`)
+  ).json()) as { tenantEnabled: boolean; configuredFields: string[] };
+  expect(tenantBWebhook).toMatchObject({ tenantEnabled: false, configuredFields: [] });
+  const switchToAAfterConfigResponse = await request.post(`${baseUrl}/auth/context`, {
+    data: {
+      organizationId: currentContext.workspace.organizationId,
+      workspaceId: currentContext.workspace.id,
+    },
+  });
+  expect(switchToAAfterConfigResponse.status()).toBe(200);
+  await request.post(`${baseUrl}/extensions/demo-webhook/disable`);
+
+  const readerRoleResponse = await request.post(`${baseUrl}/roles`, {
+    data: {
+      key: `extension-reader-${Date.now()}`,
+      name: 'Extension Reader E2E',
+      permissions: ['extensions.read'],
+    },
+  });
+  expect(readerRoleResponse.status()).toBe(201);
+  const readerRole = (await readerRoleResponse.json()) as { id: string };
+  const readerEmail = `extension-reader-${Date.now()}@example.com`;
+  const readerPassword = 'extension-reader-password';
+  const readerUserResponse = await request.post(`${baseUrl}/users`, {
+    data: {
+      email: readerEmail,
+      displayName: 'Extension Reader',
+      password: readerPassword,
+      roleId: readerRole.id,
+      scope: 'tenant',
+    },
+  });
+  expect(readerUserResponse.status()).toBe(201);
+  const readerUser = (await readerUserResponse.json()) as { user: { id: string } };
+  const readerRequest = await playwrightRequest.newContext();
+  try {
+    const readerLogin = await readerRequest.post(`${baseUrl}/auth/login`, {
+      data: { email: readerEmail, password: readerPassword },
+    });
+    expect(readerLogin.status()).toBe(200);
+    expect((await readerRequest.get(`${baseUrl}/extensions`)).status()).toBe(200);
+    expect(
+      (
+        await readerRequest.post(`${baseUrl}/extensions/demo-builder-countdown/enable`, {
+          data: { configuration: {} },
+        })
+      ).status(),
+    ).toBe(403);
+  } finally {
+    await readerRequest.dispose();
+    const assignmentsResponse = await request.get(
+      `${baseUrl}/users/${readerUser.user.id}/role-assignments`,
+    );
+    if (assignmentsResponse.ok()) {
+      const assignments = (await assignmentsResponse.json()) as {
+        items: Array<{ id: string }>;
+      };
+      for (const assignment of assignments.items) {
+        await request.delete(
+          `${baseUrl}/users/${readerUser.user.id}/role-assignments/${assignment.id}`,
+        );
+      }
+    }
+    await request.delete(`${baseUrl}/users/${readerUser.user.id}`);
+    await request.delete(`${baseUrl}/roles/${readerRole.id}`);
+  }
+
+  const enableResponse = await request.post(
+    `${baseUrl}/extensions/demo-builder-countdown/enable`,
+    { data: { configuration: {} } },
+  );
+  expect(enableResponse.status()).toBe(201);
+  expect(
+    ((await enableResponse.json()) as { tenantEnabled: boolean }).tenantEnabled,
+  ).toBe(true);
+
+  const configuredResponse = await request.get(
+    `${baseUrl}/extensions/demo-builder-countdown`,
+  );
+  expect(configuredResponse.status()).toBe(200);
+  const configured = (await configuredResponse.json()) as {
+    tenantEnabled: boolean;
+    health: string;
+    manifest: { capabilities: string[] };
+  };
+  expect(configured).toMatchObject({ tenantEnabled: true, health: 'healthy' });
+  expect(configured.manifest.capabilities).toContain('builder.element.countdown');
+
+  const disableResponse = await request.post(
+    `${baseUrl}/extensions/demo-builder-countdown/disable`,
+  );
+  expect(disableResponse.status()).toBe(201);
+  expect(
+    ((await disableResponse.json()) as { tenantEnabled: boolean }).tenantEnabled,
+  ).toBe(false);
+
+  const auditResponse = await request.get(
+    `${baseUrl}/audit-logs?action=extension.enabled&resourceType=extension`,
+  );
+  expect(auditResponse.status()).toBe(200);
+  expect(
+    ((await auditResponse.json()) as { items: Array<{ resourceId?: string }> }).items,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ resourceId: 'demo-builder-countdown' }),
+    ]),
+  );
+});
+
+test('tenant user management enforces lifecycle, session revocation and safe access data', async ({
+  request,
+}) => {
+  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const ownerLogin = await request.post(`${baseUrl}/auth/login`, {
+    data: {
+      email: process.env.AUTH_EMAIL ?? 'admin@example.com',
+      password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
+    },
+  });
+  expect(ownerLogin.status()).toBe(200);
+
+  const roles = (await (await request.get(`${baseUrl}/roles`)).json()) as {
+    items: Array<{ id: string; key: string }>;
+  };
+  const viewerRole = roles.items.find((role) => role.key === 'viewer');
+  expect(viewerRole).toBeTruthy();
+  const workspace = (await (await request.get(`${baseUrl}/auth/me`)).json()) as {
+    workspace: { id: string };
+  };
+  const email = `user-management-${Date.now()}@example.com`;
+  const password = 'user-management-password';
+
+  const createResponse = await request.post(`${baseUrl}/users`, {
+    data: {
+      email,
+      displayName: 'Lifecycle User',
+      password,
+      roleId: viewerRole?.id,
+      scope: 'workspace',
+      workspaceId: workspace.workspace.id,
+    },
+  });
+  expect(createResponse.status()).toBe(201);
+  const created = (await createResponse.json()) as { user: { id: string } };
+  expect(created.user.id).toMatch(/^[0-9a-f-]{36}$/);
+
+  const duplicateResponse = await request.post(`${baseUrl}/users`, {
+    data: { email: email.toUpperCase(), password },
+  });
+  expect(duplicateResponse.status()).toBe(409);
+
+  const listResponse = await request.get(
+    `${baseUrl}/users?search=${encodeURIComponent(email)}`,
+  );
+  expect(listResponse.status()).toBe(200);
+  expect(
+    ((await listResponse.json()) as { items: Array<{ email: string }> }).items,
+  ).toEqual(expect.arrayContaining([expect.objectContaining({ email })]));
+
+  const detailResponse = await request.get(`${baseUrl}/users/${created.user.id}`);
+  expect(detailResponse.status()).toBe(200);
+  const detailBody = (await detailResponse.json()) as Record<string, unknown>;
+  expect(detailBody).not.toHaveProperty('passwordHash');
+  expect(JSON.stringify(detailBody)).not.toContain(password);
+
+  const userRequest = await playwrightRequest.newContext();
+  try {
+    const userLogin = await userRequest.post(`${baseUrl}/auth/login`, {
+      data: { email, password },
+    });
+    expect(userLogin.status()).toBe(200);
+    expect((await userRequest.get(`${baseUrl}/auth/me`)).status()).toBe(200);
+
+    const disableResponse = await request.post(
+      `${baseUrl}/users/${created.user.id}/disable`,
+    );
+    expect(disableResponse.status()).toBe(201);
+    expect((await userRequest.get(`${baseUrl}/auth/me`)).status()).toBe(401);
+
+    const disabledLogin = await userRequest.post(`${baseUrl}/auth/login`, {
+      data: { email, password },
+    });
+    expect(disabledLogin.status()).toBe(401);
+
+    const enableResponse = await request.post(
+      `${baseUrl}/users/${created.user.id}/enable`,
+    );
+    expect(enableResponse.status()).toBe(201);
+    expect(
+      (
+        await userRequest.post(`${baseUrl}/auth/login`, { data: { email, password } })
+      ).status(),
+    ).toBe(200);
+  } finally {
+    await userRequest.dispose();
+  }
+
+  const ownerList = (await (await request.get(`${baseUrl}/users`)).json()) as {
+    items: Array<{ id: string; email: string }>;
+  };
+  const owner = ownerList.items.find(
+    (user) =>
+      user.email === (process.env.AUTH_EMAIL ?? 'admin@example.com').toLowerCase(),
+  );
+  expect(owner).toBeTruthy();
+  const lastOwnerDisable = await request.post(`${baseUrl}/users/${owner?.id}/disable`);
+  expect(lastOwnerDisable.status()).toBe(403);
+
+  const auditResponse = await request.get(
+    `${baseUrl}/audit-logs?resourceType=tenant_user`,
+  );
+  expect(auditResponse.status()).toBe(200);
+  expect(
+    ((await auditResponse.json()) as { items: Array<{ action: string }> }).items.map(
+      (entry) => entry.action,
+    ),
+  ).toEqual(expect.arrayContaining(['user.create', 'user.disable', 'user.enable']));
+
+  const removeResponse = await request.delete(`${baseUrl}/users/${created.user.id}`);
+  expect(removeResponse.status()).toBe(204);
 });

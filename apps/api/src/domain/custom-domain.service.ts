@@ -38,6 +38,7 @@ import { PublicPageResolver } from './public-page.resolver';
 import { TenantResolver } from '../tenancy/tenant-resolver';
 import { TenantContext } from '../tenancy/tenant-context';
 import { QuotaService } from '../billing/quota.service';
+import { EventBus } from '../extensions/event-bus';
 
 const PUBLIC_DOMAIN_RESOLVE_RATE_LIMIT_MAX_REQUESTS = 240;
 const PUBLIC_DOMAIN_RESOLVE_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -63,6 +64,7 @@ export class CustomDomainService {
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(QuotaService) private readonly quotas: QuotaService,
+    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async list(workspaceId: string): Promise<CustomDomainListResponse> {
@@ -215,6 +217,12 @@ export class CustomDomainService {
         tenantId: this.tenantContext.require().id,
         hostname: record.hostname,
         sourceDomainId: record._id.toString(),
+      });
+      await this.events.publish('domain.verified', {
+        tenantId: this.tenantContext.require().id,
+        domainId: record._id.toString(),
+        workspaceId,
+        occurredAt: new Date().toISOString(),
       });
       return this.toContract(record, true);
     } catch {

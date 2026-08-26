@@ -5,6 +5,8 @@ import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
+  BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
+  BUILDER_EXTENSION_PROPS_ATTRIBUTE,
   BUILDER_PAYLOAD_VERSION_ATTRIBUTE,
   BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
   BuilderAdapterError,
@@ -190,5 +192,80 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
       formPayload,
     );
+  });
+
+  it('registers and round-trips the Countdown extension as PagePayload V3', () => {
+    const definition = createBlockDefinition('countdown');
+    expect(definition.attributes?.[BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]).toContain(
+      'Launch countdown',
+    );
+    const payload = {
+      version: 3 as const,
+      metadata: { documentTitle: 'Countdown page' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'countdown',
+                type: 'countdown' as const,
+                props: {
+                  label: 'Launch countdown',
+                  targetAt: '2030-01-01T00:00:00.000Z',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(
+      serializeEditorSnapshot(
+        snapshotFromEditorDefinition(payloadToEditorComponent(payload)),
+      ),
+    ).toEqual(payload);
+  });
+
+  it('creates and round-trips a declarative custom extension block as V3', () => {
+    const definition = createBlockDefinition('extension', 'custom-launch');
+    expect(definition.attributes?.[BUILDER_EXTENSION_PROPS_ATTRIBUTE]).toContain(
+      'custom-launch',
+    );
+    const payload = {
+      version: 3 as const,
+      metadata: { documentTitle: 'Custom extension page' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'custom-launch',
+                type: 'extension' as const,
+                props: { extensionId: 'custom-launch', values: {} },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(
+      serializeEditorSnapshot(
+        snapshotFromEditorDefinition(payloadToEditorComponent(payload)),
+      ),
+    ).toEqual(payload);
   });
 });

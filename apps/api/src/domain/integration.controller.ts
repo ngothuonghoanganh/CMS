@@ -27,12 +27,16 @@ import { requireRequestedWorkspace } from '../common/guards/workspace-context';
 import type { PlatformRequest } from '../common/interfaces/request';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { IntegrationService } from './integration.service';
+import { AuthorizationService } from '../security/authorization.service';
+import { AuditService } from '../security/audit.service';
 
 @Controller('workspaces/:workspaceId/integrations')
 @UseGuards(AuthenticationGuard)
 export class IntegrationController {
   constructor(
     @Inject(IntegrationService) private readonly integrationService: IntegrationService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Post()
@@ -42,10 +46,24 @@ export class IntegrationController {
     input: CreateIntegrationRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.integrationService.create(
+    await this.authorization.assertCan(principal, 'integration.create', workspaceId);
+    const result = await this.integrationService.create(
       requireRequestedWorkspace(principal, workspaceId),
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'integration.create',
+        resourceType: 'integration',
+        resourceId: result.id,
+        workspaceId,
+        result: 'success',
+        metadata: { type: result.type, name: result.name },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Get()
@@ -54,6 +72,7 @@ export class IntegrationController {
     @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'integration.read', workspaceId);
     return this.integrationService.list(
       requireRequestedWorkspace(principal, workspaceId),
       query,
@@ -66,6 +85,7 @@ export class IntegrationController {
     @Param('integrationId') integrationId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'integration.read', workspaceId);
     return this.integrationService.getById(
       requireRequestedWorkspace(principal, workspaceId),
       integrationId,
@@ -80,11 +100,25 @@ export class IntegrationController {
     input: UpdateIntegrationRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.integrationService.update(
+    await this.authorization.assertCan(principal, 'integration.update', workspaceId);
+    const result = await this.integrationService.update(
       requireRequestedWorkspace(principal, workspaceId),
       integrationId,
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'integration.update',
+        resourceType: 'integration',
+        resourceId: integrationId,
+        workspaceId,
+        result: 'success',
+        metadata: { changedFields: Object.keys(input) },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Delete(':integrationId')
@@ -94,9 +128,21 @@ export class IntegrationController {
     @Param('integrationId') integrationId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ): Promise<void> {
+    await this.authorization.assertCan(principal, 'integration.delete', workspaceId);
     await this.integrationService.remove(
       requireRequestedWorkspace(principal, workspaceId),
       integrationId,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'integration.delete',
+        resourceType: 'integration',
+        resourceId: integrationId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
   }
 }

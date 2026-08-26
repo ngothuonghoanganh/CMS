@@ -56,6 +56,12 @@ export default async function RendererHomePage() {
           pageSlug,
           siteSlug,
           ...(page.tenantSlug ? { tenantSlug: page.tenantSlug } : {}),
+          ...(page.extensions
+            ? {
+                runtimeIds: page.extensions.flatMap((extension) => extension.runtimeIds),
+                extensions: page.extensions,
+              }
+            : {}),
         })}
       </div>
     );

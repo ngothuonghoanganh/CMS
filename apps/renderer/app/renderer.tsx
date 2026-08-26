@@ -4,6 +4,7 @@ import {
   type ImageNode,
   type PageNode,
   type PageNodeV2,
+  type PageNodeV3,
   type PageNodeStyle,
   type PagePayload,
   type FormNode,
@@ -11,10 +12,14 @@ import {
   type SectionNode,
   type TextNode,
   type ButtonNode,
+  type CountdownNode,
+  type ExtensionNode,
+  type PageRuntimeExtension,
 } from '@payload/contracts';
 import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 
 import { FormRenderer } from './form-renderer';
+import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
 
 const stylePropertyMap = {
   display: 'display',
@@ -32,8 +37,26 @@ const stylePropertyMap = {
   borderRadius: 'border-radius',
 } as const;
 
-type RenderableNode = PageNode | PageNodeV2;
-type RenderContext = { siteSlug?: string; pageSlug?: string; tenantSlug?: string };
+type RenderableNode = PageNode | PageNodeV2 | PageNodeV3;
+type RootRenderableNode =
+  | RootNode
+  | Extract<PageNodeV2, { type: 'root' }>
+  | Extract<PageNodeV3, { type: 'root' }>;
+type SectionRenderableNode =
+  | SectionNode
+  | Extract<PageNodeV2, { type: 'section' }>
+  | Extract<PageNodeV3, { type: 'section' }>;
+type ContainerRenderableNode =
+  | ContainerNode
+  | Extract<PageNodeV2, { type: 'container' }>
+  | Extract<PageNodeV3, { type: 'container' }>;
+type RenderContext = {
+  siteSlug?: string;
+  pageSlug?: string;
+  tenantSlug?: string;
+  runtimeIds?: readonly string[];
+  extensions?: readonly PageRuntimeExtension[];
+};
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
 function isSafeCssValue(value: string): boolean {
@@ -82,7 +105,7 @@ function renderChildren(node: RenderableNode, context: RenderContext): ReactElem
   ));
 }
 
-function renderRoot(node: RootNode | PageNodeV2, context: RenderContext): ReactElement {
+function renderRoot(node: RootRenderableNode, context: RenderContext): ReactElement {
   return (
     <main {...nodeAttributes(node)} style={nodeStyle(node)}>
       {renderChildren(node, context)}
@@ -91,7 +114,7 @@ function renderRoot(node: RootNode | PageNodeV2, context: RenderContext): ReactE
 }
 
 function renderSection(
-  node: SectionNode | PageNodeV2,
+  node: SectionRenderableNode,
   context: RenderContext,
 ): ReactElement {
   return (
@@ -102,7 +125,7 @@ function renderSection(
 }
 
 function renderContainer(
-  node: ContainerNode | PageNodeV2,
+  node: ContainerRenderableNode,
   context: RenderContext,
 ): ReactElement {
   return (
@@ -166,6 +189,71 @@ function renderButton(node: ButtonNode): ReactElement {
   );
 }
 
+function renderCountdown(node: CountdownNode, context: RenderContext): ReactElement {
+  if (context.runtimeIds?.includes('countdown.runtime')) {
+    return (
+      <div
+        {...nodeAttributes(node)}
+        data-extension="demo-builder-countdown"
+        style={nodeStyle(node)}
+      >
+        <CountdownRuntime label={node.props.label} targetAt={node.props.targetAt} />
+      </div>
+    );
+  }
+  return (
+    <div {...nodeAttributes(node)} style={nodeStyle(node)}>
+      <span>{node.props.label}</span>{' '}
+      <time dateTime={node.props.targetAt}>{node.props.targetAt}</time>
+    </div>
+  );
+}
+
+function renderExtension(node: ExtensionNode, context: RenderContext): ReactElement {
+  const runtime = context.extensions?.find(
+    (extension) => extension.extensionId === node.props.extensionId,
+  );
+  const custom = runtime?.custom;
+  if (!custom) {
+    return (
+      <div
+        {...nodeAttributes(node)}
+        aria-label="Unavailable custom extension"
+        data-extension={node.props.extensionId}
+        role="note"
+        style={nodeStyle(node)}
+      >
+        This custom extension is unavailable.
+      </div>
+    );
+  }
+
+  const { render } = custom;
+  const href =
+    render.buttonHref && isSafeHref(render.buttonHref) ? render.buttonHref : null;
+  const style = nodeStyle(node);
+  return (
+    <section
+      {...nodeAttributes(node)}
+      data-extension={custom.id}
+      style={{
+        ...style,
+        borderLeft: `4px solid ${render.accentColor}`,
+        padding: style.padding ?? '24px',
+      }}
+    >
+      {render.eyebrow ? <span className="eyebrow">{render.eyebrow}</span> : null}
+      <h2>{render.heading}</h2>
+      {render.body ? <p>{render.body}</p> : null}
+      {render.buttonLabel && href ? (
+        <a href={href} style={{ display: 'inline-block', marginTop: '12px' }}>
+          {render.buttonLabel}
+        </a>
+      ) : null}
+    </section>
+  );
+}
+
 function renderForm(node: FormNode, context: RenderContext): ReactElement {
   const apiBaseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
@@ -186,6 +274,8 @@ const rendererRegistry: Partial<Record<RenderableNode['type'], NodeRenderer>> = 
   image: (node) => renderImage(node as ImageNode),
   button: (node) => renderButton(node as ButtonNode),
   form: (node, context) => renderForm(node as FormNode, context),
+  countdown: (node, context) => renderCountdown(node as CountdownNode, context),
+  extension: (node, context) => renderExtension(node as ExtensionNode, context),
 };
 
 function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): ReactElement {
@@ -281,6 +371,9 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
 
   return (
     <div className="payload-page">
+      {context.runtimeIds?.length ? (
+        <ExtensionRuntimeBootstrap runtimeIds={context.runtimeIds} />
+      ) : null}
       {renderResponsiveStyles(parsed.data)}
       {renderNode(parsed.data.root, context)}
     </div>

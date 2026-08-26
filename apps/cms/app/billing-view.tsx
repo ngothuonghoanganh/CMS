@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import { api } from './lib/api';
+import { StatusBadge } from './status-badge';
 
 const labels: Record<BillingUsageItem['metric'], string> = {
   workspaces: 'Workspaces',
@@ -22,6 +23,7 @@ export function BillingView({ workspaceId }: { workspaceId: string }) {
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -47,19 +49,33 @@ export function BillingView({ workspaceId }: { workspaceId: string }) {
     return () => {
       active = false;
     };
-  }, [workspaceId]);
+  }, [reloadKey, workspaceId]);
 
   if (loading) {
     return (
-      <main className="loading-page" aria-busy="true">
-        Loading billing…
-      </main>
+      <section className="panel billing-loading" aria-busy="true">
+        <div className="skeleton skeleton-heading" />
+        <div className="skeleton skeleton-copy" />
+        <div className="skeleton-grid">
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+        </div>
+      </section>
     );
   }
   if (error) {
     return (
       <section className="panel" role="alert">
-        <strong>Billing data unavailable</strong>
+        <div className="panel-heading">
+          <strong>Billing data unavailable</strong>
+          <button
+            className="button button-small button-ghost"
+            onClick={() => setReloadKey((current) => current + 1)}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
         <p className="muted">{error}</p>
       </section>
     );
@@ -80,7 +96,7 @@ export function BillingView({ workspaceId }: { workspaceId: string }) {
         <div>
           <span className="muted small">Current plan</span>
           <h2>{summary.plan.name}</h2>
-          <span className="pill">{summary.subscription.status}</span>
+          <StatusBadge status={summary.subscription.status} />
         </div>
         <div className="muted small">
           Period: {formatDate(summary.subscription.currentPeriodStart)} –{' '}
@@ -113,14 +129,21 @@ function UsageCard({ item }: { item: BillingUsageItem }) {
     <article className={isNearLimit ? 'usage-card near-limit' : 'usage-card'}>
       <div className="panel-heading">
         <strong>{labels[item.metric]}</strong>
-        <span className="pill">{item.enforcement}</span>
+        <StatusBadge status={item.enforcement} />
       </div>
       <div className="usage-value">
         {item.value.toLocaleString()}{' '}
         <span className="muted">/ {formatLimit(item.limit)}</span>
       </div>
       {item.limit !== null ? (
-        <div aria-hidden="true" className="usage-bar">
+        <div
+          aria-label={`${labels[item.metric]} usage`}
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={percentage}
+          className="usage-bar"
+          role="progressbar"
+        >
           <span style={{ width: `${percentage}%` }} />
         </div>
       ) : null}

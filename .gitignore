@@ -11,3 +11,5 @@ playwright-report
 *.tsbuildinfo
 .DS_Store
 .serena/
+.playwright-mcp/
+mcp-*.png

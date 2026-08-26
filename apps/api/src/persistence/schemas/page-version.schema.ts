@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { HydratedDocument } from 'mongoose';
-import { PagePayloadSchema } from '@payload/contracts';
+import { PagePayloadSchema, PublishedPageBundleSchema } from '@payload/contracts';
 
 export type PageVersionDocument = HydratedDocument<PageVersionRecord>;
 
@@ -36,6 +36,16 @@ export class PageVersionRecord {
     },
   })
   payload!: unknown;
+
+  @Prop({
+    type: Object,
+    required: false,
+    validate: {
+      validator: (value: unknown) => PublishedPageBundleSchema.safeParse(value).success,
+      message: 'publishedBundle must be a valid published page bundle',
+    },
+  })
+  publishedBundle?: unknown;
 
   createdAt!: Date;
 }

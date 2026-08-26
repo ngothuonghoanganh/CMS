@@ -55,12 +55,14 @@ test('configures integrations, binds them to a form and records deliveries', asy
 
   await login(page);
   await page.getByRole('button', { name: 'Integrations', exact: true }).click();
+  await page.getByRole('button', { name: 'Add integration', exact: true }).click();
   await page.getByLabel('Name').fill(emailIntegrationName);
   await page.getByLabel(/Recipients/).fill('sales@example.com');
   await page.getByLabel('Subject template').fill('New submission from {{pageTitle}}');
   await page.getByRole('button', { name: 'Create integration' }).click();
   await expect(page.getByRole('status')).toContainText('Integration created');
 
+  await page.getByRole('button', { name: 'Add integration', exact: true }).click();
   await page.getByLabel('Type').selectOption('webhook');
   await page.getByLabel('Name').fill(webhookIntegrationName);
   await page.getByLabel('HTTPS URL').fill('http://127.0.0.1:4317/hook');

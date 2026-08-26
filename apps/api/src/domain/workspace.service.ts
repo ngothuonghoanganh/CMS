@@ -15,6 +15,7 @@ import {
   type WorkspaceDocument,
 } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
+import { EventBus } from '../extensions/event-bus';
 
 @Injectable()
 export class WorkspaceService {
@@ -23,6 +24,7 @@ export class WorkspaceService {
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(QuotaService) private readonly quotas: QuotaService,
+    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async create(input: CreateWorkspaceRequest, _tenantId: string): Promise<Workspace> {
@@ -30,6 +32,11 @@ export class WorkspaceService {
       const record = await this.workspaceModel.create({
         _id: randomUUID(),
         ...input,
+      });
+      await this.events.publish('workspace.created', {
+        tenantId: this.tenantContext.require().id,
+        workspaceId: record._id.toString(),
+        occurredAt: new Date().toISOString(),
       });
       return this.toContract(record);
     });

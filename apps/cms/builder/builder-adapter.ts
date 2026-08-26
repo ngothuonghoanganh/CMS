@@ -3,15 +3,20 @@ import {
   PageNodeStyleSchema,
   PagePayloadSchema,
   PagePayloadV1Schema,
+  CountdownPropsSchema,
+  CustomExtensionNodePropsSchema,
+  type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
   type PageNode,
   type PageNodeV2,
+  type PageNodeV3,
   type PageNodeStyle,
   type PagePayload,
   type PagePayloadV1,
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
+import { builderExtensionElement } from './builder-extension-registry';
 
 export const BUILDER_NODE_ID_ATTRIBUTE = 'data-payload-node-id';
 export const BUILDER_NODE_TYPE_ATTRIBUTE = 'data-payload-node-type';
@@ -20,10 +25,12 @@ export const BUILDER_METADATA_ATTRIBUTE = 'data-payload-metadata';
 export const BUILDER_TEXT_ALIGN_ATTRIBUTE = 'data-payload-text-align';
 export const BUILDER_FORM_PROPS_ATTRIBUTE = 'data-payload-form-props';
 export const BUILDER_FORM_PREVIEW_ATTRIBUTE = 'data-payload-form-preview';
+export const BUILDER_COUNTDOWN_PROPS_ATTRIBUTE = 'data-payload-countdown-props';
+export const BUILDER_EXTENSION_PROPS_ATTRIBUTE = 'data-payload-extension-props';
 export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
-export type BuilderNode = PageNode | PageNodeV2;
+export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3;
 export type BuilderNodeType = BuilderNode['type'];
 export type BuilderBlockType = Exclude<BuilderNodeType, 'root'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
@@ -72,6 +79,8 @@ const nodeTags: Record<BuilderNodeType, string> = {
   image: 'img',
   button: 'a',
   form: 'form',
+  countdown: 'div',
+  extension: 'div',
 };
 
 const nodeNames: Record<BuilderNodeType, string> = {
@@ -82,6 +91,8 @@ const nodeNames: Record<BuilderNodeType, string> = {
   image: 'Image',
   button: 'Button',
   form: 'Form',
+  countdown: 'Countdown',
+  extension: 'Custom extension',
 };
 
 function editorOnlyPreview(
@@ -237,12 +248,14 @@ export function formPreviewComponents(props: FormProps): ComponentDefinition[] {
 
 const allowedChildren: Record<BuilderNodeType, readonly BuilderNodeType[]> = {
   root: ['section', 'container'],
-  section: ['container', 'text', 'image', 'button', 'form'],
-  container: ['section', 'text', 'image', 'button', 'form'],
+  section: ['container', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
+  container: ['section', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
   text: [],
   image: [],
   button: [],
   form: [],
+  countdown: [],
+  extension: [],
 };
 
 function isBuilderNodeType(value: unknown): value is BuilderNodeType {
@@ -253,7 +266,9 @@ function isBuilderNodeType(value: unknown): value is BuilderNodeType {
     value === 'text' ||
     value === 'image' ||
     value === 'button' ||
-    value === 'form'
+    value === 'form' ||
+    value === 'countdown' ||
+    value === 'extension'
   );
 }
 
@@ -367,7 +382,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
 function attributesForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 = 1,
+  payloadVersion: 1 | 2 | 3 = 1,
 ) {
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
@@ -390,7 +405,7 @@ function attributesForNode(
 function componentDefinitionForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 = 1,
+  payloadVersion: 1 | 2 | 3 = 1,
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
   const shared: ComponentDefinition = {
@@ -460,6 +475,26 @@ function componentDefinitionForNode(
           [BUILDER_FORM_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
       };
+    case 'countdown':
+      return {
+        ...shared,
+        tagName: 'div',
+        content: node.props.label,
+        attributes: {
+          ...attributes,
+          [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+      };
+    case 'extension':
+      return {
+        ...shared,
+        tagName: 'div',
+        content: node.props.extensionId,
+        attributes: {
+          ...attributes,
+          [BUILDER_EXTENSION_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+      };
     case 'root':
     case 'section':
     case 'container':
@@ -500,7 +535,10 @@ function newNodeId(prefix: string): string {
   return `${prefix}-${uuid.replace(/[^A-Za-z0-9_-]/g, '')}`;
 }
 
-export function createBlockDefinition(type: BuilderBlockType): ComponentDefinition {
+export function createBlockDefinition(
+  type: BuilderBlockType,
+  extensionId?: string,
+): ComponentDefinition {
   const id = newNodeId(type);
   const baseNode = {
     id,
@@ -561,7 +599,40 @@ export function createBlockDefinition(type: BuilderBlockType): ComponentDefiniti
         undefined,
         2,
       );
+    case 'countdown': {
+      const extension = builderExtensionElement('countdown');
+      if (!extension)
+        throw new BuilderAdapterError('Countdown extension is not registered');
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'countdown',
+          props: extension.defaultProps,
+        },
+        undefined,
+        3,
+      );
+    }
+    case 'extension': {
+      if (!extensionId) {
+        throw new BuilderAdapterError('Custom extension id is required');
+      }
+      const props: CustomExtensionNodeProps = { extensionId, values: {} };
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'extension',
+          props,
+        },
+        undefined,
+        3,
+      );
+    }
   }
+}
+
+export function createExtensionBlockDefinition(extensionId: string): ComponentDefinition {
+  return createBlockDefinition('extension', extensionId);
 }
 
 function readStringAttribute(
@@ -596,9 +667,17 @@ function readStringAttribute(
 }
 
 function isPageNodeType(value: string): value is BuilderNodeType {
-  return ['root', 'section', 'container', 'text', 'image', 'button', 'form'].includes(
-    value,
-  );
+  return [
+    'root',
+    'section',
+    'container',
+    'text',
+    'image',
+    'button',
+    'form',
+    'countdown',
+    'extension',
+  ].includes(value);
 }
 
 function readMetadata(attributes: Record<string, unknown>): PagePayloadV1['metadata'] {
@@ -634,6 +713,30 @@ function readFormProps(attributes: Record<string, unknown>, path: string[]): For
     ]);
   }
   const parsed = FormPropsSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new BuilderAdapterError(
+      parsed.error.issues.map((issue) => issue.message).join('; '),
+      [...path, 'props'],
+    );
+  }
+  return parsed.data;
+}
+
+function readCountdownProps(
+  attributes: Record<string, unknown>,
+  path: string[],
+): { targetAt: string; label: string } {
+  const raw = readStringAttribute(attributes, BUILDER_COUNTDOWN_PROPS_ATTRIBUTE, path);
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch {
+    throw new BuilderAdapterError('Countdown properties are not valid JSON', [
+      ...path,
+      'props',
+    ]);
+  }
+  const parsed = CountdownPropsSchema.safeParse(value);
   if (!parsed.success) {
     throw new BuilderAdapterError(
       parsed.error.issues.map((issue) => issue.message).join('; '),
@@ -700,6 +803,50 @@ function nodeFromSnapshot(
       props: readFormProps(snapshot.attributes, path),
       children: [],
     };
+  }
+
+  if (type === 'countdown') {
+    if (snapshot.children.length > 0) {
+      throw new BuilderAdapterError('Countdown nodes cannot contain editor components', [
+        ...path,
+        'children',
+      ]);
+    }
+    return {
+      id,
+      type,
+      style,
+      props: readCountdownProps(snapshot.attributes, path),
+      children: [],
+    };
+  }
+
+  if (type === 'extension') {
+    if (snapshot.children.length > 0) {
+      throw new BuilderAdapterError('Extension nodes cannot contain editor components', [
+        ...path,
+        'children',
+      ]);
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(
+        readStringAttribute(snapshot.attributes, BUILDER_EXTENSION_PROPS_ATTRIBUTE, path),
+      ) as unknown;
+    } catch {
+      throw new BuilderAdapterError('Extension properties are not valid JSON', [
+        ...path,
+        'props',
+      ]);
+    }
+    const props = CustomExtensionNodePropsSchema.safeParse(value);
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children: [] };
   }
 
   const children = snapshot.children.map((child, index) =>
@@ -775,7 +922,14 @@ export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePa
   const root = nodeFromSnapshot(snapshot, ['root']);
   const versionValue = snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE];
   const version =
-    versionValue === '2' || versionValue === 2 || containsFormNode(root) ? 2 : 1;
+    versionValue === '3' ||
+    versionValue === 3 ||
+    containsCountdownNode(root) ||
+    containsExtensionNode(root)
+      ? 3
+      : versionValue === '2' || versionValue === 2 || containsFormNode(root)
+        ? 2
+        : 1;
   const candidate: unknown = {
     version,
     metadata: readMetadata(snapshot.attributes),
@@ -798,6 +952,28 @@ function containsFormNode(node: Record<string, unknown>): boolean {
     node.children.some(
       (child): child is Record<string, unknown> =>
         isObject(child) && containsFormNode(child),
+    )
+  );
+}
+
+function containsCountdownNode(node: Record<string, unknown>): boolean {
+  if (node.type === 'countdown') return true;
+  return (
+    Array.isArray(node.children) &&
+    node.children.some(
+      (child): child is Record<string, unknown> =>
+        isObject(child) && containsCountdownNode(child),
+    )
+  );
+}
+
+function containsExtensionNode(node: Record<string, unknown>): boolean {
+  if (node.type === 'extension') return true;
+  return (
+    Array.isArray(node.children) &&
+    node.children.some(
+      (child): child is Record<string, unknown> =>
+        isObject(child) && containsExtensionNode(child),
     )
   );
 }

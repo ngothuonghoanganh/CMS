@@ -5,9 +5,16 @@ import { ControlPlaneModule } from './control-plane.module';
 import { TenantController } from './tenant.controller';
 import { TenantModelsModule } from './tenant-models.module';
 import { TenantModule } from './tenant.module';
+import { SecurityModule } from '../security/security.module';
 
 @Module({
   controllers: [TenantController],
-  imports: [AuthenticationModule, ControlPlaneModule, TenantModelsModule, TenantModule],
+  imports: [
+    AuthenticationModule,
+    ControlPlaneModule,
+    SecurityModule,
+    TenantModelsModule,
+    TenantModule,
+  ],
 })
 export class TenantManagementModule {}

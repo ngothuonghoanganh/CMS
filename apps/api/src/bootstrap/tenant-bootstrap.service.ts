@@ -30,6 +30,20 @@ import {
   WorkspaceRecord,
   WorkspaceSchema,
 } from '../persistence/schemas/workspace.schema';
+import { RoleRecord, RoleSchema } from '../persistence/schemas/role.schema';
+import {
+  RoleAssignmentRecord,
+  RoleAssignmentSchema,
+} from '../persistence/schemas/role-assignment.schema';
+import {
+  PlatformRoleRecord,
+  PlatformRoleSchema,
+} from '../tenancy/schemas/platform-role.schema';
+import {
+  PlatformRoleAssignmentRecord,
+  PlatformRoleAssignmentSchema,
+} from '../tenancy/schemas/platform-role-assignment.schema';
+import { systemRoleDefinitions } from '../security/role-defaults';
 
 const scrypt = promisify(nodeScrypt);
 
@@ -56,7 +70,8 @@ export class TenantBootstrapService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const tenant = await this.ensureInitialTenant();
-    await this.ensurePlatformUser();
+    const platformUser = await this.ensurePlatformUser();
+    await this.ensurePlatformRoleAssignment(platformUser._id.toString());
     const scope = this.resolver.toScope(tenant);
     await this.connections.get(scope);
     await this.context.run(scope, () => this.ensureTenantSeedData());
@@ -153,6 +168,28 @@ export class TenantBootstrapService implements OnModuleInit {
         role: 'owner',
       });
     }
+    const roleModel = this.models.proxy(RoleRecord.name, RoleSchema);
+    const assignmentModel = this.models.proxy(
+      RoleAssignmentRecord.name,
+      RoleAssignmentSchema,
+    );
+    await seedTenantRoles(roleModel);
+    const ownerRole = await roleModel.findOne({ key: 'owner' }).exec();
+    if (
+      ownerRole &&
+      !(await assignmentModel.exists({
+        userId: email,
+        roleId: ownerRole._id,
+        scope: 'tenant',
+      }))
+    ) {
+      await assignmentModel.create({
+        _id: randomUUID(),
+        userId: email,
+        roleId: ownerRole._id,
+        scope: 'tenant',
+      });
+    }
   }
 
   private async syncExistingDomains(
@@ -185,9 +222,9 @@ export class TenantBootstrapService implements OnModuleInit {
     });
   }
 
-  private async ensurePlatformUser(): Promise<void> {
+  private async ensurePlatformUser(): Promise<PlatformUserRecord> {
     const email = env.AUTH_EMAIL.toLowerCase();
-    await this.platformUserModel
+    const user = await this.platformUserModel
       .findOneAndUpdate(
         { email },
         {
@@ -195,6 +232,51 @@ export class TenantBootstrapService implements OnModuleInit {
           $setOnInsert: { _id: randomUUID(), email },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },
+      )
+      .exec();
+    if (!user) throw new Error('PLATFORM_USER_BOOTSTRAP_FAILED');
+    return user;
+  }
+
+  private async ensurePlatformRoleAssignment(platformUserId: string): Promise<void> {
+    const roleModel = this.platformUserModel.db.model<PlatformRoleRecord>(
+      PlatformRoleRecord.name,
+      PlatformRoleSchema,
+    );
+    const assignmentModel = this.platformUserModel.db.model<PlatformRoleAssignmentRecord>(
+      PlatformRoleAssignmentRecord.name,
+      PlatformRoleAssignmentSchema,
+    );
+    const role = await roleModel
+      .findOneAndUpdate(
+        { key: 'platform-admin' },
+        {
+          $setOnInsert: {
+            _id: randomUUID(),
+            key: 'platform-admin',
+            name: 'Platform administrator',
+            permissions: Object.values({
+              TenantRead: 'platform.tenant.read',
+              TenantCreate: 'platform.tenant.create',
+              TenantUpdate: 'platform.tenant.update',
+              PlanRead: 'platform.plan.read',
+              PlanCreate: 'platform.plan.create',
+              PlanUpdate: 'platform.plan.update',
+              SubscriptionRead: 'platform.subscription.read',
+              SubscriptionUpdate: 'platform.subscription.update',
+              AuditRead: 'platform.audit.read',
+            }),
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      )
+      .exec();
+    if (!role) throw new Error('PLATFORM_ROLE_BOOTSTRAP_FAILED');
+    await assignmentModel
+      .updateOne(
+        { platformUserId, roleId: role._id },
+        { $setOnInsert: { _id: randomUUID(), platformUserId, roleId: role._id } },
+        { upsert: true, setDefaultsOnInsert: true },
       )
       .exec();
   }
@@ -210,4 +292,19 @@ function isDuplicateKey(error: unknown): boolean {
   return (
     typeof error === 'object' && error !== null && 'code' in error && error.code === 11000
   );
+}
+
+async function seedTenantRoles(roleModel: Model<RoleRecord>): Promise<void> {
+  for (const role of systemRoleDefinitions) {
+    await roleModel
+      .updateOne(
+        { key: role.key },
+        {
+          $set: { ...role, type: 'system' },
+          $setOnInsert: { _id: randomUUID() },
+        },
+        { upsert: true, setDefaultsOnInsert: true },
+      )
+      .exec();
+  }
 }

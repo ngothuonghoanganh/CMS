@@ -1,7 +1,9 @@
 'use client';
 
 import type { CustomDomain, LandingPage } from '@payload/contracts';
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+
+import { Modal, PageHeader } from './ui/surfaces';
 
 type DomainForm = { hostname: string; landingPageId: string; isPrimary: boolean };
 
@@ -29,85 +31,120 @@ export function DomainsView({
   ) => void;
   onRemove: (domain: CustomDomain) => void;
 }) {
+  const [createOpen, setCreateOpen] = useState(false);
   return (
     <>
-      <PageHeading
+      <PageHeader
+        actions={
+          <button
+            className="button button-primary"
+            onClick={() => setCreateOpen(true)}
+            type="button"
+          >
+            Add domain
+          </button>
+        }
         eyebrow="Settings"
         title="Domains"
         description="Connect a verified hostname to a published landing page. TLS remains the responsibility of your edge or hosting provider."
       />
-      <div className="two-column">
-        <section className="panel">
-          <PanelTitle title="Add a custom domain" />
-          <form className="stack" onSubmit={onSubmit}>
-            <label>
-              Hostname
-              <input
-                aria-describedby="domain-help"
-                placeholder="www.example.com"
-                value={form.hostname}
-                onChange={(event) => onChange({ ...form, hostname: event.target.value })}
-                required
+      <section className="panel">
+        <PanelTitle title="Configured domains" count={domains.length} />
+        {domains.length ? (
+          <div className="list">
+            {domains.map((domain) => (
+              <DomainRow
+                domain={domain}
+                key={domain.id}
+                pages={pages}
+                busy={busy}
+                onVerify={onVerify}
+                onUpdate={onUpdate}
+                onRemove={onRemove}
               />
-            </label>
-            <span className="muted small" id="domain-help">
-              Enter a hostname only, without https:// or a path.
-            </span>
-            <label>
-              Landing page <span className="muted">(optional until verification)</span>
-              <select
-                value={form.landingPageId}
-                onChange={(event) =>
-                  onChange({ ...form, landingPageId: event.target.value })
-                }
-              >
-                <option value="">Choose a page later</option>
-                {pages.map((page) => (
-                  <option key={page.id} value={page.id}>
-                    {page.name} {page.slug ? `(/${page.slug})` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="checkbox-field">
-              <input
-                checked={form.isPrimary}
-                onChange={(event) =>
-                  onChange({ ...form, isPrimary: event.target.checked })
-                }
-                type="checkbox"
-              />
-              <span>Use as the canonical primary domain for this page</span>
-            </label>
-            <button className="button button-primary" disabled={busy} type="submit">
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No custom domains"
+            description="Add a domain to receive DNS ownership instructions."
+          />
+        )}
+      </section>
+      <Modal
+        description="Enter a hostname only, without https:// or a path."
+        eyebrow="Settings"
+        footer={
+          <>
+            <button
+              className="button button-ghost"
+              onClick={() => setCreateOpen(false)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="button button-primary"
+              disabled={busy}
+              form="create-domain-form"
+              type="submit"
+            >
               {busy ? 'Adding…' : 'Add domain'}
             </button>
-          </form>
-        </section>
-        <section className="panel">
-          <PanelTitle title="Configured domains" count={domains.length} />
-          {domains.length ? (
-            <div className="list">
-              {domains.map((domain) => (
-                <DomainRow
-                  domain={domain}
-                  key={domain.id}
-                  pages={pages}
-                  busy={busy}
-                  onVerify={onVerify}
-                  onUpdate={onUpdate}
-                  onRemove={onRemove}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No custom domains"
-              description="Add a domain to receive DNS ownership instructions."
+          </>
+        }
+        onClose={() => setCreateOpen(false)}
+        open={createOpen}
+        size="md"
+        title="Add a custom domain"
+      >
+        <form
+          className="stack"
+          id="create-domain-form"
+          onSubmit={(event) => {
+            onSubmit(event);
+            setCreateOpen(false);
+          }}
+        >
+          <label>
+            Hostname
+            <input
+              aria-describedby="domain-help"
+              placeholder="www.example.com"
+              value={form.hostname}
+              onChange={(event) => onChange({ ...form, hostname: event.target.value })}
+              required
             />
-          )}
-        </section>
-      </div>
+          </label>
+          <span className="muted small" id="domain-help">
+            Enter a hostname only, without https:// or a path.
+          </span>
+          <label>
+            Landing page <span className="muted">(optional until verification)</span>
+            <select
+              value={form.landingPageId}
+              onChange={(event) =>
+                onChange({ ...form, landingPageId: event.target.value })
+              }
+            >
+              <option value="">Choose a page later</option>
+              {pages.map((page) => (
+                <option key={page.id} value={page.id}>
+                  {page.name} {page.slug ? `(/${page.slug})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="checkbox-field">
+            <input
+              checked={form.isPrimary}
+              onChange={(event) => onChange({ ...form, isPrimary: event.target.checked })}
+              type="checkbox"
+            />
+            <span>Use as the canonical primary domain for this page</span>
+          </label>
+        </form>
+      </Modal>
     </>
   );
 }
@@ -130,6 +167,11 @@ function DomainRow({
   ) => void;
   onRemove: (domain: CustomDomain) => void;
 }) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    landingPageId: domain.landingPageId ?? '',
+    isPrimary: domain.isPrimary,
+  });
   const page = pages.find((candidate) => candidate.id === domain.landingPageId);
   return (
     <div className="list-row" data-domain-hostname={domain.hostname}>
@@ -161,42 +203,27 @@ function DomainRow({
         {domain.failureReason ? (
           <span className="alert alert-error">{domain.failureReason}</span>
         ) : null}
-        <label className="inline-field">
-          Page
-          <select
-            value={domain.landingPageId ?? ''}
-            onChange={(event) =>
-              onUpdate(domain, {
-                landingPageId: event.target.value || null,
-                isPrimary: event.target.value ? domain.isPrimary : false,
-              })
-            }
-          >
-            <option value="">Unassigned</option>
-            {pages.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {domain.landingPageId ? (
-          <label className="checkbox-field">
-            <input
-              checked={domain.isPrimary}
-              onChange={(event) =>
-                onUpdate(domain, {
-                  landingPageId: domain.landingPageId ?? null,
-                  isPrimary: event.target.checked,
-                })
-              }
-              type="checkbox"
-            />
-            <span>Primary/canonical domain</span>
-          </label>
-        ) : null}
+        <span className="muted small">
+          {domain.landingPageId && domain.isPrimary
+            ? 'Canonical primary domain'
+            : 'Use Edit settings to assign a page or change the primary domain.'}
+        </span>
       </div>
       <div className="row-actions">
+        <button
+          className="button button-small"
+          disabled={busy}
+          onClick={() => {
+            setEditForm({
+              landingPageId: domain.landingPageId ?? '',
+              isPrimary: domain.isPrimary,
+            });
+            setEditOpen(true);
+          }}
+          type="button"
+        >
+          Edit settings
+        </button>
         {domain.status !== 'active' ? (
           <button
             className="button button-small"
@@ -216,24 +243,68 @@ function DomainRow({
           Remove
         </button>
       </div>
-    </div>
-  );
-}
-
-function PageHeading({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="page-heading">
-      <span className="eyebrow">{eyebrow}</span>
-      <h1>{title}</h1>
-      <p className="muted">{description}</p>
+      <Modal
+        description={domain.hostname}
+        eyebrow="Domain settings"
+        footer={
+          <>
+            <button
+              className="button button-ghost"
+              onClick={() => setEditOpen(false)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="button button-primary"
+              onClick={() => {
+                onUpdate(domain, {
+                  landingPageId: editForm.landingPageId || null,
+                  isPrimary: Boolean(editForm.landingPageId) && editForm.isPrimary,
+                });
+                setEditOpen(false);
+              }}
+              type="button"
+            >
+              Save settings
+            </button>
+          </>
+        }
+        onClose={() => setEditOpen(false)}
+        open={editOpen}
+        size="md"
+        title="Edit domain settings"
+      >
+        <div className="stack">
+          <label>
+            Landing page <span className="muted">(optional)</span>
+            <select
+              value={editForm.landingPageId}
+              onChange={(event) =>
+                setEditForm({ ...editForm, landingPageId: event.target.value })
+              }
+            >
+              <option value="">Unassigned</option>
+              {pages.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="checkbox-field">
+            <input
+              checked={editForm.isPrimary}
+              disabled={!editForm.landingPageId}
+              onChange={(event) =>
+                setEditForm({ ...editForm, isPrimary: event.target.checked })
+              }
+              type="checkbox"
+            />
+            <span>Primary/canonical domain</span>
+          </label>
+        </div>
+      </Modal>
     </div>
   );
 }

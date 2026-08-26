@@ -54,12 +54,13 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await expect(page.getByRole('status')).toContainText('SEO settings saved');
 
   await page.getByRole('button', { name: 'Domains', exact: true }).click();
+  await page.getByRole('button', { name: 'Add domain', exact: true }).first().click();
   await page.getByLabel('Hostname').fill(hostname);
   await page
     .getByLabel('Landing page')
     .selectOption({ label: `${pageName} (/${pageSlug})` });
   await page.getByLabel('Use as the canonical primary domain for this page').check();
-  await page.getByRole('button', { name: 'Add domain' }).click();
+  await page.getByRole('button', { name: 'Add domain', exact: true }).last().click();
   await expect(page.getByRole('status')).toContainText('Domain added');
   const domainRow = page.locator(`[data-domain-hostname="${hostname}"]`);
   await domainRow.getByRole('button', { name: 'Verify / retry' }).click();

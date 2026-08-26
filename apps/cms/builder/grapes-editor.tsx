@@ -5,6 +5,7 @@ import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
+  BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   BUILDER_TEXT_ALIGN_ATTRIBUTE,
   type BuilderNodeType,
   type BuilderBlockType,
@@ -13,6 +14,7 @@ import {
   canContainNode,
   captureEditorViewportStyle,
   createBlockDefinition,
+  createExtensionBlockDefinition,
   formPreviewComponents,
   payloadToEditorComponent,
   readEditorResponsiveStyle,
@@ -35,6 +37,7 @@ import {
 import type { BuilderCanvasNode, BuilderCanvasState } from './builder-minimap';
 import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import {
+  CountdownPropsSchema,
   FormPropsSchema,
   type FormProps,
   type PageNodeStyle,
@@ -53,6 +56,7 @@ export type SelectedBuilderNode = {
   align?: 'left' | 'center' | 'right';
   style?: PageNodeStyle;
   form?: FormProps;
+  countdown?: { targetAt: string; label: string };
 };
 
 type BuilderDebugApi = {
@@ -67,6 +71,7 @@ declare global {
 
 export type GrapesEditorHandle = {
   addBlock: (type: BuilderBlockType) => void;
+  addExtensionBlock: (extensionId: string) => void;
   startBlockDrag: (type: BuilderBlockType, event: Event) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
@@ -82,6 +87,7 @@ export type GrapesEditorHandle = {
   updateSelectedAlign: (value: SelectedBuilderNode['align']) => void;
   updateSelectedStyle: (property: string, value: string) => void;
   updateSelectedForm: (form: FormProps) => void;
+  updateSelectedCountdown: (props: { targetAt: string; label: string }) => void;
   selectAsset: (src: string) => void;
   selectNode: (id: string) => void;
   scrollToCanvasPoint: (x: number, y: number) => void;
@@ -115,7 +121,9 @@ function isPayloadNodeType(value: unknown): value is BuilderNodeType {
     value === 'text' ||
     value === 'image' ||
     value === 'button' ||
-    value === 'form'
+    value === 'form' ||
+    value === 'countdown' ||
+    value === 'extension'
   );
 }
 
@@ -138,6 +146,7 @@ function selectionFromComponent(
   const target = attributes.target;
   const responsiveStyle = readEditorResponsiveStyle(component);
   let form: FormProps | undefined;
+  let countdown: SelectedBuilderNode['countdown'];
   if (type === 'form') {
     const rawForm = attributes[BUILDER_FORM_PROPS_ATTRIBUTE];
     if (typeof rawForm === 'string') {
@@ -145,6 +154,24 @@ function selectionFromComponent(
         form = JSON.parse(rawForm) as FormProps;
       } catch {
         form = undefined;
+      }
+    }
+  }
+  if (type === 'countdown') {
+    const raw = attributes[BUILDER_COUNTDOWN_PROPS_ATTRIBUTE];
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          typeof (parsed as { targetAt?: unknown }).targetAt === 'string' &&
+          typeof (parsed as { label?: unknown }).label === 'string'
+        ) {
+          countdown = parsed as { targetAt: string; label: string };
+        }
+      } catch {
+        countdown = undefined;
       }
     }
   }
@@ -174,6 +201,7 @@ function selectionFromComponent(
       : {}),
     ...(responsiveStyle ? { style: responsiveStyle } : {}),
     ...(form ? { form } : {}),
+    ...(countdown ? { countdown } : {}),
   };
 }
 
@@ -607,7 +635,8 @@ function dropBlockAtPoint(
     if (
       isPayloadNodeType(targetType) &&
       (canContainNode(targetType, type) ||
-        (targetType === 'root' && ['text', 'image', 'button'].includes(type)))
+        (targetType === 'root' &&
+          ['text', 'image', 'button', 'countdown'].includes(type)))
     ) {
       break;
     }
@@ -615,7 +644,10 @@ function dropBlockAtPoint(
   }
   if (!target) return undefined;
 
-  if (target === root && (type === 'text' || type === 'image' || type === 'button')) {
+  if (
+    target === root &&
+    (type === 'text' || type === 'image' || type === 'button' || type === 'countdown')
+  ) {
     target = root.append(createBlockDefinition('section'))[0] ?? root;
   }
   const created = target.append(createBlockDefinition(type));
@@ -649,17 +681,20 @@ function applyAllViewportStyles(root: Component, viewport: BuilderViewport): voi
   root.onAll((component) => applyEditorViewportStyle(component, viewport));
 }
 
-const blockLabels: Record<BuilderBlockType, string> = {
+type BuiltInBuilderBlockType = Exclude<BuilderBlockType, 'extension'>;
+
+const blockLabels: Record<BuiltInBuilderBlockType, string> = {
   section: 'Section',
   container: 'Container',
   text: 'Text',
   image: 'Image',
   button: 'Button',
   form: 'Form',
+  countdown: 'Countdown',
 };
 
 function createBlockManagerDefinitions(): BlockProperties[] {
-  return (Object.keys(blockLabels) as BuilderBlockType[]).map((type) => ({
+  return (Object.keys(blockLabels) as BuiltInBuilderBlockType[]).map((type) => ({
     category: 'PagePayloadV1',
     content: () => createBlockDefinition(type),
     id: type,
@@ -677,6 +712,8 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   image: 'Image',
   button: 'Button',
   form: 'Form',
+  countdown: 'Countdown',
+  extension: 'Custom extension',
 };
 
 function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
@@ -977,6 +1014,32 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         notifySelection(editor);
         notifyHistory(editor);
       },
+      addExtensionBlock(extensionId) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const definition = createExtensionBlockDefinition(extensionId);
+        const selected = editor.getSelected();
+        const selectedType = selected?.getAttributes({ noStyle: true })[
+          BUILDER_NODE_TYPE_ATTRIBUTE
+        ];
+        const target =
+          selected &&
+          isPayloadNodeType(selectedType) &&
+          canContainNode(selectedType, 'extension')
+            ? selected
+            : findAppendTarget(getRoot(editor), 'extension');
+        const section =
+          target ?? getRoot(editor).append(createBlockDefinition('section'))[0];
+        const created = section ? section.append(definition) : [];
+        const added = created[0];
+        if (added) {
+          editor.select(added);
+          lastSelectedComponentRef.current = added;
+        }
+        callbacksRef.current.onDirty();
+        notifySelection(editor);
+        notifyHistory(editor);
+      },
       startBlockDrag(type, event) {
         const editor = editorRef.current;
         if (!editor) return;
@@ -1068,6 +1131,25 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           [BUILDER_FORM_PROPS_ATTRIBUTE]: JSON.stringify(form),
         });
         selected.components(formPreviewComponents(form));
+        callbacksRef.current.onDirty();
+        notifySelection(editor);
+        notifyHistory(editor);
+      },
+      updateSelectedCountdown(props) {
+        const editor = editorRef.current;
+        const selected = editor ? getSelectedComponent(editor) : undefined;
+        if (!editor || !selected) return;
+        const type = selected.getAttributes({ noStyle: true })[
+          BUILDER_NODE_TYPE_ATTRIBUTE
+        ];
+        if (type !== 'countdown') return;
+        const parsed = CountdownPropsSchema.safeParse(props);
+        if (!parsed.success) return;
+        selected.set({ content: parsed.data.label });
+        selected.setAttributes({
+          ...selected.getAttributes({ noStyle: true }),
+          [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: JSON.stringify(parsed.data),
+        });
         callbacksRef.current.onDirty();
         notifySelection(editor);
         notifyHistory(editor);

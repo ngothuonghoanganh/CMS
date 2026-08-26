@@ -18,6 +18,9 @@ export class TenantUserRecord {
   })
   email!: string;
 
+  @Prop({ type: String, required: false, trim: true, maxlength: 200 })
+  displayName?: string;
+
   @Prop({ type: String, required: true, select: false })
   passwordHash!: string;
 

@@ -10,11 +10,13 @@ import { TenantRecord, TenantSchema } from '../tenancy/schemas/tenant.schema';
 import { ControlPlaneModule } from '../tenancy/control-plane.module';
 import { TenantModelsModule } from '../tenancy/tenant-models.module';
 import { TenantBootstrapService } from './tenant-bootstrap.service';
+import { SecurityModule } from '../security/security.module';
 
 @Module({
   imports: [
     ControlPlaneModule,
     TenantModelsModule,
+    SecurityModule,
     MongooseModule.forFeature(
       [
         { name: TenantRecord.name, schema: TenantSchema },

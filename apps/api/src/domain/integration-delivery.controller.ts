@@ -10,6 +10,8 @@ import { requireWorkspaceId } from '../common/guards/workspace-context';
 import type { PlatformRequest } from '../common/interfaces/request';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { IntegrationDispatcher } from './integration-dispatcher';
+import { AuthorizationService } from '../security/authorization.service';
+import { AuditService } from '../security/audit.service';
 
 @Controller('integration-deliveries')
 @UseGuards(AuthenticationGuard)
@@ -17,6 +19,8 @@ export class IntegrationDeliveryController {
   constructor(
     @Inject(IntegrationDispatcher)
     private readonly dispatcher: IntegrationDispatcher,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Get()
@@ -25,6 +29,7 @@ export class IntegrationDeliveryController {
     query: IntegrationDeliveryListQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'integration.delivery.read');
     return this.dispatcher.list(requireWorkspaceId(principal), query);
   }
 
@@ -33,6 +38,19 @@ export class IntegrationDeliveryController {
     @Param('deliveryId') deliveryId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.dispatcher.retry(deliveryId, requireWorkspaceId(principal));
+    await this.authorization.assertCan(principal, 'integration.delivery.retry');
+    const result = await this.dispatcher.retry(deliveryId, requireWorkspaceId(principal));
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'integration.delivery.retry',
+        resourceType: 'integration_delivery',
+        resourceId: deliveryId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
   }
 }

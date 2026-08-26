@@ -10,6 +10,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { api } from './lib/api';
+import { Modal, PageHeader, ResourceToolbar } from './ui/surfaces';
 
 type IntegrationType = 'email' | 'webhook';
 type IntegrationForm = {
@@ -47,6 +48,7 @@ export function IntegrationsView({
   const [deliveries, setDeliveries] = useState<IntegrationDelivery[]>([]);
   const [form, setForm] = useState<IntegrationForm>(blankForm);
   const [editingId, setEditingId] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [retryingId, setRetryingId] = useState('');
@@ -116,6 +118,7 @@ export function IntegrationsView({
       onIntegrationsChanged(next);
       setForm(blankForm);
       setEditingId('');
+      setFormOpen(false);
       setNotice(editingId ? 'Integration updated.' : 'Integration created.');
     } catch (caughtError) {
       setError(errorMessage(caughtError));
@@ -173,18 +176,28 @@ export function IntegrationsView({
     }
     setEditingId(integration.id);
     setNotice(null);
+    setFormOpen(true);
+  }
+
+  function startCreate() {
+    setEditingId('');
+    setForm(blankForm);
+    setNotice(null);
+    setFormOpen(true);
   }
 
   return (
     <>
-      <div className="page-heading">
-        <span className="eyebrow">Connected services</span>
-        <h1>Integrations</h1>
-        <p className="muted">
-          Configure workspace notifications and inspect durable delivery attempts. Secrets
-          are never shown after they are saved.
-        </p>
-      </div>
+      <PageHeader
+        actions={
+          <button className="button button-primary" onClick={startCreate} type="button">
+            Add integration
+          </button>
+        }
+        description="Configure workspace notifications and inspect durable delivery attempts. Secrets are never shown after they are saved."
+        eyebrow="Connected services"
+        title="Integrations"
+      />
       {error ? (
         <div className="alert alert-error" role="alert">
           {error}
@@ -195,185 +208,195 @@ export function IntegrationsView({
           {notice}
         </div>
       ) : null}
-      <div className="two-column">
-        <section className="panel">
-          <div className="panel-heading">
-            <h2>{editingId ? 'Edit integration' : 'Create integration'}</h2>
-          </div>
-          <form className="stack" onSubmit={save}>
-            {!editingId ? (
-              <label>
-                Type
-                <select
-                  onChange={(event) =>
-                    setForm({ ...form, type: event.target.value as IntegrationType })
-                  }
-                  value={form.type}
-                >
-                  <option value="email">Email notification</option>
-                  <option value="webhook">Webhook</option>
-                </select>
-              </label>
-            ) : null}
-            <label>
-              Name
-              <input
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                required
-                value={form.name}
-              />
-            </label>
-            <label className="checkbox-field">
-              <input
-                checked={form.enabled}
-                onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
-                type="checkbox"
-              />
-              Enabled
-            </label>
-            {form.type === 'email' ? (
-              <>
-                <label>
-                  Recipients <span className="muted">(comma separated)</span>
-                  <input
-                    onChange={(event) =>
-                      setForm({ ...form, recipients: event.target.value })
-                    }
-                    placeholder="sales@example.com"
-                    required
-                    value={form.recipients}
-                  />
-                </label>
-                <label>
-                  Subject template
-                  <input
-                    onChange={(event) =>
-                      setForm({ ...form, subjectTemplate: event.target.value })
-                    }
-                    required
-                    value={form.subjectTemplate}
-                  />
-                </label>
-              </>
-            ) : (
-              <>
-                <label>
-                  HTTPS URL
-                  <input
-                    onChange={(event) => setForm({ ...form, url: event.target.value })}
-                    placeholder="https://hooks.example.com/payload"
-                    required
-                    type="url"
-                    value={form.url}
-                  />
-                </label>
-                <label>
-                  Signing secret <span className="muted">(optional)</span>
-                  <input
-                    onChange={(event) =>
-                      setForm({ ...form, secret: event.target.value, clearSecret: false })
-                    }
-                    placeholder={
-                      editingId ? 'Secret configured' : 'Enter once; never displayed'
-                    }
-                    type="password"
-                    value={form.secret}
-                  />
-                </label>
-                {editingId ? (
-                  <label className="checkbox-field">
-                    <input
-                      checked={form.clearSecret}
-                      onChange={(event) =>
-                        setForm({
-                          ...form,
-                          clearSecret: event.target.checked,
-                          secret: '',
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    Remove configured secret
-                  </label>
-                ) : null}
-              </>
-            )}
-            <div className="form-actions">
-              <button className="button button-primary" disabled={saving} type="submit">
-                {saving
-                  ? 'Saving…'
-                  : editingId
-                    ? 'Save integration'
-                    : 'Create integration'}
-              </button>
-              {editingId ? (
-                <button
-                  className="button button-ghost"
-                  onClick={() => {
-                    setEditingId('');
-                    setForm(blankForm);
-                  }}
-                  type="button"
-                >
-                  Cancel
-                </button>
-              ) : null}
-            </div>
-          </form>
-        </section>
-        <section className="panel">
-          <div className="panel-heading">
-            <h2>Workspace integrations</h2>
-            <span className="pill">{integrations.length}</span>
-          </div>
-          {loading ? (
-            <p className="muted" aria-busy="true">
-              Loading integrations…
-            </p>
-          ) : integrations.length ? (
-            <div className="list">
-              {integrations.map((integration) => (
-                <div className="list-row" key={integration.id}>
-                  <div>
-                    <strong>{integration.name}</strong>
-                    <span className="muted">
-                      {integration.config.type === 'email'
-                        ? integration.config.recipients.join(', ')
-                        : `${integration.config.url} · ${integration.config.secretConfigured ? 'Secret configured' : 'Unsigned'}`}
-                    </span>
-                  </div>
-                  <div className="row-actions">
-                    <span className="pill">
-                      {integration.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                    <button
-                      className="button button-small"
-                      onClick={() => edit(integration)}
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="button button-small button-danger"
-                      onClick={() => void remove(integration)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
+      <ResourceToolbar>
+        <span className="muted small">
+          {integrations.length} configured integration(s)
+        </span>
+        <span className="muted small">Delivery logs retained for reliability review</span>
+      </ResourceToolbar>
+      <section className="panel">
+        <div className="panel-heading">
+          <h2>Workspace integrations</h2>
+          <span className="pill">{integrations.length}</span>
+        </div>
+        {loading ? (
+          <p className="muted" aria-busy="true">
+            Loading integrations…
+          </p>
+        ) : integrations.length ? (
+          <div className="list">
+            {integrations.map((integration) => (
+              <div className="list-row" key={integration.id}>
+                <div>
+                  <strong>{integration.name}</strong>
+                  <span className="muted">
+                    {integration.config.type === 'email'
+                      ? integration.config.recipients.join(', ')
+                      : `${integration.config.url} · ${integration.config.secretConfigured ? 'Secret configured' : 'Unsigned'}`}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="row-actions">
+                  <span className="pill">
+                    {integration.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <button
+                    className="button button-small"
+                    onClick={() => edit(integration)}
+                    type="button"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="button button-small button-danger"
+                    onClick={() => void remove(integration)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <strong>No integrations configured</strong>
+            <span className="muted">
+              Add an email notification or webhook to connect a form.
+            </span>
+          </div>
+        )}
+      </section>
+      <Modal
+        description="Secrets are never shown after they are saved."
+        eyebrow="Connected services"
+        footer={
+          <>
+            <button
+              className="button button-ghost"
+              onClick={() => {
+                setFormOpen(false);
+                setEditingId('');
+                setForm(blankForm);
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="button button-primary"
+              disabled={saving}
+              form="integration-form"
+              type="submit"
+            >
+              {saving ? 'Saving…' : editingId ? 'Save integration' : 'Create integration'}
+            </button>
+          </>
+        }
+        onClose={() => setFormOpen(false)}
+        open={formOpen}
+        size="lg"
+        title={editingId ? 'Edit integration' : 'Create integration'}
+      >
+        <form className="stack" id="integration-form" onSubmit={save}>
+          {!editingId ? (
+            <label>
+              Type
+              <select
+                onChange={(event) =>
+                  setForm({ ...form, type: event.target.value as IntegrationType })
+                }
+                value={form.type}
+              >
+                <option value="email">Email notification</option>
+                <option value="webhook">Webhook</option>
+              </select>
+            </label>
+          ) : null}
+          <label>
+            Name
+            <input
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              required
+              value={form.name}
+            />
+          </label>
+          <label className="checkbox-field">
+            <input
+              checked={form.enabled}
+              onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
+              type="checkbox"
+            />
+            Enabled
+          </label>
+          {form.type === 'email' ? (
+            <>
+              <label>
+                Recipients <span className="muted">(comma separated)</span>
+                <input
+                  onChange={(event) =>
+                    setForm({ ...form, recipients: event.target.value })
+                  }
+                  placeholder="sales@example.com"
+                  required
+                  value={form.recipients}
+                />
+              </label>
+              <label>
+                Subject template
+                <input
+                  onChange={(event) =>
+                    setForm({ ...form, subjectTemplate: event.target.value })
+                  }
+                  required
+                  value={form.subjectTemplate}
+                />
+              </label>
+            </>
           ) : (
-            <div className="empty-state">
-              <strong>No integrations configured</strong>
-              <span className="muted">
-                Create an email notification or webhook to connect a form.
-              </span>
-            </div>
+            <>
+              <label>
+                HTTPS URL
+                <input
+                  onChange={(event) => setForm({ ...form, url: event.target.value })}
+                  placeholder="https://hooks.example.com/payload"
+                  required
+                  type="url"
+                  value={form.url}
+                />
+              </label>
+              <label>
+                Signing secret <span className="muted">(optional)</span>
+                <input
+                  onChange={(event) =>
+                    setForm({ ...form, secret: event.target.value, clearSecret: false })
+                  }
+                  placeholder={
+                    editingId ? 'Secret configured' : 'Enter once; never displayed'
+                  }
+                  type="password"
+                  value={form.secret}
+                />
+              </label>
+              {editingId ? (
+                <label className="checkbox-field">
+                  <input
+                    checked={form.clearSecret}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        clearSecret: event.target.checked,
+                        secret: '',
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  Remove configured secret
+                </label>
+              ) : null}
+            </>
           )}
-        </section>
-      </div>
+        </form>
+      </Modal>
       <section className="panel" aria-label="Integration delivery logs">
         <div className="panel-heading">
           <div>

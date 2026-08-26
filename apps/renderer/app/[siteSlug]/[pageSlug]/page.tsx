@@ -46,6 +46,12 @@ export default async function PublicPage({ params }: PublicPageProps) {
         pageSlug: pageSlug,
         siteSlug: siteSlug,
         ...(page.tenantSlug ? { tenantSlug: page.tenantSlug } : {}),
+        ...(page.extensions
+          ? {
+              runtimeIds: page.extensions.flatMap((extension) => extension.runtimeIds),
+              extensions: page.extensions,
+            }
+          : {}),
       })}
     </div>
   );

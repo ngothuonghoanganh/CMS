@@ -13,6 +13,7 @@ import {
   PAGE_PAYLOAD_MAX_TREE_DEPTH,
   PagePayloadV1Schema,
   PagePayloadV2Schema,
+  PagePayloadV3Schema,
   CreateIntegrationRequestSchema,
   CreateCustomDomainRequestSchema,
   FormSubmittedWebhookV1Schema,
@@ -27,6 +28,9 @@ import {
   CreateOrganizationRequestSchema,
   SwitchAuthContextRequestSchema,
   type PageNode,
+  PageExtensionInstanceSchema,
+  PageCapabilityGraphSchema,
+  PublishedPageBundleSchema,
 } from './index';
 
 function createPayload(children: PageNode[] = []) {
@@ -510,6 +514,40 @@ describe('foundation contracts', () => {
     expect(PagePayloadV2Schema.safeParse(invalid).success).toBe(false);
   });
 
+  it('keeps V1/V2 closed and round-trips the extension-capable V3 countdown node', () => {
+    const payload = {
+      version: 3 as const,
+      metadata: { documentTitle: 'Countdown page' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'hero',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'launch',
+                type: 'countdown' as const,
+                props: {
+                  label: 'Launches soon',
+                  targetAt: '2030-01-01T00:00:00.000Z',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(PagePayloadV3Schema.parse(payload)).toEqual(payload);
+    expect(PagePayloadV1Schema.safeParse(payload).success).toBe(false);
+    expect(PagePayloadV2Schema.safeParse(payload).success).toBe(false);
+    expect(JSON.parse(serializePagePayload(payload))).toEqual(payload);
+  });
+
   it('normalizes public hostnames and rejects URL-shaped input', () => {
     expect(normalizeHostname(' Example.COM. ')).toBe('example.com');
     expect(normalizeHostname('https://example.com/path')).toBeNull();
@@ -524,6 +562,65 @@ describe('foundation contracts', () => {
         title: 'Safe title',
         canonicalUrl: 'javascript:alert(1)',
       }).success,
+    ).toBe(false);
+  });
+
+  it('models page extension instances and rejects executable runtime descriptors', () => {
+    const instance = PageExtensionInstanceSchema.parse({
+      id: randomUUID(),
+      pageId: randomUUID(),
+      extensionId: 'demo-builder-countdown',
+      enabled: true,
+      configuration: {},
+      capabilities: ['builder.element.countdown'],
+      runtimeIds: ['countdown.runtime'],
+      createdAt: '2026-08-25T00:00:00.000Z',
+      updatedAt: '2026-08-25T00:00:00.000Z',
+    });
+    expect(instance.runtimeIds).toEqual(['countdown.runtime']);
+    expect(
+      PageCapabilityGraphSchema.safeParse({
+        pageId: instance.pageId,
+        extensionIds: [instance.extensionId],
+        capabilities: instance.capabilities,
+        runtimeIds: instance.runtimeIds,
+        dataBindings: [],
+        slots: ['PAGE_BODY_END'],
+      }).success,
+    ).toBe(true);
+    expect(
+      PageCapabilityGraphSchema.safeParse({
+        pageId: instance.pageId,
+        extensionIds: ['<script>'],
+        capabilities: [],
+        runtimeIds: [],
+        dataBindings: [],
+        slots: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('models a published composition bundle without allowing secrets or code', () => {
+    const pageId = randomUUID();
+    const bundle = PublishedPageBundleSchema.parse({
+      bundleVersion: 1,
+      pageId,
+      versionNumber: 3,
+      payload: createPayload(),
+      attachments: [],
+      bindings: [],
+      actions: [],
+      resources: [],
+      extensions: [],
+      extensionVersions: {},
+      capabilities: [],
+      runtimeIds: [],
+      styleAssetIds: [],
+      compiledAt: '2026-08-25T00:00:00.000Z',
+    });
+    expect(bundle.pageId).toBe(pageId);
+    expect(
+      PublishedPageBundleSchema.safeParse({ ...bundle, stripeSecret: 'secret' }).success,
     ).toBe(false);
   });
 });

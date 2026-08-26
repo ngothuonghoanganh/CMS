@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
   PagePayloadSchema,
+  PublishedPageBundleSchema,
   PublicLandingPageSchema,
   PublicSeoSettingsSchema,
   normalizeHostname,
@@ -27,6 +28,7 @@ import {
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 import { TenantContext } from '../tenancy/tenant-context';
+import { PageExtensionService } from '../extensions/page-extension.service';
 
 @Injectable()
 export class PublicPageResolver {
@@ -42,6 +44,8 @@ export class PublicPageResolver {
     @InjectModel(PageSeoSettingsRecord.name)
     private readonly seoModel: Model<PageSeoSettingsRecord>,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(PageExtensionService)
+    private readonly pageExtensions: PageExtensionService,
   ) {}
 
   async resolveByPath(siteSlug: string, pageSlug: string): Promise<PublicLandingPage> {
@@ -115,6 +119,12 @@ export class PublicPageResolver {
         .exec();
       const seo = seoRecord ? this.toPublicSeo(seoRecord) : undefined;
       const canonicalUrl = await this.resolveCanonicalUrl(page, seo?.canonicalUrl);
+      const publishedBundle = version.publishedBundle
+        ? PublishedPageBundleSchema.parse(version.publishedBundle)
+        : undefined;
+      const extensions =
+        publishedBundle?.extensions ??
+        (await this.pageExtensions.resolveRuntime(page._id.toString(), page.workspaceId));
 
       return PublicLandingPageSchema.parse({
         tenantSlug: this.tenantContext.require().slug,
@@ -124,6 +134,7 @@ export class PublicPageResolver {
           ...(page.slug ? { slug: page.slug } : {}),
         },
         payload,
+        ...(extensions.length ? { extensions } : {}),
         ...(seo ? { seo } : {}),
         ...(canonicalUrl ? { canonicalUrl } : {}),
       });

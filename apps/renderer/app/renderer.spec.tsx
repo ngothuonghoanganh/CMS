@@ -178,4 +178,103 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('Send');
     expect(markup).not.toContain('dangerouslySetInnerHTML');
   });
+
+  it('renders the trusted Countdown extension safely from a V3 payload', () => {
+    const payload = {
+      version: 3,
+      metadata: { documentTitle: 'Countdown' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'launch',
+                type: 'countdown',
+                props: {
+                  label: 'Launches soon',
+                  targetAt: '2030-01-01T00:00:00.000Z',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    } as const;
+    const markup = renderToStaticMarkup(renderPage(payload));
+    expect(markup).toContain('Launches soon');
+    expect(markup).toContain('dateTime="2030-01-01T00:00:00.000Z"');
+    expect(markup).not.toContain('eval');
+
+    const runtimeMarkup = renderToStaticMarkup(
+      renderPage(payload, { runtimeIds: ['countdown.runtime'] }),
+    );
+    expect(runtimeMarkup).toContain('data-extension="demo-builder-countdown"');
+    expect(runtimeMarkup).toContain('data-extension-runtime="countdown.runtime"');
+  });
+
+  it('renders a tenant custom extension from its declarative runtime definition', () => {
+    const payload = {
+      version: 3,
+      metadata: { documentTitle: 'Custom extension' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'hero',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'custom-banner',
+                type: 'extension',
+                props: { extensionId: 'custom-launch', values: {} },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    } as const;
+    const markup = renderToStaticMarkup(
+      renderPage(payload, {
+        extensions: [
+          {
+            extensionId: 'custom-launch',
+            runtimeIds: [],
+            styleAssetIds: [],
+            slots: [],
+            custom: {
+              id: 'custom-launch',
+              name: 'Launch banner',
+              version: '1.0.0',
+              render: {
+                kind: 'banner',
+                eyebrow: 'Now live',
+                heading: 'Launch your next campaign',
+                body: 'A reusable tenant-defined landing page block.',
+                buttonLabel: 'Learn more',
+                buttonHref: '/learn',
+                accentColor: '#8cf0c5',
+              },
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(markup).toContain('data-payload-node-type="extension"');
+    expect(markup).toContain('data-extension="custom-launch"');
+    expect(markup).toContain('Launch your next campaign');
+    expect(markup).toContain('href="/learn"');
+    expect(markup).not.toContain('dangerouslySetInnerHTML');
+  });
 });

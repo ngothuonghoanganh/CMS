@@ -55,12 +55,18 @@ import { OrganizationService } from './organization.service';
 import { TenantModelsModule } from '../tenancy/tenant-models.module';
 import { TenantModule } from '../tenancy/tenant.module';
 import { ControlPlaneModule } from '../tenancy/control-plane.module';
+import { SecurityModule } from '../security/security.module';
+import { ExtensionModule } from '../extensions/extension.module';
+import { WorkflowModule } from '../workflows/workflow.module';
 
 @Module({
   imports: [
     AuthenticationModule,
     BillingModule,
     ControlPlaneModule,
+    SecurityModule,
+    ExtensionModule,
+    WorkflowModule,
     TenantModelsModule,
     TenantModule,
   ],

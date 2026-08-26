@@ -10,6 +10,7 @@ import { MASTER_CONNECTION, masterDatabaseUri } from './tenancy/master-connectio
 import { ControlPlaneModule } from './tenancy/control-plane.module';
 import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middleware';
 import { TenantManagementModule } from './tenancy/tenant-management.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TenantManagementModule } from './tenancy/tenant-management.module';
       serverSelectionTimeoutMS: 3000,
     }),
     ControlPlaneModule,
+    SecurityModule,
     TenantBootstrapModule,
     AuthenticationModule,
     AuthModule,

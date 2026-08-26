@@ -40,25 +40,6 @@ export function requireOrganizationId(principal: AuthPrincipal | undefined): str
   return tenantId;
 }
 
-export function requireOrganizationRole(
-  principal: AuthPrincipal | undefined,
-  roles: readonly ('owner' | 'admin' | 'member')[],
-): string {
-  const organizationId = requireOrganizationId(principal);
-  const role = principal?.organizationRole;
-  // Phase 10 keeps the existing workspace permission surface. Tenant-local
-  // users are allowed through this compatibility helper; advanced RBAC is
-  // intentionally deferred.
-  if (!role) return organizationId;
-  if (!roles.includes(role)) {
-    throw new ForbiddenException({
-      code: 'ORGANIZATION_FORBIDDEN',
-      message: 'The current organization role does not allow this action',
-    });
-  }
-  return organizationId;
-}
-
 export function requireRequestedWorkspace(
   principal: AuthPrincipal | undefined,
   requestedWorkspaceId: string,
@@ -71,4 +52,17 @@ export function requireRequestedWorkspace(
     });
   }
   return workspaceId;
+}
+
+export function requestedWorkspaceId(
+  principal: AuthPrincipal | undefined,
+  requestedWorkspaceId: string,
+): string {
+  if (!principal?.workspaceId) {
+    throw new UnauthorizedException({
+      code: 'UNAUTHENTICATED',
+      message: 'An authenticated workspace context is required',
+    });
+  }
+  return requestedWorkspaceId;
 }

@@ -18,6 +18,7 @@ import {
   type AnalyticsIngestResponse,
   type PageNode,
   type PageNodeV2,
+  type PageNodeV3,
 } from '@payload/contracts';
 
 import {
@@ -37,6 +38,7 @@ import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { UsageService } from '../billing/usage.service';
 import { platformLogger } from '../common/logging/platform-logger';
+import { EventBus } from '../extensions/event-bus';
 
 const ANALYTICS_MAX_EVENT_BYTES = 8 * 1024;
 const ANALYTICS_RATE_WINDOW_MS = 60_000;
@@ -80,6 +82,7 @@ export class AnalyticsService {
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async ingestClientEvent(
@@ -118,6 +121,18 @@ export class AnalyticsService {
       node?.type,
     );
     await this.repository.insertEvent(stored);
+    const runtimeEvent = event.event === 'page.viewed' ? 'page.viewed' : 'button.clicked';
+    await this.events.publish(runtimeEvent, {
+      tenantId: this.tenantContext.require().id,
+      eventId: stored._id,
+      workspaceId: context.site.workspaceId,
+      siteId: context.site._id.toString(),
+      pageId: context.page._id.toString(),
+      pageVersionId: context.version._id.toString(),
+      ...(event.event === 'element.clicked' ? { nodeId: event.nodeId } : {}),
+      ...(event.sessionId ? { sessionId: event.sessionId } : {}),
+      occurredAt: occurredAt.toISOString(),
+    });
     if (event.event === 'page.viewed') {
       try {
         await this.usage.increment(
@@ -311,9 +326,9 @@ function deriveDeviceType(
 }
 
 function findNode(
-  node: PageNode | PageNodeV2,
+  node: PageNode | PageNodeV2 | PageNodeV3,
   nodeId: string,
-): PageNode | PageNodeV2 | undefined {
+): PageNode | PageNodeV2 | PageNodeV3 | undefined {
   if (node.id === nodeId) return node;
   for (const child of node.children) {
     const match = findNode(child, nodeId);

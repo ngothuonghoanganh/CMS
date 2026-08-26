@@ -7,8 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Model, Schema } from 'mongoose';
-import { randomBytes, randomUUID, scrypt as nodeScrypt } from 'node:crypto';
-import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
 
 import {
   CreateTenantRequestSchema,
@@ -81,8 +80,21 @@ import { TenantContext } from './tenant-context';
 import { TenantModelRegistry } from './tenant-model.registry';
 import { TenantResolver } from './tenant-resolver';
 import { SubscriptionService } from '../billing/subscription.service';
-
-const scrypt = promisify(nodeScrypt);
+import { RoleRecord, RoleSchema } from '../persistence/schemas/role.schema';
+import {
+  RoleAssignmentRecord,
+  RoleAssignmentSchema,
+} from '../persistence/schemas/role-assignment.schema';
+import { systemRoleDefinitions } from '../security/role-defaults';
+import { hashPassword } from '../common/guards/password';
+import {
+  TenantExtensionRecord,
+  TenantExtensionSchema,
+} from '../persistence/schemas/tenant-extension.schema';
+import {
+  PageExtensionInstanceRecord,
+  PageExtensionInstanceSchema,
+} from '../persistence/schemas/page-extension-instance.schema';
 
 const tenantMigrations = [
   [AuthSessionRecord, AuthSessionSchema],
@@ -101,6 +113,10 @@ const tenantMigrations = [
   [TemplateRecord, TemplateSchema],
   [TenantUserRecord, TenantUserSchema],
   [TenantMembershipRecord, TenantMembershipSchema],
+  [RoleRecord, RoleSchema],
+  [RoleAssignmentRecord, RoleAssignmentSchema],
+  [TenantExtensionRecord, TenantExtensionSchema],
+  [PageExtensionInstanceRecord, PageExtensionInstanceSchema],
 ] as const;
 
 @Injectable()
@@ -304,13 +320,36 @@ export class TenantProvisioningService {
       TenantMembershipRecord.name,
       TenantMembershipSchema,
     );
+    const roleModel = this.models.proxy(RoleRecord.name, RoleSchema);
+    const assignmentModel = this.models.proxy(
+      RoleAssignmentRecord.name,
+      RoleAssignmentSchema,
+    );
     const tenantId = this.context.require().id;
-    if (!(await membershipModel.exists({ tenantId, userId: email }))) {
+    const membership = await membershipModel.findOne({ tenantId, userId: email }).exec();
+    if (!membership) {
       await membershipModel.create({
         _id: randomUUID(),
         tenantId,
         userId: email,
         role: 'owner',
+      });
+    }
+    await seedTenantRoles(roleModel);
+    const ownerRole = await roleModel.findOne({ key: 'owner' }).exec();
+    if (
+      ownerRole &&
+      !(await assignmentModel.exists({
+        userId: email,
+        roleId: ownerRole._id,
+        scope: 'tenant',
+      }))
+    ) {
+      await assignmentModel.create({
+        _id: randomUUID(),
+        userId: email,
+        roleId: ownerRole._id,
+        scope: 'tenant',
       });
     }
   }
@@ -336,12 +375,6 @@ export class TenantProvisioningService {
   }
 }
 
-async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString('hex');
-  const derived = (await scrypt(password, salt, 64)) as Buffer;
-  return `scrypt$${salt}$${derived.toString('hex')}`;
-}
-
 function isDuplicateKey(error: unknown): boolean {
   return (
     typeof error === 'object' && error !== null && 'code' in error && error.code === 11000
@@ -352,4 +385,19 @@ function safeProvisioningError(error: unknown): string {
   return error instanceof Error
     ? error.message.slice(0, 500)
     : 'Unknown provisioning error';
+}
+
+async function seedTenantRoles(roleModel: Model<RoleRecord>): Promise<void> {
+  for (const role of systemRoleDefinitions) {
+    await roleModel
+      .updateOne(
+        { key: role.key },
+        {
+          $set: { ...role, type: 'system' },
+          $setOnInsert: { _id: randomUUID() },
+        },
+        { upsert: true, setDefaultsOnInsert: true },
+      )
+      .exec();
+  }
 }

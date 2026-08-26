@@ -9,11 +9,13 @@ import {
 } from '../tenancy/schemas/platform-user.schema';
 import { BillingController } from './billing.controller';
 import { BillingCoreModule } from './billing-core.module';
+import { SecurityModule } from '../security/security.module';
 
 @Module({
   imports: [
     AuthenticationModule,
     BillingCoreModule,
+    SecurityModule,
     MongooseModule.forFeature(
       [{ name: PlatformUserRecord.name, schema: PlatformUserSchema }],
       MASTER_CONNECTION,

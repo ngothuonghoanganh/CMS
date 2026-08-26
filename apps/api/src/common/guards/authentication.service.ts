@@ -3,10 +3,8 @@ import {
   createHmac,
   randomBytes,
   randomUUID,
-  scrypt as nodeScrypt,
   timingSafeEqual,
 } from 'node:crypto';
-import { promisify } from 'node:util';
 
 import {
   Inject,
@@ -43,6 +41,8 @@ import { TenantMembershipRecord } from '../../tenancy/schemas/tenant-membership.
 import { TenantUserRecord } from '../../tenancy/schemas/tenant-user.schema';
 import { TenantContext } from '../../tenancy/tenant-context';
 import { TenantResolver } from '../../tenancy/tenant-resolver';
+import { AuthorizationService } from '../../security/authorization.service';
+import { verifyPassword } from './password';
 
 type AccessTokenClaims = {
   sub: string;
@@ -61,8 +61,6 @@ type SessionTokens = {
 export type LoginResult = SessionTokens & { response: AuthSessionResponse };
 
 const ACCESS_TOKEN_HEADER = { alg: 'HS256', typ: 'JWT' } as const;
-const scrypt = promisify(nodeScrypt);
-
 function encodeBase64Url(value: string | Buffer): string {
   return Buffer.from(value).toString('base64url');
 }
@@ -91,6 +89,7 @@ export class AuthenticationService {
     private readonly membershipModel: Model<TenantMembershipRecord>,
     @Inject(TenantResolver) private readonly resolver: TenantResolver,
     @Inject(TenantContext) private readonly context: TenantContext,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
   ) {}
 
   async login(input: LoginRequest): Promise<LoginResult> {
@@ -168,6 +167,7 @@ export class AuthenticationService {
         .exec();
       if (!session) throw this.refreshTokenError('REFRESH_TOKEN_INVALID');
       this.assertSessionActive(session);
+      await this.assertUserActive(session.email, 'USER_DISABLED');
 
       const now = new Date();
       const nextSessionId = randomUUID();
@@ -238,6 +238,7 @@ export class AuthenticationService {
         'The authentication session is no longer active',
       );
     }
+    await this.assertUserActive(session.email, 'USER_DISABLED');
     return this.toPrincipal(session, claims.sub, scope.id);
   }
 
@@ -255,6 +256,7 @@ export class AuthenticationService {
         'The authentication session is no longer active',
       );
     }
+    await this.assertUserActive(session.email, 'USER_DISABLED');
     const workspace = await this.getWorkspace(workspaceId);
     const scope = this.context.require();
     return this.toSessionResponse(
@@ -297,6 +299,18 @@ export class AuthenticationService {
       }
       const workspace = await this.workspaceModel.findById(parsed.workspaceId).exec();
       if (!workspace) {
+        throw new UnauthorizedException({
+          code: 'AUTH_CONTEXT_INVALID',
+          message: 'The requested tenant or workspace is not available',
+        });
+      }
+      if (
+        !(await this.authorization.can(
+          principal.subject,
+          parsed.workspaceId,
+          'workspace.read',
+        ))
+      ) {
         throw new UnauthorizedException({
           code: 'AUTH_CONTEXT_INVALID',
           message: 'The requested tenant or workspace is not available',
@@ -476,6 +490,21 @@ export class AuthenticationService {
     return this.toWorkspace(record);
   }
 
+  private async assertUserActive(
+    email: string,
+    code: 'USER_DISABLED' | 'SESSION_REVOKED',
+  ): Promise<void> {
+    const user = await this.userModel.findOne({ email, status: 'active' }).exec();
+    if (!user) {
+      throw this.unauthorized(
+        code,
+        code === 'USER_DISABLED'
+          ? 'The tenant user is disabled'
+          : 'The authentication session is no longer active',
+      );
+    }
+  }
+
   private toPrincipal(
     session: AuthSessionDocument,
     subject: string,
@@ -567,16 +596,4 @@ export class AuthenticationService {
   ): UnauthorizedException {
     return new UnauthorizedException({ code, message });
   }
-}
-
-async function verifyPassword(
-  password: string,
-  storedHash: string | undefined,
-): Promise<boolean> {
-  if (!storedHash || !/^scrypt\$[^$]+\$[0-9a-f]+$/.test(storedHash)) return false;
-  const [, salt, expectedHex] = storedHash.split('$');
-  if (!salt || !expectedHex) return false;
-  const expected = Buffer.from(expectedHex, 'hex');
-  const derived = (await scrypt(password, salt, expected.length)) as Buffer;
-  return expected.length === derived.length && timingSafeEqual(expected, derived);
 }

@@ -2,6 +2,10 @@
 
 import {
   AssetListResponseSchema,
+  ExtensionListResponseSchema,
+  PageCapabilityGraphSchema,
+  PageExtensionInstanceSchema,
+  PageExtensionListResponseSchema,
   LandingPageSchema,
   FormPropsSchema,
   PagePayloadSchema,
@@ -13,6 +17,9 @@ import {
   type LandingPage,
   type PagePayload,
   type PageVersion,
+  type ExtensionDescriptor,
+  type PageExtensionInstance,
+  type PageCapabilityGraph,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -26,6 +33,17 @@ import {
 } from 'react';
 
 import { ApiClientError, api } from '../app/lib/api';
+import {
+  ColorField,
+  DateTimeField,
+  SegmentedControl,
+  SelectField,
+  SpacingControl,
+  TextAreaField,
+  TextField,
+  UnitField,
+  type SegmentedOption,
+} from '../app/ui/fields';
 import {
   BUILDER_VIEWPORTS,
   GrapesEditor,
@@ -43,6 +61,7 @@ import type {
   BuilderNodeType,
   BuilderViewport,
 } from './builder-adapter';
+import { isBuilderExtensionAvailableForPage } from './builder-extension-registry';
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 
 type BuilderShellProps = {
@@ -54,23 +73,34 @@ type BuilderShellProps = {
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
 
-const blockOptions: Array<{ type: BuilderBlockType; label: string }> = [
+type AvailableBlockOption = {
+  type: BuilderBlockType;
+  label: string;
+  extensionId?: string;
+};
+
+const blockOptions: AvailableBlockOption[] = [
   { type: 'section', label: 'Section' },
   { type: 'container', label: 'Container' },
   { type: 'text', label: 'Text' },
   { type: 'image', label: 'Image' },
   { type: 'button', label: 'Button' },
   { type: 'form', label: 'Form' },
+  { type: 'countdown', label: 'Countdown' },
 ];
 
 type InspectorNodeType = BuilderNodeType;
 type InspectorSectionKey =
   'content' | 'layout' | 'spacing' | 'typography' | 'appearance' | 'advanced';
 
+type InspectorControlType = 'color' | 'select' | 'segmented' | 'spacing' | 'unit';
+
 type InspectorStyleField = {
+  allowAuto?: boolean;
+  control: InspectorControlType;
   property: string;
   label: string;
-  placeholder?: string;
+  options?: readonly { label: string; value: string }[];
   appliesTo?: readonly InspectorNodeType[];
 };
 
@@ -88,6 +118,8 @@ const allInspectorNodeTypes: readonly InspectorNodeType[] = [
   'image',
   'button',
   'form',
+  'countdown',
+  'extension',
 ];
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = [
@@ -95,26 +127,40 @@ const inspectorStyleSections: readonly InspectorStyleSection[] = [
     key: 'layout',
     label: 'Layout',
     fields: [
-      { property: 'display', label: 'Display', placeholder: 'block, flex or grid' },
       {
+        control: 'select',
+        property: 'display',
+        label: 'Display',
+        options: [
+          { value: '', label: 'Default' },
+          { value: 'block', label: 'Block' },
+          { value: 'flex', label: 'Flex' },
+          { value: 'grid', label: 'Grid' },
+          { value: 'inline', label: 'Inline' },
+          { value: 'inline-block', label: 'Inline block' },
+          { value: 'none', label: 'Hidden' },
+        ],
+      },
+      {
+        control: 'unit',
         property: 'width',
         label: 'Width',
-        placeholder: 'Auto, 320px or 100%',
+        allowAuto: true,
       },
       {
+        control: 'unit',
         property: 'max-width',
         label: 'Max width',
-        placeholder: 'None or 1200px',
       },
       {
+        control: 'unit',
         property: 'min-height',
         label: 'Min height',
-        placeholder: 'Auto or 480px',
       },
       {
+        control: 'unit',
         property: 'gap',
         label: 'Gap',
-        placeholder: 'e.g. 24px',
         appliesTo: ['root', 'section', 'container'],
       },
     ],
@@ -123,8 +169,8 @@ const inspectorStyleSections: readonly InspectorStyleSection[] = [
     key: 'spacing',
     label: 'Spacing',
     fields: [
-      { property: 'padding', label: 'Padding', placeholder: 'e.g. 24px 16px' },
-      { property: 'margin', label: 'Margin', placeholder: 'e.g. 0 auto' },
+      { control: 'spacing', property: 'padding', label: 'Padding' },
+      { control: 'spacing', property: 'margin', label: 'Margin', allowAuto: true },
     ],
   },
   {
@@ -132,27 +178,35 @@ const inspectorStyleSections: readonly InspectorStyleSection[] = [
     label: 'Typography',
     fields: [
       {
+        control: 'color',
         property: 'color',
         label: 'Text color',
-        placeholder: '#172033 or transparent',
         appliesTo: ['root', 'section', 'container', 'text', 'button'],
       },
       {
+        control: 'unit',
         property: 'font-size',
         label: 'Font size',
-        placeholder: 'e.g. 16px',
         appliesTo: ['root', 'section', 'container', 'text', 'button'],
       },
       {
+        control: 'select',
         property: 'font-weight',
         label: 'Font weight',
-        placeholder: '400, 500, 600, 700 or 800',
+        options: [
+          { value: '', label: 'Default' },
+          { value: '400', label: 'Regular (400)' },
+          { value: '500', label: 'Medium (500)' },
+          { value: '600', label: 'Semibold (600)' },
+          { value: '700', label: 'Bold (700)' },
+          { value: '800', label: 'Extra bold (800)' },
+        ],
         appliesTo: ['root', 'section', 'container', 'text', 'button'],
       },
       {
+        control: 'segmented',
         property: 'text-align',
         label: 'Text alignment',
-        placeholder: 'left, center or right',
         appliesTo: ['root', 'section', 'container', 'button'],
       },
     ],
@@ -162,25 +216,25 @@ const inspectorStyleSections: readonly InspectorStyleSection[] = [
     label: 'Appearance',
     fields: [
       {
+        control: 'color',
         property: 'background-color',
         label: 'Background',
-        placeholder: '#fef3c7 or transparent',
         appliesTo: allInspectorNodeTypes,
       },
       {
+        control: 'unit',
         property: 'border-radius',
         label: 'Radius',
-        placeholder: 'e.g. 12px',
         appliesTo: allInspectorNodeTypes,
       },
     ],
   },
 ];
 
-const alignmentOptions = [
-  { value: 'left' as const, label: 'Left', icon: '⇤' },
-  { value: 'center' as const, label: 'Center', icon: '↔' },
-  { value: 'right' as const, label: 'Right', icon: '⇥' },
+const alignmentOptions: readonly SegmentedOption<'left' | 'center' | 'right'>[] = [
+  { value: 'left', label: 'Left' },
+  { value: 'center', label: 'Center' },
+  { value: 'right', label: 'Right' },
 ];
 
 function viewportStyleKey(viewport: BuilderViewport): 'base' | 'tablet' | 'mobile' {
@@ -296,6 +350,9 @@ function inspectorNodeSummary(selected: SelectedBuilderNode): string {
   if (selected.type === 'image') {
     return selected.alt?.trim() || 'Image element';
   }
+  if (selected.type === 'countdown') {
+    return selected.countdown?.label?.trim() || 'Countdown element';
+  }
   return `${inspectorNodeLabel(selected.type)} element`;
 }
 
@@ -342,6 +399,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const [version, setVersion] = useState<PageVersion | null>(null);
   const [payload, setPayload] = useState<PagePayload | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [enabledExtensionIds, setEnabledExtensionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [customExtensions, setCustomExtensions] = useState<ExtensionDescriptor[]>([]);
+  const [pageExtensions, setPageExtensions] = useState<PageExtensionInstance[]>([]);
+  const [pageCapabilities, setPageCapabilities] = useState<PageCapabilityGraph | null>(
+    null,
+  );
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
   const [canvasState, setCanvasState] = useState<BuilderCanvasState | null>(null);
   const [viewport, setViewport] = useState<BuilderViewport>('desktop');
@@ -350,7 +415,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   >({
     content: true,
     layout: true,
-    spacing: false,
+    spacing: true,
     typography: false,
     appearance: false,
     advanced: false,
@@ -372,6 +437,31 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const layerHoverExpandTargetRef = useRef<string | null>(null);
 
   const isDirty = saveStatus === 'unsaved' || saveStatus === 'saving';
+  const pageExtensionState = new Map(
+    pageExtensions.map((item) => [item.extensionId, item.enabled]),
+  );
+  const availableBlockOptions: AvailableBlockOption[] = [
+    ...blockOptions.filter(
+      (block) =>
+        block.type !== 'countdown' ||
+        isBuilderExtensionAvailableForPage(
+          'countdown',
+          enabledExtensionIds,
+          pageExtensionState,
+        ),
+    ),
+    ...customExtensions
+      .filter(
+        (extension) =>
+          extension.tenantEnabled &&
+          pageExtensionState.get(extension.manifest.id) !== false,
+      )
+      .map((extension) => ({
+        type: 'extension' as const,
+        extensionId: extension.manifest.id,
+        label: extension.manifest.name,
+      })),
+  ];
   const styleBlock = selected?.style?.[viewportStyleKey(viewport)] ?? {};
   const usableAssets = useMemo(
     () => assets.filter((asset) => isUsableImageSource(asset.storageKey)),
@@ -549,6 +639,37 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         setVersion(PageVersionSchema.parse(nextVersion));
         setPayload(nextPayload);
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
+        try {
+          const [extensionResult, pageExtensionResult, capabilityResult] =
+            await Promise.all([
+              api.get('/extensions'),
+              api.get(`/pages/${pageId}/extensions`),
+              api.get(`/pages/${pageId}/extensions/capabilities`),
+            ]);
+          const extensionResponse = ExtensionListResponseSchema.parse(extensionResult);
+          const pageExtensionResponse =
+            PageExtensionListResponseSchema.parse(pageExtensionResult);
+          setPageExtensions(pageExtensionResponse.items);
+          setPageCapabilities(PageCapabilityGraphSchema.parse(capabilityResult));
+          setCustomExtensions(
+            extensionResponse.items.filter(
+              (extension) => extension.custom && extension.tenantEnabled,
+            ),
+          );
+          setEnabledExtensionIds(
+            new Set(
+              extensionResponse.items
+                .filter((extension) => extension.tenantEnabled)
+                .map((extension) => extension.manifest.id),
+            ),
+          );
+        } catch {
+          // Existing content remains editable when the user cannot read extension state.
+          setEnabledExtensionIds(new Set());
+          setPageExtensions([]);
+          setPageCapabilities(null);
+          setCustomExtensions([]);
+        }
         setLoadState('ready');
         setSaveStatus('saved');
       } catch (caughtError) {
@@ -605,6 +726,10 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         }),
       );
       setVersion(nextVersion);
+      const nextPageExtensions = PageExtensionListResponseSchema.parse(
+        await api.get(`/pages/${pageId}/extensions`),
+      );
+      setPageExtensions(nextPageExtensions.items);
       setSaveStatus('saved');
       setNotice(`Saved draft version ${nextVersion.versionNumber}.`);
     } catch (caughtError) {
@@ -616,6 +741,28 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         return;
       }
       setSaveStatus('error');
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function togglePageExtension(extensionId: string, enabled: boolean) {
+    setError(null);
+    try {
+      const result = PageExtensionInstanceSchema.parse(
+        await api.put(`/pages/${pageId}/extensions/${extensionId}`, { enabled }),
+      );
+      const capabilityGraph = PageCapabilityGraphSchema.parse(
+        await api.get(`/pages/${pageId}/extensions/capabilities`),
+      );
+      setPageExtensions((current) => {
+        const without = current.filter((item) => item.extensionId !== extensionId);
+        return [...without, result].sort((left, right) =>
+          left.extensionId.localeCompare(right.extensionId),
+        );
+      });
+      setPageCapabilities(capabilityGraph);
+      setNotice(`${extensionId} is ${enabled ? 'enabled' : 'disabled'} for this page.`);
+    } catch (caughtError) {
       setError(toErrorMessage(caughtError));
     }
   }
@@ -644,8 +791,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     editorRef.current?.updateSelectedAttribute(name, event.target.value);
   }
 
-  function updateSelectedStyle(property: string, event: ChangeEvent<HTMLInputElement>) {
-    editorRef.current?.updateSelectedStyle(property, event.target.value);
+  function updateSelectedStyle(property: string, value: string) {
+    editorRef.current?.updateSelectedStyle(property, value);
   }
 
   function updateForm(nextForm: FormProps) {
@@ -653,6 +800,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     if (parsed.success) {
       editorRef.current?.updateSelectedForm(parsed.data);
     }
+  }
+
+  function updateSelectedCountdown(key: 'label' | 'targetAt', value: string): void {
+    if (!selected?.countdown) return;
+    editorRef.current?.updateSelectedCountdown({
+      ...selected.countdown,
+      [key]: value,
+    });
   }
 
   function patchFormField(index: number, patch: Record<string, unknown>) {
@@ -743,17 +898,82 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         open={openInspectorSections[section.key]}
       >
         <div className="builder-inspector-fields">
-          {fields.map((option) => (
-            <label key={option.property}>
-              {option.label}
-              <input
-                aria-label={option.label}
-                onChange={(event) => updateSelectedStyle(option.property, event)}
-                placeholder={option.placeholder ?? 'Not set'}
-                value={styleValue(styleBlock, option.property)}
-              />
-            </label>
-          ))}
+          {fields.map((option) => {
+            const value = styleValue(styleBlock, option.property);
+            if (option.control === 'unit') {
+              return (
+                <UnitField
+                  allowAuto={option.allowAuto}
+                  compact
+                  key={option.property}
+                  label={option.label}
+                  onValueChange={(nextValue) =>
+                    updateSelectedStyle(option.property, nextValue)
+                  }
+                  value={value}
+                />
+              );
+            }
+            if (option.control === 'spacing') {
+              return (
+                <SpacingControl
+                  allowAuto={option.allowAuto}
+                  compact
+                  key={option.property}
+                  label={option.label}
+                  onValueChange={(nextValue) =>
+                    updateSelectedStyle(option.property, nextValue)
+                  }
+                  value={value}
+                />
+              );
+            }
+            if (option.control === 'color') {
+              return (
+                <ColorField
+                  compact
+                  key={option.property}
+                  label={option.label}
+                  onValueChange={(nextValue) =>
+                    updateSelectedStyle(option.property, nextValue)
+                  }
+                  value={value}
+                />
+              );
+            }
+            if (option.control === 'segmented') {
+              return (
+                <div className="ui-field ui-field-compact" key={option.property}>
+                  <span className="ui-field-label">{option.label}</span>
+                  <SegmentedControl
+                    ariaLabel={option.label}
+                    onValueChange={(nextValue) =>
+                      updateSelectedStyle(option.property, nextValue)
+                    }
+                    options={alignmentOptions}
+                    value={value as 'left' | 'center' | 'right' | undefined}
+                  />
+                </div>
+              );
+            }
+            return (
+              <SelectField
+                compact
+                key={option.property}
+                label={option.label}
+                onChange={(event) =>
+                  updateSelectedStyle(option.property, event.target.value)
+                }
+                value={value}
+              >
+                {option.options?.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+              </SelectField>
+            );
+          })}
         </div>
       </InspectorSection>
     );
@@ -870,17 +1090,25 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             <strong>Add to canvas</strong>
           </div>
           <div className="builder-block-list">
-            {blockOptions.map((block) => (
+            {availableBlockOptions.map((block) => (
               <div
                 className="builder-block-row"
                 data-block-type={block.type}
-                key={block.type}
+                key={`${block.type}:${block.extensionId ?? ''}`}
               >
                 <button
-                  aria-label={`Drag ${block.label} block`}
+                  aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
                   className="builder-block-drag"
-                  onMouseDown={(event) =>
-                    editorRef.current?.startBlockDrag(block.type, event.nativeEvent)
+                  onClick={
+                    block.extensionId
+                      ? () => editorRef.current?.addExtensionBlock(block.extensionId!)
+                      : undefined
+                  }
+                  onMouseDown={
+                    block.extensionId
+                      ? undefined
+                      : (event) =>
+                          editorRef.current?.startBlockDrag(block.type, event.nativeEvent)
                   }
                   type="button"
                 >
@@ -890,7 +1118,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 <button
                   aria-label={`${block.label} add`}
                   className="builder-block-add"
-                  onClick={() => editorRef.current?.addBlock(block.type)}
+                  onClick={() =>
+                    block.extensionId
+                      ? editorRef.current?.addExtensionBlock(block.extensionId)
+                      : editorRef.current?.addBlock(block.type)
+                  }
                   type="button"
                 >
                   ＋
@@ -899,8 +1131,87 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             ))}
           </div>
           <p className="muted small builder-help">
-            Blocks map only to the supported PagePayloadV1 node set.
+            Blocks map to the supported, versioned PagePayload node set.
           </p>
+          <div className="builder-layers-section builder-page-capabilities">
+            <div className="builder-panel-heading">
+              <div>
+                <span className="eyebrow">Page runtime</span>
+                <strong>Extension graph</strong>
+              </div>
+              <span className="builder-capability-active">
+                {pageExtensions.filter((item) => item.enabled).length} active
+              </span>
+            </div>
+            <p className="muted small builder-capability-intro">
+              Page-level switches control which tenant extensions can run on this page.
+            </p>
+            {pageExtensions.length === 0 ? (
+              <p className="muted small">
+                Add an extension block and save the page to attach an instance here.
+              </p>
+            ) : (
+              <div className="builder-capability-list">
+                {pageExtensions.map((instance) => (
+                  <label
+                    className={`builder-capability-row${instance.enabled ? '' : ' is-disabled'}`}
+                    key={instance.extensionId}
+                  >
+                    <span>
+                      <strong>{instance.extensionId}</strong>
+                      <small>
+                        {instance.enabled ? 'Enabled' : 'Disabled'} ·{' '}
+                        {instance.runtimeIds.length} runtime resource(s)
+                      </small>
+                    </span>
+                    <input
+                      aria-label={`Enable ${instance.extensionId} for page`}
+                      checked={instance.enabled}
+                      onChange={(event) =>
+                        void togglePageExtension(
+                          instance.extensionId,
+                          event.target.checked,
+                        )
+                      }
+                      type="checkbox"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+            {pageCapabilities ? (
+              <div
+                aria-label="Page capability summary"
+                className="builder-capability-summary"
+              >
+                <div className="builder-capability-metric">
+                  <strong>{pageCapabilities.capabilities.length}</strong>
+                  <span>Capabilities</span>
+                </div>
+                <div className="builder-capability-metric">
+                  <strong>{pageCapabilities.runtimeIds.length}</strong>
+                  <span>Runtimes</span>
+                </div>
+                <div className="builder-capability-metric">
+                  <strong>{pageCapabilities.slots.length}</strong>
+                  <span>Slots</span>
+                </div>
+                <div className="builder-capability-metric">
+                  <strong>{pageCapabilities.dataBindings.length}</strong>
+                  <span>Bindings</span>
+                </div>
+                {pageCapabilities.capabilities.length > 0 ? (
+                  <div className="builder-capability-chips">
+                    {pageCapabilities.capabilities.map((capability) => (
+                      <span className="builder-capability-chip" key={capability}>
+                        {capability}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <div className="builder-layers-section">
             <div className="builder-panel-heading">
               <span className="eyebrow">Layers</span>
@@ -1194,6 +1505,34 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 </InspectorSection>
               ) : null}
 
+              {selected.type === 'countdown' && selected.countdown ? (
+                <InspectorSection
+                  label="Countdown"
+                  onToggle={(open) => toggleInspectorSection('content', open)}
+                  open={openInspectorSections.content}
+                >
+                  <div className="builder-inspector-fields">
+                    <TextField
+                      compact
+                      label="Countdown label"
+                      onChange={(event) =>
+                        updateSelectedCountdown('label', event.target.value)
+                      }
+                      value={selected.countdown.label}
+                    />
+                    <DateTimeField
+                      compact
+                      description="Stored as UTC in the existing countdown payload."
+                      label="Target date and time"
+                      onValueChange={(nextValue) => {
+                        if (nextValue) updateSelectedCountdown('targetAt', nextValue);
+                      }}
+                      value={selected.countdown.targetAt}
+                    />
+                  </div>
+                </InspectorSection>
+              ) : null}
+
               {selected.type === 'text' ? (
                 <InspectorSection
                   label="Content"
@@ -1201,41 +1540,24 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   open={openInspectorSections.content}
                 >
                   <div className="builder-inspector-fields">
-                    <label>
-                      Text
-                      <textarea
-                        aria-label="Text content"
-                        onChange={updateSelectedText}
-                        rows={5}
-                        value={selected.text ?? ''}
+                    <TextAreaField
+                      aria-label="Text content"
+                      compact
+                      label="Text"
+                      onChange={updateSelectedText}
+                      rows={5}
+                      value={selected.text ?? ''}
+                    />
+                    <div className="ui-field ui-field-compact">
+                      <span className="ui-field-label">Alignment</span>
+                      <SegmentedControl
+                        ariaLabel="Text alignment"
+                        onValueChange={(nextValue) =>
+                          editorRef.current?.updateSelectedAlign(nextValue)
+                        }
+                        options={alignmentOptions}
+                        value={selected.align}
                       />
-                    </label>
-                    <div className="builder-property-control">
-                      <span className="builder-property-label">Alignment</span>
-                      <div
-                        aria-label="Text alignment"
-                        className="builder-segmented-control"
-                        role="group"
-                      >
-                        {alignmentOptions.map((option) => (
-                          <button
-                            aria-label={`Align text ${option.label.toLowerCase()}`}
-                            aria-pressed={selected.align === option.value}
-                            className={
-                              selected.align === option.value ? 'active' : undefined
-                            }
-                            key={option.value}
-                            onClick={() =>
-                              editorRef.current?.updateSelectedAlign(option.value)
-                            }
-                            title={`Align ${option.label.toLowerCase()}`}
-                            type="button"
-                          >
-                            <span aria-hidden="true">{option.icon}</span>
-                            <span>{option.label}</span>
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </div>
                 </InspectorSection>
@@ -1248,35 +1570,30 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   open={openInspectorSections.content}
                 >
                   <div className="builder-inspector-fields">
-                    <label>
-                      Label
-                      <input
-                        aria-label="Button label"
-                        onChange={(event) =>
-                          editorRef.current?.updateSelectedText(event.target.value)
-                        }
-                        value={selected.label ?? ''}
-                      />
-                    </label>
-                    <label>
-                      Link
-                      <input
-                        aria-label="Button link"
-                        onChange={(event) => updateSelectedAttribute('href', event)}
-                        value={selected.href ?? ''}
-                      />
-                    </label>
-                    <label>
-                      Target
-                      <select
-                        aria-label="Button target"
-                        onChange={(event) => updateSelectedAttribute('target', event)}
-                        value={selected.target ?? '_self'}
-                      >
-                        <option value="_self">Same tab</option>
-                        <option value="_blank">New tab</option>
-                      </select>
-                    </label>
+                    <TextField
+                      compact
+                      label="Label"
+                      onChange={(event) =>
+                        editorRef.current?.updateSelectedText(event.target.value)
+                      }
+                      value={selected.label ?? ''}
+                    />
+                    <TextField
+                      compact
+                      label="Link"
+                      onChange={(event) => updateSelectedAttribute('href', event)}
+                      type="url"
+                      value={selected.href ?? ''}
+                    />
+                    <SelectField
+                      compact
+                      label="Open link"
+                      onChange={(event) => updateSelectedAttribute('target', event)}
+                      value={selected.target ?? '_self'}
+                    >
+                      <option value="_self">Same tab</option>
+                      <option value="_blank">New tab</option>
+                    </SelectField>
                   </div>
                 </InspectorSection>
               ) : null}
@@ -1288,39 +1605,35 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   open={openInspectorSections.content}
                 >
                   <div className="builder-inspector-fields">
-                    <label>
-                      Source
-                      <input
-                        aria-label="Image source"
-                        onChange={(event) => updateSelectedAttribute('src', event)}
-                        value={selected.src ?? ''}
-                      />
-                    </label>
-                    <label>
-                      Alt text
-                      <input
-                        aria-label="Image alt text"
-                        onChange={(event) => updateSelectedAttribute('alt', event)}
-                        value={selected.alt ?? ''}
-                      />
-                    </label>
-                    <label>
-                      Workspace asset
-                      <select
-                        aria-label="Workspace asset"
-                        onChange={(event) =>
-                          editorRef.current?.selectAsset(event.target.value)
-                        }
-                        value={selected.src ?? ''}
-                      >
-                        <option value="">Select an asset</option>
-                        {usableAssets.map((asset) => (
-                          <option key={asset.id} value={asset.storageKey}>
-                            {asset.filename}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <SelectField
+                      compact
+                      label="Workspace asset"
+                      onChange={(event) =>
+                        editorRef.current?.selectAsset(event.target.value)
+                      }
+                      value={selected.src ?? ''}
+                    >
+                      <option value="">Select an asset</option>
+                      {usableAssets.map((asset) => (
+                        <option key={asset.id} value={asset.storageKey}>
+                          {asset.filename}
+                        </option>
+                      ))}
+                    </SelectField>
+                    <TextField
+                      compact
+                      description="Use a direct URL only when the asset is not in this workspace."
+                      label="Image URL"
+                      onChange={(event) => updateSelectedAttribute('src', event)}
+                      type="url"
+                      value={selected.src ?? ''}
+                    />
+                    <TextField
+                      compact
+                      label="Alt text"
+                      onChange={(event) => updateSelectedAttribute('alt', event)}
+                      value={selected.alt ?? ''}
+                    />
                   </div>
                 </InspectorSection>
               ) : null}

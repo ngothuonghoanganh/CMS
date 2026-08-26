@@ -26,12 +26,16 @@ import { requireWorkspaceId } from '../common/guards/workspace-context';
 import type { PlatformRequest } from '../common/interfaces/request';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { SubmissionService } from './submission.service';
+import { AuthorizationService } from '../security/authorization.service';
+import { AuditService } from '../security/audit.service';
 
 @Controller('submissions')
 @UseGuards(AuthenticationGuard)
 export class SubmissionController {
   constructor(
     @Inject(SubmissionService) private readonly submissionService: SubmissionService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Get()
@@ -39,6 +43,7 @@ export class SubmissionController {
     @Query(new ZodValidationPipe(SubmissionListQuerySchema)) query: SubmissionListQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'lead.read');
     return this.submissionService.list(query, requireWorkspaceId(principal));
   }
 
@@ -47,6 +52,7 @@ export class SubmissionController {
     @Param('submissionId') submissionId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
+    await this.authorization.assertCan(principal, 'lead.read');
     return this.submissionService.getById(submissionId, requireWorkspaceId(principal));
   }
 
@@ -57,11 +63,25 @@ export class SubmissionController {
     input: UpdateSubmissionRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    return this.submissionService.updateStatus(
+    await this.authorization.assertCan(principal, 'lead.update');
+    const result = await this.submissionService.updateStatus(
       submissionId,
       input,
       requireWorkspaceId(principal),
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'lead.update',
+        resourceType: 'submission',
+        resourceId: submissionId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: { status: input.status },
+      })
+      .catch(() => undefined);
+    return result;
   }
 }
 

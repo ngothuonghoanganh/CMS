@@ -29,6 +29,26 @@ import {
   TemplateSchema,
   WorkspaceRecord,
   WorkspaceSchema,
+  RoleRecord,
+  RoleSchema,
+  RoleAssignmentRecord,
+  RoleAssignmentSchema,
+  AuditLogRecord,
+  AuditLogSchema,
+  TenantExtensionRecord,
+  TenantExtensionSchema,
+  PageExtensionInstanceRecord,
+  PageExtensionInstanceSchema,
+  ExtensionConnectionRecord,
+  ExtensionConnectionSchema,
+  WorkflowRecord,
+  WorkflowSchema,
+  WorkflowVersionRecord,
+  WorkflowVersionSchema,
+  WorkflowExecutionRecord,
+  WorkflowExecutionSchema,
+  WorkflowStepExecutionRecord,
+  WorkflowStepExecutionSchema,
 } from '../persistence/schemas';
 import { TenantUserRecord, TenantUserSchema } from './schemas/tenant-user.schema';
 import {
@@ -56,6 +76,16 @@ const models = [
   [WorkspaceRecord, WorkspaceSchema],
   [TenantUserRecord, TenantUserSchema],
   [TenantMembershipRecord, TenantMembershipSchema],
+  [RoleRecord, RoleSchema],
+  [RoleAssignmentRecord, RoleAssignmentSchema],
+  [AuditLogRecord, AuditLogSchema],
+  [TenantExtensionRecord, TenantExtensionSchema],
+  [PageExtensionInstanceRecord, PageExtensionInstanceSchema],
+  [ExtensionConnectionRecord, ExtensionConnectionSchema],
+  [WorkflowRecord, WorkflowSchema],
+  [WorkflowVersionRecord, WorkflowVersionSchema],
+  [WorkflowExecutionRecord, WorkflowExecutionSchema],
+  [WorkflowStepExecutionRecord, WorkflowStepExecutionSchema],
 ] as const;
 
 const providers = models.map(([record, schema]) =>
