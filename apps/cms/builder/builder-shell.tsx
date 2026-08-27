@@ -349,6 +349,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   );
   const [layerDraggingId, setLayerDraggingId] = useState<string | null>(null);
   const [layerDropIntent, setLayerDropIntent] = useState<MoveNodeIntent | null>(null);
+  const [blockQuery, setBlockQuery] = useState('');
   const [layerQuery, setLayerQuery] = useState('');
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
@@ -386,6 +387,15 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         label: extension.manifest.name,
       })),
   ];
+  const visibleBlockOptions = availableBlockOptions.filter((block) => {
+    const query = blockQuery.trim().toLowerCase();
+    return (
+      !query ||
+      block.label.toLowerCase().includes(query) ||
+      block.type.toLowerCase().includes(query) ||
+      block.extensionId?.toLowerCase().includes(query)
+    );
+  });
   const styleBlock = selected?.style?.[viewportStyleKey(viewport)] ?? {};
   const layerChildren = useMemo(() => {
     const index = new Map<string | undefined, BuilderCanvasNode[]>();
@@ -906,6 +916,10 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     editorRef.current?.updateSelectedStyle(property, value);
   }
 
+  function resetSelectedStyle(property: string) {
+    editorRef.current?.resetSelectedStyle(property);
+  }
+
   function updateForm(nextForm: FormProps) {
     const parsed = FormPropsSchema.safeParse(nextForm);
     if (parsed.success) {
@@ -1031,83 +1045,107 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             const description = inherited
               ? `Inherited from ${inheritedViewport}`
               : undefined;
+            const hasOverride = viewport !== 'desktop' && value !== '';
+            const resetOverride = hasOverride ? (
+              <button
+                aria-label={`Reset ${option.label} override`}
+                className="button button-small button-ghost builder-reset-override"
+                onClick={() => resetSelectedStyle(option.key)}
+                type="button"
+              >
+                Reset override
+              </button>
+            ) : null;
             if (option.control === 'unit') {
               return (
-                <UnitField
-                  allowAuto={option.allowAuto}
-                  compact
-                  description={description}
-                  key={option.key}
-                  label={option.label}
-                  onValueChange={(nextValue) =>
-                    updateSelectedStyle(option.key, nextValue)
-                  }
-                  value={value}
-                />
+                <div className="builder-inspector-field-stack" key={option.key}>
+                  <UnitField
+                    allowAuto={option.allowAuto}
+                    compact
+                    description={description}
+                    label={option.label}
+                    onValueChange={(nextValue) =>
+                      updateSelectedStyle(option.key, nextValue)
+                    }
+                    value={value}
+                  />
+                  {resetOverride}
+                </div>
               );
             }
             if (option.control === 'spacing') {
               return (
-                <SpacingControl
-                  allowAuto={option.allowAuto}
-                  compact
-                  description={description}
-                  key={option.key}
-                  label={option.label}
-                  onValueChange={(nextValue) =>
-                    updateSelectedStyle(option.key, nextValue)
-                  }
-                  value={value}
-                />
+                <div className="builder-inspector-field-stack" key={option.key}>
+                  <SpacingControl
+                    allowAuto={option.allowAuto}
+                    compact
+                    description={description}
+                    label={option.label}
+                    onValueChange={(nextValue) =>
+                      updateSelectedStyle(option.key, nextValue)
+                    }
+                    value={value}
+                  />
+                  {resetOverride}
+                </div>
               );
             }
             if (option.control === 'color') {
               return (
-                <ColorField
-                  compact
-                  description={description}
-                  key={option.key}
-                  label={option.label}
-                  onValueChange={(nextValue) =>
-                    updateSelectedStyle(option.key, nextValue)
-                  }
-                  value={value}
-                />
+                <div className="builder-inspector-field-stack" key={option.key}>
+                  <ColorField
+                    compact
+                    description={description}
+                    label={option.label}
+                    onValueChange={(nextValue) =>
+                      updateSelectedStyle(option.key, nextValue)
+                    }
+                    value={value}
+                  />
+                  {resetOverride}
+                </div>
               );
             }
             if (option.control === 'segmented') {
               return (
-                <div className="ui-field ui-field-compact" key={option.key}>
-                  <span className="ui-field-label">{option.label}</span>
-                  {description ? (
-                    <p className="ui-field-description">{description}</p>
-                  ) : null}
-                  <SegmentedControl
-                    ariaLabel={option.label}
-                    onValueChange={(nextValue) =>
-                      updateSelectedStyle(option.key, nextValue)
-                    }
-                    options={option.options ?? alignmentOptions}
-                    value={value}
-                  />
+                <div className="builder-inspector-field-stack" key={option.key}>
+                  <div className="ui-field ui-field-compact">
+                    <span className="ui-field-label">{option.label}</span>
+                    {description ? (
+                      <p className="ui-field-description">{description}</p>
+                    ) : null}
+                    <SegmentedControl
+                      ariaLabel={option.label}
+                      onValueChange={(nextValue) =>
+                        updateSelectedStyle(option.key, nextValue)
+                      }
+                      options={option.options ?? alignmentOptions}
+                      value={value}
+                    />
+                  </div>
+                  {resetOverride}
                 </div>
               );
             }
             return (
-              <SelectField
-                compact
-                description={description}
-                key={option.key}
-                label={option.label}
-                onChange={(event) => updateSelectedStyle(option.key, event.target.value)}
-                value={value}
-              >
-                {option.options?.map((choice) => (
-                  <option key={choice.value} value={choice.value}>
-                    {choice.label}
-                  </option>
-                ))}
-              </SelectField>
+              <div className="builder-inspector-field-stack" key={option.key}>
+                <SelectField
+                  compact
+                  description={description}
+                  label={option.label}
+                  onChange={(event) =>
+                    updateSelectedStyle(option.key, event.target.value)
+                  }
+                  value={value}
+                >
+                  {option.options?.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </SelectField>
+                {resetOverride}
+              </div>
             );
           })}
         </div>
@@ -1372,8 +1410,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             <span className="eyebrow">Blocks</span>
             <strong>Add to canvas</strong>
           </div>
+          <label className="builder-block-search">
+            <span className="sr-only">Search components</span>
+            <input
+              aria-label="Search components"
+              onChange={(event) => setBlockQuery(event.target.value)}
+              placeholder="Search components"
+              type="search"
+              value={blockQuery}
+            />
+          </label>
           <div className="builder-block-list">
-            {availableBlockOptions.map((block) => (
+            {visibleBlockOptions.map((block) => (
               <div
                 className="builder-block-row"
                 data-block-type={block.type}
@@ -1413,6 +1461,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               </div>
             ))}
           </div>
+          {visibleBlockOptions.length === 0 ? (
+            <p className="muted small builder-empty-message">No matching components.</p>
+          ) : null}
           <p className="muted small builder-help">
             Blocks map to the supported, versioned PagePayload node set.
           </p>

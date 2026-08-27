@@ -10,6 +10,7 @@ import {
   PageExtensionAttachmentSchema,
   PageResourceSchema,
 } from './extension-platform';
+import { PAGE_COMPONENT_REGISTRY } from './component-registry';
 
 export const apiVersion = 'v1' as const;
 
@@ -742,15 +743,6 @@ export const PageNodeSchema: z.ZodType<PageNode> = z.lazy(() =>
   ]),
 );
 
-const pageNodeTypeToChildren: Record<PageNode['type'], readonly PageNode['type'][]> = {
-  root: ['section', 'container'],
-  section: ['container', 'text', 'image', 'button'],
-  container: ['section', 'text', 'image', 'button'],
-  text: [],
-  image: [],
-  button: [],
-};
-
 export const PagePayloadV1Schema = z
   .object({
     version: z.literal(1),
@@ -821,7 +813,7 @@ export const PagePayloadV1Schema = z
       }
       nodeIds.add(current.node.id);
 
-      const allowedChildren = pageNodeTypeToChildren[current.node.type];
+      const allowedChildren = PAGE_COMPONENT_REGISTRY[current.node.type].allowedChildren;
       current.node.children.forEach((child, index) => {
         if (!allowedChildren.includes(child.type)) {
           context.addIssue({
@@ -1073,19 +1065,6 @@ export const PageNodeV2Schema: z.ZodType<PageNodeV2> = z.lazy(() =>
   ]),
 );
 
-const pageNodeV2TypeToChildren: Record<
-  PageNodeV2['type'],
-  readonly PageNodeV2['type'][]
-> = {
-  root: ['section', 'container'],
-  section: ['container', 'text', 'image', 'button', 'form'],
-  container: ['section', 'text', 'image', 'button', 'form'],
-  text: [],
-  image: [],
-  button: [],
-  form: [],
-};
-
 export const PagePayloadV2Schema = z
   .object({
     version: z.literal(2),
@@ -1141,7 +1120,7 @@ export const PagePayloadV2Schema = z
         });
       }
       nodeIds.add(current.node.id);
-      const allowedChildren = pageNodeV2TypeToChildren[current.node.type];
+      const allowedChildren = PAGE_COMPONENT_REGISTRY[current.node.type].allowedChildren;
       current.node.children.forEach((child, index) => {
         if (!allowedChildren.includes(child.type)) {
           context.addIssue({
@@ -1320,21 +1299,6 @@ export const PageNodeV3Schema: z.ZodType<PageNodeV3> = z.lazy(() =>
   ]),
 );
 
-const pageNodeV3TypeToChildren: Record<
-  PageNodeV3['type'],
-  readonly PageNodeV3['type'][]
-> = {
-  root: ['section', 'container'],
-  section: ['container', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
-  container: ['section', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
-  text: [],
-  image: [],
-  button: [],
-  form: [],
-  countdown: [],
-  extension: [],
-};
-
 export const PagePayloadV3Schema = z
   .object({
     version: z.literal(3),
@@ -1390,7 +1354,7 @@ export const PagePayloadV3Schema = z
         });
       }
       nodeIds.add(current.node.id);
-      const allowedChildren = pageNodeV3TypeToChildren[current.node.type];
+      const allowedChildren = PAGE_COMPONENT_REGISTRY[current.node.type].allowedChildren;
       current.node.children.forEach((child, index) => {
         if (!allowedChildren.includes(child.type)) {
           context.addIssue({
@@ -1448,6 +1412,17 @@ export function createPageDocument(payload: PagePayload): PageDocument {
 
 export function parsePageDocument(input: unknown): PageDocument {
   return PageDocumentSchema.parse(input);
+}
+
+/**
+ * Accepts the current editor envelope and the legacy persisted payload shape.
+ * This is the migration seam for future document schema versions: callers can
+ * normalize before initializing Editor Core without widening PagePayload.
+ */
+export function migratePageDocument(input: unknown): PageDocument {
+  const document = PageDocumentSchema.safeParse(input);
+  if (document.success) return document.data;
+  return createPageDocument(PagePayloadSchema.parse(input));
 }
 
 export const PAGE_PREVIEW_MESSAGE_TYPE = 'payload-landing-page:preview' as const;

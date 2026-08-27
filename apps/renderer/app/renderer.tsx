@@ -285,6 +285,7 @@ function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): React
       aria-label="Unsupported page component"
       data-payload-node-id={node.id}
       data-payload-node-type={node.type}
+      data-payload-render-error="unsupported-component"
       role="note"
     >
       This page component is not supported.
@@ -359,7 +360,11 @@ function renderResponsiveStyles(payload: PagePayload): ReactElement | null {
 
 function RendererFallback(): ReactElement {
   return (
-    <div className="payload-renderer-error" role="alert">
+    <div
+      className="payload-renderer-error"
+      data-payload-render-error="invalid-page-document"
+      role="alert"
+    >
       This page is temporarily unavailable.
     </div>
   );

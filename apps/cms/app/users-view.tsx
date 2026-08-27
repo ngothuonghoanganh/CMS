@@ -17,7 +17,15 @@ import {
 } from 'react';
 
 import { StatusBadge } from './status-badge';
-import { Drawer, Modal, PageHeader, ResourceToolbar } from './ui/surfaces';
+import {
+  DataTable,
+  Drawer,
+  EmptyState,
+  Modal,
+  PageHeader,
+  PaginationControls,
+  ResourceToolbar,
+} from './ui/surfaces';
 
 type UserCreateInput = {
   email: string;
@@ -212,104 +220,82 @@ export function UsersView({
           <span className="pill">{pagination.total}</span>
         </div>
         {users.length === 0 ? (
-          <div className="empty-state">
-            <strong>No users found</strong>
-            <span className="muted">
-              Try another search or use Create user to add the first team user.
-            </span>
-          </div>
+          <EmptyState
+            description="Try another search or use Create user to add the first team user."
+            title="No users found"
+          />
         ) : (
-          <div className="table-shell users-table-shell">
-            <table className="data-table users-table">
-              <caption className="sr-only">Tenant users and access</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Tenant access</th>
-                  <th scope="col">Workspace access</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr
-                    className={selectedUserId === user.id ? 'selected' : undefined}
-                    key={user.id}
-                  >
-                    <td>
+          <DataTable className="users-table">
+            <caption className="sr-only">Tenant users and access</caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Status</th>
+                <th scope="col">Tenant access</th>
+                <th scope="col">Workspace access</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr
+                  className={selectedUserId === user.id ? 'selected' : undefined}
+                  key={user.id}
+                >
+                  <td>
+                    <button
+                      className="user-table-primary"
+                      onClick={() => void selectUser(user.id)}
+                      type="button"
+                    >
+                      <strong>{user.displayName || user.email}</strong>
+                      <span className="table-secondary">{user.email}</span>
+                    </button>
+                  </td>
+                  <td>
+                    <StatusBadge status={user.status} />
+                  </td>
+                  <td>
+                    <span className="table-secondary user-role-summary">
+                      {user.tenantRoleKeys.length > 0
+                        ? user.tenantRoleKeys.join(', ')
+                        : 'No tenant role'}
+                    </span>
+                  </td>
+                  <td>{user.workspaceAccessCount} workspace(s)</td>
+                  <td>
+                    <div className="user-table-actions">
                       <button
-                        className="user-table-primary"
+                        className="button button-small button-ghost"
                         onClick={() => void selectUser(user.id)}
                         type="button"
                       >
-                        <strong>{user.displayName || user.email}</strong>
-                        <span className="table-secondary">{user.email}</span>
+                        View details
                       </button>
-                    </td>
-                    <td>
-                      <StatusBadge status={user.status} />
-                    </td>
-                    <td>
-                      <span className="table-secondary user-role-summary">
-                        {user.tenantRoleKeys.length > 0
-                          ? user.tenantRoleKeys.join(', ')
-                          : 'No tenant role'}
-                      </span>
-                    </td>
-                    <td>{user.workspaceAccessCount} workspace(s)</td>
-                    <td>
-                      <div className="user-table-actions">
+                      {canUpdate ? (
                         <button
-                          className="button button-small button-ghost"
-                          onClick={() => void selectUser(user.id)}
+                          className="button button-small button-secondary"
+                          onClick={() => void selectUser(user.id, 'edit')}
                           type="button"
                         >
-                          View details
+                          Edit
                         </button>
-                        {canUpdate ? (
-                          <button
-                            className="button button-small button-secondary"
-                            onClick={() => void selectUser(user.id, 'edit')}
-                            type="button"
-                          >
-                            Edit
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
         )}
-        <div className="row-actions user-pagination">
-          <button
-            className="button button-small button-ghost"
-            disabled={busy || pagination.offset === 0}
-            onClick={() => onPage(Math.max(0, pagination.offset - pagination.limit))}
-            type="button"
-          >
-            Previous
-          </button>
-          <span className="muted small">
-            {pagination.total === 0
-              ? '0 users'
-              : `${pagination.offset + 1}–${Math.min(
-                  pagination.offset + users.length,
-                  pagination.total,
-                )} of ${pagination.total}`}
-          </span>
-          <button
-            className="button button-small button-ghost"
-            disabled={busy || !pagination.hasNextPage}
-            onClick={() => onPage(pagination.offset + pagination.limit)}
-            type="button"
-          >
-            Next
-          </button>
-        </div>
+        <PaginationControls
+          busy={busy}
+          className="user-pagination"
+          noun="users"
+          onNext={() => onPage(pagination.offset + pagination.limit)}
+          onPrevious={() => onPage(Math.max(0, pagination.offset - pagination.limit))}
+          pagination={pagination}
+        />
       </section>
       {detail ? (
         <Drawer

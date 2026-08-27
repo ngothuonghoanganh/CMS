@@ -1199,6 +1199,26 @@ textarea {
   border-radius: 0.75rem;
   padding: 1.25rem;
 }
+.empty-state-action {
+  margin-top: 0.45rem;
+}
+.empty-state-error {
+  border-color: #713b50;
+  color: var(--color-danger);
+}
+.ui-loading-state {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 4rem;
+  color: var(--color-muted);
+}
+.ui-loading-indicator {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
 .toolbar {
   display: flex;
   justify-content: flex-end;
@@ -1500,6 +1520,19 @@ textarea {
 .builder-block-list {
   display: grid;
   gap: 0.5rem;
+}
+.builder-block-search {
+  display: block;
+  margin-bottom: 0.65rem;
+}
+.builder-block-search input {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.78rem;
+}
+.builder-empty-message {
+  margin: 0.7rem 0 0;
 }
 .builder-block-row {
   display: flex;
@@ -2044,6 +2077,12 @@ textarea {
 .builder-inspector-field-stack {
   display: grid;
   gap: 0.75rem;
+}
+.builder-reset-override {
+  justify-self: start;
+  padding: 0.25rem 0.45rem;
+  color: var(--color-warning);
+  font-size: 0.68rem;
 }
 .ui-field {
   display: grid;

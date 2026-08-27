@@ -3,7 +3,10 @@ import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-dotenv.config({ path: resolve(__dirname, '../../../.env') });
+// Load the repository-level environment file in both tsx development and the
+// compiled dist layout. The package working directory is apps/api, so the
+// second dotenv call below only covers an optional package-local .env file.
+dotenv.config({ path: resolve(__dirname, '../../../../.env') });
 dotenv.config();
 
 const environmentSchema = z
@@ -56,7 +59,7 @@ const environmentSchema = z
     DOMAIN_VERIFICATION_PREFIX: z
       .string()
       .trim()
-      .regex(/^[a-z0-9-]+$/i)
+      .regex(/^[a-z0-9_-]+$/i)
       .default('_payload-verification'),
     DOMAIN_VERIFICATION_PROVIDER: z.enum(['dns', 'fake']).default('dns'),
     PUBLIC_PLATFORM_ORIGIN: z.string().url().default('http://127.0.0.1:3002'),
@@ -72,16 +75,25 @@ const environmentSchema = z
     INTEGRATION_ALLOW_HTTP_WEBHOOKS: z.coerce.boolean().default(false),
     INTEGRATION_ALLOW_LOCAL_WEBHOOKS: z.coerce.boolean().default(false),
     INTEGRATION_EMAIL_PROVIDER: z.enum(['fake', 'resend']).default('fake'),
-    INTEGRATION_SECRET_ENCRYPTION_KEY: z.string().min(32).optional(),
-    RESEND_API_KEY: z.string().min(1).optional(),
-    EMAIL_FROM: z.string().email().optional(),
+    INTEGRATION_SECRET_ENCRYPTION_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().min(32).optional(),
+    ),
+    RESEND_API_KEY: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().min(1).optional(),
+    ),
+    EMAIL_FROM: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.string().email().optional(),
+    ),
     MONGODB_URI: z
       .string()
       .refine(
         (value) => value.startsWith('mongodb://') || value.startsWith('mongodb+srv://'),
         'MONGODB_URI must be a MongoDB connection string',
       )
-      .default('mongodb://127.0.0.1:27017/payload_landing_platform'),
+      .default('mongodb://127.0.0.1:27018/payload_landing_platform'),
     MONGODB_MASTER_DATABASE_NAME: z
       .string()
       .trim()

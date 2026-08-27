@@ -91,6 +91,7 @@ export type GrapesEditorHandle = {
   ) => void;
   updateSelectedAlign: (value: SelectedBuilderNode['align']) => void;
   updateSelectedStyle: (property: string, value: string) => void;
+  resetSelectedStyle: (property: string) => void;
   updateSelectedForm: (form: FormProps) => void;
   updateSelectedCountdown: (props: { targetAt: string; label: string }) => void;
   selectAsset: (src: string) => void;
@@ -1280,6 +1281,23 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           nodeId: payloadNodeId(selected) ?? '',
           property,
           value,
+          viewport: viewportRef.current,
+        });
+        queueMicrotask(() => {
+          internalChangeRef.current = false;
+        });
+      },
+      resetSelectedStyle(property) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const selected = getSelectedComponent(editor);
+        if (!selected) return;
+        internalChangeRef.current = true;
+        commitEditorCommand(editor, {
+          kind: 'set-responsive-style',
+          nodeId: payloadNodeId(selected) ?? '',
+          property,
+          value: '',
           viewport: viewportRef.current,
         });
         queueMicrotask(() => {

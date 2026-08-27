@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type SurfaceSize = 'sm' | 'md' | 'lg' | 'fullscreen';
 
@@ -209,6 +209,117 @@ export function Drawer({
         {footer ? <footer className="ui-surface-footer">{footer}</footer> : null}
       </aside>
     </div>
+  );
+}
+
+export function DataTable({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string | undefined;
+}) {
+  return (
+    <div className="table-shell">
+      <table className={`data-table${className ? ` ${className}` : ''}`}>
+        {children}
+      </table>
+    </div>
+  );
+}
+
+export function EmptyState({
+  action,
+  description,
+  title,
+}: {
+  action?: ReactNode;
+  description: string;
+  title: string;
+}) {
+  return (
+    <div className="empty-state" role="status">
+      <strong>{title}</strong>
+      <span className="muted">{description}</span>
+      {action ? <div className="empty-state-action">{action}</div> : null}
+    </div>
+  );
+}
+
+export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <div aria-busy="true" className="ui-loading-state" role="status">
+      <span className="skeleton ui-loading-indicator" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+export function ErrorState({
+  action,
+  message,
+  title = 'Something went wrong',
+}: {
+  action?: ReactNode;
+  message: string;
+  title?: string;
+}) {
+  return (
+    <div className="empty-state empty-state-error" role="alert">
+      <strong>{title}</strong>
+      <span>{message}</span>
+      {action ? <div className="empty-state-action">{action}</div> : null}
+    </div>
+  );
+}
+
+export function PaginationControls({
+  busy = false,
+  className,
+  noun = 'items',
+  onNext,
+  onPrevious,
+  pagination,
+}: {
+  busy?: boolean;
+  className?: string | undefined;
+  noun?: string;
+  onNext: () => void;
+  onPrevious: () => void;
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
+    hasNextPage: boolean;
+  };
+}) {
+  const first = pagination.total ? pagination.offset + 1 : 0;
+  const last = Math.min(pagination.offset + pagination.limit, pagination.total);
+  return (
+    <nav
+      aria-label={`${noun} pagination`}
+      className={`form-actions pagination-actions${className ? ` ${className}` : ''}`}
+    >
+      <button
+        className="button button-small button-ghost"
+        disabled={busy || pagination.offset === 0}
+        onClick={onPrevious}
+        type="button"
+      >
+        Previous
+      </button>
+      <span aria-live="polite" className="muted small">
+        {first}–{last} of {pagination.total} {noun}
+      </span>
+      <button
+        className="button button-small button-ghost"
+        disabled={busy || !pagination.hasNextPage}
+        onClick={onNext}
+        type="button"
+      >
+        Next
+      </button>
+    </nav>
   );
 }
 

@@ -37,6 +37,7 @@ import {
   PagePreviewMessageSchema,
   canContainPageComponent,
   createPageDocument,
+  migratePageDocument,
   isPageComponentType,
 } from './index';
 
@@ -238,6 +239,8 @@ describe('foundation contracts', () => {
 
     expect(document).toEqual({ schemaVersion: 1, payload });
     expect(PageDocumentSchema.parse(document)).toEqual(document);
+    expect(migratePageDocument(payload)).toEqual(document);
+    expect(migratePageDocument(document)).toEqual(document);
   });
 
   it('validates live preview messages as versioned PageDocument snapshots', () => {
@@ -275,6 +278,26 @@ describe('foundation contracts', () => {
     expect(canContainPageComponent('section', 'extension')).toBe(true);
     expect(canContainPageComponent('text', 'section')).toBe(false);
     expect(isPageComponentType('toString')).toBe(false);
+  });
+
+  it('keeps every registry relationship resolvable without duplicated type maps', () => {
+    for (const [type, definition] of Object.entries(PAGE_COMPONENT_REGISTRY)) {
+      expect(definition.type).toBe(type);
+      expect(definition.version).toBeGreaterThan(0);
+      expect(definition.defaultProps).toBeDefined();
+      for (const parent of definition.allowedParents) {
+        expect(isPageComponentType(parent)).toBe(true);
+      }
+      for (const child of definition.allowedChildren) {
+        expect(isPageComponentType(child)).toBe(true);
+      }
+      for (const slot of definition.slots) {
+        expect(slot.name).toBeTruthy();
+        expect(slot.accepts).toEqual(
+          expect.arrayContaining([...definition.allowedChildren]),
+        );
+      }
+    }
   });
 
   it('rejects the removed props.kind discriminator and duplicate ids', () => {

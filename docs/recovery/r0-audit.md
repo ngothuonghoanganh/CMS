@@ -693,8 +693,9 @@ The source is ahead of several historical documents:
 - UX docs describe a focus-contained overlay; `surfaces.tsx` now implements that
   behavior, with broader nested/empty-surface coverage still recommended.
 - The recovery context describes a canonical PageDocument and schema-driven inspector
-  as goals. The source currently has an adapter plus local inspector metadata, not
-  those target abstractions.
+  as goals. The source now has the Model-A adapter envelope and shared registry-backed
+  inspector metadata; standalone Editor Core and historical document migrations remain
+  intentionally incremental.
 
 These should be corrected incrementally alongside the corresponding code changes;
 historical phase records should remain historical rather than being rewritten as if
@@ -716,7 +717,10 @@ recovery work listed below:
 - add the Model-A PageDocument envelope, shared component registry and editor command
   layer;
 - add schema-driven builder inspector fields, layer search, responsive inheritance
-  hints, keyboard layer navigation and live preview postMessage transport;
+  hints, reset, keyboard layer navigation and live preview postMessage transport;
+- add shared `DataTable`, `PaginationControls`, `EmptyState`, `LoadingState` and
+  `ErrorState` primitives, and migrate Audit and Users views to them;
+- add registry-iterated renderer compatibility coverage and stable fallback markers;
 - add server-side compare-and-set draft pointer advancement with conflict normalization.
 
 The context-pack documents that failed the initial formatting gate were normalized as
@@ -727,6 +731,6 @@ editing, keyboard layer navigation, draft conflicts and the live-preview postMes
 stream.
 
 The recovery remains incremental and preserves existing payload versions. Remaining
-follow-ups are concurrent CAS/injected-failure coverage, dashboard decomposition and
-broader table/empty-state consolidation; no speculative
+follow-ups are concurrent CAS/injected-failure coverage, dashboard decomposition,
+resource-wide state migration and visual regression baselines; no speculative
 payload schema rewrite was introduced.

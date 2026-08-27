@@ -911,6 +911,10 @@ test('rejects a circular Canvas move into a descendant', async ({ page }) => {
 
 test('edits responsive styles and changes the real canvas viewport', async ({ page }) => {
   await openBuilder(page, 'Responsive Builder');
+  await page.getByLabel('Search components').fill('text');
+  await expect(page.getByRole('button', { name: 'Text add' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Section add' })).toHaveCount(0);
+  await page.getByLabel('Search components').fill('');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Width', { exact: true }).fill('320');
@@ -925,6 +929,9 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
   await expect.poll(canvasWidth).toBeLessThan(desktopWidth);
   const tabletWidth = await canvasWidth();
   expect(tabletWidth).toBeLessThan(desktopWidth);
+  await page.getByLabel('Width', { exact: true }).fill('280');
+  await page.getByRole('button', { name: 'Reset Width override' }).click();
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('');
   await page.getByLabel('Width', { exact: true }).fill('280');
 
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();

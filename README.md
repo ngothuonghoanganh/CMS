@@ -41,6 +41,9 @@ Start MongoDB:
 docker compose up -d mongodb
 ```
 
+The bundled MongoDB is exposed on host port `27018` so it does not collide with
+other local MongoDB projects. Keep `MONGODB_URI` in `.env` aligned with that port.
+
 Run all applications:
 
 ```bash

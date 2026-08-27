@@ -3,7 +3,8 @@ services:
     image: mongo:8.0
     restart: unless-stopped
     ports:
-      - '27017:27017'
+      # Keep the host port isolated from other local MongoDB projects.
+      - '27018:27017'
     environment:
       MONGO_INITDB_DATABASE: payload_landing_platform
     volumes:

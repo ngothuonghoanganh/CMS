@@ -3,6 +3,7 @@
 import type { AuditLog } from '@payload/contracts';
 
 import { StatusBadge } from './status-badge';
+import { DataTable, EmptyState, PaginationControls } from './ui/surfaces';
 
 export function AuditView({
   auditLogs,
@@ -80,57 +81,36 @@ export function AuditView({
       </section>
       <section className="panel">
         {auditLogs.length ? (
-          <div className="table-shell">
-            <table className="data-table audit-table">
-              <caption className="sr-only">Security and administration events</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Time</th>
-                  <th scope="col">Actor</th>
-                  <th scope="col">Action</th>
-                  <th scope="col">Workspace</th>
-                  <th scope="col">Resource</th>
-                  <th scope="col">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditLogs.map((entry) => (
-                  <AuditRow entry={entry} key={entry.id} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable className="audit-table">
+            <caption className="sr-only">Security and administration events</caption>
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Action</th>
+                <th scope="col">Workspace</th>
+                <th scope="col">Resource</th>
+                <th scope="col">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditLogs.map((entry) => (
+                <AuditRow entry={entry} key={entry.id} />
+              ))}
+            </tbody>
+          </DataTable>
         ) : (
-          <div className="empty-state">
-            <strong>No audit events yet</strong>
-            <span className="muted">
-              Security events will appear here as workspace activity occurs.
-            </span>
-          </div>
+          <EmptyState
+            description="Security events will appear here as workspace activity occurs."
+            title="No audit events yet"
+          />
         )}
-        <div className="form-actions pagination-actions">
-          <button
-            className="button button-ghost"
-            disabled={pagination.offset === 0}
-            onClick={onPrevious}
-            type="button"
-          >
-            Previous
-          </button>
-          <span className="muted small" aria-live="polite">
-            {pagination.total ? pagination.offset + 1 : 0}–
-            {Math.min(pagination.offset + pagination.limit, pagination.total)} of{' '}
-            {pagination.total}
-          </span>
-          <button
-            className="button button-ghost"
-            disabled={!pagination.hasNextPage}
-            onClick={onNext}
-            type="button"
-          >
-            Next
-          </button>
-        </div>
+        <PaginationControls
+          noun="events"
+          onNext={onNext}
+          onPrevious={onPrevious}
+          pagination={pagination}
+        />
       </section>
     </>
   );

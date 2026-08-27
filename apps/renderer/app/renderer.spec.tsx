@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { PagePayloadV1 } from '@payload/contracts';
+import {
+  PAGE_COMPONENT_REGISTRY,
+  PagePayloadV3Schema,
+  type PagePayloadV1,
+} from '@payload/contracts';
 
 import { renderPage } from './renderer';
 
@@ -217,6 +221,85 @@ describe('PagePayloadV1 renderer', () => {
     );
     expect(runtimeMarkup).toContain('data-extension="demo-builder-countdown"');
     expect(runtimeMarkup).toContain('data-extension-runtime="countdown.runtime"');
+  });
+
+  it('keeps every registered component type renderable', () => {
+    const payload = PagePayloadV3Schema.parse({
+      version: 3,
+      metadata: { documentTitle: 'Registry coverage' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'components',
+            type: 'section',
+            props: {},
+            children: [
+              { id: 'container', type: 'container', props: {}, children: [] },
+              {
+                id: 'text',
+                type: 'text',
+                props: { text: 'Registry text' },
+                children: [],
+              },
+              {
+                id: 'image',
+                type: 'image',
+                props: { src: '/assets/registry.png', alt: 'Registry image' },
+                children: [],
+              },
+              {
+                id: 'button',
+                type: 'button',
+                props: { label: 'Registry button', href: '#top', target: '_self' },
+                children: [],
+              },
+              {
+                id: 'form',
+                type: 'form',
+                props: {
+                  fields: [
+                    {
+                      id: 'email',
+                      type: 'email',
+                      label: 'Email',
+                      name: 'email',
+                      required: true,
+                    },
+                  ],
+                  submitLabel: 'Send',
+                  successMessage: 'Thanks',
+                },
+                children: [],
+              },
+              {
+                id: 'countdown',
+                type: 'countdown',
+                props: {
+                  label: 'Registry countdown',
+                  targetAt: '2030-01-01T00:00:00.000Z',
+                },
+                children: [],
+              },
+              {
+                id: 'extension',
+                type: 'extension',
+                props: { extensionId: 'custom-registry', values: {} },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const markup = renderToStaticMarkup(renderPage(payload));
+    for (const type of Object.keys(PAGE_COMPONENT_REGISTRY)) {
+      expect(markup).toContain(`data-payload-node-type="${type}"`);
+    }
+    expect(markup).not.toContain('This page component is not supported.');
   });
 
   it('renders a tenant custom extension from its declarative runtime definition', () => {

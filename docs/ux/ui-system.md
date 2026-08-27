@@ -3,14 +3,17 @@
 ## Scope
 
 This is a small, CSS-backed system for the current Next.js CMS. It does not add
-a component framework, change API contracts, add a PagePayload field, or make
-the Builder schema-driven. Native controls remain the semantic foundation.
+a component framework, change API contracts or add a PagePayload field. Native
+controls remain the semantic foundation, while the Builder inspector is driven
+by the shared component property registry.
 
 The source lives in `apps/cms/app/ui`:
 
 - `fields.tsx` owns reusable field and inspector controls.
 - `field-utils.ts` owns parsing, formatting and validation that can be unit
   tested without a browser.
+- `surfaces.tsx` owns shared overlays, data tables, pagination and resource
+  loading/empty/error states.
 - `system.css` owns the compact/default control scale and field layout.
 
 Import only the control that matches the domain value; do not recreate a new
@@ -92,11 +95,14 @@ closure plus list refresh, not all three.
 
 ## Tables, navigation, overlays, and responsive ownership
 
-- Use the existing `table-shell`/`data-table` surface. Wide datasets scroll
-  inside that surface, never on the page body. Add sorting, filtering or paging
-  only when the backing endpoint implements it.
+- Use `DataTable` from `ui/surfaces.tsx`, which provides the existing
+  `table-shell`/`data-table` surface. Wide datasets scroll inside that surface,
+  never on the page body. Use `PaginationControls` for server-backed paging and
+  add sorting or filtering only when the backing endpoint implements it.
 - Empty states name the empty resource and the permitted next action. Loading is
-  local to the affected surface; do not blank the entire CMS for a row mutation.
+  local to the affected surface; use `EmptyState`, `LoadingState` and
+  `ErrorState` for consistent semantics. Do not blank the entire CMS for a row
+  mutation.
 - Company remains read-only in the header. Workspace remains the only context
   switcher. The permission-aware sidebar remains compact on desktop and is an
   off-canvas, focus-contained overlay at tablet/mobile widths.
