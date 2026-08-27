@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -172,6 +173,7 @@ export class PageService {
         page,
         this.parsePayload(parsedInput.payload),
         latestVersion?.versionNumber,
+        latestVersion?._id.toString(),
       );
     }
     await page.save();
@@ -213,6 +215,7 @@ export class PageService {
       page,
       this.parsePayload(parsedInput.payload),
       latestVersion?.versionNumber,
+      latestVersion?._id.toString(),
     );
   }
 
@@ -350,18 +353,50 @@ export class PageService {
     page: LandingPageDocument,
     payload: PagePayload,
     currentVersionNumber: number | undefined,
+    expectedDraftVersionId: string | undefined,
   ): Promise<PageVersion> {
     const versionNumber = nextVersionNumber(currentVersionNumber);
-    const record = await this.versionModel.create({
-      _id: randomUUID(),
-      workspaceId: page.workspaceId,
-      siteId: page.siteId,
-      landingPageId: page._id.toString(),
-      versionNumber,
-      payload,
-    });
+    let record: PageVersionDocument;
+    try {
+      record = await this.versionModel.create({
+        _id: randomUUID(),
+        workspaceId: page.workspaceId,
+        siteId: page.siteId,
+        landingPageId: page._id.toString(),
+        versionNumber,
+        payload,
+      });
+    } catch (caughtError) {
+      if (isDuplicateKeyError(caughtError)) {
+        throw new ConflictException({
+          code: 'PAGE_VERSION_CONFLICT',
+          message: 'The page draft changed while this version was being created',
+        });
+      }
+      throw caughtError;
+    }
+    const currentDraftFilter = expectedDraftVersionId
+      ? { currentDraftVersionId: expectedDraftVersionId }
+      : { currentDraftVersionId: { $exists: false } };
+    const advancedPage = await this.pageModel
+      .findOneAndUpdate(
+        {
+          _id: page._id.toString(),
+          workspaceId: page.workspaceId,
+          ...currentDraftFilter,
+        },
+        { $set: { currentDraftVersionId: record._id.toString() } },
+        { new: true },
+      )
+      .exec();
+    if (!advancedPage) {
+      await record.deleteOne().catch(() => undefined);
+      throw new ConflictException({
+        code: 'PAGE_VERSION_CONFLICT',
+        message: 'The page draft changed while this version was being created',
+      });
+    }
     page.currentDraftVersionId = record._id.toString();
-    await page.save();
     await this.pageExtensions.synchronizePayload(
       page._id.toString(),
       page.workspaceId,
@@ -531,4 +566,13 @@ export class PageService {
       message: 'The published page data is invalid',
     });
   }
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 11000
+  );
 }

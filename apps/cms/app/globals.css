@@ -1662,6 +1662,15 @@ textarea {
   overflow: auto;
   padding: 0.15rem 0.35rem;
 }
+.builder-layer-search {
+  display: block;
+  margin-bottom: 0.65rem;
+}
+.builder-layer-search input {
+  min-height: 2.25rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.78rem;
+}
 .builder-layer-node {
   display: grid;
   gap: 0.1rem;
@@ -2031,6 +2040,120 @@ textarea {
 .builder-inspector-fields {
   display: grid;
   gap: 0.75rem;
+}
+.builder-inspector-field-stack {
+  display: grid;
+  gap: 0.75rem;
+}
+.ui-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.ui-field-label {
+  color: #dce5fb;
+  font-size: 0.78rem;
+}
+.ui-field-description {
+  margin: 0;
+  color: #8c98b3;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+.ui-field-error {
+  margin: 0;
+  color: #ffc1ce;
+  font-size: 0.7rem;
+}
+.ui-control {
+  min-width: 0;
+}
+.ui-number-control,
+.ui-unit-control,
+.ui-color-control,
+.ui-spacing-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.ui-number-input,
+.ui-color-value,
+.ui-spacing-control input {
+  min-width: 0;
+}
+.ui-number-step,
+.ui-control-action {
+  flex: 0 0 auto;
+  border: 1px solid #334363;
+  border-radius: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  color: #cbd6ee;
+  background: #182842;
+  cursor: pointer;
+}
+.ui-number-step:hover,
+.ui-control-action:hover {
+  border-color: #8cf0c5;
+  color: #07121a;
+  background: #8cf0c5;
+}
+.ui-number-step:disabled,
+.ui-control-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.ui-unit-control .ui-number-control {
+  flex: 1 1 auto;
+}
+.ui-unit-select {
+  width: 4.25rem;
+  flex: 0 0 auto;
+}
+.ui-color-swatch {
+  width: 2.35rem;
+  min-height: 2.35rem;
+  padding: 0.2rem;
+}
+.ui-color-value {
+  flex: 1 1 auto;
+}
+.ui-segmented-control {
+  display: flex;
+  gap: 0.25rem;
+  border: 1px solid #334363;
+  border-radius: 0.55rem;
+  padding: 0.2rem;
+  background: #0d1426;
+}
+.ui-segmented-control button {
+  flex: 1 1 0;
+  border: 1px solid transparent;
+  border-radius: 0.38rem;
+  padding: 0.42rem 0.35rem;
+  color: #a9b7d4;
+  background: transparent;
+  font-size: 0.68rem;
+}
+.ui-segmented-control button:hover,
+.ui-segmented-control button.is-selected {
+  border-color: #8cf0c5;
+  color: #07121a;
+  background: #8cf0c5;
+}
+.ui-spacing-control {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.ui-spacing-control > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.ui-spacing-control label {
+  color: #8c98b3;
+  font-size: 0.62rem;
+  text-align: center;
 }
 .builder-inspector-fields label,
 .builder-property-control {

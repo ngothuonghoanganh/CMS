@@ -19,6 +19,22 @@ type OverlayProps = SurfaceHeaderProps & {
   size?: SurfaceSize | undefined;
 };
 
+const focusableSelector = [
+  'a[href]:not([aria-hidden="true"])',
+  'button:not([disabled]):not([aria-hidden="true"])',
+  'input:not([disabled]):not([type="hidden"]):not([aria-hidden="true"])',
+  'select:not([disabled]):not([aria-hidden="true"])',
+  'textarea:not([disabled]):not([aria-hidden="true"])',
+  '[tabindex]:not([tabindex="-1"]):not([aria-hidden="true"])',
+  '[contenteditable="true"]:not([aria-hidden="true"])',
+].join(', ');
+
+function getFocusableElements(surface: HTMLElement): HTMLElement[] {
+  return Array.from(surface.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+    (element) => !element.hidden,
+  );
+}
+
 function useOverlay(open: boolean, onClose: () => void) {
   const [mounted, setMounted] = useState(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -40,6 +56,27 @@ function useOverlay(open: boolean, onClose: () => void) {
     document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCloseRef.current();
+      if (event.key !== 'Tab') return;
+
+      const surface = surfaceRef.current;
+      if (!surface) return;
+      const focusable = getFocusableElements(surface);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      const active = document.activeElement as HTMLElement | null;
+      const activeIndex = active ? focusable.indexOf(active) : -1;
+      if (activeIndex === -1) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && activeIndex === 0) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeIndex === focusable.length - 1) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -51,10 +88,9 @@ function useOverlay(open: boolean, onClose: () => void) {
 
   useEffect(() => {
     if (!mounted || !open) return;
-    const firstFocusable =
-      surfaceRef.current?.querySelector<HTMLElement>(
-        'input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
-      ) ?? surfaceRef.current?.querySelector<HTMLElement>('button:not([disabled])');
+    const firstFocusable = surfaceRef.current
+      ? getFocusableElements(surfaceRef.current)[0]
+      : undefined;
     firstFocusable?.focus();
   }, [mounted, open]);
 

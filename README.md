@@ -71,7 +71,10 @@ The development servers are:
 
 Published pages resolve at `http://localhost:3002/:siteSlug/:pageSlug`. The renderer
 uses `RENDERER_API_BASE_URL` for server-side public/preview reads, and the CMS preview
-button uses `NEXT_PUBLIC_RENDERER_BASE_URL`.
+button uses `NEXT_PUBLIC_RENDERER_BASE_URL`. The builder's Live preview keeps the
+renderer open and sends validated `PageDocument` snapshots over `postMessage`; set
+`NEXT_PUBLIC_CMS_BASE_URL` to the exact CMS origin outside local development so the
+preview bridge can enforce its trusted sender.
 
 The API readiness endpoint is http://localhost:3001/api/v1/health/ready and reports
 the MongoDB connection state.

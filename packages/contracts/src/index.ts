@@ -1424,6 +1424,49 @@ export const PagePayloadSchema = z.discriminatedUnion('version', [
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
 
+/**
+ * Editor-facing document envelope. The persisted/public payload remains the
+ * versioned PagePayload union for backward compatibility; this explicit
+ * envelope gives Editor Core a stable document identity without duplicating
+ * the editable tree or introducing a second storage format.
+ */
+export const PAGE_DOCUMENT_SCHEMA_VERSION = 1 as const;
+export const PageDocumentSchema = z
+  .object({
+    schemaVersion: z.literal(PAGE_DOCUMENT_SCHEMA_VERSION),
+    payload: PagePayloadSchema,
+  })
+  .strict();
+export type PageDocument = z.infer<typeof PageDocumentSchema>;
+
+export function createPageDocument(payload: PagePayload): PageDocument {
+  return PageDocumentSchema.parse({
+    schemaVersion: PAGE_DOCUMENT_SCHEMA_VERSION,
+    payload,
+  });
+}
+
+export function parsePageDocument(input: unknown): PageDocument {
+  return PageDocumentSchema.parse(input);
+}
+
+export const PAGE_PREVIEW_MESSAGE_TYPE = 'payload-landing-page:preview' as const;
+export const PAGE_PREVIEW_READY_MESSAGE_TYPE =
+  'payload-landing-page:preview-ready' as const;
+export const PagePreviewMessageSchema = z
+  .object({
+    type: z.literal(PAGE_PREVIEW_MESSAGE_TYPE),
+    document: PageDocumentSchema,
+  })
+  .strict();
+export type PagePreviewMessage = z.infer<typeof PagePreviewMessageSchema>;
+
+export const PagePreviewReadyMessageSchema = z
+  .object({ type: z.literal(PAGE_PREVIEW_READY_MESSAGE_TYPE) })
+  .strict();
+
+export * from './component-registry';
+
 export const PageCompositionSchema = z
   .object({
     pageId: EntityIdSchema,

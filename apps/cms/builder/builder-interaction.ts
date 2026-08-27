@@ -5,8 +5,11 @@ import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   canContainNode,
+  isBuilderNodeType,
   type BuilderNodeType,
 } from './builder-adapter';
+
+export { isBuilderNodeType } from './builder-adapter';
 
 export type DropPosition = 'before' | 'inside' | 'after';
 
@@ -30,19 +33,6 @@ export function payloadNodeType(component: Component): BuilderNodeType | undefin
 export function payloadNodeId(component: Component): string | undefined {
   const id = component.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
   return typeof id === 'string' ? id : undefined;
-}
-
-export function isBuilderNodeType(value: unknown): value is BuilderNodeType {
-  return (
-    value === 'root' ||
-    value === 'section' ||
-    value === 'container' ||
-    value === 'text' ||
-    value === 'image' ||
-    value === 'button' ||
-    value === 'form' ||
-    value === 'countdown'
-  );
 }
 
 export function isEditorOnlyPreview(component: Component): boolean {

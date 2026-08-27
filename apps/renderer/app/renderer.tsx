@@ -1,4 +1,5 @@
 import {
+  PAGE_COMPONENT_REGISTRY,
   PagePayloadSchema,
   type ContainerNode,
   type ImageNode,
@@ -295,8 +296,9 @@ export function renderNode(
   node: RenderableNode,
   context: RenderContext = {},
 ): ReactElement {
+  const definition = PAGE_COMPONENT_REGISTRY[node.type];
   const Renderer = rendererRegistry[node.type];
-  return Renderer ? Renderer(node, context) : renderUnsupportedNode(node);
+  return Renderer && definition ? Renderer(node, context) : renderUnsupportedNode(node);
 }
 
 type ResponsiveRule = {

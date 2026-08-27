@@ -190,6 +190,21 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View details', exact: true }).first().click();
   await expect(page.getByText('User details', { exact: true })).toBeVisible();
+  const userDetailsDialog = page.getByRole('dialog');
+  const editDetailsButton = userDetailsDialog.getByRole('button', {
+    name: 'Edit',
+    exact: true,
+  });
+  const lastDetailsButton = userDetailsDialog.getByRole('button', {
+    name: 'Assign role',
+    exact: true,
+  });
+  await lastDetailsButton.focus();
+  await page.keyboard.press('Tab');
+  await expect(editDetailsButton).toBeFocused();
+  await editDetailsButton.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(lastDetailsButton).toBeFocused();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Edit', exact: true })
@@ -932,6 +947,23 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
   await expect(page.getByLabel('Width', { exact: true })).toHaveValue('240');
 });
 
+test('streams unsaved builder changes to the live preview window', async ({ page }) => {
+  await openBuilder(page, 'Live Preview Builder');
+  await page.getByRole('button', { name: 'Text add' }).click();
+
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Live preview' }).click();
+  const preview = await popupPromise;
+  await preview.waitForLoadState('domcontentloaded');
+  await expect(preview.getByText('Edit this text')).toBeVisible({ timeout: 15_000 });
+
+  await page.getByLabel('Text content').fill('Unsaved preview content');
+  await expect(preview.getByText('Unsaved preview content')).toBeVisible({
+    timeout: 5_000,
+  });
+  await preview.close();
+});
+
 test('applies multiple inspector properties immediately and persists them after reload', async ({
   page,
 }) => {
@@ -1218,4 +1250,51 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
     .not.toBe(viewportBeforeScroll);
 
   await page.getByRole('button', { name: 'Fit page in canvas' }).click();
+});
+
+test('navigates the Layers tree with keyboard and keeps Canvas selection in sync', async ({
+  page,
+}) => {
+  await openBuilder(page, 'Keyboard Layers Builder');
+
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: /^Text/ }).click();
+
+  const root = page.getByRole('treeitem', { name: 'Select Page' });
+  const section = page.getByRole('treeitem', { name: /^Select Section/ });
+  const text = page.getByRole('treeitem', { name: /^Select Text/ });
+  await expect(root).toHaveAttribute('aria-level', '1');
+  await expect(section).toHaveAttribute('aria-level', '2');
+  await expect(text).toHaveAttribute('aria-level', '3');
+
+  await root.focus();
+  await root.press('ArrowDown');
+  await expect(section).toBeFocused();
+  await expect(section).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.builder-layer-button.selected')).toContainText('Section');
+
+  await section.press('ArrowRight');
+  await expect(text).toBeFocused();
+  await expect(text).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.locator('.builder-properties-panel .builder-panel-heading strong'),
+  ).toHaveText('Text');
+
+  await text.press('ArrowLeft');
+  await expect(section).toBeFocused();
+  await section.press('ArrowUp');
+  await expect(root).toBeFocused();
+
+  await root.press('End');
+  await expect(text).toBeFocused();
+  await text.press('Home');
+  await expect(root).toBeFocused();
+
+  await section.focus();
+  await section.press('ArrowLeft');
+  await expect(section).toHaveAttribute('aria-expanded', 'false');
+  await expect(text).toBeHidden();
+  await section.press('ArrowRight');
+  await expect(section).toHaveAttribute('aria-expanded', 'true');
+  await expect(text).toBeVisible();
 });

@@ -15,6 +15,7 @@ import {
   serializeEditorSnapshot,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
+import { isBuilderNodeType } from './builder-interaction';
 
 const payload = {
   version: 1 as const,
@@ -267,5 +268,9 @@ describe('builder adapter', () => {
         snapshotFromEditorDefinition(payloadToEditorComponent(payload)),
       ),
     ).toEqual(payload);
+  });
+
+  it('recognizes extension nodes at the shared interaction boundary', () => {
+    expect(isBuilderNodeType('extension')).toBe(true);
   });
 });

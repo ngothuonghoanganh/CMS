@@ -3,6 +3,10 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
+  // The local suite starts three Turbopack dev servers. Keep the default
+  // worker count bounded so route compilation does not take those servers
+  // offline during a full E2E run.
+  workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',

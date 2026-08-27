@@ -31,6 +31,13 @@ import {
   PageExtensionInstanceSchema,
   PageCapabilityGraphSchema,
   PublishedPageBundleSchema,
+  PAGE_COMPONENT_REGISTRY,
+  PAGE_PREVIEW_MESSAGE_TYPE,
+  PageDocumentSchema,
+  PagePreviewMessageSchema,
+  canContainPageComponent,
+  createPageDocument,
+  isPageComponentType,
 } from './index';
 
 function createPayload(children: PageNode[] = []) {
@@ -223,6 +230,51 @@ describe('foundation contracts', () => {
     ]);
 
     expect(PagePayloadV1Schema.parse(payload)).toEqual(payload);
+  });
+
+  it('wraps every versioned payload in the editor PageDocument envelope', () => {
+    const payload = createPayload();
+    const document = createPageDocument(payload);
+
+    expect(document).toEqual({ schemaVersion: 1, payload });
+    expect(PageDocumentSchema.parse(document)).toEqual(document);
+  });
+
+  it('validates live preview messages as versioned PageDocument snapshots', () => {
+    const document = createPageDocument(createPayload());
+
+    expect(
+      PagePreviewMessageSchema.parse({
+        type: PAGE_PREVIEW_MESSAGE_TYPE,
+        document,
+      }),
+    ).toMatchObject({ type: PAGE_PREVIEW_MESSAGE_TYPE, document });
+    expect(
+      PagePreviewMessageSchema.safeParse({
+        type: PAGE_PREVIEW_MESSAGE_TYPE,
+        document: { ...document, payload: { version: 999 } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('exposes one typed component registry for structure and property metadata', () => {
+    expect(PAGE_COMPONENT_REGISTRY.text.propertiesSchema).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'text', group: 'content', control: 'textarea' }),
+      ]),
+    );
+    expect(PAGE_COMPONENT_REGISTRY.section.slots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'children',
+          accepts: expect.arrayContaining(['text']),
+        }),
+      ]),
+    );
+    expect(PAGE_COMPONENT_REGISTRY.text.migrations).toEqual([]);
+    expect(canContainPageComponent('section', 'extension')).toBe(true);
+    expect(canContainPageComponent('text', 'section')).toBe(false);
+    expect(isPageComponentType('toString')).toBe(false);
   });
 
   it('rejects the removed props.kind discriminator and duplicate ids', () => {

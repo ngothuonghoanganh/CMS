@@ -7,19 +7,25 @@ import {
   PageExtensionInstanceSchema,
   PageExtensionListResponseSchema,
   LandingPageSchema,
+  PAGE_PREVIEW_MESSAGE_TYPE,
+  PAGE_PREVIEW_READY_MESSAGE_TYPE,
   FormPropsSchema,
   PagePayloadSchema,
+  createPageDocument,
   PageVersionListResponseSchema,
   PageVersionSchema,
+  PAGE_COMPONENT_REGISTRY,
+  PAGE_STYLE_PROPERTY_GROUPS,
   type Asset,
   type FormField,
   type FormProps,
   type LandingPage,
-  type PagePayload,
+  type PageDocument,
   type PageVersion,
   type ExtensionDescriptor,
   type PageExtensionInstance,
   type PageCapabilityGraph,
+  type ComponentPropertyDefinition,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -28,6 +34,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
@@ -56,13 +63,10 @@ import {
   type BuilderCanvasNode,
   type BuilderCanvasState,
 } from './builder-minimap';
-import type {
-  BuilderBlockType,
-  BuilderNodeType,
-  BuilderViewport,
-} from './builder-adapter';
+import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
 import { isBuilderExtensionAvailableForPage } from './builder-extension-registry';
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
+import { saveStatusAfterAcknowledgement } from './builder-save';
 
 type BuilderShellProps = {
   workspaceId: string;
@@ -79,39 +83,7 @@ type AvailableBlockOption = {
   extensionId?: string;
 };
 
-const blockOptions: AvailableBlockOption[] = [
-  { type: 'section', label: 'Section' },
-  { type: 'container', label: 'Container' },
-  { type: 'text', label: 'Text' },
-  { type: 'image', label: 'Image' },
-  { type: 'button', label: 'Button' },
-  { type: 'form', label: 'Form' },
-  { type: 'countdown', label: 'Countdown' },
-];
-
-type InspectorNodeType = BuilderNodeType;
-type InspectorSectionKey =
-  'content' | 'layout' | 'spacing' | 'typography' | 'appearance' | 'advanced';
-
-type InspectorControlType = 'color' | 'select' | 'segmented' | 'spacing' | 'unit';
-
-type InspectorStyleField = {
-  allowAuto?: boolean;
-  control: InspectorControlType;
-  property: string;
-  label: string;
-  options?: readonly { label: string; value: string }[];
-  appliesTo?: readonly InspectorNodeType[];
-};
-
-type InspectorStyleSection = {
-  key: Exclude<InspectorSectionKey, 'content' | 'advanced'>;
-  label: string;
-  fields: readonly InspectorStyleField[];
-};
-
-const allInspectorNodeTypes: readonly InspectorNodeType[] = [
-  'root',
+const builderBlockTypes = [
   'section',
   'container',
   'text',
@@ -119,117 +91,40 @@ const allInspectorNodeTypes: readonly InspectorNodeType[] = [
   'button',
   'form',
   'countdown',
-  'extension',
-];
+] as const satisfies readonly BuilderBlockType[];
 
-const inspectorStyleSections: readonly InspectorStyleSection[] = [
-  {
-    key: 'layout',
-    label: 'Layout',
-    fields: [
-      {
-        control: 'select',
-        property: 'display',
-        label: 'Display',
-        options: [
-          { value: '', label: 'Default' },
-          { value: 'block', label: 'Block' },
-          { value: 'flex', label: 'Flex' },
-          { value: 'grid', label: 'Grid' },
-          { value: 'inline', label: 'Inline' },
-          { value: 'inline-block', label: 'Inline block' },
-          { value: 'none', label: 'Hidden' },
-        ],
-      },
-      {
-        control: 'unit',
-        property: 'width',
-        label: 'Width',
-        allowAuto: true,
-      },
-      {
-        control: 'unit',
-        property: 'max-width',
-        label: 'Max width',
-      },
-      {
-        control: 'unit',
-        property: 'min-height',
-        label: 'Min height',
-      },
-      {
-        control: 'unit',
-        property: 'gap',
-        label: 'Gap',
-        appliesTo: ['root', 'section', 'container'],
-      },
-    ],
-  },
-  {
-    key: 'spacing',
-    label: 'Spacing',
-    fields: [
-      { control: 'spacing', property: 'padding', label: 'Padding' },
-      { control: 'spacing', property: 'margin', label: 'Margin', allowAuto: true },
-    ],
-  },
-  {
-    key: 'typography',
-    label: 'Typography',
-    fields: [
-      {
-        control: 'color',
-        property: 'color',
-        label: 'Text color',
-        appliesTo: ['root', 'section', 'container', 'text', 'button'],
-      },
-      {
-        control: 'unit',
-        property: 'font-size',
-        label: 'Font size',
-        appliesTo: ['root', 'section', 'container', 'text', 'button'],
-      },
-      {
-        control: 'select',
-        property: 'font-weight',
-        label: 'Font weight',
-        options: [
-          { value: '', label: 'Default' },
-          { value: '400', label: 'Regular (400)' },
-          { value: '500', label: 'Medium (500)' },
-          { value: '600', label: 'Semibold (600)' },
-          { value: '700', label: 'Bold (700)' },
-          { value: '800', label: 'Extra bold (800)' },
-        ],
-        appliesTo: ['root', 'section', 'container', 'text', 'button'],
-      },
-      {
-        control: 'segmented',
-        property: 'text-align',
-        label: 'Text alignment',
-        appliesTo: ['root', 'section', 'container', 'button'],
-      },
-    ],
-  },
-  {
-    key: 'appearance',
-    label: 'Appearance',
-    fields: [
-      {
-        control: 'color',
-        property: 'background-color',
-        label: 'Background',
-        appliesTo: allInspectorNodeTypes,
-      },
-      {
-        control: 'unit',
-        property: 'border-radius',
-        label: 'Radius',
-        appliesTo: allInspectorNodeTypes,
-      },
-    ],
-  },
-];
+const blockOptions: AvailableBlockOption[] = builderBlockTypes.map(
+  (type): AvailableBlockOption => ({ type, label: PAGE_COMPONENT_REGISTRY[type].label }),
+);
+
+type InspectorSectionKey =
+  'content' | 'layout' | 'spacing' | 'typography' | 'appearance' | 'advanced';
+
+type InspectorStyleSection = {
+  key: Exclude<InspectorSectionKey, 'content' | 'advanced'>;
+  label: string;
+  fields: readonly ComponentPropertyDefinition[];
+};
+
+const rendererBaseUrl =
+  process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
+const rendererOrigin = (() => {
+  try {
+    return new URL(rendererBaseUrl).origin;
+  } catch {
+    return 'http://127.0.0.1:3002';
+  }
+})();
+
+const inspectorStyleSections: readonly InspectorStyleSection[] = (
+  Object.entries(PAGE_STYLE_PROPERTY_GROUPS) as Array<
+    [InspectorStyleSection['key'], readonly ComponentPropertyDefinition[]]
+  >
+).map(([key, fields]) => ({
+  key,
+  label: key.charAt(0).toUpperCase() + key.slice(1),
+  fields,
+}));
 
 const alignmentOptions: readonly SegmentedOption<'left' | 'center' | 'right'>[] = [
   { value: 'left', label: 'Left' },
@@ -254,10 +149,16 @@ function isUsableImageSource(value: string): boolean {
 
 function renderLayerNodes(
   nodes: BuilderCanvasNode[],
+  childrenByParent: ReadonlyMap<string | undefined, BuilderCanvasNode[]>,
+  visibleNodeIds: ReadonlySet<string> | null,
   parentId: string | undefined,
   selectedId: string | undefined,
   onSelect: (id: string) => void,
   onToggle: (id: string) => void,
+  onKeyDown: (
+    node: BuilderCanvasNode,
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => void,
   onDragStart: (
     node: BuilderCanvasNode,
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -265,23 +166,30 @@ function renderLayerNodes(
   collapsedIds: Set<string>,
   draggingId: string | null,
   dropIntent: MoveNodeIntent | null,
+  focusableId: string | undefined,
 ): ReactNode {
-  return nodes
-    .filter((node) => node.parentId === parentId)
+  return (childrenByParent.get(parentId) ?? [])
+    .filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id))
     .map((node) => {
-      const hasChildren = nodes.some((child) => child.parentId === node.id);
+      const hasChildren = (childrenByParent.get(node.id) ?? []).some(
+        (child) => !visibleNodeIds || visibleNodeIds.has(child.id),
+      );
       const children =
         hasChildren && !collapsedIds.has(node.id)
           ? renderLayerNodes(
               nodes,
+              childrenByParent,
+              visibleNodeIds,
               node.id,
               selectedId,
               onSelect,
               onToggle,
+              onKeyDown,
               onDragStart,
               collapsedIds,
               draggingId,
               dropIntent,
+              focusableId,
             )
           : null;
       const dropClass =
@@ -312,11 +220,15 @@ function renderLayerNodes(
             </button>
             <button
               aria-label={`Select ${node.label}`}
+              aria-expanded={hasChildren ? !collapsedIds.has(node.id) : undefined}
+              aria-level={node.depth + 1}
               aria-selected={node.id === selectedId}
               className={`builder-layer-button${node.id === selectedId ? ' selected' : ''}`}
               data-builder-layer-id={node.id}
               onClick={() => onSelect(node.id)}
+              onKeyDown={(event) => onKeyDown(node, event)}
               role="treeitem"
+              tabIndex={node.id === focusableId ? 0 : -1}
               type="button"
             >
               <span
@@ -395,9 +307,13 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const editorRef = useRef<GrapesEditorHandle>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('initializing');
+  const [saveInFlight, setSaveInFlight] = useState(false);
   const [page, setPage] = useState<LandingPage | null>(null);
   const [version, setVersion] = useState<PageVersion | null>(null);
-  const [payload, setPayload] = useState<PagePayload | null>(null);
+  // Model A: GrapesJS owns the live editable document. This is only the last
+  // validated server snapshot used to initialize the editor, never a second
+  // mutable source of truth for Canvas/Layers/Inspector.
+  const [pageDocument, setPageDocument] = useState<PageDocument | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [enabledExtensionIds, setEnabledExtensionIds] = useState<Set<string>>(
     () => new Set(),
@@ -421,6 +337,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     advanced: false,
   });
   const viewportChangingRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const localMutationSequenceRef = useRef(0);
   const selectedNodeRef = useRef<SelectedBuilderNode | null>(null);
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [error, setError] = useState<string | null>(null);
@@ -431,12 +349,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   );
   const [layerDraggingId, setLayerDraggingId] = useState<string | null>(null);
   const [layerDropIntent, setLayerDropIntent] = useState<MoveNodeIntent | null>(null);
+  const [layerQuery, setLayerQuery] = useState('');
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
   const layerHoverExpandTimerRef = useRef<number | null>(null);
   const layerHoverExpandTargetRef = useRef<string | null>(null);
+  const previewWindowRef = useRef<Window | null>(null);
 
-  const isDirty = saveStatus === 'unsaved' || saveStatus === 'saving';
+  const isDirty =
+    saveStatus === 'unsaved' ||
+    saveStatus === 'saving' ||
+    saveStatus === 'error' ||
+    saveStatus === 'conflict';
   const pageExtensionState = new Map(
     pageExtensions.map((item) => [item.extensionId, item.enabled]),
   );
@@ -463,6 +387,57 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       })),
   ];
   const styleBlock = selected?.style?.[viewportStyleKey(viewport)] ?? {};
+  const layerChildren = useMemo(() => {
+    const index = new Map<string | undefined, BuilderCanvasNode[]>();
+    for (const node of canvasState?.nodes ?? []) {
+      const siblings = index.get(node.parentId) ?? [];
+      siblings.push(node);
+      index.set(node.parentId, siblings);
+    }
+    return index;
+  }, [canvasState?.nodes]);
+  const visibleLayerIds = useMemo(() => {
+    const query = layerQuery.trim().toLowerCase();
+    if (!query || !canvasState) return null;
+    const byId = new Map(canvasState.nodes.map((node) => [node.id, node]));
+    const visible = new Set<string>();
+    for (const node of canvasState.nodes) {
+      if (
+        !node.label.toLowerCase().includes(query) &&
+        !node.type.toLowerCase().includes(query) &&
+        !node.id.toLowerCase().includes(query)
+      ) {
+        continue;
+      }
+      let current: BuilderCanvasNode | undefined = node;
+      while (current) {
+        visible.add(current.id);
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+      }
+    }
+    return visible;
+  }, [canvasState, layerQuery]);
+  const layerNavigationIds = useMemo(() => {
+    const result: string[] = [];
+    function visit(parentId: string | undefined) {
+      for (const node of layerChildren.get(parentId) ?? []) {
+        if (visibleLayerIds && !visibleLayerIds.has(node.id)) continue;
+        result.push(node.id);
+        const children = (layerChildren.get(node.id) ?? []).filter(
+          (child) => !visibleLayerIds || visibleLayerIds.has(child.id),
+        );
+        if (children.length > 0 && !collapsedLayerIds.has(node.id)) {
+          visit(node.id);
+        }
+      }
+    }
+    visit(undefined);
+    return result;
+  }, [collapsedLayerIds, layerChildren, visibleLayerIds]);
+  const focusableLayerId =
+    selected && layerNavigationIds.includes(selected.id)
+      ? selected.id
+      : layerNavigationIds[0];
   const usableAssets = useMemo(
     () => assets.filter((asset) => isUsableImageSource(asset.storageKey)),
     [assets],
@@ -475,6 +450,74 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       else next.add(id);
       return next;
     });
+  }
+
+  function focusLayer(id: string) {
+    editorRef.current?.selectNode(id);
+    window.requestAnimationFrame(() => {
+      const button = Array.from(
+        layerTreeRef.current?.querySelectorAll<HTMLButtonElement>(
+          '[data-builder-layer-id]',
+        ) ?? [],
+      ).find((candidate) => candidate.dataset.builderLayerId === id);
+      button?.focus();
+    });
+  }
+
+  function handleLayerKeyDown(
+    node: BuilderCanvasNode,
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) {
+    const currentIndex = layerNavigationIds.indexOf(node.id);
+    if (currentIndex === -1) return;
+
+    const children = (layerChildren.get(node.id) ?? []).filter(
+      (child) => !visibleLayerIds || visibleLayerIds.has(child.id),
+    );
+    const isCollapsed = collapsedLayerIds.has(node.id);
+    let nextId: string | undefined;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        nextId = layerNavigationIds[currentIndex + 1];
+        break;
+      case 'ArrowUp':
+        nextId = layerNavigationIds[currentIndex - 1];
+        break;
+      case 'Home':
+        nextId = layerNavigationIds[0];
+        break;
+      case 'End':
+        nextId = layerNavigationIds[layerNavigationIds.length - 1];
+        break;
+      case 'ArrowRight':
+        if (children.length === 0) return;
+        event.preventDefault();
+        if (isCollapsed) {
+          toggleLayer(node.id);
+          return;
+        }
+        nextId = children[0]?.id;
+        break;
+      case 'ArrowLeft':
+        if (!isCollapsed && children.length > 0) {
+          event.preventDefault();
+          toggleLayer(node.id);
+          return;
+        }
+        if (node.parentId && layerNavigationIds.includes(node.parentId)) {
+          nextId = node.parentId;
+        } else {
+          return;
+        }
+        break;
+      default:
+        return;
+    }
+
+    if (!nextId) return;
+    event.preventDefault();
+    focusLayer(nextId);
   }
 
   function updateLayerDropIntent(
@@ -637,7 +680,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         const nextPayload = PagePayloadSchema.parse(nextVersion.payload);
         setPage(nextPage);
         setVersion(PageVersionSchema.parse(nextVersion));
-        setPayload(nextPayload);
+        setPageDocument(createPageDocument(nextPayload));
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
         try {
           const [extensionResult, pageExtensionResult, capabilityResult] =
@@ -708,17 +751,72 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   }
 
   function markDirty() {
+    localMutationSequenceRef.current += 1;
     setNotice(null);
     setSaveStatus('unsaved');
   }
 
+  function postPreviewDocument(document?: PageDocument) {
+    const previewWindow = previewWindowRef.current;
+    if (!previewWindow || previewWindow.closed) return;
+    try {
+      const nextDocument = document ?? editorRef.current?.getDocument();
+      if (!nextDocument) return;
+      previewWindow.postMessage(
+        { type: PAGE_PREVIEW_MESSAGE_TYPE, document: nextDocument },
+        rendererOrigin,
+      );
+    } catch {
+      previewWindowRef.current = null;
+    }
+  }
+
+  function openLivePreview() {
+    const previewWindow = window.open(
+      `${rendererBaseUrl}/preview/${encodeURIComponent(pageId)}`,
+      'payload-landing-page-preview',
+    );
+    if (!previewWindow) {
+      setError('The preview window was blocked. Allow pop-ups for this workspace.');
+      return;
+    }
+    previewWindowRef.current = previewWindow;
+    previewWindow.focus();
+    postPreviewDocument();
+  }
+
+  useEffect(() => {
+    function handlePreviewMessage(event: MessageEvent<unknown>) {
+      if (
+        event.origin !== rendererOrigin ||
+        event.source !== previewWindowRef.current ||
+        !event.data ||
+        typeof event.data !== 'object' ||
+        (event.data as { type?: unknown }).type !== PAGE_PREVIEW_READY_MESSAGE_TYPE
+      ) {
+        return;
+      }
+      postPreviewDocument();
+    }
+    window.addEventListener('message', handlePreviewMessage);
+    return () => window.removeEventListener('message', handlePreviewMessage);
+  }, []);
+
   async function saveDraft() {
-    if (!version || !editorRef.current) return;
+    if (!version || !editorRef.current || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setSaveInFlight(true);
     setSaveStatus('saving');
     setError(null);
     setNotice(null);
     try {
-      const nextPayload = PagePayloadSchema.parse(editorRef.current.serialize());
+      const nextDocument = editorRef.current.getDocument();
+      const nextPayload = PagePayloadSchema.parse(nextDocument.payload);
+      // GrapesJS can emit the final component:update asynchronously after an
+      // inspector input event. Capture the acknowledgement point after the
+      // payload snapshot so that event is included in this save, while edits
+      // made after the snapshot still remain dirty.
+      const saveSequence = localMutationSequenceRef.current;
       const nextVersion = PageVersionSchema.parse(
         await api.post(`/pages/${pageId}/versions`, {
           expectedVersionNumber: version.versionNumber,
@@ -730,8 +828,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         await api.get(`/pages/${pageId}/extensions`),
       );
       setPageExtensions(nextPageExtensions.items);
-      setSaveStatus('saved');
-      setNotice(`Saved draft version ${nextVersion.versionNumber}.`);
+      if (
+        saveStatusAfterAcknowledgement(saveSequence, localMutationSequenceRef.current) ===
+        'saved'
+      ) {
+        setSaveStatus('saved');
+        setNotice(`Saved draft version ${nextVersion.versionNumber}.`);
+      } else {
+        setSaveStatus('unsaved');
+        setNotice(
+          `Saved draft version ${nextVersion.versionNumber}. Newer local changes remain unsaved.`,
+        );
+      }
     } catch (caughtError) {
       if (caughtError instanceof ApiClientError && caughtError.status === 409) {
         setSaveStatus('conflict');
@@ -742,6 +850,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       }
       setSaveStatus('error');
       setError(toErrorMessage(caughtError));
+    } finally {
+      saveInFlightRef.current = false;
+      setSaveInFlight(false);
     }
   }
 
@@ -884,10 +995,13 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     section: InspectorStyleSection,
     styleBlock: Record<string, string | undefined>,
   ) {
-    const fields = section.fields.filter(
-      (field) =>
-        !field.appliesTo || (selected && field.appliesTo.includes(selected.type)),
+    if (!selected) return null;
+    const allowedPropertyKeys = new Set(
+      PAGE_COMPONENT_REGISTRY[selected.type].propertiesSchema
+        .filter((property) => property.group === 'style')
+        .map((property) => property.key),
     );
+    const fields = section.fields.filter((field) => allowedPropertyKeys.has(field.key));
     if (fields.length === 0) return null;
 
     return (
@@ -899,16 +1013,34 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       >
         <div className="builder-inspector-fields">
           {fields.map((option) => {
-            const value = styleValue(styleBlock, option.property);
+            const value = styleValue(styleBlock, option.key);
+            const inheritedStyleBlock =
+              viewport === 'mobile' &&
+              styleValue(selected.style?.tablet ?? {}, option.key) !== ''
+                ? (selected.style?.tablet ?? {})
+                : (selected.style?.base ?? {});
+            const inherited =
+              viewport !== 'desktop' &&
+              value === '' &&
+              styleValue(inheritedStyleBlock, option.key) !== '';
+            const inheritedViewport =
+              viewport === 'mobile' &&
+              inheritedStyleBlock === (selected.style?.tablet ?? {})
+                ? 'Tablet'
+                : 'Desktop';
+            const description = inherited
+              ? `Inherited from ${inheritedViewport}`
+              : undefined;
             if (option.control === 'unit') {
               return (
                 <UnitField
                   allowAuto={option.allowAuto}
                   compact
-                  key={option.property}
+                  description={description}
+                  key={option.key}
                   label={option.label}
                   onValueChange={(nextValue) =>
-                    updateSelectedStyle(option.property, nextValue)
+                    updateSelectedStyle(option.key, nextValue)
                   }
                   value={value}
                 />
@@ -919,10 +1051,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 <SpacingControl
                   allowAuto={option.allowAuto}
                   compact
-                  key={option.property}
+                  description={description}
+                  key={option.key}
                   label={option.label}
                   onValueChange={(nextValue) =>
-                    updateSelectedStyle(option.property, nextValue)
+                    updateSelectedStyle(option.key, nextValue)
                   }
                   value={value}
                 />
@@ -932,10 +1065,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               return (
                 <ColorField
                   compact
-                  key={option.property}
+                  description={description}
+                  key={option.key}
                   label={option.label}
                   onValueChange={(nextValue) =>
-                    updateSelectedStyle(option.property, nextValue)
+                    updateSelectedStyle(option.key, nextValue)
                   }
                   value={value}
                 />
@@ -943,15 +1077,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             }
             if (option.control === 'segmented') {
               return (
-                <div className="ui-field ui-field-compact" key={option.property}>
+                <div className="ui-field ui-field-compact" key={option.key}>
                   <span className="ui-field-label">{option.label}</span>
+                  {description ? (
+                    <p className="ui-field-description">{description}</p>
+                  ) : null}
                   <SegmentedControl
                     ariaLabel={option.label}
                     onValueChange={(nextValue) =>
-                      updateSelectedStyle(option.property, nextValue)
+                      updateSelectedStyle(option.key, nextValue)
                     }
-                    options={alignmentOptions}
-                    value={value as 'left' | 'center' | 'right' | undefined}
+                    options={option.options ?? alignmentOptions}
+                    value={value}
                   />
                 </div>
               );
@@ -959,11 +1096,10 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             return (
               <SelectField
                 compact
-                key={option.property}
+                description={description}
+                key={option.key}
                 label={option.label}
-                onChange={(event) =>
-                  updateSelectedStyle(option.property, event.target.value)
-                }
+                onChange={(event) => updateSelectedStyle(option.key, event.target.value)}
                 value={value}
               >
                 {option.options?.map((choice) => (
@@ -979,7 +1115,147 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     );
   }
 
-  if (loadState === 'loading' || !payload || !page || !version) {
+  function renderContentInspector() {
+    if (!selected || selected.type === 'form' || selected.type === 'countdown') {
+      return null;
+    }
+    const fields = PAGE_COMPONENT_REGISTRY[selected.type].propertiesSchema.filter(
+      (property) => property.group === 'content',
+    );
+    if (fields.length === 0) return null;
+
+    return (
+      <InspectorSection
+        label="Content"
+        onToggle={(open) => toggleInspectorSection('content', open)}
+        open={openInspectorSections.content}
+      >
+        <div className="builder-inspector-fields">
+          {fields.map((property) => {
+            if (selected.type === 'text' && property.key === 'text') {
+              return (
+                <TextAreaField
+                  aria-label="Text content"
+                  compact
+                  description={property.description}
+                  key={property.key}
+                  label={property.label}
+                  onChange={updateSelectedText}
+                  rows={5}
+                  value={selected.text ?? ''}
+                />
+              );
+            }
+            if (selected.type === 'text' && property.key === 'align') {
+              return (
+                <div className="ui-field ui-field-compact" key={property.key}>
+                  <span className="ui-field-label">{property.label}</span>
+                  <SegmentedControl
+                    ariaLabel="Text alignment"
+                    onValueChange={(nextValue) =>
+                      editorRef.current?.updateSelectedAlign(nextValue)
+                    }
+                    options={alignmentOptions}
+                    value={selected.align}
+                  />
+                </div>
+              );
+            }
+            if (selected.type === 'button' && property.key === 'label') {
+              return (
+                <TextField
+                  compact
+                  description={property.description}
+                  key={property.key}
+                  label={property.label}
+                  onChange={(event) =>
+                    editorRef.current?.updateSelectedText(event.target.value)
+                  }
+                  value={selected.label ?? ''}
+                />
+              );
+            }
+            if (selected.type === 'button' && property.key === 'href') {
+              return (
+                <TextField
+                  compact
+                  description={property.description}
+                  key={property.key}
+                  label={property.label}
+                  onChange={(event) => updateSelectedAttribute('href', event)}
+                  type="url"
+                  value={selected.href ?? ''}
+                />
+              );
+            }
+            if (selected.type === 'button' && property.key === 'target') {
+              return (
+                <SelectField
+                  compact
+                  description={property.description}
+                  key={property.key}
+                  label={property.label}
+                  onChange={(event) => updateSelectedAttribute('target', event)}
+                  value={selected.target ?? '_self'}
+                >
+                  {property.options?.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </SelectField>
+              );
+            }
+            if (selected.type === 'image' && property.key === 'src') {
+              return (
+                <div key={property.key} className="builder-inspector-field-stack">
+                  <SelectField
+                    compact
+                    description={property.description}
+                    label="Workspace asset"
+                    onChange={(event) =>
+                      editorRef.current?.selectAsset(event.target.value)
+                    }
+                    value={selected.src ?? ''}
+                  >
+                    <option value="">Select an asset</option>
+                    {usableAssets.map((asset) => (
+                      <option key={asset.id} value={asset.storageKey}>
+                        {asset.filename}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <TextField
+                    compact
+                    description="Use a direct URL only when the asset is not in this workspace."
+                    label="Image URL"
+                    onChange={(event) => updateSelectedAttribute('src', event)}
+                    type="url"
+                    value={selected.src ?? ''}
+                  />
+                </div>
+              );
+            }
+            if (selected.type === 'image' && property.key === 'alt') {
+              return (
+                <TextField
+                  compact
+                  description={property.description}
+                  key={property.key}
+                  label={property.label}
+                  onChange={(event) => updateSelectedAttribute('alt', event)}
+                  value={selected.alt ?? ''}
+                />
+              );
+            }
+            return null;
+          })}
+        </div>
+      </InspectorSection>
+    );
+  }
+
+  if (loadState === 'loading' || !pageDocument || !page || !version) {
     return (
       <main className="builder-loading" aria-busy="true">
         <span className="eyebrow">Visual builder</span>
@@ -1062,8 +1338,15 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             Redo
           </button>
           <button
+            className="button button-secondary"
+            onClick={openLivePreview}
+            type="button"
+          >
+            Live preview
+          </button>
+          <button
             className="button button-primary"
-            disabled={saveStatus === 'saving' || saveStatus === 'initializing'}
+            disabled={saveInFlight || saveStatus === 'initializing'}
             onClick={() => void saveDraft()}
             type="button"
           >
@@ -1217,6 +1500,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               <span className="eyebrow">Layers</span>
               <strong>Page structure</strong>
             </div>
+            <label className="builder-layer-search">
+              <span className="sr-only">Search layers</span>
+              <input
+                aria-label="Search layers"
+                onChange={(event) => setLayerQuery(event.target.value)}
+                placeholder="Search layers"
+                type="search"
+                value={layerQuery}
+              />
+            </label>
             <div
               ref={layerTreeRef}
               aria-label="Page layers"
@@ -1226,18 +1519,25 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               {canvasState ? (
                 renderLayerNodes(
                   canvasState.nodes,
+                  layerChildren,
+                  visibleLayerIds,
                   undefined,
                   selected?.id,
                   (id) => editorRef.current?.selectNode(id),
                   toggleLayer,
+                  handleLayerKeyDown,
                   startLayerDrag,
                   collapsedLayerIds,
                   layerDraggingId,
                   layerDropIntent,
+                  focusableLayerId,
                 )
               ) : (
                 <span className="muted small">Preparing layers…</span>
               )}
+              {canvasState && visibleLayerIds && visibleLayerIds.size === 0 ? (
+                <span className="muted small">No matching layers.</span>
+              ) : null}
             </div>
           </div>
         </aside>
@@ -1286,8 +1586,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           </div>
           <div className="builder-editor-shell">
             <GrapesEditor
-              initialPayload={payload}
+              initialPayload={pageDocument.payload}
               onDirty={markDirty}
+              onDocumentChange={postPreviewDocument}
               onError={(message) => {
                 setSaveStatus('error');
                 setError(`Editor error: ${message}`);
@@ -1533,110 +1834,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 </InspectorSection>
               ) : null}
 
-              {selected.type === 'text' ? (
-                <InspectorSection
-                  label="Content"
-                  onToggle={(open) => toggleInspectorSection('content', open)}
-                  open={openInspectorSections.content}
-                >
-                  <div className="builder-inspector-fields">
-                    <TextAreaField
-                      aria-label="Text content"
-                      compact
-                      label="Text"
-                      onChange={updateSelectedText}
-                      rows={5}
-                      value={selected.text ?? ''}
-                    />
-                    <div className="ui-field ui-field-compact">
-                      <span className="ui-field-label">Alignment</span>
-                      <SegmentedControl
-                        ariaLabel="Text alignment"
-                        onValueChange={(nextValue) =>
-                          editorRef.current?.updateSelectedAlign(nextValue)
-                        }
-                        options={alignmentOptions}
-                        value={selected.align}
-                      />
-                    </div>
-                  </div>
-                </InspectorSection>
-              ) : null}
-
-              {selected.type === 'button' ? (
-                <InspectorSection
-                  label="Content"
-                  onToggle={(open) => toggleInspectorSection('content', open)}
-                  open={openInspectorSections.content}
-                >
-                  <div className="builder-inspector-fields">
-                    <TextField
-                      compact
-                      label="Label"
-                      onChange={(event) =>
-                        editorRef.current?.updateSelectedText(event.target.value)
-                      }
-                      value={selected.label ?? ''}
-                    />
-                    <TextField
-                      compact
-                      label="Link"
-                      onChange={(event) => updateSelectedAttribute('href', event)}
-                      type="url"
-                      value={selected.href ?? ''}
-                    />
-                    <SelectField
-                      compact
-                      label="Open link"
-                      onChange={(event) => updateSelectedAttribute('target', event)}
-                      value={selected.target ?? '_self'}
-                    >
-                      <option value="_self">Same tab</option>
-                      <option value="_blank">New tab</option>
-                    </SelectField>
-                  </div>
-                </InspectorSection>
-              ) : null}
-
-              {selected.type === 'image' ? (
-                <InspectorSection
-                  label="Content"
-                  onToggle={(open) => toggleInspectorSection('content', open)}
-                  open={openInspectorSections.content}
-                >
-                  <div className="builder-inspector-fields">
-                    <SelectField
-                      compact
-                      label="Workspace asset"
-                      onChange={(event) =>
-                        editorRef.current?.selectAsset(event.target.value)
-                      }
-                      value={selected.src ?? ''}
-                    >
-                      <option value="">Select an asset</option>
-                      {usableAssets.map((asset) => (
-                        <option key={asset.id} value={asset.storageKey}>
-                          {asset.filename}
-                        </option>
-                      ))}
-                    </SelectField>
-                    <TextField
-                      compact
-                      description="Use a direct URL only when the asset is not in this workspace."
-                      label="Image URL"
-                      onChange={(event) => updateSelectedAttribute('src', event)}
-                      type="url"
-                      value={selected.src ?? ''}
-                    />
-                    <TextField
-                      compact
-                      label="Alt text"
-                      onChange={(event) => updateSelectedAttribute('alt', event)}
-                      value={selected.alt ?? ''}
-                    />
-                  </div>
-                </InspectorSection>
-              ) : null}
+              {renderContentInspector()}
 
               {inspectorStyleSections.map((section) =>
                 renderStyleSection(section, styleBlock),

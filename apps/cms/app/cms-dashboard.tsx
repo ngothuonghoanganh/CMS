@@ -208,6 +208,8 @@ export default function CmsDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const pagesRequestId = useRef(0);
+  const pageDetailsRequestId = useRef(0);
+  const submissionsRequestId = useRef(0);
   const mobileSidebarCloseRef = useRef<HTMLButtonElement>(null);
   const permissionSet = useMemo(() => new Set(permissions), [permissions]);
   const can = (permission: TenantPermission) => permissionSet.has(permission);
@@ -292,13 +294,14 @@ export default function CmsDashboard() {
     if ((view === 'domains' || view === 'seo') && selectedSiteId) {
       void refreshPages(selectedSiteId);
     }
-  }, [selectedSiteId, view]);
+  }, [view]);
 
   useEffect(() => {
+    const requestId = ++pageDetailsRequestId.current;
     if (selectedPageId) {
-      void refreshVersions(selectedPageId);
-      void refreshFormBindings(selectedPageId);
-      void refreshSeo(selectedPageId);
+      void refreshVersions(selectedPageId, requestId);
+      void refreshFormBindings(selectedPageId, requestId);
+      void refreshSeo(selectedPageId, requestId);
     } else {
       setVersions([]);
       setFormBindings([]);
@@ -307,8 +310,9 @@ export default function CmsDashboard() {
   }, [selectedPageId]);
 
   useEffect(() => {
+    const requestId = ++submissionsRequestId.current;
     if (view === 'submissions' && session) {
-      void refreshSubmissions(0);
+      void refreshSubmissions(0, requestId);
     }
   }, [session, submissionSearch, submissionStatus, view]);
 
@@ -680,46 +684,63 @@ export default function CmsDashboard() {
     }
   }
 
-  async function refreshVersions(pageId: string) {
+  async function refreshVersions(
+    pageId: string,
+    requestId = pageDetailsRequestId.current,
+  ) {
     try {
       const response = await api.get(`/pages/${pageId}/versions?limit=100`);
+      if (requestId !== pageDetailsRequestId.current) return;
       setVersions(PageVersionListResponseSchema.parse(response).items);
     } catch (caughtError) {
+      if (requestId !== pageDetailsRequestId.current) return;
       setError(toErrorMessage(caughtError));
     }
   }
 
-  async function refreshSubmissions(offset: number) {
+  async function refreshSubmissions(
+    offset: number,
+    requestId = ++submissionsRequestId.current,
+  ) {
     try {
       const params = new URLSearchParams({ limit: '20', offset: String(offset) });
       if (submissionSearch.trim()) params.set('search', submissionSearch.trim());
       if (submissionStatus) params.set('status', submissionStatus);
       const response = await api.get(`/submissions?${params.toString()}`);
       const parsed = SubmissionListResponseSchema.parse(response);
+      if (requestId !== submissionsRequestId.current) return;
       setSubmissions(parsed.items);
       setSubmissionPage(parsed.pagination);
       setSelectedSubmission((current) =>
         current && parsed.items.some((item) => item.id === current.id) ? current : null,
       );
     } catch (caughtError) {
+      if (requestId !== submissionsRequestId.current) return;
       setError(toErrorMessage(caughtError));
     }
   }
 
-  async function refreshFormBindings(pageId: string) {
+  async function refreshFormBindings(
+    pageId: string,
+    requestId = pageDetailsRequestId.current,
+  ) {
     try {
       const response = await api.get(`/pages/${pageId}/form-integrations`);
+      if (requestId !== pageDetailsRequestId.current) return;
       setFormBindings(FormIntegrationBindingListResponseSchema.parse(response).items);
     } catch (caughtError) {
+      if (requestId !== pageDetailsRequestId.current) return;
       setError(toErrorMessage(caughtError));
     }
   }
 
-  async function refreshSeo(pageId: string) {
+  async function refreshSeo(pageId: string, requestId = pageDetailsRequestId.current) {
     try {
       const response = await api.get(`/pages/${pageId}/seo`);
+      if (requestId !== pageDetailsRequestId.current) return;
       setSeoSettings(PageSeoSettingsSchema.parse(response));
     } catch (caughtError) {
+      if (requestId !== pageDetailsRequestId.current) return;
       setError(toErrorMessage(caughtError));
     }
   }

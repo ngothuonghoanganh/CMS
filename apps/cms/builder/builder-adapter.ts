@@ -1,13 +1,17 @@
 import {
+  PAGE_COMPONENT_REGISTRY,
   FormPropsSchema,
   PageNodeStyleSchema,
   PagePayloadSchema,
   PagePayloadV1Schema,
   CountdownPropsSchema,
   CustomExtensionNodePropsSchema,
+  canContainPageComponent,
+  isPageComponentType,
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
+  type PageComponentType,
   type PageNode,
   type PageNodeV2,
   type PageNodeV3,
@@ -31,7 +35,7 @@ export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
 export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3;
-export type BuilderNodeType = BuilderNode['type'];
+export type BuilderNodeType = PageComponentType;
 export type BuilderBlockType = Exclude<BuilderNodeType, 'root'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
 
@@ -70,30 +74,6 @@ const stylePropertyMap = {
 } as const;
 
 type EditorStyleProperty = keyof typeof stylePropertyMap;
-
-const nodeTags: Record<BuilderNodeType, string> = {
-  root: 'main',
-  section: 'section',
-  container: 'div',
-  text: 'p',
-  image: 'img',
-  button: 'a',
-  form: 'form',
-  countdown: 'div',
-  extension: 'div',
-};
-
-const nodeNames: Record<BuilderNodeType, string> = {
-  root: 'Page root',
-  section: 'Section',
-  container: 'Container',
-  text: 'Text',
-  image: 'Image',
-  button: 'Button',
-  form: 'Form',
-  countdown: 'Countdown',
-  extension: 'Custom extension',
-};
 
 function editorOnlyPreview(
   definition: ComponentDefinition,
@@ -246,37 +226,15 @@ export function formPreviewComponents(props: FormProps): ComponentDefinition[] {
   ];
 }
 
-const allowedChildren: Record<BuilderNodeType, readonly BuilderNodeType[]> = {
-  root: ['section', 'container'],
-  section: ['container', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
-  container: ['section', 'text', 'image', 'button', 'form', 'countdown', 'extension'],
-  text: [],
-  image: [],
-  button: [],
-  form: [],
-  countdown: [],
-  extension: [],
-};
-
-function isBuilderNodeType(value: unknown): value is BuilderNodeType {
-  return (
-    value === 'root' ||
-    value === 'section' ||
-    value === 'container' ||
-    value === 'text' ||
-    value === 'image' ||
-    value === 'button' ||
-    value === 'form' ||
-    value === 'countdown' ||
-    value === 'extension'
-  );
+export function isBuilderNodeType(value: unknown): value is BuilderNodeType {
+  return isPageComponentType(value);
 }
 
 export function canContainNode(
   parentType: BuilderNodeType,
   childType: BuilderNodeType,
 ): boolean {
-  return allowedChildren[parentType].includes(childType);
+  return canContainPageComponent(parentType, childType);
 }
 
 function canAcceptEditorNode(
@@ -410,8 +368,8 @@ function componentDefinitionForNode(
   const attributes = attributesForNode(node, metadata, payloadVersion);
   const shared: ComponentDefinition = {
     type: node.type === 'text' ? 'text' : node.type === 'image' ? 'image' : 'default',
-    tagName: nodeTags[node.type],
-    name: nodeNames[node.type],
+    tagName: PAGE_COMPONENT_REGISTRY[node.type].editorTagName,
+    name: PAGE_COMPONENT_REGISTRY[node.type].label,
     attributes,
     droppable:
       node.type === 'root' || node.type === 'section' || node.type === 'container'
@@ -667,17 +625,7 @@ function readStringAttribute(
 }
 
 function isPageNodeType(value: string): value is BuilderNodeType {
-  return [
-    'root',
-    'section',
-    'container',
-    'text',
-    'image',
-    'button',
-    'form',
-    'countdown',
-    'extension',
-  ].includes(value);
+  return isBuilderNodeType(value);
 }
 
 function readMetadata(attributes: Record<string, unknown>): PagePayloadV1['metadata'] {
