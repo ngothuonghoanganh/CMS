@@ -60,7 +60,7 @@ Phase 1 contracts are intentionally limited to API versioning, error envelope, h
 
 ## Database approach
 
-MongoDB is selected for the initial persistence technology because future landing-page versions are naturally document-shaped and are expected to be read as coherent snapshots. Mongoose is an infrastructure adapter inside `apps/api`; Mongoose documents/types must never leak into shared contracts.
+MongoDB is selected for the initial persistence technology because future Page versions are naturally document-shaped and are expected to be read as coherent snapshots. Mongoose is an infrastructure adapter inside `apps/api`; Mongoose documents/types must never leak into shared contracts.
 
 Phase 1 uses one local MongoDB instance. There is no sharding, replica-set topology, Redis, queue or cache tier yet. Those are operational decisions to introduce only after real access patterns require them.
 
@@ -104,7 +104,7 @@ Phase 1 does **not** create users, passwords, login endpoints, refresh tokens, s
 
 ## Explicitly out of Phase 1
 
-- Workspace, Site, LandingPage, PageVersion, Asset or Template domain models.
+- Workspace, Site, Page, PageVersion, Asset or Template domain models.
 - Canonical/versioned Page Payload.
 - Page CRUD and draft/version behavior.
 - User persistence and login flows.

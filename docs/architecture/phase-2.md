@@ -9,7 +9,7 @@ Implemented domain records:
 
 - Workspace
 - Site
-- LandingPage
+- Page
 - PageVersion
 - minimal Asset metadata model
 - minimal Template payload model

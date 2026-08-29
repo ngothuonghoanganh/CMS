@@ -125,7 +125,7 @@ For each key screen, inspect the network graph and answer:
 
 ## 8. Responsive CMS problems
 
-Responsive admin behavior must be treated independently from landing-page responsive editing.
+Responsive admin behavior must be treated independently from Page responsive editing.
 
 Audit:
 

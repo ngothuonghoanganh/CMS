@@ -472,6 +472,7 @@ export const PAGE_PAYLOAD_MAX_NODE_ID_LENGTH = 128;
 export const DEFAULT_PAGE_LIMIT = 20;
 export const MAX_PAGE_LIMIT = 100;
 export const MAX_HOSTNAME_LENGTH = 253;
+export const MAX_PAGE_PATH_LENGTH = 512;
 export const MAX_SEO_TITLE_LENGTH = 200;
 export const MAX_SEO_DESCRIPTION_LENGTH = 500;
 export const MAX_SEO_URL_LENGTH = 2_048;
@@ -485,6 +486,36 @@ export function normalizeOrganizationSlug(input: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
+}
+
+const reservedPagePaths = new Set([
+  '/api',
+  '/preview',
+  '/login',
+  '/robots.txt',
+  '/sitemap.xml',
+]);
+const pagePathPattern = /^\/(?:[a-z0-9][a-z0-9._~-]*(?:\/[a-z0-9][a-z0-9._~-]*)*)?$/;
+
+/** Canonical public route identity. The root path is the only homepage path. */
+export const PagePathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_PAGE_PATH_LENGTH)
+  .regex(pagePathPattern, 'Path must contain lowercase URL-safe segments')
+  .refine((value) => !reservedPagePaths.has(value), 'This path is reserved');
+
+export function normalizePagePath(input: string): string | null {
+  const value = input.trim();
+  if (!value || value.includes('?') || value.includes('#') || value.includes('\\')) {
+    return null;
+  }
+
+  const path = `/${value.replace(/^\/+/, '')}`.replaceAll(/\/+/g, '/');
+  const normalized = path.length > 1 ? path.replace(/\/+$/, '') : path;
+  const result = PagePathSchema.safeParse(normalized.toLowerCase());
+  return result.success ? result.data : null;
 }
 const styleValue = z.string().trim().min(1).max(PAGE_PAYLOAD_MAX_STYLE_VALUE_LENGTH);
 const pageNodeId = z
@@ -1784,17 +1815,41 @@ export const SiteSchema = z
     workspaceId: EntityIdSchema,
     name: nonEmptyText.max(200),
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    homePageId: EntityIdSchema,
+    status: z.enum(['draft', 'published', 'archived']),
+    primaryNavigationId: EntityIdSchema.optional(),
+    footerNavigationId: EntityIdSchema.optional(),
+    officialUrl: z.string().url().optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
   .strict();
 
-export const LandingPageSchema = z
+export const PageStatusSchema = z.enum(['draft', 'published', 'modified', 'archived']);
+export type PageStatus = z.infer<typeof PageStatusSchema>;
+export const PageKindSchema = z.enum([
+  'standard',
+  'landing',
+  'system',
+  'collection-template',
+]);
+export type PageKind = z.infer<typeof PageKindSchema>;
+
+export const PageSchema = z
   .object({
     id: EntityIdSchema,
     workspaceId: EntityIdSchema,
     siteId: EntityIdSchema,
     name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    path: PagePathSchema,
+    kind: PageKindSchema,
+    status: PageStatusSchema,
+    parentId: EntityIdSchema.optional(),
+    anchors: z
+      .array(z.string().regex(/^[a-z][a-z0-9_-]{0,127}$/))
+      .max(200)
+      .optional(),
     slug: z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -1813,9 +1868,10 @@ const PublicSiteSchema = z
   })
   .strict();
 
-const PublicPageSchema = z
+const PublicPageSummarySchema = z
   .object({
     name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
     slug: z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -1846,6 +1902,7 @@ export const CustomDomainSchema = z
   .object({
     id: EntityIdSchema,
     workspaceId: EntityIdSchema,
+    siteId: EntityIdSchema.optional(),
     hostname: z.string().trim().max(MAX_HOSTNAME_LENGTH),
     status: CustomDomainStatusSchema,
     verificationMethod: DomainVerificationMethodSchema,
@@ -1871,6 +1928,7 @@ export const CreateCustomDomainRequestSchema = z
       .min(1)
       .max(MAX_HOSTNAME_LENGTH + 32),
     landingPageId: EntityIdSchema.optional(),
+    siteId: EntityIdSchema.optional(),
     isPrimary: z.boolean().optional(),
   })
   .strict();
@@ -1878,6 +1936,7 @@ export const CreateCustomDomainRequestSchema = z
 export const UpdateCustomDomainRequestSchema = z
   .object({
     landingPageId: EntityIdSchema.nullable().optional(),
+    siteId: EntityIdSchema.nullable().optional(),
     isPrimary: z.boolean().optional(),
   })
   .strict()
@@ -1936,6 +1995,194 @@ export type UpdatePageSeoSettingsRequest = z.infer<
   typeof UpdatePageSeoSettingsRequestSchema
 >;
 
+export const NavigationItemTypeSchema = z.enum(['page', 'section', 'external', 'action']);
+export type NavigationItemType = z.infer<typeof NavigationItemTypeSchema>;
+
+export const NavigationActionTypeSchema = z.enum([
+  'phone',
+  'email',
+  'download',
+  'custom',
+]);
+export type NavigationActionType = z.infer<typeof NavigationActionTypeSchema>;
+
+const safeNavigationActionUrl = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2_048)
+  .refine((value) => isSafeMetadataUrl(value) || isAnchor(value));
+const NavigationActionSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('phone'),
+      value: z.string().regex(/^\+?[0-9(). -]{3,32}$/),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('email'),
+      value: z.string().regex(/^(?:mailto:)?[^\s@]+@[^\s@]+\.[^\s@]+$/i),
+    })
+    .strict(),
+  z.object({ type: z.literal('download'), value: safeNavigationActionUrl }).strict(),
+  z.object({ type: z.literal('custom'), value: safeNavigationActionUrl }).strict(),
+]);
+
+export type NavigationItem = {
+  id: string;
+  label: string;
+  type: NavigationItemType;
+  pageId?: string | undefined;
+  anchorId?: string | undefined;
+  externalUrl?: string | undefined;
+  action?: { type: NavigationActionType; value: string } | undefined;
+  openInNewTab?: boolean | undefined;
+  children?: NavigationItem[] | undefined;
+};
+
+const navigationItemChildren = () => z.array(NavigationItemSchema).max(50);
+export const NavigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    z
+      .object({
+        id: EntityIdSchema,
+        label: nonEmptyText.max(200),
+        type: z.literal('page'),
+        pageId: EntityIdSchema,
+        openInNewTab: z.boolean().optional(),
+        children: navigationItemChildren().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        id: EntityIdSchema,
+        label: nonEmptyText.max(200),
+        type: z.literal('section'),
+        pageId: EntityIdSchema,
+        anchorId: z.string().regex(/^[a-z][a-z0-9_-]{0,127}$/),
+        openInNewTab: z.boolean().optional(),
+        children: navigationItemChildren().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        id: EntityIdSchema,
+        label: nonEmptyText.max(200),
+        type: z.literal('external'),
+        externalUrl: z
+          .string()
+          .url()
+          .refine((value) => /^https?:\/\//i.test(value)),
+        openInNewTab: z.boolean().optional(),
+        children: navigationItemChildren().optional(),
+      })
+      .strict(),
+    z
+      .object({
+        id: EntityIdSchema,
+        label: nonEmptyText.max(200),
+        type: z.literal('action'),
+        action: NavigationActionSchema,
+        openInNewTab: z.boolean().optional(),
+        children: navigationItemChildren().optional(),
+      })
+      .strict(),
+  ]),
+);
+
+export const NavigationSchema = z
+  .object({
+    id: EntityIdSchema,
+    siteId: EntityIdSchema,
+    name: nonEmptyText.max(200),
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    items: z.array(NavigationItemSchema).max(100),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type Navigation = z.infer<typeof NavigationSchema>;
+
+export type ResolvedNavigationItem = {
+  id: string;
+  label: string;
+  type: NavigationItemType;
+  href: string;
+  openInNewTab?: boolean | undefined;
+  children?: ResolvedNavigationItem[] | undefined;
+};
+
+export const ResolvedNavigationItemSchema: z.ZodType<ResolvedNavigationItem> = z.lazy(
+  () =>
+    z
+      .object({
+        id: EntityIdSchema,
+        label: nonEmptyText.max(200),
+        type: NavigationItemTypeSchema,
+        href: z
+          .string()
+          .min(1)
+          .max(MAX_PAGE_PATH_LENGTH + 2_048),
+        openInNewTab: z.boolean().optional(),
+        children: z.array(ResolvedNavigationItemSchema).max(50).optional(),
+      })
+      .strict(),
+);
+
+export const NavigationListResponseSchema = z
+  .object({ items: z.array(NavigationSchema) })
+  .strict();
+export type NavigationListResponse = z.infer<typeof NavigationListResponseSchema>;
+
+export const CreateNavigationRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200),
+    key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    items: z.array(NavigationItemSchema).max(100).default([]),
+  })
+  .strict();
+export const UpdateNavigationRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    items: z.array(NavigationItemSchema).max(100).optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export type CreateNavigationRequest = z.infer<typeof CreateNavigationRequestSchema>;
+export type UpdateNavigationRequest = z.infer<typeof UpdateNavigationRequestSchema>;
+
+export const SiteManifestSchema = z
+  .object({
+    version: z.literal(1),
+    siteId: EntityIdSchema,
+    homePageId: EntityIdSchema,
+    routes: z.record(z.string(), EntityIdSchema),
+    navigation: z
+      .object({ main: EntityIdSchema.optional(), footer: EntityIdSchema.optional() })
+      .strict(),
+    globals: z
+      .object({ header: EntityIdSchema.optional(), footer: EntityIdSchema.optional() })
+      .strict(),
+    publishedAt: timestampSchema.optional(),
+  })
+  .strict();
+export type SiteManifest = z.infer<typeof SiteManifestSchema>;
+
+export const SiteUrlResponseSchema = z
+  .object({
+    siteId: EntityIdSchema,
+    url: z.string().url().optional(),
+    published: z.boolean(),
+  })
+  .strict();
+export type SiteUrlResponse = z.infer<typeof SiteUrlResponseSchema>;
+
+export const PublicSiteRoutesSchema = z
+  .object({ urls: z.array(z.string().url()).max(2_000) })
+  .strict();
+export type PublicSiteRoutes = z.infer<typeof PublicSiteRoutesSchema>;
+
 export const PublicSeoSettingsSchema = z
   .object({
     title: OptionalSeoText(MAX_SEO_TITLE_LENGTH),
@@ -1954,15 +2201,22 @@ export const PublicSeoSettingsSchema = z
   })
   .strict();
 
-export const PublicLandingPageSchema = z
+export const PublicPageSchema = z
   .object({
     tenantSlug: z.string().trim().min(1).max(80).optional(),
     site: PublicSiteSchema,
-    page: PublicPageSchema,
+    page: PublicPageSummarySchema,
     payload: PagePayloadSchema,
     extensions: z.array(PageRuntimeExtensionSchema).optional(),
     seo: PublicSeoSettingsSchema.optional(),
     canonicalUrl: z.string().url().optional(),
+    navigation: z
+      .object({
+        main: z.array(ResolvedNavigationItemSchema).optional(),
+        footer: z.array(ResolvedNavigationItemSchema).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -2005,11 +2259,20 @@ export const TemplateSchema = z
 
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 export type Site = z.infer<typeof SiteSchema>;
-export type LandingPage = z.infer<typeof LandingPageSchema>;
-export type PublicLandingPage = z.infer<typeof PublicLandingPageSchema>;
+export type Page = z.infer<typeof PageSchema>;
+export type PublicPage = z.infer<typeof PublicPageSchema>;
 export type PageVersion = z.infer<typeof PageVersionSchema>;
 export type Asset = z.infer<typeof AssetSchema>;
 export type Template = z.infer<typeof TemplateSchema>;
+
+/** @deprecated Use PageSchema/Page instead. Kept for API client compatibility. */
+export const LandingPageSchema = PageSchema;
+/** @deprecated Use PublicPageSchema/PublicPage instead. */
+export const PublicLandingPageSchema = PublicPageSchema;
+/** @deprecated Use Page instead. */
+export type LandingPage = Page;
+/** @deprecated Use PublicPage instead. */
+export type PublicLandingPage = PublicPage;
 
 export const PaginationQuerySchema = z
   .object({
@@ -2028,7 +2291,7 @@ export const PaginationSchema = z
   .strict();
 
 export const PageListResponseSchema = z
-  .object({ items: z.array(LandingPageSchema), pagination: PaginationSchema })
+  .object({ items: z.array(PageSchema), pagination: PaginationSchema })
   .strict();
 
 export const PageVersionListResponseSchema = z
@@ -2107,9 +2370,17 @@ export const UpdateSiteRequestSchema = z
 export const CreatePageRequestSchema = z
   .object({
     name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    path: PagePathSchema.optional(),
     slug: z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    parentId: EntityIdSchema.optional(),
+    kind: PageKindSchema.optional(),
+    anchors: z
+      .array(z.string().regex(/^[a-z][a-z0-9_-]{0,127}$/))
+      .max(200)
       .optional(),
     payload: PagePayloadSchema,
   })
@@ -2117,12 +2388,20 @@ export const CreatePageRequestSchema = z
 export const UpdatePageRequestSchema = z
   .object({
     name: nonEmptyText.max(200).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+    path: PagePathSchema.nullable().optional(),
     slug: z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       .nullable()
       .optional(),
     payload: PagePayloadSchema.optional(),
+    parentId: EntityIdSchema.nullable().optional(),
+    kind: PageKindSchema.optional(),
+    anchors: z
+      .array(z.string().regex(/^[a-z][a-z0-9_-]{0,127}$/))
+      .max(200)
+      .optional(),
     expectedVersionNumber: z.number().int().positive().optional(),
   })
   .strict()
@@ -2137,6 +2416,13 @@ export const CreatePageVersionRequestSchema = z
 export const PublishPageRequestSchema = z
   .object({
     versionNumber: z.number().int().positive().optional(),
+  })
+  .strict();
+
+export const DuplicatePageRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    path: PagePathSchema.optional(),
   })
   .strict();
 
@@ -2156,6 +2442,7 @@ export type CreatePageRequest = z.infer<typeof CreatePageRequestSchema>;
 export type UpdatePageRequest = z.infer<typeof UpdatePageRequestSchema>;
 export type CreatePageVersionRequest = z.infer<typeof CreatePageVersionRequestSchema>;
 export type PublishPageRequest = z.infer<typeof PublishPageRequestSchema>;
+export type DuplicatePageRequest = z.infer<typeof DuplicatePageRequestSchema>;
 
 export const CreateAssetRequestSchema = z
   .object({

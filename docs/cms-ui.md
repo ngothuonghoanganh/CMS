@@ -14,7 +14,7 @@ label instead of an empty or misleading selector.
 
 The sidebar is grouped by task and remains permission-aware:
 
-- **Workspace**: Dashboard, Organization, Sites, Landing Pages, Assets, Templates,
+- **Workspace**: Dashboard, Organization, Sites, Pages, Assets, Templates,
   and Submissions.
 - **Operations**: Integrations, Analytics, Domains, and SEO.
 - **Management**: Billing & Usage, Users, Roles, and Audit Log.

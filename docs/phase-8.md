@@ -3,7 +3,7 @@
 ## Status
 
 Phase 8 is implemented as a first-party, workspace-scoped analytics foundation for
-published landing pages. It records compact raw events in MongoDB and aggregates
+published pages. It records compact raw events in MongoDB and aggregates
 reports on demand for the CMS. Phase 9 is documented separately in
 [`docs/phase-9.md`](phase-9.md); its domain and SEO settings remain outside the
 canonical page payload described here.

@@ -54,10 +54,7 @@ import {
   IntegrationRecord,
   IntegrationSchema,
 } from '../persistence/schemas/integration.schema';
-import {
-  LandingPageRecord,
-  LandingPageSchema,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, PageSchema } from '../persistence/schemas/page.schema';
 import {
   PageSeoSettingsRecord,
   PageSeoSettingsSchema,
@@ -95,6 +92,10 @@ import {
   PageExtensionInstanceRecord,
   PageExtensionInstanceSchema,
 } from '../persistence/schemas/page-extension-instance.schema';
+import {
+  NavigationRecord,
+  NavigationSchemaMongoose,
+} from '../persistence/schemas/navigation.schema';
 
 const tenantMigrations = [
   [AuthSessionRecord, AuthSessionSchema],
@@ -106,7 +107,7 @@ const tenantMigrations = [
   [FormSubmissionRecord, FormSubmissionSchema],
   [IntegrationDeliveryRecord, IntegrationDeliverySchema],
   [IntegrationRecord, IntegrationSchema],
-  [LandingPageRecord, LandingPageSchema],
+  [PageRecord, PageSchema],
   [PageSeoSettingsRecord, PageSeoSettingsSchema],
   [PageVersionRecord, PageVersionSchema],
   [SiteRecord, SiteSchema],
@@ -117,6 +118,7 @@ const tenantMigrations = [
   [RoleAssignmentRecord, RoleAssignmentSchema],
   [TenantExtensionRecord, TenantExtensionSchema],
   [PageExtensionInstanceRecord, PageExtensionInstanceSchema],
+  [NavigationRecord, NavigationSchemaMongoose],
 ] as const;
 
 @Injectable()

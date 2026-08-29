@@ -1,4 +1,4 @@
-# AI Context — Payload Landing Page Platform
+# AI Context — Payload Page Platform
 
 > **Entry point for every AI agent and engineer working on this repository.**
 >
@@ -6,9 +6,9 @@
 
 ## Product identity
 
-This repository belongs to the **Payload Landing Page Platform** project: a multi-tenant platform that allows companies to create, manage, preview, publish, and operate landing pages without editing source code.
+This repository belongs to the **Payload Page Platform** project: a multi-tenant platform that allows companies to create, manage, preview, publish, and operate pages without editing source code.
 
-The product is not intended to become a generic CRUD/database admin. The target is a **visual landing-page platform** composed of:
+The product is not intended to become a generic CRUD/database admin. The target is a **visual Page platform** composed of:
 
 - CMS / admin application;
 - visual page builder;

@@ -45,7 +45,7 @@ entries for `extension.enabled`, `extension.disabled` and `extension.configurati
 without values.
 
 The platform exposes built-in deployed extensions and tenant-scoped declarative custom extensions
-in CMS. Custom definitions are stored as validated content and can create safe landing-page
+in CMS. Custom definitions are stored as validated content and can create safe Page
 banner blocks; they cannot install modules or execute code. There is no marketplace or
 install-from-URL flow in this phase.
 
@@ -168,7 +168,7 @@ use the existing validated runtime resolver during compatibility rollout.
 
 Tenant disable follows the safe policy: the API checks page-extension usage and rejects a disable
 when an enabled instance is referenced by a published page. Draft-only usage can be changed or
-removed first. This prevents a CMS toggle from silently changing a live landing page; a future
+removed first. This prevents a CMS toggle from silently changing a live page; a future
 admin flow can add an explicit unpublish-and-disable operation.
 
 ### Research alignment

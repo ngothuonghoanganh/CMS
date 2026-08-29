@@ -117,7 +117,7 @@ test('attaches a page workflow and configures trigger, condition and action node
   await page.getByLabel('Slug').fill(`workflow-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(`Workflow Page ${suffix}`);
   await page.getByLabel('Slug').fill(`workflow-page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
@@ -157,10 +157,10 @@ test('attaches a page workflow and configures trigger, condition and action node
   await expect(page.getByText('Workflow published.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Enable' }).click();
   await expect(page.getByText('Workflow enabled.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByRole('button', { name: `Workflow Page ${suffix}` }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await expect(
-    page.getByRole('status').filter({ hasText: 'Landing page published' }),
+    page.getByRole('status').filter({ hasText: 'Page published' }),
   ).toBeVisible();
 });

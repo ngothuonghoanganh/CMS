@@ -16,6 +16,7 @@ import {
   type CountdownNode,
   type ExtensionNode,
   type PageRuntimeExtension,
+  type ResolvedNavigationItem,
 } from '@payload/contracts';
 import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 
@@ -57,6 +58,13 @@ type RenderContext = {
   tenantSlug?: string;
   runtimeIds?: readonly string[];
   extensions?: readonly PageRuntimeExtension[];
+  customDomain?: boolean;
+  navigation?:
+    | {
+        main?: readonly ResolvedNavigationItem[] | undefined;
+        footer?: readonly ResolvedNavigationItem[] | undefined;
+      }
+    | undefined;
 };
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
@@ -265,6 +273,48 @@ function renderForm(node: FormNode, context: RenderContext): ReactElement {
   return <FormRenderer node={node} {...(submissionUrl ? { submissionUrl } : {})} />;
 }
 
+function navigationHref(href: string, context: RenderContext): string {
+  if (context.customDomain || !context.siteSlug || !href.startsWith('/')) return href;
+  return `/${context.siteSlug}${href === '/' ? '' : href}`;
+}
+
+function renderNavigationItems(
+  items: readonly ResolvedNavigationItem[],
+  context: RenderContext,
+): ReactElement {
+  return (
+    <ul>
+      {items.map((item) => (
+        <li key={item.id}>
+          <a
+            href={navigationHref(item.href, context)}
+            rel={item.openInNewTab ? 'noopener noreferrer' : undefined}
+            target={item.openInNewTab ? '_blank' : undefined}
+          >
+            {item.label}
+          </a>
+          {item.children?.length ? renderNavigationItems(item.children, context) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function renderGlobalNavigation(
+  items: readonly ResolvedNavigationItem[] | undefined,
+  context: RenderContext,
+  label: string,
+  element: 'header' | 'footer',
+): ReactElement | null {
+  if (!items?.length) return null;
+  const content = <nav aria-label={label}>{renderNavigationItems(items, context)}</nav>;
+  return element === 'header' ? (
+    <header data-site-global="header">{content}</header>
+  ) : (
+    <footer data-site-global="footer">{content}</footer>
+  );
+}
+
 // This registry is intentionally explicit: the payload node type is the only
 // dispatch key, and the renderer never imports editor or persistence modules.
 const rendererRegistry: Partial<Record<RenderableNode['type'], NodeRenderer>> = {
@@ -381,8 +431,20 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
       {context.runtimeIds?.length ? (
         <ExtensionRuntimeBootstrap runtimeIds={context.runtimeIds} />
       ) : null}
+      {renderGlobalNavigation(
+        context.navigation?.main,
+        context,
+        'Main navigation',
+        'header',
+      )}
       {renderResponsiveStyles(parsed.data)}
       {renderNode(parsed.data.root, context)}
+      {renderGlobalNavigation(
+        context.navigation?.footer,
+        context,
+        'Footer navigation',
+        'footer',
+      )}
     </div>
   );
 }

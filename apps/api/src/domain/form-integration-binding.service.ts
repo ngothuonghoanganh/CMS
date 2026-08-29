@@ -18,10 +18,7 @@ import {
   type FormIntegrationBindingDocument,
 } from '../persistence/schemas/form-integration-binding.schema';
 import { IntegrationRecord } from '../persistence/schemas/integration.schema';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 
 @Injectable()
@@ -31,8 +28,8 @@ export class FormIntegrationBindingService {
     private readonly bindingModel: Model<FormIntegrationBindingRecord>,
     @InjectModel(IntegrationRecord.name)
     private readonly integrationModel: Model<IntegrationRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
   ) {}
@@ -100,10 +97,7 @@ export class FormIntegrationBindingService {
     return this.toContract(record);
   }
 
-  private async requirePage(
-    pageId: string,
-    workspaceId: string,
-  ): Promise<LandingPageDocument> {
+  private async requirePage(pageId: string, workspaceId: string): Promise<PageDocument> {
     const page = await this.pageModel.findOne({ _id: pageId, workspaceId }).exec();
     if (!page) {
       throw new NotFoundException({

@@ -26,10 +26,7 @@ import {
   type AnalyticsFilter,
   type AnalyticsPageEventMetrics,
 } from './analytics.repository';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 
 const DEFAULT_RANGE_DAYS = 30;
@@ -40,8 +37,8 @@ export class AnalyticsQueryService {
   constructor(
     @Inject(AnalyticsRepository)
     private readonly repository: AnalyticsRepository,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
   ) {}
@@ -205,7 +202,7 @@ function toMetrics(input: {
 }
 
 function toPageSummary(
-  page: LandingPageDocument,
+  page: PageDocument,
   site: SiteDocument,
   metric: AnalyticsPageEventMetrics,
 ): AnalyticsPageSummary {

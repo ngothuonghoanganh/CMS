@@ -17,8 +17,8 @@ import {
   IntegrationDeliverySchema,
   IntegrationRecord,
   IntegrationSchema,
-  LandingPageRecord,
-  LandingPageSchema,
+  PageRecord,
+  PageSchema,
   PageSeoSettingsRecord,
   PageSeoSettingsSchema,
   PageVersionRecord,
@@ -49,6 +49,8 @@ import {
   WorkflowExecutionSchema,
   WorkflowStepExecutionRecord,
   WorkflowStepExecutionSchema,
+  NavigationRecord,
+  NavigationSchema,
 } from '../persistence/schemas';
 import { TenantUserRecord, TenantUserSchema } from './schemas/tenant-user.schema';
 import {
@@ -68,7 +70,7 @@ const models = [
   [FormSubmissionRecord, FormSubmissionSchema],
   [IntegrationDeliveryRecord, IntegrationDeliverySchema],
   [IntegrationRecord, IntegrationSchema],
-  [LandingPageRecord, LandingPageSchema],
+  [PageRecord, PageSchema],
   [PageSeoSettingsRecord, PageSeoSettingsSchema],
   [PageVersionRecord, PageVersionSchema],
   [SiteRecord, SiteSchema],
@@ -86,6 +88,7 @@ const models = [
   [WorkflowVersionRecord, WorkflowVersionSchema],
   [WorkflowExecutionRecord, WorkflowExecutionSchema],
   [WorkflowStepExecutionRecord, WorkflowStepExecutionSchema],
+  [NavigationRecord, NavigationSchema],
 ] as const;
 
 const providers = models.map(([record, schema]) =>

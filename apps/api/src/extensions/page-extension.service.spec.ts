@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Model } from 'mongoose';
 import { PagePayloadV3Schema } from '@payload/contracts';
 
-import type { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import type { PageRecord } from '../persistence/schemas/page.schema';
 import type { PageExtensionInstanceRecord } from '../persistence/schemas/page-extension-instance.schema';
 import type { TenantExtensionRecord } from '../persistence/schemas/tenant-extension.schema';
 import { CapabilityRegistry } from './capability-registry';
@@ -171,7 +171,7 @@ describe('PageExtensionService', () => {
     const tenants = new TenantExtensionStore();
     const service = new PageExtensionService(
       instances as unknown as Model<PageExtensionInstanceRecord>,
-      new PageStore() as unknown as Model<LandingPageRecord>,
+      new PageStore() as unknown as Model<PageRecord>,
       tenants as unknown as Model<TenantExtensionRecord>,
       registry,
     );
@@ -240,7 +240,7 @@ describe('PageExtensionService', () => {
     await registry.onModuleInit();
     const service = new PageExtensionService(
       new PageExtensionStore() as unknown as Model<PageExtensionInstanceRecord>,
-      new PageStore() as unknown as Model<LandingPageRecord>,
+      new PageStore() as unknown as Model<PageRecord>,
       new CustomTenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
       registry,
     );

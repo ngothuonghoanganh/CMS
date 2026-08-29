@@ -42,9 +42,7 @@ export default function LoginPage() {
       <section className="auth-card" aria-labelledby="login-title">
         <div className="eyebrow">Payload CMS</div>
         <h1 id="login-title">Sign in to your workspace</h1>
-        <p className="muted">
-          Manage sites, landing pages, drafts and assets from one place.
-        </p>
+        <p className="muted">Manage sites, pages, drafts and assets from one place.</p>
         <form className="stack" onSubmit={handleSubmit}>
           <TextField
             autoComplete="email"

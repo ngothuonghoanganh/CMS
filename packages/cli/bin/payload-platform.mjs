@@ -45,7 +45,7 @@ function findWorkspaceRoot() {
 }
 
 function printHelp() {
-  console.log(`Payload Landing Page Platform
+  console.log(`Payload Page Platform
 
 Usage:
   payload-platform <command>

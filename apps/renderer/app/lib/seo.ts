@@ -1,15 +1,18 @@
 import type { Metadata } from 'next';
-import type { PublicLandingPage } from '@payload/contracts';
+import type { PublicPage } from '@payload/contracts';
 
 import { getPlatformOrigin } from './host';
 
 export function publicPageMetadata(
-  page: PublicLandingPage,
+  page: PublicPage,
   options: { fallbackPath?: string; preview?: boolean } = {},
 ): Metadata {
   const seo = page.seo;
-  const title = seo?.title ?? page.payload.metadata.documentTitle;
-  const description = seo?.description ?? page.payload.metadata.documentDescription;
+  const title = seo?.title ?? page.payload.metadata.documentTitle ?? page.page.name;
+  const description =
+    seo?.description ??
+    page.payload.metadata.documentDescription ??
+    page.page.description;
   const fallbackCanonical = options.fallbackPath
     ? new URL(options.fallbackPath, getPlatformOrigin()).toString()
     : undefined;

@@ -11,6 +11,9 @@ export class CustomDomainRecord {
   @Prop({ type: String, required: true, index: true })
   workspaceId!: string;
 
+  @Prop({ type: String, required: false, index: true })
+  siteId?: string;
+
   @Prop({ type: String, required: true, trim: true, lowercase: true })
   hostname!: string;
 
@@ -53,6 +56,14 @@ export const CustomDomainSchema = SchemaFactory.createForClass(CustomDomainRecor
 CustomDomainSchema.index({ normalizedHostname: 1 }, { unique: true });
 CustomDomainSchema.index({ workspaceId: 1, createdAt: -1 });
 CustomDomainSchema.index({ workspaceId: 1, landingPageId: 1 });
+CustomDomainSchema.index({ workspaceId: 1, siteId: 1, createdAt: -1 });
+CustomDomainSchema.index(
+  { workspaceId: 1, siteId: 1, isPrimary: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isPrimary: true, siteId: { $type: 'string' } },
+  },
+);
 CustomDomainSchema.index(
   { workspaceId: 1, landingPageId: 1, isPrimary: 1 },
   {

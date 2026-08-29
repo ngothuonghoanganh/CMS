@@ -12,7 +12,7 @@ collaboration and microservices remain deferred.
 
 `PagePayloadV1` and `PagePayloadV2` are unchanged. Integration configuration is not
 stored inside the page payload and is never serialized by the GrapesJS adapter.
-Bindings point to a landing page and a stable V2 form node id, while submissions
+Bindings point to a page and a stable V2 form node id, while submissions
 continue to record the published page-version id. A notification therefore uses the
 same published schema and version semantics as the underlying submission.
 
@@ -23,7 +23,7 @@ The API persists three workspace-scoped records:
 - `IntegrationRecord` stores the name, enabled flag, type and non-secret config.
   Email config contains recipients and a subject template. Webhook config contains
   the destination URL and the `form.submitted` event type.
-- `FormIntegrationBindingRecord` maps a landing page/form node pair to selected
+- `FormIntegrationBindingRecord` maps a page/form node pair to selected
   integration ids. The pair is unique per workspace.
 - `IntegrationDeliveryRecord` is the durable outbox entry for one
   `submissionId`/`integrationId` pair. It records `pending`, `processing`,
@@ -128,7 +128,7 @@ and E2E tests. Production deployments should leave both values false.
 
 The CMS now has an Integrations view for creating, editing, enabling/disabling and
 deleting email/webhook integrations, viewing delivery logs and retrying failures.
-Landing Page settings show the current draft's V2 form nodes and allow selecting
+Page settings show the current draft's V2 form nodes and allow selecting
 enabled integrations per form. The UI displays only configuration metadata and
 never receives a stored secret value.
 

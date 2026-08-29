@@ -14,15 +14,15 @@ import {
   PageSeoSettingsRecord,
   type PageSeoSettingsDocument,
 } from '../persistence/schemas/page-seo-settings.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 
 @Injectable()
 export class SeoService {
   constructor(
     @InjectModel(PageSeoSettingsRecord.name)
     private readonly seoModel: Model<PageSeoSettingsRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
   ) {}
 
   async get(pageId: string, workspaceId: string): Promise<PageSeoSettings> {
@@ -93,7 +93,7 @@ export class SeoService {
     if (!(await this.pageModel.exists({ _id: pageId, workspaceId }))) {
       throw new NotFoundException({
         code: 'PAGE_NOT_FOUND',
-        message: 'Landing page was not found in the requested workspace',
+        message: 'Page was not found in the requested workspace',
       });
     }
   }

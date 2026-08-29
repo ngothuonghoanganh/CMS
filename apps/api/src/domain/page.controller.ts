@@ -16,11 +16,13 @@ import {
 import {
   CreatePageRequestSchema,
   CreatePageVersionRequestSchema,
+  DuplicatePageRequestSchema,
   UpdatePageRequestSchema,
   PaginationQuerySchema,
   PublishPageRequestSchema,
   type CreatePageRequest,
   type CreatePageVersionRequest,
+  type DuplicatePageRequest,
   type PaginationQuery,
   type PublishPageRequest,
   type UpdatePageRequest,
@@ -147,6 +149,26 @@ export class PageController {
       .catch(() => undefined);
   }
 
+  @Post(':pageId/duplicate')
+  async duplicate(
+    @Param('pageId') pageId: string,
+    @Body(new ZodValidationPipe(DuplicatePageRequestSchema))
+    input: DuplicatePageRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.create');
+    return this.pageService.duplicate(pageId, input, requireWorkspaceId(principal));
+  }
+
+  @Post(':pageId/homepage')
+  async setHomepage(
+    @Param('pageId') pageId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update');
+    return this.pageService.setHomepage(pageId, requireWorkspaceId(principal));
+  }
+
   @Post(':pageId/versions')
   async createVersion(
     @Param('pageId') pageId: string,
@@ -262,6 +284,19 @@ export class PublicPageController {
     @Param('pageSlug') pageSlug: string,
   ) {
     return this.pageService.resolvePublicPage(siteSlug, pageSlug);
+  }
+
+  @Get(':siteSlug')
+  async getPublicHomePage(@Param('siteSlug') siteSlug: string) {
+    return this.pageService.resolvePublicPageByPath(siteSlug, '/');
+  }
+
+  @Get(':siteSlug/resolve')
+  async resolvePublicPage(
+    @Param('siteSlug') siteSlug: string,
+    @Query('path') path = '/',
+  ) {
+    return this.pageService.resolvePublicPageByPath(siteSlug, path);
   }
 }
 

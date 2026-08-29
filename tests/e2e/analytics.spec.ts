@@ -28,7 +28,7 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(pageName);
   await page.getByLabel('Slug').fill(pageSlug);
   await page.getByRole('button', { name: 'Create page' }).click();
@@ -41,11 +41,11 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: '← Pages' }).click();
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Site').selectOption({ label: `Analytics E2E Site ${suffix}` });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
   await publicPage.goto(
@@ -75,5 +75,5 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await expect(
     page.locator('.analytics-metric-card').nth(2).locator('strong'),
   ).toHaveText(/[1-9]/);
-  await expect(page.getByText('Top landing pages')).toBeVisible();
+  await expect(page.getByText('Top pages')).toBeVisible();
 });

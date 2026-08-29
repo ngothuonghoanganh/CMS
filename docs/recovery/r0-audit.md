@@ -194,7 +194,7 @@ API authentication and authorization remain authoritative.
 CMS dashboard/builder
   → GET /pages/:id, /versions, assets, extensions
   → API PageService
-  → LandingPageRecord + PageVersionRecord in current tenant DB
+  → PageRecord + PageVersionRecord in current tenant DB
   → contract parse before response
 ```
 
@@ -209,7 +209,7 @@ Renderer request
   → API public route
   → middleware resolves tenant from host/slug
   → PublicPageResolver checks site/page/workspace/published pointer
-  → PageService builds PublicLandingPage
+  → PageService builds PublicPage
   → strict response parse in renderer
   → shared renderer registry
 ```
@@ -272,7 +272,7 @@ pass would be unnecessarily risky.
 
 ```text
 create page
-  → create LandingPageRecord
+  → create PageRecord
   → create PageVersionRecord(version 1)
   → set currentDraftVersionId
   → synchronize page extensions

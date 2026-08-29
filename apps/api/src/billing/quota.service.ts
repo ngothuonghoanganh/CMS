@@ -15,7 +15,7 @@ import {
 
 import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
 import { IntegrationRecord } from '../persistence/schemas/integration.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { currentUtcMonth, SubscriptionService } from './subscription.service';
@@ -44,8 +44,8 @@ export class QuotaService {
   constructor(
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(CustomDomainRecord.name)
     private readonly domainModel: Model<CustomDomainRecord>,
     @InjectModel(IntegrationRecord.name)
@@ -113,7 +113,7 @@ export class QuotaService {
     const { start, end } = currentUtcMonth();
     const [workspaces, pages, domains, integrations, periodic] = await Promise.all([
       this.workspaceModel.countDocuments({}).exec(),
-      this.pageModel.countDocuments({}).exec(),
+      this.pageModel.countDocuments({ kind: { $ne: 'system' } }).exec(),
       this.domainModel.countDocuments({}).exec(),
       this.integrationModel.countDocuments({}).exec(),
       this.usage.listForCurrentPeriod(tenantId),
@@ -163,7 +163,7 @@ export class QuotaService {
       case 'workspaces':
         return this.workspaceModel.countDocuments({}).exec();
       case 'landing_pages':
-        return this.pageModel.countDocuments({}).exec();
+        return this.pageModel.countDocuments({ kind: { $ne: 'system' } }).exec();
       case 'custom_domains':
         return this.domainModel.countDocuments({}).exec();
       case 'integrations':

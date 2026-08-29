@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`PagePayloadV1` is the canonical, JSON-safe representation of a landing page. It is
+`PagePayloadV1` is the canonical, JSON-safe representation of a page. It is
 the boundary between the builder adapter, the API, persistence and the renderer. The
 editor is an implementation detail: GrapesJS editor state is transient and no raw
 editor project JSON is persisted.
@@ -29,7 +29,7 @@ cannot contain children. Each node has a stable, page-local `id`. The root id is
 `root`, and all ids must be unique in the tree. `type` is the only node discriminator;
 there is no duplicated `props.kind` field.
 
-`LandingPage.name` is the CMS management name. `metadata.documentTitle` and
+`Page.name` is the CMS management name. `metadata.documentTitle` and
 `metadata.documentDescription` are versioned rendered document metadata and are not a
 second source of truth for the management name.
 
@@ -77,7 +77,7 @@ countdown insertion.
   "version": 1,
   "metadata": {
     "documentTitle": "Launch your next idea",
-    "documentDescription": "A focused landing page."
+    "documentDescription": "A focused page."
   },
   "root": {
     "id": "root",

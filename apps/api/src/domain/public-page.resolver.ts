@@ -9,18 +9,16 @@ import type { Model } from 'mongoose';
 import {
   PagePayloadSchema,
   PublishedPageBundleSchema,
-  PublicLandingPageSchema,
+  PublicPageSchema,
   PublicSeoSettingsSchema,
   normalizeHostname,
-  type PublicLandingPage,
+  type PublicPage,
+  normalizePagePath,
 } from '@payload/contracts';
 
 import { env } from '../config/env';
 import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
 import {
   PageVersionRecord,
@@ -29,14 +27,17 @@ import {
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { PageExtensionService } from '../extensions/page-extension.service';
+import { SiteService } from './site.service';
+import { SiteUrlService } from './site-url.service';
+import { NavigationService } from './navigation.service';
 
 @Injectable()
 export class PublicPageResolver {
   constructor(
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(CustomDomainRecord.name)
@@ -46,52 +47,95 @@ export class PublicPageResolver {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(PageExtensionService)
     private readonly pageExtensions: PageExtensionService,
+    @Inject(SiteService) private readonly sites: SiteService,
+    @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
+    @Inject(NavigationService) private readonly navigation: NavigationService,
   ) {}
 
-  async resolveByPath(siteSlug: string, pageSlug: string): Promise<PublicLandingPage> {
+  async resolveByLegacySlug(siteSlug: string, pageSlug: string): Promise<PublicPage> {
+    return this.resolveByPath(siteSlug, pageSlug ? `/${pageSlug}` : '/');
+  }
+
+  async resolveByPath(siteSlug: string, path: string): Promise<PublicPage> {
+    const normalizedPath = normalizePagePath(path);
+    if (!normalizedPath) throw this.publicNotFound();
     const sites = await this.siteModel.find({ slug: siteSlug }).limit(2).exec();
     if (sites.length !== 1 || !sites[0]) {
       throw this.publicNotFound();
     }
 
     const site = sites[0];
+    await this.sites.ensureHomePage(site);
     const page = await this.pageModel
       .findOne({
         siteId: site._id.toString(),
-        slug: pageSlug,
+        path: normalizedPath,
         workspaceId: site.workspaceId,
       })
       .exec();
-    if (!page) throw this.publicNotFound();
+    const legacyPage =
+      page ??
+      (normalizedPath === '/'
+        ? null
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              slug: normalizedPath.slice(1),
+              workspaceId: site.workspaceId,
+            })
+            .exec());
+    if (!legacyPage) throw this.publicNotFound();
 
-    const version = await this.findPublishedVersion(page, site);
-    return this.toPublicContract(site, page, version);
+    const version = await this.findPublishedVersion(legacyPage, site);
+    return this.toPublicContract(site, legacyPage, version);
   }
 
-  async resolveByHostname(hostname: string): Promise<PublicLandingPage> {
+  async resolveByHostname(hostname: string, path = '/'): Promise<PublicPage> {
     const normalizedHostname = normalizeHostname(hostname);
     if (!normalizedHostname) throw this.publicNotFound();
 
     const domain = await this.domainModel
       .findOne({ normalizedHostname, hostname: normalizedHostname, status: 'active' })
       .exec();
-    if (!domain?.landingPageId) throw this.publicNotFound();
-    const page = await this.pageModel
-      .findOne({ _id: domain.landingPageId, workspaceId: domain.workspaceId })
-      .exec();
-    if (!page) throw this.publicNotFound();
+    if (!domain) throw this.publicNotFound();
+    const normalizedPath = normalizePagePath(path);
+    if (!normalizedPath) throw this.publicNotFound();
 
-    const site = await this.siteModel
-      .findOne({ _id: page.siteId, workspaceId: domain.workspaceId })
-      .exec();
+    let site = domain.siteId
+      ? await this.siteModel
+          .findOne({ _id: domain.siteId, workspaceId: domain.workspaceId })
+          .exec()
+      : null;
+    const assignedPage = domain.landingPageId
+      ? await this.pageModel
+          .findOne({ _id: domain.landingPageId, workspaceId: domain.workspaceId })
+          .exec()
+      : null;
+    if (!site && assignedPage) {
+      site = await this.siteModel
+        .findOne({ _id: assignedPage.siteId, workspaceId: domain.workspaceId })
+        .exec();
+    }
     if (!site) throw this.publicNotFound();
 
+    await this.sites.ensureHomePage(site);
+    const page =
+      normalizedPath === '/' && assignedPage && !domain.siteId
+        ? assignedPage
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              workspaceId: domain.workspaceId,
+              path: normalizedPath,
+            })
+            .exec();
+    if (!page) throw this.publicNotFound();
     const version = await this.findPublishedVersion(page, site);
     return this.toPublicContract(site, page, version);
   }
 
   private async findPublishedVersion(
-    page: LandingPageDocument,
+    page: PageDocument,
     site: SiteDocument,
   ): Promise<PageVersionDocument> {
     if (!page.publishedVersionId) throw this.publicNotFound();
@@ -109,9 +153,9 @@ export class PublicPageResolver {
 
   private async toPublicContract(
     site: SiteDocument,
-    page: LandingPageDocument,
+    page: PageDocument,
     version: PageVersionDocument,
-  ): Promise<PublicLandingPage> {
+  ): Promise<PublicPage> {
     try {
       const payload = PagePayloadSchema.parse(version.payload);
       const seoRecord = await this.seoModel
@@ -119,6 +163,10 @@ export class PublicPageResolver {
         .exec();
       const seo = seoRecord ? this.toPublicSeo(seoRecord) : undefined;
       const canonicalUrl = await this.resolveCanonicalUrl(page, seo?.canonicalUrl);
+      const navigation = await this.navigation.resolveForSite(
+        site._id.toString(),
+        site.workspaceId,
+      );
       const publishedBundle = version.publishedBundle
         ? PublishedPageBundleSchema.parse(version.publishedBundle)
         : undefined;
@@ -126,17 +174,19 @@ export class PublicPageResolver {
         publishedBundle?.extensions ??
         (await this.pageExtensions.resolveRuntime(page._id.toString(), page.workspaceId));
 
-      return PublicLandingPageSchema.parse({
+      return PublicPageSchema.parse({
         tenantSlug: this.tenantContext.require().slug,
         site: { name: site.name, slug: site.slug },
         page: {
           name: page.name,
+          ...(page.description ? { description: page.description } : {}),
           ...(page.slug ? { slug: page.slug } : {}),
         },
         payload,
         ...(extensions.length ? { extensions } : {}),
         ...(seo ? { seo } : {}),
         ...(canonicalUrl ? { canonicalUrl } : {}),
+        ...(navigation ? { navigation } : {}),
       });
     } catch (error) {
       if (
@@ -170,7 +220,7 @@ export class PublicPageResolver {
   }
 
   private async resolveCanonicalUrl(
-    page: LandingPageDocument,
+    page: PageDocument,
     explicitCanonicalUrl?: string,
   ): Promise<string | undefined> {
     const origin = new URL(env.PUBLIC_PLATFORM_ORIGIN);
@@ -178,19 +228,11 @@ export class PublicPageResolver {
       return new URL(explicitCanonicalUrl, origin).toString();
     }
 
-    const primaryDomain = await this.domainModel
-      .findOne({
-        workspaceId: page.workspaceId,
-        landingPageId: page._id.toString(),
-        status: 'active',
-        isPrimary: true,
-      })
+    const site = await this.siteModel
+      .findOne({ _id: page.siteId, workspaceId: page.workspaceId })
       .exec();
-    if (primaryDomain) {
-      return `https://${primaryDomain.hostname}/`;
-    }
-
-    return undefined;
+    if (!site) return undefined;
+    return this.siteUrls.getPageUrl(site, page);
   }
 
   private publicNotFound(): NotFoundException {

@@ -16,7 +16,7 @@ Tenant ── TenantSubscription ── Plan ── Entitlements
   └──────────────┴── TenantUsage (period counters)
 
 TENANT DB
-Workspace, Sites, LandingPages, PageVersions, Forms, Leads,
+Workspace, Sites, Pages, PageVersions, Forms, Leads,
 Integrations, AnalyticsEvents, CustomDomains and SEO
 ```
 
@@ -60,13 +60,13 @@ The supported entitlements are:
 - `monthlyFormSubmissions`
 
 Hard resource limits are enforced in domain services before mutation:
-workspaces, landing pages, custom domains and configured integrations. The central
+workspaces, pages, custom domains and configured integrations. The central
 `QuotaService` also serializes same-process creates for a tenant/resource pair. This
 is a correctness improvement for one API instance; cross-process distributed locking
 is intentionally deferred and the cross-database consistency model remains
 check-then-create.
 
-Page versions do not count as landing pages. Integration deliveries do not count as
+Page versions do not count as pages. Integration deliveries do not count as
 integrations. All configured custom-domain records count, including pending records.
 
 Monthly page views and accepted form submissions are soft usage metrics. They are

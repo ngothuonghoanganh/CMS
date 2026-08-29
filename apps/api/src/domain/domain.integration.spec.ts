@@ -19,7 +19,7 @@ import { env } from '../config/env';
 import { withTestTenant } from '../testing/tenant-test-context';
 import { AuthSessionRecord } from '../persistence/schemas/auth-session.schema';
 import { FormSubmissionRecord } from '../persistence/schemas/form-submission.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
@@ -122,7 +122,7 @@ function readCookie(setCookie: string[] | undefined, name: string): string {
 describe.skipIf(!integrationEnabled)('domain API integration', () => {
   let app: INestApplication;
   let moduleRef: TestingModule;
-  let landingPageModel: Model<LandingPageRecord>;
+  let pageModel: Model<PageRecord>;
   let versionModel: Model<PageVersionRecord>;
   let submissionModel: Model<FormSubmissionRecord>;
   let siteModel: Model<SiteRecord>;
@@ -134,9 +134,7 @@ describe.skipIf(!integrationEnabled)('domain API integration', () => {
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
     app.useGlobalFilters(new ApiExceptionFilter());
-    landingPageModel = moduleRef.get<Model<LandingPageRecord>>(
-      getModelToken(LandingPageRecord.name),
-    );
+    pageModel = moduleRef.get<Model<PageRecord>>(getModelToken(PageRecord.name));
     versionModel = moduleRef.get<Model<PageVersionRecord>>(
       getModelToken(PageVersionRecord.name),
     );
@@ -246,7 +244,7 @@ describe.skipIf(!integrationEnabled)('domain API integration', () => {
 
       const pageB = randomUUID();
       const versionB = randomUUID();
-      await landingPageModel.create({
+      await pageModel.create({
         _id: pageB,
         workspaceId: workspaceB,
         siteId: siteB,
@@ -276,11 +274,12 @@ describe.skipIf(!integrationEnabled)('domain API integration', () => {
       const pageListResponse = await agent
         .get(`/api/v1/sites/${siteA}/pages`)
         .expect(200);
-      expect(pageListResponse.body.items).toHaveLength(1);
+      // Site provisioning creates the invariant homepage before user-created pages.
+      expect(pageListResponse.body.items).toHaveLength(2);
       expect(pageListResponse.body.pagination).toMatchObject({
         limit: 20,
         offset: 0,
-        total: 1,
+        total: 2,
         hasNextPage: false,
       });
       await agent.get(`/api/v1/sites/${siteA}/pages?limit=101`).expect(400);

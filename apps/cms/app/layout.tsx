@@ -4,7 +4,7 @@ import './globals.css';
 import './ui/system.css';
 
 export const metadata: Metadata = {
-  description: 'Management workspace for the Payload Landing Page Platform',
+  description: 'Management workspace for the Payload Page Platform',
   title: 'Payload CMS',
 };
 

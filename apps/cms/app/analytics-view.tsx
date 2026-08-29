@@ -183,13 +183,13 @@ function AnalyticsReport({
         </div>
         {overview?.topPages.length ? (
           <label className="inline-field">
-            Landing page
+            Page
             <select
-              aria-label="Analytics landing page"
+              aria-label="Analytics page"
               onChange={(event) => onSelectPage(event.target.value)}
               value={selectedPageId}
             >
-              <option value="">All landing pages</option>
+              <option value="">All pages</option>
               {overview.topPages.map((page) => (
                 <option key={page.id} value={page.id}>
                   {page.name} · {page.siteName}
@@ -282,7 +282,7 @@ function TopPages({ pages }: { pages: AnalyticsOverviewResponse['topPages'] }) {
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>Top landing pages</h2>
+        <h2>Top pages</h2>
       </div>
       {pages.length ? (
         <div className="list">

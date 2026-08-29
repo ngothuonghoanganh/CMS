@@ -58,6 +58,9 @@ import { ControlPlaneModule } from '../tenancy/control-plane.module';
 import { SecurityModule } from '../security/security.module';
 import { ExtensionModule } from '../extensions/extension.module';
 import { WorkflowModule } from '../workflows/workflow.module';
+import { NavigationController } from './navigation.controller';
+import { NavigationService } from './navigation.service';
+import { SiteUrlService } from './site-url.service';
 
 @Module({
   imports: [
@@ -89,6 +92,7 @@ import { WorkflowModule } from '../workflows/workflow.module';
     PublicDomainController,
     SeoController,
     OrganizationController,
+    NavigationController,
   ],
   providers: [
     AssetService,
@@ -104,6 +108,8 @@ import { WorkflowModule } from '../workflows/workflow.module';
     AnalyticsRepository,
     AnalyticsService,
     OrganizationService,
+    NavigationService,
+    SiteUrlService,
     AnalyticsQueryService,
     CustomDomainService,
     PublicPageResolver,

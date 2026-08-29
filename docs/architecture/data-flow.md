@@ -7,7 +7,7 @@ PagePayload JSON
   -> Zod PagePayloadV1 validation
   -> PageController
   -> PageService ownership/version checks
-  -> PageVersion snapshot + LandingPage draft pointer
+  -> PageVersion snapshot + Page draft pointer
   -> explicit API contract mapping
   -> MongoDB
 ```
@@ -88,7 +88,7 @@ Raw GrapesJS project JSON is transient editor state only. The API receives only 
 validated PagePayloadV1 snapshot, and a stale expected version becomes a visible
 conflict instead of an overwrite.
 
-## Deferred landing-page flows
+## Deferred Page flows
 
 The following flows remain intentionally outside Phase 4:
 

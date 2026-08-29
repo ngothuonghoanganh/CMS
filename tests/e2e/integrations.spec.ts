@@ -74,7 +74,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await page.getByLabel('Slug').fill(siteSlug);
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(pageName);
   await page.getByLabel('Slug').fill(pageSlug);
   await page.getByRole('button', { name: 'Create page' }).click();
@@ -87,7 +87,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: '← Pages' }).click();
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Site').selectOption({ label: siteName });
   await page.getByRole('button', { name: pageName }).click();
   await expect(page.getByRole('heading', { name: 'Form integrations' })).toBeVisible();
@@ -104,7 +104,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await expect(webhookCheckbox).toBeChecked();
   await expect(page.getByRole('status')).toContainText('Form notifications updated');
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
   await publicPage.goto(`/${siteSlug}/${pageSlug}`);

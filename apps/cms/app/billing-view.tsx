@@ -12,7 +12,7 @@ import { StatusBadge } from './status-badge';
 
 const labels: Record<BillingUsageItem['metric'], string> = {
   workspaces: 'Workspaces',
-  landing_pages: 'Landing pages',
+  landing_pages: 'Pages',
   custom_domains: 'Custom domains',
   integrations: 'Integrations',
   page_views_monthly: 'Monthly page views',

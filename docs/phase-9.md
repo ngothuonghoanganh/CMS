@@ -5,7 +5,7 @@
 Phase 8 was complete before this work started. Phase 9 is implemented and verified;
 Phase 10 has not been started.
 
-The phase moves public delivery from a slug-only landing-page route to a host-aware
+The phase moves public delivery from a slug-only Page route to a host-aware
 resolution boundary while keeping custom-domain and SEO configuration outside the
 frozen `PagePayloadV1`/`PagePayloadV2` contracts.
 

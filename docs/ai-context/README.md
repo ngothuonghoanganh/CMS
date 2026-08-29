@@ -1,4 +1,4 @@
-# Payload Landing Page Platform — AI Context Pack
+# Payload Page Platform — AI Context Pack
 
 This folder contains a repository-ready documentation pack for the `ngothuonghoanganh/CMS` project.
 

@@ -34,17 +34,17 @@ The table area should have its own horizontal overflow behavior when needed rath
 
 Use the smallest pattern that preserves clarity:
 
-| Task                        | Preferred pattern      |
-| --------------------------- | ---------------------- |
-| delete confirmation         | dialog                 |
-| rename/simple edit          | inline or small dialog |
-| create 3–8 simple fields    | dialog or drawer       |
-| inspect medium detail       | drawer                 |
-| edit medium entity          | drawer                 |
-| complex configuration       | dedicated page         |
-| landing page visual builder | dedicated workspace    |
-| large data table            | normal page, not modal |
-| multi-step setup            | dedicated flow/page    |
+| Task                     | Preferred pattern      |
+| ------------------------ | ---------------------- |
+| delete confirmation      | dialog                 |
+| rename/simple edit       | inline or small dialog |
+| create 3–8 simple fields | dialog or drawer       |
+| inspect medium detail    | drawer                 |
+| edit medium entity       | drawer                 |
+| complex configuration    | dedicated page         |
+| page visual builder      | dedicated workspace    |
+| large data table         | normal page, not modal |
+| multi-step setup         | dedicated flow/page    |
 
 Modal is not a universal solution.
 

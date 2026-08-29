@@ -450,7 +450,7 @@ export function ExtensionsView({ canManage }: { canManage: boolean }) {
             <section className="panel custom-extension-create-panel">
               <div>
                 <span className="eyebrow">Custom extension</span>
-                <h2>Create a reusable landing-page block</h2>
+                <h2>Create a reusable page block</h2>
                 <p className="muted">
                   Define content, CTA and accent styling once, then place the block from
                   the visual builder on any page in this tenant.
@@ -557,7 +557,7 @@ export function ExtensionsView({ canManage }: { canManage: boolean }) {
                   Body
                   <textarea
                     onChange={(event) => updateCustomDraft('body', event.target.value)}
-                    placeholder="A short message shown on the landing page"
+                    placeholder="A short message shown on the page"
                     value={customDraft.body}
                   />
                 </label>

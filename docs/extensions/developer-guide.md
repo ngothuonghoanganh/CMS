@@ -103,7 +103,7 @@ mobile widths. Update `docs/phase-13.md` when the platform boundary changes.
 
 ## 7. Attach an extension to a page
 
-Use `pageConfiguration` for settings that belong to one landing page. The page API stores a
+Use `pageConfiguration` for settings that belong to one page. The page API stores a
 `PageExtensionInstance` and validates that the tenant extension is enabled before allowing the
 instance to be enabled:
 
@@ -129,7 +129,7 @@ Use `GET /api/v1/pages/:pageId/extensions/capabilities` when a host needs the re
 graph. It returns active extension IDs, capabilities, runtime IDs, data bindings and controlled
 slots without exposing tenant secrets.
 
-## 9. Create a custom landing-page extension
+## 9. Create a custom Page extension
 
 The CMS supports tenant-scoped declarative extensions in addition to statically deployed code.
 Create one with `POST /api/v1/extensions`, edit it with `PATCH /api/v1/extensions/:extensionId` and
@@ -146,7 +146,7 @@ HTTP(S)/relative CTA and a hex accent color:
   "render": {
     "kind": "banner",
     "heading": "Launch your next campaign",
-    "body": "A reusable landing-page block.",
+    "body": "A reusable Page block.",
     "buttonLabel": "Learn more",
     "buttonHref": "/learn",
     "accentColor": "#8cf0c5"

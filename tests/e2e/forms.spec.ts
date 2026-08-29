@@ -13,7 +13,7 @@ async function login(page: Page) {
 }
 
 async function openPages(page: Page, siteName?: string) {
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   if (siteName) await page.getByLabel('Site').selectOption({ label: siteName });
 }
 
@@ -107,7 +107,7 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await openPages(page, siteName);
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
   await publicPage.goto(`/${siteSlug}/${pageSlug}`);
@@ -132,7 +132,7 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await openPages(page, siteName);
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   await publicPage.goto(`/${siteSlug}/${pageSlug}?republished=${Date.now()}`);
   await expect(publicPage.getByLabel('Phone')).toBeVisible();

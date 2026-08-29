@@ -36,10 +36,7 @@ import {
   FormSubmissionRecord,
   type FormSubmissionDocument,
 } from '../persistence/schemas/form-submission.schema';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import {
   PageVersionRecord,
   type PageVersionDocument,
@@ -55,14 +52,14 @@ import { EventBus } from '../extensions/event-bus';
 
 type ResolvedForm = {
   site: SiteDocument;
-  page: LandingPageDocument;
+  page: PageDocument;
   version: PageVersionDocument;
   form: AnyFormNode;
 };
 
 type SubmissionContext = {
   site?: SiteDocument;
-  page?: LandingPageDocument;
+  page?: PageDocument;
   version?: PageVersionDocument;
   form?: AnyFormNode;
 };
@@ -88,8 +85,8 @@ export class SubmissionService {
     private readonly submissionModel: Model<FormSubmissionRecord>,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
     @Inject(IntegrationDispatcher)

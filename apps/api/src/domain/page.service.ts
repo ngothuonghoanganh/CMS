@@ -12,21 +12,24 @@ import { randomUUID } from 'node:crypto';
 
 import {
   CreatePageVersionRequestSchema,
-  LandingPageSchema,
+  DuplicatePageRequestSchema,
+  PageSchema,
   PagePayloadSchema,
   PageListResponseSchema,
-  PublicLandingPageSchema,
+  PublicPageSchema,
   PageVersionListResponseSchema,
   PageVersionSchema,
   PaginationQuerySchema,
   PublishPageRequestSchema,
   UpdatePageRequestSchema,
+  normalizePagePath,
   type CreatePageRequest,
   type CreatePageVersionRequest,
-  type LandingPage,
+  type DuplicatePageRequest,
+  type Page,
   type PagePayload,
   type PageListResponse,
-  type PublicLandingPage,
+  type PublicPage,
   type PageVersionListResponse,
   type PageVersion,
   type PaginationQuery,
@@ -37,10 +40,7 @@ import {
 import { QuotaService } from '../billing/quota.service';
 import { assertExpectedVersionNumber, nextVersionNumber } from './versioning';
 import { PublicPageResolver } from './public-page.resolver';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import {
   PageVersionRecord,
   type PageVersionDocument,
@@ -50,12 +50,14 @@ import { EventBus } from '../extensions/event-bus';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { WorkflowService } from '../workflows/workflow.service';
+import { SiteService } from './site.service';
+import { NavigationService } from './navigation.service';
 
 @Injectable()
 export class PageService {
   constructor(
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(SiteRecord.name)
@@ -68,44 +70,71 @@ export class PageService {
     private readonly pageExtensions: PageExtensionService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(WorkflowService) private readonly workflows: WorkflowService,
+    @Inject(SiteService) private readonly sites: SiteService,
+    @Inject(NavigationService) private readonly navigation: NavigationService,
   ) {}
 
   async create(
     siteId: string,
     input: CreatePageRequest,
     workspaceId: string,
-  ): Promise<LandingPage> {
+  ): Promise<Page> {
     return this.quotas.withHardQuota('landing_pages', async () => {
       const site = await this.requireSite(siteId, workspaceId);
+      await this.sites.ensureHomePage(site);
       const payload = this.parsePayload(input.payload);
       const pageId = randomUUID();
+      const path = this.requirePath(
+        input.path ??
+          (input.slug
+            ? `/${input.slug}`
+            : `/${slugifyPagePath(input.name) || `page-${pageId.slice(-12)}`}`),
+      );
+      if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
       const versionId = randomUUID();
-      const page = await this.pageModel.create({
-        _id: pageId,
-        workspaceId: site.workspaceId,
-        siteId,
-        name: input.name,
-        ...(input.slug ? { slug: input.slug } : {}),
-      });
-      await this.versionModel.create({
-        _id: versionId,
-        workspaceId: site.workspaceId,
-        siteId,
-        landingPageId: pageId,
-        versionNumber: 1,
-        payload,
-      });
-      page.currentDraftVersionId = versionId;
-      await page.save();
-      await this.pageExtensions.synchronizePayload(pageId, site.workspaceId, payload);
+      let page: PageDocument;
+      try {
+        page = await this.pageModel.create({
+          _id: pageId,
+          workspaceId: site.workspaceId,
+          siteId,
+          name: input.name,
+          ...(input.description ? { description: input.description } : {}),
+          path,
+          kind: input.kind ?? 'standard',
+          ...(input.parentId ? { parentId: input.parentId } : {}),
+          ...(input.anchors ? { anchors: input.anchors } : {}),
+          ...(input.slug ? { slug: input.slug } : {}),
+        });
+      } catch (error) {
+        if (isDuplicateKeyError(error)) throw this.duplicatePath();
+        throw error;
+      }
+      try {
+        await this.versionModel.create({
+          _id: versionId,
+          workspaceId: site.workspaceId,
+          siteId,
+          landingPageId: pageId,
+          versionNumber: 1,
+          payload,
+        });
+        page.currentDraftVersionId = versionId;
+        await page.save();
+        await this.pageExtensions.synchronizePayload(pageId, site.workspaceId, payload);
 
-      await this.events.publish('page.created', {
-        tenantId: this.tenantContext.require().id,
-        pageId,
-        workspaceId: site.workspaceId,
-        siteId,
-        occurredAt: new Date().toISOString(),
-      });
+        await this.events.publish('page.created', {
+          tenantId: this.tenantContext.require().id,
+          pageId,
+          workspaceId: site.workspaceId,
+          siteId,
+          occurredAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
+        await page.deleteOne().exec();
+        throw error;
+      }
 
       return this.toPageContract(page);
     });
@@ -116,7 +145,8 @@ export class PageService {
     input: PaginationQuery,
     workspaceId: string,
   ): Promise<PageListResponse> {
-    await this.requireSite(siteId, workspaceId);
+    const site = await this.requireSite(siteId, workspaceId);
+    await this.sites.ensureHomePage(site);
     const query = PaginationQuerySchema.parse(input);
     const [records, total] = await Promise.all([
       this.pageModel
@@ -138,7 +168,7 @@ export class PageService {
     });
   }
 
-  async getById(pageId: string, workspaceId: string): Promise<LandingPage> {
+  async getById(pageId: string, workspaceId: string): Promise<Page> {
     const record = await this.pageModel.findOne({ _id: pageId, workspaceId }).exec();
 
     if (!record) {
@@ -152,7 +182,7 @@ export class PageService {
     pageId: string,
     input: UpdatePageRequest,
     workspaceId: string,
-  ): Promise<LandingPage> {
+  ): Promise<Page> {
     const parsedInput = UpdatePageRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
     const latestVersion = await this.findLatestVersion(pageId, workspaceId);
@@ -165,8 +195,39 @@ export class PageService {
     if (parsedInput.name !== undefined) {
       page.name = parsedInput.name;
     }
+    if (parsedInput.description !== undefined) {
+      if (parsedInput.description === null) {
+        page.set('description', undefined);
+      } else {
+        page.description = parsedInput.description;
+      }
+    }
+    if (parsedInput.path !== undefined && parsedInput.path !== null) {
+      page.path = this.requirePath(parsedInput.path);
+    }
     if (parsedInput.slug !== undefined) {
-      page.set('slug', parsedInput.slug);
+      if (parsedInput.slug === null) {
+        page.set('slug', undefined);
+      } else {
+        page.slug = parsedInput.slug;
+        if (parsedInput.path === undefined) {
+          page.path = this.requirePath(`/${parsedInput.slug}`);
+        }
+      }
+    }
+    if (parsedInput.parentId !== undefined) {
+      if (parsedInput.parentId === null) {
+        page.set('parentId', undefined);
+      } else {
+        await this.requireParent(parsedInput.parentId, page.siteId, workspaceId);
+        page.parentId = parsedInput.parentId;
+      }
+    }
+    if (parsedInput.kind !== undefined) {
+      page.kind = parsedInput.kind;
+    }
+    if (parsedInput.anchors !== undefined) {
+      page.anchors = parsedInput.anchors;
     }
     if (parsedInput.payload !== undefined) {
       await this.persistVersion(
@@ -176,7 +237,12 @@ export class PageService {
         latestVersion?._id.toString(),
       );
     }
-    await page.save();
+    try {
+      await page.save();
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw this.duplicatePath();
+      throw error;
+    }
 
     await this.events.publish('page.updated', {
       tenantId: this.tenantContext.require().id,
@@ -193,8 +259,102 @@ export class PageService {
 
   async remove(pageId: string, workspaceId: string): Promise<void> {
     const page = await this.requirePageDocument(pageId, workspaceId);
+    const site = await this.requireSite(page.siteId, workspaceId);
+    await this.sites.ensureHomePage(site);
+    if (site.homePageId === pageId) {
+      throw new ConflictException({
+        code: 'HOME_PAGE_CANNOT_BE_DELETED',
+        message: 'Choose another homepage before deleting the current homepage',
+      });
+    }
+    await this.navigation.assertPageCanBeDeleted(page.siteId, pageId, workspaceId);
     await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
     await page.deleteOne();
+  }
+
+  async duplicate(
+    pageId: string,
+    input: DuplicatePageRequest,
+    workspaceId: string,
+  ): Promise<Page> {
+    const parsedInput = DuplicatePageRequestSchema.parse(input);
+    return this.quotas.withHardQuota('landing_pages', async () => {
+      const source = await this.requirePageDocument(pageId, workspaceId);
+      const latest = await this.findLatestVersion(pageId, workspaceId);
+      if (!latest) {
+        throw new NotFoundException({
+          code: 'PAGE_VERSION_NOT_FOUND',
+          message: 'The page does not have a version to duplicate',
+        });
+      }
+      const site = await this.requireSite(source.siteId, workspaceId);
+      const path = await this.findAvailablePath(
+        site._id.toString(),
+        parsedInput.path ??
+          this.copyPath(source.path ?? (source.slug ? `/${source.slug}` : '/')),
+        workspaceId,
+      );
+      const duplicated = await this.pageModel.create({
+        _id: randomUUID(),
+        workspaceId,
+        siteId: source.siteId,
+        name: parsedInput.name ?? `Copy of ${source.name}`,
+        ...(source.description ? { description: source.description } : {}),
+        path,
+        kind: source.kind ?? 'standard',
+        ...(source.parentId ? { parentId: source.parentId } : {}),
+        ...(source.anchors ? { anchors: [...source.anchors] } : {}),
+      });
+      try {
+        const version = await this.versionModel.create({
+          _id: randomUUID(),
+          workspaceId,
+          siteId: source.siteId,
+          landingPageId: duplicated._id.toString(),
+          versionNumber: 1,
+          payload: latest.payload,
+        });
+        duplicated.currentDraftVersionId = version._id.toString();
+        await duplicated.save();
+        await this.pageExtensions.synchronizePayload(
+          duplicated._id.toString(),
+          workspaceId,
+          this.parsePayload(latest.payload),
+        );
+        return this.toPageContract(duplicated);
+      } catch (error) {
+        await this.versionModel.deleteMany({ landingPageId: duplicated._id }).exec();
+        await duplicated.deleteOne().exec();
+        throw error;
+      }
+    });
+  }
+
+  async setHomepage(pageId: string, workspaceId: string): Promise<Page> {
+    const page = await this.requirePageDocument(pageId, workspaceId);
+    const site = await this.requireSite(page.siteId, workspaceId);
+    await this.sites.ensureHomePage(site);
+    if (site.homePageId === pageId && page.path === '/') return this.toPageContract(page);
+
+    const currentHome = site.homePageId
+      ? await this.pageModel
+          .findOne({ _id: site.homePageId, siteId: site._id.toString(), workspaceId })
+          .exec()
+      : null;
+    if (currentHome && currentHome._id.toString() !== pageId) {
+      currentHome.path = await this.findAvailablePath(
+        site._id.toString(),
+        currentHome.path && currentHome.path !== '/' ? currentHome.path : '/home',
+        workspaceId,
+        currentHome._id.toString(),
+      );
+      await currentHome.save();
+    }
+    page.path = '/';
+    await page.save();
+    site.homePageId = pageId;
+    await site.save();
+    return this.toPageContract(page);
   }
 
   async createVersion(
@@ -223,16 +383,9 @@ export class PageService {
     pageId: string,
     input: PublishPageRequest,
     workspaceId: string,
-  ): Promise<LandingPage> {
+  ): Promise<Page> {
     const parsedInput = PublishPageRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
-
-    if (!page.slug) {
-      throw new BadRequestException({
-        code: 'PAGE_SLUG_REQUIRED_FOR_PUBLISH',
-        message: 'A page slug is required before publishing',
-      });
-    }
 
     const version = await this.findPublicationVersion(page, parsedInput.versionNumber);
     if (!version) {
@@ -244,6 +397,7 @@ export class PageService {
 
     const payload = PagePayloadSchema.parse(version.payload);
     await this.workflows.validatePagePublishDependencies(pageId, workspaceId);
+    await this.navigation.validateBeforePagePublish(page.siteId, pageId, workspaceId);
     await this.pageExtensions.validateBeforePublish(pageId, workspaceId, payload);
     const publishedBundle = await this.pageExtensions.compilePublishedBundle(
       pageId,
@@ -255,6 +409,7 @@ export class PageService {
     await version.save();
 
     page.publishedVersionId = version._id.toString();
+    page.status = 'published';
     await page.save();
 
     await this.events.publish('page.published', {
@@ -269,21 +424,22 @@ export class PageService {
     return this.toPageContract(page);
   }
 
-  async unpublish(pageId: string, workspaceId: string): Promise<LandingPage> {
+  async unpublish(pageId: string, workspaceId: string): Promise<Page> {
     const page = await this.requirePageDocument(pageId, workspaceId);
     page.set('publishedVersionId', undefined);
     await page.save();
     return this.toPageContract(page);
   }
 
-  async resolvePublicPage(
-    siteSlug: string,
-    pageSlug: string,
-  ): Promise<PublicLandingPage> {
-    return this.publicPageResolver.resolveByPath(siteSlug, pageSlug);
+  async resolvePublicPage(siteSlug: string, pageSlug: string): Promise<PublicPage> {
+    return this.publicPageResolver.resolveByLegacySlug(siteSlug, pageSlug);
   }
 
-  async resolvePreview(pageId: string, workspaceId: string): Promise<PublicLandingPage> {
+  async resolvePublicPageByPath(siteSlug: string, path: string): Promise<PublicPage> {
+    return this.publicPageResolver.resolveByPath(siteSlug, path);
+  }
+
+  async resolvePreview(pageId: string, workspaceId: string): Promise<PublicPage> {
     const page = await this.requirePageDocument(pageId, workspaceId);
     const site = await this.siteModel.findOne({ _id: page.siteId, workspaceId }).exec();
 
@@ -295,7 +451,7 @@ export class PageService {
     if (!version) {
       throw new NotFoundException({
         code: 'DRAFT_VERSION_NOT_FOUND',
-        message: 'The landing page does not have a current draft version',
+        message: 'The page does not have a current draft version',
       });
     }
 
@@ -350,7 +506,7 @@ export class PageService {
   }
 
   private async persistVersion(
-    page: LandingPageDocument,
+    page: PageDocument,
     payload: PagePayload,
     currentVersionNumber: number | undefined,
     expectedDraftVersionId: string | undefined,
@@ -406,7 +562,7 @@ export class PageService {
   }
 
   private async findPublicationVersion(
-    page: LandingPageDocument,
+    page: PageDocument,
     versionNumber?: number,
   ): Promise<PageVersionDocument | null> {
     if (versionNumber !== undefined) {
@@ -447,10 +603,67 @@ export class PageService {
     return site;
   }
 
+  private async requireParent(
+    parentId: string,
+    siteId: string,
+    workspaceId: string,
+  ): Promise<void> {
+    const parent = await this.pageModel
+      .findOne({ _id: parentId, siteId, workspaceId })
+      .select({ _id: 1 })
+      .exec();
+    if (!parent) {
+      throw new NotFoundException({
+        code: 'PARENT_PAGE_NOT_FOUND',
+        message: 'The parent page was not found in this site',
+      });
+    }
+  }
+
+  private requirePath(value: string): string {
+    const normalized = normalizePagePath(value);
+    if (!normalized) {
+      throw new BadRequestException({
+        code: 'INVALID_PAGE_PATH',
+        message: 'Page path must be a normalized URL path such as /about',
+      });
+    }
+    return normalized;
+  }
+
+  private async findAvailablePath(
+    siteId: string,
+    requestedPath: string,
+    workspaceId: string,
+    exceptPageId?: string,
+  ): Promise<string> {
+    const normalized = this.requirePath(requestedPath);
+    const base = normalized === '/' ? '/home-copy' : `${normalized}-copy`;
+    let candidate = normalized;
+    let index = 0;
+    while (
+      await this.pageModel.exists({
+        siteId,
+        workspaceId,
+        path: candidate,
+        ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
+      })
+    ) {
+      index += 1;
+      candidate = `${base}${index === 1 ? '' : `-${index}`}`;
+    }
+    return candidate;
+  }
+
+  private copyPath(path: string): string {
+    const normalized = this.requirePath(path);
+    return normalized === '/' ? '/home-copy' : `${normalized}-copy`;
+  }
+
   private async requirePageDocument(
     pageId: string,
     workspaceId: string,
-  ): Promise<LandingPageDocument> {
+  ): Promise<PageDocument> {
     const page = await this.pageModel.findOne({ _id: pageId, workspaceId }).exec();
 
     if (!page) {
@@ -491,12 +704,25 @@ export class PageService {
     return result.data;
   }
 
-  private toPageContract(record: LandingPageDocument): LandingPage {
-    return LandingPageSchema.parse({
+  private toPageContract(record: PageDocument): Page {
+    return PageSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
       siteId: record.siteId,
       name: record.name,
+      ...(record.description ? { description: record.description } : {}),
+      path: this.requirePath(record.path ?? (record.slug ? `/${record.slug}` : '/')),
+      kind: record.kind ?? 'standard',
+      status:
+        record.status === 'archived'
+          ? 'archived'
+          : record.publishedVersionId
+            ? record.currentDraftVersionId === record.publishedVersionId
+              ? 'published'
+              : 'modified'
+            : 'draft',
+      ...(record.parentId ? { parentId: record.parentId } : {}),
+      ...(record.anchors?.length ? { anchors: record.anchors } : {}),
       ...(record.slug ? { slug: record.slug } : {}),
       ...(record.currentDraftVersionId
         ? { currentDraftVersionId: record.currentDraftVersionId }
@@ -511,19 +737,20 @@ export class PageService {
 
   private async toPublicContract(
     site: SiteDocument,
-    page: LandingPageDocument,
+    page: PageDocument,
     version: PageVersionDocument,
-  ): Promise<PublicLandingPage> {
+  ): Promise<PublicPage> {
     try {
       const versionContract = this.toVersionContract(version);
       const extensions = await this.pageExtensions.resolveRuntime(
         page._id.toString(),
         page.workspaceId,
       );
-      return PublicLandingPageSchema.parse({
+      return PublicPageSchema.parse({
         site: { name: site.name, slug: site.slug },
         page: {
           name: page.name,
+          ...(page.description ? { description: page.description } : {}),
           ...(page.slug ? { slug: page.slug } : {}),
         },
         payload: versionContract.payload,
@@ -566,6 +793,13 @@ export class PageService {
       message: 'The published page data is invalid',
     });
   }
+
+  private duplicatePath(): ConflictException {
+    return new ConflictException({
+      code: 'DUPLICATE_PAGE_PATH',
+      message: 'A page with this path already exists in the site',
+    });
+  }
 }
 
 function isDuplicateKeyError(error: unknown): boolean {
@@ -575,4 +809,13 @@ function isDuplicateKeyError(error: unknown): boolean {
     'code' in error &&
     (error as { code?: unknown }).code === 11000
   );
+}
+
+function slugifyPagePath(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
 }

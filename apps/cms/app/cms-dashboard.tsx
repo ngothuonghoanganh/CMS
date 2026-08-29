@@ -11,6 +11,8 @@ import {
   CustomDomainListResponseSchema,
   FormIntegrationBindingListResponseSchema,
   IntegrationListResponseSchema,
+  NavigationListResponseSchema,
+  NavigationSchema,
   SubmissionListResponseSchema,
   PageListResponseSchema,
   PageSeoSettingsSchema,
@@ -31,8 +33,10 @@ import {
   type FormIntegrationBinding,
   type FormNode,
   type Integration,
+  type Navigation,
+  type NavigationItem,
   type PageNodeV2,
-  type LandingPage,
+  type Page,
   type PageVersion,
   type PageSeoSettings,
   type Role,
@@ -60,12 +64,14 @@ import { StatusBadge } from './status-badge';
 import { AppHeader } from './app-header';
 import { ExtensionsView } from './extensions-view';
 import { WorkflowsView } from './workflows-view';
-import { Drawer, PageHeader, ResourceToolbar } from './ui/surfaces';
+import { NavigationView } from './navigation-view';
+import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
 
 type View =
   | 'dashboard'
   | 'sites'
   | 'pages'
+  | 'navigation'
   | 'assets'
   | 'templates'
   | 'submissions'
@@ -81,13 +87,18 @@ type View =
   | 'workflows'
   | 'organization';
 type SiteForm = { name: string; slug: string };
-type PageForm = { name: string; slug: string };
+type PageForm = { name: string; slug: string; description: string; path: string };
 type AssetForm = { filename: string; mimeType: string; size: string; storageKey: string };
 type TemplateForm = { name: string; description: string };
-type DomainForm = { hostname: string; landingPageId: string; isPrimary: boolean };
+type DomainForm = {
+  hostname: string;
+  siteId: string;
+  landingPageId: string;
+  isPrimary: boolean;
+};
 
 const blankSite: SiteForm = { name: '', slug: '' };
-const blankPage: PageForm = { name: '', slug: '' };
+const blankPage: PageForm = { name: '', slug: '', description: '', path: '' };
 const blankAsset: AssetForm = {
   filename: '',
   mimeType: 'image/png',
@@ -95,7 +106,12 @@ const blankAsset: AssetForm = {
   storageKey: '/assets/',
 };
 const blankTemplate: TemplateForm = { name: '', description: '' };
-const blankDomain: DomainForm = { hostname: '', landingPageId: '', isPrimary: false };
+const blankDomain: DomainForm = {
+  hostname: '',
+  siteId: '',
+  landingPageId: '',
+  isPrimary: false,
+};
 const rendererBaseUrl =
   process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
 
@@ -108,7 +124,8 @@ const viewLabels: Record<View, string> = {
   domains: 'Domains',
   integrations: 'Integrations',
   organization: 'Organization',
-  pages: 'Landing pages',
+  pages: 'Pages',
+  navigation: 'Navigation',
   roles: 'Roles',
   seo: 'SEO',
   sites: 'Sites',
@@ -171,12 +188,20 @@ export default function CmsDashboard() {
   const [newMemberUserId, setNewMemberUserId] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'admin' | 'member'>('member');
   const [sites, setSites] = useState<Site[]>([]);
-  const [pages, setPages] = useState<LandingPage[]>([]);
+  const [sitePagination, setSitePagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasNextPage: false,
+  });
+  const [sitePaging, setSitePaging] = useState(false);
+  const [pages, setPages] = useState<Page[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [submissions, setSubmissions] = useState<FormSubmission[]>([]);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [domains, setDomains] = useState<CustomDomain[]>([]);
+  const [navigations, setNavigations] = useState<Navigation[]>([]);
   const [seoSettings, setSeoSettings] = useState<PageSeoSettings | null>(null);
   const [formBindings, setFormBindings] = useState<FormIntegrationBinding[]>([]);
   const [bindingSaving, setBindingSaving] = useState(false);
@@ -208,6 +233,7 @@ export default function CmsDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const pagesRequestId = useRef(0);
+  const sitesRequestId = useRef(0);
   const pageDetailsRequestId = useRef(0);
   const submissionsRequestId = useRef(0);
   const mobileSidebarCloseRef = useRef<HTMLButtonElement>(null);
@@ -219,10 +245,10 @@ export default function CmsDashboard() {
     () => ({
       assets: assets.length,
       pages: pages.length,
-      sites: sites.length,
+      sites: sitePagination.total,
       templates: templates.length,
     }),
-    [assets.length, pages.length, sites.length, templates.length],
+    [assets.length, pages.length, sitePagination.total, templates.length],
   );
 
   useEffect(() => {
@@ -297,6 +323,12 @@ export default function CmsDashboard() {
   }, [view]);
 
   useEffect(() => {
+    if (view === 'navigation' && selectedSiteId) {
+      void refreshNavigations(selectedSiteId);
+    }
+  }, [selectedSiteId, view]);
+
+  useEffect(() => {
     const requestId = ++pageDetailsRequestId.current;
     if (selectedPageId) {
       void refreshVersions(selectedPageId, requestId);
@@ -346,7 +378,7 @@ export default function CmsDashboard() {
       }
       const workspaceId = currentSession.workspace.id;
       const siteResponse = hasPermission('site.read')
-        ? await api.get(`/workspaces/${workspaceId}/sites?limit=100`)
+        ? await api.get(`/workspaces/${workspaceId}/sites?limit=20&offset=0`)
         : null;
       const assetResponse = hasPermission('asset.read')
         ? await api.get(`/workspaces/${workspaceId}/assets?limit=100`)
@@ -357,10 +389,14 @@ export default function CmsDashboard() {
       const domainResponse = hasPermission('domain.read')
         ? await api.get(`/workspaces/${workspaceId}/domains`)
         : null;
-      const nextSites = siteResponse
-        ? SiteListResponseSchema.parse(siteResponse).items
-        : [];
+      const parsedSites = siteResponse
+        ? SiteListResponseSchema.parse(siteResponse)
+        : null;
+      const nextSites = parsedSites?.items ?? [];
       setSites(nextSites);
+      setSitePagination(
+        parsedSites?.pagination ?? { limit: 20, offset: 0, total: 0, hasNextPage: false },
+      );
       setAssets(assetResponse ? AssetListResponseSchema.parse(assetResponse).items : []);
       setTemplates(
         templateResponse ? TemplateListResponseSchema.parse(templateResponse).items : [],
@@ -385,6 +421,27 @@ export default function CmsDashboard() {
       setError(toErrorMessage(caughtError));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function refreshSites(offset = 0) {
+    if (!session) return;
+    const requestId = ++sitesRequestId.current;
+    setSitePaging(true);
+    try {
+      const response = SiteListResponseSchema.parse(
+        await api.get(
+          `/workspaces/${session.workspace.id}/sites?limit=20&offset=${offset}`,
+        ),
+      );
+      if (requestId !== sitesRequestId.current) return;
+      setSites(response.items);
+      setSitePagination(response.pagination);
+    } catch (caughtError) {
+      if (requestId !== sitesRequestId.current) return;
+      setError(toErrorMessage(caughtError));
+    } finally {
+      if (requestId === sitesRequestId.current) setSitePaging(false);
     }
   }
 
@@ -654,12 +711,14 @@ export default function CmsDashboard() {
       await api.post('/auth/context', { organizationId, workspaceId });
       // Clear every tenant-sensitive view before the new server context is read.
       setSites([]);
+      setSitePagination({ limit: 20, offset: 0, total: 0, hasNextPage: false });
       setPages([]);
       setAssets([]);
       setTemplates([]);
       setSubmissions([]);
       setIntegrations([]);
       setDomains([]);
+      setNavigations([]);
       setSelectedSiteId('');
       setSelectedPageId('');
       window.location.reload();
@@ -680,6 +739,15 @@ export default function CmsDashboard() {
       );
     } catch (caughtError) {
       if (requestId !== pagesRequestId.current) return;
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function refreshNavigations(siteId: string) {
+    try {
+      const response = await api.get(`/sites/${siteId}/navigations`);
+      setNavigations(NavigationListResponseSchema.parse(response).items);
+    } catch (caughtError) {
       setError(toErrorMessage(caughtError));
     }
   }
@@ -785,33 +853,78 @@ export default function CmsDashboard() {
     });
   }
 
-  async function publishPage(page: LandingPage) {
+  async function publishPage(page: Page) {
     await runBusy(async () => {
-      const updated = await api.post<LandingPage>(`/pages/${page.id}/publish`, {});
+      const updated = await api.post<Page>(`/pages/${page.id}/publish`, {});
       setPages((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
       if (page.id === selectedPageId) {
         await refreshVersions(page.id);
       }
-      setNotice('Landing page published.');
+      setNotice('Page published.');
     });
   }
 
-  async function unpublishPage(page: LandingPage) {
+  async function unpublishPage(page: Page) {
     await runBusy(async () => {
-      const updated = await api.post<LandingPage>(`/pages/${page.id}/unpublish`);
+      const updated = await api.post<Page>(`/pages/${page.id}/unpublish`);
       setPages((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
       if (page.id === selectedPageId) {
         await refreshVersions(page.id);
       }
-      setNotice('Landing page unpublished.');
+      setNotice('Page unpublished.');
     });
   }
 
-  function previewPage(page: LandingPage) {
+  async function duplicatePage(page: Page) {
+    await runBusy(async () => {
+      const duplicated = await api.post<Page>(`/pages/${page.id}/duplicate`, {});
+      setPages((current) => [duplicated, ...current]);
+      setSelectedPageId(duplicated.id);
+      setPageForm({
+        name: duplicated.name,
+        slug: duplicated.slug ?? '',
+        description: duplicated.description ?? '',
+        path: duplicated.path,
+      });
+      setNotice('Page duplicated as a draft.');
+    });
+  }
+
+  async function setHomepage(page: Page) {
+    await runBusy(async () => {
+      const updated = await api.post<Page>(`/pages/${page.id}/homepage`);
+      setPages((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? updated
+            : item.path === '/'
+              ? { ...item, path: '/home' }
+              : item,
+        ),
+      );
+      setNotice(`${page.name} is now the homepage.`);
+      await refreshPages(page.siteId);
+    });
+  }
+
+  async function removePage(page: Page) {
+    if (!window.confirm(`Delete ${page.name}? This cannot be undone.`)) return;
+    await runBusy(async () => {
+      await api.delete(`/pages/${page.id}`);
+      setPages((current) => current.filter((item) => item.id !== page.id));
+      if (selectedPageId === page.id) {
+        setSelectedPageId('');
+        setPageForm(blankPage);
+      }
+      setNotice('Page deleted.');
+    });
+  }
+
+  function previewPage(page: Page) {
     window.open(
       `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}`,
       '_blank',
@@ -846,7 +959,7 @@ export default function CmsDashboard() {
           name: siteForm.name,
           slug: siteForm.slug || slugify(siteForm.name),
         });
-        setSites((current) => [created, ...current]);
+        await refreshSites(0);
         setSelectedSiteId(created.id);
         setNotice('Site created.');
       }
@@ -860,25 +973,31 @@ export default function CmsDashboard() {
     if (!session || !selectedSiteId) return;
     await runBusy(async () => {
       if (selectedPageId) {
-        const updated = await api.patch<LandingPage>(`/pages/${selectedPageId}`, {
+        const updated = await api.patch<Page>(`/pages/${selectedPageId}`, {
           expectedVersionNumber: versions[0]?.versionNumber,
           name: pageForm.name,
+          description: pageForm.description.trim() || null,
+          ...(pageForm.path ? { path: pageForm.path } : {}),
           slug: pageForm.slug || null,
         });
         setPages((current) =>
           current.map((page) => (page.id === updated.id ? updated : page)),
         );
-        setNotice('Landing page metadata updated.');
+        setNotice('Page metadata updated.');
       } else {
-        const created = await api.post<LandingPage>(`/sites/${selectedSiteId}/pages`, {
+        const created = await api.post<Page>(`/sites/${selectedSiteId}/pages`, {
           name: pageForm.name,
+          ...(pageForm.description.trim()
+            ? { description: pageForm.description.trim() }
+            : {}),
+          ...(pageForm.path ? { path: pageForm.path } : {}),
           ...(pageForm.slug ? { slug: pageForm.slug } : {}),
           payload: defaultPayload(pageForm.name),
         });
         pagesRequestId.current += 1;
         setPages((current) => [created, ...current]);
         setSelectedPageId(created.id);
-        setNotice('Landing page and draft version 1 created.');
+        setNotice('Page and draft version 1 created.');
       }
       setPageForm(blankPage);
     });
@@ -954,6 +1073,7 @@ export default function CmsDashboard() {
         `/workspaces/${session.workspace.id}/domains`,
         {
           hostname: domainForm.hostname,
+          ...(domainForm.siteId ? { siteId: domainForm.siteId } : {}),
           ...(domainForm.landingPageId
             ? { landingPageId: domainForm.landingPageId }
             : {}),
@@ -1010,6 +1130,43 @@ export default function CmsDashboard() {
       await api.delete(`/workspaces/${session.workspace.id}/domains/${domain.id}`);
       setDomains((current) => current.filter((item) => item.id !== domain.id));
       setNotice('Domain removed.');
+    });
+  }
+
+  async function saveNavigation(input: {
+    id?: string;
+    key: string;
+    name: string;
+    items: NavigationItem[];
+  }) {
+    if (!selectedSiteId) return;
+    await runBusy(async () => {
+      const response = input.id
+        ? await api.patch(`/sites/${selectedSiteId}/navigations/${input.id}`, {
+            name: input.name,
+            items: input.items,
+          })
+        : await api.post(`/sites/${selectedSiteId}/navigations`, {
+            key: input.key,
+            name: input.name,
+            items: input.items,
+          });
+      const saved = NavigationSchema.parse(response);
+      setNavigations((current) =>
+        input.id
+          ? current.map((navigation) => (navigation.id === saved.id ? saved : navigation))
+          : [...current, saved],
+      );
+      setNotice('Navigation saved.');
+    });
+  }
+
+  async function removeNavigation(navigation: Navigation) {
+    if (!selectedSiteId || !window.confirm(`Delete ${navigation.name}?`)) return;
+    await runBusy(async () => {
+      await api.delete(`/sites/${selectedSiteId}/navigations/${navigation.id}`);
+      setNavigations((current) => current.filter((item) => item.id !== navigation.id));
+      setNotice('Navigation deleted.');
     });
   }
 
@@ -1089,7 +1246,10 @@ export default function CmsDashboard() {
           ? [{ icon: '◫', key: 'sites' as const, label: 'Sites' }]
           : []),
         ...(can('page.read')
-          ? [{ icon: '▤', key: 'pages' as const, label: 'Landing Pages' }]
+          ? [{ icon: '▤', key: 'pages' as const, label: 'Pages' }]
+          : []),
+        ...(can('site.read')
+          ? [{ icon: '≡', key: 'navigation' as const, label: 'Navigation' }]
           : []),
         ...(can('asset.read')
           ? [{ icon: '◈', key: 'assets' as const, label: 'Assets' }]
@@ -1168,7 +1328,7 @@ export default function CmsDashboard() {
           <div className="brand-mark">PL</div>
           <div className="brand-copy">
             <strong>Payload CMS</strong>
-            <span>Landing page platform</span>
+            <span>Page platform</span>
           </div>
           <button
             ref={mobileSidebarCloseRef}
@@ -1289,6 +1449,7 @@ export default function CmsDashboard() {
               busy={busy}
               editingSiteId={editingSiteId}
               form={siteForm}
+              paging={sitePaging}
               onCancel={() => {
                 setEditingSiteId('');
                 setSiteForm(blankSite);
@@ -1298,7 +1459,9 @@ export default function CmsDashboard() {
                 setEditingSiteId(site.id);
                 setSiteForm({ name: site.name, slug: site.slug });
               }}
+              onPage={(offset) => void refreshSites(offset)}
               onSubmit={handleSiteSubmit}
+              pagination={sitePagination}
               sites={sites}
             />
           ) : null}
@@ -1308,6 +1471,7 @@ export default function CmsDashboard() {
               canCreatePage={can('page.create')}
               canPublishPage={can('page.publish')}
               canUpdatePage={can('page.update')}
+              canDeletePage={can('page.delete')}
               canReadWorkflows={can('workflow.read')}
               form={pageForm}
               onChange={setPageForm}
@@ -1320,11 +1484,19 @@ export default function CmsDashboard() {
                 setSelectedPageId(page.id);
                 setView('workflows');
               }}
+              onDuplicate={(page) => void duplicatePage(page)}
+              onDelete={(page) => void removePage(page)}
+              onSetHomepage={(page) => void setHomepage(page)}
               onPreview={previewPage}
               onPublish={(page) => void publishPage(page)}
               onSelectPage={(page) => {
                 setSelectedPageId(page.id);
-                setPageForm({ name: page.name, slug: page.slug ?? '' });
+                setPageForm({
+                  name: page.name,
+                  slug: page.slug ?? '',
+                  description: page.description ?? '',
+                  path: page.path,
+                });
               }}
               onSelectSite={setSelectedSiteId}
               onSubmit={handlePageSubmit}
@@ -1340,6 +1512,19 @@ export default function CmsDashboard() {
               onSaveFormBinding={(formNodeId, integrationIds) =>
                 void saveFormBinding(formNodeId, integrationIds)
               }
+            />
+          ) : null}
+          {view === 'navigation' ? (
+            <NavigationView
+              busy={busy}
+              canUpdate={can('site.update')}
+              navigations={navigations}
+              onRemove={(navigation) => void removeNavigation(navigation)}
+              onSave={(input) => void saveNavigation(input)}
+              onSelectSite={setSelectedSiteId}
+              pages={pages}
+              selectedSiteId={selectedSiteId}
+              sites={sites}
             />
           ) : null}
           {view === 'assets' ? (
@@ -1418,6 +1603,7 @@ export default function CmsDashboard() {
               onUpdate={(domain, input) => void updateDomain(domain, input)}
               onVerify={(domain) => void verifyDomain(domain)}
               pages={pages}
+              sites={sites}
             />
           ) : null}
           {view === 'seo' ? (
@@ -1427,7 +1613,13 @@ export default function CmsDashboard() {
               onSelectPage={(pageId) => {
                 setSelectedPageId(pageId);
                 const page = pages.find((candidate) => candidate.id === pageId);
-                if (page) setPageForm({ name: page.name, slug: page.slug ?? '' });
+                if (page)
+                  setPageForm({
+                    name: page.name,
+                    slug: page.slug ?? '',
+                    description: page.description ?? '',
+                    path: page.path,
+                  });
               }}
               pages={pages}
               selectedPageId={selectedPageId}
@@ -1759,13 +1951,13 @@ function Dashboard({
       <PageHeading
         eyebrow="Overview"
         title="Good morning"
-        description="A focused workspace for managing your landing page inventory."
+        description="A focused workspace for managing your page inventory."
       />
       <div className="metric-grid">
         {(
           [
             ['sites', 'Sites', counts.sites],
-            ['pages', 'Landing pages', counts.pages],
+            ['pages', 'Pages', counts.pages],
             ['assets', 'Assets', counts.assets],
             ['templates', 'Templates', counts.templates],
           ] as const
@@ -1787,7 +1979,7 @@ function Dashboard({
         <p className="muted">
           {sites.length
             ? 'Your most recently available sites.'
-            : 'Create your first site to start organizing landing pages.'}
+            : 'Create your first site to start organizing pages.'}
         </p>
         {sites.length ? (
           <div className="list">
@@ -1809,6 +2001,8 @@ function Dashboard({
 
 function SitesView({
   sites,
+  pagination,
+  paging,
   form,
   busy,
   editingSiteId,
@@ -1816,8 +2010,16 @@ function SitesView({
   onSubmit,
   onEdit,
   onCancel,
+  onPage,
 }: {
   sites: Site[];
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
+    hasNextPage: boolean;
+  };
+  paging: boolean;
   form: SiteForm;
   busy: boolean;
   editingSiteId: string;
@@ -1825,13 +2027,14 @@ function SitesView({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onEdit: (site: Site) => void;
   onCancel: () => void;
+  onPage: (offset: number) => void;
 }) {
   return (
     <>
       <PageHeading
         eyebrow="Workspace"
         title="Sites"
-        description="Create and maintain the destinations that own your landing pages."
+        description="Create and maintain the destinations that own your pages."
       />
       <div className="two-column">
         <section className="panel">
@@ -1872,22 +2075,45 @@ function SitesView({
           </form>
         </section>
         <section className="panel">
-          <PanelTitle title="Your sites" count={sites.length} />
+          <PanelTitle title="Your sites" count={pagination.total} />
           {sites.length ? (
-            <div className="list">
+            <div className="list site-list">
               {sites.map((site) => (
                 <div className="list-row" key={site.id}>
                   <div>
                     <strong>{site.name}</strong>
-                    <span className="muted">/{site.slug}</span>
+                    <span className="muted">
+                      {site.officialUrl ?? `/${site.slug}`} · {site.status}
+                    </span>
                   </div>
-                  <button
-                    className="button button-small"
-                    onClick={() => onEdit(site)}
-                    type="button"
-                  >
-                    Edit
-                  </button>
+                  <div className="row-actions">
+                    {site.officialUrl ? (
+                      <a
+                        className="button button-secondary button-small"
+                        href={site.officialUrl}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        View Site ↗
+                      </a>
+                    ) : (
+                      <button
+                        className="button button-secondary button-small"
+                        disabled
+                        title="Publish this site or configure a domain first."
+                        type="button"
+                      >
+                        View Site ↗
+                      </button>
+                    )}
+                    <button
+                      className="button button-small"
+                      onClick={() => onEdit(site)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1897,6 +2123,16 @@ function SitesView({
               description="Your site list will appear here."
             />
           )}
+          {pagination.total > 0 ? (
+            <PaginationControls
+              busy={busy || paging}
+              className="site-pagination"
+              noun="sites"
+              onNext={() => onPage(pagination.offset + pagination.limit)}
+              onPrevious={() => onPage(Math.max(0, pagination.offset - pagination.limit))}
+              pagination={pagination}
+            />
+          ) : null}
         </section>
       </div>
     </>
@@ -1916,6 +2152,7 @@ function PagesView({
   canCreatePage,
   canUpdatePage,
   canPublishPage,
+  canDeletePage,
   canReadWorkflows,
   form,
   busy,
@@ -1928,31 +2165,38 @@ function PagesView({
   onChange,
   onSubmit,
   onUnpublish,
+  onDuplicate,
+  onDelete,
+  onSetHomepage,
 }: {
   sites: Site[];
-  pages: LandingPage[];
+  pages: Page[];
   selectedSiteId: string;
-  selectedPage: LandingPage | undefined;
+  selectedPage: Page | undefined;
   versions: PageVersion[];
   bindings: FormIntegrationBinding[];
   bindingSaving: boolean;
   integrations: Integration[];
   form: PageForm;
   busy: boolean;
-  onOpenBuilder: (page: LandingPage) => void;
-  onPreview: (page: LandingPage) => void;
-  onPublish: (page: LandingPage) => void;
+  onOpenBuilder: (page: Page) => void;
+  onPreview: (page: Page) => void;
+  onPublish: (page: Page) => void;
   onSelectSite: (siteId: string) => void;
-  onSelectPage: (page: LandingPage) => void;
+  onSelectPage: (page: Page) => void;
   onChange: (form: PageForm) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onUnpublish: (page: LandingPage) => void;
+  onUnpublish: (page: Page) => void;
   onSaveFormBinding: (formNodeId: string, integrationIds: string[]) => void;
   canCreatePage: boolean;
   canUpdatePage: boolean;
   canPublishPage: boolean;
+  canDeletePage: boolean;
   canReadWorkflows: boolean;
-  onOpenWorkflows: (page: LandingPage) => void;
+  onOpenWorkflows: (page: Page) => void;
+  onDuplicate: (page: Page) => void;
+  onDelete: (page: Page) => void;
+  onSetHomepage: (page: Page) => void;
 }) {
   const [pageSearch, setPageSearch] = useState('');
   const [pageStatus, setPageStatus] = useState('');
@@ -1974,8 +2218,8 @@ function PagesView({
     <>
       <PageHeading
         eyebrow="Content"
-        title="Landing pages"
-        description="Manage page identity and draft history without opening the visual builder."
+        title="Pages"
+        description="Manage routes, page metadata and draft history without opening the visual builder."
       />
       <div className="toolbar page-toolbar">
         <label className="inline-field">
@@ -2018,18 +2262,16 @@ function PagesView({
       </div>
       <div className="two-column">
         <section className="panel">
-          <PanelTitle
-            title={selectedPage ? 'Edit page metadata' : 'Create a landing page'}
-          />
+          <PanelTitle title={selectedPage ? 'Edit page metadata' : 'Create a page'} />
           {!selectedSiteId ? (
             <EmptyState
               title="Select a site first"
-              description="Landing pages belong to a site."
+              description="Pages belong to a site."
             />
           ) : (selectedPage ? canUpdatePage : canCreatePage) ? (
             <form className="stack" onSubmit={onSubmit}>
               <label>
-                Page name
+                Title
                 <input
                   aria-label="Page name"
                   onChange={(event) => onChange({ ...form, name: event.target.value })}
@@ -2038,7 +2280,7 @@ function PagesView({
                 />
               </label>
               <label>
-                Slug <span className="muted">(optional)</span>
+                Slug <span className="muted">(optional, legacy URL alias)</span>
                 <input
                   aria-label="Slug"
                   onChange={(event) => onChange({ ...form, slug: event.target.value })}
@@ -2046,12 +2288,39 @@ function PagesView({
                   value={form.slug}
                 />
               </label>
+              <label>
+                Description <span className="muted">(optional)</span>
+                <textarea
+                  aria-label="Description"
+                  maxLength={500}
+                  onChange={(event) =>
+                    onChange({ ...form, description: event.target.value })
+                  }
+                  rows={3}
+                  value={form.description}
+                />
+              </label>
+              <label>
+                Path <span className="muted">(optional, defaults from name)</span>
+                <input
+                  aria-label="Path"
+                  onChange={(event) => onChange({ ...form, path: event.target.value })}
+                  placeholder="/about"
+                  value={form.path}
+                />
+              </label>
+              <div aria-label="Page status" className="page-form-status">
+                <span className="muted">Status</span>
+                <StatusBadge
+                  status={selectedPage ? publicationStatus(selectedPage) : 'Draft'}
+                />
+              </div>
               <button className="button button-primary" disabled={busy} type="submit">
                 {busy ? 'Saving…' : selectedPage ? 'Save metadata' : 'Create page'}
               </button>
             </form>
           ) : (
-            <p className="muted">You have read-only access to landing pages.</p>
+            <p className="muted">You have read-only access to pages.</p>
           )}
         </section>
         <section className="panel">
@@ -2068,13 +2337,20 @@ function PagesView({
                   key={page.id}
                 >
                   <button
+                    aria-label={`Select page ${page.name} at ${page.path}`}
                     className="page-select-button"
                     onClick={() => onSelectPage(page)}
                     type="button"
                   >
                     <div>
                       <strong>{page.name}</strong>
-                      <span className="muted">/{page.slug ?? 'no-slug'}</span>
+                      <span className="muted">
+                        {page.path}{' '}
+                        {page.id ===
+                        sites.find((site) => site.id === selectedSiteId)?.homePageId
+                          ? '· Homepage'
+                          : ''}
+                      </span>
                     </div>
                     <StatusBadge status={publicationStatus(page)} />
                   </button>
@@ -2083,8 +2359,30 @@ function PagesView({
                     onClick={() => onOpenBuilder(page)}
                     type="button"
                   >
-                    Open Builder
+                    {page.id ===
+                    sites.find((site) => site.id === selectedSiteId)?.homePageId
+                      ? 'Open Homepage Builder'
+                      : 'Open Builder'}
                   </button>
+                  {canDeletePage ? (
+                    <button
+                      className="button button-ghost button-small"
+                      disabled={
+                        page.id ===
+                        sites.find((site) => site.id === selectedSiteId)?.homePageId
+                      }
+                      onClick={() => onDelete(page)}
+                      title={
+                        page.id ===
+                        sites.find((site) => site.id === selectedSiteId)?.homePageId
+                          ? 'Choose another homepage first'
+                          : 'Delete page'
+                      }
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
                   <span className="muted small page-updated-at">
                     Updated {new Date(page.updatedAt).toLocaleDateString()}
                   </span>
@@ -2093,7 +2391,7 @@ function PagesView({
             </div>
           ) : (
             <EmptyState
-              title={pages.length ? 'No matching pages' : 'No landing pages'}
+              title={pages.length ? 'No matching pages' : 'No pages'}
               description={
                 pages.length
                   ? 'Try a different name, slug or publication status.'
@@ -2118,6 +2416,25 @@ function PagesView({
                 type="button"
               >
                 Preview draft
+              </button>
+              {selectedPage.id !==
+              sites.find((site) => site.id === selectedSiteId)?.homePageId ? (
+                <button
+                  className="button button-secondary button-small"
+                  disabled={busy}
+                  onClick={() => onSetHomepage(selectedPage)}
+                  type="button"
+                >
+                  Set as homepage
+                </button>
+              ) : null}
+              <button
+                className="button button-secondary button-small"
+                disabled={busy}
+                onClick={() => onDuplicate(selectedPage)}
+                type="button"
+              >
+                Duplicate
               </button>
               {canPublishPage && publicationStatus(selectedPage) === 'Published' ? (
                 <button
@@ -2489,7 +2806,7 @@ function SubmissionsView({
       <PageHeader
         eyebrow="Leads"
         title="Submissions"
-        description="Review form submissions captured by published landing pages."
+        description="Review form submissions captured by published pages."
       />
       <ResourceToolbar>
         <label className="inline-field">
@@ -2671,9 +2988,7 @@ function toErrorMessage(error: unknown): string {
     : 'Something went wrong. Please try again.';
 }
 
-function publicationStatus(
-  page: LandingPage,
-): 'Published' | 'Newer draft' | 'Unpublished' {
+function publicationStatus(page: Page): 'Published' | 'Newer draft' | 'Unpublished' {
   if (!page.publishedVersionId) {
     return 'Unpublished';
   }

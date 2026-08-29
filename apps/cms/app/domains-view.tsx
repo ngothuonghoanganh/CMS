@@ -1,15 +1,21 @@
 'use client';
 
-import type { CustomDomain, LandingPage } from '@payload/contracts';
+import type { CustomDomain, Page, Site } from '@payload/contracts';
 import { useState, type FormEvent } from 'react';
 
 import { Modal, PageHeader } from './ui/surfaces';
 
-type DomainForm = { hostname: string; landingPageId: string; isPrimary: boolean };
+type DomainForm = {
+  hostname: string;
+  siteId: string;
+  landingPageId: string;
+  isPrimary: boolean;
+};
 
 export function DomainsView({
   domains,
   pages,
+  sites,
   form,
   busy,
   onChange,
@@ -19,7 +25,8 @@ export function DomainsView({
   onRemove,
 }: {
   domains: CustomDomain[];
-  pages: LandingPage[];
+  pages: Page[];
+  sites: Site[];
   form: DomainForm;
   busy: boolean;
   onChange: (form: DomainForm) => void;
@@ -46,7 +53,7 @@ export function DomainsView({
         }
         eyebrow="Settings"
         title="Domains"
-        description="Connect a verified hostname to a published landing page. TLS remains the responsibility of your edge or hosting provider."
+        description="Connect a verified hostname to a published site or keep the legacy page assignment. TLS remains the responsibility of your edge or hosting provider."
       />
       <section className="panel">
         <PanelTitle title="Configured domains" count={domains.length} />
@@ -120,8 +127,23 @@ export function DomainsView({
             Enter a hostname only, without https:// or a path.
           </span>
           <label>
-            Landing page <span className="muted">(optional until verification)</span>
+            Site <span className="muted">(recommended)</span>
             <select
+              value={form.siteId}
+              onChange={(event) => onChange({ ...form, siteId: event.target.value })}
+            >
+              <option value="">Choose a site later</option>
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Page <span className="muted">(optional until verification)</span>
+            <select
+              aria-label="Page"
               value={form.landingPageId}
               onChange={(event) =>
                 onChange({ ...form, landingPageId: event.target.value })
@@ -158,7 +180,7 @@ function DomainRow({
   onRemove,
 }: {
   domain: CustomDomain;
-  pages: LandingPage[];
+  pages: Page[];
   busy: boolean;
   onVerify: (domain: CustomDomain) => void;
   onUpdate: (
@@ -277,8 +299,9 @@ function DomainRow({
       >
         <div className="stack">
           <label>
-            Landing page <span className="muted">(optional)</span>
+            Page <span className="muted">(optional)</span>
             <select
+              aria-label="Page"
               value={editForm.landingPageId}
               onChange={(event) =>
                 setEditForm({ ...editForm, landingPageId: event.target.value })

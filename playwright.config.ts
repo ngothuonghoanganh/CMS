@@ -3,9 +3,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
-  // The local suite starts three Turbopack dev servers. Keep the default
-  // worker count bounded so route compilation does not take those servers
-  // offline during a full E2E run.
+  // The local suite starts three dev servers. Keep the default worker count
+  // bounded so route compilation does not take those servers offline during
+  // a full E2E run.
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
@@ -32,6 +32,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
+      // Next 16's Turbopack dev HMR currently panics while rewriting this
+      // optional catch-all route; production builds still use Turbopack.
       command: 'TRUST_PROXY=true pnpm --filter @payload/renderer dev',
       url: 'http://127.0.0.1:3002',
       reuseExistingServer: !process.env.CI,

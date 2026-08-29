@@ -31,7 +31,7 @@ import {
   type WorkflowDocument,
   type WorkflowVersionDocument,
 } from '../persistence/schemas/workflow.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { ExtensionConnectionRecord } from '../persistence/schemas/extension-connection.schema';
 import { TenantExtensionRecord } from '../persistence/schemas/tenant-extension.schema';
@@ -50,8 +50,8 @@ export class WorkflowService {
     private readonly workflowModel: Model<WorkflowRecord>,
     @InjectModel(WorkflowVersionRecord.name)
     private readonly versionModel: Model<WorkflowVersionRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @InjectModel(ExtensionConnectionRecord.name)

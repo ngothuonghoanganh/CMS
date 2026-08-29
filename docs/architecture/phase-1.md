@@ -69,7 +69,7 @@ into `packages/contracts`; persistence models and public contracts remain separa
 
 ## Explicitly deferred
 
-Workspace, Site, LandingPage, PageVersion, PagePayload, Asset, Template, page CRUD,
+Workspace, Site, Page, PageVersion, PagePayload, Asset, Template, page CRUD,
 visual builder/GrapesJS, preview, publishing, forms, leads, integrations, analytics,
 feature registry, RBAC, audit logs, queues, workers, CDN and microservices are outside
 this phase.

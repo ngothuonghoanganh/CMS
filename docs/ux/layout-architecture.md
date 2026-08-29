@@ -29,7 +29,7 @@ creation, editing, and inspection happen in a focused surface.
 | --------------------- | --------------------------------- | ---------------------------------------------- |
 | Overview              | summary and recent-resource cards | route shortcuts                                |
 | Sites                 | site list                         | existing create/edit form; migration candidate |
-| Landing Pages         | filtered page list                | metadata form; dedicated Builder route         |
+| Pages                 | filtered page list                | metadata form; dedicated Builder route         |
 | Assets / Templates    | resource lists                    | existing metadata forms; migration candidates  |
 | Submissions           | submissions list                  | submission detail drawer                       |
 | Users                 | searchable users list             | create modal; user detail drawer               |
@@ -42,7 +42,7 @@ creation, editing, and inspection happen in a focused surface.
 | Builder               | dedicated editor workspace        | grouped/collapsible inspector sections         |
 
 The first cleanup pass focuses on the shared surfaces and the high-risk operational
-routes (Users, Roles, Domains, Integrations, and Submissions). Sites, Landing Pages,
+routes (Users, Roles, Domains, Integrations, and Submissions). Sites, Pages,
 Assets, Templates, and Organization still contain task-specific forms because they
 also coordinate selection, version history, publishing, or context switching. They
 are documented as list-first migration candidates rather than being silently treated

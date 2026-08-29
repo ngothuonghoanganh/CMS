@@ -1,6 +1,6 @@
 'use client';
 
-import type { LandingPage, PageSeoSettings } from '@payload/contracts';
+import type { Page, PageSeoSettings } from '@payload/contracts';
 import type { FormEvent } from 'react';
 
 export function SeoView({
@@ -11,7 +11,7 @@ export function SeoView({
   onSelectPage,
   onSave,
 }: {
-  pages: LandingPage[];
+  pages: Page[];
   selectedPageId: string;
   settings: PageSeoSettings | null;
   busy: boolean;
@@ -34,8 +34,9 @@ export function SeoView({
       </div>
       <section className="panel">
         <label className="inline-field">
-          Landing page
+          Page
           <select
+            aria-label="Page"
             value={selectedPageId}
             onChange={(event) => onSelectPage(event.target.value)}
           >
@@ -52,7 +53,7 @@ export function SeoView({
         <section className="panel">
           <div className="empty-state">
             <strong>Select a page</strong>
-            <span className="muted">SEO settings are stored per landing page.</span>
+            <span className="muted">SEO settings are stored per page.</span>
           </div>
         </section>
       ) : (

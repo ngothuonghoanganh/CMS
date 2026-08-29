@@ -31,7 +31,7 @@ import {
 } from '../persistence/schemas/tenant-extension.schema';
 import { PageExtensionInstanceRecord } from '../persistence/schemas/page-extension-instance.schema';
 import { ExtensionConnectionRecord } from '../persistence/schemas/extension-connection.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 import { ExtensionRegistry } from './extension-registry';
 import { EventBus } from './event-bus';
 import { customExtensionManifest } from './custom-extension';
@@ -51,8 +51,8 @@ export class TenantExtensionService {
     @InjectModel(ExtensionConnectionRecord.name)
     private readonly connections?: Model<ExtensionConnectionRecord>,
     @Optional()
-    @InjectModel(LandingPageRecord.name)
-    private readonly pages?: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pages?: Model<PageRecord>,
   ) {}
 
   async list(): Promise<ExtensionListResponse> {
@@ -164,7 +164,7 @@ export class TenantExtensionService {
     if (this.pageInstances && (await this.pageInstances.exists({ extensionId }))) {
       throw new ConflictException({
         code: 'CUSTOM_EXTENSION_IN_USE',
-        message: 'Remove this extension from landing pages before deleting it',
+        message: 'Remove this extension from pages before deleting it',
       });
     }
     if (this.connections && (await this.connections.exists({ extensionId }))) {

@@ -11,7 +11,7 @@ any GrapesJS, Next.js, React, Mongoose or MongoDB dependency in the shared contr
 ```text
 published PageVersion.payload
         ↓
-PublicLandingPage response
+PublicPage response
         ↓
 PagePayloadV1Schema validation
         ↓
@@ -52,7 +52,7 @@ asset upload and storage/CDN processing remain outside this phase.
 
 ## Publication model
 
-`LandingPage` now has two management pointers:
+`Page` now has two management pointers:
 
 ```text
 currentDraftVersionId

@@ -2,7 +2,7 @@
   "name": "payload-landing-page-platform",
   "version": "0.1.0",
   "private": true,
-  "description": "Foundation monorepo for the Payload Landing Page Platform",
+  "description": "Foundation monorepo for the Payload Page Platform",
   "packageManager": "pnpm@10.15.0",
   "engines": {
     "node": ">=24.0.0",

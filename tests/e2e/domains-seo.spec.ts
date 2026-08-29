@@ -30,7 +30,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Site').selectOption({ label: siteName });
   await page.getByLabel('Page name').fill(pageName);
   await page.getByLabel('Slug').fill(pageSlug);
@@ -38,7 +38,9 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await expect(page.getByRole('status')).toContainText('draft version 1 created');
 
   await page.getByRole('button', { name: 'SEO', exact: true }).click();
-  await page.getByLabel('Landing page').selectOption({ label: pageName });
+  await page.getByRole('combobox', { name: 'Page', exact: true }).selectOption({
+    label: pageName,
+  });
   await page.getByLabel('SEO title').fill('Custom domain SEO title');
   await page.getByLabel('Meta description').fill('Custom domain SEO description');
   await page.getByLabel('Canonical URL').fill(`https://${hostname}/`);
@@ -57,7 +59,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await page.getByRole('button', { name: 'Add domain', exact: true }).first().click();
   await page.getByLabel('Hostname').fill(hostname);
   await page
-    .getByLabel('Landing page')
+    .getByRole('combobox', { name: 'Page', exact: true })
     .selectOption({ label: `${pageName} (/${pageSlug})` });
   await page.getByLabel('Use as the canonical primary domain for this page').check();
   await page.getByRole('button', { name: 'Add domain', exact: true }).last().click();
@@ -66,11 +68,11 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await domainRow.getByRole('button', { name: 'Verify / retry' }).click();
   await expect(domainRow.getByText('active', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Site').selectOption({ label: siteName });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
   await publicPage.setExtraHTTPHeaders({ 'x-forwarded-host': hostname });

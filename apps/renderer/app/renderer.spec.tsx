@@ -91,6 +91,41 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('padding:24px 16px');
   });
 
+  it('renders resolved site navigation with platform and custom-domain URL rules', () => {
+    const navigation = {
+      main: [
+        {
+          id: 'nav-home',
+          label: 'Home',
+          type: 'page' as const,
+          href: '/',
+          children: [
+            { id: 'nav-docs', label: 'Docs', type: 'page' as const, href: '/docs' },
+          ],
+        },
+        {
+          id: 'nav-external',
+          label: 'Docs',
+          type: 'external' as const,
+          href: 'https://docs.example.com',
+          openInNewTab: true,
+        },
+      ],
+    };
+    const platformMarkup = renderToStaticMarkup(
+      renderPage(createPayload(), { siteSlug: 'demo', pageSlug: '', navigation }),
+    );
+    expect(platformMarkup).toContain('href="/demo"');
+    expect(platformMarkup).toContain('href="/demo/docs"');
+    expect(platformMarkup).toContain('target="_blank"');
+
+    const customDomainMarkup = renderToStaticMarkup(
+      renderPage(createPayload(), { customDomain: true, navigation }),
+    );
+    expect(customDomainMarkup).toContain('href="/docs"');
+    expect(customDomainMarkup).not.toContain('href="/demo/docs"');
+  });
+
   it('fails safely for invalid or unsupported payload data', () => {
     const invalid = renderToStaticMarkup(
       renderPage({
@@ -343,7 +378,7 @@ describe('PagePayloadV1 renderer', () => {
                 kind: 'banner',
                 eyebrow: 'Now live',
                 heading: 'Launch your next campaign',
-                body: 'A reusable tenant-defined landing page block.',
+                body: 'A reusable tenant-defined page block.',
                 buttonLabel: 'Learn more',
                 buttonHref: '/learn',
                 accentColor: '#8cf0c5',

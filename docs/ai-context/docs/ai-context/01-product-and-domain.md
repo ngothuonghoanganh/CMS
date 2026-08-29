@@ -2,7 +2,7 @@
 
 ## 1. Product vision
 
-The product is a platform where a company can build and operate landing pages without editing application source code. A user should be able to open the CMS, create a page, compose content visually, configure forms/integrations, preview responsive behavior, publish, and later update content safely.
+The product is a platform where a company can build and operate pages without editing application source code. A user should be able to open the CMS, create a page, compose content visually, configure forms/integrations, preview responsive behavior, publish, and later update content safely.
 
 The target experience is closer to a visual publishing product than a traditional admin panel.
 
@@ -14,7 +14,7 @@ Responsible for platform health, tenant provisioning, global capabilities, deplo
 
 ### Company administrator
 
-Responsible for company users, landing pages, forms, leads, integrations, domains/settings, publishing, and permissions within one tenant.
+Responsible for company users, pages, forms, leads, integrations, domains/settings, publishing, and permissions within one tenant.
 
 ### Designer / advanced editor
 
@@ -36,7 +36,7 @@ A user is authenticated and operates within an authorized company context. Role/
 
 ### Page
 
-A page is a managed landing-page entity. It should contain metadata and a versioned document/payload representing editable content and structure.
+A page is a managed content entity. It should contain metadata and a versioned document/payload representing editable content and structure.
 
 Suggested conceptual fields:
 
@@ -54,7 +54,7 @@ Suggested conceptual fields:
 
 ### PageDocument
 
-The canonical editable representation of a landing page. It should be serializable, versioned, deterministic, and independent from temporary React component state.
+The canonical editable representation of a page. It should be serializable, versioned, deterministic, and independent from temporary React component state.
 
 ### Component / Element
 

@@ -25,10 +25,7 @@ import {
   AnalyticsRepository,
   type AnalyticsStoredEventInput,
 } from './analytics.repository';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import {
   PageVersionRecord,
   type PageVersionDocument,
@@ -60,7 +57,7 @@ export type SubmissionAnalyticsInput = {
 
 type PublishedAnalyticsContext = {
   site: SiteDocument;
-  page: LandingPageDocument;
+  page: PageDocument;
   version: PageVersionDocument;
   payload: ReturnType<typeof PagePayloadSchema.parse>;
 };
@@ -74,8 +71,8 @@ export class AnalyticsService {
     private readonly repository: AnalyticsRepository,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(WorkspaceRecord.name)

@@ -13,7 +13,7 @@ async function login(page: Page) {
 }
 
 async function openPages(page: Page, siteName?: string) {
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   if (siteName) {
     await page.getByLabel('Site').selectOption({ label: siteName });
   }
@@ -58,7 +58,7 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await returnToPages(page, `Publish Site ${suffix}`);
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
   const publicUrl = `/${siteSlug}/${pageSlug}`;
@@ -81,12 +81,12 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await expect(publicPage.getByText('Draft content B')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
   await publicPage.reload();
   await expect(publicPage.getByText('Draft content B')).toBeVisible();
 
   await page.getByRole('button', { name: 'Unpublish' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page unpublished');
+  await expect(page.getByRole('status')).toContainText('Page unpublished');
   const unpublishedResponse = await request.get(
     `http://127.0.0.1:3001/api/v1/public/sites/${siteSlug}/pages/${pageSlug}`,
   );

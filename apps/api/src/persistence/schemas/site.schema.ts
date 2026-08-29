@@ -22,6 +22,25 @@ export class SiteRecord {
   })
   slug!: string;
 
+  // Optional at persistence level so old tenant databases can be repaired by
+  // SiteService without a destructive collection rewrite.
+  @Prop({ type: String, required: false, index: true })
+  homePageId?: string;
+
+  @Prop({
+    type: String,
+    required: true,
+    enum: ['draft', 'published', 'archived'],
+    default: 'draft',
+  })
+  status!: 'draft' | 'published' | 'archived';
+
+  @Prop({ type: String, required: false })
+  primaryNavigationId?: string;
+
+  @Prop({ type: String, required: false })
+  footerNavigationId?: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

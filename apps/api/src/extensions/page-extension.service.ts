@@ -30,10 +30,7 @@ import { randomUUID } from 'node:crypto';
 
 import { env } from '../config/env';
 import { IntegrationSecretVault } from '../domain/integration-secret-vault';
-import {
-  LandingPageRecord,
-  type LandingPageDocument,
-} from '../persistence/schemas/landing-page.schema';
+import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import {
   PageExtensionInstanceRecord,
   type PageExtensionInstanceDocument,
@@ -48,8 +45,8 @@ export class PageExtensionService {
   constructor(
     @InjectModel(PageExtensionInstanceRecord.name)
     private readonly instanceModel: Model<PageExtensionInstanceRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(TenantExtensionRecord.name)
     private readonly tenantExtensionModel: Model<TenantExtensionRecord>,
     @Inject(ExtensionRegistry) private readonly registry: ExtensionRegistry,
@@ -412,10 +409,7 @@ export class PageExtensionService {
       : [];
   }
 
-  private async requirePage(
-    pageId: string,
-    workspaceId: string,
-  ): Promise<LandingPageDocument> {
+  private async requirePage(pageId: string, workspaceId: string): Promise<PageDocument> {
     const page = await this.pageModel.findOne({ _id: pageId, workspaceId }).exec();
     if (!page) {
       throw new NotFoundException({

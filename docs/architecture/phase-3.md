@@ -12,10 +12,10 @@
   ownership filters.
 - CMS proxy redirect for unauthenticated browser requests, login form, logout and
   structured API error handling.
-- Responsive CMS shell with Dashboard, Sites, Landing Pages, Assets and Templates
+- Responsive CMS shell with Dashboard, Sites, Pages, Assets and Templates
   navigation.
-- Site list/create/edit, landing page list/create/metadata edit and draft version
-  history. Page metadata remains on `LandingPage`; version snapshots remain immutable
+- Site list/create/edit, page list/create/metadata edit and draft version
+  history. Page metadata remains on `Page`; version snapshots remain immutable
   `PagePayloadV1` records and saves retain `expectedVersionNumber` concurrency checks.
 - Asset metadata CRUD. Binary upload, storage, CDN and processing remain deferred.
 - Template metadata CRUD over validated `PagePayload` starter snapshots. A template is
@@ -40,7 +40,7 @@ RBAC and workspace switching are not introduced in this phase.
 ## E2E coverage
 
 Playwright covers protected-route redirect, invalid credentials, valid login/logout,
-authenticated API lifecycle, site create/edit, landing-page create/metadata edit and
+authenticated API lifecycle, site create/edit, Page create/metadata edit and
 draft history visibility. Mongo-backed Vitest integration tests cover workspace scoping,
 page/version behavior, validation, pagination, immutable snapshots and concurrency.
 

@@ -88,6 +88,32 @@ export class SiteController {
     );
   }
 
+  @Get(':siteId/url')
+  async getOfficialUrl(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.read', workspaceId);
+    return this.siteService.getOfficialUrl(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+    );
+  }
+
+  @Get(':siteId/manifest')
+  async getManifest(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.read', workspaceId);
+    return this.siteService.getManifest(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+    );
+  }
+
   @Patch(':siteId')
   async update(
     @Param('workspaceId') workspaceId: string,

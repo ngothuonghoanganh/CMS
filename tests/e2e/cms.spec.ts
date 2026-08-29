@@ -23,7 +23,7 @@ async function openBuilder(page: Page, prefix: string): Promise<string> {
   await page.getByLabel('Slug').fill(`${slugPrefix}-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(pageName);
   await page.getByLabel('Slug').fill(`${slugPrefix}-page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
@@ -158,8 +158,8 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
       if (width === 390) {
         await openNavigation.click();
         await expect(navigation).toBeVisible();
-        await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
-        await expect(page.getByRole('heading', { name: 'Landing pages' })).toBeVisible();
+        await page.getByRole('button', { name: 'Pages', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible();
         const mobileWorkspaceTrigger = page.getByRole('button', {
           name: 'Current workspace',
         });
@@ -305,7 +305,7 @@ test('uses the enabled Countdown extension through builder save and public paylo
   await page.getByLabel('Slug').fill(siteSlug);
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(pageName);
   await page.getByLabel('Slug').fill(pageSlug);
   await page.getByRole('button', { name: 'Create page' }).click();
@@ -359,11 +359,11 @@ test('uses the enabled Countdown extension through builder save and public paylo
   ).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole('button', { name: '← Pages' }).click();
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Site').selectOption({ label: `Countdown Site ${suffix}` });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
-  await expect(page.getByRole('status')).toContainText('Landing page published');
+  await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicResponse = await page.request.get(
     `${apiBase}/public/sites/${siteSlug}/pages/${pageSlug}?tenantSlug=${tenantSlug}`,
@@ -455,7 +455,7 @@ test('creates and edits a site', async ({ page }) => {
   await expect(page.getByText(`Edited E2E Site ${suffix}`)).toBeVisible();
 });
 
-test('creates a landing page and edits its metadata', async ({ page }) => {
+test('creates a page and edits its metadata', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
@@ -464,19 +464,22 @@ test('creates a landing page and edits its metadata', async ({ page }) => {
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Landing Page ${suffix}`);
-  await page.getByLabel('Slug').fill(`landing-page-${suffix}`);
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page.getByLabel('Page name').fill(`Page ${suffix}`);
+  await page.getByLabel('Slug').fill(`page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
   await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await expect(page.getByText(`Landing Page ${suffix}`)).toBeVisible();
+  await expect(page.getByText(`Page ${suffix}`)).toBeVisible();
 
-  await page.getByRole('button', { name: `Landing Page ${suffix}` }).click();
-  await page.getByLabel('Page name').fill(`Edited Landing Page ${suffix}`);
+  await page.getByRole('button', { name: `Page ${suffix}` }).click();
+  await page.getByLabel('Page name').fill(`Edited Page ${suffix}`);
+  await page.getByLabel('Description').fill(`Information page ${suffix}`);
   await page.getByRole('button', { name: 'Save metadata' }).click();
   await expect(page.getByRole('status')).toContainText('metadata updated');
-  await expect(page.getByText(`Edited Landing Page ${suffix}`)).toBeVisible();
+  await expect(page.getByText(`Edited Page ${suffix}`)).toBeVisible();
   await expect(page.getByText('Version 1')).toBeVisible();
+  await page.getByRole('button', { name: `Edited Page ${suffix}` }).click();
+  await expect(page.getByLabel('Description')).toHaveValue(`Information page ${suffix}`);
 });
 
 test('opens the visual builder, saves a draft, and restores it after reload', async ({
@@ -490,7 +493,7 @@ test('opens the visual builder, saves a draft, and restores it after reload', as
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(`Builder Page ${suffix}`);
   await page.getByLabel('Slug').fill(`builder-page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
@@ -592,23 +595,20 @@ test('supports true block drag and a second edit after save and reload', async (
     .filter({ hasText: 'Edit this text' });
   await expect(canvasText).toBeVisible({ timeout: 15_000 });
 
-  await page.getByLabel('Text content').fill('Hello Landing Page');
+  await page.getByLabel('Text content').fill('Hello Page');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.reload();
   await expect(
-    page
-      .frameLocator('iframe.gjs-frame')
-      .locator('p')
-      .filter({ hasText: 'Hello Landing Page' }),
+    page.frameLocator('iframe.gjs-frame').locator('p').filter({ hasText: 'Hello Page' }),
   ).toBeVisible({ timeout: 15_000 });
 
   await page
     .frameLocator('iframe.gjs-frame')
     .locator('p')
-    .filter({ hasText: 'Hello Landing Page' })
+    .filter({ hasText: 'Hello Page' })
     .click();
-  await page.getByLabel('Text content').fill('Updated Landing Page');
+  await page.getByLabel('Text content').fill('Updated Page');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v3')).toBeVisible({ timeout: 15_000 });
   await page.reload();
@@ -616,7 +616,7 @@ test('supports true block drag and a second edit after save and reload', async (
     page
       .frameLocator('iframe.gjs-frame')
       .locator('p')
-      .filter({ hasText: 'Updated Landing Page' }),
+      .filter({ hasText: 'Updated Page' }),
   ).toBeVisible({ timeout: 15_000 });
 });
 
@@ -1164,7 +1164,7 @@ test('shows a conflict when another draft is saved first', async ({ page }) => {
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(page.getByRole('status')).toContainText('Site created');
 
-  await page.getByRole('button', { name: 'Landing Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByLabel('Page name').fill(`Conflict Page ${suffix}`);
   await page.getByLabel('Slug').fill(`conflict-page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();

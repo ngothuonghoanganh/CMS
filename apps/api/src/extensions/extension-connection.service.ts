@@ -102,7 +102,7 @@ export class ExtensionConnectionService {
     if (await this.pageInstances.exists({ connectionId })) {
       throw new ConflictException({
         code: 'EXTENSION_CONNECTION_IN_USE',
-        message: 'Remove this connection from landing pages before deleting it',
+        message: 'Remove this connection from pages before deleting it',
       });
     }
     await this.connectionModel.deleteOne({ _id: connectionId, extensionId }).exec();

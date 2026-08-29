@@ -1,7 +1,12 @@
 import { cookies } from 'next/headers';
 import { cache } from 'react';
 
-import { PublicLandingPageSchema, type PublicLandingPage } from '@payload/contracts';
+import {
+  PublicPageSchema,
+  PublicSiteRoutesSchema,
+  type PublicPage,
+  type PublicSiteRoutes,
+} from '@payload/contracts';
 
 const apiBaseUrl = process.env.RENDERER_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
 
@@ -11,7 +16,7 @@ function uncachedApiUrl(path: string): string {
   return `${apiBaseUrl}${path}${path.includes('?') ? '&' : '?'}_rendererRequest=${Date.now()}`;
 }
 
-async function readPageResponse(response: Response): Promise<PublicLandingPage | null> {
+async function readPageResponse(response: Response): Promise<PublicPage | null> {
   if (response.status === 404 || response.status === 401) {
     return null;
   }
@@ -20,7 +25,7 @@ async function readPageResponse(response: Response): Promise<PublicLandingPage |
     throw new Error(`Page API request failed with status ${response.status}`);
   }
 
-  const parsed = PublicLandingPageSchema.safeParse(await response.json());
+  const parsed = PublicPageSchema.safeParse(await response.json());
   if (!parsed.success) {
     throw new Error('The page API returned an invalid public page payload');
   }
@@ -31,7 +36,7 @@ async function readPageResponse(response: Response): Promise<PublicLandingPage |
 export const getPublicPage = cache(async function getPublicPage(
   siteSlug: string,
   pageSlug: string,
-): Promise<PublicLandingPage | null> {
+): Promise<PublicPage | null> {
   const response = await fetch(
     uncachedApiUrl(
       `/public/sites/${encodeURIComponent(siteSlug)}/pages/${encodeURIComponent(pageSlug)}`,
@@ -41,9 +46,22 @@ export const getPublicPage = cache(async function getPublicPage(
   return readPageResponse(response);
 });
 
+export const getPublicPageByPath = cache(async function getPublicPageByPath(
+  siteSlug: string,
+  path: string,
+): Promise<PublicPage | null> {
+  const response = await fetch(
+    uncachedApiUrl(
+      `/public/sites/${encodeURIComponent(siteSlug)}/resolve?path=${encodeURIComponent(path)}`,
+    ),
+    { cache: 'no-store' },
+  );
+  return readPageResponse(response);
+});
+
 export const getPublicPageForHostname = cache(async function getPublicPageForHostname(
   hostname: string,
-): Promise<PublicLandingPage | null> {
+): Promise<PublicPage | null> {
   const response = await fetch(
     uncachedApiUrl(`/public/domains/resolve?hostname=${encodeURIComponent(hostname)}`),
     { cache: 'no-store' },
@@ -51,9 +69,39 @@ export const getPublicPageForHostname = cache(async function getPublicPageForHos
   return readPageResponse(response);
 });
 
+export const getPublicPageForHostnamePath = cache(
+  async function getPublicPageForHostnamePath(
+    hostname: string,
+    path: string,
+  ): Promise<PublicPage | null> {
+    const response = await fetch(
+      uncachedApiUrl(
+        `/public/domains/resolve?hostname=${encodeURIComponent(hostname)}&path=${encodeURIComponent(path)}`,
+      ),
+      { cache: 'no-store' },
+    );
+    return readPageResponse(response);
+  },
+);
+
+export const getPublicRoutesForHostname = cache(async function getPublicRoutesForHostname(
+  hostname: string,
+): Promise<PublicSiteRoutes | null> {
+  const response = await fetch(
+    uncachedApiUrl(`/public/domains/routes?hostname=${encodeURIComponent(hostname)}`),
+    { cache: 'no-store' },
+  );
+  if (response.status === 404 || response.status === 401) return null;
+  if (!response.ok)
+    throw new Error(`Routes API request failed with status ${response.status}`);
+  const parsed = PublicSiteRoutesSchema.safeParse(await response.json());
+  if (!parsed.success) throw new Error('The routes API returned an invalid response');
+  return parsed.data;
+});
+
 export const getPreviewPage = cache(async function getPreviewPage(
   pageId: string,
-): Promise<PublicLandingPage | null> {
+): Promise<PublicPage | null> {
   const cookieHeader = (await cookies()).toString();
   const requestInit: RequestInit = { cache: 'no-store' };
   if (cookieHeader) {

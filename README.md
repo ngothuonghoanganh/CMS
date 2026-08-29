@@ -1,6 +1,6 @@
-# Payload Landing Page Platform
+# Payload Page Platform
 
-Greenfield monorepo for a modular landing-page platform. The current implementation
+Greenfield monorepo for a modular Page platform. The current implementation
 includes the Phase 6 forms/submissions foundation, Phase 7 notifications, Phase 8
 analytics and Phase 9 custom-domain/SEO hardening:
 versioned page payloads, Mongo persistence, authenticated REST management APIs, CMS

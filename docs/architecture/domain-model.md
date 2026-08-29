@@ -5,7 +5,7 @@ Workspace
    │
    └── Site
         │
-        └── LandingPage
+        └── Page
                │
                └── PageVersion
                        │
@@ -23,9 +23,9 @@ implementation details. Page node ids are separate page-local strings and are st
 inside a payload; they are never Mongo ids.
 
 - A Workspace owns Sites, Assets and Templates.
-- A Site belongs to exactly one Workspace and owns LandingPages.
-- A LandingPage is page identity and metadata; it does not contain page content.
-- A PageVersion belongs to one LandingPage and stores one validated immutable snapshot.
+- A Site belongs to exactly one Workspace and owns Pages.
+- A Page is page identity and metadata; it does not contain page content.
+- A PageVersion belongs to one Page and stores one validated immutable snapshot.
 
 Nested site lookups query both ids, so a Site from another Workspace cannot satisfy the
 request. Page creation resolves the Site first and copies its ownership context into the
@@ -41,7 +41,7 @@ small optimistic-concurrency guard and returns `409 PAGE_VERSION_CONFLICT` when 
 
 The current draft pointer is persisted now. A published pointer/workflow is intentionally
 not implemented, but the separate version document keeps a future publish snapshot from
-requiring a LandingPage rewrite. Phase 2 does not use event sourcing, diffs or a
+requiring a Page rewrite. Phase 2 does not use event sourcing, diffs or a
 multi-document transaction; the simple save sequence and unique version index are
 appropriate for this phase. Before Phase 4 autosave or concurrent editing, revisit
 atomicity with a transaction, compare-and-set update, idempotency key or another
@@ -66,4 +66,4 @@ contracts package contains no Mongoose types or decorators.
 
 Assets intentionally model metadata and a storage key only; binary upload, CDN and image
 processing are deferred. Templates store a validated payload snapshot and are not a
-LandingPage inheritance hierarchy.
+Page inheritance hierarchy.

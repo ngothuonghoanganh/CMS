@@ -6,7 +6,7 @@ import {
   PageCapabilityGraphSchema,
   PageExtensionInstanceSchema,
   PageExtensionListResponseSchema,
-  LandingPageSchema,
+  PageSchema,
   PAGE_PREVIEW_MESSAGE_TYPE,
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
   FormPropsSchema,
@@ -19,7 +19,7 @@ import {
   type Asset,
   type FormField,
   type FormProps,
-  type LandingPage,
+  type Page,
   type PageDocument,
   type PageVersion,
   type ExtensionDescriptor,
@@ -308,7 +308,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('initializing');
   const [saveInFlight, setSaveInFlight] = useState(false);
-  const [page, setPage] = useState<LandingPage | null>(null);
+  const [page, setPage] = useState<Page | null>(null);
   const [version, setVersion] = useState<PageVersion | null>(null);
   // Model A: GrapesJS owns the live editable document. This is only the last
   // validated server snapshot used to initialize the editor, never a second
@@ -674,18 +674,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         ]);
         if (cancelled) return;
 
-        const nextPage = LandingPageSchema.parse(pageResponse);
+        const nextPage = PageSchema.parse(pageResponse);
         if (nextPage.siteId !== siteId || nextPage.workspaceId !== workspaceId) {
-          throw new Error(
-            'This landing page does not belong to the selected workspace/site.',
-          );
+          throw new Error('This page does not belong to the selected workspace/site.');
         }
         const versionList = PageVersionListResponseSchema.parse(versionsResponse);
         const nextVersion =
           versionList.items.find((item) => item.id === nextPage.currentDraftVersionId) ??
           versionList.items[0];
         if (!nextVersion) {
-          throw new Error('This landing page does not have a current draft version.');
+          throw new Error('This page does not have a current draft version.');
         }
         const nextPayload = PagePayloadSchema.parse(nextVersion.payload);
         setPage(nextPage);
@@ -1407,8 +1405,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       <div className="builder-workspace">
         <aside className="builder-panel builder-blocks-panel">
           <div className="builder-panel-heading">
-            <span className="eyebrow">Blocks</span>
-            <strong>Add to canvas</strong>
+            <span className="eyebrow">Page sections</span>
+            <strong>Add section or content</strong>
           </div>
           <label className="builder-block-search">
             <span className="sr-only">Search components</span>
@@ -1465,7 +1463,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             <p className="muted small builder-empty-message">No matching components.</p>
           ) : null}
           <p className="muted small builder-help">
-            Blocks map to the supported, versioned PagePayload node set.
+            Sections map to the supported, versioned PagePayload node set and keep their
+            canvas order when published.
           </p>
           <div className="builder-layers-section builder-page-capabilities">
             <div className="builder-panel-heading">

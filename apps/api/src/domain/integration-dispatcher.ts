@@ -29,7 +29,7 @@ import {
   type IntegrationDeliveryDocument,
 } from '../persistence/schemas/integration-delivery.schema';
 import { IntegrationRecord } from '../persistence/schemas/integration.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { FormIntegrationBindingRecord } from '../persistence/schemas/form-integration-binding.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
@@ -59,8 +59,8 @@ export class IntegrationDispatcher implements OnModuleDestroy {
     private readonly integrationModel: Model<IntegrationRecord>,
     @InjectModel(FormSubmissionRecord.name)
     private readonly submissionModel: Model<FormSubmissionRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(WorkspaceRecord.name)

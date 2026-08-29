@@ -2,7 +2,7 @@
 
 ## What changed
 
-- Clarified metadata ownership: `LandingPage.name` is the CMS management name;
+- Clarified metadata ownership: `Page.name` is the CMS management name;
   `PagePayloadV1.metadata.documentTitle` and `documentDescription` are versioned
   rendered-document metadata.
 - Removed the duplicated `props.kind` discriminator. Node `type` is the sole
@@ -13,7 +13,7 @@
   `/assets/` paths.
 - Added offset pagination (`limit`, `offset`) with defaults 20/0, maximum limit 100,
   stable ordering and `{ items, pagination }` responses for page and version lists.
-- Replaced the optional LandingPage slug sparse unique index with a partial unique index
+- Replaced the optional Page slug sparse unique index with a partial unique index
   that only applies to string slugs. Missing and null slugs are not unique-key values.
 - Expanded real API/Mongo integration tests for ownership, snapshots, pagination,
   validation, deletion, duplicate slugs and the unique PageVersion index.
@@ -58,7 +58,7 @@ The save sequence remains intentionally simple:
 ```text
 insert PageVersion
 ↓
-update LandingPage.currentDraftVersionId
+update Page.currentDraftVersionId
 ```
 
 It is acceptable before autosave/concurrent editing, but it is not transactionally

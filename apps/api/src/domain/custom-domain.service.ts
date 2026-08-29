@@ -17,6 +17,7 @@ import {
   CustomDomainSchema,
   UpdateCustomDomainRequestSchema,
   normalizeHostname,
+  PublicSiteRoutesSchema,
   type CreateCustomDomainRequest,
   type CustomDomain,
   type CustomDomainListResponse,
@@ -28,7 +29,9 @@ import {
   CustomDomainRecord,
   type CustomDomainDocument,
 } from '../persistence/schemas/custom-domain.schema';
-import { LandingPageRecord } from '../persistence/schemas/landing-page.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
+import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
+import { SiteRecord } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import {
   DOMAIN_VERIFICATION_RESOLVER,
@@ -53,8 +56,12 @@ export class CustomDomainService {
   constructor(
     @InjectModel(CustomDomainRecord.name)
     private readonly domainModel: Model<CustomDomainRecord>,
-    @InjectModel(LandingPageRecord.name)
-    private readonly pageModel: Model<LandingPageRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
+    @InjectModel(SiteRecord.name)
+    private readonly siteModel: Model<SiteRecord>,
+    @InjectModel(PageSeoSettingsRecord.name)
+    private readonly seoModel: Model<PageSeoSettingsRecord>,
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(DOMAIN_VERIFICATION_RESOLVER)
@@ -88,23 +95,32 @@ export class CustomDomainService {
     const parsedInput = CreateCustomDomainRequestSchema.parse(input);
     const hostname = this.requirePublicHostname(parsedInput.hostname);
     const landingPageId = parsedInput.landingPageId;
+    const siteId = parsedInput.siteId;
+    let pageSiteId: string | undefined;
     if (landingPageId) {
-      await this.requirePage(landingPageId, workspaceId);
+      const page = await this.requirePage(landingPageId, workspaceId);
+      pageSiteId = page.siteId;
+      if (siteId && siteId !== page.siteId) {
+        throw new BadRequestException({
+          code: 'DOMAIN_SITE_PAGE_MISMATCH',
+          message: 'The domain site and page must belong to the same site',
+        });
+      }
     }
+    if (siteId) await this.requireSite(siteId, workspaceId);
 
     const token = randomBytes(32).toString('base64url');
     const verificationHostname = `${env.DOMAIN_VERIFICATION_PREFIX}.${hostname}`;
-    if (parsedInput.isPrimary && !landingPageId) {
+    if (parsedInput.isPrimary && !siteId && !pageSiteId) {
       throw new BadRequestException({
-        code: 'PRIMARY_DOMAIN_PAGE_REQUIRED',
-        message: 'A primary domain must be assigned to a landing page',
+        code: 'PRIMARY_DOMAIN_SITE_REQUIRED',
+        message: 'A primary domain must be assigned to a site',
       });
     }
 
     return this.quotas.withHardQuota('custom_domains', async () => {
-      if (parsedInput.isPrimary && landingPageId) {
-        await this.clearPrimaryDomain(workspaceId, landingPageId);
-      }
+      if (parsedInput.isPrimary && (siteId ?? pageSiteId))
+        await this.clearPrimaryDomain(workspaceId, siteId ?? pageSiteId!, landingPageId);
 
       const record = await this.domainModel.create({
         _id: randomUUID(),
@@ -115,6 +131,7 @@ export class CustomDomainService {
         verificationMethod: 'dns_txt',
         verificationHostname,
         verificationToken: token,
+        ...(siteId ? { siteId } : {}),
         ...(landingPageId ? { landingPageId } : {}),
         isPrimary: parsedInput.isPrimary ?? false,
       });
@@ -143,22 +160,35 @@ export class CustomDomainService {
       parsedInput.landingPageId === null
         ? undefined
         : (parsedInput.landingPageId ?? record.landingPageId);
+    let nextSiteId =
+      parsedInput.siteId === null ? undefined : (parsedInput.siteId ?? record.siteId);
 
-    if (nextPageId) {
-      await this.requirePage(nextPageId, workspaceId);
+    const nextPage = nextPageId
+      ? await this.requirePage(nextPageId, workspaceId)
+      : undefined;
+    if (nextPage) {
+      if (nextSiteId && nextSiteId !== nextPage.siteId) {
+        throw new BadRequestException({
+          code: 'DOMAIN_SITE_PAGE_MISMATCH',
+          message: 'The domain site and page must belong to the same site',
+        });
+      }
     }
-    if (parsedInput.isPrimary && !nextPageId) {
+    if (nextSiteId) await this.requireSite(nextSiteId, workspaceId);
+    const effectiveSiteId = nextSiteId ?? nextPage?.siteId;
+    if (parsedInput.isPrimary && !effectiveSiteId) {
       throw new BadRequestException({
-        code: 'PRIMARY_DOMAIN_PAGE_REQUIRED',
-        message: 'A primary domain must be assigned to a landing page',
+        code: 'PRIMARY_DOMAIN_SITE_REQUIRED',
+        message: 'A primary domain must be assigned to a site',
       });
     }
     if (
-      nextPageId &&
+      effectiveSiteId &&
       (parsedInput.isPrimary === true ||
-        (record.isPrimary && nextPageId !== record.landingPageId))
+        (record.isPrimary &&
+          (nextSiteId !== record.siteId || nextPageId !== record.landingPageId)))
     ) {
-      await this.clearPrimaryDomain(workspaceId, nextPageId, domainId);
+      await this.clearPrimaryDomain(workspaceId, effectiveSiteId, nextPageId, domainId);
     }
 
     if (parsedInput.landingPageId === null) {
@@ -166,6 +196,11 @@ export class CustomDomainService {
       record.isPrimary = false;
     } else if (parsedInput.landingPageId !== undefined) {
       record.landingPageId = parsedInput.landingPageId;
+    }
+    if (parsedInput.siteId === null) {
+      record.set('siteId', undefined);
+    } else if (parsedInput.siteId !== undefined && nextSiteId) {
+      record.siteId = nextSiteId;
     }
     if (parsedInput.isPrimary !== undefined) {
       record.isPrimary = parsedInput.isPrimary;
@@ -234,13 +269,69 @@ export class CustomDomainService {
     }
   }
 
-  async resolvePublic(hostname: string | undefined, clientIp = 'unknown') {
+  async resolvePublic(hostname: string | undefined, path = '/', clientIp = 'unknown') {
     this.assertPublicResolveRateLimit(clientIp);
     const normalizedHostname = normalizeHostname(hostname ?? '');
     if (!normalizedHostname) {
       throw this.publicNotFound();
     }
-    return this.publicPageResolver.resolveByHostname(normalizedHostname);
+    return this.publicPageResolver.resolveByHostname(normalizedHostname, path);
+  }
+
+  async resolvePublicRoutes(
+    hostname: string | undefined,
+    clientIp = 'unknown',
+  ): Promise<{ urls: string[] }> {
+    this.assertPublicResolveRateLimit(clientIp);
+    const normalizedHostname = normalizeHostname(hostname ?? '');
+    if (!normalizedHostname) throw this.publicNotFound();
+    const domain = await this.domainModel
+      .findOne({ normalizedHostname, hostname: normalizedHostname, status: 'active' })
+      .exec();
+    if (!domain) throw this.publicNotFound();
+
+    const assignedPage = domain.landingPageId
+      ? await this.pageModel
+          .findOne({ _id: domain.landingPageId, workspaceId: domain.workspaceId })
+          .exec()
+      : null;
+    const siteId = domain.siteId ?? assignedPage?.siteId;
+    if (!siteId) throw this.publicNotFound();
+
+    const pages = await this.pageModel
+      .find({
+        siteId,
+        workspaceId: domain.workspaceId,
+        publishedVersionId: { $exists: true, $ne: null },
+      })
+      .sort({ path: 1, _id: 1 })
+      .exec();
+    const seoRecords = await this.seoModel
+      .find({
+        workspaceId: domain.workspaceId,
+        landingPageId: { $in: pages.map((page) => page._id.toString()) },
+      })
+      .exec();
+    const seoByPageId = new Map(
+      seoRecords.map((record) => [record.landingPageId, record]),
+    );
+    const origin = `https://${normalizedHostname}`;
+    const urls = pages.flatMap((page) => {
+      const seo = seoByPageId.get(page._id.toString());
+      if (seo?.noIndex) return [];
+      const path = page.path ?? (page.slug ? `/${page.slug}` : '/');
+      const fallback = `${origin}${path === '/' ? '/' : path}`;
+      if (!seo?.canonicalUrl) return [fallback];
+      try {
+        const canonical = new URL(seo.canonicalUrl, fallback);
+        return canonical.protocol === 'http:' || canonical.protocol === 'https:'
+          ? [canonical.toString()]
+          : [fallback];
+      } catch {
+        return [fallback];
+      }
+    });
+    return PublicSiteRoutesSchema.parse({ urls });
   }
 
   private async requireWorkspace(workspaceId: string): Promise<void> {
@@ -252,11 +343,22 @@ export class CustomDomainService {
     }
   }
 
-  private async requirePage(pageId: string, workspaceId: string): Promise<void> {
-    if (!(await this.pageModel.exists({ _id: pageId, workspaceId }))) {
+  private async requirePage(pageId: string, workspaceId: string) {
+    const page = await this.pageModel.findOne({ _id: pageId, workspaceId }).exec();
+    if (!page) {
       throw new NotFoundException({
         code: 'PAGE_NOT_FOUND',
-        message: 'Landing page was not found in the requested workspace',
+        message: 'Page was not found in the requested workspace',
+      });
+    }
+    return page;
+  }
+
+  private async requireSite(siteId: string, workspaceId: string): Promise<void> {
+    if (!(await this.siteModel.exists({ _id: siteId, workspaceId }))) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: 'Site was not found in the requested workspace',
       });
     }
   }
@@ -290,14 +392,15 @@ export class CustomDomainService {
 
   private async clearPrimaryDomain(
     workspaceId: string,
-    landingPageId: string,
+    siteId: string,
+    landingPageId?: string,
     exceptDomainId?: string,
   ): Promise<void> {
     await this.domainModel
       .updateMany(
         {
           workspaceId,
-          landingPageId,
+          $or: [{ siteId }, ...(landingPageId ? [{ landingPageId }] : [])],
           isPrimary: true,
           ...(exceptDomainId ? { _id: { $ne: exceptDomainId } } : {}),
         },
@@ -364,6 +467,7 @@ export class CustomDomainService {
     return CustomDomainSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
+      ...(record.siteId ? { siteId: record.siteId } : {}),
       hostname: record.hostname,
       status: record.status,
       verificationMethod: record.verificationMethod,

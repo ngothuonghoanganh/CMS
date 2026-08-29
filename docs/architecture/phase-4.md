@@ -80,7 +80,7 @@ the frozen contract's safe-URL validation succeeds on the first serialization.
 
 ## Lifecycle and save flow
 
-The server page boundary loads the LandingPage and its current draft version before
+The server page boundary loads the Page and its current draft version before
 the client editor mounts. The client initializes GrapesJS once, hydrates exactly
 once, subscribes only to change/selection events, and destroys the editor on
 unmount. React owns loading, selected component, viewport, dirty state and save

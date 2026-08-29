@@ -44,7 +44,7 @@ function renderText(submission: IntegrationDeliveryContext['submission']): strin
   const lines = [
     'New form submission',
     '',
-    `Landing page: ${safeText(submission.pageName)}`,
+    `Page: ${safeText(submission.pageName)}`,
     `Form: ${safeText(submission.formNodeId)}`,
     `Submitted at: ${submission.submittedAt.toISOString()}`,
     '',

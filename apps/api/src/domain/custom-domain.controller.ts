@@ -180,13 +180,34 @@ export class PublicDomainController {
   ) {}
 
   @Get('resolve')
-  async resolve(@Query('hostname') hostname: string, @Req() request: Request) {
+  async resolve(
+    @Query('hostname') hostname: string,
+    @Query('path') path = '/',
+    @Req() request: Request,
+  ) {
     const normalizedHostname = normalizeHostname(hostname ?? '');
-    if (!normalizedHostname) return this.domainService.resolvePublic(hostname, 'unknown');
+    if (!normalizedHostname)
+      return this.domainService.resolvePublic(hostname, path, 'unknown');
     const scope = await this.tenantResolver.resolveByHostname(normalizedHostname);
     await this.tenantResolver.ensureConnection(scope);
     return this.tenantContext.run(scope, () =>
       this.domainService.resolvePublic(
+        normalizedHostname,
+        path,
+        request.ip || request.socket.remoteAddress || 'unknown',
+      ),
+    );
+  }
+
+  @Get('routes')
+  async routes(@Query('hostname') hostname: string, @Req() request: Request) {
+    const normalizedHostname = normalizeHostname(hostname ?? '');
+    if (!normalizedHostname)
+      return this.domainService.resolvePublicRoutes(hostname, 'unknown');
+    const scope = await this.tenantResolver.resolveByHostname(normalizedHostname);
+    await this.tenantResolver.ensureConnection(scope);
+    return this.tenantContext.run(scope, () =>
+      this.domainService.resolvePublicRoutes(
         normalizedHostname,
         request.ip || request.socket.remoteAddress || 'unknown',
       ),

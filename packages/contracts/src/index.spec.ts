@@ -39,6 +39,11 @@ import {
   createPageDocument,
   migratePageDocument,
   isPageComponentType,
+  NavigationSchema,
+  PagePathSchema,
+  PageSchema,
+  LandingPageSchema,
+  normalizePagePath,
 } from './index';
 
 function createPayload(children: PageNode[] = []) {
@@ -46,7 +51,7 @@ function createPayload(children: PageNode[] = []) {
     version: 1 as const,
     metadata: {
       documentTitle: 'Launch your next idea',
-      documentDescription: 'A focused landing page.',
+      documentDescription: 'A focused page.',
     },
     root: {
       id: 'root',
@@ -58,6 +63,24 @@ function createPayload(children: PageNode[] = []) {
 }
 
 describe('foundation contracts', () => {
+  it('uses Page as the canonical resource while preserving the legacy schema alias', () => {
+    const page = PageSchema.parse({
+      id: randomUUID(),
+      workspaceId: randomUUID(),
+      siteId: randomUUID(),
+      name: 'About',
+      description: 'Company information',
+      path: '/about',
+      kind: 'standard',
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    expect(page.description).toBe('Company information');
+    expect(LandingPageSchema).toBe(PageSchema);
+  });
+
   it('accepts versioned browser analytics events and rejects PII-shaped fields', () => {
     const event = AnalyticsEventV1Schema.parse({
       version: 1,
@@ -696,6 +719,65 @@ describe('foundation contracts', () => {
     expect(bundle.pageId).toBe(pageId);
     expect(
       PublishedPageBundleSchema.safeParse({ ...bundle, stripeSecret: 'secret' }).success,
+    ).toBe(false);
+  });
+
+  it('normalizes canonical page paths and blocks reserved or ambiguous routes', () => {
+    expect(normalizePagePath('/About/')).toBe('/about');
+    expect(normalizePagePath('docs//Getting-Started/')).toBe('/docs/getting-started');
+    expect(normalizePagePath('/')).toBe('/');
+    expect(normalizePagePath('/api')).toBeNull();
+    expect(normalizePagePath('/docs?draft=true')).toBeNull();
+    expect(PagePathSchema.safeParse('/docs/getting-started').success).toBe(true);
+  });
+
+  it('validates nested site-owned navigation without coupling it to page payloads', () => {
+    const pageId = randomUUID();
+    const navigation = NavigationSchema.parse({
+      id: randomUUID(),
+      siteId: randomUUID(),
+      name: 'Main navigation',
+      key: 'main',
+      items: [
+        {
+          id: randomUUID(),
+          label: 'Home',
+          type: 'page',
+          pageId,
+          children: [
+            {
+              id: randomUUID(),
+              label: 'Docs',
+              type: 'external',
+              externalUrl: 'https://docs.example.com',
+              openInNewTab: true,
+            },
+          ],
+        },
+        {
+          id: randomUUID(),
+          label: 'Contact',
+          type: 'action',
+          action: { type: 'email', value: 'hello@example.com' },
+        },
+      ],
+      createdAt: '2026-08-25T00:00:00.000Z',
+      updatedAt: '2026-08-25T00:00:00.000Z',
+    });
+    expect(navigation.items).toHaveLength(2);
+    expect(navigation.items[0]?.children).toHaveLength(1);
+    expect(
+      NavigationSchema.safeParse({
+        ...navigation,
+        items: [
+          {
+            id: randomUUID(),
+            label: 'Unsafe',
+            type: 'action',
+            action: { type: 'custom', value: 'javascript:alert(1)' },
+          },
+        ],
+      }).success,
     ).toBe(false);
   });
 });
