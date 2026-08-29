@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { PagePayloadV1 } from '@payload/contracts';
 
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -17,7 +18,7 @@ import {
 } from './builder-adapter';
 import { isBuilderNodeType } from './builder-interaction';
 
-const payload = {
+const payload: PagePayloadV1 = {
   version: 1 as const,
   metadata: {
     documentTitle: 'Launch page',
@@ -33,9 +34,15 @@ const payload = {
         type: 'section' as const,
         props: {},
         style: {
-          base: { padding: '64px 24px', backgroundColor: '#111827' },
-          tablet: { padding: '48px 20px' },
-          mobile: { padding: '32px 16px' },
+          base: {
+            padding: '64px 24px',
+            backgroundColor: '#111827',
+            flexDirection: 'column',
+            borderWidth: '1px',
+            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.2)',
+          },
+          tablet: { padding: '48px 20px', gap: '24px' },
+          mobile: { padding: '32px 16px', width: '100%' },
         },
         children: [
           {
@@ -130,10 +137,10 @@ describe('builder adapter', () => {
     expect(() => serializeEditorSnapshot(snapshot)).toThrow('Image source must be');
   });
 
-  it('fails on editor styles outside the V1 vocabulary', () => {
+  it('fails on editor styles outside the shared vocabulary', () => {
     const definition = payloadToEditorComponent(payload);
     const snapshot = snapshotFromEditorDefinition(definition);
-    snapshot.children[0]!.style['box-shadow'] = 'none';
+    snapshot.children[0]!.style['not-a-style'] = 'none';
 
     expect(() => serializeEditorSnapshot(snapshot)).toThrow(
       'Unsupported editor style property',

@@ -655,18 +655,47 @@ const StyleBlockSchema = z
     display: z
       .enum(['block', 'flex', 'grid', 'inline', 'inline-block', 'none'])
       .optional(),
+    flexDirection: z.enum(['row', 'column', 'row-reverse', 'column-reverse']).optional(),
+    justifyContent: z
+      .enum([
+        'flex-start',
+        'center',
+        'flex-end',
+        'space-between',
+        'space-around',
+        'space-evenly',
+      ])
+      .optional(),
+    alignItems: z
+      .enum(['flex-start', 'center', 'flex-end', 'stretch', 'baseline'])
+      .optional(),
+    flexWrap: z.enum(['nowrap', 'wrap', 'wrap-reverse']).optional(),
+    gridTemplateColumns: styleValue.optional(),
+    position: z.enum(['static', 'relative', 'sticky', 'absolute']).optional(),
     width: styleValue.optional(),
+    height: styleValue.optional(),
+    minWidth: styleValue.optional(),
     maxWidth: styleValue.optional(),
     minHeight: styleValue.optional(),
+    maxHeight: styleValue.optional(),
     padding: styleValue.optional(),
     margin: styleValue.optional(),
     gap: styleValue.optional(),
+    fontFamily: styleValue.optional(),
     backgroundColor: styleValue.optional(),
     color: styleValue.optional(),
     fontSize: styleValue.optional(),
     fontWeight: z.enum(['400', '500', '600', '700', '800']).optional(),
+    lineHeight: styleValue.optional(),
+    letterSpacing: styleValue.optional(),
     textAlign: z.enum(['left', 'center', 'right']).optional(),
+    textDecoration: z.enum(['none', 'underline', 'line-through']).optional(),
+    borderWidth: styleValue.optional(),
+    borderStyle: z.enum(['none', 'solid', 'dashed', 'dotted']).optional(),
+    borderColor: styleValue.optional(),
     borderRadius: styleValue.optional(),
+    opacity: styleValue.optional(),
+    boxShadow: styleValue.optional(),
   })
   .strict();
 
@@ -1504,6 +1533,7 @@ export const PagePreviewReadyMessageSchema = z
   .strict();
 
 export * from './component-registry';
+export * from './style-registry';
 
 export const PageCompositionSchema = z
   .object({

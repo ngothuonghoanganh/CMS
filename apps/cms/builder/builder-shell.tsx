@@ -11,10 +11,12 @@ import {
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
   FormPropsSchema,
   PagePayloadSchema,
+  NavigationListResponseSchema,
   createPageDocument,
   PageVersionListResponseSchema,
   PageVersionSchema,
   PAGE_COMPONENT_REGISTRY,
+  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   PAGE_STYLE_PROPERTY_GROUPS,
   type Asset,
   type FormField,
@@ -25,6 +27,7 @@ import {
   type ExtensionDescriptor,
   type PageExtensionInstance,
   type PageCapabilityGraph,
+  type Navigation,
   type ComponentPropertyDefinition,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
@@ -76,6 +79,7 @@ type BuilderShellProps = {
 
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
+type BuilderTool = 'add' | 'layers' | 'assets' | 'sections';
 
 type AvailableBlockOption = {
   type: BuilderBlockType;
@@ -83,22 +87,24 @@ type AvailableBlockOption = {
   extensionId?: string;
 };
 
-const builderBlockTypes = [
-  'section',
-  'container',
-  'text',
-  'image',
-  'button',
-  'form',
-  'countdown',
-] as const satisfies readonly BuilderBlockType[];
-
-const blockOptions: AvailableBlockOption[] = builderBlockTypes.map(
-  (type): AvailableBlockOption => ({ type, label: PAGE_COMPONENT_REGISTRY[type].label }),
-);
+const blockOptions: AvailableBlockOption[] = Object.values(PAGE_COMPONENT_REGISTRY)
+  .filter((definition) => definition.type !== 'root' && definition.type !== 'extension')
+  .map((definition) => ({
+    type: definition.type as BuilderBlockType,
+    label: definition.label,
+  }));
 
 type InspectorSectionKey =
-  'content' | 'layout' | 'spacing' | 'typography' | 'appearance' | 'advanced';
+  | 'content'
+  | 'layout'
+  | 'size'
+  | 'spacing'
+  | 'typography'
+  | 'background'
+  | 'border'
+  | 'effects'
+  | 'appearance'
+  | 'advanced';
 
 type InspectorStyleSection = {
   key: Exclude<InspectorSectionKey, 'content' | 'advanced'>;
@@ -125,6 +131,35 @@ const inspectorStyleSections: readonly InspectorStyleSection[] = (
   label: key.charAt(0).toUpperCase() + key.slice(1),
   fields,
 }));
+
+const inspectorQuickStyleSections: readonly InspectorStyleSection[] = [
+  {
+    key: 'layout',
+    label: 'Layout',
+    fields: [...PAGE_STYLE_PROPERTY_GROUPS.layout, ...PAGE_STYLE_PROPERTY_GROUPS.size],
+  },
+  {
+    key: 'spacing',
+    label: 'Spacing',
+    fields: PAGE_STYLE_PROPERTY_GROUPS.spacing,
+  },
+  {
+    key: 'typography',
+    label: 'Typography',
+    fields: PAGE_STYLE_PROPERTY_GROUPS.typography,
+  },
+  {
+    key: 'appearance',
+    label: 'Appearance',
+    fields: [
+      ...PAGE_STYLE_PROPERTY_GROUPS.background,
+      ...PAGE_STYLE_PROPERTY_GROUPS.border,
+      ...PAGE_STYLE_PROPERTY_GROUPS.effects,
+    ],
+  },
+];
+
+type InspectorTab = 'content' | 'style' | 'settings';
 
 const alignmentOptions: readonly SegmentedOption<'left' | 'center' | 'right'>[] = [
   { value: 'left', label: 'Left' },
@@ -315,6 +350,10 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   // mutable source of truth for Canvas/Layers/Inspector.
   const [pageDocument, setPageDocument] = useState<PageDocument | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [siteGlobals, setSiteGlobals] = useState<{
+    header: Navigation | null;
+    footer: Navigation | null;
+  }>({ header: null, footer: null });
   const [enabledExtensionIds, setEnabledExtensionIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -326,13 +365,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
   const [canvasState, setCanvasState] = useState<BuilderCanvasState | null>(null);
   const [viewport, setViewport] = useState<BuilderViewport>('desktop');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('content');
   const [openInspectorSections, setOpenInspectorSections] = useState<
     Record<InspectorSectionKey, boolean>
   >({
     content: true,
     layout: true,
+    size: true,
     spacing: true,
     typography: false,
+    background: false,
+    border: false,
+    effects: false,
     appearance: false,
     advanced: false,
   });
@@ -351,6 +395,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const [layerDropIntent, setLayerDropIntent] = useState<MoveNodeIntent | null>(null);
   const [blockQuery, setBlockQuery] = useState('');
   const [layerQuery, setLayerQuery] = useState('');
+  const [activeTool, setActiveTool] = useState<BuilderTool>('add');
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
   const layerHoverExpandTimerRef = useRef<number | null>(null);
@@ -396,6 +443,12 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       block.extensionId?.toLowerCase().includes(query)
     );
   });
+  const toolBlockOptions =
+    activeTool === 'sections'
+      ? visibleBlockOptions.filter((block) =>
+          ['section', 'container'].includes(block.type),
+        )
+      : visibleBlockOptions;
   const styleBlock = selected?.style?.[viewportStyleKey(viewport)] ?? {};
   const layerChildren = useMemo(() => {
     const index = new Map<string | undefined, BuilderCanvasNode[]>();
@@ -691,6 +744,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         setPageDocument(createPageDocument(nextPayload));
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
         try {
+          const navigationResponse = NavigationListResponseSchema.parse(
+            await api.get(`/sites/${siteId}/navigations`),
+          );
+          setSiteGlobals({
+            header: navigationResponse.items.find((item) => item.key === 'main') ?? null,
+            footer:
+              navigationResponse.items.find((item) => item.key === 'footer') ?? null,
+          });
+        } catch {
+          setSiteGlobals({ header: null, footer: null });
+        }
+        try {
           const [extensionResult, pageExtensionResult, capabilityResult] =
             await Promise.all([
               api.get('/extensions'),
@@ -831,6 +896,12 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           payload: nextPayload,
         }),
       );
+      const currentPayloadResult = PagePayloadSchema.safeParse(
+        editorRef.current.getDocument().payload,
+      );
+      const hasNewerPayloadChanges =
+        !currentPayloadResult.success ||
+        JSON.stringify(currentPayloadResult.data) !== JSON.stringify(nextPayload);
       setVersion(nextVersion);
       const nextPageExtensions = PageExtensionListResponseSchema.parse(
         await api.get(`/pages/${pageId}/extensions`),
@@ -838,7 +909,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       setPageExtensions(nextPageExtensions.items);
       if (
         saveStatusAfterAcknowledgement(saveSequence, localMutationSequenceRef.current) ===
-        'saved'
+          'saved' &&
+        !hasNewerPayloadChanges
       ) {
         setSaveStatus('saved');
         setNotice(`Saved draft version ${nextVersion.versionNumber}.`);
@@ -861,6 +933,22 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     } finally {
       saveInFlightRef.current = false;
       setSaveInFlight(false);
+    }
+  }
+
+  async function publishPage() {
+    if (saveStatus === 'unsaved' || saveStatus === 'saving') {
+      setError('Save the current draft before publishing.');
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = PageSchema.parse(await api.post(`/pages/${pageId}/publish`, {}));
+      setPage(updated);
+      setNotice('Page published. The public site now uses the published snapshot.');
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
     }
   }
 
@@ -1125,6 +1213,22 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 </div>
               );
             }
+            if (option.control === 'text') {
+              return (
+                <div className="builder-inspector-field-stack" key={option.key}>
+                  <TextField
+                    compact
+                    description={description ?? option.description}
+                    label={option.label}
+                    onChange={(event) =>
+                      updateSelectedStyle(option.key, event.target.value)
+                    }
+                    value={value}
+                  />
+                  {resetOverride}
+                </div>
+              );
+            }
             return (
               <div className="builder-inspector-field-stack" key={option.key}>
                 <SelectField
@@ -1330,9 +1434,24 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           <div>
             <span className="eyebrow">Visual builder</span>
             <h1>{page.name}</h1>
+            <code className="builder-page-path">{page.path}</code>
           </div>
         </div>
         <div className="builder-actions">
+          <div className="builder-topbar-viewport" aria-label="Viewport">
+            {BUILDER_VIEWPORTS.map((item) => (
+              <button
+                className={
+                  viewport === item ? 'button button-small active' : 'button button-small'
+                }
+                key={`top-${item}`}
+                onClick={() => changeViewport(item)}
+                type="button"
+              >
+                {item.charAt(0).toUpperCase() + item.slice(1)}
+              </button>
+            ))}
+          </div>
           <span className={`builder-save-status status-${saveStatus}`} role="status">
             {saveStatus === 'initializing'
               ? 'Initializing editor…'
@@ -1388,6 +1507,20 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           >
             Save draft
           </button>
+          <button
+            className="button button-success"
+            disabled={
+              saveInFlight ||
+              saveStatus === 'initializing' ||
+              saveStatus === 'unsaved' ||
+              saveStatus === 'saving' ||
+              saveStatus === 'conflict'
+            }
+            onClick={() => void publishPage()}
+            type="button"
+          >
+            Publish
+          </button>
         </div>
       </header>
 
@@ -1403,194 +1536,284 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       ) : null}
 
       <div className="builder-workspace">
-        <aside className="builder-panel builder-blocks-panel">
-          <div className="builder-panel-heading">
-            <span className="eyebrow">Page sections</span>
-            <strong>Add section or content</strong>
-          </div>
-          <label className="builder-block-search">
-            <span className="sr-only">Search components</span>
-            <input
-              aria-label="Search components"
-              onChange={(event) => setBlockQuery(event.target.value)}
-              placeholder="Search components"
-              type="search"
-              value={blockQuery}
-            />
-          </label>
-          <div className="builder-block-list">
-            {visibleBlockOptions.map((block) => (
-              <div
-                className="builder-block-row"
-                data-block-type={block.type}
-                key={`${block.type}:${block.extensionId ?? ''}`}
+        <div
+          className={`builder-left-dock${leftPanelCollapsed ? ' is-collapsed' : ''}`}
+          data-active-tool={activeTool}
+        >
+          <nav aria-label="Builder tools" className="builder-tool-rail">
+            {(
+              [
+                ['add', '＋', 'Add blocks'],
+                ['layers', '▤', 'Layers'],
+                ['assets', '▧', 'Assets'],
+                ['sections', '◫', 'Layout sections'],
+              ] as const
+            ).map(([tool, icon, label]) => (
+              <button
+                aria-label={label}
+                aria-pressed={activeTool === tool}
+                className={`builder-tool-button${activeTool === tool ? ' is-active' : ''}`}
+                key={tool}
+                onClick={() => setActiveTool(tool)}
+                type="button"
               >
-                <button
-                  aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
-                  className="builder-block-drag"
-                  onClick={
-                    block.extensionId
-                      ? () => editorRef.current?.addExtensionBlock(block.extensionId!)
-                      : undefined
-                  }
-                  onMouseDown={
-                    block.extensionId
-                      ? undefined
-                      : (event) =>
-                          editorRef.current?.startBlockDrag(block.type, event.nativeEvent)
-                  }
-                  type="button"
-                >
-                  <span aria-hidden="true">⠿</span>
-                  <span>{block.label}</span>
-                </button>
-                <button
-                  aria-label={`${block.label} add`}
-                  className="builder-block-add"
-                  onClick={() =>
-                    block.extensionId
-                      ? editorRef.current?.addExtensionBlock(block.extensionId)
-                      : editorRef.current?.addBlock(block.type)
-                  }
-                  type="button"
-                >
-                  ＋
-                </button>
-              </div>
+                <span aria-hidden="true">{icon}</span>
+                <span>{tool === 'sections' ? 'Sections' : label}</span>
+              </button>
             ))}
-          </div>
-          {visibleBlockOptions.length === 0 ? (
-            <p className="muted small builder-empty-message">No matching components.</p>
-          ) : null}
-          <p className="muted small builder-help">
-            Sections map to the supported, versioned PagePayload node set and keep their
-            canvas order when published.
-          </p>
-          <div className="builder-layers-section builder-page-capabilities">
-            <div className="builder-panel-heading">
-              <div>
-                <span className="eyebrow">Page runtime</span>
-                <strong>Extension graph</strong>
-              </div>
-              <span className="builder-capability-active">
-                {pageExtensions.filter((item) => item.enabled).length} active
-              </span>
-            </div>
-            <p className="muted small builder-capability-intro">
-              Page-level switches control which tenant extensions can run on this page.
-            </p>
-            {pageExtensions.length === 0 ? (
-              <p className="muted small">
-                Add an extension block and save the page to attach an instance here.
-              </p>
-            ) : (
-              <div className="builder-capability-list">
-                {pageExtensions.map((instance) => (
-                  <label
-                    className={`builder-capability-row${instance.enabled ? '' : ' is-disabled'}`}
-                    key={instance.extensionId}
-                  >
-                    <span>
-                      <strong>{instance.extensionId}</strong>
-                      <small>
-                        {instance.enabled ? 'Enabled' : 'Disabled'} ·{' '}
-                        {instance.runtimeIds.length} runtime resource(s)
-                      </small>
+            <button
+              aria-label={
+                leftPanelCollapsed ? 'Expand builder panel' : 'Collapse builder panel'
+              }
+              className="builder-tool-button builder-tool-collapse"
+              onClick={() => setLeftPanelCollapsed((current) => !current)}
+              type="button"
+            >
+              <span aria-hidden="true">{leftPanelCollapsed ? '→' : '←'}</span>
+              <span>{leftPanelCollapsed ? 'Expand' : 'Collapse'}</span>
+            </button>
+          </nav>
+          <aside className="builder-panel builder-blocks-panel">
+            {activeTool === 'add' || activeTool === 'sections' ? (
+              <>
+                <div className="builder-panel-heading">
+                  <span className="eyebrow">
+                    {activeTool === 'sections' ? 'Sections' : 'Page sections'}
+                  </span>
+                  <strong>
+                    {activeTool === 'sections'
+                      ? 'Add a layout section'
+                      : 'Add section or content'}
+                  </strong>
+                </div>
+                <label className="builder-block-search">
+                  <span className="sr-only">Search components</span>
+                  <input
+                    aria-label="Search components"
+                    onChange={(event) => setBlockQuery(event.target.value)}
+                    placeholder="Search components"
+                    type="search"
+                    value={blockQuery}
+                  />
+                </label>
+                <div className="builder-block-list">
+                  {toolBlockOptions.map((block) => (
+                    <div
+                      className="builder-block-row"
+                      data-block-type={block.type}
+                      key={`${block.type}:${block.extensionId ?? ''}`}
+                    >
+                      <button
+                        aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
+                        className="builder-block-drag"
+                        onClick={
+                          block.extensionId
+                            ? () =>
+                                editorRef.current?.addExtensionBlock(block.extensionId!)
+                            : undefined
+                        }
+                        onMouseDown={
+                          block.extensionId
+                            ? undefined
+                            : (event) =>
+                                editorRef.current?.startBlockDrag(
+                                  block.type,
+                                  event.nativeEvent,
+                                )
+                        }
+                        type="button"
+                      >
+                        <span aria-hidden="true">⠿</span>
+                        <span>{block.label}</span>
+                      </button>
+                      <button
+                        aria-label={`${block.label} add`}
+                        className="builder-block-add"
+                        onClick={() =>
+                          block.extensionId
+                            ? editorRef.current?.addExtensionBlock(block.extensionId)
+                            : editorRef.current?.addBlock(block.type)
+                        }
+                        type="button"
+                      >
+                        ＋
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {toolBlockOptions.length === 0 ? (
+                  <p className="muted small builder-empty-message">
+                    No matching components.
+                  </p>
+                ) : null}
+                <p className="muted small builder-help">
+                  Sections map to the supported, versioned PagePayload node set and keep
+                  their canvas order when published.
+                </p>
+              </>
+            ) : null}
+            {activeTool === 'add' ? (
+              <>
+                <div className="builder-layers-section builder-page-capabilities">
+                  <div className="builder-panel-heading">
+                    <div>
+                      <span className="eyebrow">Page runtime</span>
+                      <strong>Extension graph</strong>
+                    </div>
+                    <span className="builder-capability-active">
+                      {pageExtensions.filter((item) => item.enabled).length} active
                     </span>
-                    <input
-                      aria-label={`Enable ${instance.extensionId} for page`}
-                      checked={instance.enabled}
-                      onChange={(event) =>
-                        void togglePageExtension(
-                          instance.extensionId,
-                          event.target.checked,
-                        )
-                      }
-                      type="checkbox"
-                    />
-                  </label>
-                ))}
-              </div>
-            )}
-            {pageCapabilities ? (
-              <div
-                aria-label="Page capability summary"
-                className="builder-capability-summary"
-              >
-                <div className="builder-capability-metric">
-                  <strong>{pageCapabilities.capabilities.length}</strong>
-                  <span>Capabilities</span>
+                  </div>
+                  <p className="muted small builder-capability-intro">
+                    Page-level switches control which tenant extensions can run on this
+                    page.
+                  </p>
+                  {pageExtensions.length === 0 ? (
+                    <p className="muted small">
+                      Add an extension block and save the page to attach an instance here.
+                    </p>
+                  ) : (
+                    <div className="builder-capability-list">
+                      {pageExtensions.map((instance) => (
+                        <label
+                          className={`builder-capability-row${instance.enabled ? '' : ' is-disabled'}`}
+                          key={instance.extensionId}
+                        >
+                          <span>
+                            <strong>{instance.extensionId}</strong>
+                            <small>
+                              {instance.enabled ? 'Enabled' : 'Disabled'} ·{' '}
+                              {instance.runtimeIds.length} runtime resource(s)
+                            </small>
+                          </span>
+                          <input
+                            aria-label={`Enable ${instance.extensionId} for page`}
+                            checked={instance.enabled}
+                            onChange={(event) =>
+                              void togglePageExtension(
+                                instance.extensionId,
+                                event.target.checked,
+                              )
+                            }
+                            type="checkbox"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {pageCapabilities ? (
+                    <div
+                      aria-label="Page capability summary"
+                      className="builder-capability-summary"
+                    >
+                      <div className="builder-capability-metric">
+                        <strong>{pageCapabilities.capabilities.length}</strong>
+                        <span>Capabilities</span>
+                      </div>
+                      <div className="builder-capability-metric">
+                        <strong>{pageCapabilities.runtimeIds.length}</strong>
+                        <span>Runtimes</span>
+                      </div>
+                      <div className="builder-capability-metric">
+                        <strong>{pageCapabilities.slots.length}</strong>
+                        <span>Slots</span>
+                      </div>
+                      <div className="builder-capability-metric">
+                        <strong>{pageCapabilities.dataBindings.length}</strong>
+                        <span>Bindings</span>
+                      </div>
+                      {pageCapabilities.capabilities.length > 0 ? (
+                        <div className="builder-capability-chips">
+                          {pageCapabilities.capabilities.map((capability) => (
+                            <span className="builder-capability-chip" key={capability}>
+                              {capability}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                <div className="builder-capability-metric">
-                  <strong>{pageCapabilities.runtimeIds.length}</strong>
-                  <span>Runtimes</span>
+              </>
+            ) : null}
+            {activeTool === 'assets' ? (
+              <div className="builder-asset-panel">
+                <div className="builder-panel-heading">
+                  <span className="eyebrow">Workspace library</span>
+                  <strong>Assets</strong>
                 </div>
-                <div className="builder-capability-metric">
-                  <strong>{pageCapabilities.slots.length}</strong>
-                  <span>Slots</span>
-                </div>
-                <div className="builder-capability-metric">
-                  <strong>{pageCapabilities.dataBindings.length}</strong>
-                  <span>Bindings</span>
-                </div>
-                {pageCapabilities.capabilities.length > 0 ? (
-                  <div className="builder-capability-chips">
-                    {pageCapabilities.capabilities.map((capability) => (
-                      <span className="builder-capability-chip" key={capability}>
-                        {capability}
-                      </span>
+                {usableAssets.length ? (
+                  <div className="builder-asset-list">
+                    {usableAssets.map((asset) => (
+                      <button
+                        className="builder-asset-card"
+                        key={asset.id}
+                        onClick={() => editorRef.current?.selectAsset(asset.storageKey)}
+                        type="button"
+                      >
+                        <img alt="" src={asset.storageKey} />
+                        <span>{asset.filename}</span>
+                      </button>
                     ))}
                   </div>
-                ) : null}
+                ) : (
+                  <p className="muted small">
+                    No image assets are available in this workspace.
+                  </p>
+                )}
               </div>
             ) : null}
-          </div>
-          <div className="builder-layers-section">
-            <div className="builder-panel-heading">
-              <span className="eyebrow">Layers</span>
-              <strong>Page structure</strong>
-            </div>
-            <label className="builder-layer-search">
-              <span className="sr-only">Search layers</span>
-              <input
-                aria-label="Search layers"
-                onChange={(event) => setLayerQuery(event.target.value)}
-                placeholder="Search layers"
-                type="search"
-                value={layerQuery}
-              />
-            </label>
-            <div
-              ref={layerTreeRef}
-              aria-label="Page layers"
-              className="builder-layer-tree"
-              role="tree"
-            >
-              {canvasState ? (
-                renderLayerNodes(
-                  canvasState.nodes,
-                  layerChildren,
-                  visibleLayerIds,
-                  undefined,
-                  selected?.id,
-                  (id) => editorRef.current?.selectNode(id),
-                  toggleLayer,
-                  handleLayerKeyDown,
-                  startLayerDrag,
-                  collapsedLayerIds,
-                  layerDraggingId,
-                  layerDropIntent,
-                  focusableLayerId,
-                )
-              ) : (
-                <span className="muted small">Preparing layers…</span>
-              )}
-              {canvasState && visibleLayerIds && visibleLayerIds.size === 0 ? (
-                <span className="muted small">No matching layers.</span>
-              ) : null}
-            </div>
-          </div>
-        </aside>
+            {activeTool === 'layers' || activeTool === 'add' ? (
+              <>
+                <div className="builder-layers-section">
+                  <div className="builder-panel-heading">
+                    <span className="eyebrow">Layers</span>
+                    <strong>Page structure</strong>
+                  </div>
+                  <label className="builder-layer-search">
+                    <span className="sr-only">Search layers</span>
+                    <input
+                      aria-label="Search layers"
+                      onChange={(event) => setLayerQuery(event.target.value)}
+                      placeholder="Search layers"
+                      type="search"
+                      value={layerQuery}
+                    />
+                  </label>
+                  <div
+                    ref={layerTreeRef}
+                    aria-label="Page layers"
+                    className="builder-layer-tree"
+                    role="tree"
+                  >
+                    {canvasState ? (
+                      renderLayerNodes(
+                        canvasState.nodes,
+                        layerChildren,
+                        visibleLayerIds,
+                        undefined,
+                        selected?.id,
+                        (id) => editorRef.current?.selectNode(id),
+                        toggleLayer,
+                        handleLayerKeyDown,
+                        startLayerDrag,
+                        collapsedLayerIds,
+                        layerDraggingId,
+                        layerDropIntent,
+                        focusableLayerId,
+                      )
+                    ) : (
+                      <span className="muted small">Preparing layers…</span>
+                    )}
+                    {canvasState && visibleLayerIds && visibleLayerIds.size === 0 ? (
+                      <span className="muted small">No matching layers.</span>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </aside>
+        </div>
 
         <section className="builder-canvas-panel" aria-label="Builder canvas">
           <div className="builder-viewport-toolbar">
@@ -1616,22 +1839,31 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               </button>
               <span className="muted small">V/H · Space + drag · middle drag</span>
             </div>
-            <span className="muted small">Viewport</span>
-            <div className="builder-viewport-list">
-              {BUILDER_VIEWPORTS.map((item) => (
-                <button
-                  className={
-                    viewport === item
-                      ? 'button button-small active'
-                      : 'button button-small'
-                  }
-                  key={item}
-                  onClick={() => changeViewport(item)}
-                  type="button"
-                >
-                  {item.charAt(0).toUpperCase() + item.slice(1)}
-                </button>
-              ))}
+          </div>
+          <div aria-label="Site global content" className="builder-global-chrome">
+            <div className="builder-global-chrome-row">
+              <span className="eyebrow">Site header</span>
+              <div className="builder-global-links">
+                {(siteGlobals.header?.items ?? []).slice(0, 6).map((item) => (
+                  <span key={item.id}>{item.label}</span>
+                ))}
+                {!siteGlobals.header?.items.length ? (
+                  <span className="muted small">No main navigation configured</span>
+                ) : null}
+              </div>
+              <span className="builder-global-lock">Locked · Navigation</span>
+            </div>
+            <div className="builder-global-chrome-row is-footer">
+              <span className="eyebrow">Site footer</span>
+              <div className="builder-global-links">
+                {(siteGlobals.footer?.items ?? []).slice(0, 6).map((item) => (
+                  <span key={item.id}>{item.label}</span>
+                ))}
+                {!siteGlobals.footer?.items.length ? (
+                  <span className="muted small">No footer navigation configured</span>
+                ) : null}
+              </div>
+              <span className="builder-global-lock">Locked · Navigation</span>
             </div>
           </div>
           <div className="builder-editor-shell">
@@ -1668,13 +1900,25 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           </div>
         </section>
 
-        <aside className="builder-panel builder-properties-panel">
+        <aside
+          className={`builder-panel builder-properties-panel${rightPanelCollapsed ? ' is-collapsed' : ''}`}
+        >
           {selected ? (
             <div className="builder-properties-stack">
               <div className="builder-properties-heading">
-                <div className="builder-panel-heading">
-                  <span className="eyebrow">Properties</span>
-                  <strong>{inspectorNodeLabel(selected.type)}</strong>
+                <div className="builder-properties-heading-row">
+                  <div className="builder-panel-heading">
+                    <span className="eyebrow">Properties</span>
+                    <strong>{inspectorNodeLabel(selected.type)}</strong>
+                  </div>
+                  <button
+                    aria-label="Collapse inspector"
+                    className="button button-small button-ghost"
+                    onClick={() => setRightPanelCollapsed(true)}
+                    type="button"
+                  >
+                    Hide
+                  </button>
                 </div>
                 <p
                   className="builder-properties-summary"
@@ -1713,265 +1957,354 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 </div>
               </div>
 
-              {selected.type === 'form' && selected.form ? (
-                <InspectorSection
-                  label="Form"
-                  onToggle={(open) => toggleInspectorSection('content', open)}
-                  open={openInspectorSections.content}
-                >
-                  <div className="builder-inspector-fields">
-                    <label>
-                      Submit button label
-                      <input
-                        aria-label="Submit button label"
-                        onChange={(event) =>
-                          updateForm({
-                            ...selected.form!,
-                            submitLabel: event.target.value,
-                          })
-                        }
-                        value={selected.form.submitLabel}
-                      />
-                    </label>
-                    <label>
-                      Success message
-                      <textarea
-                        aria-label="Form success message"
-                        onChange={(event) =>
-                          updateForm({
-                            ...selected.form!,
-                            successMessage: event.target.value,
-                          })
-                        }
-                        rows={3}
-                        value={selected.form.successMessage}
-                      />
-                    </label>
-                    <div className="builder-form-fields">
-                      <div className="builder-property-control">
-                        <span className="builder-property-label">Fields</span>
-                        <button
-                          className="button button-secondary button-small"
-                          disabled={selected.form.fields.length >= 20}
-                          onClick={addFormField}
-                          type="button"
-                        >
-                          + Add field
-                        </button>
-                      </div>
-                      {selected.form.fields.map((field, index) => (
-                        <fieldset className="builder-form-field" key={field.id}>
-                          <legend>
-                            {index + 1}. {field.label}
-                          </legend>
-                          <label>
-                            Label
-                            <input
-                              aria-label={`Form field label ${field.id}`}
-                              onChange={(event) =>
-                                patchFormField(index, { label: event.target.value })
-                              }
-                              value={field.label}
-                            />
-                          </label>
-                          <label>
-                            Type
-                            <select
-                              aria-label={`Form field type ${field.id}`}
-                              onChange={(event) =>
-                                changeFormFieldType(
-                                  index,
-                                  event.target.value as FormField['type'],
-                                )
-                              }
-                              value={field.type}
-                            >
-                              <option value="text">Text</option>
-                              <option value="email">Email</option>
-                              <option value="phone">Phone</option>
-                              <option value="textarea">Textarea</option>
-                              <option value="select">Select</option>
-                              <option value="checkbox">Checkbox</option>
-                              <option value="radio">Radio</option>
-                            </select>
-                          </label>
-                          {'placeholder' in field ? (
-                            <label>
-                              Placeholder
-                              <input
-                                aria-label={`Form field placeholder ${field.id}`}
-                                onChange={(event) =>
-                                  patchFormField(index, {
-                                    placeholder: event.target.value,
-                                  })
-                                }
-                                value={field.placeholder ?? ''}
-                              />
-                            </label>
-                          ) : null}
-                          <label className="checkbox-field">
-                            <input
-                              aria-label={`Form field required ${field.id}`}
-                              checked={field.required}
-                              onChange={(event) =>
-                                patchFormField(index, { required: event.target.checked })
-                              }
-                              type="checkbox"
-                            />
-                            Required
-                          </label>
-                          <div className="row-actions">
+              <div
+                aria-label="Inspector tabs"
+                className="builder-inspector-tabs"
+                role="tablist"
+              >
+                {(['content', 'style', 'settings'] as const).map((tab) => (
+                  <button
+                    aria-selected={inspectorTab === tab}
+                    className={inspectorTab === tab ? 'is-active' : ''}
+                    key={tab}
+                    onClick={() => setInspectorTab(tab)}
+                    role="tab"
+                    type="button"
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {inspectorTab === 'content' ? (
+                <>
+                  {selected.type === 'form' && selected.form ? (
+                    <InspectorSection
+                      label="Form"
+                      onToggle={(open) => toggleInspectorSection('content', open)}
+                      open={openInspectorSections.content}
+                    >
+                      <div className="builder-inspector-fields">
+                        <label>
+                          Submit button label
+                          <input
+                            aria-label="Submit button label"
+                            onChange={(event) =>
+                              updateForm({
+                                ...selected.form!,
+                                submitLabel: event.target.value,
+                              })
+                            }
+                            value={selected.form.submitLabel}
+                          />
+                        </label>
+                        <label>
+                          Success message
+                          <textarea
+                            aria-label="Form success message"
+                            onChange={(event) =>
+                              updateForm({
+                                ...selected.form!,
+                                successMessage: event.target.value,
+                              })
+                            }
+                            rows={3}
+                            value={selected.form.successMessage}
+                          />
+                        </label>
+                        <div className="builder-form-fields">
+                          <div className="builder-property-control">
+                            <span className="builder-property-label">Fields</span>
                             <button
-                              aria-label={`Move field ${field.id} up`}
-                              className="button button-ghost button-small"
-                              disabled={index === 0}
-                              onClick={() => moveFormField(index, -1)}
+                              className="button button-secondary button-small"
+                              disabled={selected.form.fields.length >= 20}
+                              onClick={addFormField}
                               type="button"
                             >
-                              ↑
-                            </button>
-                            <button
-                              aria-label={`Move field ${field.id} down`}
-                              className="button button-ghost button-small"
-                              disabled={index === selected.form!.fields.length - 1}
-                              onClick={() => moveFormField(index, 1)}
-                              type="button"
-                            >
-                              ↓
-                            </button>
-                            <button
-                              aria-label={`Remove field ${field.id}`}
-                              className="button button-danger button-small"
-                              disabled={selected.form!.fields.length <= 1}
-                              onClick={() => removeFormField(index)}
-                              type="button"
-                            >
-                              Remove
+                              + Add field
                             </button>
                           </div>
-                        </fieldset>
-                      ))}
+                          {selected.form.fields.map((field, index) => (
+                            <fieldset className="builder-form-field" key={field.id}>
+                              <legend>
+                                {index + 1}. {field.label}
+                              </legend>
+                              <label>
+                                Label
+                                <input
+                                  aria-label={`Form field label ${field.id}`}
+                                  onChange={(event) =>
+                                    patchFormField(index, { label: event.target.value })
+                                  }
+                                  value={field.label}
+                                />
+                              </label>
+                              <label>
+                                Type
+                                <select
+                                  aria-label={`Form field type ${field.id}`}
+                                  onChange={(event) =>
+                                    changeFormFieldType(
+                                      index,
+                                      event.target.value as FormField['type'],
+                                    )
+                                  }
+                                  value={field.type}
+                                >
+                                  <option value="text">Text</option>
+                                  <option value="email">Email</option>
+                                  <option value="phone">Phone</option>
+                                  <option value="textarea">Textarea</option>
+                                  <option value="select">Select</option>
+                                  <option value="checkbox">Checkbox</option>
+                                  <option value="radio">Radio</option>
+                                </select>
+                              </label>
+                              {'placeholder' in field ? (
+                                <label>
+                                  Placeholder
+                                  <input
+                                    aria-label={`Form field placeholder ${field.id}`}
+                                    onChange={(event) =>
+                                      patchFormField(index, {
+                                        placeholder: event.target.value,
+                                      })
+                                    }
+                                    value={field.placeholder ?? ''}
+                                  />
+                                </label>
+                              ) : null}
+                              <label className="checkbox-field">
+                                <input
+                                  aria-label={`Form field required ${field.id}`}
+                                  checked={field.required}
+                                  onChange={(event) =>
+                                    patchFormField(index, {
+                                      required: event.target.checked,
+                                    })
+                                  }
+                                  type="checkbox"
+                                />
+                                Required
+                              </label>
+                              <div className="row-actions">
+                                <button
+                                  aria-label={`Move field ${field.id} up`}
+                                  className="button button-ghost button-small"
+                                  disabled={index === 0}
+                                  onClick={() => moveFormField(index, -1)}
+                                  type="button"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  aria-label={`Move field ${field.id} down`}
+                                  className="button button-ghost button-small"
+                                  disabled={index === selected.form!.fields.length - 1}
+                                  onClick={() => moveFormField(index, 1)}
+                                  type="button"
+                                >
+                                  ↓
+                                </button>
+                                <button
+                                  aria-label={`Remove field ${field.id}`}
+                                  className="button button-danger button-small"
+                                  disabled={selected.form!.fields.length <= 1}
+                                  onClick={() => removeFormField(index)}
+                                  type="button"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </fieldset>
+                          ))}
+                        </div>
+                      </div>
+                    </InspectorSection>
+                  ) : null}
+
+                  {selected.type === 'countdown' && selected.countdown ? (
+                    <InspectorSection
+                      label="Countdown"
+                      onToggle={(open) => toggleInspectorSection('content', open)}
+                      open={openInspectorSections.content}
+                    >
+                      <div className="builder-inspector-fields">
+                        <TextField
+                          compact
+                          label="Countdown label"
+                          onChange={(event) =>
+                            updateSelectedCountdown('label', event.target.value)
+                          }
+                          value={selected.countdown.label}
+                        />
+                        <DateTimeField
+                          compact
+                          description="Stored as UTC in the existing countdown payload."
+                          label="Target date and time"
+                          onValueChange={(nextValue) => {
+                            if (nextValue) updateSelectedCountdown('targetAt', nextValue);
+                          }}
+                          value={selected.countdown.targetAt}
+                        />
+                      </div>
+                    </InspectorSection>
+                  ) : null}
+
+                  {renderContentInspector()}
+
+                  {inspectorQuickStyleSections.map((section) =>
+                    renderStyleSection(section, styleBlock),
+                  )}
+
+                  <InspectorSection
+                    label="Advanced"
+                    onToggle={(open) => toggleInspectorSection('advanced', open)}
+                    open={openInspectorSections.advanced}
+                  >
+                    <div className="builder-inspector-advanced">
+                      <span className="muted small">Node ID</span>
+                      <code>{selected.id}</code>
+                      <span className="muted small">
+                        This identifier is stable for this page and is not edited here.
+                      </span>
                     </div>
-                  </div>
-                </InspectorSection>
+                  </InspectorSection>
+
+                  {selected.type !== 'root' ? (
+                    <div className="builder-selection-actions">
+                      <span className="muted small">
+                        Common actions stay available while you edit content.
+                      </span>
+                      <div className="row-actions">
+                        <button
+                          className="button button-secondary button-small"
+                          onClick={() => editorRef.current?.duplicateSelected()}
+                          type="button"
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          className="button button-danger button-small"
+                          onClick={() => {
+                            editorRef.current?.deleteSelected();
+                            selectedNodeRef.current = null;
+                            setSelected(null);
+                          }}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
-              {selected.type === 'countdown' && selected.countdown ? (
-                <InspectorSection
-                  label="Countdown"
-                  onToggle={(open) => toggleInspectorSection('content', open)}
-                  open={openInspectorSections.content}
-                >
-                  <div className="builder-inspector-fields">
-                    <TextField
-                      compact
-                      label="Countdown label"
-                      onChange={(event) =>
-                        updateSelectedCountdown('label', event.target.value)
-                      }
-                      value={selected.countdown.label}
-                    />
-                    <DateTimeField
-                      compact
-                      description="Stored as UTC in the existing countdown payload."
-                      label="Target date and time"
-                      onValueChange={(nextValue) => {
-                        if (nextValue) updateSelectedCountdown('targetAt', nextValue);
-                      }}
-                      value={selected.countdown.targetAt}
-                    />
-                  </div>
-                </InspectorSection>
+              {inspectorTab === 'style' ? (
+                <>
+                  {inspectorStyleSections.map((section) =>
+                    renderStyleSection(section, styleBlock),
+                  )}
+                </>
               ) : null}
 
-              {renderContentInspector()}
+              {inspectorTab === 'settings' ? (
+                <>
+                  <InspectorSection
+                    label="Advanced"
+                    onToggle={(open) => toggleInspectorSection('advanced', open)}
+                    open={openInspectorSections.advanced}
+                  >
+                    <div className="builder-inspector-advanced">
+                      <span className="muted small">Node ID</span>
+                      <code>{selected.id}</code>
+                      <span className="muted small">
+                        This identifier is stable for this page and is not edited here.
+                      </span>
+                    </div>
+                  </InspectorSection>
 
-              {inspectorStyleSections.map((section) =>
-                renderStyleSection(section, styleBlock),
-              )}
-
-              <InspectorSection
-                label="Advanced"
-                onToggle={(open) => toggleInspectorSection('advanced', open)}
-                open={openInspectorSections.advanced}
-              >
-                <div className="builder-inspector-advanced">
-                  <span className="muted small">Node ID</span>
-                  <code>{selected.id}</code>
-                  <span className="muted small">
-                    This identifier is stable for this page and is not edited here.
-                  </span>
-                </div>
-              </InspectorSection>
-
-              {selected.type !== 'root' ? (
-                <div className="builder-selection-actions">
-                  <span className="muted small">
-                    Use the ⠿ handle to move this node. Drop before, inside, or after a
-                    target.
-                  </span>
-                  <div className="row-actions">
-                    <button
-                      aria-label="Move up"
-                      className="button button-ghost button-small"
-                      onClick={() => editorRef.current?.moveSelected('up')}
-                      type="button"
-                    >
-                      ↑ Up
-                    </button>
-                    <button
-                      aria-label="Move down"
-                      className="button button-ghost button-small"
-                      onClick={() => editorRef.current?.moveSelected('down')}
-                      type="button"
-                    >
-                      ↓ Down
-                    </button>
-                    <button
-                      aria-label="Outdent"
-                      className="button button-ghost button-small"
-                      onClick={() => editorRef.current?.moveSelected('outdent')}
-                      type="button"
-                    >
-                      ← Outdent
-                    </button>
-                    <button
-                      aria-label="Indent"
-                      className="button button-ghost button-small"
-                      onClick={() => editorRef.current?.moveSelected('indent')}
-                      type="button"
-                    >
-                      → Indent
-                    </button>
-                  </div>
-                  <div className="row-actions">
-                    <button
-                      className="button button-secondary button-small"
-                      onClick={() => editorRef.current?.duplicateSelected()}
-                      type="button"
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      className="button button-danger button-small"
-                      onClick={() => {
-                        editorRef.current?.deleteSelected();
-                        selectedNodeRef.current = null;
-                        setSelected(null);
-                      }}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
+                  {selected.type !== 'root' ? (
+                    <div className="builder-selection-actions">
+                      <span className="muted small">
+                        Use the ⠿ handle to move this node. Drop before, inside, or after
+                        a target.
+                      </span>
+                      <div className="row-actions">
+                        <button
+                          aria-label="Move up"
+                          className="button button-ghost button-small"
+                          onClick={() => editorRef.current?.moveSelected('up')}
+                          type="button"
+                        >
+                          ↑ Up
+                        </button>
+                        <button
+                          aria-label="Move down"
+                          className="button button-ghost button-small"
+                          onClick={() => editorRef.current?.moveSelected('down')}
+                          type="button"
+                        >
+                          ↓ Down
+                        </button>
+                        <button
+                          aria-label="Outdent"
+                          className="button button-ghost button-small"
+                          onClick={() => editorRef.current?.moveSelected('outdent')}
+                          type="button"
+                        >
+                          ← Outdent
+                        </button>
+                        <button
+                          aria-label="Indent"
+                          className="button button-ghost button-small"
+                          onClick={() => editorRef.current?.moveSelected('indent')}
+                          type="button"
+                        >
+                          → Indent
+                        </button>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="button button-secondary button-small"
+                          onClick={() => editorRef.current?.duplicateSelected()}
+                          type="button"
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          className="button button-danger button-small"
+                          onClick={() => {
+                            editorRef.current?.deleteSelected();
+                            selectedNodeRef.current = null;
+                            setSelected(null);
+                          }}
+                          type="button"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : (
             <div className="builder-properties-empty">
-              <div className="builder-panel-heading">
-                <span className="eyebrow">Properties</span>
-                <strong>Nothing selected</strong>
+              <div className="builder-properties-heading-row">
+                <div className="builder-panel-heading">
+                  <span className="eyebrow">Properties</span>
+                  <strong>Nothing selected</strong>
+                </div>
+                <button
+                  aria-label="Collapse inspector"
+                  className="button button-small button-ghost"
+                  onClick={() => setRightPanelCollapsed(true)}
+                  type="button"
+                >
+                  Hide
+                </button>
               </div>
               <p className="muted small">
                 Select an element on the canvas or in Layers to edit its properties.
@@ -1979,6 +2312,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             </div>
           )}
         </aside>
+        {rightPanelCollapsed ? (
+          <button
+            aria-label="Expand inspector"
+            className="builder-inspector-expand button button-small button-secondary"
+            onClick={() => setRightPanelCollapsed(false)}
+            type="button"
+          >
+            Show inspector
+          </button>
+        ) : null}
       </div>
     </main>
   );
@@ -1988,20 +2331,9 @@ function styleValue(
   style: Record<string, string | undefined>,
   editorProperty: string,
 ): string {
-  const map: Record<string, string> = {
-    display: 'display',
-    width: 'width',
-    'max-width': 'maxWidth',
-    'min-height': 'minHeight',
-    padding: 'padding',
-    margin: 'margin',
-    gap: 'gap',
-    'background-color': 'backgroundColor',
-    color: 'color',
-    'font-size': 'fontSize',
-    'font-weight': 'fontWeight',
-    'text-align': 'textAlign',
-    'border-radius': 'borderRadius',
-  };
-  return style[map[editorProperty] ?? editorProperty] ?? '';
+  const property =
+    PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+      editorProperty as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+    ];
+  return style[property?.payloadKey ?? editorProperty] ?? '';
 }

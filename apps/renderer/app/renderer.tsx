@@ -17,27 +17,13 @@ import {
   type ExtensionNode,
   type PageRuntimeExtension,
   type ResolvedNavigationItem,
+  PAGE_RESPONSIVE_BREAKPOINTS,
+  PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
 } from '@payload/contracts';
 import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 
 import { FormRenderer } from './form-renderer';
 import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
-
-const stylePropertyMap = {
-  display: 'display',
-  width: 'width',
-  maxWidth: 'max-width',
-  minHeight: 'min-height',
-  padding: 'padding',
-  margin: 'margin',
-  gap: 'gap',
-  backgroundColor: 'background-color',
-  color: 'color',
-  fontSize: 'font-size',
-  fontWeight: 'font-weight',
-  textAlign: 'text-align',
-  borderRadius: 'border-radius',
-} as const;
 
 type RenderableNode = PageNode | PageNodeV2 | PageNodeV3;
 type RootRenderableNode =
@@ -84,10 +70,11 @@ function styleBlockToProperties(style: PageNodeStyle['base'] | undefined): CSSPr
 
   const result: CSSProperties = {};
   for (const [property, value] of Object.entries(style)) {
-    if (typeof value !== 'string' || !isSafeCssValue(value)) {
+    const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
+    if (!definition || typeof value !== 'string' || !isSafeCssValue(value)) {
       continue;
     }
-    (result as Record<string, string>)[property] = value;
+    (result as Record<string, string>)[definition.cssProperty] = value;
   }
   return result;
 }
@@ -319,7 +306,7 @@ function renderGlobalNavigation(
 
 // This registry is intentionally explicit: the payload node type is the only
 // dispatch key, and the renderer never imports editor or persistence modules.
-const rendererRegistry: Partial<Record<RenderableNode['type'], NodeRenderer>> = {
+export const PAGE_RENDERER_REGISTRY = {
   root: (node, context) => renderRoot(node as RootNode, context),
   section: (node, context) => renderSection(node as SectionNode, context),
   container: (node, context) => renderContainer(node as ContainerNode, context),
@@ -329,7 +316,7 @@ const rendererRegistry: Partial<Record<RenderableNode['type'], NodeRenderer>> = 
   form: (node, context) => renderForm(node as FormNode, context),
   countdown: (node, context) => renderCountdown(node as CountdownNode, context),
   extension: (node, context) => renderExtension(node as ExtensionNode, context),
-};
+} satisfies Record<RenderableNode['type'], NodeRenderer>;
 
 function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): ReactElement {
   return (
@@ -350,8 +337,8 @@ export function renderNode(
   context: RenderContext = {},
 ): ReactElement {
   const definition = PAGE_COMPONENT_REGISTRY[node.type];
-  const Renderer = rendererRegistry[node.type];
-  return Renderer && definition ? Renderer(node, context) : renderUnsupportedNode(node);
+  const Renderer = PAGE_RENDERER_REGISTRY[node.type];
+  return definition ? Renderer(node, context) : renderUnsupportedNode(node);
 }
 
 type ResponsiveRule = {
@@ -369,13 +356,13 @@ function responsiveRules(
     ? Object.entries(style)
         .filter(
           ([property, value]) =>
-            property in stylePropertyMap &&
+            property in PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY &&
             typeof value === 'string' &&
             isSafeCssValue(value),
         )
         .map(
           ([property, value]) =>
-            `${stylePropertyMap[property as keyof typeof stylePropertyMap]}:${value}`,
+            `${PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.cssProperty}:${value}`,
         )
         .join(';')
     : '';
@@ -397,10 +384,10 @@ function renderResponsiveStyles(payload: PagePayload): ReactElement | null {
   responsiveRules(payload.root, 'mobile', mobileRules);
 
   const tablet = tabletRules.length
-    ? `@media (max-width: 991px){${tabletRules.map((rule) => `${rule.selector}{${rule.declarations}}`).join('')}}`
+    ? `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.tablet.maxWidth}px){${tabletRules.map((rule) => `${rule.selector}{${rule.declarations}}`).join('')}}`
     : '';
   const mobile = mobileRules.length
-    ? `@media (max-width: 479px){${mobileRules.map((rule) => `${rule.selector}{${rule.declarations}}`).join('')}}`
+    ? `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.mobile.maxWidth}px){${mobileRules.map((rule) => `${rule.selector}{${rule.declarations}}`).join('')}}`
     : '';
 
   if (!tablet && !mobile) {

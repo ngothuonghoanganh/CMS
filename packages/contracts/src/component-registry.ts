@@ -1,4 +1,5 @@
 import type { PageNodeV3 } from './index';
+import { PAGE_STYLE_PROPERTY_DEFINITIONS } from './style-registry';
 
 export type PageComponentType = PageNodeV3['type'];
 
@@ -63,146 +64,8 @@ export type PageComponentDefinition = {
   propertiesSchema: readonly ComponentPropertyDefinition[];
 };
 
-const responsiveStyleProperties: readonly ComponentPropertyDefinition[] = [
-  {
-    key: 'display',
-    label: 'Display',
-    group: 'style',
-    control: 'select',
-    responsive: true,
-    options: [
-      { value: '', label: 'Default' },
-      { value: 'block', label: 'Block' },
-      { value: 'flex', label: 'Flex' },
-      { value: 'grid', label: 'Grid' },
-      { value: 'inline', label: 'Inline' },
-      { value: 'inline-block', label: 'Inline block' },
-      { value: 'none', label: 'Hidden' },
-    ],
-  },
-  {
-    key: 'width',
-    label: 'Width',
-    group: 'style',
-    control: 'unit',
-    responsive: true,
-    allowAuto: true,
-  },
-  {
-    key: 'max-width',
-    label: 'Max width',
-    group: 'style',
-    control: 'unit',
-    responsive: true,
-  },
-  {
-    key: 'min-height',
-    label: 'Min height',
-    group: 'style',
-    control: 'unit',
-    responsive: true,
-  },
-  {
-    key: 'gap',
-    label: 'Gap',
-    group: 'style',
-    control: 'unit',
-    responsive: true,
-    allowAuto: true,
-  },
-  {
-    key: 'padding',
-    label: 'Padding',
-    group: 'style',
-    control: 'spacing',
-    responsive: true,
-  },
-  {
-    key: 'margin',
-    label: 'Margin',
-    group: 'style',
-    control: 'spacing',
-    responsive: true,
-    allowAuto: true,
-  },
-  {
-    key: 'color',
-    label: 'Text color',
-    group: 'style',
-    control: 'color',
-    responsive: true,
-  },
-  {
-    key: 'font-size',
-    label: 'Font size',
-    group: 'style',
-    control: 'unit',
-    responsive: true,
-  },
-  {
-    key: 'font-weight',
-    label: 'Font weight',
-    group: 'style',
-    control: 'select',
-    responsive: true,
-    options: [
-      { value: '', label: 'Default' },
-      { value: '400', label: 'Regular (400)' },
-      { value: '500', label: 'Medium (500)' },
-      { value: '600', label: 'Semibold (600)' },
-      { value: '700', label: 'Bold (700)' },
-      { value: '800', label: 'Extra bold (800)' },
-    ],
-  },
-  {
-    key: 'text-align',
-    label: 'Text alignment',
-    group: 'style',
-    control: 'segmented',
-    responsive: true,
-    options: [
-      { value: 'left', label: 'Left' },
-      { value: 'center', label: 'Center' },
-      { value: 'right', label: 'Right' },
-    ],
-  },
-  {
-    key: 'background-color',
-    label: 'Background',
-    group: 'style',
-    control: 'color',
-    responsive: true,
-  },
-  {
-    key: 'border-radius',
-    label: 'Radius',
-    group: 'style',
-    control: 'unit',
-    responsive: true,
-  },
-];
-
-const layoutProperties = responsiveStyleProperties.filter(
-  (property) =>
-    property.key === 'display' ||
-    property.key === 'width' ||
-    property.key === 'max-width' ||
-    property.key === 'min-height' ||
-    property.key === 'gap',
-);
-const spacingProperties = responsiveStyleProperties.filter(
-  (property) => property.key === 'padding' || property.key === 'margin',
-);
-const typographyProperties = responsiveStyleProperties.filter(
-  (property) =>
-    property.key === 'color' ||
-    property.key === 'font-size' ||
-    property.key === 'font-weight' ||
-    property.key === 'text-align',
-);
-const appearanceProperties = responsiveStyleProperties.filter(
-  (property) => property.key === 'background-color' || property.key === 'border-radius',
-);
+const responsiveStyleProperties: readonly ComponentPropertyDefinition[] =
+  PAGE_STYLE_PROPERTY_DEFINITIONS;
 
 const styleSchemaFor = (
   type: PageComponentType,
@@ -428,9 +291,4 @@ export function canContainPageComponent(
   return PAGE_COMPONENT_REGISTRY[parentType].allowedChildren.includes(childType);
 }
 
-export const PAGE_STYLE_PROPERTY_GROUPS = {
-  layout: layoutProperties,
-  spacing: spacingProperties,
-  typography: typographyProperties,
-  appearance: appearanceProperties,
-} as const;
+export { PAGE_STYLE_PROPERTY_GROUPS } from './style-registry';

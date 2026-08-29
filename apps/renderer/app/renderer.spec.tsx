@@ -2,11 +2,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
+  PAGE_RESPONSIVE_BREAKPOINTS,
   PagePayloadV3Schema,
   type PagePayloadV1,
 } from '@payload/contracts';
 
-import { renderPage } from './renderer';
+import { PAGE_RENDERER_REGISTRY, renderPage } from './renderer';
 
 function createPayload(): PagePayloadV1 {
   return {
@@ -67,6 +68,12 @@ function createPayload(): PagePayloadV1 {
 }
 
 describe('PagePayloadV1 renderer', () => {
+  it('has an exhaustive production renderer for every registered component', () => {
+    expect(Object.keys(PAGE_RENDERER_REGISTRY).sort()).toEqual(
+      Object.keys(PAGE_COMPONENT_REGISTRY).sort(),
+    );
+  });
+
   it('renders the explicit node mapping and nested children as semantic HTML', () => {
     const markup = renderToStaticMarkup(renderPage(createPayload()));
 
@@ -85,9 +92,13 @@ describe('PagePayloadV1 renderer', () => {
     const markup = renderToStaticMarkup(renderPage(createPayload()));
 
     expect(markup).toContain('padding:64px 24px');
-    expect(markup).toContain('@media (max-width: 991px)');
+    expect(markup).toContain(
+      `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.tablet.maxWidth}px)`,
+    );
     expect(markup).toContain('padding:40px 20px');
-    expect(markup).toContain('@media (max-width: 479px)');
+    expect(markup).toContain(
+      `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.mobile.maxWidth}px)`,
+    );
     expect(markup).toContain('padding:24px 16px');
   });
 

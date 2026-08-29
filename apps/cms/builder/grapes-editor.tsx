@@ -40,6 +40,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from 're
 import {
   CountdownPropsSchema,
   FormPropsSchema,
+  PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
   createPageDocument,
   type FormProps,
@@ -618,26 +619,37 @@ function dropBlockAtPoint(
   const frame = editor.Canvas.getFrameEl();
   if (!frame) return undefined;
 
-  const { x, y } = editor.Canvas.getMouseRelativeCanvas({ clientX, clientY });
-  const element = frame.contentDocument?.elementFromPoint(x, y);
-  if (!element) return undefined;
-
   const root = editor.getComponents().models[0];
   if (!root) return undefined;
-  let target = componentForCanvasElement(root, element);
-  while (target) {
-    const targetType = target.getAttributes({ noStyle: true })[
-      BUILDER_NODE_TYPE_ATTRIBUTE
-    ];
-    if (
-      isPayloadNodeType(targetType) &&
-      (canContainNode(targetType, type) ||
-        (targetType === 'root' &&
-          ['text', 'image', 'button', 'countdown'].includes(type)))
-    ) {
-      break;
+
+  const frameRect = frame.getBoundingClientRect();
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) return undefined;
+
+  const points = [
+    { x: clientX - frameRect.left, y: clientY - frameRect.top },
+    { x: clientX, y: clientY },
+  ];
+  let target: Component | undefined;
+  for (const point of points) {
+    const element = frameDocument.elementFromPoint(point.x, point.y);
+    let candidate = element ? componentForCanvasElement(root, element) : undefined;
+    while (candidate) {
+      const targetType = candidate.getAttributes({ noStyle: true })[
+        BUILDER_NODE_TYPE_ATTRIBUTE
+      ];
+      if (
+        isPayloadNodeType(targetType) &&
+        (canContainNode(targetType, type) ||
+          (targetType === 'root' &&
+            ['text', 'image', 'button', 'countdown'].includes(type)))
+      ) {
+        target = candidate;
+        break;
+      }
+      candidate = candidate.parent() ?? undefined;
     }
-    target = target.parent() ?? null;
+    if (target) break;
   }
   if (!target) return undefined;
 
@@ -690,13 +702,9 @@ function applyAllViewportStyles(root: Component, viewport: BuilderViewport): voi
 type BuiltInBuilderBlockType = Exclude<BuilderBlockType, 'extension'>;
 
 const blockTypes: readonly BuiltInBuilderBlockType[] = [
-  'section',
-  'container',
-  'text',
-  'image',
-  'button',
-  'form',
-  'countdown',
+  ...(Object.keys(PAGE_COMPONENT_REGISTRY).filter(
+    (type): type is BuiltInBuilderBlockType => type !== 'root' && type !== 'extension',
+  ) as BuiltInBuilderBlockType[]),
 ];
 
 function createBlockManagerDefinitions(): BlockProperties[] {
@@ -1593,9 +1601,23 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           deviceManager: {
             default: 'desktop',
             devices: [
-              { id: 'desktop', name: 'Desktop', width: '' },
-              { id: 'tablet', name: 'Tablet', width: '640px', widthMedia: '768px' },
-              { id: 'mobile', name: 'Mobile', width: '375px', widthMedia: '480px' },
+              {
+                id: 'desktop',
+                name: PAGE_RESPONSIVE_BREAKPOINTS.desktop.label,
+                width: PAGE_RESPONSIVE_BREAKPOINTS.desktop.canvasWidth,
+              },
+              {
+                id: 'tablet',
+                name: PAGE_RESPONSIVE_BREAKPOINTS.tablet.label,
+                width: PAGE_RESPONSIVE_BREAKPOINTS.tablet.canvasWidth,
+                widthMedia: PAGE_RESPONSIVE_BREAKPOINTS.tablet.editorMediaQuery,
+              },
+              {
+                id: 'mobile',
+                name: PAGE_RESPONSIVE_BREAKPOINTS.mobile.label,
+                width: PAGE_RESPONSIVE_BREAKPOINTS.mobile.canvasWidth,
+                widthMedia: PAGE_RESPONSIVE_BREAKPOINTS.mobile.editorMediaQuery,
+              },
             ],
           },
         });

@@ -8,6 +8,9 @@ import {
   CustomExtensionNodePropsSchema,
   canContainPageComponent,
   isPageComponentType,
+  PAGE_RESPONSIVE_BREAKPOINTS,
+  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
@@ -56,24 +59,6 @@ export class BuilderAdapterError extends Error {
     this.name = 'BuilderAdapterError';
   }
 }
-
-const stylePropertyMap = {
-  display: 'display',
-  width: 'width',
-  'max-width': 'maxWidth',
-  'min-height': 'minHeight',
-  padding: 'padding',
-  margin: 'margin',
-  gap: 'gap',
-  'background-color': 'backgroundColor',
-  color: 'color',
-  'font-size': 'fontSize',
-  'font-weight': 'fontWeight',
-  'text-align': 'textAlign',
-  'border-radius': 'borderRadius',
-} as const;
-
-type EditorStyleProperty = keyof typeof stylePropertyMap;
 
 function editorOnlyPreview(
   definition: ComponentDefinition,
@@ -254,7 +239,7 @@ function canAcceptEditorNode(
 }
 
 function payloadViewport(viewport: BuilderViewport): PayloadViewport {
-  return viewport === 'desktop' ? 'base' : viewport;
+  return PAGE_RESPONSIVE_BREAKPOINTS[viewport].payloadKey;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -269,10 +254,8 @@ function styleBlockToEditorStyle(style: PageNodeStyle['base']): Record<string, s
   const result: Record<string, string> = {};
   for (const [property, value] of Object.entries(style)) {
     if (typeof value !== 'string') continue;
-    const editorProperty = Object.entries(stylePropertyMap).find(
-      ([, payloadProperty]) => payloadProperty === property,
-    )?.[0];
-    result[editorProperty ?? property] = value;
+    const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
+    if (definition) result[definition.editorProperty] = value;
   }
   return result;
 }
@@ -284,7 +267,11 @@ function editorStyleToPayloadStyle(
   const payloadStyle: Record<string, unknown> = {};
 
   for (const [property, value] of Object.entries(style)) {
-    if (!(property in stylePropertyMap)) {
+    const definition =
+      PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+        property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+      ];
+    if (!definition) {
       throw new BuilderAdapterError(`Unsupported editor style property "${property}"`, [
         ...path,
         'style',
@@ -297,7 +284,7 @@ function editorStyleToPayloadStyle(
         [...path, 'style', property],
       );
     }
-    payloadStyle[stylePropertyMap[property as EditorStyleProperty]] = value;
+    payloadStyle[definition.payloadKey] = value;
   }
 
   const parsed = PageNodeStyleSchema.safeParse({ base: payloadStyle });
@@ -991,19 +978,22 @@ export function updateEditorViewportStyle(
   property: string,
   value: string,
 ): void {
-  if (!(property in stylePropertyMap)) {
+  const definition =
+    PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+      property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+    ];
+  if (!definition) {
     throw new BuilderAdapterError(`Unsupported editor style property "${property}"`);
   }
   captureEditorViewportStyle(component, viewport);
   const payloadViewportKey = payloadViewport(viewport);
   const current = readEditorResponsiveStyle(component) ?? { base: {} };
-  const payloadProperty = stylePropertyMap[property as EditorStyleProperty];
   const nextBlock = {
     ...(current[payloadViewportKey] ?? {}),
-    [payloadProperty]: value,
+    [definition.payloadKey]: value,
   };
   if (value.trim() === '') {
-    delete nextBlock[payloadProperty as keyof typeof nextBlock];
+    delete nextBlock[definition.payloadKey as keyof typeof nextBlock];
   }
   current[payloadViewportKey] = nextBlock;
   const parsed = PageNodeStyleSchema.safeParse(current);

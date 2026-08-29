@@ -31,11 +31,10 @@ import {
   type CustomDomain,
   type FormSubmission,
   type FormIntegrationBinding,
-  type FormNode,
   type Integration,
   type Navigation,
   type NavigationItem,
-  type PageNodeV2,
+  type PagePayload,
   type Page,
   type PageVersion,
   type PageSeoSettings,
@@ -66,6 +65,7 @@ import { AppHeader } from './app-header';
 import { ExtensionsView } from './extensions-view';
 import { WorkflowsView } from './workflows-view';
 import { NavigationView } from './navigation-view';
+import { PagesView as SiteMapPagesView } from './pages/pages-view';
 import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
 
 type View =
@@ -214,6 +214,9 @@ export default function CmsDashboard() {
   const [versions, setVersions] = useState<PageVersion[]>([]);
   const [siteForm, setSiteForm] = useState<SiteForm>(blankSite);
   const [pageForm, setPageForm] = useState<PageForm>(blankPage);
+  const [pageTemplatePayload, setPageTemplatePayload] = useState<PagePayload | null>(
+    null,
+  );
   const [assetForm, setAssetForm] = useState<AssetForm>(blankAsset);
   const [templateForm, setTemplateForm] = useState<TemplateForm>(blankTemplate);
   const [domainForm, setDomainForm] = useState<DomainForm>(blankDomain);
@@ -239,8 +242,6 @@ export default function CmsDashboard() {
 
   const selectedPage = pages.find((page) => page.id === selectedPageId);
   const selectedSite = sites.find((site) => site.id === selectedSiteId);
-  const selectedPagePublicPath =
-    selectedPage && selectedSite?.homePageId === selectedPage.id ? '/' : pageForm.path;
   const counts = useMemo(
     () => ({
       assets: assets.length,
@@ -885,10 +886,10 @@ export default function CmsDashboard() {
       setPages((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
-      if (page.id === selectedPageId) {
-        await refreshVersions(page.id);
-      }
       setNotice('Page published.');
+      if (page.id === selectedPageId) {
+        void refreshVersions(page.id);
+      }
     });
   }
 
@@ -912,10 +913,10 @@ export default function CmsDashboard() {
       setPages((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
-      if (page.id === selectedPageId) {
-        await refreshVersions(page.id);
-      }
       setNotice('Page unpublished.');
+      if (page.id === selectedPageId) {
+        void refreshVersions(page.id);
+      }
     });
   }
 
@@ -930,6 +931,7 @@ export default function CmsDashboard() {
         path: duplicated.path,
       });
       setPageDrawerOpen(true);
+      setPageTemplatePayload(null);
       setNotice('Page duplicated as a draft.');
     });
   }
@@ -946,7 +948,6 @@ export default function CmsDashboard() {
   }
 
   async function removePage(page: Page) {
-    if (!window.confirm(`Delete ${page.name}? This cannot be undone.`)) return;
     await runBusy(async () => {
       await api.delete(`/pages/${page.id}`);
       setPages((current) => current.filter((item) => item.id !== page.id));
@@ -954,6 +955,7 @@ export default function CmsDashboard() {
         setSelectedPageId('');
         setPageForm(blankPage);
       }
+      setPageDrawerOpen(false);
       setNotice('Page deleted.');
     });
   }
@@ -1028,7 +1030,7 @@ export default function CmsDashboard() {
             ? { description: pageForm.description.trim() }
             : {}),
           ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
-          payload: defaultPayload(pageForm.name),
+          payload: pageTemplatePayload ?? defaultPayload(pageForm.name),
         });
         pagesRequestId.current += 1;
         setPages((current) => [created, ...current]);
@@ -1036,6 +1038,7 @@ export default function CmsDashboard() {
         setNotice('Page and draft version 1 created.');
       }
       setPageForm(blankPage);
+      setPageTemplatePayload(null);
       setPageDrawerOpen(false);
     });
   }
@@ -1568,9 +1571,11 @@ export default function CmsDashboard() {
             </Drawer>
           ) : null}
           {view === 'pages' ? (
-            <PagesView
+            <SiteMapPagesView
+              workspaceId={session.workspace.id}
               busy={busy}
               canCreatePage={can('page.create')}
+              canUpdatePage={can('page.update')}
               canPublishPage={can('page.publish')}
               canDeletePage={can('page.delete')}
               canReadWorkflows={can('workflow.read')}
@@ -1578,6 +1583,7 @@ export default function CmsDashboard() {
                 if (!selectedSiteId || !can('page.create')) return;
                 setSelectedPageId('');
                 setPageForm(blankPage);
+                setPageTemplatePayload(null);
                 setPageDrawerOpen(true);
               }}
               onOpenBuilder={(page) =>
@@ -1585,9 +1591,22 @@ export default function CmsDashboard() {
                   `/workspaces/${session.workspace.id}/sites/${page.siteId}/pages/${page.id}/builder`,
                 )
               }
+              onEditPage={(page) => {
+                setSelectedPageId(page.id);
+                setPageForm({
+                  name: page.name,
+                  description: page.description ?? '',
+                  path: page.path,
+                });
+                setPageDrawerOpen(true);
+              }}
               onOpenWorkflows={(page) => {
                 setSelectedPageId(page.id);
                 setView('workflows');
+              }}
+              onOpenSeo={(page) => {
+                setSelectedPageId(page.id);
+                setView('seo');
               }}
               onDuplicate={(page) => void duplicatePage(page)}
               onDelete={(page) => void removePage(page)}
@@ -1596,6 +1615,7 @@ export default function CmsDashboard() {
               onPublish={(page) => void publishPage(page)}
               onSelectPage={(page) => {
                 setSelectedPageId(page.id);
+                setPageTemplatePayload(null);
                 setPageForm({
                   name: page.name,
                   description: page.description ?? '',
@@ -1607,9 +1627,16 @@ export default function CmsDashboard() {
               onUnpublish={(page) => void unpublishPage(page)}
               pages={pages}
               pageDrawerOpen={pageDrawerOpen}
+              pageForm={pageForm}
+              onPageFormChange={setPageForm}
+              onPageSubmit={handlePageSubmit}
+              onClosePageDrawer={() => setPageDrawerOpen(false)}
+              onChooseTemplate={(template) => setPageTemplatePayload(template.payload)}
               selectedPage={selectedPage}
+              selectedSite={selectedSite}
               selectedSiteId={selectedSiteId}
               sites={sites}
+              templates={templates}
               versions={versions}
               bindings={formBindings}
               bindingSaving={bindingSaving}
@@ -1618,216 +1645,6 @@ export default function CmsDashboard() {
                 void saveFormBinding(formNodeId, integrationIds)
               }
             />
-          ) : null}
-          {view === 'pages' ? (
-            <Drawer
-              description="Set the canonical URL slug for this page. The homepage is a site-level alias at /."
-              eyebrow={selectedPageId ? 'Page settings' : 'New page'}
-              footer={
-                <div className="form-actions">
-                  {selectedPage ? (
-                    <>
-                      <button
-                        className="button button-secondary"
-                        onClick={() => {
-                          setPageDrawerOpen(false);
-                          router.push(
-                            `/workspaces/${session.workspace.id}/sites/${selectedPage.siteId}/pages/${selectedPage.id}/builder`,
-                          );
-                        }}
-                        type="button"
-                      >
-                        Open Builder
-                      </button>
-                      <button
-                        className="button button-ghost"
-                        onClick={() => {
-                          setPageDrawerOpen(false);
-                          previewPage(selectedPage);
-                        }}
-                        type="button"
-                      >
-                        Preview draft
-                      </button>
-                      {selectedPage.id !== selectedSite?.homePageId ? (
-                        <button
-                          className="button button-ghost"
-                          disabled={busy}
-                          onClick={() => {
-                            setPageDrawerOpen(false);
-                            void setHomepage(selectedPage);
-                          }}
-                          type="button"
-                        >
-                          Set as homepage
-                        </button>
-                      ) : null}
-                      {can('page.delete') ? (
-                        <button
-                          className="button button-danger"
-                          disabled={selectedPage.id === selectedSite?.homePageId}
-                          onClick={() => {
-                            setPageDrawerOpen(false);
-                            void removePage(selectedPage);
-                          }}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                      <button
-                        className="button button-ghost"
-                        disabled={busy}
-                        onClick={() => {
-                          setPageDrawerOpen(false);
-                          void duplicatePage(selectedPage);
-                        }}
-                        type="button"
-                      >
-                        Duplicate
-                      </button>
-                      {can('page.publish') &&
-                      publicationStatus(selectedPage) === 'Published' ? (
-                        <button
-                          className="button button-ghost"
-                          disabled={busy}
-                          onClick={() => {
-                            setPageDrawerOpen(false);
-                            void unpublishPage(selectedPage);
-                          }}
-                          type="button"
-                        >
-                          Unpublish
-                        </button>
-                      ) : can('page.publish') ? (
-                        <button
-                          className="button button-primary"
-                          disabled={busy}
-                          onClick={() => {
-                            setPageDrawerOpen(false);
-                            void publishPage(selectedPage);
-                          }}
-                          type="button"
-                        >
-                          Publish draft
-                        </button>
-                      ) : null}
-                      {can('workflow.read') ? (
-                        <button
-                          className="button button-secondary"
-                          onClick={() => {
-                            setPageDrawerOpen(false);
-                            setView('workflows');
-                          }}
-                          type="button"
-                        >
-                          Manage workflows
-                        </button>
-                      ) : null}
-                    </>
-                  ) : null}
-                  <button
-                    className="button button-primary"
-                    disabled={
-                      busy ||
-                      (!selectedPageId && !selectedSiteId) ||
-                      (selectedPageId ? !can('page.update') : !can('page.create'))
-                    }
-                    form="page-metadata-form"
-                    type="submit"
-                  >
-                    {busy ? 'Saving…' : selectedPageId ? 'Save metadata' : 'Create page'}
-                  </button>
-                  <button
-                    className="button button-ghost"
-                    onClick={() => setPageDrawerOpen(false)}
-                    type="button"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              }
-              onClose={() => setPageDrawerOpen(false)}
-              allowBackgroundInteraction
-              open={pageDrawerOpen}
-              size="sm"
-              title={selectedPageId ? 'Edit page' : 'Create page'}
-            >
-              {!selectedSiteId ? (
-                <EmptyState
-                  title="Select a site first"
-                  description="Pages belong to a site."
-                />
-              ) : (selectedPageId ? can('page.update') : can('page.create')) ? (
-                <form
-                  className="stack"
-                  id="page-metadata-form"
-                  onSubmit={handlePageSubmit}
-                >
-                  <label>
-                    Title
-                    <input
-                      aria-label="Page name"
-                      onChange={(event) =>
-                        setPageForm({ ...pageForm, name: event.target.value })
-                      }
-                      required
-                      value={pageForm.name}
-                    />
-                  </label>
-                  <label>
-                    URL slug
-                    <span className="muted">Canonical public path</span>
-                    <input
-                      aria-label="Slug"
-                      onChange={(event) =>
-                        setPageForm({
-                          ...pageForm,
-                          path: event.target.value
-                            ? `/${normalizeUrlSlug(event.target.value.replace(/^\/+/, ''))}`
-                            : '',
-                        })
-                      }
-                      placeholder="about"
-                      value={
-                        pageForm.path === '/' ? '' : pageForm.path.replace(/^\/+/, '')
-                      }
-                    />
-                  </label>
-                  <p className="helper-text">
-                    Public URL:{' '}
-                    <code>
-                      /{selectedSite?.slug ?? 'site-slug'}
-                      {selectedPagePublicPath && selectedPagePublicPath !== '/'
-                        ? selectedPagePublicPath
-                        : selectedPage
-                          ? '/'
-                          : '/page-slug'}
-                    </code>
-                  </p>
-                  <label>
-                    Description <span className="muted">Optional</span>
-                    <textarea
-                      aria-label="Description"
-                      maxLength={500}
-                      onChange={(event) =>
-                        setPageForm({ ...pageForm, description: event.target.value })
-                      }
-                      rows={3}
-                      value={pageForm.description}
-                    />
-                  </label>
-                  <div aria-label="Page status" className="page-form-status">
-                    <span className="muted">Status</span>
-                    <StatusBadge
-                      status={selectedPage ? publicationStatus(selectedPage) : 'Draft'}
-                    />
-                  </div>
-                </form>
-              ) : (
-                <p className="muted">You have read-only access to pages.</p>
-              )}
-            </Drawer>
           ) : null}
           {view === 'navigation' ? (
             <NavigationView
@@ -2437,374 +2254,6 @@ function SitesView({
   );
 }
 
-function PagesView({
-  sites,
-  pages,
-  selectedSiteId,
-  selectedPage,
-  versions,
-  bindings,
-  bindingSaving,
-  integrations,
-  onSaveFormBinding,
-  canCreatePage,
-  canPublishPage,
-  canDeletePage,
-  canReadWorkflows,
-  busy,
-  onCreatePage,
-  onOpenBuilder,
-  onOpenWorkflows,
-  onPreview,
-  onPublish,
-  onSelectSite,
-  onSelectPage,
-  onUnpublish,
-  onDuplicate,
-  onDelete,
-  onSetHomepage,
-  pageDrawerOpen,
-}: {
-  sites: Site[];
-  pages: Page[];
-  selectedSiteId: string;
-  selectedPage: Page | undefined;
-  versions: PageVersion[];
-  bindings: FormIntegrationBinding[];
-  bindingSaving: boolean;
-  integrations: Integration[];
-  busy: boolean;
-  onCreatePage: () => void;
-  onOpenBuilder: (page: Page) => void;
-  onPreview: (page: Page) => void;
-  onPublish: (page: Page) => void;
-  onSelectSite: (siteId: string) => void;
-  onSelectPage: (page: Page) => void;
-  onUnpublish: (page: Page) => void;
-  onSaveFormBinding: (formNodeId: string, integrationIds: string[]) => void;
-  canCreatePage: boolean;
-  canPublishPage: boolean;
-  canDeletePage: boolean;
-  canReadWorkflows: boolean;
-  onOpenWorkflows: (page: Page) => void;
-  onDuplicate: (page: Page) => void;
-  onDelete: (page: Page) => void;
-  onSetHomepage: (page: Page) => void;
-  pageDrawerOpen: boolean;
-}) {
-  const [pageSearch, setPageSearch] = useState('');
-  const [pageStatus, setPageStatus] = useState('');
-  const draftVersion = selectedPage
-    ? versions.find((version) => version.id === selectedPage.currentDraftVersionId)
-    : undefined;
-  const formNodes =
-    draftVersion?.payload.version === 2 ? findFormNodes(draftVersion.payload.root) : [];
-  const visiblePages = pages.filter((page) => {
-    const query = pageSearch.trim().toLowerCase();
-    const matchesSearch =
-      !query ||
-      page.name.toLowerCase().includes(query) ||
-      page.path.toLowerCase().includes(query) ||
-      (page.slug ?? '').toLowerCase().includes(query);
-    const matchesStatus = !pageStatus || publicationStatus(page) === pageStatus;
-    return matchesSearch && matchesStatus;
-  });
-  return (
-    <>
-      <PageHeader
-        actions={
-          <button
-            className="button button-primary"
-            disabled={!selectedSiteId || !canCreatePage}
-            onClick={onCreatePage}
-            type="button"
-          >
-            New page
-          </button>
-        }
-        eyebrow="Content"
-        title="Pages"
-        description="Manage routes, page metadata and draft history without opening the visual builder."
-      />
-      <ResourceToolbar>
-        <label className="inline-field">
-          Site
-          <select
-            aria-label="Site"
-            onChange={(event) => onSelectSite(event.target.value)}
-            value={selectedSiteId}
-          >
-            <option value="">Select a site</option>
-            {sites.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="inline-field page-search-field">
-          Search
-          <input
-            aria-label="Search pages"
-            onChange={(event) => setPageSearch(event.target.value)}
-            placeholder="Name or slug"
-            value={pageSearch}
-          />
-        </label>
-        <label className="inline-field">
-          Status
-          <select
-            aria-label="Filter pages by status"
-            onChange={(event) => setPageStatus(event.target.value)}
-            value={pageStatus}
-          >
-            <option value="">All statuses</option>
-            <option value="Published">Published</option>
-            <option value="Newer draft">Draft pending</option>
-            <option value="Unpublished">Unpublished</option>
-          </select>
-        </label>
-      </ResourceToolbar>
-      <section className="panel">
-        <PanelTitle title="Page inventory" count={visiblePages.length} />
-        {visiblePages.length ? (
-          <div className="list">
-            {visiblePages.map((page) => (
-              <div
-                className={
-                  selectedPage?.id === page.id
-                    ? 'list-row selectable selected page-list-row'
-                    : 'list-row selectable page-list-row'
-                }
-                key={page.id}
-              >
-                <button
-                  aria-label={`Select page ${page.name} at ${page.path}`}
-                  className="page-select-button"
-                  onClick={() => onSelectPage(page)}
-                  type="button"
-                >
-                  <div>
-                    <strong>{page.name}</strong>
-                    <span className="muted">
-                      {page.id ===
-                      sites.find((site) => site.id === selectedSiteId)?.homePageId
-                        ? '/ · Homepage'
-                        : page.path}
-                    </span>
-                  </div>
-                  <StatusBadge status={publicationStatus(page)} />
-                </button>
-                {!(pageDrawerOpen && selectedPage?.id === page.id) ? (
-                  <button
-                    className="button button-secondary button-small"
-                    onClick={() => onOpenBuilder(page)}
-                    type="button"
-                  >
-                    {page.id ===
-                    sites.find((site) => site.id === selectedSiteId)?.homePageId
-                      ? 'Open Homepage Builder'
-                      : 'Open Builder'}
-                  </button>
-                ) : null}
-                {canDeletePage ? (
-                  <button
-                    className="button button-ghost button-small"
-                    disabled={
-                      page.id ===
-                      sites.find((site) => site.id === selectedSiteId)?.homePageId
-                    }
-                    onClick={() => onDelete(page)}
-                    title={
-                      page.id ===
-                      sites.find((site) => site.id === selectedSiteId)?.homePageId
-                        ? 'Choose another homepage first'
-                        : 'Delete page'
-                    }
-                    type="button"
-                  >
-                    Delete
-                  </button>
-                ) : null}
-                <span className="muted small page-updated-at">
-                  Updated {new Date(page.updatedAt).toLocaleDateString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title={pages.length ? 'No matching pages' : 'No pages'}
-            description={
-              pages.length
-                ? 'Try a different name, slug or publication status.'
-                : 'Create a page to see its draft and metadata here.'
-            }
-          />
-        )}
-      </section>
-      {selectedPage ? (
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Immutable snapshots</span>
-              <h2>Version history</h2>
-            </div>
-            {!pageDrawerOpen ? (
-              <div className="row-actions">
-                <StatusBadge status={publicationStatus(selectedPage)} />
-                <button
-                  className="button button-secondary button-small"
-                  onClick={() => onPreview(selectedPage)}
-                  type="button"
-                >
-                  Preview draft
-                </button>
-                {selectedPage.id !==
-                sites.find((site) => site.id === selectedSiteId)?.homePageId ? (
-                  <button
-                    className="button button-secondary button-small"
-                    disabled={busy}
-                    onClick={() => onSetHomepage(selectedPage)}
-                    type="button"
-                  >
-                    Set as homepage
-                  </button>
-                ) : null}
-                <button
-                  className="button button-secondary button-small"
-                  disabled={busy}
-                  onClick={() => onDuplicate(selectedPage)}
-                  type="button"
-                >
-                  Duplicate
-                </button>
-                {canPublishPage && publicationStatus(selectedPage) === 'Published' ? (
-                  <button
-                    className="button button-ghost button-small"
-                    disabled={busy}
-                    onClick={() => onUnpublish(selectedPage)}
-                    type="button"
-                  >
-                    Unpublish
-                  </button>
-                ) : canPublishPage ? (
-                  <button
-                    className="button button-primary button-small"
-                    disabled={busy}
-                    onClick={() => onPublish(selectedPage)}
-                    type="button"
-                  >
-                    Publish draft
-                  </button>
-                ) : null}
-                {canReadWorkflows ? (
-                  <button
-                    className="button button-secondary button-small"
-                    onClick={() => onOpenWorkflows(selectedPage)}
-                    type="button"
-                  >
-                    Manage workflows
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <p className="muted small">
-            Current draft v
-            {versions.find((version) => version.id === selectedPage.currentDraftVersionId)
-              ?.versionNumber ?? '—'}
-            {selectedPage.publishedVersionId &&
-            selectedPage.publishedVersionId !== selectedPage.currentDraftVersionId
-              ? ' · Public site still uses the published snapshot.'
-              : ''}
-          </p>
-          {versions.length ? (
-            <div className="list">
-              {versions.map((version) => (
-                <div className="list-row" key={version.id}>
-                  <div>
-                    <strong>Version {version.versionNumber}</strong>
-                    <span className="muted">
-                      {new Date(version.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <span className="muted">Snapshot</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No versions found"
-              description="The page has no readable draft history."
-            />
-          )}
-        </section>
-      ) : null}
-      {selectedPage ? (
-        <section className="panel" aria-label="Form integration settings">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Notifications</span>
-              <h2>Form integrations</h2>
-            </div>
-            {bindingSaving ? <span className="muted small">Saving…</span> : null}
-          </div>
-          {formNodes.length ? (
-            <div className="stack">
-              {formNodes.map((formNode) => {
-                const selectedIds =
-                  bindings.find((binding) => binding.formNodeId === formNode.id)
-                    ?.integrationIds ?? [];
-                return (
-                  <div className="form-integration-card" key={formNode.id}>
-                    <strong>Form {formNode.id}</strong>
-                    {integrations.length ? (
-                      <div className="stack compact-stack">
-                        {integrations.map((integration) => (
-                          <label className="checkbox-field" key={integration.id}>
-                            <input
-                              checked={selectedIds.includes(integration.id)}
-                              disabled={bindingSaving}
-                              onChange={(event) => {
-                                const nextIds = event.target.checked
-                                  ? [...selectedIds, integration.id]
-                                  : selectedIds.filter((id) => id !== integration.id);
-                                onSaveFormBinding(formNode.id, nextIds);
-                              }}
-                              type="checkbox"
-                            />
-                            <span>
-                              {integration.name}{' '}
-                              <span className="muted small">
-                                ({integration.type} ·{' '}
-                                {integration.enabled ? 'enabled' : 'disabled'})
-                              </span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="muted small">
-                        Create an integration from the Integrations section first.
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              title="No form in the current draft"
-              description="Add a Form block in the visual builder to configure notifications."
-            />
-          )}
-        </section>
-      ) : null}
-    </>
-  );
-}
-
 function AssetsView({
   assets,
   form,
@@ -3223,21 +2672,8 @@ function EmptyState({ title, description }: { title: string; description: string
   );
 }
 
-function findFormNodes(node: PageNodeV2): FormNode[] {
-  if (node.type === 'form') return [node];
-  return node.children.flatMap((child) => findFormNodes(child));
-}
 function toErrorMessage(error: unknown): string {
   return error instanceof ApiClientError
     ? error.message
     : 'Something went wrong. Please try again.';
-}
-
-function publicationStatus(page: Page): 'Published' | 'Newer draft' | 'Unpublished' {
-  if (!page.publishedVersionId) {
-    return 'Unpublished';
-  }
-  return page.publishedVersionId === page.currentDraftVersionId
-    ? 'Published'
-    : 'Newer draft';
 }
