@@ -14,5 +14,7 @@ technical debt rather than simulated with a large project blob.
 
 The homepage invariant is enforced by `homePageId`. It is repaired
 idempotently for legacy data, cannot be deleted, and can be changed through the
-set-homepage operation. Changing home safely moves the previous root Page to a
-generated non-root path before assigning `/` to the selected Page.
+set-homepage operation. Changing home only updates the Site reference; it does
+not rewrite the previous or selected Page path. Public resolution is read-only:
+legacy repair belongs to an explicit management read or migration job, never to
+the delivery path.

@@ -19,6 +19,10 @@ import { TenantResolver } from './tenant-resolver';
 import { TenantModule } from './tenant.module';
 import { TenantModelsModule } from './tenant-models.module';
 import { TenantProvisioningService } from './tenant-provisioning.service';
+import {
+  PublicSiteRouteRecord,
+  PublicSiteRouteSchema,
+} from './schemas/public-site-route.schema';
 
 @Module({
   exports: [
@@ -40,6 +44,7 @@ import { TenantProvisioningService } from './tenant-provisioning.service';
         { name: PlatformRoleRecord.name, schema: PlatformRoleSchema },
         { name: PlatformRoleAssignmentRecord.name, schema: PlatformRoleAssignmentSchema },
         { name: PlatformAuditLogRecord.name, schema: PlatformAuditLogSchema },
+        { name: PublicSiteRouteRecord.name, schema: PublicSiteRouteSchema },
       ],
       MASTER_CONNECTION,
     ),

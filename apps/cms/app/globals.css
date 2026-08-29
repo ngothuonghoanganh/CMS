@@ -1,7 +1,6 @@
 @import 'grapesjs/dist/css/grapes.min.css';
 
 :root {
-  color-scheme: dark;
   font-family:
     Inter,
     ui-sans-serif,
@@ -10,32 +9,6 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  --color-bg: #0b1020;
-  --color-surface: #131c32;
-  --color-surface-raised: #18243d;
-  --color-surface-muted: #10172a;
-  --color-input: #0d1426;
-  --color-border: #273453;
-  --color-border-strong: #3a4b70;
-  --color-text: #edf2ff;
-  --color-text-soft: #cbd6ee;
-  --color-muted: #8c98b3;
-  --color-primary: #8cf0c5;
-  --color-primary-strong: #a7f6d4;
-  --color-warning: #f4d38a;
-  --color-danger: #ffc1ce;
-  --space-1: 0.35rem;
-  --space-2: 0.55rem;
-  --space-3: 0.8rem;
-  --space-4: 1rem;
-  --space-5: 1.35rem;
-  --space-6: 1.75rem;
-  --radius-sm: 0.55rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --shadow-panel: 0 14px 36px #02050d22;
-  background: var(--color-bg);
-  color: var(--color-text);
 }
 
 .workflow-page {
@@ -3370,4 +3343,95 @@ textarea {
     border-radius: 1rem 1rem 0 0;
     padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
   }
+}
+
+/* Neutral compact administration theme. Feature-specific legacy surfaces inherit
+   these tokens so the CMS remains visually coherent while they are migrated. */
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.auth-page,
+.builder-frame,
+.builder-loading {
+  background: var(--color-bg);
+}
+
+.auth-card,
+.extension-overview,
+.extension-card.is-enabled,
+.analytics-skeleton {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.brand-mark {
+  color: var(--color-bg);
+  background: var(--color-primary);
+}
+
+.extension-mark {
+  border-color: var(--color-border-strong);
+  color: var(--color-primary);
+  background: var(--color-surface-raised);
+}
+
+.builder-topbar {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.resource-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.resource-table th,
+.resource-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.8rem 0.75rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.resource-table th {
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.resource-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.helper-text {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.helper-text code {
+  color: var(--color-text-soft);
+}
+
+.row-menu {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.text-link {
+  color: var(--color-text-soft);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.text-link:hover {
+  color: var(--color-primary);
 }

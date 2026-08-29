@@ -14,6 +14,7 @@ import {
   AnalyticsClientEventV1Schema,
   AnalyticsIngestResponseSchema,
   PagePayloadSchema,
+  normalizePagePath,
   type AnalyticsClientEventV1,
   type AnalyticsIngestResponse,
   type PageNode,
@@ -95,7 +96,11 @@ export class AnalyticsService {
       });
     }
     const event = AnalyticsClientEventV1Schema.parse(input);
-    const context = await this.resolvePublishedContext(event.siteSlug, event.pageSlug);
+    const pagePath = normalizePagePath(
+      event.pagePath ?? (event.pageSlug ? `/${event.pageSlug}` : '/'),
+    );
+    if (!pagePath) throw this.publicNotFound();
+    const context = await this.resolvePublishedContext(event.siteSlug, pagePath);
     const node =
       event.event === 'element.clicked'
         ? findNode(context.payload.root, event.nodeId)
@@ -172,7 +177,7 @@ export class AnalyticsService {
 
   private async resolvePublishedContext(
     siteSlug: string,
-    pageSlug: string,
+    pagePath: string,
   ): Promise<PublishedAnalyticsContext> {
     const sites = await this.siteModel.find({ slug: siteSlug }).limit(2).exec();
     if (sites.length !== 1 || !sites[0]) throw this.publicNotFound();
@@ -180,18 +185,45 @@ export class AnalyticsService {
     if (!(await this.workspaceModel.exists({ _id: site.workspaceId }))) {
       throw this.publicNotFound();
     }
-    const page = await this.pageModel
-      .findOne({
-        siteId: site._id.toString(),
-        workspaceId: site.workspaceId,
-        slug: pageSlug,
-      })
-      .exec();
-    if (!page?.publishedVersionId) throw this.publicNotFound();
+    const page =
+      pagePath === '/' && site.homePageId
+        ? await this.pageModel
+            .findOne({
+              _id: site.homePageId,
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+            })
+            .exec()
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+              path: pagePath,
+            })
+            .exec();
+    const legacyPage =
+      page ??
+      (pagePath === '/'
+        ? await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+              path: '/',
+            })
+            .sort({ createdAt: 1, _id: 1 })
+            .exec()
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+              slug: pagePath.slice(1),
+            })
+            .exec());
+    if (!legacyPage?.publishedVersionId) throw this.publicNotFound();
     const version = await this.versionModel
       .findOne({
-        _id: page.publishedVersionId,
-        landingPageId: page._id.toString(),
+        _id: legacyPage.publishedVersionId,
+        landingPageId: legacyPage._id.toString(),
         siteId: site._id.toString(),
         workspaceId: site.workspaceId,
       })
@@ -199,7 +231,7 @@ export class AnalyticsService {
     if (!version) throw this.publicNotFound();
     const payload = PagePayloadSchema.safeParse(version.payload);
     if (!payload.success) throw this.publicNotFound();
-    return { site, page, version, payload: payload.data };
+    return { site, page: legacyPage, version, payload: payload.data };
   }
 
   private toStoredEvent(

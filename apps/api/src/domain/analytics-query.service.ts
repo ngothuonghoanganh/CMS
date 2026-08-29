@@ -19,6 +19,7 @@ import {
   type AnalyticsPageSummary,
   type AnalyticsRangeQuery,
   type AnalyticsTimeSeriesPoint,
+  normalizePagePath,
 } from '@payload/contracts';
 
 import {
@@ -206,11 +207,16 @@ function toPageSummary(
   site: SiteDocument,
   metric: AnalyticsPageEventMetrics,
 ): AnalyticsPageSummary {
+  const pagePath =
+    site.homePageId === page._id.toString()
+      ? '/'
+      : normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : '/'));
   return {
     id: page._id.toString(),
     name: page.name,
     siteName: site.name,
     siteSlug: site.slug,
+    ...(pagePath ? { pagePath } : {}),
     ...(page.slug ? { slug: page.slug } : {}),
     metrics: toMetrics(metric),
   };

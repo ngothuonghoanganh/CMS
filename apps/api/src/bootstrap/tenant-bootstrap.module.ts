@@ -11,6 +11,10 @@ import { ControlPlaneModule } from '../tenancy/control-plane.module';
 import { TenantModelsModule } from '../tenancy/tenant-models.module';
 import { TenantBootstrapService } from './tenant-bootstrap.service';
 import { SecurityModule } from '../security/security.module';
+import {
+  PublicSiteRouteRecord,
+  PublicSiteRouteSchema,
+} from '../tenancy/schemas/public-site-route.schema';
 
 @Module({
   imports: [
@@ -21,6 +25,7 @@ import { SecurityModule } from '../security/security.module';
       [
         { name: TenantRecord.name, schema: TenantSchema },
         { name: TenantDomainRecord.name, schema: TenantDomainSchema },
+        { name: PublicSiteRouteRecord.name, schema: PublicSiteRouteSchema },
       ],
       MASTER_CONNECTION,
     ),

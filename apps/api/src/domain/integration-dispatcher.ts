@@ -13,6 +13,7 @@ import {
   IntegrationDeliverySchema,
   PagePayloadV2Schema,
   PaginationSchema,
+  normalizePagePath,
   type FormNode,
   type PageNodeV2,
   type IntegrationDelivery,
@@ -364,10 +365,12 @@ export class IntegrationDispatcher implements OnModuleDestroy {
       : undefined;
     if (!form) throw new Error('Submission form context is invalid');
     const fieldsById = new Map(form.props.fields.map((field) => [field.id, field]));
+    const pagePath = normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : '/'));
     return {
       submissionId,
       landingPageId: submission.landingPageId,
       pageName: page.name,
+      ...(pagePath ? { pagePath } : {}),
       ...(page.slug ? { pageSlug: page.slug } : {}),
       formNodeId: submission.formNodeId,
       submittedAt: submission.submittedAt,

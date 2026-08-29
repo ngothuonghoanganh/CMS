@@ -32,6 +32,8 @@ export class WebhookIntegrationAdapter implements IntegrationAdapter {
       version: 1,
       submissionId: context.submission.submissionId,
       landingPageId: context.submission.landingPageId,
+      ...(context.submission.pagePath ? { pagePath: context.submission.pagePath } : {}),
+      ...(context.submission.pageSlug ? { pageSlug: context.submission.pageSlug } : {}),
       formId: context.submission.formNodeId,
       submittedAt: context.submission.submittedAt.toISOString(),
       data: Object.fromEntries(

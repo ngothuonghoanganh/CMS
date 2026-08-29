@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import './ui/tokens.css';
 import './globals.css';
 import './ui/system.css';
 

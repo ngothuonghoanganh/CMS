@@ -19,6 +19,7 @@ import {
   SubmitFormRequestSchema,
   SubmissionStatusSchema,
   FormSubmissionSchema,
+  normalizePagePath,
   UpdateSubmissionRequestSchema,
   type FormField,
   type PageNodeV3,
@@ -107,8 +108,28 @@ export class SubmissionService {
     input: SubmitFormRequest,
     clientIp: string,
   ): Promise<SubmitFormResponse> {
+    return this.submitPublicByPath(
+      siteSlug,
+      pageSlug ? `/${pageSlug}` : '/',
+      formNodeId,
+      input,
+      clientIp,
+    );
+  }
+
+  async submitPublicByPath(
+    siteSlug: string,
+    pagePath: string,
+    formNodeId: string,
+    input: SubmitFormRequest,
+    clientIp: string,
+  ): Promise<SubmitFormResponse> {
     const parsedInput = SubmitFormRequestSchema.parse(input);
-    const resolved = await this.resolvePublishedForm(siteSlug, pageSlug, formNodeId);
+    const resolved = await this.resolvePublishedFormByPath(
+      siteSlug,
+      pagePath,
+      formNodeId,
+    );
     this.assertRateLimit(`${clientIp}:${resolved.site._id}:${resolved.form.id}`);
 
     // Honeypot submissions look successful to bots but never create a record.
@@ -270,9 +291,9 @@ export class SubmissionService {
     return this.toContract(record, context);
   }
 
-  private async resolvePublishedForm(
+  private async resolvePublishedFormByPath(
     siteSlug: string,
-    pageSlug: string,
+    pagePath: string,
     formNodeId: string,
   ): Promise<ResolvedForm> {
     const sites = await this.siteModel.find({ slug: siteSlug }).limit(2).exec();
@@ -281,18 +302,47 @@ export class SubmissionService {
     if (!(await this.workspaceModel.exists({ _id: site.workspaceId }))) {
       throw this.publicNotFound();
     }
-    const page = await this.pageModel
-      .findOne({
-        siteId: site._id.toString(),
-        slug: pageSlug,
-        workspaceId: site.workspaceId,
-      })
-      .exec();
-    if (!page?.publishedVersionId) throw this.publicNotFound();
+    const normalizedPath = normalizePagePath(pagePath);
+    if (!normalizedPath) throw this.publicNotFound();
+    const page =
+      normalizedPath === '/' && site.homePageId
+        ? await this.pageModel
+            .findOne({
+              _id: site.homePageId,
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+            })
+            .exec()
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              path: normalizedPath,
+              workspaceId: site.workspaceId,
+            })
+            .exec();
+    const legacyPage =
+      page ??
+      (normalizedPath === '/'
+        ? await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+              path: '/',
+            })
+            .sort({ createdAt: 1, _id: 1 })
+            .exec()
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              slug: normalizedPath.slice(1),
+              workspaceId: site.workspaceId,
+            })
+            .exec());
+    if (!legacyPage?.publishedVersionId) throw this.publicNotFound();
     const version = await this.versionModel
       .findOne({
-        _id: page.publishedVersionId,
-        landingPageId: page._id.toString(),
+        _id: legacyPage.publishedVersionId,
+        landingPageId: legacyPage._id.toString(),
         siteId: site._id.toString(),
         workspaceId: site.workspaceId,
       })
@@ -302,7 +352,7 @@ export class SubmissionService {
     if (!payload.success) throw this.publicNotFound();
     const form = findForm(payload.data.root, formNodeId);
     if (!form) throw this.publicNotFound();
-    return { site, page, version, form };
+    return { site, page: legacyPage, version, form };
   }
 
   private validateValues(
@@ -378,6 +428,13 @@ export class SubmissionService {
     const fieldMap = new Map(
       context?.form?.props.fields.map((field) => [field.id, field]),
     );
+    const pagePath = context?.page
+      ? context.site?.homePageId === context.page._id.toString()
+        ? '/'
+        : normalizePagePath(
+            context.page.path ?? (context.page.slug ? `/${context.page.slug}` : '/'),
+          )
+      : undefined;
     return FormSubmissionSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
@@ -385,6 +442,7 @@ export class SubmissionService {
       siteName: context?.site?.name ?? 'Unknown site',
       landingPageId: record.landingPageId,
       pageName: context?.page?.name ?? 'Unknown page',
+      ...(pagePath ? { pagePath } : {}),
       ...(context?.page?.slug ? { pageSlug: context.page.slug } : {}),
       pageVersionId: record.pageVersionId,
       formNodeId: record.formNodeId,

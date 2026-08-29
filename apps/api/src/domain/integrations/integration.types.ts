@@ -1,6 +1,7 @@
 import type {
   FormSubmittedWebhookV1,
   IntegrationDeliveryStatus,
+  PagePath,
 } from '@payload/contracts';
 
 import type { IntegrationDocument } from '../../persistence/schemas/integration.schema';
@@ -17,6 +18,7 @@ export type DeliverySubmissionContext = {
   submissionId: string;
   landingPageId: string;
   pageName: string;
+  pagePath?: PagePath;
   pageSlug?: string;
   formNodeId: string;
   submittedAt: Date;

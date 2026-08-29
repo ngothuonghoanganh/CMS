@@ -4,10 +4,10 @@
 
 ```text
 HTTP request
-  → hostname/domain resolver
-  → tenant context
+  → custom hostname resolver, or master PublicSiteRoute(siteSlug)
+  → tenant context + tenant database connection
   → Site
-  → normalized Page.path
+  → Site.homePageId for `/`, otherwise normalized Page.path
   → published PageVersion
   → PagePayload
   → renderer
@@ -22,6 +22,12 @@ Pages are unique by `(siteId, path)`. The Mongo index is partial during legacy
 migration so old slug-only records remain readable; all new API writes have a
 canonical path.
 
+`Site.homePageId` is the only homepage identity. `/` is a site-level alias and
+never requires changing the selected Page's canonical path. Platform host
+routing is control-plane data in `publicSiteRoutes`, keyed by the globally
+unique public `siteSlug`. This lookup happens before tenant models are opened,
+so tenant-local Site ids can safely overlap.
+
 The management API exposes a path resolver in addition to the legacy
 `/public/sites/:siteSlug/pages/:pageSlug` endpoint. The legacy endpoint remains
 available for existing renderer clients and resolves through the canonical path
@@ -31,6 +37,11 @@ The public renderer supports both platform routes (`/:siteSlug` and
 `/:siteSlug/*path`) and custom-domain routes (`/` and `/*path`) through the same
 resolver. Custom-domain lookup is fail-closed and always checks the resolved
 site, workspace, page, and published version together.
+
+The old `/public/sites/:siteSlug/pages/:pageSlug` read and form endpoints remain
+available as compatibility shims. New renderer form requests and analytics
+events send `pagePath`; old `pageSlug` payloads are normalized and resolved as
+legacy aliases.
 
 ## URL policy
 

@@ -107,4 +107,21 @@ export class PublicSubmissionController {
       request.ip || request.socket.remoteAddress || 'unknown',
     );
   }
+
+  @Post(':siteSlug/forms/:formNodeId/submissions')
+  async submitByPath(
+    @Param('siteSlug') siteSlug: string,
+    @Param('formNodeId') formNodeId: string,
+    @Query('path') path = '/',
+    @Body(new ZodValidationPipe(SubmitFormRequestSchema)) input: SubmitFormRequest,
+    @Req() request: Request,
+  ) {
+    return this.submissionService.submitPublicByPath(
+      siteSlug,
+      path,
+      formNodeId,
+      input,
+      request.ip || request.socket.remoteAddress || 'unknown',
+    );
+  }
 }

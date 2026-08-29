@@ -23,6 +23,7 @@ import {
   PublishPageRequestSchema,
   UpdatePageRequestSchema,
   normalizePagePath,
+  normalizeUrlSlug,
   type CreatePageRequest,
   type CreatePageVersionRequest,
   type DuplicatePageRequest,
@@ -87,9 +88,10 @@ export class PageService {
       const path = this.requirePath(
         input.path ??
           (input.slug
-            ? `/${input.slug}`
-            : `/${slugifyPagePath(input.name) || `page-${pageId.slice(-12)}`}`),
+            ? `/${normalizeUrlSlug(input.slug)}`
+            : `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`),
       );
+      const legacySlug = normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
       if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
       const versionId = randomUUID();
       let page: PageDocument;
@@ -104,7 +106,7 @@ export class PageService {
           kind: input.kind ?? 'standard',
           ...(input.parentId ? { parentId: input.parentId } : {}),
           ...(input.anchors ? { anchors: input.anchors } : {}),
-          ...(input.slug ? { slug: input.slug } : {}),
+          ...(legacySlug ? { slug: legacySlug } : {}),
         });
       } catch (error) {
         if (isDuplicateKeyError(error)) throw this.duplicatePath();
@@ -204,14 +206,17 @@ export class PageService {
     }
     if (parsedInput.path !== undefined && parsedInput.path !== null) {
       page.path = this.requirePath(parsedInput.path);
+      const legacySlug = normalizeUrlSlug(page.path.replace(/^\/+/, ''));
+      if (legacySlug) page.slug = legacySlug;
     }
     if (parsedInput.slug !== undefined) {
       if (parsedInput.slug === null) {
         page.set('slug', undefined);
       } else {
-        page.slug = parsedInput.slug;
+        const normalizedSlug = normalizeUrlSlug(parsedInput.slug);
+        page.slug = normalizedSlug;
         if (parsedInput.path === undefined) {
-          page.path = this.requirePath(`/${parsedInput.slug}`);
+          page.path = this.requirePath(`/${normalizedSlug}`);
         }
       }
     }
@@ -333,25 +338,10 @@ export class PageService {
   async setHomepage(pageId: string, workspaceId: string): Promise<Page> {
     const page = await this.requirePageDocument(pageId, workspaceId);
     const site = await this.requireSite(page.siteId, workspaceId);
-    await this.sites.ensureHomePage(site);
-    if (site.homePageId === pageId && page.path === '/') return this.toPageContract(page);
+    if (site.homePageId === pageId) return this.toPageContract(page);
 
-    const currentHome = site.homePageId
-      ? await this.pageModel
-          .findOne({ _id: site.homePageId, siteId: site._id.toString(), workspaceId })
-          .exec()
-      : null;
-    if (currentHome && currentHome._id.toString() !== pageId) {
-      currentHome.path = await this.findAvailablePath(
-        site._id.toString(),
-        currentHome.path && currentHome.path !== '/' ? currentHome.path : '/home',
-        workspaceId,
-        currentHome._id.toString(),
-      );
-      await currentHome.save();
-    }
-    page.path = '/';
-    await page.save();
+    // Homepage is a site-level alias. Page.path remains the page's own
+    // canonical identity, so switching home never rewrites either page route.
     site.homePageId = pageId;
     await site.save();
     return this.toPageContract(page);
@@ -809,13 +799,4 @@ function isDuplicateKeyError(error: unknown): boolean {
     'code' in error &&
     (error as { code?: unknown }).code === 11000
   );
-}
-
-function slugifyPagePath(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
 }

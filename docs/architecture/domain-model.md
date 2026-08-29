@@ -24,6 +24,8 @@ inside a payload; they are never Mongo ids.
 
 - A Workspace owns Sites, Assets and Templates.
 - A Site belongs to exactly one Workspace and owns Pages.
+- A Site stores `homePageId`, a reference to one of its Pages. The homepage is
+  selected by this reference; `/` is an alias and is not a Page path mutation.
 - A Page is page identity and metadata; it does not contain page content.
 - A PageVersion belongs to one Page and stores one validated immutable snapshot.
 
@@ -55,14 +57,15 @@ retention are deferred until there is a product requirement.
 The API owns Mongoose schemas and maps documents explicitly to shared contracts. The
 contracts package contains no Mongoose types or decorators.
 
-| Collection     | Purpose                         | Intentional indexes                                                     |
-| -------------- | ------------------------------- | ----------------------------------------------------------------------- |
-| `workspaces`   | Workspace identity              | Mongo `_id`                                                             |
-| `sites`        | Workspace-owned site            | `(workspaceId, slug)` unique                                            |
-| `landingPages` | Site-owned page identity        | `(siteId, createdAt)`, partial unique `(siteId, slug)` for string slugs |
-| `pageVersions` | Immutable payload snapshots     | `(landingPageId, versionNumber)` unique, `(landingPageId, createdAt)`   |
-| `assets`       | Minimal file metadata           | `(workspaceId, createdAt)`                                              |
-| `templates`    | Workspace-owned payload starter | `(workspaceId, createdAt)`                                              |
+| Collection         | Purpose                                                 | Intentional indexes                                                                       |
+| ------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `workspaces`       | Workspace identity                                      | Mongo `_id`                                                                               |
+| `sites`            | Workspace-owned site                                    | `(workspaceId, slug)` unique                                                              |
+| `landingPages`     | Site-owned page identity                                | `(siteId, createdAt)`, partial unique `(siteId, path)` and compatibility `(siteId, slug)` |
+| `publicSiteRoutes` | Master platform `siteSlug` → tenant/site route registry | unique `siteSlug`, unique `(tenantId, siteId)`                                            |
+| `pageVersions`     | Immutable payload snapshots                             | `(landingPageId, versionNumber)` unique, `(landingPageId, createdAt)`                     |
+| `assets`           | Minimal file metadata                                   | `(workspaceId, createdAt)`                                                                |
+| `templates`        | Workspace-owned payload starter                         | `(workspaceId, createdAt)`                                                                |
 
 Assets intentionally model metadata and a storage key only; binary upload, CDN and image
 processing are deferred. Templates store a validated payload snapshot and are not a

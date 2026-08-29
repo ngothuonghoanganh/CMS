@@ -404,11 +404,27 @@
   padding: 0;
 }
 
+.ui-drawer-layer-interactive {
+  pointer-events: none;
+}
+
+.ui-drawer-layer-interactive > .ui-overlay-backdrop {
+  pointer-events: none;
+}
+
+.ui-drawer-layer-interactive > .ui-drawer {
+  pointer-events: auto;
+}
+
 .ui-drawer {
   width: min(100%, 40rem);
   height: 100%;
   max-height: 100vh;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.ui-drawer-sm {
+  width: min(100%, 20rem);
 }
 
 .ui-drawer-lg {

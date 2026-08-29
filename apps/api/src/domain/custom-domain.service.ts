@@ -17,6 +17,7 @@ import {
   CustomDomainSchema,
   UpdateCustomDomainRequestSchema,
   normalizeHostname,
+  normalizePagePath,
   PublicSiteRoutesSchema,
   type CreateCustomDomainRequest,
   type CustomDomain,
@@ -306,6 +307,22 @@ export class CustomDomainService {
       })
       .sort({ path: 1, _id: 1 })
       .exec();
+    const site = await this.siteModel
+      .findOne({ _id: siteId, workspaceId: domain.workspaceId })
+      .exec();
+    if (!site) throw this.publicNotFound();
+    const homePage =
+      !domain.siteId && assignedPage
+        ? assignedPage
+        : site.homePageId
+          ? await this.pageModel
+              .findOne({
+                _id: site.homePageId,
+                siteId,
+                workspaceId: domain.workspaceId,
+              })
+              .exec()
+          : null;
     const seoRecords = await this.seoModel
       .find({
         workspaceId: domain.workspaceId,
@@ -319,7 +336,12 @@ export class CustomDomainService {
     const urls = pages.flatMap((page) => {
       const seo = seoByPageId.get(page._id.toString());
       if (seo?.noIndex) return [];
-      const path = page.path ?? (page.slug ? `/${page.slug}` : '/');
+      const path =
+        page._id.toString() === homePage?._id.toString()
+          ? '/'
+          : normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : ''));
+      if (!path) return [];
+      if (path === '/' && page._id.toString() !== homePage?._id.toString()) return [];
       const fallback = `${origin}${path === '/' ? '/' : path}`;
       if (!seo?.canonicalUrl) return [fallback];
       try {

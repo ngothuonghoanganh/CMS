@@ -96,3 +96,27 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
 
   await publicPage.close();
 });
+
+test('publishes a site after its homepage is published', async ({ page }) => {
+  const suffix = Date.now().toString();
+  const siteName = `Site Release ${suffix}`;
+
+  await login(page);
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByLabel('Site name').fill(siteName);
+  await page.getByLabel('Slug').fill(`site-release-${suffix}`);
+  await page.getByRole('button', { name: 'Create site' }).click();
+  await expect(page.getByRole('status')).toContainText('Site created');
+
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page.getByRole('button', { name: 'Select page Home at /' }).click();
+  await page.getByRole('button', { name: 'Publish draft' }).click();
+  await expect(page.getByRole('status')).toContainText('Page published');
+
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  const siteRow = page.getByRole('row').filter({ hasText: siteName });
+  await siteRow.getByRole('button', { name: 'Publish site' }).click();
+  await expect(page.getByRole('status')).toContainText('Site published');
+  await expect(siteRow.getByRole('button', { name: 'Published' })).toBeDisabled();
+});

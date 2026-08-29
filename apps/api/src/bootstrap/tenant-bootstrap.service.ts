@@ -31,6 +31,7 @@ import {
   WorkspaceSchema,
 } from '../persistence/schemas/workspace.schema';
 import { RoleRecord, RoleSchema } from '../persistence/schemas/role.schema';
+import { SiteRecord, SiteSchema } from '../persistence/schemas/site.schema';
 import {
   RoleAssignmentRecord,
   RoleAssignmentSchema,
@@ -76,6 +77,8 @@ export class TenantBootstrapService implements OnModuleInit {
     await this.connections.get(scope);
     await this.context.run(scope, () => this.ensureTenantSeedData());
     await this.syncExistingDomains(scope);
+    await this.syncExistingSiteRoutes(scope);
+    await this.syncRoutesForOtherActiveTenants(scope.id);
     await this.subscriptions.ensureDefaultForTenant(
       scope.id,
       env.BILLING_EXISTING_TENANT_PLAN_KEY,
@@ -220,6 +223,53 @@ export class TenantBootstrapService implements OnModuleInit {
           .exec();
       }
     });
+  }
+
+  /** Idempotent control-plane backfill for sites created before public routing. */
+  private async syncExistingSiteRoutes(
+    scope: ReturnType<TenantResolver['toScope']>,
+  ): Promise<void> {
+    await this.context.run(scope, async () => {
+      const siteModel = this.models.proxy(SiteRecord.name, SiteSchema);
+      const sites = await siteModel.find().exec();
+      for (const site of sites) {
+        try {
+          await this.resolver.registerPublicSiteRoute({
+            siteSlug: site.slug,
+            tenantId: scope.id,
+            tenantSlug: scope.slug,
+            databaseKey: scope.databaseKey,
+            workspaceId: site.workspaceId,
+            siteId: site._id.toString(),
+          });
+        } catch (error) {
+          this.logger.warn(
+            `Could not backfill public route for site ${site._id.toString()}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+        }
+      }
+    });
+  }
+
+  private async syncRoutesForOtherActiveTenants(currentTenantId: string): Promise<void> {
+    const tenants = await this.tenantModel
+      .find({ status: 'active', _id: { $ne: currentTenantId } })
+      .exec();
+    for (const tenant of tenants) {
+      const scope = this.resolver.toScope(tenant);
+      try {
+        await this.connections.get(scope);
+        await this.syncExistingSiteRoutes(scope);
+      } catch (error) {
+        this.logger.warn(
+          `Could not backfill public routes for tenant ${scope.slug}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    }
   }
 
   private async ensurePlatformUser(): Promise<PlatformUserRecord> {

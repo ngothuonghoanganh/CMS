@@ -480,17 +480,43 @@ export const MAX_SEO_URL_LENGTH = 2_048;
 export const OrganizationSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
 export function normalizeOrganizationSlug(input: string): string {
+  return normalizeUrlSlug(input, 80);
+}
+
+/**
+ * Converts user-facing URL input into one deterministic, platform-safe slug.
+ * This is intentionally shared by site/page management boundaries so the CMS
+ * never needs to teach users about the legacy `slug` and canonical `path`
+ * distinction.
+ */
+export function normalizeUrlSlug(input: string, maxLength = 80): string {
   return input
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
+    .slice(0, maxLength)
+    .replace(/-+$/, '');
 }
 
+export const RESERVED_PUBLIC_ROUTE_SEGMENTS = [
+  'api',
+  'admin',
+  'cms',
+  'auth',
+  'login',
+  'logout',
+  'preview',
+  'assets',
+  'static',
+  'health',
+] as const;
+
 const reservedPagePaths = new Set([
-  '/api',
-  '/preview',
+  ...RESERVED_PUBLIC_ROUTE_SEGMENTS.map((segment) => `/${segment}`),
   '/login',
   '/robots.txt',
   '/sitemap.xml',
@@ -504,7 +530,13 @@ export const PagePathSchema = z
   .min(1)
   .max(MAX_PAGE_PATH_LENGTH)
   .regex(pagePathPattern, 'Path must contain lowercase URL-safe segments')
-  .refine((value) => !reservedPagePaths.has(value), 'This path is reserved');
+  .refine((value) => !reservedPagePaths.has(value), 'This path is reserved')
+  .refine(
+    (value) =>
+      !RESERVED_PUBLIC_ROUTE_SEGMENTS.some((segment) => segment === value.split('/')[1]),
+    'This path uses a reserved route segment',
+  );
+export type PagePath = z.infer<typeof PagePathSchema>;
 
 export function normalizePagePath(input: string): string | null {
   const value = input.trim();
@@ -2524,6 +2556,7 @@ export const FormSubmissionSchema = z
     siteName: nonEmptyText.max(200),
     landingPageId: EntityIdSchema,
     pageName: nonEmptyText.max(200),
+    pagePath: PagePathSchema.optional(),
     pageSlug: z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -2587,31 +2620,38 @@ const analyticsContextSchema = z
   })
   .strict();
 
-export const AnalyticsEventV1Schema = z.discriminatedUnion('event', [
-  z
-    .object({
-      version: z.literal(1),
-      event: z.literal('page.viewed'),
-      siteSlug: analyticsSlugSchema,
-      pageSlug: analyticsSlugSchema,
-      sessionId: analyticsSessionIdSchema,
-      occurredAt: timestampSchema.optional(),
-      context: analyticsContextSchema.optional(),
-    })
-    .strict(),
-  z
-    .object({
-      version: z.literal(1),
-      event: z.literal('element.clicked'),
-      siteSlug: analyticsSlugSchema,
-      pageSlug: analyticsSlugSchema,
-      nodeId: pageNodeId,
-      sessionId: analyticsSessionIdSchema,
-      occurredAt: timestampSchema.optional(),
-      context: analyticsContextSchema.optional(),
-    })
-    .strict(),
-]);
+export const AnalyticsEventV1Schema = z
+  .discriminatedUnion('event', [
+    z
+      .object({
+        version: z.literal(1),
+        event: z.literal('page.viewed'),
+        siteSlug: analyticsSlugSchema,
+        pagePath: PagePathSchema.optional(),
+        pageSlug: analyticsSlugSchema.optional(),
+        sessionId: analyticsSessionIdSchema,
+        occurredAt: timestampSchema.optional(),
+        context: analyticsContextSchema.optional(),
+      })
+      .strict(),
+    z
+      .object({
+        version: z.literal(1),
+        event: z.literal('element.clicked'),
+        siteSlug: analyticsSlugSchema,
+        pagePath: PagePathSchema.optional(),
+        pageSlug: analyticsSlugSchema.optional(),
+        nodeId: pageNodeId,
+        sessionId: analyticsSessionIdSchema,
+        occurredAt: timestampSchema.optional(),
+        context: analyticsContextSchema.optional(),
+      })
+      .strict(),
+  ])
+  .refine(
+    (event) => event.pagePath !== undefined || event.pageSlug !== undefined,
+    'A page path is required',
+  );
 export type AnalyticsEventV1 = z.infer<typeof AnalyticsEventV1Schema>;
 export const AnalyticsClientEventV1Schema = AnalyticsEventV1Schema;
 export type AnalyticsClientEventV1 = AnalyticsEventV1;
@@ -2702,6 +2742,7 @@ export const AnalyticsPageSummarySchema = z
     name: nonEmptyText.max(200),
     siteName: nonEmptyText.max(200),
     siteSlug: analyticsSlugSchema,
+    pagePath: PagePathSchema.optional(),
     slug: analyticsSlugSchema.optional(),
     metrics: AnalyticsMetricsSchema,
   })
@@ -2966,6 +3007,8 @@ export const FormSubmittedWebhookV1Schema = z
     version: z.literal(1),
     submissionId: EntityIdSchema,
     landingPageId: EntityIdSchema,
+    pagePath: PagePathSchema.optional(),
+    pageSlug: analyticsSlugSchema.optional(),
     formId: pageNodeId,
     submittedAt: timestampSchema,
     data: z.record(z.string().max(128), submissionValueSchema),

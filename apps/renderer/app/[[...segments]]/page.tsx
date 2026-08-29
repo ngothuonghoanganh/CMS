@@ -66,21 +66,19 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
   }
 
   const siteSlug = resolved.page.site.slug;
-  const analyticsPageSlug = resolved.pagePath === '/' ? '' : resolved.pagePath.slice(1);
   return (
     <div
       className="public-page"
       data-page-path={resolved.pagePath}
-      data-page-slug={analyticsPageSlug}
       data-site-slug={siteSlug}
     >
       <AnalyticsTracker
-        pageSlug={analyticsPageSlug}
+        pagePath={resolved.pagePath}
         siteSlug={siteSlug}
         {...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {})}
       />
       {renderPage(resolved.page.payload, {
-        pageSlug: analyticsPageSlug,
+        pagePath: resolved.pagePath,
         siteSlug,
         customDomain: resolved.customDomain,
         navigation: resolved.page.navigation,

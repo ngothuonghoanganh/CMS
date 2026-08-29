@@ -47,10 +47,11 @@ second document system and preserves existing integrations.
 
 The migration is idempotent and lazy-safe. New sites create a draft Home Page
 and set `homePageId` in the same application operation. Existing sites are
-repaired when read or resolved: an existing `/` page is selected first, then
-the oldest existing page is promoted to `/`, and only a site with no pages gets
-a new empty Home Page and version 1. The original page payload and version
-documents are never rewritten or deleted.
+repaired by explicit management reads: an existing `/` page is selected first,
+then the oldest existing page is promoted to `/`, and only a site with no pages
+gets a new empty Home Page and version 1. Public delivery is read-only and does
+not perform this repair. The original page payload and version documents are
+never rewritten or deleted.
 
 The Mongoose `homePageId`, `path`, `status`, and hierarchy fields are optional
 at persistence level during the compatibility window, while API contracts

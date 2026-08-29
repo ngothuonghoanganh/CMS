@@ -54,6 +54,8 @@ type ContainerRenderableNode =
   | Extract<PageNodeV3, { type: 'container' }>;
 type RenderContext = {
   siteSlug?: string;
+  pagePath?: string;
+  /** @deprecated legacy renderer callers may still provide pageSlug. */
   pageSlug?: string;
   tenantSlug?: string;
   runtimeIds?: readonly string[];
@@ -266,10 +268,10 @@ function renderExtension(node: ExtensionNode, context: RenderContext): ReactElem
 function renderForm(node: FormNode, context: RenderContext): ReactElement {
   const apiBaseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
-  const submissionUrl =
-    context.siteSlug && context.pageSlug
-      ? `${apiBaseUrl}/public/sites/${encodeURIComponent(context.siteSlug)}/pages/${encodeURIComponent(context.pageSlug)}/forms/${encodeURIComponent(node.id)}/submissions${context.tenantSlug ? `?tenantSlug=${encodeURIComponent(context.tenantSlug)}` : ''}`
-      : undefined;
+  const pagePath = context.pagePath ?? (context.pageSlug ? `/${context.pageSlug}` : '/');
+  const submissionUrl = context.siteSlug
+    ? `${apiBaseUrl}/public/sites/${encodeURIComponent(context.siteSlug)}/forms/${encodeURIComponent(node.id)}/submissions?path=${encodeURIComponent(pagePath)}${context.tenantSlug ? `&tenantSlug=${encodeURIComponent(context.tenantSlug)}` : ''}`
+    : undefined;
   return <FormRenderer node={node} {...(submissionUrl ? { submissionUrl } : {})} />;
 }
 

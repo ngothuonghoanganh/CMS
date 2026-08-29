@@ -6,7 +6,8 @@ URL string.
 
 Supported targets are:
 
-- Page: resolved from the current Page path.
+- Page: resolved from the current Page path; the selected homepage resolves to
+  `/` even when its canonical Page path is another path.
 - Section: resolved from a Page path plus an anchor id.
 - External: validated HTTP(S) URL.
 - Action: phone, email, download, or custom action value.

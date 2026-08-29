@@ -27,8 +27,10 @@ payload. It uses the API client and builder adapter; the renderer remains a sepa
 consumer and does not import GrapesJS.
 ```
 
-The CMS and renderer currently prove application boundaries only. Page creation,
-loading, preview, publishing and public slug rendering are **NOT IMPLEMENTED**.
+The CMS and renderer are separate application boundaries. The CMS manages
+Site/Page metadata and immutable versions; the renderer resolves published
+PageVersions through canonical `Page.path` routes. Legacy slug routes remain
+compatibility shims.
 
 ## API liveness flow
 
@@ -88,14 +90,20 @@ Raw GrapesJS project JSON is transient editor state only. The API receives only 
 validated PagePayloadV1 snapshot, and a stale expected version becomes a visible
 conflict instead of an overwrite.
 
-## Deferred Page flows
+## Website platform flow
 
-The following flows remain intentionally outside Phase 4:
+```text
+platform /:siteSlug/*path
+  -> master publicSiteRoutes lookup
+  -> tenant database connection
+  -> Site.homePageId or Page.path
+  -> published PageVersion
+  -> renderer / forms / analytics
+```
 
-- draft -> preview -> publish
-- PagePayload -> public renderer delivery
-- visitor form/event -> API -> response/UI state
-- lead collection, email, webhook and social integrations
+Preview, publishing, form submission, integrations, leads and analytics are
+implemented as separate boundaries. They all retain `landingPageId` for
+storage compatibility while using `pagePath` at public request boundaries.
 
 ## Phase 6 form submission flow
 

@@ -3,7 +3,6 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 
 import { normalizeHostname } from '@payload/contracts';
 
-import { env } from '../config/env';
 import { TenantContext, type TenantScope } from './tenant-context';
 import { TenantResolver } from './tenant-resolver';
 
@@ -24,12 +23,18 @@ export class TenantResolutionMiddleware {
     try {
       if (this.isPublicRequest(request)) {
         const hostname = this.publicHostname(request);
+        const publicSiteSlug = this.publicSiteSlug(request);
         const tenantSlug = this.publicTenantSlug(request);
-        scope = hostname
-          ? await this.resolver.resolveByHostname(hostname)
-          : tenantSlug
-            ? await this.resolver.resolveBySlug(tenantSlug)
-            : await this.resolver.resolvePlatformTenant();
+        // Renderer calls arrive through the API transport host. The public
+        // site registry must win over that host; custom-domain delivery passes
+        // its verified hostname explicitly as a query value.
+        scope = publicSiteSlug
+          ? await this.resolver.resolveByPublicSiteSlug(publicSiteSlug)
+          : hostname
+            ? await this.resolver.resolveByHostname(hostname)
+            : tenantSlug
+              ? await this.resolver.resolveBySlug(tenantSlug)
+              : await this.resolver.resolvePlatformTenant();
         await this.resolver.ensureConnection(scope);
       } else {
         const tokenTenantId = this.untrustedAccessTokenTenantId(request);
@@ -71,15 +76,22 @@ export class TenantResolutionMiddleware {
       typeof request.query.hostname === 'string'
         ? normalizeHostname(request.query.hostname)
         : null;
-    if (queryHostname) return queryHostname;
-    const requestHostname = normalizeHostname(request.hostname);
-    if (!requestHostname || isLocalOrPlatformHostname(requestHostname)) return undefined;
-    return requestHostname;
+    // Never infer a custom domain from the API transport host.
+    return queryHostname ?? undefined;
   }
 
   private publicTenantSlug(request: Request): string | undefined {
     return typeof request.query.tenantSlug === 'string'
       ? request.query.tenantSlug.trim().toLowerCase()
+      : undefined;
+  }
+
+  private publicSiteSlug(request: Request): string | undefined {
+    const pathMatch = request.path.match(/^\/api\/v1\/public\/sites\/([^/]+)/i);
+    if (pathMatch?.[1]) return decodeURIComponent(pathMatch[1]).trim().toLowerCase();
+    const body = request.body as { siteSlug?: unknown } | undefined;
+    return typeof body?.siteSlug === 'string'
+      ? body.siteSlug.trim().toLowerCase()
       : undefined;
   }
 
@@ -108,14 +120,5 @@ export class TenantResolutionMiddleware {
     } catch {
       return undefined;
     }
-  }
-}
-
-function isLocalOrPlatformHostname(hostname: string): boolean {
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
-  try {
-    return hostname === new URL(env.PUBLIC_PLATFORM_ORIGIN).hostname.toLowerCase();
-  } catch {
-    return false;
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { normalizePagePath } from '@payload/contracts';
 
 import { env } from '../config/env';
 import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
@@ -57,7 +58,10 @@ export class SiteUrlService {
     const siteUrl = await this.getOfficialSiteUrl(site);
     if (!siteUrl) return undefined;
     const base = new URL(siteUrl);
-    const normalizedPath = page.path ?? (page.slug ? `/${page.slug}` : '/');
+    const isHomepage = site.homePageId === page._id.toString();
+    const normalizedPath = isHomepage
+      ? '/'
+      : (normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : '')) ?? '/');
     if (normalizedPath === '/') {
       base.pathname = base.pathname.replace(/\/$/, '') || '/';
     } else {

@@ -258,6 +258,7 @@ export class TenantProvisioningService {
         await this.runMigrations();
         await this.seedTenant(input);
       });
+      await this.syncPublicSiteRoutes(scope);
       await this.subscriptions.ensureDefaultForTenant(
         tenantId,
         env.BILLING_DEFAULT_PLAN_KEY,
@@ -354,6 +355,25 @@ export class TenantProvisioningService {
         scope: 'tenant',
       });
     }
+  }
+
+  private async syncPublicSiteRoutes(
+    scope: ReturnType<TenantResolver['toScope']>,
+  ): Promise<void> {
+    await this.context.run(scope, async () => {
+      const siteModel = this.models.proxy(SiteRecord.name, SiteSchema);
+      const sites = await siteModel.find().exec();
+      for (const site of sites) {
+        await this.resolver.registerPublicSiteRoute({
+          siteSlug: site.slug,
+          tenantId: scope.id,
+          tenantSlug: scope.slug,
+          databaseKey: scope.databaseKey,
+          workspaceId: site.workspaceId,
+          siteId: site._id.toString(),
+        });
+      }
+    });
   }
 
   private toContract(record: TenantDocument): Tenant {

@@ -151,6 +151,19 @@ export class NavigationService {
     publishingPageId: string,
     workspaceId: string,
   ): Promise<void> {
+    await this.validateSiteBeforePublish(siteId, workspaceId, publishingPageId);
+  }
+
+  async validateBeforeSitePublish(siteId: string, workspaceId: string): Promise<void> {
+    await this.validateSiteBeforePublish(siteId, workspaceId, undefined, true);
+  }
+
+  private async validateSiteBeforePublish(
+    siteId: string,
+    workspaceId: string,
+    publishingPageId?: string,
+    requirePublishedHome = false,
+  ): Promise<void> {
     const site = await this.requireSite(siteId, workspaceId);
     const pages = await this.pageModel.find({ siteId, workspaceId }).exec();
     const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
@@ -169,6 +182,12 @@ export class NavigationService {
       throw new ConflictException({
         code: 'SITE_HOMEPAGE_REQUIRED',
         message: 'The site must have a homepage before it can be published',
+      });
+    }
+    if (requirePublishedHome && !pageById.get(site.homePageId)?.publishedVersionId) {
+      throw new ConflictException({
+        code: 'SITE_HOMEPAGE_NOT_PUBLISHED',
+        message: 'Publish the site homepage before publishing the site',
       });
     }
 
@@ -196,6 +215,7 @@ export class NavigationService {
   ): Promise<
     { main?: ResolvedNavigationItem[]; footer?: ResolvedNavigationItem[] } | undefined
   > {
+    const site = await this.requireSite(siteId, workspaceId);
     const records = await this.navigationModel
       .find({ siteId, workspaceId, key: { $in: ['main', 'footer'] } })
       .sort({ createdAt: 1, _id: 1 })
@@ -204,7 +224,12 @@ export class NavigationService {
     const result: { main?: ResolvedNavigationItem[]; footer?: ResolvedNavigationItem[] } =
       {};
     for (const record of records) {
-      const items = await this.resolveItems(siteId, workspaceId, this.parseItems(record));
+      const items = await this.resolveItems(
+        siteId,
+        workspaceId,
+        this.parseItems(record),
+        site.homePageId,
+      );
       if (record.key === 'main' && !result.main) result.main = items;
       if (record.key === 'footer' && !result.footer) result.footer = items;
     }
@@ -215,6 +240,7 @@ export class NavigationService {
     siteId: string,
     workspaceId: string,
     items: NavigationItem[],
+    homePageId?: string,
   ): Promise<ResolvedNavigationItem[]> {
     const resolvedItems = await Promise.all(
       items.map(async (item) => {
@@ -232,9 +258,10 @@ export class NavigationService {
             .exec();
           if (!page) throw this.invalidTarget();
           if (!page.publishedVersionId) return null;
-          const path = normalizePagePath(
-            page.path ?? (page.slug ? `/${page.slug}` : '/'),
-          );
+          const path =
+            page._id.toString() === homePageId
+              ? '/'
+              : normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : ''));
           if (!path) throw this.invalidTarget();
           if (item.type === 'section') {
             if (!item.anchorId) throw this.invalidTarget();
@@ -251,7 +278,14 @@ export class NavigationService {
           href,
           ...(item.openInNewTab !== undefined ? { openInNewTab: item.openInNewTab } : {}),
           ...(item.children?.length
-            ? { children: await this.resolveItems(siteId, workspaceId, item.children) }
+            ? {
+                children: await this.resolveItems(
+                  siteId,
+                  workspaceId,
+                  item.children,
+                  homePageId,
+                ),
+              }
             : {}),
         });
         return resolved;

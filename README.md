@@ -72,7 +72,8 @@ The development servers are:
 - API: http://localhost:3001/api/v1/health/live
 - Public renderer: http://localhost:3002
 
-Published pages resolve at `http://localhost:3002/:siteSlug/:pageSlug`. The renderer
+Published pages resolve at `http://localhost:3002/:siteSlug` for the site homepage
+and `http://localhost:3002/:siteSlug/:pagePath` for other canonical page paths. The renderer
 uses `RENDERER_API_BASE_URL` for server-side public/preview reads, and the CMS preview
 button uses `NEXT_PUBLIC_RENDERER_BASE_URL`. The builder's Live preview keeps the
 renderer open and sends validated `PageDocument` snapshots over `postMessage`; set

@@ -11,6 +11,7 @@ type SurfaceHeaderProps = {
 };
 
 type OverlayProps = SurfaceHeaderProps & {
+  allowBackgroundInteraction?: boolean;
   children: ReactNode;
   footer?: ReactNode;
   headerActions?: ReactNode;
@@ -35,7 +36,11 @@ function getFocusableElements(surface: HTMLElement): HTMLElement[] {
   );
 }
 
-function useOverlay(open: boolean, onClose: () => void) {
+function useOverlay(
+  open: boolean,
+  onClose: () => void,
+  allowBackgroundInteraction = false,
+) {
   const [mounted, setMounted] = useState(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const surfaceRef = useRef<HTMLElement | null>(null);
@@ -53,10 +58,10 @@ function useOverlay(open: boolean, onClose: () => void) {
     if (!open) return;
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    if (!allowBackgroundInteraction) document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCloseRef.current();
-      if (event.key !== 'Tab') return;
+      if (allowBackgroundInteraction || event.key !== 'Tab') return;
 
       const surface = surfaceRef.current;
       if (!surface) return;
@@ -84,7 +89,7 @@ function useOverlay(open: boolean, onClose: () => void) {
       document.removeEventListener('keydown', onKeyDown);
       restoreFocusRef.current?.focus();
     };
-  }, [open]);
+  }, [allowBackgroundInteraction, open]);
 
   useEffect(() => {
     if (!mounted || !open) return;
@@ -170,6 +175,7 @@ export function Modal({
 }
 
 export function Drawer({
+  allowBackgroundInteraction = false,
   children,
   description,
   eyebrow,
@@ -180,11 +186,16 @@ export function Drawer({
   size = 'lg',
   title,
 }: OverlayProps) {
-  const { mounted, surfaceRef } = useOverlay(open, onClose);
+  const { mounted, surfaceRef } = useOverlay(open, onClose, allowBackgroundInteraction);
   if (!mounted || !open) return null;
 
   return (
-    <div className="ui-overlay-layer ui-drawer-layer" role="presentation">
+    <div
+      className={`ui-overlay-layer ui-drawer-layer${
+        allowBackgroundInteraction ? ' ui-drawer-layer-interactive' : ''
+      }`}
+      role="presentation"
+    >
       <button
         aria-label="Close dialog"
         className="ui-overlay-backdrop"
@@ -193,7 +204,7 @@ export function Drawer({
       />
       <aside
         aria-label={title}
-        aria-modal="true"
+        aria-modal={allowBackgroundInteraction ? undefined : true}
         className={`ui-surface ui-drawer ui-drawer-${size}`}
         ref={surfaceRef}
         role="dialog"

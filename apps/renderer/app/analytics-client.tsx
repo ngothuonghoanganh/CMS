@@ -8,11 +8,11 @@ const SESSION_STORAGE_KEY = 'payload.analytics.session.v1';
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
 
 type AnalyticsEventInput =
-  | { event: 'page.viewed'; siteSlug: string; pageSlug: string; tenantSlug?: string }
+  | { event: 'page.viewed'; siteSlug: string; pagePath: string; tenantSlug?: string }
   | {
       event: 'element.clicked';
       siteSlug: string;
-      pageSlug: string;
+      pagePath: string;
       nodeId: string;
       tenantSlug?: string;
     };
@@ -72,11 +72,11 @@ export function trackAnalyticsEvent(input: AnalyticsEventInput): void {
 
 export function AnalyticsTracker({
   siteSlug,
-  pageSlug,
+  pagePath,
   tenantSlug,
 }: {
   siteSlug: string;
-  pageSlug: string;
+  pagePath: string;
   tenantSlug?: string;
 }): ReactNode {
   const markerRef = useRef<HTMLSpanElement>(null);
@@ -88,7 +88,7 @@ export function AnalyticsTracker({
       trackAnalyticsEvent({
         event: 'page.viewed',
         siteSlug,
-        pageSlug,
+        pagePath,
         ...(tenantSlug ? { tenantSlug } : {}),
       });
     }
@@ -106,14 +106,14 @@ export function AnalyticsTracker({
         trackAnalyticsEvent({
           event: 'element.clicked',
           siteSlug,
-          pageSlug,
+          pagePath,
           nodeId,
           ...(tenantSlug ? { tenantSlug } : {}),
         });
     };
     root.addEventListener('click', onClick);
     return () => root.removeEventListener('click', onClick);
-  }, [pageSlug, siteSlug, tenantSlug]);
+  }, [pagePath, siteSlug, tenantSlug]);
 
   return <span aria-hidden="true" hidden ref={markerRef} />;
 }

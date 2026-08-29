@@ -23,6 +23,7 @@ import {
   deserializePagePayload,
   serializePagePayload,
   normalizeHostname,
+  normalizeUrlSlug,
   OrganizationSchema,
   OrganizationMembershipSchema,
   CreateOrganizationRequestSchema,
@@ -727,6 +728,8 @@ describe('foundation contracts', () => {
     expect(normalizePagePath('docs//Getting-Started/')).toBe('/docs/getting-started');
     expect(normalizePagePath('/')).toBe('/');
     expect(normalizePagePath('/api')).toBeNull();
+    expect(normalizePagePath('/api/v1/public')).toBeNull();
+    expect(normalizeUrlSlug('  Hồ sơ công ty  ')).toBe('ho-so-cong-ty');
     expect(normalizePagePath('/docs?draft=true')).toBeNull();
     expect(PagePathSchema.safeParse('/docs/getting-started').success).toBe(true);
   });

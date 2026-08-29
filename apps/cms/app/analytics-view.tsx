@@ -291,7 +291,7 @@ function TopPages({ pages }: { pages: AnalyticsOverviewResponse['topPages'] }) {
               <div>
                 <strong>{page.name}</strong>
                 <span className="muted">
-                  {page.siteName} · /{page.slug ?? 'no-slug'}
+                  {page.siteName} · {page.pagePath ?? (page.slug ? `/${page.slug}` : '/')}
                 </span>
               </div>
               <span className="pill">{page.metrics.pageViews} views</span>

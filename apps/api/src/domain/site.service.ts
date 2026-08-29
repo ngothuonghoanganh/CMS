@@ -1,4 +1,10 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +19,7 @@ import {
   type SiteListResponse,
   SiteManifestSchema,
   normalizePagePath,
+  normalizeUrlSlug,
   type SiteManifest,
   type UpdateSiteRequest,
   PagePayloadSchema,
@@ -26,6 +33,9 @@ import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { NavigationRecord } from '../persistence/schemas/navigation.schema';
 import { QuotaService } from '../billing/quota.service';
 import { SiteUrlService } from './site-url.service';
+import { TenantContext } from '../tenancy/tenant-context';
+import { TenantResolver } from '../tenancy/tenant-resolver';
+import { NavigationService } from './navigation.service';
 
 @Injectable()
 export class SiteService {
@@ -42,18 +52,30 @@ export class SiteService {
     private readonly navigationModel: Model<NavigationRecord>,
     @Inject(QuotaService) private readonly quotas: QuotaService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
+    @Inject(TenantContext) private readonly tenantContext: TenantContext,
+    @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
+    @Inject(NavigationService) private readonly navigation: NavigationService,
   ) {}
 
   async create(workspaceId: string, input: CreateSiteRequest): Promise<Site> {
     await this.requireWorkspace(workspaceId);
     return this.quotas.withHardQuota('landing_pages', async () => {
+      const slug = normalizeUrlSlug(input.slug);
+      if (!slug) {
+        throw new BadRequestException({
+          code: 'INVALID_SITE_SLUG',
+          message: 'Site URL must contain at least one URL-safe character',
+        });
+      }
       const record = await this.siteModel.create({
         _id: randomUUID(),
         workspaceId,
-        ...input,
+        name: input.name,
+        slug,
       });
       try {
         await this.ensureHomePage(record);
+        await this.registerPublicRoute(record);
       } catch (error) {
         // Mongo deployments without replica-set transactions still get a
         // compensating cleanup, so a failed bootstrap cannot leave a site that
@@ -80,6 +102,7 @@ export class SiteService {
       this.siteModel.countDocuments({ workspaceId }).exec(),
     ]);
 
+    await Promise.all(records.map((record) => this.ensureHomePage(record)));
     return SiteListResponseSchema.parse({
       items: await Promise.all(records.map((record) => this.toContract(record))),
       pagination: {
@@ -109,16 +132,7 @@ export class SiteService {
     siteId: string,
     input: UpdateSiteRequest,
   ): Promise<Site> {
-    const record = await this.siteModel
-      .findOneAndUpdate(
-        { _id: siteId, workspaceId },
-        {
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.slug !== undefined ? { slug: input.slug } : {}),
-        },
-        { new: true, runValidators: true },
-      )
-      .exec();
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
 
     if (!record) {
       throw new NotFoundException({
@@ -127,7 +141,59 @@ export class SiteService {
       });
     }
 
+    const previousSlug = record.slug;
+    const nextSlug =
+      input.slug === undefined ? previousSlug : normalizeUrlSlug(input.slug);
+    if (!nextSlug) {
+      throw new BadRequestException({
+        code: 'INVALID_SITE_SLUG',
+        message: 'Site URL must contain at least one URL-safe character',
+      });
+    }
+    if (input.name !== undefined) record.name = input.name;
+    if (input.slug !== undefined) record.slug = nextSlug;
+    const slugChanged = nextSlug !== previousSlug;
+    if (slugChanged) await this.registerPublicRoute(record);
+    try {
+      await record.save();
+    } catch (error) {
+      if (slugChanged) {
+        await this.registerPublicRoute({
+          _id: record._id,
+          slug: previousSlug,
+          workspaceId: record.workspaceId,
+        }).catch(() => undefined);
+      }
+      if (isDuplicateKeyError(error))
+        throw new ConflictException({
+          code: 'DUPLICATE_SITE_SLUG',
+          message: 'A site with this URL already exists in the workspace',
+        });
+      throw error;
+    }
     await this.ensureHomePage(record);
+    return this.toContract(record);
+  }
+
+  async publish(workspaceId: string, siteId: string): Promise<Site> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+    if (record.status === 'archived') {
+      throw new ConflictException({
+        code: 'SITE_ARCHIVED',
+        message: 'An archived site cannot be published',
+      });
+    }
+
+    await this.navigation.validateBeforeSitePublish(siteId, workspaceId);
+    record.status = 'published';
+    await record.save();
     return this.toContract(record);
   }
 
@@ -152,14 +218,23 @@ export class SiteService {
         message: 'Site was not found',
       });
     }
-    const home = await this.ensureHomePage(site);
+    const home = await this.resolveHomePage(site);
+    if (!home)
+      throw new NotFoundException({
+        code: 'SITE_HOMEPAGE_REQUIRED',
+        message: 'The site has no homepage',
+      });
     const pages = await this.pageModel.find({ siteId, workspaceId }).exec();
     const routes: Record<string, string> = {};
     let publishedAt: Date | undefined;
+    if (home.publishedVersionId) routes['/'] = home._id.toString();
     for (const page of pages) {
       if (!page.publishedVersionId) continue;
-      const path = normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : '/'));
+      const path = normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : ''));
       if (!path) continue;
+      if (path === '/') {
+        if (page._id.toString() !== home._id.toString()) continue;
+      }
       routes[path] = page._id.toString();
       const version = await this.versionModel
         .findOne({ _id: page.publishedVersionId, landingPageId: page._id })
@@ -189,6 +264,17 @@ export class SiteService {
   /** Idempotent legacy repair and new-site homepage creation. */
   async ensureHomePage(site: SiteDocument): Promise<PageDocument> {
     const siteId = site._id.toString();
+    const pointedHome = site.homePageId
+      ? await this.pageModel
+          .findOne({
+            _id: site.homePageId,
+            siteId,
+            workspaceId: site.workspaceId,
+          })
+          .exec()
+      : null;
+    if (pointedHome) return pointedHome;
+
     const existingRoot = await this.pageModel
       .findOne({ siteId, workspaceId: site.workspaceId, path: '/' })
       .sort({ createdAt: 1, _id: 1 })
@@ -202,21 +288,10 @@ export class SiteService {
       return existingRoot;
     }
 
-    const pointedHome = site.homePageId
-      ? await this.pageModel
-          .findOne({
-            _id: site.homePageId,
-            siteId,
-            workspaceId: site.workspaceId,
-          })
-          .exec()
-      : null;
-    const oldestPage =
-      pointedHome ??
-      (await this.pageModel
-        .findOne({ siteId, workspaceId: site.workspaceId })
-        .sort({ createdAt: 1, _id: 1 })
-        .exec());
+    const oldestPage = await this.pageModel
+      .findOne({ siteId, workspaceId: site.workspaceId })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
 
     if (oldestPage) {
       try {
@@ -263,6 +338,43 @@ export class SiteService {
     site.homePageId = pageId;
     await site.save();
     return home;
+  }
+
+  /** Read-only homepage lookup used by public delivery and URL generation. */
+  async resolveHomePage(site: SiteDocument): Promise<PageDocument | null> {
+    if (site.homePageId) {
+      const pointed = await this.pageModel
+        .findOne({
+          _id: site.homePageId,
+          siteId: site._id.toString(),
+          workspaceId: site.workspaceId,
+        })
+        .exec();
+      if (pointed) return pointed;
+    }
+
+    // Compatibility-only read for old records. It deliberately does not save
+    // the site or page; repair belongs to an explicit management/migration flow.
+    return this.pageModel
+      .findOne({ siteId: site._id.toString(), workspaceId: site.workspaceId, path: '/' })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
+  }
+
+  private async registerPublicRoute(site: {
+    _id: { toString(): string };
+    slug: string;
+    workspaceId: string;
+  }): Promise<void> {
+    const tenant = this.tenantContext.require();
+    await this.tenantResolver.registerPublicSiteRoute({
+      siteSlug: site.slug,
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      databaseKey: tenant.databaseKey,
+      workspaceId: site.workspaceId,
+      siteId: site._id.toString(),
+    });
   }
 
   private async backfillLegacyPaths(
@@ -317,7 +429,8 @@ export class SiteService {
 
   private async toContract(record: SiteDocument): Promise<Site> {
     try {
-      const home = await this.ensureHomePage(record);
+      const home = await this.resolveHomePage(record);
+      if (!home) throw new Error('SITE_HOMEPAGE_REQUIRED');
       const urlState = await this.siteUrls.getState(record);
       return SiteSchema.parse({
         id: record._id.toString(),
@@ -328,7 +441,7 @@ export class SiteService {
         status:
           record.status === 'archived'
             ? 'archived'
-            : urlState.published
+            : record.status === 'published'
               ? 'published'
               : 'draft',
         ...(record.primaryNavigationId

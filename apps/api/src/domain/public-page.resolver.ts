@@ -27,7 +27,6 @@ import {
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { PageExtensionService } from '../extensions/page-extension.service';
-import { SiteService } from './site.service';
 import { SiteUrlService } from './site-url.service';
 import { NavigationService } from './navigation.service';
 
@@ -47,7 +46,6 @@ export class PublicPageResolver {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(PageExtensionService)
     private readonly pageExtensions: PageExtensionService,
-    @Inject(SiteService) private readonly sites: SiteService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
   ) {}
@@ -65,14 +63,31 @@ export class PublicPageResolver {
     }
 
     const site = sites[0];
-    await this.sites.ensureHomePage(site);
-    const page = await this.pageModel
-      .findOne({
-        siteId: site._id.toString(),
-        path: normalizedPath,
-        workspaceId: site.workspaceId,
-      })
-      .exec();
+    const page =
+      normalizedPath === '/'
+        ? site.homePageId
+          ? await this.pageModel
+              .findOne({
+                _id: site.homePageId,
+                siteId: site._id.toString(),
+                workspaceId: site.workspaceId,
+              })
+              .exec()
+          : await this.pageModel
+              .findOne({
+                siteId: site._id.toString(),
+                workspaceId: site.workspaceId,
+                path: '/',
+              })
+              .sort({ createdAt: 1, _id: 1 })
+              .exec()
+        : await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              path: normalizedPath,
+              workspaceId: site.workspaceId,
+            })
+            .exec();
     const legacyPage =
       page ??
       (normalizedPath === '/'
@@ -118,20 +133,45 @@ export class PublicPageResolver {
     }
     if (!site) throw this.publicNotFound();
 
-    await this.sites.ensureHomePage(site);
     const page =
-      normalizedPath === '/' && assignedPage && !domain.siteId
+      normalizedPath === '/' && !domain.siteId && assignedPage
         ? assignedPage
+        : normalizedPath === '/' && site.homePageId
+          ? await this.pageModel
+              .findOne({
+                _id: site.homePageId,
+                siteId: site._id.toString(),
+                workspaceId: site.workspaceId,
+              })
+              .exec()
+          : await this.pageModel
+              .findOne({
+                siteId: site._id.toString(),
+                workspaceId: site.workspaceId,
+                path: normalizedPath,
+              })
+              .exec();
+    const legacyPage =
+      page ??
+      (normalizedPath === '/'
+        ? await this.pageModel
+            .findOne({
+              siteId: site._id.toString(),
+              workspaceId: site.workspaceId,
+              path: '/',
+            })
+            .sort({ createdAt: 1, _id: 1 })
+            .exec()
         : await this.pageModel
             .findOne({
               siteId: site._id.toString(),
-              workspaceId: domain.workspaceId,
-              path: normalizedPath,
+              workspaceId: site.workspaceId,
+              slug: normalizedPath.slice(1),
             })
-            .exec();
-    if (!page) throw this.publicNotFound();
-    const version = await this.findPublishedVersion(page, site);
-    return this.toPublicContract(site, page, version);
+            .exec());
+    if (!legacyPage) throw this.publicNotFound();
+    const version = await this.findPublishedVersion(legacyPage, site);
+    return this.toPublicContract(site, legacyPage, version);
   }
 
   private async findPublishedVersion(

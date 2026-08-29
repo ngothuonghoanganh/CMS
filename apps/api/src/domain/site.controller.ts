@@ -141,4 +141,29 @@ export class SiteController {
       .catch(() => undefined);
     return result;
   }
+
+  @Post(':siteId/publish')
+  async publish(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.publish', workspaceId);
+    const result = await this.siteService.publish(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.publish',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
 }
