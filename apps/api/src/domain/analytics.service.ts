@@ -20,6 +20,7 @@ import {
   type PageNode,
   type PageNodeV2,
   type PageNodeV3,
+  type PageNodeV4,
 } from '@payload/contracts';
 
 import {
@@ -355,9 +356,9 @@ function deriveDeviceType(
 }
 
 function findNode(
-  node: PageNode | PageNodeV2 | PageNodeV3,
+  node: PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4,
   nodeId: string,
-): PageNode | PageNodeV2 | PageNodeV3 | undefined {
+): PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | undefined {
   if (node.id === nodeId) return node;
   for (const child of node.children) {
     const match = findNode(child, nodeId);

@@ -5,6 +5,8 @@ import {
   PagePayloadSchema,
   PagePayloadV1Schema,
   CountdownPropsSchema,
+  ListPropsSchema,
+  VideoPropsSchema,
   CustomExtensionNodePropsSchema,
   canContainPageComponent,
   isPageComponentType,
@@ -15,10 +17,12 @@ import {
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
+  type ListProps,
   type PageComponentType,
   type PageNode,
   type PageNodeV2,
   type PageNodeV3,
+  type PageNodeV4,
   type PageNodeStyle,
   type PagePayload,
   type PagePayloadV1,
@@ -37,12 +41,31 @@ export const BUILDER_RUNTIME_PREVIEW_ATTRIBUTE = 'data-payload-runtime-preview';
 export const BUILDER_COUNTDOWN_PROPS_ATTRIBUTE = 'data-payload-countdown-props';
 export const BUILDER_EXTENSION_PROPS_ATTRIBUTE = 'data-payload-extension-props';
 export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
+export const BUILDER_HEADING_LEVEL_ATTRIBUTE = 'data-payload-heading-level';
+export const BUILDER_LIST_PROPS_ATTRIBUTE = 'data-payload-list-props';
+export const BUILDER_LIST_PREVIEW_ATTRIBUTE = 'data-payload-list-preview';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
-export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3;
+export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4;
 export type BuilderNodeType = PageComponentType;
 export type BuilderBlockType = Exclude<BuilderNodeType, 'root'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
+
+export function listPreviewComponents(props: ListProps): ComponentDefinition[] {
+  return props.items.map((item) => ({
+    tagName: 'li',
+    content: sanitizeInlineText(item.text),
+    attributes: {
+      [BUILDER_LIST_PREVIEW_ATTRIBUTE]: 'true',
+      'data-payload-list-item-id': item.id,
+    },
+    copyable: false,
+    draggable: false,
+    droppable: false,
+    removable: false,
+    selectable: false,
+  }));
+}
 
 export type BuilderEditorSnapshot = {
   tagName: string;
@@ -277,7 +300,9 @@ function canAcceptEditorNode(
     // useful drop target without broadening the persisted V1 tree.
     return (
       canContainNode(parentType, childType) ||
-      ['text', 'image', 'button'].includes(childType)
+      ['text', 'image', 'button', 'heading', 'link', 'divider', 'list', 'video'].includes(
+        childType,
+      )
     );
   }
   return canContainNode(parentType, childType);
@@ -408,7 +433,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
 function attributesForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 = 1,
 ) {
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
@@ -431,7 +456,7 @@ function attributesForNode(
 function componentDefinitionForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 = 1,
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
   const shared: ComponentDefinition = {
@@ -527,6 +552,58 @@ function componentDefinitionForNode(
           'data-extension': node.props.extensionId,
           [BUILDER_EXTENSION_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
           role: 'note',
+        },
+      };
+    case 'heading':
+      return {
+        ...shared,
+        tagName: `h${node.props.level}`,
+        content: node.props.text,
+        editable: true,
+        attributes: {
+          ...attributes,
+          [BUILDER_HEADING_LEVEL_ATTRIBUTE]: String(node.props.level),
+        },
+      };
+    case 'link':
+      return {
+        ...shared,
+        content: node.props.text,
+        editable: true,
+        attributes: {
+          ...attributes,
+          href: node.props.href,
+          target: node.props.target,
+        },
+      };
+    case 'divider':
+      return { ...shared, tagName: 'hr', void: true };
+    case 'list':
+      return {
+        ...shared,
+        tagName: node.props.ordered ? 'ol' : 'ul',
+        components: listPreviewComponents(node.props),
+        attributes: {
+          ...attributes,
+          [BUILDER_LIST_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+      };
+    case 'video':
+      return {
+        ...shared,
+        tagName: 'video',
+        void: false,
+        attributes: {
+          ...attributes,
+          src: node.props.src,
+          ...(node.props.poster ? { poster: node.props.poster } : {}),
+          ...(node.props.controls ? { controls: 'true' } : { controls: 'false' }),
+          ...(node.props.autoplay ? { autoplay: 'true' } : { autoplay: 'false' }),
+          ...(node.props.muted ? { muted: 'true' } : { muted: 'false' }),
+          ...(node.props.loop ? { loop: 'true' } : { loop: 'false' }),
+          ...(node.props.playsInline
+            ? { playsinline: 'true' }
+            : { playsinline: 'false' }),
         },
       };
     case 'root':
@@ -662,6 +739,65 @@ export function createBlockDefinition(
         3,
       );
     }
+    case 'heading':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'heading',
+          props: { text: 'Heading', level: 2 },
+        },
+        undefined,
+        4,
+      );
+    case 'link':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'link',
+          props: { text: 'Learn more', href: '/', target: '_self' },
+        },
+        undefined,
+        4,
+      );
+    case 'divider':
+      return componentDefinitionForNode(
+        { ...baseNode, type: 'divider', props: {} },
+        undefined,
+        4,
+      );
+    case 'list':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'list',
+          props: {
+            ordered: false,
+            items: [
+              { id: 'item-1', text: 'First item' },
+              { id: 'item-2', text: 'Second item' },
+            ],
+          },
+        },
+        undefined,
+        4,
+      );
+    case 'video':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'video',
+          props: {
+            src: '/assets/placeholder.mp4',
+            controls: true,
+            autoplay: false,
+            muted: false,
+            loop: false,
+            playsInline: true,
+          },
+        },
+        undefined,
+        4,
+      );
   }
 }
 
@@ -778,6 +914,43 @@ function readCountdownProps(
   return parsed.data;
 }
 
+function readJsonAttribute(
+  attributes: Record<string, unknown>,
+  name: string,
+  path: string[],
+): unknown {
+  const raw = readStringAttribute(attributes, name, path);
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new BuilderAdapterError(`${name} is not valid JSON`, [...path, 'props']);
+  }
+}
+
+function readBooleanAttribute(
+  attributes: Record<string, unknown>,
+  name: string,
+  path: string[],
+): boolean {
+  const value = readStringAttribute(attributes, name, path);
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new BuilderAdapterError(`Editor attribute "${name}" is invalid`, [...path, name]);
+}
+
+function readHeadingLevel(attributes: Record<string, unknown>, path: string[]): number {
+  const raw = readStringAttribute(attributes, BUILDER_HEADING_LEVEL_ATTRIBUTE, path);
+  const level = Number(raw);
+  if (!Number.isInteger(level) || level < 1 || level > 6) {
+    throw new BuilderAdapterError('Heading level must be between 1 and 6', [
+      ...path,
+      'props',
+      'level',
+    ]);
+  }
+  return level;
+}
+
 function readNodeStyle(
   snapshot: BuilderEditorSnapshot,
   path: string[],
@@ -881,6 +1054,103 @@ function nodeFromSnapshot(
     return { id, type, style, props: props.data, children: [] };
   }
 
+  if (type === 'heading') {
+    if (snapshot.children.length > 0) {
+      throw new BuilderAdapterError('Heading nodes cannot contain editor components', [
+        ...path,
+        'children',
+      ]);
+    }
+    return {
+      id,
+      type,
+      style,
+      props: {
+        text: sanitizeInlineText(snapshot.content),
+        level: readHeadingLevel(snapshot.attributes, path),
+      },
+      children: [],
+    };
+  }
+
+  if (type === 'link') {
+    if (snapshot.children.length > 0) {
+      throw new BuilderAdapterError('Link nodes cannot contain editor components', [
+        ...path,
+        'children',
+      ]);
+    }
+    return {
+      id,
+      type,
+      style,
+      props: {
+        text: sanitizeInlineText(snapshot.content),
+        href: readStringAttribute(snapshot.attributes, 'href', path),
+        target: readStringAttribute(snapshot.attributes, 'target', path),
+      },
+      children: [],
+    };
+  }
+
+  if (type === 'divider') {
+    if (snapshot.children.length > 0) {
+      throw new BuilderAdapterError('Divider nodes cannot contain editor components', [
+        ...path,
+        'children',
+      ]);
+    }
+    return { id, type, style, props: {}, children: [] };
+  }
+
+  if (type === 'list') {
+    const hasUnexpectedEditorChild = snapshot.children.some(
+      (child) => child.attributes[BUILDER_LIST_PREVIEW_ATTRIBUTE] === undefined,
+    );
+    if (hasUnexpectedEditorChild) {
+      throw new BuilderAdapterError('List nodes may only contain editor preview items', [
+        ...path,
+        'children',
+      ]);
+    }
+    const props = ListPropsSchema.safeParse(
+      readJsonAttribute(snapshot.attributes, BUILDER_LIST_PROPS_ATTRIBUTE, path),
+    );
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children: [] };
+  }
+
+  if (type === 'video') {
+    if (snapshot.children.length > 0) {
+      throw new BuilderAdapterError('Video nodes cannot contain editor components', [
+        ...path,
+        'children',
+      ]);
+    }
+    const poster = readStringAttribute(snapshot.attributes, 'poster', path, false);
+    const props = VideoPropsSchema.safeParse({
+      src: readStringAttribute(snapshot.attributes, 'src', path),
+      ...(poster ? { poster } : {}),
+      controls: readBooleanAttribute(snapshot.attributes, 'controls', path),
+      autoplay: readBooleanAttribute(snapshot.attributes, 'autoplay', path),
+      muted: readBooleanAttribute(snapshot.attributes, 'muted', path),
+      loop: readBooleanAttribute(snapshot.attributes, 'loop', path),
+      playsInline: readBooleanAttribute(snapshot.attributes, 'playsinline', path),
+    });
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children: [] };
+  }
+
   const children = snapshot.children.map((child, index) =>
     nodeFromSnapshot(child, [...path, 'children', String(index)]),
   );
@@ -954,14 +1224,16 @@ export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePa
   const root = nodeFromSnapshot(snapshot, ['root']);
   const versionValue = snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE];
   const version =
-    versionValue === '3' ||
-    versionValue === 3 ||
-    containsCountdownNode(root) ||
-    containsExtensionNode(root)
-      ? 3
-      : versionValue === '2' || versionValue === 2 || containsFormNode(root)
-        ? 2
-        : 1;
+    versionValue === '4' || versionValue === 4 || containsV4Node(root)
+      ? 4
+      : versionValue === '3' ||
+          versionValue === 3 ||
+          containsCountdownNode(root) ||
+          containsExtensionNode(root)
+        ? 3
+        : versionValue === '2' || versionValue === 2 || containsFormNode(root)
+          ? 2
+          : 1;
   const candidate: unknown = {
     version,
     metadata: readMetadata(snapshot.attributes),
@@ -1006,6 +1278,19 @@ function containsExtensionNode(node: Record<string, unknown>): boolean {
     node.children.some(
       (child): child is Record<string, unknown> =>
         isObject(child) && containsExtensionNode(child),
+    )
+  );
+}
+
+function containsV4Node(node: Record<string, unknown>): boolean {
+  if (['heading', 'link', 'divider', 'list', 'video'].includes(String(node.type))) {
+    return true;
+  }
+  return (
+    Array.isArray(node.children) &&
+    node.children.some(
+      (child): child is Record<string, unknown> =>
+        isObject(child) && containsV4Node(child),
     )
   );
 }

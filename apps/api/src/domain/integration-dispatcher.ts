@@ -11,11 +11,14 @@ import {
   IntegrationDeliveryListQuerySchema,
   IntegrationDeliveryListResponseSchema,
   IntegrationDeliverySchema,
-  PagePayloadV2Schema,
+  PagePayloadSchema,
   PaginationSchema,
   normalizePagePath,
-  type FormNode,
+  type FormProps,
+  type PageNode,
   type PageNodeV2,
+  type PageNodeV3,
+  type PageNodeV4,
   type IntegrationDelivery,
   type IntegrationDeliveryListQuery,
   type IntegrationDeliveryListResponse,
@@ -43,6 +46,8 @@ import type {
 export const INTEGRATION_ADAPTERS = Symbol('INTEGRATION_ADAPTERS');
 export const DELIVERY_MAX_ATTEMPTS = 4;
 const DELIVERY_BATCH_SIZE = 20;
+
+type IntegrationFormNode = { id: string; type: 'form'; props: FormProps };
 const DELIVERY_LEASE_MS = 60_000;
 const RETRY_DELAYS_MS = [0, 30_000, 120_000, 600_000] as const;
 
@@ -359,7 +364,7 @@ export class IntegrationDispatcher implements OnModuleDestroy {
         .exec(),
     ]);
     if (!page || !version) throw new Error('Submission context no longer exists');
-    const payload = PagePayloadV2Schema.safeParse(version.payload);
+    const payload = PagePayloadSchema.safeParse(version.payload);
     const form = payload.success
       ? findForm(payload.data.root, submission.formNodeId)
       : undefined;
@@ -418,7 +423,10 @@ export class IntegrationDispatcher implements OnModuleDestroy {
   }
 }
 
-function findForm(node: PageNodeV2, formNodeId: string): FormNode | undefined {
+function findForm(
+  node: PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4,
+  formNodeId: string,
+): IntegrationFormNode | undefined {
   if (node.type === 'form') return node.id === formNodeId ? node : undefined;
   for (const child of node.children) {
     const form = findForm(child, formNodeId);

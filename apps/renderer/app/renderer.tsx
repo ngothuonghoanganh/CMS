@@ -6,6 +6,7 @@ import {
   type PageNode,
   type PageNodeV2,
   type PageNodeV3,
+  type PageNodeV4,
   type PageNodeStyle,
   type PagePayload,
   type FormNode,
@@ -15,6 +16,11 @@ import {
   type ButtonNode,
   type CountdownNode,
   type ExtensionNode,
+  type HeadingNode,
+  type LinkNode,
+  type DividerNode,
+  type ListNode,
+  type VideoNode,
   type PageRuntimeExtension,
   type ResolvedNavigationItem,
   PAGE_RESPONSIVE_BREAKPOINTS,
@@ -27,7 +33,7 @@ import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 import { FormRenderer } from './form-renderer';
 import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
 
-type RenderableNode = PageNode | PageNodeV2 | PageNodeV3;
+type RenderableNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4;
 type RootRenderableNode =
   | RootNode
   | Extract<PageNodeV2, { type: 'root' }>
@@ -184,6 +190,61 @@ function renderButton(node: ButtonNode): ReactElement {
   );
 }
 
+function renderHeading(node: HeadingNode): ReactElement {
+  const Tag = `h${node.props.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+  return (
+    <Tag {...nodeAttributes(node)} style={nodeStyle(node)}>
+      {node.props.text}
+    </Tag>
+  );
+}
+
+function renderLink(node: LinkNode): ReactElement {
+  const href = isSafeHref(node.props.href) ? node.props.href : '#';
+  return (
+    <a
+      {...nodeAttributes(node)}
+      href={href}
+      rel={node.props.target === '_blank' ? 'noopener noreferrer' : undefined}
+      style={nodeStyle(node)}
+      target={node.props.target}
+    >
+      {node.props.text}
+    </a>
+  );
+}
+
+function renderDivider(node: DividerNode): ReactElement {
+  return <hr {...nodeAttributes(node)} style={nodeStyle(node)} />;
+}
+
+function renderList(node: ListNode): ReactElement {
+  const Tag = node.props.ordered ? 'ol' : 'ul';
+  return (
+    <Tag {...nodeAttributes(node)} style={nodeStyle(node)}>
+      {node.props.items.map((item) => (
+        <li key={item.id}>{item.text}</li>
+      ))}
+    </Tag>
+  );
+}
+
+function renderVideo(node: VideoNode): ReactElement {
+  return (
+    <video
+      {...nodeAttributes(node)}
+      autoPlay={node.props.autoplay}
+      controls={node.props.controls}
+      loop={node.props.loop}
+      muted={node.props.muted}
+      playsInline={node.props.playsInline}
+      poster={node.props.poster}
+      src={node.props.src}
+      style={nodeStyle(node)}
+    />
+  );
+}
+
 function renderCountdown(node: CountdownNode, context: RenderContext): ReactElement {
   if (context.runtimeIds?.includes('countdown.runtime')) {
     return (
@@ -313,6 +374,11 @@ export const PAGE_RENDERER_REGISTRY = {
   form: (node, context) => renderForm(node as FormNode, context),
   countdown: (node, context) => renderCountdown(node as CountdownNode, context),
   extension: (node, context) => renderExtension(node as ExtensionNode, context),
+  heading: (node) => renderHeading(node as HeadingNode),
+  link: (node) => renderLink(node as LinkNode),
+  divider: (node) => renderDivider(node as DividerNode),
+  list: (node) => renderList(node as ListNode),
+  video: (node) => renderVideo(node as VideoNode),
 } satisfies Record<RenderableNode['type'], NodeRenderer>;
 
 function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): ReactElement {

@@ -14,6 +14,8 @@ import {
   PagePayloadV1Schema,
   PagePayloadV2Schema,
   PagePayloadV3Schema,
+  PagePayloadV4Schema,
+  PagePayloadSchema,
   CreateIntegrationRequestSchema,
   CreateCustomDomainRequestSchema,
   FormSubmittedWebhookV1Schema,
@@ -661,6 +663,100 @@ describe('foundation contracts', () => {
     expect(PagePayloadV1Schema.safeParse(payload).success).toBe(false);
     expect(PagePayloadV2Schema.safeParse(payload).success).toBe(false);
     expect(JSON.parse(serializePagePayload(payload))).toEqual(payload);
+  });
+
+  it('validates V4 semantic content while keeping legacy versions closed', () => {
+    const payload = {
+      version: 4 as const,
+      metadata: { documentTitle: 'Expanded content' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'heading',
+                type: 'heading' as const,
+                props: { text: 'Ship faster', level: 2 },
+                children: [],
+              },
+              {
+                id: 'link',
+                type: 'link' as const,
+                props: { text: 'Read more', href: '/docs', target: '_self' as const },
+                children: [],
+              },
+              { id: 'divider', type: 'divider' as const, props: {}, children: [] },
+              {
+                id: 'list',
+                type: 'list' as const,
+                props: {
+                  ordered: false,
+                  items: [
+                    { id: 'item-1', text: 'One' },
+                    { id: 'item-2', text: 'Two' },
+                  ],
+                },
+                children: [],
+              },
+              {
+                id: 'video',
+                type: 'video' as const,
+                props: {
+                  src: '/assets/demo.mp4',
+                  poster: '/assets/poster.png',
+                  controls: true,
+                  autoplay: true,
+                  muted: true,
+                  loop: false,
+                  playsInline: true,
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(PagePayloadV4Schema.parse(payload)).toEqual(payload);
+    expect(PagePayloadSchema.parse(payload)).toEqual(payload);
+    expect(PagePayloadV1Schema.safeParse(payload).success).toBe(false);
+    expect(PagePayloadV2Schema.safeParse(payload).success).toBe(false);
+    expect(PagePayloadV3Schema.safeParse(payload).success).toBe(false);
+    expect(
+      PagePayloadV4Schema.safeParse({
+        ...payload,
+        root: {
+          ...payload.root,
+          children: [
+            {
+              ...payload.root.children[0],
+              children: [
+                {
+                  id: 'unsafe-video',
+                  type: 'video' as const,
+                  props: {
+                    src: 'javascript:alert(1)',
+                    controls: true,
+                    autoplay: true,
+                    muted: false,
+                    loop: false,
+                    playsInline: true,
+                  },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it('normalizes public hostnames and rejects URL-shaped input', () => {

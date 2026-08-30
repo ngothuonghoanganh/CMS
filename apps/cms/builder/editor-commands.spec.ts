@@ -280,4 +280,31 @@ describe('editor command boundary', () => {
     expect(bus.dispatch(command).changed).toBe(true);
     expect(bus.dispatch(command).changed).toBe(false);
   });
+
+  it('updates a list property through the command bus and refreshes its preview', () => {
+    const list = new FakeComponent('list', 'list');
+    list.setAttributes({
+      'data-payload-list-props': JSON.stringify({
+        ordered: false,
+        items: [{ id: 'item-1', text: 'One' }],
+      }),
+    });
+    const section = new FakeComponent('section', 'section', [list]);
+    const editor = new FakeEditor(new FakeComponent('root', 'root', [section]));
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    const result = bus.dispatch({
+      kind: 'set-property',
+      nodeId: 'list',
+      property: 'ordered',
+      value: true,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(JSON.parse(String(list.getAttributes()['data-payload-list-props']))).toEqual({
+      ordered: true,
+      items: [{ id: 'item-1', text: 'One' }],
+    });
+    expect(list.children).toHaveLength(1);
+  });
 });

@@ -1,12 +1,14 @@
 'use client';
 
-import type { BlockProperties, Component, Editor } from 'grapesjs';
+import type { BlockProperties, Component, ComponentDefinition, Editor } from 'grapesjs';
 import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
+  BUILDER_HEADING_LEVEL_ATTRIBUTE,
+  BUILDER_LIST_PROPS_ATTRIBUTE,
   BUILDER_TEXT_ALIGN_ATTRIBUTE,
   type BuilderNodeType,
   type BuilderBlockType,
@@ -43,11 +45,20 @@ import {
   type EditorCommand,
   type EditorCommandResult,
 } from './editor-commands';
+import { createEditorPropertyCommand } from './component-editor-bindings';
 import { BuilderSelection } from './builder-selection';
+import {
+  BUILDER_BLOCK_PRESET_REGISTRY,
+  createBlockPresetDefinition,
+  type BlockPresetId,
+  type BuilderInsertable,
+} from './block-presets';
 import type { BuilderCanvasNode, BuilderCanvasState } from './builder-minimap';
 import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import {
   CountdownPropsSchema,
+  ListPropsSchema,
+  VideoPropsSchema,
   FormPropsSchema,
   PAGE_RUNTIME_CLASS_NAMES,
   PAGE_RUNTIME_BASELINE_CSS,
@@ -63,6 +74,8 @@ import {
 export type SelectedBuilderNode = {
   id: string;
   type: BuilderNodeType;
+  /** Registry-shaped semantic properties used by the generic Inspector. */
+  props: Record<string, unknown>;
   text?: string;
   label?: string;
   href?: string;
@@ -88,9 +101,9 @@ declare global {
 }
 
 export type GrapesEditorHandle = {
-  addBlock: (type: BuilderBlockType) => void;
+  addBlock: (type: BuilderInsertable) => void;
   addExtensionBlock: (extensionId: string) => void;
-  startBlockDrag: (type: BuilderBlockType, event: Event) => void;
+  startBlockDrag: (type: BuilderInsertable, event: Event) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
   undo: () => void;
@@ -99,6 +112,7 @@ export type GrapesEditorHandle = {
   serialize: () => PagePayload;
   setViewport: (viewport: BuilderViewport) => void;
   updateSelectedText: (value: string) => void;
+  updateSelectedProperty: (property: string, value: unknown) => void;
   updateSelectedAttribute: (
     name: 'href' | 'target' | 'src' | 'alt',
     value: string,
@@ -111,7 +125,7 @@ export type GrapesEditorHandle = {
   selectNode: (id: string) => void;
   selectParent: () => void;
   insertBlock: (
-    type: BuilderBlockType,
+    type: BuilderInsertable,
     placement?: { targetNodeId: string; position: DropPosition },
   ) => boolean;
   validateMove: (intent: MoveNodeIntent) => { valid: boolean; reason?: string };
@@ -171,6 +185,7 @@ function selectionFromComponent(
   const align = styleAlign ?? legacyAlign;
   let form: FormProps | undefined;
   let countdown: SelectedBuilderNode['countdown'];
+  let props: Record<string, unknown> = {};
   if (type === 'form') {
     const rawForm = attributes[BUILDER_FORM_PROPS_ATTRIBUTE];
     if (typeof rawForm === 'string') {
@@ -199,9 +214,58 @@ function selectionFromComponent(
       }
     }
   }
+  if (type === 'list') {
+    const raw = attributes[BUILDER_LIST_PROPS_ATTRIBUTE];
+    if (typeof raw === 'string') {
+      try {
+        const parsed = ListPropsSchema.safeParse(JSON.parse(raw) as unknown);
+        if (parsed.success) props = parsed.data;
+      } catch {
+        props = {};
+      }
+    }
+  } else if (type === 'video') {
+    const video = VideoPropsSchema.safeParse({
+      src: attributes.src,
+      ...(typeof attributes.poster === 'string' ? { poster: attributes.poster } : {}),
+      controls: attributes.controls === 'true',
+      autoplay: attributes.autoplay === 'true',
+      muted: attributes.muted === 'true',
+      loop: attributes.loop === 'true',
+      playsInline: attributes.playsinline === 'true',
+    });
+    if (video.success) props = video.data;
+  } else if (type === 'heading') {
+    const level = Number(attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE]);
+    props = { text: content, level: Number.isInteger(level) ? level : 2 };
+  } else if (type === 'link') {
+    props = {
+      text: content,
+      href: typeof attributes.href === 'string' ? attributes.href : '/',
+      target: target === '_blank' ? '_blank' : '_self',
+    };
+  } else if (type === 'text') {
+    props = { text: content };
+  } else if (type === 'button') {
+    props = {
+      label: content,
+      href: typeof attributes.href === 'string' ? attributes.href : '#',
+      target: target === '_blank' ? '_blank' : '_self',
+    };
+  } else if (type === 'image') {
+    props = {
+      src: typeof attributes.src === 'string' ? attributes.src : '',
+      alt: typeof attributes.alt === 'string' ? attributes.alt : '',
+    };
+  } else if (type === 'form' && form) {
+    props = form;
+  } else if (type === 'countdown' && countdown) {
+    props = countdown;
+  }
   return {
     id,
     type,
+    props,
     ...(type === 'text'
       ? {
           text: content,
@@ -306,6 +370,35 @@ function componentForCanvasElement(root: Component, element: Element): Component
     if (isEditorOnlyPreview(component)) return;
     const componentElement = component.getEl();
     if (!componentElement || !componentElement.contains(element)) return;
+    if (!match || (match.getEl()?.contains(componentElement) ?? false)) {
+      match = component;
+    }
+  });
+  return match ?? null;
+}
+
+function componentForCanvasPoint(
+  root: Component,
+  frameDocument: Document,
+  x: number,
+  y: number,
+): Component | null {
+  const element = frameDocument.elementFromPoint(x, y);
+  if (element) {
+    const match = componentForCanvasElement(root, element);
+    if (match) return match;
+  }
+
+  // Browser iframe hit-testing can briefly use parent-document coordinates
+  // while the frame is resizing. Resolve the deepest laid-out component as a
+  // geometry fallback so Add-panel drag remains usable in that window.
+  let match: Component | undefined;
+  root.onAll((component) => {
+    if (isEditorOnlyPreview(component)) return;
+    const componentElement = component.getEl();
+    if (!componentElement) return;
+    const rect = componentElement.getBoundingClientRect();
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
     if (!match || (match.getEl()?.contains(componentElement) ?? false)) {
       match = component;
     }
@@ -691,18 +784,45 @@ function bindCanvasComponentDrag(
   };
 }
 
+function isBlockPresetId(value: BuilderInsertable): value is BlockPresetId {
+  return (
+    typeof value === 'string' &&
+    BUILDER_BLOCK_PRESET_REGISTRY.some(
+      (candidate) => candidate.kind === 'preset' && candidate.id === value,
+    )
+  );
+}
+
+function createInsertableDefinition(type: BuilderInsertable): ComponentDefinition {
+  return isBlockPresetId(type)
+    ? createBlockPresetDefinition(type)
+    : createBlockDefinition(type);
+}
+
+function insertableNodeType(
+  definition: ComponentDefinition,
+): BuilderBlockType | undefined {
+  const type = definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
+  return typeof type === 'string' && isBuilderNodeType(type) && type !== 'root'
+    ? type
+    : undefined;
+}
+
 function dropBlockAtPoint(
   editor: Editor,
-  type: BuilderBlockType,
+  type: BuilderInsertable,
   clientX: number,
   clientY: number,
-  commit: (command: EditorCommand) => boolean,
+  commit: (command: EditorCommand) => EditorCommandResult,
 ): Component | undefined {
   const frame = editor.Canvas.getFrameEl();
   if (!frame) return undefined;
 
   const root = editor.getComponents().models[0];
   if (!root) return undefined;
+  const definition = createInsertableDefinition(type);
+  const childType = insertableNodeType(definition);
+  if (!childType) return undefined;
 
   const frameRect = frame.getBoundingClientRect();
   const frameDocument = frame.contentDocument;
@@ -714,17 +834,27 @@ function dropBlockAtPoint(
   ];
   let target: Component | undefined;
   for (const point of points) {
-    const element = frameDocument.elementFromPoint(point.x, point.y);
-    let candidate = element ? componentForCanvasElement(root, element) : undefined;
+    let candidate: Component | undefined =
+      componentForCanvasPoint(root, frameDocument, point.x, point.y) ?? undefined;
     while (candidate) {
       const targetType = candidate.getAttributes({ noStyle: true })[
         BUILDER_NODE_TYPE_ATTRIBUTE
       ];
       if (
         isPayloadNodeType(targetType) &&
-        (canInsertNode(targetType, type) ||
+        (canInsertNode(targetType, childType) ||
           (targetType === 'root' &&
-            ['text', 'image', 'button', 'countdown'].includes(type)))
+            [
+              'text',
+              'image',
+              'button',
+              'countdown',
+              'heading',
+              'link',
+              'divider',
+              'list',
+              'video',
+            ].includes(childType)))
       ) {
         target = candidate;
         break;
@@ -733,26 +863,45 @@ function dropBlockAtPoint(
     }
     if (target) break;
   }
+  if (
+    !target &&
+    clientX >= frameRect.left &&
+    clientX <= frameRect.right &&
+    clientY >= frameRect.top &&
+    clientY <= frameRect.bottom
+  ) {
+    target = root;
+  }
   if (!target) return undefined;
 
   if (
     target === root &&
-    (type === 'text' || type === 'image' || type === 'button' || type === 'countdown')
+    (childType === 'text' ||
+      childType === 'image' ||
+      childType === 'button' ||
+      childType === 'countdown' ||
+      childType === 'heading' ||
+      childType === 'link' ||
+      childType === 'divider' ||
+      childType === 'list' ||
+      childType === 'video')
   ) {
-    const sectionChanged = commit({
+    const sectionResult = commit({
       kind: 'insert',
       definition: createBlockDefinition('section'),
       parentId: payloadNodeId(root),
     });
-    if (!sectionChanged) return undefined;
-    target = editor.getSelected() ?? root;
+    if (!sectionResult.changed) return undefined;
+    target = sectionResult.selection ?? editor.getSelected() ?? root;
   }
-  const changed = commit({
+  const result = commit({
     kind: 'insert',
-    definition: createBlockDefinition(type),
+    definition,
     parentId: payloadNodeId(target),
   });
-  return changed ? (editor.getSelected() ?? undefined) : undefined;
+  return result.changed
+    ? (result.selection ?? editor.getSelected() ?? undefined)
+    : undefined;
 }
 
 function findAppendTarget(
@@ -805,6 +954,11 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   form: 'Form',
   countdown: 'Countdown',
   extension: 'Custom extension',
+  heading: 'Heading',
+  link: 'Link',
+  divider: 'Divider',
+  list: 'List',
+  video: 'Video',
 };
 
 function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
@@ -967,6 +1121,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   // Selection identity is the stable PagePayload node id. Component instances
   // are resolved from the live GrapesJS tree and are never persisted in React.
   const selectionRef = useRef(new BuilderSelection());
+  const pendingProgrammaticSelectionRef = useRef<string | null>(null);
   const viewportRef = useRef<BuilderViewport>('desktop');
   const internalChangeRef = useRef(false);
   const selectingComponentRef = useRef(false);
@@ -1007,7 +1162,19 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   }
 
   function notifySelection(editor: Editor): void {
-    const selected = editor.getSelected();
+    // React-facing selection is keyed by the persisted PagePayload ID. Prefer
+    // that live component when GrapesJS briefly reports a stale selection
+    // during canvas/layout updates (notably for unloaded media).
+    let selected: Component | undefined;
+    try {
+      const root = editor.getComponents().models[0];
+      selected =
+        (root ? selectionRef.current.resolve(root) : undefined) ?? editor.getSelected();
+    } catch {
+      // GrapesJS can emit a final model event after its modules have started
+      // teardown. There is no selection to publish in that lifecycle window.
+      return;
+    }
     if (!selected) {
       if (internalChangeRef.current) return;
       selectionRef.current.clear();
@@ -1019,6 +1186,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   }
 
   function getSelectedComponent(editor: Editor): Component | undefined {
+    const root = editor.getComponents().models[0];
+    const canonical = root ? selectionRef.current.resolve(root) : undefined;
+    if (canonical) return canonical;
     const selected = editor.getSelected();
     if (selected) {
       selectionRef.current.set(selected);
@@ -1104,7 +1274,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     return commitEditorCommand(editor, { kind: 'move', intent });
   }
 
-  function commitEditorCommand(editor: Editor, command: EditorCommand): boolean {
+  function commitEditorCommandResult(
+    editor: Editor,
+    command: EditorCommand,
+  ): EditorCommandResult {
     // GrapesJS emits component events for the same mutation. Suppress those
     // observer-side dirty notifications while the command is committing so a
     // user action creates one coherent document/dirty update.
@@ -1123,9 +1296,26 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     queueMicrotask(() => {
       internalChangeRef.current = wasInternalChange;
     });
-    if (!result.changed) return false;
+    if (!result.changed) return result;
     if (result.selection) {
+      const expectedSelectionId = payloadNodeId(result.selection) ?? '';
+      pendingProgrammaticSelectionRef.current = expectedSelectionId;
       selectionRef.current.select(editor, result.selection);
+      window.setTimeout(() => {
+        if (
+          editorRef.current !== editor ||
+          pendingProgrammaticSelectionRef.current !== expectedSelectionId
+        ) {
+          return;
+        }
+        pendingProgrammaticSelectionRef.current = null;
+        if (editor.getSelected() !== result.selection) {
+          selectingComponentRef.current = true;
+          selectionRef.current.select(editor, result.selection);
+          selectingComponentRef.current = false;
+        }
+        notifySelection(editor);
+      }, 0);
       if (command.kind === 'remove') {
         // GrapesJS may emit its deselection event after the command returns.
         // Restore the command's deterministic parent selection on the next
@@ -1145,7 +1335,31 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     notifyHistory(editor);
     notifyDocumentChange(editor);
     scheduleCanvasState(editor, true);
-    return true;
+    return result;
+  }
+
+  function commitEditorCommand(editor: Editor, command: EditorCommand): boolean {
+    return commitEditorCommandResult(editor, command).changed;
+  }
+
+  function commitSelectedProperty(
+    editor: Editor,
+    property: string,
+    value: unknown,
+  ): void {
+    mutateAfterInlineEdit(editor, () => {
+      const selected = getSelectedComponent(editor);
+      if (!selected) return;
+      const type = selected.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+      if (!isBuilderNodeType(type)) return;
+      const command = createEditorPropertyCommand(
+        payloadNodeId(selected) ?? '',
+        type,
+        property,
+        value,
+      );
+      if (command) commitEditorCommand(editor, command);
+    });
   }
 
   useImperativeHandle(ref, () => {
@@ -1161,18 +1375,22 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       addBlock(type) {
         const editor = editorRef.current;
         if (!editor) return;
-        const definition = createBlockDefinition(type);
+        const definition = createInsertableDefinition(type);
+        const childType = insertableNodeType(definition);
+        if (!childType) return;
         const selected = editor.getSelected();
         const selectedType = selected?.getAttributes({ noStyle: true })[
           BUILDER_NODE_TYPE_ATTRIBUTE
         ];
         const target =
-          selected && isPayloadNodeType(selectedType) && canInsertNode(selectedType, type)
+          selected &&
+          isPayloadNodeType(selectedType) &&
+          canInsertNode(selectedType, childType)
             ? selected
-            : findAppendTarget(getRoot(editor), type);
+            : findAppendTarget(getRoot(editor), childType);
 
         let parent: Component | undefined = target ?? undefined;
-        if (!parent && (type === 'section' || type === 'container')) {
+        if (!parent && (childType === 'section' || childType === 'container')) {
           parent = getRoot(editor);
         } else if (!parent) {
           const sectionResult = commitEditorCommand(editor, {
@@ -1189,7 +1407,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         });
         const added = result ? getSelectedComponent(editor) : undefined;
         if (added) {
-          if (type === 'form') ensureFormPreview(added);
+          if (childType === 'form') ensureFormPreview(added);
           selectingComponentRef.current = true;
           selectionRef.current.select(editor, added);
           selectingComponentRef.current = false;
@@ -1234,6 +1452,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const mouseEvent = event as MouseEvent;
         if (mouseEvent.button !== 0) return;
 
+        const frameDocument = editor.Canvas.getFrameEl()?.contentDocument;
         blockDragCleanupRef.current?.();
         const state = {
           startX: mouseEvent.clientX,
@@ -1243,6 +1462,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const cleanup = () => {
           window.removeEventListener('mousemove', handleMove, true);
           window.removeEventListener('mouseup', handleUp, true);
+          frameDocument?.removeEventListener('mousemove', handleFrameMove, true);
+          frameDocument?.removeEventListener('mouseup', handleFrameUp, true);
           document.body.classList.remove('builder-block-dragging');
           if (blockDragCleanupRef.current === cleanup) {
             blockDragCleanupRef.current = null;
@@ -1258,17 +1479,32 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           document.body.classList.add('builder-block-dragging');
           moveEvent.preventDefault();
         };
-        const handleUp = (upEvent: MouseEvent) => {
+        const handleUp = (
+          upEvent: MouseEvent,
+          clientX = upEvent.clientX,
+          clientY = upEvent.clientY,
+        ) => {
           cleanup();
           if (!state.dragging) return;
-          dropBlockAtPoint(editor, type, upEvent.clientX, upEvent.clientY, (command) =>
-            commitEditorCommand(editor, command),
+          dropBlockAtPoint(editor, type, clientX, clientY, (command) =>
+            commitEditorCommandResult(editor, command),
+          );
+        };
+        const handleFrameMove = (moveEvent: MouseEvent) => handleMove(moveEvent);
+        const handleFrameUp = (upEvent: MouseEvent) => {
+          const frameRect = editor.Canvas.getFrameEl()?.getBoundingClientRect();
+          handleUp(
+            upEvent,
+            (frameRect?.left ?? 0) + upEvent.clientX,
+            (frameRect?.top ?? 0) + upEvent.clientY,
           );
         };
 
         blockDragCleanupRef.current = cleanup;
         window.addEventListener('mousemove', handleMove, true);
         window.addEventListener('mouseup', handleUp, true);
+        frameDocument?.addEventListener('mousemove', handleFrameMove, true);
+        frameDocument?.addEventListener('mouseup', handleFrameUp, true);
         mouseEvent.preventDefault();
         mouseEvent.stopPropagation();
       },
@@ -1401,28 +1637,21 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       updateSelectedText(value) {
         const editor = editorRef.current;
         if (!editor) return;
-        mutateAfterInlineEdit(editor, () => {
-          const selected = getSelectedComponent(editor);
-          if (!selected) return;
-          commitEditorCommand(editor, {
-            kind: 'set-content',
-            nodeId: payloadNodeId(selected) ?? '',
-            content: value,
-          });
-        });
+        const type = getSelectedComponent(editor)?.getAttributes({ noStyle: true })[
+          BUILDER_NODE_TYPE_ATTRIBUTE
+        ];
+        const property = type === 'button' ? 'label' : 'text';
+        commitSelectedProperty(editor, property, value);
+      },
+      updateSelectedProperty(property, value) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        commitSelectedProperty(editor, property, value);
       },
       updateSelectedAttribute(name, value) {
         const editor = editorRef.current;
         if (!editor) return;
-        mutateAfterInlineEdit(editor, () => {
-          const selected = getSelectedComponent(editor);
-          if (!selected) return;
-          commitEditorCommand(editor, {
-            kind: 'set-attributes',
-            nodeId: payloadNodeId(selected) ?? '',
-            attributes: { [name]: value },
-          });
-        });
+        commitSelectedProperty(editor, name, value);
       },
       updateSelectedStyle(property, value) {
         const editor = editorRef.current;
@@ -1479,13 +1708,60 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const editor = editorRef.current;
         if (!editor) return;
         const component = findComponentById(getRoot(editor), id);
-        if (!component) return;
+        if (!component) {
+          // Layers can render one animation frame ahead of GrapesJS after an
+          // insertion or viewport change. Retry by stable payload ID instead
+          // of dropping a user selection during that transient window.
+          window.setTimeout(() => {
+            if (editorRef.current !== editor) return;
+            const retry = findComponentById(getRoot(editor), id);
+            if (retry) {
+              selectionRef.current.select(editor, retry);
+              notifySelection(editor);
+              scheduleCanvasState(editor);
+            }
+          }, 0);
+          return;
+        }
+        pendingProgrammaticSelectionRef.current = id;
+        selectingComponentRef.current = true;
         selectionRef.current.select(editor, component);
-        editor.Canvas.scrollTo(component, {
-          behavior: 'auto',
-          block: 'center',
-        });
+        selectingComponentRef.current = false;
+        // Navigator selection must also work for unloaded media and other
+        // components whose iframe element has not received layout yet.
+        if (component.getEl()) {
+          try {
+            editor.Canvas.scrollTo(component, {
+              behavior: 'auto',
+              block: 'center',
+            });
+          } catch {
+            // Selection itself is still valid when canvas scrolling cannot be
+            // calculated for an unlaid-out component.
+          }
+        }
         notifySelection(editor);
+        const settleSelection = (attempt: number) => {
+          if (
+            editorRef.current !== editor ||
+            pendingProgrammaticSelectionRef.current !== id
+          ) {
+            return;
+          }
+          if (editor.getSelected() !== component) {
+            selectingComponentRef.current = true;
+            selectionRef.current.select(editor, component);
+            selectingComponentRef.current = false;
+          }
+          notifySelection(editor);
+          if (editor.getSelected() === component || attempt >= 5) {
+            pendingProgrammaticSelectionRef.current = null;
+            return;
+          }
+          const delays = [0, 16, 64, 150, 300];
+          window.setTimeout(() => settleSelection(attempt + 1), delays[attempt]);
+        };
+        window.setTimeout(() => settleSelection(0), 0);
         scheduleCanvasState(editor);
       },
       selectParent() {
@@ -1503,12 +1779,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       insertBlock(type, placement) {
         const editor = editorRef.current;
         if (!editor) return false;
-        const definition = createBlockDefinition(type);
+        const definition = createInsertableDefinition(type);
+        const childType = insertableNodeType(definition);
+        if (!childType) return false;
         if (placement) {
           if (placement.position === 'inside') {
             const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
             const targetType = target && payloadNodeType(target);
-            if (targetType === 'root' && !canInsertNode(targetType, type)) {
+            if (targetType === 'root' && !canInsertNode(targetType, childType)) {
               const sectionResult = commitEditorCommand(editor, {
                 kind: 'insert',
                 definition: createBlockDefinition('section'),
@@ -1539,11 +1817,13 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           BUILDER_NODE_TYPE_ATTRIBUTE
         ];
         const target =
-          selected && isPayloadNodeType(selectedType) && canInsertNode(selectedType, type)
+          selected &&
+          isPayloadNodeType(selectedType) &&
+          canInsertNode(selectedType, childType)
             ? selected
-            : findAppendTarget(getRoot(editor), type);
+            : findAppendTarget(getRoot(editor), childType);
         let parent: Component | undefined = target ?? undefined;
-        if (!parent && (type === 'section' || type === 'container'))
+        if (!parent && (childType === 'section' || childType === 'container'))
           parent = getRoot(editor);
         if (!parent) {
           const insertedSection = commitEditorCommand(editor, {
@@ -1924,6 +2204,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         };
         const handleSelectionChange = () => {
           const selected = (editor as Editor).getSelected();
+          const pendingSelectionId = pendingProgrammaticSelectionRef.current;
+          if (pendingSelectionId) {
+            if (!selected) return;
+            if (payloadNodeId(selected) !== pendingSelectionId) return;
+            pendingProgrammaticSelectionRef.current = null;
+          }
           if (!selected) {
             if (selectingComponentRef.current) return;
             selectionRef.current.clear();

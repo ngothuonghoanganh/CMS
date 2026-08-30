@@ -1,11 +1,11 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { BuilderBlockType } from '../builder-adapter';
+import type { BuilderInsertable } from '../block-presets';
 import type { DropPosition } from '../builder-interaction';
 
 export type QuickAddOption = {
-  type: BuilderBlockType;
+  type: BuilderInsertable;
   label: string;
 };
 
@@ -15,7 +15,7 @@ type QuickAddOverlayProps = {
   targetLabel?: string | undefined;
   options: readonly QuickAddOption[];
   onClose: () => void;
-  onInsert: (type: BuilderBlockType) => void;
+  onInsert: (type: BuilderInsertable) => void;
   anchor?: { left: number; top: number } | undefined;
 };
 

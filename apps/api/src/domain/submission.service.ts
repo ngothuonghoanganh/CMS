@@ -24,6 +24,7 @@ import {
   type FormField,
   type PageNodeV3,
   type PageNodeV2,
+  type PageNodeV4,
   type FormProps,
   type FormSubmission,
   type SubmissionListQuery,
@@ -501,7 +502,10 @@ export class SubmissionService {
   }
 }
 
-function findForm(node: PageNodeV2 | PageNodeV3, formNodeId: string): AnyFormNode | null {
+function findForm(
+  node: PageNodeV2 | PageNodeV3 | PageNodeV4,
+  formNodeId: string,
+): AnyFormNode | null {
   if (node.type === 'form') {
     return node.id === formNodeId
       ? { id: node.id, type: 'form', props: node.props, children: [] }

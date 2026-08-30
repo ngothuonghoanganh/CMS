@@ -1,16 +1,17 @@
-import type { PageNodeV3 } from './index';
+import type { PageNodeV4 } from './index';
 import {
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PageStylePropertyKey,
 } from './style-registry';
 
-export type PageComponentType = PageNodeV3['type'];
+export type PageComponentType = PageNodeV4['type'];
 
 export type ComponentPropertyGroup = 'content' | 'style' | 'advanced';
 
 export type ComponentPropertyControl =
   | 'asset'
   | 'color'
+  | 'custom'
   | 'datetime'
   | 'number'
   | 'segmented'
@@ -39,6 +40,8 @@ export type ComponentPropertyDefinition = {
   max?: number;
   step?: number;
   options?: readonly ComponentPropertyOption[];
+  customEditor?: 'form' | 'list';
+  assetKind?: 'image' | 'video';
 };
 
 export type ComponentSlotDefinition = {
@@ -269,6 +272,98 @@ export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
     'opacity',
     'box-shadow',
   ],
+  heading: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'text-decoration',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  link: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'text-decoration',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  divider: [
+    'width',
+    'height',
+    'margin',
+    'border-width',
+    'border-style',
+    'border-color',
+    'opacity',
+  ],
+  list: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'text-decoration',
+  ],
+  video: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+  ],
 };
 
 export const styleSchemaFor = (
@@ -334,6 +429,11 @@ export const PAGE_COMPONENT_REGISTRY = {
       'form',
       'countdown',
       'extension',
+      'heading',
+      'link',
+      'divider',
+      'list',
+      'video',
     ],
   }),
   container: definition({
@@ -346,12 +446,18 @@ export const PAGE_COMPONENT_REGISTRY = {
     allowedParents: ['root', 'section', 'container'],
     allowedChildren: [
       'section',
+      'container',
       'text',
       'image',
       'button',
       'form',
       'countdown',
       'extension',
+      'heading',
+      'link',
+      'divider',
+      'list',
+      'video',
     ],
   }),
   text: definition({
@@ -366,7 +472,7 @@ export const PAGE_COMPONENT_REGISTRY = {
     allowedParents: commonLayoutParents,
     allowedChildren: [],
     propertiesSchema: content([
-      { key: 'text', label: 'Text', group: 'content', control: 'textarea' },
+      { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
     ]),
   }),
   image: definition({
@@ -379,7 +485,13 @@ export const PAGE_COMPONENT_REGISTRY = {
     allowedParents: commonLayoutParents,
     allowedChildren: [],
     propertiesSchema: content([
-      { key: 'src', label: 'Image', group: 'content', control: 'asset' },
+      {
+        key: 'src',
+        label: 'Image',
+        group: 'content',
+        control: 'asset',
+        assetKind: 'image',
+      },
       { key: 'alt', label: 'Alt text', group: 'content', control: 'text' },
     ]),
   }),
@@ -418,16 +530,11 @@ export const PAGE_COMPONENT_REGISTRY = {
     allowedChildren: [],
     propertiesSchema: content([
       {
-        key: 'submitLabel',
-        label: 'Submit button label',
+        key: 'form',
+        label: 'Form fields and messages',
         group: 'content',
-        control: 'text',
-      },
-      {
-        key: 'successMessage',
-        label: 'Success message',
-        group: 'content',
-        control: 'textarea',
+        control: 'custom',
+        customEditor: 'form',
       },
     ]),
   }),
@@ -460,6 +567,128 @@ export const PAGE_COMPONENT_REGISTRY = {
     allowedParents: commonLayoutParents,
     allowedChildren: [],
     propertiesSchema: [],
+  }),
+  heading: definition({
+    type: 'heading',
+    version: 1,
+    label: 'Heading',
+    category: 'content',
+    editorTagName: 'h2',
+    defaultProps: { text: 'Heading', level: 2 },
+    allowedParents: commonLayoutParents,
+    allowedChildren: [],
+    propertiesSchema: content([
+      { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
+      {
+        key: 'level',
+        label: 'Heading level',
+        group: 'content',
+        control: 'select',
+        options: [1, 2, 3, 4, 5, 6].map((level) => ({
+          label: `H${level}`,
+          value: String(level),
+        })),
+      },
+    ]),
+  }),
+  link: definition({
+    type: 'link',
+    version: 1,
+    label: 'Link',
+    category: 'content',
+    editorTagName: 'a',
+    defaultProps: { text: 'Learn more', href: '/', target: '_self' },
+    allowedParents: commonLayoutParents,
+    allowedChildren: [],
+    propertiesSchema: content([
+      { key: 'text', label: 'Text', group: 'content', control: 'text' },
+      { key: 'href', label: 'Link', group: 'content', control: 'url' },
+      {
+        key: 'target',
+        label: 'Open link',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: '_self', label: 'Same tab' },
+          { value: '_blank', label: 'New tab' },
+        ],
+      },
+    ]),
+  }),
+  divider: definition({
+    type: 'divider',
+    version: 1,
+    label: 'Divider',
+    category: 'content',
+    editorTagName: 'hr',
+    defaultProps: {},
+    allowedParents: commonLayoutParents,
+    allowedChildren: [],
+    propertiesSchema: [],
+  }),
+  list: definition({
+    type: 'list',
+    version: 1,
+    label: 'List',
+    category: 'content',
+    editorTagName: 'ul',
+    defaultProps: {
+      ordered: false,
+      items: [
+        { id: 'item-1', text: 'First item' },
+        { id: 'item-2', text: 'Second item' },
+      ],
+    },
+    allowedParents: commonLayoutParents,
+    allowedChildren: [],
+    propertiesSchema: content([
+      { key: 'ordered', label: 'Ordered list', group: 'content', control: 'toggle' },
+      {
+        key: 'items',
+        label: 'List items',
+        group: 'content',
+        control: 'custom',
+        customEditor: 'list',
+      },
+    ]),
+  }),
+  video: definition({
+    type: 'video',
+    version: 1,
+    label: 'Video',
+    category: 'content',
+    editorTagName: 'video',
+    defaultProps: {
+      src: '/assets/placeholder.mp4',
+      controls: true,
+      autoplay: false,
+      muted: false,
+      loop: false,
+      playsInline: true,
+    },
+    allowedParents: commonLayoutParents,
+    allowedChildren: [],
+    propertiesSchema: content([
+      {
+        key: 'src',
+        label: 'Video source',
+        group: 'content',
+        control: 'asset',
+        assetKind: 'video',
+      },
+      {
+        key: 'poster',
+        label: 'Poster image',
+        group: 'content',
+        control: 'asset',
+        assetKind: 'image',
+      },
+      { key: 'controls', label: 'Show controls', group: 'content', control: 'toggle' },
+      { key: 'autoplay', label: 'Autoplay', group: 'content', control: 'toggle' },
+      { key: 'muted', label: 'Muted', group: 'content', control: 'toggle' },
+      { key: 'loop', label: 'Loop', group: 'content', control: 'toggle' },
+      { key: 'playsInline', label: 'Play inline', group: 'content', control: 'toggle' },
+    ]),
   }),
 } satisfies Record<PageComponentType, PageComponentDefinition>;
 

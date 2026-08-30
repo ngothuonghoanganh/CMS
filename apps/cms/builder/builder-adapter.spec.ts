@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type PagePayloadV1 } from '@payload/contracts';
+import { type PagePayloadV1, type PagePayloadV4 } from '@payload/contracts';
 
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -10,6 +10,8 @@ import {
   BUILDER_EXTENSION_PROPS_ATTRIBUTE,
   BUILDER_PAYLOAD_VERSION_ATTRIBUTE,
   BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
+  BUILDER_HEADING_LEVEL_ATTRIBUTE,
+  BUILDER_LIST_PROPS_ATTRIBUTE,
   BuilderAdapterError,
   createBlockDefinition,
   formatCountdownRemaining,
@@ -158,7 +160,7 @@ describe('builder adapter', () => {
   it('fails instead of silently dropping unsupported editor nodes', () => {
     const definition = payloadToEditorComponent(payload);
     const snapshot = snapshotFromEditorDefinition(definition);
-    snapshot.children[0]!.attributes[BUILDER_NODE_TYPE_ATTRIBUTE] = 'video';
+    snapshot.children[0]!.attributes[BUILDER_NODE_TYPE_ATTRIBUTE] = 'unsupported';
 
     expect(() => serializeEditorSnapshot(snapshot)).toThrow(BuilderAdapterError);
     expect(() => serializeEditorSnapshot(snapshot)).toThrow(
@@ -325,6 +327,85 @@ describe('builder adapter', () => {
         snapshotFromEditorDefinition(payloadToEditorComponent(payload)),
       ),
     ).toEqual(payload);
+  });
+
+  it('round-trips the V4 semantic element set and keeps list previews editor-only', () => {
+    const payload: PagePayloadV4 = {
+      version: 4 as const,
+      metadata: { documentTitle: 'V4 page' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'heading',
+                type: 'heading' as const,
+                props: { text: 'A heading', level: 3 },
+                children: [],
+              },
+              {
+                id: 'link',
+                type: 'link' as const,
+                props: { text: 'Read docs', href: '/docs', target: '_self' as const },
+                children: [],
+              },
+              { id: 'divider', type: 'divider' as const, props: {}, children: [] },
+              {
+                id: 'list',
+                type: 'list' as const,
+                props: {
+                  ordered: true,
+                  items: [
+                    { id: 'first', text: 'First' },
+                    { id: 'second', text: 'Second' },
+                  ],
+                },
+                children: [],
+              },
+              {
+                id: 'video',
+                type: 'video' as const,
+                props: {
+                  src: '/assets/demo.mp4',
+                  poster: '/assets/poster.png',
+                  controls: true,
+                  autoplay: false,
+                  muted: false,
+                  loop: true,
+                  playsInline: true,
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(payload);
+    const section = (definition.components as Array<Record<string, unknown>>)[0]!;
+    const elements = section.components as Array<Record<string, unknown>>;
+    expect(elements[0]?.tagName).toBe('h3');
+    expect(
+      (elements[0]?.attributes as Record<string, unknown> | undefined)?.[
+        BUILDER_HEADING_LEVEL_ATTRIBUTE
+      ],
+    ).toBe('3');
+    expect(elements[3]?.tagName).toBe('ol');
+    expect(
+      (elements[3]?.attributes as Record<string, unknown> | undefined)?.[
+        BUILDER_LIST_PROPS_ATTRIBUTE
+      ],
+    ).toContain('first');
+    expect(elements[3]?.components).toHaveLength(2);
+    expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
+      payload,
+    );
   });
 
   it('recognizes extension nodes at the shared interaction boundary', () => {

@@ -9,7 +9,6 @@ import {
   PageSchema,
   PAGE_PREVIEW_MESSAGE_TYPE,
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
-  FormPropsSchema,
   PagePayloadSchema,
   NavigationListResponseSchema,
   createPageDocument,
@@ -17,8 +16,6 @@ import {
   PageVersionSchema,
   PAGE_COMPONENT_REGISTRY,
   type Asset,
-  type FormField,
-  type FormProps,
   type Page,
   type PageDocument,
   type PageVersion,
@@ -52,6 +49,11 @@ import {
   type BuilderCanvasState,
 } from './builder-minimap';
 import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
+import {
+  BUILDER_BLOCK_PRESET_REGISTRY,
+  type BlockPresetId,
+  type BuilderInsertable,
+} from './block-presets';
 import { isBuilderExtensionAvailableForPage } from './builder-extension-registry';
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 import { saveStatusAfterAcknowledgement } from './builder-save';
@@ -75,27 +77,42 @@ type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
 type AddPanelTab = 'layouts' | 'elements';
 
 type AvailableBlockOption = {
-  type: BuilderBlockType;
+  kind: 'component' | 'preset';
+  type?: BuilderBlockType;
+  presetId?: BlockPresetId;
   label: string;
-  category: 'layout' | 'content' | 'conversion' | 'extension';
+  category: 'layout' | 'content' | 'extension' | 'preset';
   extensionId?: string;
+  keywords?: readonly string[];
 };
 
-const blockCategoryOrder = ['layout', 'content', 'conversion', 'extension'] as const;
+const blockCategoryOrder = ['layout', 'content', 'extension', 'preset'] as const;
 const blockCategoryLabels: Record<(typeof blockCategoryOrder)[number], string> = {
   layout: 'Layout',
-  content: 'Content',
-  conversion: 'Conversion',
+  content: 'Elements',
   extension: 'Extensions',
+  preset: 'Presets',
 };
 
-const blockOptions: AvailableBlockOption[] = Object.values(PAGE_COMPONENT_REGISTRY)
-  .filter((definition) => definition.type !== 'root' && definition.type !== 'extension')
-  .map((definition) => ({
-    type: definition.type as BuilderBlockType,
-    label: definition.label,
-    category: definition.category,
-  }));
+const blockOptions: AvailableBlockOption[] = [
+  ...Object.values(PAGE_COMPONENT_REGISTRY)
+    .filter((definition) => definition.type !== 'root' && definition.type !== 'extension')
+    .map((definition) => ({
+      kind: 'component' as const,
+      type: definition.type as BuilderBlockType,
+      label: definition.label,
+      category:
+        definition.category === 'layout' ? ('layout' as const) : ('content' as const),
+      keywords: [definition.type, definition.label],
+    })),
+  ...BUILDER_BLOCK_PRESET_REGISTRY.map((preset) => ({
+    kind: 'preset' as const,
+    presetId: preset.id,
+    label: preset.label,
+    category: 'preset' as const,
+    keywords: [...preset.keywords],
+  })),
+];
 
 const rendererBaseUrl =
   process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
@@ -228,18 +245,12 @@ function inspectorNodeLabel(type: string): string {
 }
 
 function inspectorNodeSummary(selected: SelectedBuilderNode): string {
-  if (selected.type === 'text') {
-    return selected.text?.trim() || 'Text element';
-  }
-  if (selected.type === 'button') {
-    return selected.label?.trim() || 'Button element';
-  }
-  if (selected.type === 'image') {
-    return selected.alt?.trim() || 'Image element';
-  }
-  if (selected.type === 'countdown') {
-    return selected.countdown?.label?.trim() || 'Countdown element';
-  }
+  const summaryValue = ['text', 'label', 'alt', 'src']
+    .map((key) => selected.props[key])
+    .find(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    );
+  if (summaryValue) return summaryValue.trim().slice(0, 80);
   return `${inspectorNodeLabel(selected.type)} element`;
 }
 
@@ -357,10 +368,12 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           pageExtensionState.get(extension.manifest.id) !== false,
       )
       .map((extension) => ({
+        kind: 'component' as const,
         type: 'extension' as const,
         extensionId: extension.manifest.id,
         label: extension.manifest.name,
         category: 'extension' as const,
+        keywords: [extension.manifest.id, extension.manifest.name],
       })),
   ];
   const visibleBlockOptions = availableBlockOptions.filter((block) => {
@@ -368,7 +381,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     return (
       !query ||
       block.label.toLowerCase().includes(query) ||
-      block.type.toLowerCase().includes(query) ||
+      block.type?.toLowerCase().includes(query) ||
+      block.presetId?.toLowerCase().includes(query) ||
+      block.keywords?.some((keyword) => keyword.toLowerCase().includes(query)) ||
       block.extensionId?.toLowerCase().includes(query)
     );
   });
@@ -378,7 +393,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const toolBlockOptions = addPanelTabTouched
     ? visibleBlockOptions.filter((block) =>
         addPanelTab === 'layouts'
-          ? block.category === 'layout'
+          ? block.category === 'layout' || block.kind === 'preset'
           : block.category !== 'layout',
       )
     : visibleBlockOptions;
@@ -442,6 +457,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const usableAssets = useMemo(
     () => assets.filter((asset) => isUsableImageSource(asset.storageKey)),
     [assets],
+  );
+  const imageAssets = useMemo(
+    () =>
+      usableAssets.filter((asset) => asset.mimeType.toLowerCase().startsWith('image/')),
+    [usableAssets],
   );
   const contextToolbarPosition = useMemo(() => {
     if (!canvasState || !selectedNodeId) return undefined;
@@ -1001,7 +1021,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     });
   }
 
-  function insertQuickAdd(type: BuilderBlockType) {
+  function insertQuickAdd(type: BuilderInsertable) {
     if (!quickAddTarget) return;
     const changed = editorRef.current?.insertBlock(type, quickAddTarget);
     if (changed) {
@@ -1011,104 +1031,12 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     }
   }
 
-  function updateSelectedText(value: string) {
-    editorRef.current?.updateSelectedText(value);
-  }
-
-  function updateSelectedAttribute(
-    name: 'href' | 'target' | 'src' | 'alt',
-    value: string,
-  ) {
-    editorRef.current?.updateSelectedAttribute(name, value);
-  }
-
   function updateSelectedStyle(property: string, value: string) {
     editorRef.current?.updateSelectedStyle(property, value);
   }
 
   function resetSelectedStyle(property: string) {
     editorRef.current?.resetSelectedStyle(property);
-  }
-
-  function updateForm(nextForm: FormProps) {
-    const parsed = FormPropsSchema.safeParse(nextForm);
-    if (parsed.success) {
-      editorRef.current?.updateSelectedForm(parsed.data);
-    }
-  }
-
-  function updateSelectedCountdown(key: 'label' | 'targetAt', value: string): void {
-    if (!selected?.countdown) return;
-    editorRef.current?.updateSelectedCountdown({
-      ...selected.countdown,
-      [key]: value,
-    });
-  }
-
-  function patchFormField(index: number, patch: Record<string, unknown>) {
-    const form = selected?.form;
-    if (!form) return;
-    const fields = form.fields.map((field, fieldIndex) =>
-      fieldIndex === index ? { ...field, ...patch } : field,
-    );
-    updateForm({ ...form, fields });
-  }
-
-  function addFormField() {
-    const form = selected?.form;
-    if (!form || form.fields.length >= 20) return;
-    const id = `field-${Date.now().toString(36)}`;
-    const field: FormField = {
-      id,
-      type: 'text',
-      label: 'New field',
-      name: id,
-      required: false,
-      placeholder: '',
-    };
-    updateForm({ ...form, fields: [...form.fields, field] });
-  }
-
-  function moveFormField(index: number, direction: -1 | 1) {
-    const form = selected?.form;
-    if (!form) return;
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= form.fields.length) return;
-    const fields = [...form.fields];
-    const current = fields[index];
-    const target = fields[nextIndex];
-    if (!current || !target) return;
-    fields[index] = target;
-    fields[nextIndex] = current;
-    updateForm({ ...form, fields });
-  }
-
-  function removeFormField(index: number) {
-    const form = selected?.form;
-    if (!form || form.fields.length <= 1) return;
-    updateForm({
-      ...form,
-      fields: form.fields.filter((_, fieldIndex) => fieldIndex !== index),
-    });
-  }
-
-  function changeFormFieldType(index: number, type: FormField['type']) {
-    const field = selected?.form?.fields[index];
-    if (!field) return;
-    const common = {
-      id: field.id,
-      label: field.label,
-      name: field.name,
-      required: field.required,
-      type,
-    } as Record<string, unknown>;
-    if (type !== 'checkbox' && type !== 'radio') {
-      common.placeholder = 'Optional';
-    }
-    if (type === 'select' || type === 'radio') {
-      common.options = [{ value: 'option', label: 'Option' }];
-    }
-    patchFormField(index, common);
   }
 
   function toggleInspectorSection(section: InspectorSectionKey, open: boolean) {
@@ -1339,52 +1267,66 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                       <h2 className="builder-block-category-heading">
                         {blockCategoryLabels[group.category]}
                       </h2>
-                      {group.options.map((block) => (
-                        <div
-                          className="builder-block-row builder-block-card"
-                          data-block-category={block.category}
-                          data-block-type={block.type}
-                          key={`${block.type}:${block.extensionId ?? ''}`}
-                        >
-                          <button
-                            aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
-                            className="builder-block-drag"
-                            onClick={
-                              block.extensionId
-                                ? () =>
-                                    editorRef.current?.addExtensionBlock(
-                                      block.extensionId!,
-                                    )
-                                : undefined
-                            }
-                            onMouseDown={
-                              block.extensionId
-                                ? undefined
-                                : (event) =>
-                                    editorRef.current?.startBlockDrag(
-                                      block.type,
-                                      event.nativeEvent,
-                                    )
-                            }
-                            type="button"
+                      {group.options.map((block) => {
+                        const insertable = block.presetId ?? block.type;
+                        if (!insertable && !block.extensionId) return null;
+                        return (
+                          <div
+                            className="builder-block-row builder-block-card"
+                            data-block-category={block.category}
+                            data-block-type={block.presetId ?? block.type}
+                            key={`${block.presetId ?? block.type ?? 'extension'}:${block.extensionId ?? ''}`}
                           >
-                            <span aria-hidden="true">⠿</span>
-                            <span>{block.label}</span>
-                          </button>
-                          <button
-                            aria-label={`${block.label} add`}
-                            className="builder-block-add"
-                            onClick={() =>
-                              block.extensionId
-                                ? editorRef.current?.addExtensionBlock(block.extensionId)
-                                : editorRef.current?.addBlock(block.type)
-                            }
-                            type="button"
-                          >
-                            ＋
-                          </button>
-                        </div>
-                      ))}
+                            <button
+                              aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
+                              className="builder-block-drag"
+                              onClick={
+                                block.extensionId
+                                  ? () =>
+                                      editorRef.current?.addExtensionBlock(
+                                        block.extensionId!,
+                                      )
+                                  : undefined
+                              }
+                              onMouseDown={
+                                block.extensionId || !insertable
+                                  ? undefined
+                                  : (event) =>
+                                      editorRef.current?.startBlockDrag(
+                                        insertable as BuilderInsertable,
+                                        event.nativeEvent,
+                                      )
+                              }
+                              type="button"
+                            >
+                              <span aria-hidden="true">⠿</span>
+                              <span>{block.label}</span>
+                            </button>
+                            <button
+                              aria-label={`${block.label}${
+                                block.kind === 'preset' && block.label.endsWith('Section')
+                                  ? ' preset'
+                                  : ''
+                              } add`}
+                              className="builder-block-add"
+                              onClick={() =>
+                                block.extensionId
+                                  ? editorRef.current?.addExtensionBlock(
+                                      block.extensionId,
+                                    )
+                                  : insertable
+                                    ? editorRef.current?.addBlock(
+                                        insertable as BuilderInsertable,
+                                      )
+                                    : undefined
+                              }
+                              type="button"
+                            >
+                              ＋
+                            </button>
+                          </div>
+                        );
+                      })}
                     </section>
                   ))}
                 </div>
@@ -1492,9 +1434,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   <span className="eyebrow">Workspace library</span>
                   <strong>Assets</strong>
                 </div>
-                {usableAssets.length ? (
+                {imageAssets.length ? (
                   <div className="builder-asset-list">
-                    {usableAssets.map((asset) => (
+                    {imageAssets.map((asset) => (
                       <button
                         className="builder-asset-card"
                         key={asset.id}
@@ -1648,7 +1590,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               position={quickAddTarget?.position}
               options={visibleBlockOptions
                 .filter((option) => option.type !== 'extension')
-                .map(({ type, label }) => ({ type, label }))}
+                .filter((option) => option.presetId || option.type)
+                .map((option) => ({
+                  type: (option.presetId ?? option.type) as BuilderInsertable,
+                  label: option.label,
+                }))}
               targetLabel={selected?.type}
             />
             <GrapesEditor
@@ -1741,22 +1687,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 </div>
               </div>
               <BuilderInspector
-                addFormField={addFormField}
-                changeFormFieldType={changeFormFieldType}
                 inspectorTab={inspectorTab}
-                moveFormField={moveFormField}
                 onInspectorTabChange={setInspectorTab}
                 onToggleSection={toggleInspectorSection}
                 openSections={openInspectorSections}
-                patchFormField={patchFormField}
-                removeFormField={removeFormField}
                 resetSelectedStyle={resetSelectedStyle}
                 selected={selected}
-                updateForm={updateForm}
-                updateSelectedAttribute={updateSelectedAttribute}
-                updateSelectedCountdown={updateSelectedCountdown}
+                updateSelectedProperty={(property, value) =>
+                  editorRef.current?.updateSelectedProperty(property, value)
+                }
                 updateSelectedStyle={updateSelectedStyle}
-                updateSelectedText={updateSelectedText}
                 usableAssets={usableAssets}
                 viewport={viewport}
               />

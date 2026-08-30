@@ -24,4 +24,33 @@ describe('component style capabilities', () => {
         .map((property) => property.key),
     ).toEqual(['text']);
   });
+
+  it('registers V4 content properties and explicit style capabilities', () => {
+    expect(PAGE_COMPONENT_REGISTRY.heading.propertiesSchema).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'text', control: 'textarea' }),
+        expect.objectContaining({ key: 'level', control: 'select' }),
+      ]),
+    );
+    expect(PAGE_COMPONENT_REGISTRY.list.propertiesSchema).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'ordered', control: 'toggle' }),
+        expect.objectContaining({
+          key: 'items',
+          control: 'custom',
+          customEditor: 'list',
+        }),
+      ]),
+    );
+    expect(PAGE_COMPONENT_REGISTRY.form.propertiesSchema).toContainEqual(
+      expect.objectContaining({ key: 'form', control: 'custom', customEditor: 'form' }),
+    );
+    expect(styleSchemaFor('heading').map((property) => property.key)).toContain(
+      'font-size',
+    );
+    expect(styleSchemaFor('divider').map((property) => property.key)).toContain(
+      'border-color',
+    );
+    expect(styleSchemaFor('video').map((property) => property.key)).toContain('width');
+  });
 });

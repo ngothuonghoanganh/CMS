@@ -1,4 +1,5 @@
 import type { Component, ComponentDefinition, Editor } from 'grapesjs';
+import { CountdownPropsSchema, ListPropsSchema } from '@payload/contracts';
 
 import {
   canInsertNode,
@@ -7,11 +8,15 @@ import {
   moveNodeByIntent,
   type MoveNodeIntent,
 } from './builder-interaction';
+import { resolveEditorPropertyUpdate } from './component-editor-bindings';
 import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   isBuilderNodeType,
   reassignEditorNodeIds,
   sanitizeInlineText,
+  listPreviewComponents,
+  formPreviewComponents,
   updateEditorViewportStyle,
   type BuilderViewport,
   type BuilderNodeType,
@@ -42,6 +47,7 @@ export type EditorCommand =
       components?: ComponentDefinition[] | undefined;
     }
   | { kind: 'set-content'; nodeId: string; content: string }
+  | { kind: 'set-property'; nodeId: string; property: string; value: unknown }
   | { kind: 'set-attributes'; attributes: Record<string, string>; nodeId: string }
   | { kind: 'set-style'; nodeId: string; style: Record<string, string> }
   | {
@@ -151,6 +157,46 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
           (!target || target.parent() === parent),
         );
       }
+      if (command.kind === 'set-property') {
+        const node = getNode(editor, command.nodeId);
+        if (!node) return false;
+        const type = node.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+        if (!isBuilderNodeType(type)) return false;
+        try {
+          let property = command.property;
+          const value =
+            type === 'list' && command.property === 'ordered'
+              ? {
+                  ...ListPropsSchema.parse(
+                    JSON.parse(
+                      String(
+                        node.getAttributes({ noStyle: true })['data-payload-list-props'],
+                      ),
+                    ) as unknown,
+                  ),
+                  ordered: command.value,
+                }
+              : type === 'countdown' &&
+                  (command.property === 'label' || command.property === 'targetAt')
+                ? {
+                    ...CountdownPropsSchema.parse(
+                      JSON.parse(
+                        String(
+                          node.getAttributes({ noStyle: true })[
+                            BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
+                          ],
+                        ),
+                      ) as unknown,
+                    ),
+                    [command.property]: command.value,
+                  }
+                : command.value;
+          if (type === 'list' && command.property === 'ordered') property = 'items';
+          return Boolean(resolveEditorPropertyUpdate(type, property, value));
+        } catch {
+          return false;
+        }
+      }
       if ('nodeId' in command) {
         const node = getNode(editor, command.nodeId);
         return Boolean(node && (command.kind !== 'remove' || node !== root));
@@ -238,6 +284,66 @@ export function executeEditorCommand(
         nodeId: command.nodeId,
         content: command.content,
       });
+    }
+    case 'set-property': {
+      const node = getNode(editor, command.nodeId);
+      if (!node) return { changed: false };
+      const type = node.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+      if (!isBuilderNodeType(type)) return { changed: false };
+      let value = command.value;
+      let property = command.property;
+      if (type === 'list' && command.property === 'ordered') {
+        const raw = node.getAttributes({ noStyle: true })['data-payload-list-props'];
+        let current: unknown;
+        try {
+          current = JSON.parse(String(raw)) as unknown;
+        } catch {
+          return { changed: false };
+        }
+        const parsed = ListPropsSchema.safeParse(current);
+        if (!parsed.success || typeof command.value !== 'boolean')
+          return { changed: false };
+        value = { ...parsed.data, ordered: command.value };
+        property = 'items';
+      }
+      if (
+        type === 'countdown' &&
+        (command.property === 'label' || command.property === 'targetAt')
+      ) {
+        const raw = node.getAttributes({ noStyle: true })[
+          BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
+        ];
+        let current: unknown;
+        try {
+          current = JSON.parse(String(raw)) as unknown;
+        } catch {
+          return { changed: false };
+        }
+        const parsed = CountdownPropsSchema.safeParse(current);
+        if (!parsed.success || typeof command.value !== 'string') {
+          return { changed: false };
+        }
+        value = { ...parsed.data, [command.property]: command.value };
+      }
+      const update = resolveEditorPropertyUpdate(type, property, value);
+      if (!update) return { changed: false };
+      if (update.kind === 'content') {
+        node.set('content', update.value);
+      } else {
+        node.setAttributes({
+          ...node.getAttributes({ noStyle: true }),
+          ...update.attributes,
+        });
+        if (update.tagName) node.set('tagName', update.tagName);
+        if (update.listProps) {
+          // List item controls are editor-only descendants. Their semantic
+          // representation is the validated list props JSON above.
+          node.set('tagName', update.listProps.ordered ? 'ol' : 'ul');
+          node.components(listPreviewComponents(update.listProps));
+        }
+        if (update.formProps) node.components(formPreviewComponents(update.formProps));
+      }
+      return { changed: true, selection: node };
     }
     case 'set-attributes': {
       return executeEditorCommand(editor, {

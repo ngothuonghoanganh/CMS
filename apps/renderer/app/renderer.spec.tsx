@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_RESPONSIVE_BREAKPOINTS,
-  PagePayloadV3Schema,
+  PagePayloadV4Schema,
   type PagePayloadV1,
 } from '@payload/contracts';
 
@@ -259,6 +259,79 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).not.toContain('dangerouslySetInnerHTML');
   });
 
+  it('renders V4 heading, link, divider, list, and video nodes semantically', () => {
+    const markup = renderToStaticMarkup(
+      renderPage({
+        version: 4,
+        metadata: { documentTitle: 'V4 content' },
+        root: {
+          id: 'root',
+          type: 'root',
+          props: {},
+          children: [
+            {
+              id: 'section',
+              type: 'section',
+              props: {},
+              children: [
+                {
+                  id: 'heading',
+                  type: 'heading',
+                  props: { text: 'Welcome', level: 2 },
+                  children: [],
+                },
+                {
+                  id: 'link',
+                  type: 'link',
+                  props: { text: 'Read docs', href: '/docs', target: '_blank' },
+                  children: [],
+                },
+                { id: 'divider', type: 'divider', props: {}, children: [] },
+                {
+                  id: 'list',
+                  type: 'list',
+                  props: {
+                    ordered: true,
+                    items: [
+                      { id: 'one', text: 'One' },
+                      { id: 'two', text: 'Two' },
+                    ],
+                  },
+                  children: [],
+                },
+                {
+                  id: 'video',
+                  type: 'video',
+                  props: {
+                    src: '/assets/demo.mp4',
+                    poster: '/assets/poster.png',
+                    controls: true,
+                    autoplay: false,
+                    muted: false,
+                    loop: true,
+                    playsInline: true,
+                  },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(markup).toContain('<h2');
+    expect(markup).toContain('Welcome');
+    expect(markup).toContain('href="/docs"');
+    expect(markup).toContain('rel="noopener noreferrer"');
+    expect(markup).toContain('<hr');
+    expect(markup).toContain('<ol');
+    expect(markup).toContain('<li>One</li>');
+    expect(markup).toContain('<video');
+    expect(markup).toContain('poster="/assets/poster.png"');
+    expect(markup).toContain('playsInline');
+  });
+
   it('renders the trusted Countdown extension safely from a V3 payload', () => {
     const payload = {
       version: 3,
@@ -300,8 +373,8 @@ describe('PagePayloadV1 renderer', () => {
   });
 
   it('keeps every registered component type renderable', () => {
-    const payload = PagePayloadV3Schema.parse({
-      version: 3,
+    const payload = PagePayloadV4Schema.parse({
+      version: 4,
       metadata: { documentTitle: 'Registry coverage' },
       root: {
         id: 'root',
@@ -363,6 +436,41 @@ describe('PagePayloadV1 renderer', () => {
                 id: 'extension',
                 type: 'extension',
                 props: { extensionId: 'custom-registry', values: {} },
+                children: [],
+              },
+              {
+                id: 'heading',
+                type: 'heading',
+                props: { text: 'Registry heading', level: 2 },
+                children: [],
+              },
+              {
+                id: 'link',
+                type: 'link',
+                props: { text: 'Registry link', href: '/docs', target: '_self' },
+                children: [],
+              },
+              { id: 'divider', type: 'divider', props: {}, children: [] },
+              {
+                id: 'list',
+                type: 'list',
+                props: {
+                  ordered: false,
+                  items: [{ id: 'registry-item', text: 'Registry item' }],
+                },
+                children: [],
+              },
+              {
+                id: 'video',
+                type: 'video',
+                props: {
+                  src: '/assets/registry.mp4',
+                  controls: true,
+                  autoplay: false,
+                  muted: false,
+                  loop: false,
+                  playsInline: true,
+                },
                 children: [],
               },
             ],
