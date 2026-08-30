@@ -15,10 +15,7 @@ import {
   PaginationSchema,
   normalizePagePath,
   type FormProps,
-  type PageNode,
-  type PageNodeV2,
-  type PageNodeV3,
-  type PageNodeV4,
+  type AnyPageNode,
   type IntegrationDelivery,
   type IntegrationDeliveryListQuery,
   type IntegrationDeliveryListResponse,
@@ -424,7 +421,7 @@ export class IntegrationDispatcher implements OnModuleDestroy {
 }
 
 function findForm(
-  node: PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4,
+  node: AnyPageNode,
   formNodeId: string,
 ): IntegrationFormNode | undefined {
   if (node.type === 'form') return node.id === formNodeId ? node : undefined;

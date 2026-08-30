@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { type PagePayloadV1, type PagePayloadV4 } from '@payload/contracts';
+import {
+  type PagePayloadV1,
+  type PagePayloadV4,
+  type PagePayloadV5,
+} from '@payload/contracts';
 
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -12,6 +16,7 @@ import {
   BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
   BUILDER_HEADING_LEVEL_ATTRIBUTE,
   BUILDER_LIST_PROPS_ATTRIBUTE,
+  BUILDER_COMPOUND_PROPS_ATTRIBUTE,
   BuilderAdapterError,
   createBlockDefinition,
   formatCountdownRemaining,
@@ -406,6 +411,118 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
       payload,
     );
+  });
+
+  it('round-trips V5 compound nodes and keeps internal children out of the palette', () => {
+    const payload: PagePayloadV5 = {
+      version: 5,
+      metadata: { documentTitle: 'V5 compound page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'quote',
+                type: 'quote',
+                props: { text: 'Ship it', cite: 'Team' },
+                children: [],
+              },
+              {
+                id: 'accordion',
+                type: 'accordion',
+                props: { allowMultiple: false },
+                children: [
+                  {
+                    id: 'accordion-item',
+                    type: 'accordion-item',
+                    props: { title: 'Details', defaultOpen: true },
+                    children: [
+                      {
+                        id: 'accordion-copy',
+                        type: 'text',
+                        props: { text: 'More information' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'tabs',
+                type: 'tabs',
+                props: { orientation: 'vertical' },
+                children: [
+                  {
+                    id: 'tab-item',
+                    type: 'tab-item',
+                    props: { label: 'One' },
+                    children: [
+                      {
+                        id: 'tab-copy',
+                        type: 'text',
+                        props: { text: 'Tab content' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'gallery',
+                type: 'gallery',
+                props: {},
+                children: [
+                  {
+                    id: 'image',
+                    type: 'image',
+                    props: { src: '/assets/one.png', alt: 'One' },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const definition = payloadToEditorComponent(payload);
+    expect(definition.attributes?.[BUILDER_PAYLOAD_VERSION_ATTRIBUTE]).toBe('5');
+    const section = (definition.components as Array<Record<string, unknown>>)[0]!;
+    const children = section.components as Array<Record<string, unknown>>;
+    expect(
+      children.map(
+        (child) =>
+          (child.attributes as Record<string, unknown> | undefined)?.[
+            BUILDER_NODE_TYPE_ATTRIBUTE
+          ],
+      ),
+    ).toEqual(['quote', 'accordion', 'tabs', 'gallery']);
+    const accordion = children[1]!;
+    const accordionItem = (accordion.components as Array<Record<string, unknown>>)[0]!;
+    expect(
+      (accordionItem.attributes as Record<string, unknown> | undefined)?.[
+        BUILDER_COMPOUND_PROPS_ATTRIBUTE
+      ],
+    ).toContain('Details');
+    expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
+      payload,
+    );
+
+    const accordionDefinition = createBlockDefinition('accordion');
+    expect(accordionDefinition.components).toHaveLength(2);
+    expect(
+      (
+        (accordionDefinition.components as Array<Record<string, unknown>>)[0]!
+          .attributes as Record<string, unknown> | undefined
+      )?.[BUILDER_NODE_TYPE_ATTRIBUTE],
+    ).toBe('accordion-item');
   });
 
   it('recognizes extension nodes at the shared interaction boundary', () => {

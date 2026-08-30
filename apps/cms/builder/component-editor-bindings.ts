@@ -4,6 +4,11 @@ import {
   FormPropsSchema,
   CountdownPropsSchema,
   ListPropsSchema,
+  QuotePropsSchema,
+  AccordionPropsSchema,
+  AccordionItemPropsSchema,
+  TabsPropsSchema,
+  TabItemPropsSchema,
   isSafePageHref,
   isSafePageImageSource,
   isSafePageVideoSource,
@@ -32,6 +37,7 @@ export type EditorPropertyUpdate =
       listOrdered?: boolean;
       formProps?: FormProps;
       countdownProps?: { targetAt: string; label: string };
+      semanticPropsPatch?: { property: string; value: unknown };
     };
 
 const propertyAliases: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -78,6 +84,63 @@ export function resolveEditorPropertyUpdate(
   property: string,
   value: unknown,
 ): EditorPropertyUpdate | null {
+  if (type === 'quote' && (property === 'text' || property === 'cite')) {
+    const parsed =
+      property === 'text'
+        ? QuotePropsSchema.shape.text.safeParse(value)
+        : QuotePropsSchema.shape.cite.safeParse(value);
+    if (!parsed.success) throw new Error(`${property} is invalid`);
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'accordion' && property === 'allowMultiple') {
+    const parsed = AccordionPropsSchema.shape.allowMultiple.safeParse(value);
+    if (!parsed.success) throw new Error('allowMultiple must be boolean');
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'accordion-item' && (property === 'title' || property === 'defaultOpen')) {
+    const schema =
+      property === 'title'
+        ? AccordionItemPropsSchema.shape.title
+        : AccordionItemPropsSchema.shape.defaultOpen;
+    const parsed = schema.safeParse(value);
+    if (!parsed.success) throw new Error(`${property} is invalid`);
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'tabs' && property === 'orientation') {
+    const parsed = TabsPropsSchema.shape.orientation.safeParse(value);
+    if (!parsed.success) throw new Error('Invalid tabs orientation');
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'tab-item' && property === 'label') {
+    const parsed = TabItemPropsSchema.shape.label.safeParse(value);
+    if (!parsed.success) throw new Error('Tab label is invalid');
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
   if (property === 'ordered' && type === 'list') {
     return {
       kind: 'attributes',

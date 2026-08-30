@@ -3,6 +3,7 @@ import type { Component } from 'grapesjs';
 import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
+  BUILDER_QUOTE_PREVIEW_ATTRIBUTE,
 } from './builder-adapter';
 import {
   canInsertNode,
@@ -59,7 +60,8 @@ export function isEditorOnlyPreview(component: Component): boolean {
     const attributes = current.getAttributes({ noStyle: true });
     if (
       attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] !== undefined ||
-      attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined
+      attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined ||
+      attributes[BUILDER_QUOTE_PREVIEW_ATTRIBUTE] !== undefined
     ) {
       return true;
     }

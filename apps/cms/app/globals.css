@@ -4098,6 +4098,29 @@ body {
   }
 }
 
+.builder-structural-editor {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.builder-structural-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid #d8deec;
+  border-radius: 0.5rem;
+  padding: 0.45rem;
+}
+
+.builder-structural-select {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 820px) {
   .builder-frame {
     height: auto;

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_RESPONSIVE_BREAKPOINTS,
-  PagePayloadV4Schema,
+  PagePayloadV5Schema,
   type PagePayloadV1,
 } from '@payload/contracts';
 
@@ -332,6 +332,107 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('playsInline');
   });
 
+  it('renders V5 compound nodes with semantic and accessible runtime markup', () => {
+    const markup = renderToStaticMarkup(
+      renderPage({
+        version: 5,
+        metadata: { documentTitle: 'Compound page' },
+        root: {
+          id: 'root',
+          type: 'root',
+          props: {},
+          children: [
+            {
+              id: 'section',
+              type: 'section',
+              props: {},
+              children: [
+                {
+                  id: 'quote',
+                  type: 'quote',
+                  props: { text: 'Make it clear', cite: 'Team' },
+                  children: [],
+                },
+                {
+                  id: 'accordion',
+                  type: 'accordion',
+                  props: { allowMultiple: false },
+                  children: [
+                    {
+                      id: 'item-1',
+                      type: 'accordion-item',
+                      props: { title: 'First item', defaultOpen: true },
+                      children: [
+                        {
+                          id: 'item-text',
+                          type: 'text',
+                          props: { text: 'Panel one' },
+                          children: [],
+                        },
+                      ],
+                    },
+                    {
+                      id: 'item-2',
+                      type: 'accordion-item',
+                      props: { title: 'Second item', defaultOpen: false },
+                      children: [],
+                    },
+                  ],
+                },
+                {
+                  id: 'tabs',
+                  type: 'tabs',
+                  props: { orientation: 'horizontal' },
+                  children: [
+                    {
+                      id: 'tab-1',
+                      type: 'tab-item',
+                      props: { label: 'Overview' },
+                      children: [],
+                    },
+                    {
+                      id: 'tab-2',
+                      type: 'tab-item',
+                      props: { label: 'Details' },
+                      children: [],
+                    },
+                  ],
+                },
+                {
+                  id: 'gallery',
+                  type: 'gallery',
+                  props: {},
+                  children: [
+                    {
+                      id: 'gallery-image',
+                      type: 'image',
+                      props: { src: '/assets/gallery.png', alt: 'Gallery image' },
+                      children: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(markup).toContain('<blockquote');
+    expect(markup).toContain('<cite>Team</cite>');
+    expect(markup).toContain('class="payload-accordion"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('aria-controls="accordion-panel-item-1"');
+    expect(markup).toContain('role="region"');
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('role="tab"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('role="tabpanel"');
+    expect(markup).toContain('aria-labelledby="tabs-tab-tab-1"');
+    expect(markup).toContain('grid-template-columns:repeat(3, minmax(0, 1fr))');
+    expect(markup).toContain('alt="Gallery image"');
+  });
+
   it('renders the trusted Countdown extension safely from a V3 payload', () => {
     const payload = {
       version: 3,
@@ -373,8 +474,8 @@ describe('PagePayloadV1 renderer', () => {
   });
 
   it('keeps every registered component type renderable', () => {
-    const payload = PagePayloadV4Schema.parse({
-      version: 4,
+    const payload = PagePayloadV5Schema.parse({
+      version: 5,
       metadata: { documentTitle: 'Registry coverage' },
       root: {
         id: 'root',
@@ -472,6 +573,51 @@ describe('PagePayloadV1 renderer', () => {
                   playsInline: true,
                 },
                 children: [],
+              },
+              {
+                id: 'quote',
+                type: 'quote',
+                props: { text: 'Registry quote', cite: 'Registry author' },
+                children: [],
+              },
+              {
+                id: 'accordion',
+                type: 'accordion',
+                props: { allowMultiple: false },
+                children: [
+                  {
+                    id: 'accordion-item',
+                    type: 'accordion-item',
+                    props: { title: 'Registry item', defaultOpen: true },
+                    children: [],
+                  },
+                ],
+              },
+              {
+                id: 'tabs',
+                type: 'tabs',
+                props: { orientation: 'horizontal' },
+                children: [
+                  {
+                    id: 'tab-item',
+                    type: 'tab-item',
+                    props: { label: 'Registry tab' },
+                    children: [],
+                  },
+                ],
+              },
+              {
+                id: 'gallery',
+                type: 'gallery',
+                props: {},
+                children: [
+                  {
+                    id: 'gallery-image',
+                    type: 'image',
+                    props: { src: '/assets/gallery.png', alt: 'Registry gallery' },
+                    children: [],
+                  },
+                ],
               },
             ],
           },

@@ -3,10 +3,10 @@ import type { Component } from 'grapesjs';
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
-  canContainNode,
   isBuilderNodeType,
   type BuilderNodeType,
 } from './builder-adapter';
+import { canInsertChild, canRemoveChild, findAcceptingSlot } from '@payload/contracts';
 
 /** The three insertion semantics shared by Canvas, Layers and Quick Add. */
 export type DropPosition = 'before' | 'inside' | 'after';
@@ -32,8 +32,14 @@ export type PlacementValidation =
 export function canInsertNode(
   parentType: BuilderNodeType,
   childType: BuilderNodeType,
+  currentChildCount = 0,
 ): boolean {
-  return canContainNode(parentType, childType);
+  return canInsertChild(parentType, childType, currentChildCount);
+}
+
+function payloadChildCount(parent: Component): number {
+  return parent.components().models.filter((child) => Boolean(payloadNodeType(child)))
+    .length;
 }
 
 export function payloadNodeType(component: Component): BuilderNodeType | undefined {
@@ -88,15 +94,34 @@ export function resolveNodePlacement(
 
   let destination: Component | undefined;
   let index: number | undefined;
+  const sourceParent = source.parent();
   if (intent.position === 'inside') {
-    if (!canInsertNode(targetType, sourceType)) {
+    const destinationChildCount = payloadChildCount(target);
+    const sameParent = sourceParent === target;
+    if (
+      !canInsertChild(
+        targetType,
+        sourceType,
+        Math.max(0, destinationChildCount - (sameParent ? 1 : 0)),
+      )
+    ) {
       return invalid(`${targetType} cannot contain ${sourceType}.`);
     }
     destination = target;
   } else {
     destination = target.parent();
     const destinationType = destination ? payloadNodeType(destination) : undefined;
-    if (!destination || !destinationType || !canInsertNode(destinationType, sourceType)) {
+    const destinationChildCount = destination ? payloadChildCount(destination) : 0;
+    const sameParent = sourceParent === destination;
+    if (
+      !destination ||
+      !destinationType ||
+      !canInsertChild(
+        destinationType,
+        sourceType,
+        Math.max(0, destinationChildCount - (sameParent ? 1 : 0)),
+      )
+    ) {
       return invalid('The target position does not accept this node.');
     }
     index = target.index() + (intent.position === 'after' ? 1 : 0);
@@ -106,6 +131,16 @@ export function resolveNodePlacement(
 
   if (destination === source || isAncestor(source, destination)) {
     return invalid('A node cannot be moved into its own descendant.');
+  }
+  if (sourceParent && sourceParent !== destination) {
+    const sourceParentType = payloadNodeType(sourceParent);
+    if (
+      sourceParentType &&
+      findAcceptingSlot(sourceParentType, sourceType) &&
+      !canRemoveChild(sourceParentType, sourceType, payloadChildCount(sourceParent))
+    ) {
+      return invalid(`${sourceParentType} must keep at least one structural child.`);
+    }
   }
   return {
     valid: true,

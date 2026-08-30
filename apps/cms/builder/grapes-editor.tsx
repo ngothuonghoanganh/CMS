@@ -7,9 +7,6 @@ import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
-  BUILDER_HEADING_LEVEL_ATTRIBUTE,
-  BUILDER_LIST_PROPS_ATTRIBUTE,
-  BUILDER_TEXT_ALIGN_ATTRIBUTE,
   type BuilderNodeType,
   type BuilderBlockType,
   type BuilderViewport,
@@ -20,9 +17,7 @@ import {
   formPreviewComponents,
   isBuilderNodeType,
   payloadToEditorComponent,
-  readEditorResponsiveStyle,
   reassignEditorNodeIds,
-  sanitizeInlineText,
   serializeGrapesComponent,
 } from './builder-adapter';
 import {
@@ -57,8 +52,6 @@ import type { BuilderCanvasNode, BuilderCanvasState } from './builder-minimap';
 import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import {
   CountdownPropsSchema,
-  ListPropsSchema,
-  VideoPropsSchema,
   FormPropsSchema,
   PAGE_RUNTIME_CLASS_NAMES,
   PAGE_RUNTIME_BASELINE_CSS,
@@ -67,27 +60,15 @@ import {
   createPageDocument,
   type FormProps,
   type PageDocument,
-  type PageNodeStyle,
   type PagePayload,
 } from '@payload/contracts';
 
-export type SelectedBuilderNode = {
-  id: string;
-  type: BuilderNodeType;
-  /** Registry-shaped semantic properties used by the generic Inspector. */
-  props: Record<string, unknown>;
-  text?: string;
-  label?: string;
-  href?: string;
-  target?: '_self' | '_blank';
-  src?: string;
-  alt?: string;
-  /** Legacy payload alignment, exposed only for compatibility snapshots. */
-  align?: 'left' | 'center' | 'right';
-  style?: PageNodeStyle;
-  form?: FormProps;
-  countdown?: { targetAt: string; label: string };
-};
+import {
+  selectionFromComponentCodec,
+  type ComponentSelectionSnapshot,
+} from './component-editor-codecs';
+
+export type SelectedBuilderNode = ComponentSelectionSnapshot;
 
 type BuilderDebugApi = {
   getPayload: () => PagePayload;
@@ -128,6 +109,9 @@ export type GrapesEditorHandle = {
     type: BuilderInsertable,
     placement?: { targetNodeId: string; position: DropPosition },
   ) => boolean;
+  addStructuralChild: () => boolean;
+  removeStructuralChild: (nodeId: string) => boolean;
+  moveStructuralChild: (nodeId: string, direction: 'up' | 'down') => boolean;
   validateMove: (intent: MoveNodeIntent) => { valid: boolean; reason?: string };
   scrollToCanvasPoint: (x: number, y: number) => void;
   setCanvasZoom: (zoom: number) => void;
@@ -160,137 +144,7 @@ function isPayloadNodeType(value: unknown): value is BuilderNodeType {
 function selectionFromComponent(
   component: Component | undefined,
 ): SelectedBuilderNode | null {
-  if (!component) {
-    return null;
-  }
-
-  const attributes = component.getAttributes({ noStyle: true });
-  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
-  const id = attributes[BUILDER_NODE_ID_ATTRIBUTE];
-  if (!isPayloadNodeType(type) || typeof id !== 'string') {
-    return null;
-  }
-
-  // During an active GrapesJS RTE session the model content is intentionally
-  // committed on rte:disable. Read the live element text for the snapshot so
-  // `component:input` can keep Content Inspector values in lockstep while the
-  // user is typing, while still exposing plain text only.
-  const content = sanitizeInlineText(
-    component.getEl()?.textContent ?? String(component.get('content') ?? ''),
-  );
-  const target = attributes.target;
-  const responsiveStyle = readEditorResponsiveStyle(component);
-  const styleAlign = responsiveStyle?.base.textAlign;
-  const legacyAlign = attributes[BUILDER_TEXT_ALIGN_ATTRIBUTE];
-  const align = styleAlign ?? legacyAlign;
-  let form: FormProps | undefined;
-  let countdown: SelectedBuilderNode['countdown'];
-  let props: Record<string, unknown> = {};
-  if (type === 'form') {
-    const rawForm = attributes[BUILDER_FORM_PROPS_ATTRIBUTE];
-    if (typeof rawForm === 'string') {
-      try {
-        form = JSON.parse(rawForm) as FormProps;
-      } catch {
-        form = undefined;
-      }
-    }
-  }
-  if (type === 'countdown') {
-    const raw = attributes[BUILDER_COUNTDOWN_PROPS_ATTRIBUTE];
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw) as unknown;
-        if (
-          typeof parsed === 'object' &&
-          parsed !== null &&
-          typeof (parsed as { targetAt?: unknown }).targetAt === 'string' &&
-          typeof (parsed as { label?: unknown }).label === 'string'
-        ) {
-          countdown = parsed as { targetAt: string; label: string };
-        }
-      } catch {
-        countdown = undefined;
-      }
-    }
-  }
-  if (type === 'list') {
-    const raw = attributes[BUILDER_LIST_PROPS_ATTRIBUTE];
-    if (typeof raw === 'string') {
-      try {
-        const parsed = ListPropsSchema.safeParse(JSON.parse(raw) as unknown);
-        if (parsed.success) props = parsed.data;
-      } catch {
-        props = {};
-      }
-    }
-  } else if (type === 'video') {
-    const video = VideoPropsSchema.safeParse({
-      src: attributes.src,
-      ...(typeof attributes.poster === 'string' ? { poster: attributes.poster } : {}),
-      controls: attributes.controls === 'true',
-      autoplay: attributes.autoplay === 'true',
-      muted: attributes.muted === 'true',
-      loop: attributes.loop === 'true',
-      playsInline: attributes.playsinline === 'true',
-    });
-    if (video.success) props = video.data;
-  } else if (type === 'heading') {
-    const level = Number(attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE]);
-    props = { text: content, level: Number.isInteger(level) ? level : 2 };
-  } else if (type === 'link') {
-    props = {
-      text: content,
-      href: typeof attributes.href === 'string' ? attributes.href : '/',
-      target: target === '_blank' ? '_blank' : '_self',
-    };
-  } else if (type === 'text') {
-    props = { text: content };
-  } else if (type === 'button') {
-    props = {
-      label: content,
-      href: typeof attributes.href === 'string' ? attributes.href : '#',
-      target: target === '_blank' ? '_blank' : '_self',
-    };
-  } else if (type === 'image') {
-    props = {
-      src: typeof attributes.src === 'string' ? attributes.src : '',
-      alt: typeof attributes.alt === 'string' ? attributes.alt : '',
-    };
-  } else if (type === 'form' && form) {
-    props = form;
-  } else if (type === 'countdown' && countdown) {
-    props = countdown;
-  }
-  return {
-    id,
-    type,
-    props,
-    ...(type === 'text'
-      ? {
-          text: content,
-          ...(align === 'left' || align === 'center' || align === 'right'
-            ? { align }
-            : {}),
-        }
-      : {}),
-    ...(type === 'button'
-      ? {
-          label: content,
-          ...(typeof attributes.href === 'string' ? { href: attributes.href } : {}),
-          ...(target === '_self' || target === '_blank' ? { target } : {}),
-        }
-      : {}),
-    ...(type === 'image'
-      ? {
-          ...(typeof attributes.src === 'string' ? { src: attributes.src } : {}),
-          ...(typeof attributes.alt === 'string' ? { alt: attributes.alt } : {}),
-        }
-      : {}),
-    ...(responsiveStyle ? { style: responsiveStyle } : {}),
-    ...(form ? { form } : {}),
-    ...(countdown ? { countdown } : {}),
-  };
+  return selectionFromComponentCodec(component);
 }
 
 function formPropsFromComponent(component: Component): FormProps | undefined {
@@ -823,6 +677,10 @@ function dropBlockAtPoint(
   const definition = createInsertableDefinition(type);
   const childType = insertableNodeType(definition);
   if (!childType) return undefined;
+  const rootAcceptsDirectly =
+    PAGE_COMPONENT_REGISTRY.root.allowedChildren.includes(childType);
+  const canWrapInSection =
+    PAGE_COMPONENT_REGISTRY[childType].allowedParents.includes('section');
 
   const frameRect = frame.getBoundingClientRect();
   const frameDocument = frame.contentDocument;
@@ -842,19 +700,8 @@ function dropBlockAtPoint(
       ];
       if (
         isPayloadNodeType(targetType) &&
-        (canInsertNode(targetType, childType) ||
-          (targetType === 'root' &&
-            [
-              'text',
-              'image',
-              'button',
-              'countdown',
-              'heading',
-              'link',
-              'divider',
-              'list',
-              'video',
-            ].includes(childType)))
+        (canInsertNode(targetType, childType, payloadChildCount(candidate)) ||
+          (targetType === 'root' && !rootAcceptsDirectly && canWrapInSection))
       ) {
         target = candidate;
         break;
@@ -874,18 +721,7 @@ function dropBlockAtPoint(
   }
   if (!target) return undefined;
 
-  if (
-    target === root &&
-    (childType === 'text' ||
-      childType === 'image' ||
-      childType === 'button' ||
-      childType === 'countdown' ||
-      childType === 'heading' ||
-      childType === 'link' ||
-      childType === 'divider' ||
-      childType === 'list' ||
-      childType === 'video')
-  ) {
+  if (target === root && !rootAcceptsDirectly && canWrapInSection) {
     const sectionResult = commit({
       kind: 'insert',
       definition: createBlockDefinition('section'),
@@ -914,11 +750,21 @@ function findAppendTarget(
       return;
     }
     const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
-    if (isPayloadNodeType(type) && canInsertNode(type, childType)) {
+    if (
+      isPayloadNodeType(type) &&
+      canInsertNode(type, childType, payloadChildCount(component))
+    ) {
       target = component;
     }
   });
   return target;
+}
+
+function payloadChildCount(component: Component): number {
+  return component.components().models.filter((child) => {
+    const type = child.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+    return isPayloadNodeType(type);
+  }).length;
 }
 
 function applyAllViewportStyles(root: Component, viewport: BuilderViewport): void {
@@ -929,7 +775,11 @@ type BuiltInBuilderBlockType = Exclude<BuilderBlockType, 'extension'>;
 
 const blockTypes: readonly BuiltInBuilderBlockType[] = [
   ...(Object.keys(PAGE_COMPONENT_REGISTRY).filter(
-    (type): type is BuiltInBuilderBlockType => type !== 'root' && type !== 'extension',
+    (type): type is BuiltInBuilderBlockType =>
+      isBuilderNodeType(type) &&
+      type !== 'root' &&
+      type !== 'extension' &&
+      PAGE_COMPONENT_REGISTRY[type].builder.insertable,
   ) as BuiltInBuilderBlockType[]),
 ];
 
@@ -959,6 +809,12 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   divider: 'Divider',
   list: 'List',
   video: 'Video',
+  quote: 'Quote',
+  accordion: 'Accordion',
+  'accordion-item': 'Accordion Item',
+  tabs: 'Tabs',
+  'tab-item': 'Tab Item',
+  gallery: 'Gallery',
 };
 
 function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
@@ -1385,7 +1241,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const target =
           selected &&
           isPayloadNodeType(selectedType) &&
-          canInsertNode(selectedType, childType)
+          canInsertNode(selectedType, childType, payloadChildCount(selected))
             ? selected
             : findAppendTarget(getRoot(editor), childType);
 
@@ -1424,7 +1280,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const target =
           selected &&
           isPayloadNodeType(selectedType) &&
-          canInsertNode(selectedType, 'extension')
+          canInsertNode(selectedType, 'extension', payloadChildCount(selected))
             ? selected
             : findAppendTarget(getRoot(editor), 'extension');
         let parent: Component | undefined = target ?? undefined;
@@ -1786,7 +1642,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           if (placement.position === 'inside') {
             const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
             const targetType = target && payloadNodeType(target);
-            if (targetType === 'root' && !canInsertNode(targetType, childType)) {
+            if (
+              targetType === 'root' &&
+              !canInsertNode(
+                targetType,
+                childType,
+                target ? payloadChildCount(target) : 0,
+              )
+            ) {
               const sectionResult = commitEditorCommand(editor, {
                 kind: 'insert',
                 definition: createBlockDefinition('section'),
@@ -1819,7 +1682,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const target =
           selected &&
           isPayloadNodeType(selectedType) &&
-          canInsertNode(selectedType, childType)
+          canInsertNode(selectedType, childType, payloadChildCount(selected))
             ? selected
             : findAppendTarget(getRoot(editor), childType);
         let parent: Component | undefined = target ?? undefined;
@@ -1837,6 +1700,51 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           kind: 'insert',
           definition,
           parentId: payloadNodeId(parent),
+        });
+      },
+      addStructuralChild() {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const parent = getSelectedComponent(editor);
+        if (!parent) return false;
+        const parentType = payloadNodeType(parent);
+        if (!parentType) return false;
+        const slot = PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+          (candidate) => candidate.structural && candidate.accepts.length > 0,
+        );
+        const childType = slot?.accepts[0];
+        if (!childType || childType === 'root') return false;
+        return commitEditorCommand(editor, {
+          kind: 'insert-structural-child',
+          parentId: payloadNodeId(parent) ?? '',
+          childType,
+        });
+      },
+      removeStructuralChild(nodeId) {
+        const editor = editorRef.current;
+        return editor ? commitEditorCommand(editor, { kind: 'remove', nodeId }) : false;
+      },
+      moveStructuralChild(nodeId, direction) {
+        const editor = editorRef.current;
+        const parent = editor && getSelectedComponent(editor);
+        if (!editor || !parent) return false;
+        const child = findPayloadComponent(parent, nodeId);
+        if (!child || child.parent() !== parent) return false;
+        const siblings = parent
+          .components()
+          .models.filter((candidate) => Boolean(payloadNodeType(candidate)));
+        const index = siblings.indexOf(child);
+        const target = siblings[index + (direction === 'up' ? -1 : 1)];
+        const sourceId = payloadNodeId(child);
+        const targetId = target && payloadNodeId(target);
+        if (!sourceId || !targetId) return false;
+        return commitEditorCommand(editor, {
+          kind: 'move',
+          intent: {
+            nodeId: sourceId,
+            targetNodeId: targetId,
+            position: direction === 'up' ? 'before' : 'after',
+          },
         });
       },
       validateMove(intent) {

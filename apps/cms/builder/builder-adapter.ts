@@ -7,6 +7,11 @@ import {
   CountdownPropsSchema,
   ListPropsSchema,
   VideoPropsSchema,
+  QuotePropsSchema,
+  AccordionPropsSchema,
+  AccordionItemPropsSchema,
+  TabsPropsSchema,
+  TabItemPropsSchema,
   CustomExtensionNodePropsSchema,
   canContainPageComponent,
   isPageComponentType,
@@ -23,6 +28,7 @@ import {
   type PageNodeV2,
   type PageNodeV3,
   type PageNodeV4,
+  type PageNodeV5,
   type PageNodeStyle,
   type PagePayload,
   type PagePayloadV1,
@@ -44,9 +50,12 @@ export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
 export const BUILDER_HEADING_LEVEL_ATTRIBUTE = 'data-payload-heading-level';
 export const BUILDER_LIST_PROPS_ATTRIBUTE = 'data-payload-list-props';
 export const BUILDER_LIST_PREVIEW_ATTRIBUTE = 'data-payload-list-preview';
+export const BUILDER_QUOTE_PROPS_ATTRIBUTE = 'data-payload-quote-props';
+export const BUILDER_QUOTE_PREVIEW_ATTRIBUTE = 'data-payload-quote-preview';
+export const BUILDER_COMPOUND_PROPS_ATTRIBUTE = 'data-payload-compound-props';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
-export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4;
+export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5;
 export type BuilderNodeType = PageComponentType;
 export type BuilderBlockType = Exclude<BuilderNodeType, 'root'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
@@ -269,6 +278,38 @@ export function countdownPreviewComponents(props: {
   ];
 }
 
+export function quotePreviewComponents(props: {
+  text: string;
+  cite?: string | undefined;
+}): ComponentDefinition[] {
+  return [
+    {
+      tagName: 'p',
+      content: sanitizeInlineText(props.text),
+      attributes: { [BUILDER_QUOTE_PREVIEW_ATTRIBUTE]: 'text' },
+      copyable: false,
+      draggable: false,
+      droppable: false,
+      removable: false,
+      selectable: false,
+    },
+    ...(props.cite?.trim()
+      ? [
+          {
+            tagName: 'cite',
+            content: sanitizeInlineText(props.cite),
+            attributes: { [BUILDER_QUOTE_PREVIEW_ATTRIBUTE]: 'cite' },
+            copyable: false,
+            draggable: false,
+            droppable: false,
+            removable: false,
+            selectable: false,
+          },
+        ]
+      : []),
+  ];
+}
+
 export function formatCountdownRemaining(targetAt: string, now = Date.now()): string {
   const targetTime = new Date(targetAt).getTime();
   const milliseconds = Number.isFinite(targetTime) ? Math.max(0, targetTime - now) : 0;
@@ -300,9 +341,7 @@ function canAcceptEditorNode(
     // useful drop target without broadening the persisted V1 tree.
     return (
       canContainNode(parentType, childType) ||
-      ['text', 'image', 'button', 'heading', 'link', 'divider', 'list', 'video'].includes(
-        childType,
-      )
+      PAGE_COMPONENT_REGISTRY[childType].allowedParents.includes('section')
     );
   }
   return canContainNode(parentType, childType);
@@ -433,7 +472,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
 function attributesForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 | 4 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 = 1,
 ) {
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
@@ -456,7 +495,7 @@ function attributesForNode(
 function componentDefinitionForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 | 4 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 = 1,
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
   const shared: ComponentDefinition = {
@@ -465,7 +504,7 @@ function componentDefinitionForNode(
     name: PAGE_COMPONENT_REGISTRY[node.type].label,
     attributes,
     droppable:
-      node.type === 'root' || node.type === 'section' || node.type === 'container'
+      PAGE_COMPONENT_REGISTRY[node.type].allowedChildren.length > 0
         ? (source: Component) => {
             const sourceType = source.getAttributes({ noStyle: true })[
               BUILDER_NODE_TYPE_ATTRIBUTE
@@ -606,6 +645,75 @@ function componentDefinitionForNode(
             : { playsinline: 'false' }),
         },
       };
+    case 'quote':
+      return {
+        ...shared,
+        tagName: 'blockquote',
+        components: quotePreviewComponents(node.props),
+        attributes: {
+          ...attributes,
+          [BUILDER_QUOTE_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+      };
+    case 'accordion':
+      return {
+        ...shared,
+        tagName: 'div',
+        attributes: {
+          ...attributes,
+          [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(child, undefined, payloadVersion),
+        ),
+      };
+    case 'accordion-item':
+      return {
+        ...shared,
+        tagName: 'section',
+        content: node.props.title,
+        attributes: {
+          ...attributes,
+          [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(child, undefined, payloadVersion),
+        ),
+      };
+    case 'tabs':
+      return {
+        ...shared,
+        tagName: 'div',
+        attributes: {
+          ...attributes,
+          [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(child, undefined, payloadVersion),
+        ),
+      };
+    case 'tab-item':
+      return {
+        ...shared,
+        tagName: 'section',
+        content: node.props.label,
+        attributes: {
+          ...attributes,
+          [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(child, undefined, payloadVersion),
+        ),
+      };
+    case 'gallery':
+      return {
+        ...shared,
+        tagName: 'div',
+        attributes,
+        components: node.children.map((child) =>
+          componentDefinitionForNode(child, undefined, payloadVersion),
+        ),
+      };
     case 'root':
     case 'section':
     case 'container':
@@ -616,6 +724,7 @@ function componentDefinitionForNode(
         ),
       };
   }
+  throw new BuilderAdapterError('Unsupported builder node type');
 }
 
 export function payloadToEditorComponent(payload: PagePayload): ComponentDefinition {
@@ -798,7 +907,153 @@ export function createBlockDefinition(
         undefined,
         4,
       );
+    case 'quote':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'quote',
+          props: { text: 'A thoughtful quote', cite: '' },
+        },
+        undefined,
+        5,
+      );
+    case 'accordion-item':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'accordion-item',
+          props: { title: 'Accordion Item', defaultOpen: false },
+          children: [
+            {
+              id: newNodeId('text'),
+              type: 'text',
+              props: { text: 'Edit this panel content' },
+              children: [],
+            },
+          ],
+        },
+        undefined,
+        5,
+      );
+    case 'accordion':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'accordion',
+          props: { allowMultiple: false },
+          children: [
+            {
+              id: newNodeId('accordion-item'),
+              type: 'accordion-item',
+              props: { title: 'Accordion Item 1', defaultOpen: true },
+              children: [
+                {
+                  id: newNodeId('text'),
+                  type: 'text',
+                  props: { text: 'Edit this panel content' },
+                  children: [],
+                },
+              ],
+            },
+            {
+              id: newNodeId('accordion-item'),
+              type: 'accordion-item',
+              props: { title: 'Accordion Item 2', defaultOpen: false },
+              children: [
+                {
+                  id: newNodeId('text'),
+                  type: 'text',
+                  props: { text: 'Edit this panel content' },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+        undefined,
+        5,
+      );
+    case 'tabs':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'tabs',
+          props: { orientation: 'horizontal' },
+          children: [
+            {
+              id: newNodeId('tab-item'),
+              type: 'tab-item',
+              props: { label: 'Tab 1' },
+              children: [
+                {
+                  id: newNodeId('text'),
+                  type: 'text',
+                  props: { text: 'Edit this tab content' },
+                  children: [],
+                },
+              ],
+            },
+            {
+              id: newNodeId('tab-item'),
+              type: 'tab-item',
+              props: { label: 'Tab 2' },
+              children: [
+                {
+                  id: newNodeId('text'),
+                  type: 'text',
+                  props: { text: 'Edit this tab content' },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+        undefined,
+        5,
+      );
+    case 'tab-item':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'tab-item',
+          props: { label: 'Tab' },
+          children: [
+            {
+              id: newNodeId('text'),
+              type: 'text',
+              props: { text: 'Edit this tab content' },
+              children: [],
+            },
+          ],
+        },
+        undefined,
+        5,
+      );
+    case 'gallery':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'gallery',
+          props: {},
+          style: {
+            base: {
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gap: '16px',
+            },
+          },
+          children: [1, 2, 3].map(() => ({
+            id: newNodeId('image'),
+            type: 'image' as const,
+            props: { src: '/assets/placeholder.png', alt: 'Gallery image' },
+            children: [],
+          })),
+        },
+        undefined,
+        5,
+      );
   }
+  throw new BuilderAdapterError(`Unsupported builder block type "${String(type)}"`);
 }
 
 export function createExtensionBlockDefinition(extensionId: string): ComponentDefinition {
@@ -1151,9 +1406,61 @@ function nodeFromSnapshot(
     return { id, type, style, props: props.data, children: [] };
   }
 
+  if (type === 'quote') {
+    const hasUnexpectedEditorChild = snapshot.children.some(
+      (child) => child.attributes[BUILDER_QUOTE_PREVIEW_ATTRIBUTE] === undefined,
+    );
+    if (hasUnexpectedEditorChild) {
+      throw new BuilderAdapterError(
+        'Quote nodes may only contain editor preview content',
+        [...path, 'children'],
+      );
+    }
+    const props = QuotePropsSchema.safeParse(
+      readJsonAttribute(snapshot.attributes, BUILDER_QUOTE_PROPS_ATTRIBUTE, path),
+    );
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children: [] };
+  }
+
   const children = snapshot.children.map((child, index) =>
     nodeFromSnapshot(child, [...path, 'children', String(index)]),
   );
+
+  if (
+    type === 'accordion' ||
+    type === 'accordion-item' ||
+    type === 'tabs' ||
+    type === 'tab-item'
+  ) {
+    const propsSchema =
+      type === 'accordion'
+        ? AccordionPropsSchema
+        : type === 'accordion-item'
+          ? AccordionItemPropsSchema
+          : type === 'tabs'
+            ? TabsPropsSchema
+            : TabItemPropsSchema;
+    const props = propsSchema.safeParse(
+      readJsonAttribute(snapshot.attributes, BUILDER_COMPOUND_PROPS_ATTRIBUTE, path),
+    );
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children };
+  }
+
+  if (type === 'gallery') {
+    return { id, type, style, props: {}, children };
+  }
 
   const common = {
     id,
@@ -1218,22 +1525,25 @@ function nodeFromSnapshot(
         },
       };
   }
+  throw new BuilderAdapterError('Unsupported editor node type');
 }
 
 export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePayload {
   const root = nodeFromSnapshot(snapshot, ['root']);
   const versionValue = snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE];
   const version =
-    versionValue === '4' || versionValue === 4 || containsV4Node(root)
-      ? 4
-      : versionValue === '3' ||
-          versionValue === 3 ||
-          containsCountdownNode(root) ||
-          containsExtensionNode(root)
-        ? 3
-        : versionValue === '2' || versionValue === 2 || containsFormNode(root)
-          ? 2
-          : 1;
+    versionValue === '5' || versionValue === 5 || containsV5Node(root)
+      ? 5
+      : versionValue === '4' || versionValue === 4 || containsV4Node(root)
+        ? 4
+        : versionValue === '3' ||
+            versionValue === 3 ||
+            containsCountdownNode(root) ||
+            containsExtensionNode(root)
+          ? 3
+          : versionValue === '2' || versionValue === 2 || containsFormNode(root)
+            ? 2
+            : 1;
   const candidate: unknown = {
     version,
     metadata: readMetadata(snapshot.attributes),
@@ -1291,6 +1601,23 @@ function containsV4Node(node: Record<string, unknown>): boolean {
     node.children.some(
       (child): child is Record<string, unknown> =>
         isObject(child) && containsV4Node(child),
+    )
+  );
+}
+
+function containsV5Node(node: Record<string, unknown>): boolean {
+  if (
+    ['quote', 'accordion', 'accordion-item', 'tabs', 'tab-item', 'gallery'].includes(
+      String(node.type),
+    )
+  ) {
+    return true;
+  }
+  return (
+    Array.isArray(node.children) &&
+    node.children.some(
+      (child): child is Record<string, unknown> =>
+        isObject(child) && containsV5Node(child),
     )
   );
 }

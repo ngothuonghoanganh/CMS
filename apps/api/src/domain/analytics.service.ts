@@ -17,10 +17,7 @@ import {
   normalizePagePath,
   type AnalyticsClientEventV1,
   type AnalyticsIngestResponse,
-  type PageNode,
-  type PageNodeV2,
-  type PageNodeV3,
-  type PageNodeV4,
+  type AnyPageNode,
 } from '@payload/contracts';
 
 import {
@@ -355,10 +352,7 @@ function deriveDeviceType(
   return 'desktop';
 }
 
-function findNode(
-  node: PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4,
-  nodeId: string,
-): PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | undefined {
+function findNode(node: AnyPageNode, nodeId: string): AnyPageNode | undefined {
   if (node.id === nodeId) return node;
   for (const child of node.children) {
     const match = findNode(child, nodeId);

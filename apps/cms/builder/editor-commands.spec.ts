@@ -307,4 +307,59 @@ describe('editor command boundary', () => {
     });
     expect(list.children).toHaveLength(1);
   });
+
+  it('rejects removal of the last required compound child', () => {
+    const item = new FakeComponent('item-1', 'accordion-item');
+    const accordion = new FakeComponent('accordion', 'accordion', [item]);
+    const section = new FakeComponent('section', 'section', [accordion]);
+    const editor = new FakeEditor(new FakeComponent('root', 'root', [section]));
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'item-1' })).toBe(false);
+    expect(bus.dispatch({ kind: 'remove', nodeId: 'item-1' }).changed).toBe(false);
+    expect(accordion.children).toHaveLength(1);
+    expect(
+      executeEditorCommand(asEditor(editor), { kind: 'remove', nodeId: 'item-1' })
+        .changed,
+    ).toBe(false);
+  });
+
+  it('rejects compound add and duplicate operations at the registry maximum', () => {
+    const images = Array.from(
+      { length: 50 },
+      (_, index) => new FakeComponent(`image-${index}`, 'image'),
+    );
+    const gallery = new FakeComponent('gallery', 'gallery', images);
+    const section = new FakeComponent('section', 'section', [gallery]);
+    const editor = new FakeEditor(new FakeComponent('root', 'root', [section]));
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    const insert: EditorCommand = {
+      kind: 'insert',
+      definition: createBlockDefinition('image'),
+      parentId: 'gallery',
+    };
+    expect(bus.canDispatch(insert)).toBe(false);
+    expect(bus.dispatch(insert).changed).toBe(false);
+    expect(bus.canDispatch({ kind: 'duplicate', nodeId: 'image-0' })).toBe(false);
+    expect(gallery.children).toHaveLength(50);
+  });
+
+  it('inserts a structural child through the same finite command boundary', () => {
+    const accordion = new FakeComponent('accordion', 'accordion');
+    const section = new FakeComponent('section', 'section', [accordion]);
+    const editor = new FakeEditor(new FakeComponent('root', 'root', [section]));
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    const result = bus.dispatch({
+      kind: 'insert-structural-child',
+      parentId: 'accordion',
+      childType: 'accordion-item',
+    });
+    expect(result.changed).toBe(true);
+    expect(accordion.children).toHaveLength(1);
+    expect(accordion.children[0]?.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe(
+      'accordion-item',
+    );
+  });
 });

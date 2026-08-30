@@ -57,6 +57,76 @@ export const PAGE_RUNTIME_BASELINE_CSS = `
     height: auto;
   }
 
+  blockquote[data-payload-node-type='quote'] {
+    margin: 0;
+    padding: 1rem 1.25rem;
+    border-left: 4px solid #cbd5e1;
+  }
+
+  blockquote[data-payload-node-type='quote'] p {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  blockquote[data-payload-node-type='quote'] cite {
+    display: block;
+    margin-top: 0.75rem;
+    font-size: 0.9em;
+    font-style: normal;
+    opacity: 0.72;
+  }
+
+  .payload-accordion {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .payload-accordion > section {
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+  }
+
+  .payload-accordion button,
+  .payload-tabs [role='tab'] {
+    border: 0;
+    padding: 0.8rem 1rem;
+    color: inherit;
+    background: #f8fafc;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+  }
+
+  .payload-accordion button {
+    width: 100%;
+    text-align: left;
+  }
+
+  .payload-accordion [role='region'],
+  .payload-tabs [role='tabpanel'] {
+    padding: 1rem;
+  }
+
+  .payload-tabs {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .payload-tabs [role='tablist'] {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .payload-tabs-vertical [role='tablist'] {
+    flex-direction: column;
+  }
+
+  .payload-tabs [role='tab'][aria-selected='true'] {
+    color: #243b8f;
+    background: #e9edff;
+  }
+
   a[data-payload-node-type='button'] {
     display: inline-block;
     cursor: pointer;

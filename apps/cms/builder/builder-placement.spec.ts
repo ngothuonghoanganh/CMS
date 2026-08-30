@@ -202,6 +202,49 @@ describe('builder placement engine', () => {
     expect(textA.parent()).not.toBe(textB);
   });
 
+  it('enforces compound child types and structural parent rules', () => {
+    const image = new FakeComponent('image', 'image');
+    const gallery = new FakeComponent('gallery', 'gallery', [image]);
+    const button = new FakeComponent('button', 'button');
+    const container = new FakeComponent('container', 'container', [button]);
+    const sourceTab = new FakeComponent('tab-item', 'tab-item');
+    const root = new FakeComponent('root', 'root', [
+      new FakeComponent('section', 'section', [gallery, container, sourceTab]),
+    ]);
+
+    expect(
+      resolveNodePlacement(asComponent(root), intent('image', 'gallery', 'inside')).valid,
+    ).toBe(true);
+    expect(
+      resolveNodePlacement(asComponent(root), intent('button', 'gallery', 'inside'))
+        .valid,
+    ).toBe(false);
+    expect(
+      resolveNodePlacement(asComponent(root), intent('tab-item', 'container', 'inside'))
+        .valid,
+    ).toBe(false);
+  });
+
+  it('does not allow moving the final required item out of an accordion', () => {
+    const item = new FakeComponent('item-1', 'accordion-item');
+    const accordion = new FakeComponent('accordion', 'accordion', [item]);
+    const otherAccordion = new FakeComponent('accordion-2', 'accordion', [
+      new FakeComponent('item-2', 'accordion-item'),
+    ]);
+    const section = new FakeComponent('section', 'section', [accordion, otherAccordion]);
+    const root = new FakeComponent('root', 'root', [section]);
+
+    const result = resolveNodePlacement(
+      asComponent(root),
+      intent('item-1', 'accordion-2', 'inside'),
+    );
+    expect(result).toEqual({
+      valid: false,
+      reason: 'accordion must keep at least one structural child.',
+    });
+    expect(accordion.children).toHaveLength(1);
+  });
+
   it('rejects moving an ancestor into its descendant', () => {
     const { root, section, containerA } = fixture();
     const result = resolveNodePlacement(

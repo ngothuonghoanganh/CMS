@@ -4,8 +4,10 @@
 
 - Starting HEAD: `10197ed89397a67f1e8e90524cbde9e7b294c25f`
   (`feat(cms): consolidate builder inspector and spacing UX`)
-- Ending HEAD remains the same commit; the Phase 15 implementation is currently
-  an uncommitted working-tree change.
+- Ending HEAD: `b0459e3ead39d3a8b644c86aabebe997218a474a`
+  (`feat(cms): add registry-driven component platform`). The Phase 15
+  implementation is committed in that baseline; Phase 16 is the current
+  uncommitted working-tree change.
 - Gate 0 was run before the Phase 15 expansion. The Phase 14.2-focused CMS,
   contracts and renderer suites passed.
 

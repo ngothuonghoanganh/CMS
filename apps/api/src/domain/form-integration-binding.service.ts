@@ -8,10 +8,7 @@ import {
   UpdateFormIntegrationBindingRequestSchema,
   type FormIntegrationBinding,
   type FormIntegrationBindingListResponse,
-  type PageNode,
-  type PageNodeV2,
-  type PageNodeV3,
-  type PageNodeV4,
+  type AnyPageNode,
   type UpdateFormIntegrationBindingRequest,
 } from '@payload/contracts';
 import { randomUUID } from 'node:crypto';
@@ -124,10 +121,7 @@ export class FormIntegrationBindingService {
   }
 }
 
-function findForm(
-  node: PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4,
-  formNodeId: string,
-): boolean {
+function findForm(node: AnyPageNode, formNodeId: string): boolean {
   if (node.type === 'form') return node.id === formNodeId;
   return node.children.some((child) => findForm(child, formNodeId));
 }

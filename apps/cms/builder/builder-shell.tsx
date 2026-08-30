@@ -96,7 +96,12 @@ const blockCategoryLabels: Record<(typeof blockCategoryOrder)[number], string> =
 
 const blockOptions: AvailableBlockOption[] = [
   ...Object.values(PAGE_COMPONENT_REGISTRY)
-    .filter((definition) => definition.type !== 'root' && definition.type !== 'extension')
+    .filter(
+      (definition) =>
+        definition.type !== 'root' &&
+        definition.type !== 'extension' &&
+        definition.builder.insertable,
+    )
     .map((definition) => ({
       kind: 'component' as const,
       type: definition.type as BuilderBlockType,
@@ -1689,6 +1694,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               <BuilderInspector
                 inspectorTab={inspectorTab}
                 onInspectorTabChange={setInspectorTab}
+                onAddStructuralChild={() => editorRef.current?.addStructuralChild()}
+                onMoveStructuralChild={(nodeId, direction) =>
+                  editorRef.current?.moveStructuralChild(nodeId, direction)
+                }
+                onRemoveStructuralChild={(nodeId) =>
+                  editorRef.current?.removeStructuralChild(nodeId)
+                }
+                onSelectNode={(nodeId) => editorRef.current?.selectNode(nodeId)}
                 onToggleSection={toggleInspectorSection}
                 openSections={openInspectorSections}
                 resetSelectedStyle={resetSelectedStyle}

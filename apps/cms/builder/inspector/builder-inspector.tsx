@@ -42,6 +42,10 @@ type BuilderInspectorProps = {
   updateSelectedProperty: (property: string, value: unknown) => void;
   updateSelectedStyle: (property: string, value: string) => void;
   resetSelectedStyle: (property: string) => void;
+  onSelectNode: (nodeId: string) => void;
+  onAddStructuralChild: () => void;
+  onRemoveStructuralChild: (nodeId: string) => void;
+  onMoveStructuralChild: (nodeId: string, direction: 'up' | 'down') => void;
   usableAssets: Asset[];
 };
 
@@ -98,6 +102,10 @@ export function BuilderInspector({
   updateSelectedProperty,
   updateSelectedStyle,
   resetSelectedStyle,
+  onSelectNode,
+  onAddStructuralChild,
+  onRemoveStructuralChild,
+  onMoveStructuralChild,
   usableAssets,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
@@ -108,6 +116,10 @@ export function BuilderInspector({
   const contentProperties = definition.propertiesSchema.filter(
     (property) => property.group === 'content',
   );
+  const structuralSlot = definition.slots.find((slot) => slot.structural);
+  const structuralChildren = structuralSlot
+    ? selected.children.filter((child) => structuralSlot.accepts.includes(child.type))
+    : [];
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {
     if (property.control === 'custom' && property.customEditor) {
@@ -215,6 +227,67 @@ export function BuilderInspector({
             {contentProperties.map((property) =>
               renderProperty(property, selected.props[property.key]),
             )}
+          </div>
+        </InspectorSection>
+      ) : null}
+
+      {inspectorTab === 'content' && structuralSlot ? (
+        <InspectorSection label={structuralSlot.label} onToggle={() => undefined} open>
+          <div className="builder-structural-editor">
+            {structuralChildren.map((child, index) => (
+              <div className="builder-structural-row" key={child.id}>
+                <button
+                  className="button button-ghost builder-structural-select"
+                  onClick={() => onSelectNode(child.id)}
+                  type="button"
+                >
+                  {child.label}
+                </button>
+                <div className="row-actions">
+                  <button
+                    aria-label={`Move ${child.label} up`}
+                    className="button button-ghost button-small"
+                    disabled={index === 0}
+                    onClick={() => onMoveStructuralChild(child.id, 'up')}
+                    type="button"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    aria-label={`Move ${child.label} down`}
+                    className="button button-ghost button-small"
+                    disabled={index === structuralChildren.length - 1}
+                    onClick={() => onMoveStructuralChild(child.id, 'down')}
+                    type="button"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    aria-label={`Remove ${child.label}`}
+                    className="button button-danger button-small"
+                    disabled={
+                      structuralSlot.minChildren !== undefined &&
+                      structuralChildren.length <= structuralSlot.minChildren
+                    }
+                    onClick={() => onRemoveStructuralChild(child.id)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              className="button button-secondary button-small"
+              disabled={
+                structuralSlot.maxChildren !== undefined &&
+                structuralChildren.length >= structuralSlot.maxChildren
+              }
+              onClick={onAddStructuralChild}
+              type="button"
+            >
+              + {structuralSlot.addLabel ?? `Add ${structuralSlot.label}`}
+            </button>
           </div>
         </InspectorSection>
       ) : null}

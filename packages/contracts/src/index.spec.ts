@@ -15,6 +15,7 @@ import {
   PagePayloadV2Schema,
   PagePayloadV3Schema,
   PagePayloadV4Schema,
+  PagePayloadV5Schema,
   PagePayloadSchema,
   CreateIntegrationRequestSchema,
   CreateCustomDomainRequestSchema,
@@ -298,6 +299,122 @@ describe('foundation contracts', () => {
       PagePreviewMessageSchema.safeParse({
         type: PAGE_PREVIEW_MESSAGE_TYPE,
         document: { ...document, payload: { version: 999 } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates the V5 compound tree, cardinality, and registry-owned child types', () => {
+    const payload = {
+      version: 5 as const,
+      metadata: { documentTitle: 'Compound page' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'quote',
+                type: 'quote' as const,
+                props: { text: 'Build with confidence', cite: 'Payload' },
+                children: [],
+              },
+              {
+                id: 'accordion',
+                type: 'accordion' as const,
+                props: { allowMultiple: false },
+                children: [
+                  {
+                    id: 'item-1',
+                    type: 'accordion-item' as const,
+                    props: { title: 'First', defaultOpen: true },
+                    children: [
+                      {
+                        id: 'item-copy',
+                        type: 'text' as const,
+                        props: { text: 'Panel one' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'tabs',
+                type: 'tabs' as const,
+                props: { orientation: 'horizontal' as const },
+                children: [
+                  {
+                    id: 'tab-1',
+                    type: 'tab-item' as const,
+                    props: { label: 'Overview' },
+                    children: [],
+                  },
+                ],
+              },
+              {
+                id: 'gallery',
+                type: 'gallery' as const,
+                props: {},
+                children: [
+                  {
+                    id: 'gallery-image',
+                    type: 'image' as const,
+                    props: { src: '/assets/one.png', alt: 'One' },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(PagePayloadV5Schema.parse(payload)).toEqual(payload);
+    expect(PagePayloadSchema.parse(payload)).toEqual(payload);
+    expect(
+      PagePayloadV5Schema.safeParse({
+        ...payload,
+        root: {
+          ...payload.root,
+          children: payload.root.children.map((section) => ({
+            ...section,
+            children: section.children.map((node) =>
+              node.type === 'accordion' ? { ...node, children: [] } : node,
+            ),
+          })),
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      PagePayloadV5Schema.safeParse({
+        ...payload,
+        root: {
+          ...payload.root,
+          children: payload.root.children.map((section) => ({
+            ...section,
+            children: section.children.map((node) =>
+              node.type === 'gallery'
+                ? {
+                    ...node,
+                    children: [
+                      {
+                        id: 'invalid-button',
+                        type: 'button',
+                        props: { label: 'No', href: '#', target: '_self' },
+                        children: [],
+                      },
+                    ],
+                  }
+                : node,
+            ),
+          })),
+        },
       }).success,
     ).toBe(false);
   });

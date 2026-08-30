@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_COMPONENT_STYLE_CAPABILITIES,
+  canDuplicateChild,
+  canInsertChild,
+  canRemoveChild,
+  findAcceptingSlot,
   styleSchemaFor,
 } from './component-registry';
 
@@ -52,5 +56,25 @@ describe('component style capabilities', () => {
       'border-color',
     );
     expect(styleSchemaFor('video').map((property) => property.key)).toContain('width');
+  });
+
+  it('describes compound structure and builder exposure in the registry', () => {
+    expect(PAGE_COMPONENT_REGISTRY.accordion.builder.insertable).toBe(true);
+    expect(PAGE_COMPONENT_REGISTRY['accordion-item'].builder.insertable).toBe(false);
+    expect(PAGE_COMPONENT_REGISTRY['tab-item'].builder.insertable).toBe(false);
+    expect(PAGE_COMPONENT_REGISTRY.gallery.builder.insertable).toBe(true);
+
+    expect(findAcceptingSlot('accordion', 'accordion-item', 0)).toMatchObject({
+      minChildren: 1,
+      maxChildren: 20,
+      structural: true,
+    });
+    expect(findAcceptingSlot('tabs', 'text')).toBeUndefined();
+    expect(findAcceptingSlot('gallery', 'button')).toBeUndefined();
+    expect(canInsertChild('gallery', 'image', 49)).toBe(true);
+    expect(canInsertChild('gallery', 'image', 50)).toBe(false);
+    expect(canRemoveChild('accordion', 'accordion-item', 1)).toBe(false);
+    expect(canRemoveChild('accordion', 'accordion-item', 2)).toBe(true);
+    expect(canDuplicateChild('tabs', 'tab-item', 20)).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ import {
   type PageNodeV2,
   type PageNodeV3,
   type PageNodeV4,
+  type PageNodeV5,
   type PageNodeStyle,
   type PagePayload,
   type FormNode,
@@ -21,6 +22,12 @@ import {
   type DividerNode,
   type ListNode,
   type VideoNode,
+  type QuoteNodeV5,
+  type AccordionNodeV5,
+  type AccordionItemNodeV5,
+  type TabsNodeV5,
+  type TabItemNodeV5,
+  type GalleryNodeV5,
   type PageRuntimeExtension,
   type ResolvedNavigationItem,
   PAGE_RESPONSIVE_BREAKPOINTS,
@@ -32,8 +39,9 @@ import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 
 import { FormRenderer } from './form-renderer';
 import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
+import { AccordionRuntime, TabsRuntime } from './core-interactive-runtime';
 
-type RenderableNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4;
+type RenderableNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5;
 type RootRenderableNode =
   | RootNode
   | Extract<PageNodeV2, { type: 'root' }>
@@ -245,6 +253,83 @@ function renderVideo(node: VideoNode): ReactElement {
   );
 }
 
+function renderQuote(node: QuoteNodeV5): ReactElement {
+  return (
+    <blockquote {...nodeAttributes(node)} style={nodeStyle(node)}>
+      <p>{node.props.text}</p>
+      {node.props.cite?.trim() ? <cite>{node.props.cite}</cite> : null}
+    </blockquote>
+  );
+}
+
+function renderAccordion(node: AccordionNodeV5, context: RenderContext): ReactElement {
+  return (
+    <AccordionRuntime
+      allowMultiple={node.props.allowMultiple}
+      id={node.id}
+      items={node.children.map((item) => ({
+        id: item.id,
+        title: item.type === 'accordion-item' ? item.props.title : 'Accordion item',
+        defaultOpen: item.type === 'accordion-item' ? item.props.defaultOpen : false,
+        content: renderChildren(item, context),
+        ...(item.style ? { style: nodeStyle(item) } : {}),
+      }))}
+      style={nodeStyle(node)}
+    />
+  );
+}
+
+function renderAccordionItem(
+  node: AccordionItemNodeV5,
+  context: RenderContext,
+): ReactElement {
+  return (
+    <section {...nodeAttributes(node)} style={nodeStyle(node)}>
+      {renderChildren(node, context)}
+    </section>
+  );
+}
+
+function renderTabs(node: TabsNodeV5, context: RenderContext): ReactElement {
+  return (
+    <TabsRuntime
+      id={node.id}
+      items={node.children.map((item) => ({
+        id: item.id,
+        label: item.type === 'tab-item' ? item.props.label : 'Tab',
+        content: renderChildren(item, context),
+        ...(item.style ? { style: nodeStyle(item) } : {}),
+      }))}
+      orientation={node.props.orientation}
+      style={nodeStyle(node)}
+    />
+  );
+}
+
+function renderTabItem(node: TabItemNodeV5, context: RenderContext): ReactElement {
+  return (
+    <section {...nodeAttributes(node)} style={nodeStyle(node)}>
+      {renderChildren(node, context)}
+    </section>
+  );
+}
+
+function renderGallery(node: GalleryNodeV5, context: RenderContext): ReactElement {
+  return (
+    <div
+      {...nodeAttributes(node)}
+      style={{
+        display: 'grid',
+        gap: '16px',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        ...nodeStyle(node),
+      }}
+    >
+      {renderChildren(node, context)}
+    </div>
+  );
+}
+
 function renderCountdown(node: CountdownNode, context: RenderContext): ReactElement {
   if (context.runtimeIds?.includes('countdown.runtime')) {
     return (
@@ -379,6 +464,13 @@ export const PAGE_RENDERER_REGISTRY = {
   divider: (node) => renderDivider(node as DividerNode),
   list: (node) => renderList(node as ListNode),
   video: (node) => renderVideo(node as VideoNode),
+  quote: (node) => renderQuote(node as QuoteNodeV5),
+  accordion: (node, context) => renderAccordion(node as AccordionNodeV5, context),
+  'accordion-item': (node, context) =>
+    renderAccordionItem(node as AccordionItemNodeV5, context),
+  tabs: (node, context) => renderTabs(node as TabsNodeV5, context),
+  'tab-item': (node, context) => renderTabItem(node as TabItemNodeV5, context),
+  gallery: (node, context) => renderGallery(node as GalleryNodeV5, context),
 } satisfies Record<RenderableNode['type'], NodeRenderer>;
 
 function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): ReactElement {

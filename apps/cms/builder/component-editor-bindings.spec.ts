@@ -28,6 +28,31 @@ describe('registry property bindings', () => {
       kind: 'attributes',
       attributes: { autoplay: 'false', muted: 'false' },
     });
+    expect(resolveEditorPropertyUpdate('quote', 'cite', 'Ada Lovelace')).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property: 'cite', value: 'Ada Lovelace' },
+    });
+    expect(resolveEditorPropertyUpdate('accordion', 'allowMultiple', true)).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property: 'allowMultiple', value: true },
+    });
+    expect(resolveEditorPropertyUpdate('accordion-item', 'defaultOpen', true)).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property: 'defaultOpen', value: true },
+    });
+    expect(resolveEditorPropertyUpdate('tabs', 'orientation', 'vertical')).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property: 'orientation', value: 'vertical' },
+    });
+    expect(resolveEditorPropertyUpdate('tab-item', 'label', 'Pricing')).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property: 'label', value: 'Pricing' },
+    });
   });
 
   it('validates unsafe URLs and complex custom values before dispatch', () => {
@@ -35,6 +60,10 @@ describe('registry property bindings', () => {
       resolveEditorPropertyUpdate('link', 'href', 'javascript:alert(1)'),
     ).toThrow();
     expect(() => resolveEditorPropertyUpdate('heading', 'level', 7)).toThrow();
+    expect(() => resolveEditorPropertyUpdate('quote', 'text', '')).toThrow();
+    expect(() =>
+      resolveEditorPropertyUpdate('tabs', 'orientation', 'diagonal'),
+    ).toThrow();
     expect(() =>
       resolveEditorPropertyUpdate('video', 'src', 'data:text/html,boom'),
     ).toThrow();

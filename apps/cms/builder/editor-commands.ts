@@ -1,24 +1,41 @@
 import type { Component, ComponentDefinition, Editor } from 'grapesjs';
-import { CountdownPropsSchema, ListPropsSchema } from '@payload/contracts';
+import {
+  AccordionItemPropsSchema,
+  AccordionPropsSchema,
+  CountdownPropsSchema,
+  ListPropsSchema,
+  QuotePropsSchema,
+  TabItemPropsSchema,
+  TabsPropsSchema,
+  canDuplicateChild,
+  canInsertChild,
+  canRemoveChild,
+  findAcceptingSlot,
+} from '@payload/contracts';
 
 import {
-  canInsertNode,
   canMoveNode,
   findPayloadComponent,
   moveNodeByIntent,
+  payloadNodeType,
   type MoveNodeIntent,
 } from './builder-interaction';
 import { resolveEditorPropertyUpdate } from './component-editor-bindings';
 import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
+  BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  BUILDER_QUOTE_PROPS_ATTRIBUTE,
+  createBlockDefinition,
   isBuilderNodeType,
   reassignEditorNodeIds,
   sanitizeInlineText,
   listPreviewComponents,
   formPreviewComponents,
+  quotePreviewComponents,
   updateEditorViewportStyle,
   type BuilderViewport,
+  type BuilderBlockType,
   type BuilderNodeType,
 } from './builder-adapter';
 
@@ -57,6 +74,7 @@ export type EditorCommand =
       value: string;
       viewport: BuilderViewport;
     }
+  | { kind: 'insert-structural-child'; parentId: string; childType: BuilderBlockType }
   | { kind: 'undo' }
   | { kind: 'redo' };
 
@@ -113,6 +131,31 @@ function definitionNodeType(
   return typeof type === 'string' && isBuilderNodeType(type) ? type : undefined;
 }
 
+function payloadChildCount(parent: Component): number {
+  return parent.components().models.filter((child) => Boolean(payloadNodeType(child)))
+    .length;
+}
+
+function canRemoveLiveNode(root: Component, node: Component): boolean {
+  if (node === root) return false;
+  const parent = node.parent();
+  const parentType = parent && payloadNodeType(parent);
+  const nodeType = payloadNodeType(node);
+  if (!parent || !parentType || !nodeType) return true;
+  const slot = findAcceptingSlot(parentType, nodeType);
+  return !slot || canRemoveChild(parentType, nodeType, payloadChildCount(parent));
+}
+
+function canDuplicateLiveNode(root: Component, node: Component): boolean {
+  if (node === root) return false;
+  const parent = node.parent();
+  const parentType = parent && payloadNodeType(parent);
+  const nodeType = payloadNodeType(node);
+  if (!parent || !parentType || !nodeType) return true;
+  const slot = findAcceptingSlot(parentType, nodeType);
+  return !slot || canDuplicateChild(parentType, nodeType, payloadChildCount(parent));
+}
+
 function canInsertDefinition(
   parent: Component,
   definition: ComponentDefinition,
@@ -122,7 +165,7 @@ function canInsertDefinition(
   if (!isBuilderNodeType(parentType) || !childType) return false;
   // `droppable` is presentation behavior; command validation remains domain
   // driven and therefore also applies to Quick Add, Layers and keyboard paths.
-  return canInsertNode(parentType, childType);
+  return canInsertChild(parentType, childType, payloadChildCount(parent));
 }
 
 export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
@@ -156,6 +199,16 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
           canInsertDefinition(parent, command.definition) &&
           (!target || target.parent() === parent),
         );
+      }
+      if (command.kind === 'insert-structural-child') {
+        const parent = getNode(editor, command.parentId);
+        if (!parent) return false;
+        const parentType = payloadNodeType(parent);
+        if (!parentType) return false;
+        const childCount = parent
+          .components()
+          .models.filter((child) => Boolean(payloadNodeType(child))).length;
+        return canInsertChild(parentType, command.childType, childCount);
       }
       if (command.kind === 'set-property') {
         const node = getNode(editor, command.nodeId);
@@ -199,7 +252,11 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
       }
       if ('nodeId' in command) {
         const node = getNode(editor, command.nodeId);
-        return Boolean(node && (command.kind !== 'remove' || node !== root));
+        if (!node) return false;
+        if (command.kind === 'remove' && !canRemoveLiveNode(root, node)) return false;
+        if (command.kind === 'duplicate' && !canDuplicateLiveNode(root, node))
+          return false;
+        return true;
       }
       return true;
     },
@@ -239,6 +296,13 @@ export function executeEditorCommand(
       const selection = created[0];
       return selection ? { changed: true, selection } : { changed: false };
     }
+    case 'insert-structural-child': {
+      return executeEditorCommand(editor, {
+        kind: 'insert',
+        definition: createBlockDefinition(command.childType),
+        parentId: command.parentId,
+      });
+    }
     case 'move': {
       const result = moveNodeByIntent(root, command.intent);
       if (!result.valid) return { changed: false };
@@ -246,7 +310,7 @@ export function executeEditorCommand(
     }
     case 'remove': {
       const node = getNode(editor, command.nodeId);
-      if (!node || node === root) return { changed: false };
+      if (!node || !canRemoveLiveNode(root, node)) return { changed: false };
       const fallback = node.parent() ?? root;
       editor.select(node);
       editor.runCommand('core:component-delete');
@@ -254,7 +318,7 @@ export function executeEditorCommand(
     }
     case 'duplicate': {
       const node = getNode(editor, command.nodeId);
-      if (!node || node === root) return { changed: false };
+      if (!node || !canDuplicateLiveNode(root, node)) return { changed: false };
       const parent = node.parent();
       const existingChildren = parent?.components().models.slice() ?? [];
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
@@ -327,6 +391,50 @@ export function executeEditorCommand(
       }
       const update = resolveEditorPropertyUpdate(type, property, value);
       if (!update) return { changed: false };
+      if (update.kind === 'attributes' && update.semanticPropsPatch) {
+        const semanticAttribute =
+          type === 'quote'
+            ? BUILDER_QUOTE_PROPS_ATTRIBUTE
+            : BUILDER_COMPOUND_PROPS_ATTRIBUTE;
+        const propsSchema =
+          type === 'quote'
+            ? QuotePropsSchema
+            : type === 'accordion'
+              ? AccordionPropsSchema
+              : type === 'accordion-item'
+                ? AccordionItemPropsSchema
+                : type === 'tabs'
+                  ? TabsPropsSchema
+                  : TabItemPropsSchema;
+        const raw = node.getAttributes({ noStyle: true })[semanticAttribute];
+        if (typeof raw !== 'string') return { changed: false };
+        let current: unknown;
+        try {
+          current = JSON.parse(raw) as unknown;
+        } catch {
+          return { changed: false };
+        }
+        const parsed = propsSchema.safeParse(current);
+        if (!parsed.success) return { changed: false };
+        const next = propsSchema.safeParse({
+          ...parsed.data,
+          [update.semanticPropsPatch.property]: update.semanticPropsPatch.value,
+        });
+        if (!next.success) return { changed: false };
+        node.setAttributes({
+          ...node.getAttributes({ noStyle: true }),
+          [semanticAttribute]: JSON.stringify(next.data),
+        });
+        if (type === 'quote') {
+          const quote = QuotePropsSchema.safeParse(next.data);
+          if (quote.success) node.components(quotePreviewComponents(quote.data));
+        }
+        if (type === 'accordion-item' && 'title' in next.data)
+          node.set('content', next.data.title);
+        if (type === 'tab-item' && 'label' in next.data)
+          node.set('content', next.data.label);
+        return { changed: true, selection: node };
+      }
       if (update.kind === 'content') {
         node.set('content', update.value);
       } else {

@@ -1,10 +1,10 @@
-import type { PageNodeV4 } from './index';
+import type { PageNodeV5 } from './index';
 import {
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PageStylePropertyKey,
 } from './style-registry';
 
-export type PageComponentType = PageNodeV4['type'];
+export type PageComponentType = PageNodeV5['type'];
 
 export type ComponentPropertyGroup = 'content' | 'style' | 'advanced';
 
@@ -48,6 +48,20 @@ export type ComponentSlotDefinition = {
   name: string;
   label: string;
   accepts: readonly PageComponentType[];
+  /** Minimum number of children owned by this semantic slot. */
+  minChildren?: number;
+  /** Maximum number of children owned by this semantic slot. */
+  maxChildren?: number;
+  /** Label used by generic structural add actions. */
+  addLabel?: string;
+  /** Distinguishes semantic structural children from ordinary content. */
+  structural?: boolean;
+};
+
+export type ComponentBuilderExposure = {
+  /** Internal nodes remain selectable/persisted but are not global Add blocks. */
+  insertable: boolean;
+  keywords: readonly string[];
 };
 
 export type ComponentMigrationDefinition = {
@@ -68,6 +82,8 @@ export type PageComponentDefinition = {
   slots: readonly ComponentSlotDefinition[];
   migrations: readonly ComponentMigrationDefinition[];
   propertiesSchema: readonly ComponentPropertyDefinition[];
+  builder: ComponentBuilderExposure;
+  internal: boolean;
 };
 
 const responsiveStyleProperties: readonly ComponentPropertyDefinition[] =
@@ -364,6 +380,80 @@ export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
     'border-radius',
     'opacity',
   ],
+  quote: [
+    'width',
+    'max-width',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  accordion: [
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+    'gap',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  'accordion-item': [
+    'margin',
+    'padding',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+  ],
+  tabs: [
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+    'gap',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  'tab-item': [
+    'padding',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+  ],
+  gallery: [
+    'display',
+    'grid-template-columns',
+    'gap',
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+  ],
 };
 
 export const styleSchemaFor = (
@@ -380,10 +470,15 @@ const content = (
 ): readonly ComponentPropertyDefinition[] => properties;
 
 const definition = (
-  input: Omit<PageComponentDefinition, 'propertiesSchema' | 'slots' | 'migrations'> & {
+  input: Omit<
+    PageComponentDefinition,
+    'propertiesSchema' | 'slots' | 'migrations' | 'builder' | 'internal'
+  > & {
     propertiesSchema?: readonly ComponentPropertyDefinition[];
     slots?: readonly ComponentSlotDefinition[];
     migrations?: readonly ComponentMigrationDefinition[];
+    builder?: Partial<ComponentBuilderExposure>;
+    internal?: boolean;
   },
 ): PageComponentDefinition => ({
   ...input,
@@ -394,6 +489,11 @@ const definition = (
       : []),
   migrations: input.migrations ?? [],
   propertiesSchema: [...(input.propertiesSchema ?? []), ...styleSchemaFor(input.type)],
+  builder: {
+    insertable: input.builder?.insertable ?? !input.internal,
+    keywords: input.builder?.keywords ?? [input.type, input.label],
+  },
+  internal: input.internal ?? false,
 });
 
 const commonLayoutParents: readonly PageComponentType[] = [
@@ -434,6 +534,10 @@ export const PAGE_COMPONENT_REGISTRY = {
       'divider',
       'list',
       'video',
+      'quote',
+      'accordion',
+      'tabs',
+      'gallery',
     ],
   }),
   container: definition({
@@ -458,6 +562,10 @@ export const PAGE_COMPONENT_REGISTRY = {
       'divider',
       'list',
       'video',
+      'quote',
+      'accordion',
+      'tabs',
+      'gallery',
     ],
   }),
   text: definition({
@@ -690,6 +798,165 @@ export const PAGE_COMPONENT_REGISTRY = {
       { key: 'playsInline', label: 'Play inline', group: 'content', control: 'toggle' },
     ]),
   }),
+  quote: definition({
+    type: 'quote',
+    version: 1,
+    label: 'Quote',
+    category: 'content',
+    editorTagName: 'blockquote',
+    defaultProps: { text: 'A thoughtful quote', cite: '' },
+    allowedParents: commonLayoutParents.concat(['accordion-item', 'tab-item']),
+    allowedChildren: [],
+    propertiesSchema: content([
+      { key: 'text', label: 'Quote', group: 'content', control: 'textarea' },
+      { key: 'cite', label: 'Citation', group: 'content', control: 'text' },
+    ]),
+  }),
+  accordion: definition({
+    type: 'accordion',
+    version: 1,
+    label: 'Accordion',
+    category: 'content',
+    editorTagName: 'div',
+    defaultProps: { allowMultiple: false },
+    allowedParents: commonLayoutParents,
+    allowedChildren: ['accordion-item'],
+    slots: [
+      {
+        name: 'items',
+        label: 'Accordion items',
+        accepts: ['accordion-item'],
+        minChildren: 1,
+        maxChildren: 20,
+        addLabel: 'Add Accordion Item',
+        structural: true,
+      },
+    ],
+    propertiesSchema: content([
+      {
+        key: 'allowMultiple',
+        label: 'Allow multiple open',
+        group: 'content',
+        control: 'toggle',
+      },
+    ]),
+  }),
+  'accordion-item': definition({
+    type: 'accordion-item',
+    version: 1,
+    label: 'Accordion Item',
+    category: 'content',
+    editorTagName: 'section',
+    defaultProps: { title: 'Accordion item', defaultOpen: false },
+    allowedParents: ['accordion'],
+    allowedChildren: [
+      'container',
+      'text',
+      'heading',
+      'image',
+      'button',
+      'link',
+      'divider',
+      'list',
+      'video',
+      'form',
+      'countdown',
+      'extension',
+      'quote',
+    ],
+    propertiesSchema: content([
+      { key: 'title', label: 'Title', group: 'content', control: 'text' },
+      {
+        key: 'defaultOpen',
+        label: 'Open by default',
+        group: 'content',
+        control: 'toggle',
+      },
+    ]),
+    internal: true,
+  }),
+  tabs: definition({
+    type: 'tabs',
+    version: 1,
+    label: 'Tabs',
+    category: 'content',
+    editorTagName: 'div',
+    defaultProps: { orientation: 'horizontal' },
+    allowedParents: commonLayoutParents,
+    allowedChildren: ['tab-item'],
+    slots: [
+      {
+        name: 'items',
+        label: 'Tabs',
+        accepts: ['tab-item'],
+        minChildren: 1,
+        maxChildren: 20,
+        addLabel: 'Add Tab',
+        structural: true,
+      },
+    ],
+    propertiesSchema: content([
+      {
+        key: 'orientation',
+        label: 'Orientation',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'horizontal', label: 'Horizontal' },
+          { value: 'vertical', label: 'Vertical' },
+        ],
+      },
+    ]),
+  }),
+  'tab-item': definition({
+    type: 'tab-item',
+    version: 1,
+    label: 'Tab Item',
+    category: 'content',
+    editorTagName: 'section',
+    defaultProps: { label: 'Tab' },
+    allowedParents: ['tabs'],
+    allowedChildren: [
+      'container',
+      'text',
+      'heading',
+      'image',
+      'button',
+      'link',
+      'divider',
+      'list',
+      'video',
+      'form',
+      'countdown',
+      'extension',
+      'quote',
+    ],
+    propertiesSchema: content([
+      { key: 'label', label: 'Tab label', group: 'content', control: 'text' },
+    ]),
+    internal: true,
+  }),
+  gallery: definition({
+    type: 'gallery',
+    version: 1,
+    label: 'Gallery',
+    category: 'content',
+    editorTagName: 'div',
+    defaultProps: {},
+    allowedParents: commonLayoutParents,
+    allowedChildren: ['image'],
+    slots: [
+      {
+        name: 'images',
+        label: 'Gallery images',
+        accepts: ['image'],
+        minChildren: 1,
+        maxChildren: 50,
+        addLabel: 'Add Image',
+        structural: true,
+      },
+    ],
+  }),
 } satisfies Record<PageComponentType, PageComponentDefinition>;
 
 export type PageComponentRegistry = typeof PAGE_COMPONENT_REGISTRY;
@@ -711,7 +978,47 @@ export function canContainPageComponent(
   parentType: PageComponentType,
   childType: PageComponentType,
 ): boolean {
-  return PAGE_COMPONENT_REGISTRY[parentType].allowedChildren.includes(childType);
+  return Boolean(findAcceptingSlot(parentType, childType));
+}
+
+export function findAcceptingSlot(
+  parentType: PageComponentType,
+  childType: PageComponentType,
+  currentChildCount = 0,
+): ComponentSlotDefinition | undefined {
+  return PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+    (slot) =>
+      slot.accepts.includes(childType) &&
+      (slot.maxChildren === undefined || currentChildCount < slot.maxChildren),
+  );
+}
+
+export function canInsertChild(
+  parentType: PageComponentType,
+  childType: PageComponentType,
+  currentChildCount = 0,
+): boolean {
+  return Boolean(findAcceptingSlot(parentType, childType, currentChildCount));
+}
+
+export function canRemoveChild(
+  parentType: PageComponentType,
+  childType: PageComponentType,
+  currentChildCount: number,
+): boolean {
+  const slot = PAGE_COMPONENT_REGISTRY[parentType].slots.find((candidate) =>
+    candidate.accepts.includes(childType),
+  );
+  if (!slot) return false;
+  return slot.minChildren === undefined || currentChildCount - 1 >= slot.minChildren;
+}
+
+export function canDuplicateChild(
+  parentType: PageComponentType,
+  childType: PageComponentType,
+  currentChildCount: number,
+): boolean {
+  return canInsertChild(parentType, childType, currentChildCount);
 }
 
 export { PAGE_STYLE_PROPERTY_GROUPS } from './style-registry';

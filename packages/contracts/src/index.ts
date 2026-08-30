@@ -1850,11 +1850,292 @@ export const PagePayloadV4Schema = z
   });
 
 export type PagePayloadV4 = z.infer<typeof PagePayloadV4Schema>;
+
+// V5 adds structural compound components while preserving the V4 tree shape:
+// every persisted node still owns an ordered `children` array. Internal item
+// nodes are real payload nodes, not editor-only implementation details.
+export const QuotePropsSchema = z
+  .object({
+    text: nonEmptyText.max(PAGE_PAYLOAD_MAX_TEXT_LENGTH),
+    cite: z.string().trim().max(500).optional(),
+  })
+  .strict();
+export type QuoteProps = z.infer<typeof QuotePropsSchema>;
+
+export const AccordionPropsSchema = z.object({ allowMultiple: z.boolean() }).strict();
+export type AccordionProps = z.infer<typeof AccordionPropsSchema>;
+
+export const AccordionItemPropsSchema = z
+  .object({ title: nonEmptyText.max(300), defaultOpen: z.boolean() })
+  .strict();
+export type AccordionItemProps = z.infer<typeof AccordionItemPropsSchema>;
+
+export const TabsPropsSchema = z
+  .object({ orientation: z.enum(['horizontal', 'vertical']) })
+  .strict();
+export type TabsProps = z.infer<typeof TabsPropsSchema>;
+
+export const TabItemPropsSchema = z.object({ label: nonEmptyText.max(300) }).strict();
+export type TabItemProps = z.infer<typeof TabItemPropsSchema>;
+
+export type PageNodeV5Base = {
+  id: string;
+  style?: PageNodeStyle | undefined;
+  children: PageNodeV5[];
+};
+export type RootNodeV5 = PageNodeV5Base & { type: 'root'; props: {} };
+export type SectionNodeV5 = PageNodeV5Base & { type: 'section'; props: {} };
+export type ContainerNodeV5 = PageNodeV5Base & { type: 'container'; props: {} };
+export type TextNodeV5 = PageNodeV5Base & {
+  type: 'text';
+  props: { text: string; align?: 'left' | 'center' | 'right' | undefined };
+};
+export type ImageNodeV5 = PageNodeV5Base & {
+  type: 'image';
+  props: { src: string; alt: string };
+};
+export type ButtonNodeV5 = PageNodeV5Base & {
+  type: 'button';
+  props: { label: string; href: string; target: '_self' | '_blank' };
+};
+export type FormNodeV5 = PageNodeV5Base & { type: 'form'; props: FormProps };
+export type CountdownNodeV5 = PageNodeV5Base & {
+  type: 'countdown';
+  props: CountdownProps;
+};
+export type ExtensionNodeV5 = PageNodeV5Base & {
+  type: 'extension';
+  props: CustomExtensionNodeProps;
+};
+export type HeadingNodeV5 = PageNodeV5Base & { type: 'heading'; props: HeadingProps };
+export type LinkNodeV5 = PageNodeV5Base & { type: 'link'; props: LinkProps };
+export type DividerNodeV5 = PageNodeV5Base & { type: 'divider'; props: {} };
+export type ListNodeV5 = PageNodeV5Base & { type: 'list'; props: ListProps };
+export type VideoNodeV5 = PageNodeV5Base & { type: 'video'; props: VideoProps };
+export type QuoteNodeV5 = PageNodeV5Base & { type: 'quote'; props: QuoteProps };
+export type AccordionNodeV5 = PageNodeV5Base & {
+  type: 'accordion';
+  props: AccordionProps;
+};
+export type AccordionItemNodeV5 = PageNodeV5Base & {
+  type: 'accordion-item';
+  props: AccordionItemProps;
+};
+export type TabsNodeV5 = PageNodeV5Base & { type: 'tabs'; props: TabsProps };
+export type TabItemNodeV5 = PageNodeV5Base & { type: 'tab-item'; props: TabItemProps };
+export type GalleryNodeV5 = PageNodeV5Base & { type: 'gallery'; props: {} };
+export type PageNodeV5 =
+  | RootNodeV5
+  | SectionNodeV5
+  | ContainerNodeV5
+  | TextNodeV5
+  | ImageNodeV5
+  | ButtonNodeV5
+  | FormNodeV5
+  | CountdownNodeV5
+  | ExtensionNodeV5
+  | HeadingNodeV5
+  | LinkNodeV5
+  | DividerNodeV5
+  | ListNodeV5
+  | VideoNodeV5
+  | QuoteNodeV5
+  | AccordionNodeV5
+  | AccordionItemNodeV5
+  | TabsNodeV5
+  | TabItemNodeV5
+  | GalleryNodeV5;
+
+const pageNodeV5Children = () => z.array(PageNodeV5Schema);
+const emptyPageV5Children = () => z.array(z.never()).length(0);
+const pageNodeV5Base = <
+  T extends z.ZodTypeAny,
+  P extends z.ZodTypeAny,
+  C extends z.ZodTypeAny,
+>(
+  type: T,
+  props: P,
+  children: C,
+) =>
+  z
+    .object({
+      id: pageNodeId,
+      type,
+      props,
+      style: PageNodeStyleSchema.optional(),
+      children,
+    })
+    .strict();
+
+export const PageNodeV5Schema: z.ZodType<PageNodeV5> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    pageNodeV5Base(z.literal('root'), z.object({}).strict(), pageNodeV5Children()),
+    pageNodeV5Base(z.literal('section'), z.object({}).strict(), pageNodeV5Children()),
+    pageNodeV5Base(z.literal('container'), z.object({}).strict(), pageNodeV5Children()),
+    pageNodeV5Base(
+      z.literal('text'),
+      z
+        .object({
+          text: nonEmptyText.max(PAGE_PAYLOAD_MAX_TEXT_LENGTH),
+          align: z.enum(['left', 'center', 'right']).optional(),
+        })
+        .strict(),
+      emptyPageV5Children(),
+    ),
+    pageNodeV5Base(
+      z.literal('image'),
+      z.object({ src: safeImageSource, alt: z.string().trim().max(500) }).strict(),
+      emptyPageV5Children(),
+    ),
+    pageNodeV5Base(
+      z.literal('button'),
+      z
+        .object({
+          label: nonEmptyText.max(200),
+          href: safeButtonHref,
+          target: z.enum(['_self', '_blank']),
+        })
+        .strict(),
+      emptyPageV5Children(),
+    ),
+    pageNodeV5Base(z.literal('form'), FormPropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(z.literal('countdown'), CountdownPropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(
+      z.literal('extension'),
+      CustomExtensionNodePropsSchema,
+      emptyPageV5Children(),
+    ),
+    pageNodeV5Base(z.literal('heading'), HeadingPropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(z.literal('link'), LinkPropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(z.literal('divider'), z.object({}).strict(), emptyPageV5Children()),
+    pageNodeV5Base(z.literal('list'), ListPropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(z.literal('video'), VideoPropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(z.literal('quote'), QuotePropsSchema, emptyPageV5Children()),
+    pageNodeV5Base(z.literal('accordion'), AccordionPropsSchema, pageNodeV5Children()),
+    pageNodeV5Base(
+      z.literal('accordion-item'),
+      AccordionItemPropsSchema,
+      pageNodeV5Children(),
+    ),
+    pageNodeV5Base(z.literal('tabs'), TabsPropsSchema, pageNodeV5Children()),
+    pageNodeV5Base(z.literal('tab-item'), TabItemPropsSchema, pageNodeV5Children()),
+    pageNodeV5Base(z.literal('gallery'), z.object({}).strict(), pageNodeV5Children()),
+  ]),
+);
+
+export const PagePayloadV5Schema = z
+  .object({
+    version: z.literal(5),
+    metadata: PagePayloadV1Schema.shape.metadata,
+    root: PageNodeV5Schema,
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.root.type !== 'root' || payload.root.id !== 'root') {
+      context.addIssue({
+        code: 'custom',
+        message: 'The payload root must have type root and id root',
+        path: ['root'],
+      });
+    }
+    const nodeIds = new Set<string>();
+    const pending: Array<{ node: PageNodeV5; path: (string | number)[]; depth: number }> =
+      [{ node: payload.root, path: ['root'], depth: 1 }];
+    let nodeCount = 0;
+    let nodeLimitReported = false;
+    let depthLimitReported = false;
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current) continue;
+      nodeCount += 1;
+      if (nodeCount > PAGE_PAYLOAD_MAX_NODES) {
+        if (!nodeLimitReported) {
+          context.addIssue({
+            code: 'custom',
+            message: `PAGE_PAYLOAD_NODE_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_NODES}`,
+            path: current.path,
+          });
+          nodeLimitReported = true;
+        }
+        continue;
+      }
+      if (current.depth > PAGE_PAYLOAD_MAX_TREE_DEPTH) {
+        if (!depthLimitReported) {
+          context.addIssue({
+            code: 'custom',
+            message: `PAGE_PAYLOAD_DEPTH_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_TREE_DEPTH}`,
+            path: current.path,
+          });
+          depthLimitReported = true;
+        }
+        continue;
+      }
+      if (nodeIds.has(current.node.id)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate page node id: ${current.node.id}`,
+          path: [...current.path, 'id'],
+        });
+      }
+      nodeIds.add(current.node.id);
+
+      const definition = PAGE_COMPONENT_REGISTRY[current.node.type];
+      current.node.children.forEach((child, index) => {
+        const slot = definition.slots.find((candidate) =>
+          candidate.accepts.includes(child.type),
+        );
+        if (!slot) {
+          context.addIssue({
+            code: 'custom',
+            message: `Node type ${current.node.type} cannot contain ${child.type} children`,
+            path: [...current.path, 'children', index, 'type'],
+          });
+        }
+        pending.push({
+          node: child,
+          path: [...current.path, 'children', index],
+          depth: current.depth + 1,
+        });
+      });
+
+      for (const slot of definition.slots) {
+        const count = current.node.children.filter((child) =>
+          slot.accepts.includes(child.type),
+        ).length;
+        if (slot.minChildren !== undefined && count < slot.minChildren) {
+          context.addIssue({
+            code: 'custom',
+            message: `${current.node.type} requires at least ${slot.minChildren} ${slot.label.toLowerCase()}`,
+            path: [...current.path, 'children'],
+          });
+        }
+        if (slot.maxChildren !== undefined && count > slot.maxChildren) {
+          context.addIssue({
+            code: 'custom',
+            message: `${current.node.type} allows at most ${slot.maxChildren} ${slot.label.toLowerCase()}`,
+            path: [...current.path, 'children'],
+          });
+        }
+      }
+    }
+    const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
+    if (serializedSize > PAGE_PAYLOAD_MAX_SERIALIZED_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        message: `PAGE_PAYLOAD_TOO_LARGE: maximum serialized size is ${PAGE_PAYLOAD_MAX_SERIALIZED_BYTES} bytes`,
+        path: [],
+      });
+    }
+  });
+
+export type PagePayloadV5 = z.infer<typeof PagePayloadV5Schema>;
+export type AnyPageNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5;
 export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV1Schema,
   PagePayloadV2Schema,
   PagePayloadV3Schema,
   PagePayloadV4Schema,
+  PagePayloadV5Schema,
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
 
