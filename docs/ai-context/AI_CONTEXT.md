@@ -40,6 +40,13 @@ directly mutate GrapesJS for user document changes; documented escape hatches ar
 limited to hydration, editor-only preview decoration, presentation-only viewport
 paint, selection, and guarded native clone identity repair.
 
+Phase 14.2 adds the consolidation contract: Content owns semantic content,
+Style owns visual properties, Settings owns behavior/advanced metadata, and
+actions stay on Context Toolbar/Layers/keyboard surfaces. Canvas and Inspector
+are synchronized views of one live model; responsive Inspector controls show
+effective values while tracking authored overrides. `style.textAlign` is
+canonical and legacy `props.align` is fallback-only.
+
 ## Non-negotiable product constraints
 
 ### Tenant model

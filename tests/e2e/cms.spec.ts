@@ -790,6 +790,7 @@ test('auto-scrolls the Canvas while a real pointer drag reaches the viewport edg
 }) => {
   await openBuilder(page, 'Auto Scroll Builder');
   await page.getByRole('button', { name: 'Section add' }).click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByLabel('Min height').fill('1600');
   await page.getByRole('button', { name: 'Text add' }).click();
   const canvas = page.frameLocator('iframe.gjs-frame');
@@ -833,6 +834,7 @@ test('moves a node from Layers with the same operation and persists the reparent
   await page.getByRole('button', { name: 'Container add' }).click();
   await page.getByRole('button', { name: 'Text add' }).click();
   await page.getByLabel('Text content').fill('Layer text B');
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
 
   const sourceLabel = page
     .locator('.builder-layer-label')
@@ -917,6 +919,7 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
   await page.getByLabel('Search components').fill('');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByLabel('Width', { exact: true }).fill('320');
 
   const frame = page.locator('iframe.gjs-frame');
@@ -924,20 +927,19 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
     frame.evaluate(
       (element) => element.contentDocument?.documentElement.clientWidth ?? -1,
     );
-  const desktopWidth = await canvasWidth();
   await page.getByRole('button', { name: 'Tablet', exact: true }).click();
-  await expect.poll(canvasWidth).toBeLessThan(desktopWidth);
+  await expect.poll(canvasWidth).toBe(640);
   const tabletWidth = await canvasWidth();
-  expect(tabletWidth).toBeLessThan(desktopWidth);
+  expect(tabletWidth).toBe(640);
   await page.getByLabel('Width', { exact: true }).fill('280');
   await page.getByRole('button', { name: 'Reset Width override' }).click();
-  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('320');
   await page.getByLabel('Width', { exact: true }).fill('280');
 
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
-  await expect.poll(canvasWidth).toBeLessThan(tabletWidth);
+  await expect.poll(canvasWidth).toBe(375);
   const mobileWidth = await canvasWidth();
-  expect(mobileWidth).toBeLessThan(tabletWidth);
+  expect(mobileWidth).toBe(375);
   await page.getByLabel('Width', { exact: true }).fill('240');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
@@ -948,6 +950,7 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
     .locator('p')
     .filter({ hasText: 'Edit this text' })
     .click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByRole('button', { name: 'Tablet', exact: true }).click();
   await expect(page.getByLabel('Width', { exact: true })).toHaveValue('280');
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
@@ -960,6 +963,7 @@ test('keeps viewport changes presentational and groups one style edit into one u
   await openBuilder(page, 'Editor Core Hardening');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await expect(
     page.frameLocator('iframe.gjs-frame').locator('p[data-payload-node-type="text"]'),
   ).toHaveCount(1);
@@ -996,6 +1000,22 @@ test('streams unsaved builder changes to the live preview window', async ({ page
   await preview.close();
 });
 
+test('reflects Canvas inline text edits in the Content Inspector', async ({ page }) => {
+  await openBuilder(page, 'Inline Sync Builder');
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: /^Text/ }).click();
+
+  const canvasText = page
+    .frameLocator('iframe.gjs-frame')
+    .locator('p[data-payload-node-type="text"]');
+  await canvasText.dblclick();
+  await canvasText.press('ControlOrMeta+A');
+  await canvasText.pressSequentially('Inline canvas content');
+  await canvasText.press('Escape');
+
+  await expect(page.getByLabel('Text content')).toHaveValue('Inline canvas content');
+});
+
 test('applies multiple inspector properties immediately and persists them after reload', async ({
   page,
 }) => {
@@ -1007,6 +1027,8 @@ test('applies multiple inspector properties immediately and persists them after 
     .frameLocator('iframe.gjs-frame')
     .locator('p[data-payload-node-type="text"]');
   await page.getByLabel('Text content').fill('Persisted inspector content');
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
+  await page.getByText('Typography', { exact: true }).click();
   const textAlignment = page.getByRole('group', { name: 'Text alignment' });
   await textAlignment.getByRole('button', { name: 'Center', exact: true }).click();
   await page.getByLabel('Width', { exact: true }).fill('320');
@@ -1019,7 +1041,7 @@ test('applies multiple inspector properties immediately and persists them after 
   await spacing.getByLabel('Right', { exact: true }).fill('0');
   await spacing.getByLabel('Bottom', { exact: true }).fill('12');
   await spacing.getByLabel('Left', { exact: true }).fill('0');
-  await page.getByText('Appearance', { exact: true }).click();
+  await page.locator('summary').filter({ hasText: 'Background' }).click();
   await page.getByLabel('Background hex value').fill('#fef3c7');
 
   await expect(canvasText).toHaveText('Persisted inspector content');
@@ -1049,11 +1071,12 @@ test('applies multiple inspector properties immediately and persists them after 
           children: [
             {
               type: 'text',
-              props: { text: 'Persisted inspector content', align: 'center' },
+              props: { text: 'Persisted inspector content' },
               style: {
                 base: {
                   width: '320px',
                   margin: '12px 0px',
+                  textAlign: 'center',
                   backgroundColor: '#fef3c7',
                 },
               },
@@ -1073,10 +1096,11 @@ test('applies multiple inspector properties immediately and persists them after 
     .locator('p[data-payload-node-type="text"]');
   await expect(reloadedText).toHaveText('Persisted inspector content');
   await reloadedText.click();
-  await page.getByText('Appearance', { exact: true }).click();
   await expect(page.getByLabel('Text content')).toHaveValue(
     'Persisted inspector content',
   );
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
+  await page.getByText('Typography', { exact: true }).click();
   await expect(
     page
       .getByRole('group', { name: 'Text alignment' })
@@ -1088,6 +1112,7 @@ test('applies multiple inspector properties immediately and persists them after 
     .filter({ hasText: 'Spacing' });
   await expect(reloadedSpacing.getByLabel('Top', { exact: true })).toHaveValue('12');
   await expect(reloadedSpacing.getByLabel('Right', { exact: true })).toHaveValue('0');
+  await page.locator('summary').filter({ hasText: 'Background' }).click();
   await expect(page.getByLabel('Background hex value')).toHaveValue('#fef3c7');
   await expect
     .poll(() =>
@@ -1114,11 +1139,12 @@ test('applies multiple inspector properties immediately and persists them after 
           children: [
             {
               type: 'text',
-              props: { text: 'Persisted inspector content', align: 'center' },
+              props: { text: 'Persisted inspector content' },
               style: {
                 base: {
                   width: '320px',
                   margin: '12px 0px',
+                  textAlign: 'center',
                   backgroundColor: '#fef3c7',
                 },
               },
@@ -1138,7 +1164,8 @@ test('supports duplicate, delete, undo and redo for a selected component', async
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Text content').fill('Action component');
 
-  await page.getByRole('button', { name: 'Duplicate' }).click();
+  const toolbar = page.locator('.builder-context-toolbar');
+  await toolbar.getByRole('button', { name: 'Clone selected element' }).click();
   await expect(
     page
       .frameLocator('iframe.gjs-frame')
@@ -1148,7 +1175,7 @@ test('supports duplicate, delete, undo and redo for a selected component', async
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await toolbar.getByRole('button', { name: 'Remove selected element' }).click();
   await expect(
     page
       .frameLocator('iframe.gjs-frame')
@@ -1185,6 +1212,7 @@ test('offers a context toolbar and quick add at the selected insertion point', a
 }) => {
   await openBuilder(page, 'Context Actions');
   await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
 
   const toolbar = page.locator('.builder-context-toolbar');
   await expect(toolbar).toBeVisible();
@@ -1210,6 +1238,7 @@ test('supports keyboard delete from Layers without intercepting text fields', as
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Text content').fill('Keyboard removal');
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
   const canvasText = page
     .frameLocator('iframe.gjs-frame')
     .locator('p[data-payload-node-type="text"]');
@@ -1279,6 +1308,7 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
 
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
   const minimap = page.locator('aside.builder-minimap');
   await expect(minimap).toBeVisible();
   await expect(page.locator('[data-builder-layer-id]')).toHaveCount(3);
@@ -1296,7 +1326,9 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
   ).toHaveText('Text');
   const properties = page.locator('.builder-properties-panel');
   await expect(properties.getByText(/^Node:/)).toHaveCount(0);
-  await expect(properties.locator('details')).toHaveCount(6);
+  await expect(properties.locator('details')).toHaveCount(1);
+  await properties.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await expect(properties.locator('details')).toHaveCount(3);
   await properties.getByText('Advanced', { exact: true }).click();
   await expect(properties.locator('code')).toBeVisible();
 
@@ -1315,6 +1347,7 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
   await expect(minimap.locator('.builder-minimap-zoom-label')).toHaveText('100%');
 
   await page.locator('[data-builder-layer-id]').filter({ hasText: 'Section' }).click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByLabel('Min height').fill('1400');
   const viewport = minimap.locator('.builder-minimap-viewport');
   const viewportBeforeScroll = await viewport.getAttribute('style');
@@ -1338,6 +1371,7 @@ test('navigates the Layers tree with keyboard and keeps Canvas selection in sync
 
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
 
   const root = page.getByRole('treeitem', { name: 'Select Page' });
   const section = page.getByRole('treeitem', { name: /^Select Section/ });

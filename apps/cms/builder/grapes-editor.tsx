@@ -20,6 +20,7 @@ import {
   payloadToEditorComponent,
   readEditorResponsiveStyle,
   reassignEditorNodeIds,
+  sanitizeInlineText,
   serializeGrapesComponent,
 } from './builder-adapter';
 import {
@@ -68,6 +69,7 @@ export type SelectedBuilderNode = {
   target?: '_self' | '_blank';
   src?: string;
   alt?: string;
+  /** Legacy payload alignment, exposed only for compatibility snapshots. */
   align?: 'left' | 'center' | 'right';
   style?: PageNodeStyle;
   form?: FormProps;
@@ -101,7 +103,6 @@ export type GrapesEditorHandle = {
     name: 'href' | 'target' | 'src' | 'alt',
     value: string,
   ) => void;
-  updateSelectedAlign: (value: SelectedBuilderNode['align']) => void;
   updateSelectedStyle: (property: string, value: string) => void;
   resetSelectedStyle: (property: string) => void;
   updateSelectedForm: (form: FormProps) => void;
@@ -156,10 +157,18 @@ function selectionFromComponent(
     return null;
   }
 
-  const content = String(component.get('content') ?? '');
-  const align = attributes[BUILDER_TEXT_ALIGN_ATTRIBUTE];
+  // During an active GrapesJS RTE session the model content is intentionally
+  // committed on rte:disable. Read the live element text for the snapshot so
+  // `component:input` can keep Content Inspector values in lockstep while the
+  // user is typing, while still exposing plain text only.
+  const content = sanitizeInlineText(
+    component.getEl()?.textContent ?? String(component.get('content') ?? ''),
+  );
   const target = attributes.target;
   const responsiveStyle = readEditorResponsiveStyle(component);
+  const styleAlign = responsiveStyle?.base.textAlign;
+  const legacyAlign = attributes[BUILDER_TEXT_ALIGN_ATTRIBUTE];
+  const align = styleAlign ?? legacyAlign;
   let form: FormProps | undefined;
   let countdown: SelectedBuilderNode['countdown'];
   if (type === 'form') {
@@ -1018,6 +1027,24 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     return selectionRef.current.resolve(getRoot(editor));
   }
 
+  /** Commit GrapesJS' active RTE before an Inspector mutation. */
+  function finishInlineEdit(editor: Editor): void {
+    const editing = editor.getEditing();
+    if (editing) editing.trigger('disable');
+  }
+
+  function mutateAfterInlineEdit(editor: Editor, mutation: () => void): void {
+    if (!editor.getEditing()) {
+      mutation();
+      return;
+    }
+    finishInlineEdit(editor);
+    // RTE disable is async in GrapesJS because it reads the iframe DOM before
+    // syncing model content. Run the Inspector command after that lifecycle has
+    // completed so the old DOM value cannot overwrite the new command value.
+    window.setTimeout(mutation, 0);
+  }
+
   function notifyHistory(editor: Editor): void {
     callbacksRef.current.onHistoryChange({
       canRedo: editor.UndoManager.hasRedo(),
@@ -1278,36 +1305,42 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       },
       updateSelectedForm(form) {
         const editor = editorRef.current;
-        const selected = editor ? getSelectedComponent(editor) : undefined;
-        if (!editor || !selected) return;
-        const type = selected.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
-        if (type !== 'form') return;
-        commitEditorCommand(editor, {
-          kind: 'update-props',
-          nodeId: payloadNodeId(selected) ?? '',
-          attributes: { [BUILDER_FORM_PROPS_ATTRIBUTE]: JSON.stringify(form) },
-          components: formPreviewComponents(form),
+        if (!editor) return;
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          const type = selected.getAttributes({ noStyle: true })[
+            BUILDER_NODE_TYPE_ATTRIBUTE
+          ];
+          if (type !== 'form') return;
+          commitEditorCommand(editor, {
+            kind: 'update-props',
+            nodeId: payloadNodeId(selected) ?? '',
+            attributes: { [BUILDER_FORM_PROPS_ATTRIBUTE]: JSON.stringify(form) },
+            components: formPreviewComponents(form),
+          });
         });
       },
       updateSelectedCountdown(props) {
         const editor = editorRef.current;
-        const selected = editor ? getSelectedComponent(editor) : undefined;
-        if (!editor || !selected) return;
-        const type = selected.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
-        if (type !== 'countdown') return;
-        const parsed = CountdownPropsSchema.safeParse(props);
-        if (!parsed.success) return;
-        commitEditorCommand(editor, {
-          kind: 'update-props',
-          nodeId: payloadNodeId(selected) ?? '',
-          components: countdownPreviewComponents(parsed.data),
-          attributes: {
-            [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: JSON.stringify(parsed.data),
-          },
+        if (!editor) return;
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          const type = selected.getAttributes({ noStyle: true })[
+            BUILDER_NODE_TYPE_ATTRIBUTE
+          ];
+          if (type !== 'countdown') return;
+          const parsed = CountdownPropsSchema.safeParse(props);
+          if (!parsed.success) return;
+          commitEditorCommand(editor, {
+            kind: 'update-props',
+            nodeId: payloadNodeId(selected) ?? '',
+            components: countdownPreviewComponents(parsed.data),
+            attributes: {
+              [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: JSON.stringify(parsed.data),
+            },
+          });
         });
       },
       serialize() {
@@ -1368,79 +1401,78 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       updateSelectedText(value) {
         const editor = editorRef.current;
         if (!editor) return;
-        const selected = getSelectedComponent(editor);
-        if (!selected) return;
-        commitEditorCommand(editor, {
-          kind: 'set-content',
-          nodeId: payloadNodeId(selected) ?? '',
-          content: value,
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          commitEditorCommand(editor, {
+            kind: 'set-content',
+            nodeId: payloadNodeId(selected) ?? '',
+            content: value,
+          });
         });
       },
       updateSelectedAttribute(name, value) {
         const editor = editorRef.current;
         if (!editor) return;
-        const selected = getSelectedComponent(editor);
-        if (!selected) return;
-        commitEditorCommand(editor, {
-          kind: 'set-attributes',
-          nodeId: payloadNodeId(selected) ?? '',
-          attributes: { [name]: value },
-        });
-      },
-      updateSelectedAlign(value) {
-        const editor = editorRef.current;
-        if (!editor) return;
-        const selected = getSelectedComponent(editor);
-        if (!selected || !value) return;
-        commitEditorCommand(editor, {
-          kind: 'set-attributes',
-          nodeId: payloadNodeId(selected) ?? '',
-          attributes: { [BUILDER_TEXT_ALIGN_ATTRIBUTE]: value },
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          commitEditorCommand(editor, {
+            kind: 'set-attributes',
+            nodeId: payloadNodeId(selected) ?? '',
+            attributes: { [name]: value },
+          });
         });
       },
       updateSelectedStyle(property, value) {
         const editor = editorRef.current;
         if (!editor) return;
-        const selected = getSelectedComponent(editor);
-        if (!selected) return;
-        internalChangeRef.current = true;
-        commitEditorCommand(editor, {
-          kind: 'set-responsive-style',
-          nodeId: payloadNodeId(selected) ?? '',
-          property,
-          value,
-          viewport: viewportRef.current,
-        });
-        queueMicrotask(() => {
-          internalChangeRef.current = false;
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          internalChangeRef.current = true;
+          commitEditorCommand(editor, {
+            kind: 'set-responsive-style',
+            nodeId: payloadNodeId(selected) ?? '',
+            property,
+            value,
+            viewport: viewportRef.current,
+          });
+          queueMicrotask(() => {
+            internalChangeRef.current = false;
+          });
         });
       },
       resetSelectedStyle(property) {
         const editor = editorRef.current;
         if (!editor) return;
-        const selected = getSelectedComponent(editor);
-        if (!selected) return;
-        internalChangeRef.current = true;
-        commitEditorCommand(editor, {
-          kind: 'set-responsive-style',
-          nodeId: payloadNodeId(selected) ?? '',
-          property,
-          value: '',
-          viewport: viewportRef.current,
-        });
-        queueMicrotask(() => {
-          internalChangeRef.current = false;
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          internalChangeRef.current = true;
+          commitEditorCommand(editor, {
+            kind: 'set-responsive-style',
+            nodeId: payloadNodeId(selected) ?? '',
+            property,
+            value: '',
+            viewport: viewportRef.current,
+          });
+          queueMicrotask(() => {
+            internalChangeRef.current = false;
+          });
         });
       },
       selectAsset(src) {
         const editor = editorRef.current;
         if (!editor) return;
-        const selected = getSelectedComponent(editor);
-        if (!selected) return;
-        commitEditorCommand(editor, {
-          kind: 'set-attributes',
-          nodeId: payloadNodeId(selected) ?? '',
-          attributes: { src },
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          if (!selected) return;
+          commitEditorCommand(editor, {
+            kind: 'set-attributes',
+            nodeId: payloadNodeId(selected) ?? '',
+            attributes: { src },
+          });
         });
       },
       selectNode(id) {
@@ -1914,6 +1946,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           scheduleCanvasState(editor as Editor, true);
         };
         const handleComponentDragEnd = () => handleComponentUpdate();
+        // GrapesJS emits `component:input` for every RTE keystroke. Refresh the
+        // selected snapshot from the live model so Canvas inline edits appear
+        // in Content without requiring a second selection.
+        const handleComponentInput = () => {
+          notifySelection(editor as Editor);
+          notifyHistory(editor as Editor);
+          scheduleCanvasState(editor as Editor, false);
+        };
         const handleHistoryChange = () => notifyHistory(editor as Editor);
 
         editor.on('component:update', handleComponentUpdate);
@@ -1921,6 +1961,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editor.on('component:remove', handleComponentUpdate);
         editor.on('component:drag:end', handleComponentDragEnd);
         editor.on('component:styleUpdate', handleComponentUpdate);
+        editor.on('component:input', handleComponentInput);
         editor.on('component:selected', handleSelectionChange);
         editor.on('component:deselected', handleSelectionChange);
         editor.on('component:clone', handleClone);

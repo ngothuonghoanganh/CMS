@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import type { SelectedBuilderNode } from '../grapes-editor';
 
 type BuilderContextToolbarProps = {
@@ -10,6 +11,7 @@ type BuilderContextToolbarProps = {
   onDuplicate: () => void;
   onDelete: () => void;
   onQuickAdd: () => void;
+  position?: { left: number; top: number; placement: 'above' | 'below' } | undefined;
 };
 
 /** Small, deliberately limited canvas action surface. Detail editing stays in Inspector. */
@@ -21,10 +23,19 @@ export function BuilderContextToolbar({
   onDuplicate,
   onDelete,
   onQuickAdd,
+  position,
 }: BuilderContextToolbarProps) {
   if (!selected) return null;
+  const style: CSSProperties | undefined = position
+    ? { left: `${position.left}px`, top: `${position.top}px` }
+    : undefined;
   return (
-    <div className="builder-context-toolbar" aria-label="Selected element actions">
+    <div
+      aria-label="Selected element actions"
+      className="builder-context-toolbar"
+      data-placement={position?.placement}
+      style={style}
+    >
       <span className="builder-context-toolbar-label">{selected.type}</span>
       <button aria-label="Add after selected element" onClick={onQuickAdd} type="button">
         + Add

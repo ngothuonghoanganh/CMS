@@ -572,7 +572,7 @@ export function SpacingControl({
       label={label}
     >
       <div className="ui-spacing-header">
-        <span className="ui-field-description">Four-sided spacing</span>
+        <span className="ui-field-description">Box model</span>
         <button
           aria-pressed={linked}
           className="ui-link-toggle"
@@ -594,26 +594,29 @@ export function SpacingControl({
           {linked ? 'Linked' : 'Unlinked'}
         </button>
       </div>
-      <div className="ui-spacing-control">
-        {(linked
-          ? ([['all', 'All', sides.top]] as const)
-          : ([
-              ['top', 'Top', sides.top],
-              ['right', 'Right', sides.right],
-              ['bottom', 'Bottom', sides.bottom],
-              ['left', 'Left', sides.left],
-            ] as const)
-        ).map(([side, sideLabel, sideValue]) => (
-          <UnitField
-            allowAuto={allowAuto}
-            compact
-            disabled={disabled}
-            key={side}
-            label={sideLabel}
-            onValueChange={(next) => updateSide(side === 'all' ? 'top' : side, next)}
-            value={sideValue}
-          />
-        ))}
+      <div className="ui-spacing-box" data-spacing-linked={linked}>
+        <span className="ui-spacing-box-caption">{label ?? 'Spacing'}</span>
+        <div className="ui-spacing-control">
+          {(linked
+            ? ([['all', 'All', sides.top]] as const)
+            : ([
+                ['top', 'Top', sides.top],
+                ['right', 'Right', sides.right],
+                ['bottom', 'Bottom', sides.bottom],
+                ['left', 'Left', sides.left],
+              ] as const)
+          ).map(([side, sideLabel, sideValue]) => (
+            <UnitField
+              allowAuto={allowAuto}
+              compact
+              disabled={disabled}
+              key={side}
+              label={sideLabel}
+              onValueChange={(next) => updateSide(side === 'all' ? 'top' : side, next)}
+              value={sideValue}
+            />
+          ))}
+        </div>
       </div>
     </Field>
   );

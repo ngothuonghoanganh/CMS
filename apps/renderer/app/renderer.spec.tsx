@@ -102,6 +102,21 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('padding:24px 16px');
   });
 
+  it('uses style.textAlign as the canonical visual alignment with legacy fallback', () => {
+    const legacy = createPayload();
+    const legacyText = legacy.root.children[0]?.children[0]?.children[0];
+    if (!legacyText || legacyText.type !== 'text')
+      throw new Error('Test text is missing');
+    legacyText.props.align = 'center';
+    const legacyMarkup = renderToStaticMarkup(renderPage(legacy));
+    expect(legacyMarkup).toContain('style="text-align:center"');
+
+    legacyText.style = { base: { textAlign: 'right' } };
+    const canonicalMarkup = renderToStaticMarkup(renderPage(legacy));
+    expect(canonicalMarkup).toContain('style="text-align:right"');
+    expect(canonicalMarkup).not.toContain('style="text-align:center"');
+  });
+
   it('renders resolved site navigation with platform and custom-domain URL rules', () => {
     const navigation = {
       main: [

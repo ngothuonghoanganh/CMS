@@ -176,3 +176,11 @@ GrapesJS project/component state is canonical while application adapters convert
 Application Editor Core owns canonical state and GrapesJS acts as a rendering/interaction adapter.
 
 Do not accidentally operate a Model C where both are independently authoritative.
+
+## Phase 14.2 synchronization contract
+
+Selection is a stable `selectedNodeId`; selected snapshots are derived from the
+live GrapesJS component. `component:input`, `component:update`, history and
+viewport changes must refresh that snapshot. Inspector writes go through the
+command bus. Resolve responsive controls with authored/effective/inherited
+metadata and keep `style.textAlign` canonical over legacy `props.align`.

@@ -1,5 +1,8 @@
 import type { PageNodeV3 } from './index';
-import { PAGE_STYLE_PROPERTY_DEFINITIONS } from './style-registry';
+import {
+  PAGE_STYLE_PROPERTY_DEFINITIONS,
+  type PageStylePropertyKey,
+} from './style-registry';
 
 export type PageComponentType = PageNodeV3['type'];
 
@@ -67,14 +70,214 @@ export type PageComponentDefinition = {
 const responsiveStyleProperties: readonly ComponentPropertyDefinition[] =
   PAGE_STYLE_PROPERTY_DEFINITIONS;
 
-const styleSchemaFor = (
+/**
+ * Component style capabilities are deliberately explicit.  The registry is
+ * the only source used by the Inspector to decide which visual properties a
+ * component can expose; this prevents a new component from accidentally
+ * inheriting every CSS control in the vocabulary.
+ */
+export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
+  Record<PageComponentType, readonly PageStylePropertyKey[]>
+> = {
+  root: [
+    'display',
+    'flex-direction',
+    'justify-content',
+    'align-items',
+    'flex-wrap',
+    'grid-template-columns',
+    'position',
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'gap',
+    'background-color',
+  ],
+  section: [
+    'display',
+    'flex-direction',
+    'justify-content',
+    'align-items',
+    'flex-wrap',
+    'grid-template-columns',
+    'position',
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'gap',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  container: [
+    'display',
+    'flex-direction',
+    'justify-content',
+    'align-items',
+    'flex-wrap',
+    'grid-template-columns',
+    'position',
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'gap',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  text: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'text-decoration',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  image: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  button: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'text-decoration',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  form: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  countdown: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'letter-spacing',
+    'text-align',
+    'text-decoration',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
+  extension: [
+    'width',
+    'height',
+    'min-width',
+    'max-width',
+    'min-height',
+    'max-height',
+    'padding',
+    'margin',
+    'background-color',
+    'opacity',
+    'box-shadow',
+  ],
+};
+
+export const styleSchemaFor = (
   type: PageComponentType,
 ): readonly ComponentPropertyDefinition[] => {
-  const properties = [...responsiveStyleProperties];
-  if (!['root', 'section', 'container'].includes(type)) {
-    return properties.filter((property) => property.key !== 'gap');
-  }
-  return properties;
+  const capabilities = new Set(PAGE_COMPONENT_STYLE_CAPABILITIES[type]);
+  return responsiveStyleProperties.filter((property) =>
+    capabilities.has(property.key as PageStylePropertyKey),
+  );
 };
 
 const content = (
@@ -157,22 +360,13 @@ export const PAGE_COMPONENT_REGISTRY = {
     label: 'Text',
     category: 'content',
     editorTagName: 'p',
-    defaultProps: { text: 'Edit this text', align: 'left' },
+    // `props.align` remains in the payload schema as a legacy compatibility
+    // fallback, but newly-created text nodes write visual alignment to style.
+    defaultProps: { text: 'Edit this text' },
     allowedParents: commonLayoutParents,
     allowedChildren: [],
     propertiesSchema: content([
       { key: 'text', label: 'Text', group: 'content', control: 'textarea' },
-      {
-        key: 'align',
-        label: 'Alignment',
-        group: 'content',
-        control: 'segmented',
-        options: [
-          { value: 'left', label: 'Left' },
-          { value: 'center', label: 'Center' },
-          { value: 'right', label: 'Right' },
-        ],
-      },
     ]),
   }),
   image: definition({

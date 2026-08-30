@@ -16,8 +16,6 @@ import {
   PageVersionListResponseSchema,
   PageVersionSchema,
   PAGE_COMPONENT_REGISTRY,
-  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
-  PAGE_STYLE_PROPERTY_GROUPS,
   type Asset,
   type FormField,
   type FormProps,
@@ -28,7 +26,6 @@ import {
   type PageExtensionInstance,
   type PageCapabilityGraph,
   type Navigation,
-  type ComponentPropertyDefinition,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -36,25 +33,12 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
 
 import { ApiClientError, api } from '../app/lib/api';
-import {
-  ColorField,
-  DateTimeField,
-  NumberField,
-  SegmentedControl,
-  SelectField,
-  SpacingControl,
-  TextAreaField,
-  TextField,
-  UnitField,
-  type SegmentedOption,
-} from '../app/ui/fields';
 import {
   BUILDER_VIEWPORTS,
   GrapesEditor,
@@ -72,7 +56,12 @@ import { isBuilderExtensionAvailableForPage } from './builder-extension-registry
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 import { saveStatusAfterAcknowledgement } from './builder-save';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
-import { QuickAddOverlay, type QuickAddOption } from './canvas/quick-add-overlay';
+import { QuickAddOverlay } from './canvas/quick-add-overlay';
+import {
+  BuilderInspector,
+  type InspectorSectionKey,
+  type InspectorTab,
+} from './inspector/builder-inspector';
 
 type BuilderShellProps = {
   workspaceId: string;
@@ -82,12 +71,22 @@ type BuilderShellProps = {
 
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
-type BuilderTool = 'add' | 'layers' | 'assets' | 'sections';
+type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
+type AddPanelTab = 'layouts' | 'elements';
 
 type AvailableBlockOption = {
   type: BuilderBlockType;
   label: string;
+  category: 'layout' | 'content' | 'conversion' | 'extension';
   extensionId?: string;
+};
+
+const blockCategoryOrder = ['layout', 'content', 'conversion', 'extension'] as const;
+const blockCategoryLabels: Record<(typeof blockCategoryOrder)[number], string> = {
+  layout: 'Layout',
+  content: 'Content',
+  conversion: 'Conversion',
+  extension: 'Extensions',
 };
 
 const blockOptions: AvailableBlockOption[] = Object.values(PAGE_COMPONENT_REGISTRY)
@@ -95,25 +94,8 @@ const blockOptions: AvailableBlockOption[] = Object.values(PAGE_COMPONENT_REGIST
   .map((definition) => ({
     type: definition.type as BuilderBlockType,
     label: definition.label,
+    category: definition.category,
   }));
-
-type InspectorSectionKey =
-  | 'content'
-  | 'layout'
-  | 'size'
-  | 'spacing'
-  | 'typography'
-  | 'background'
-  | 'border'
-  | 'effects'
-  | 'appearance'
-  | 'advanced';
-
-type InspectorStyleSection = {
-  key: Exclude<InspectorSectionKey, 'content' | 'advanced'>;
-  label: string;
-  fields: readonly ComponentPropertyDefinition[];
-};
 
 const rendererBaseUrl =
   process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
@@ -124,55 +106,6 @@ const rendererOrigin = (() => {
     return 'http://127.0.0.1:3002';
   }
 })();
-
-const inspectorStyleSections: readonly InspectorStyleSection[] = (
-  Object.entries(PAGE_STYLE_PROPERTY_GROUPS) as Array<
-    [InspectorStyleSection['key'], readonly ComponentPropertyDefinition[]]
-  >
-).map(([key, fields]) => ({
-  key,
-  label: key.charAt(0).toUpperCase() + key.slice(1),
-  fields,
-}));
-
-const inspectorQuickStyleSections: readonly InspectorStyleSection[] = [
-  {
-    key: 'layout',
-    label: 'Layout',
-    fields: [...PAGE_STYLE_PROPERTY_GROUPS.layout, ...PAGE_STYLE_PROPERTY_GROUPS.size],
-  },
-  {
-    key: 'spacing',
-    label: 'Spacing',
-    fields: PAGE_STYLE_PROPERTY_GROUPS.spacing,
-  },
-  {
-    key: 'typography',
-    label: 'Typography',
-    fields: PAGE_STYLE_PROPERTY_GROUPS.typography,
-  },
-  {
-    key: 'appearance',
-    label: 'Appearance',
-    fields: [
-      ...PAGE_STYLE_PROPERTY_GROUPS.background,
-      ...PAGE_STYLE_PROPERTY_GROUPS.border,
-      ...PAGE_STYLE_PROPERTY_GROUPS.effects,
-    ],
-  },
-];
-
-type InspectorTab = 'content' | 'style' | 'settings';
-
-const alignmentOptions: readonly SegmentedOption<'left' | 'center' | 'right'>[] = [
-  { value: 'left', label: 'Left' },
-  { value: 'center', label: 'Center' },
-  { value: 'right', label: 'Right' },
-];
-
-function viewportStyleKey(viewport: BuilderViewport): 'base' | 'tablet' | 'mobile' {
-  return viewport === 'desktop' ? 'base' : viewport;
-}
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
@@ -321,29 +254,6 @@ function layerPath(nodes: BuilderCanvasNode[], selectedId: string): BuilderCanva
   return result;
 }
 
-function InspectorSection({
-  children,
-  label,
-  onToggle,
-  open,
-}: {
-  children: ReactNode;
-  label: string;
-  onToggle: (open: boolean) => void;
-  open: boolean;
-}) {
-  return (
-    <details
-      className="builder-inspector-section"
-      onToggle={(event) => onToggle(event.currentTarget.open)}
-      open={open}
-    >
-      <summary>{label}</summary>
-      <div className="builder-inspector-section-body">{children}</div>
-    </details>
-  );
-}
-
 export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShellProps) {
   const router = useRouter();
   const editorRef = useRef<GrapesEditorHandle>(null);
@@ -370,6 +280,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     null,
   );
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [canvasState, setCanvasState] = useState<BuilderCanvasState | null>(null);
   const [viewport, setViewport] = useState<BuilderViewport>('desktop');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('content');
@@ -384,13 +295,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     background: false,
     border: false,
     effects: false,
-    appearance: false,
     advanced: false,
   });
   const viewportChangingRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const localMutationSequenceRef = useRef(0);
-  const selectedNodeRef = useRef<SelectedBuilderNode | null>(null);
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -409,6 +318,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     position: 'before' | 'inside' | 'after';
   } | null>(null);
   const [blockQuery, setBlockQuery] = useState('');
+  const [addPanelTab, setAddPanelTab] = useState<AddPanelTab>('layouts');
+  const [addPanelTabTouched, setAddPanelTabTouched] = useState(false);
   const [layerQuery, setLayerQuery] = useState('');
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
@@ -449,6 +360,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         type: 'extension' as const,
         extensionId: extension.manifest.id,
         label: extension.manifest.name,
+        category: 'extension' as const,
       })),
   ];
   const visibleBlockOptions = availableBlockOptions.filter((block) => {
@@ -460,13 +372,22 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       block.extensionId?.toLowerCase().includes(query)
     );
   });
-  const toolBlockOptions =
-    activeTool === 'sections'
-      ? visibleBlockOptions.filter((block) =>
-          ['section', 'container'].includes(block.type),
-        )
-      : visibleBlockOptions;
-  const styleBlock = selected?.style?.[viewportStyleKey(viewport)] ?? {};
+  // Keep the initial Add surface discoverable for existing keyboard/palette
+  // flows; the Layouts/Elements tabs provide an explicit focused filter once
+  // the user chooses one.
+  const toolBlockOptions = addPanelTabTouched
+    ? visibleBlockOptions.filter((block) =>
+        addPanelTab === 'layouts'
+          ? block.category === 'layout'
+          : block.category !== 'layout',
+      )
+    : visibleBlockOptions;
+  const toolBlockGroups = blockCategoryOrder
+    .map((category) => ({
+      category,
+      options: toolBlockOptions.filter((block) => block.category === category),
+    }))
+    .filter((group) => group.options.length > 0);
   const layerChildren = useMemo(() => {
     const index = new Map<string | undefined, BuilderCanvasNode[]>();
     for (const node of canvasState?.nodes ?? []) {
@@ -522,6 +443,30 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     () => assets.filter((asset) => isUsableImageSource(asset.storageKey)),
     [assets],
   );
+  const contextToolbarPosition = useMemo(() => {
+    if (!canvasState || !selectedNodeId) return undefined;
+    const node = canvasState.nodes.find((candidate) => candidate.id === selectedNodeId);
+    if (!node) return undefined;
+    const zoom = Math.max(canvasState.zoom / 100, 0.01);
+    const viewport = canvasState.viewport;
+    const x = (node.x - viewport.x + node.width / 2) * zoom;
+    const top = (node.y - viewport.y) * zoom;
+    const below = (node.y - viewport.y + node.height) * zoom + 10;
+    const above = top - 46;
+    const canvasWidth = viewport.width * zoom;
+    const halfToolbar = 148;
+    const left = Math.min(
+      Math.max(x, Math.min(12 + halfToolbar, canvasWidth / 2)),
+      Math.max(12 + halfToolbar, canvasWidth - halfToolbar - 12),
+    );
+    const canvasHeight = viewport.height * zoom;
+    const placement = above >= 8 || below + 46 > canvasHeight - 8 ? 'above' : 'below';
+    return {
+      left,
+      top: Math.max(8, placement === 'above' ? above : below),
+      placement,
+    } as const;
+  }, [canvasState, selectedNodeId]);
 
   function toggleLayer(id: string) {
     setCollapsedLayerIds((current) => {
@@ -1066,15 +1011,15 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     }
   }
 
-  function updateSelectedText(event: ChangeEvent<HTMLTextAreaElement>) {
-    editorRef.current?.updateSelectedText(event.target.value);
+  function updateSelectedText(value: string) {
+    editorRef.current?.updateSelectedText(value);
   }
 
   function updateSelectedAttribute(
     name: 'href' | 'target' | 'src' | 'alt',
-    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    value: string,
   ) {
-    editorRef.current?.updateSelectedAttribute(name, event.target.value);
+    editorRef.current?.updateSelectedAttribute(name, value);
   }
 
   function updateSelectedStyle(property: string, value: string) {
@@ -1168,333 +1113,6 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
 
   function toggleInspectorSection(section: InspectorSectionKey, open: boolean) {
     setOpenInspectorSections((current) => ({ ...current, [section]: open }));
-  }
-
-  function renderStyleSection(
-    section: InspectorStyleSection,
-    styleBlock: Record<string, string | undefined>,
-  ) {
-    if (!selected) return null;
-    const allowedPropertyKeys = new Set(
-      PAGE_COMPONENT_REGISTRY[selected.type].propertiesSchema
-        .filter((property) => property.group === 'style')
-        .map((property) => property.key),
-    );
-    const fields = section.fields.filter((field) => allowedPropertyKeys.has(field.key));
-    if (fields.length === 0) return null;
-
-    return (
-      <InspectorSection
-        key={section.key}
-        label={section.label}
-        onToggle={(open) => toggleInspectorSection(section.key, open)}
-        open={openInspectorSections[section.key]}
-      >
-        <div className="builder-inspector-fields">
-          {fields.map((option) => {
-            const value = styleValue(styleBlock, option.key);
-            const inheritedStyleBlock =
-              viewport === 'mobile' &&
-              styleValue(selected.style?.tablet ?? {}, option.key) !== ''
-                ? (selected.style?.tablet ?? {})
-                : (selected.style?.base ?? {});
-            const inherited =
-              viewport !== 'desktop' &&
-              value === '' &&
-              styleValue(inheritedStyleBlock, option.key) !== '';
-            const inheritedViewport =
-              viewport === 'mobile' &&
-              inheritedStyleBlock === (selected.style?.tablet ?? {})
-                ? 'Tablet'
-                : 'Desktop';
-            const description = inherited
-              ? `Inherited from ${inheritedViewport}`
-              : undefined;
-            const hasOverride = viewport !== 'desktop' && value !== '';
-            const resetOverride = hasOverride ? (
-              <button
-                aria-label={`Reset ${option.label} override`}
-                className="button button-small button-ghost builder-reset-override"
-                onClick={() => resetSelectedStyle(option.key)}
-                type="button"
-              >
-                Reset override
-              </button>
-            ) : null;
-            if (option.control === 'unit') {
-              return (
-                <div className="builder-inspector-field-stack" key={option.key}>
-                  <UnitField
-                    allowAuto={option.allowAuto}
-                    compact
-                    description={description}
-                    label={option.label}
-                    onValueChange={(nextValue) =>
-                      updateSelectedStyle(option.key, nextValue)
-                    }
-                    value={value}
-                  />
-                  {resetOverride}
-                </div>
-              );
-            }
-            if (option.control === 'number') {
-              const numericValue = Number(value);
-              return (
-                <div className="builder-inspector-field-stack" key={option.key}>
-                  <NumberField
-                    compact
-                    description={description}
-                    label={option.label}
-                    max={option.max}
-                    min={option.min}
-                    onValueChange={(nextValue) =>
-                      updateSelectedStyle(
-                        option.key,
-                        nextValue === undefined ? '' : String(nextValue),
-                      )
-                    }
-                    step={option.step}
-                    value={Number.isFinite(numericValue) ? numericValue : undefined}
-                  />
-                  {resetOverride}
-                </div>
-              );
-            }
-            if (option.control === 'spacing') {
-              return (
-                <div className="builder-inspector-field-stack" key={option.key}>
-                  <SpacingControl
-                    allowAuto={option.allowAuto}
-                    compact
-                    description={description}
-                    label={option.label}
-                    onValueChange={(nextValue) =>
-                      updateSelectedStyle(option.key, nextValue)
-                    }
-                    value={value}
-                  />
-                  {resetOverride}
-                </div>
-              );
-            }
-            if (option.control === 'color') {
-              return (
-                <div className="builder-inspector-field-stack" key={option.key}>
-                  <ColorField
-                    compact
-                    description={description}
-                    label={option.label}
-                    onValueChange={(nextValue) =>
-                      updateSelectedStyle(option.key, nextValue)
-                    }
-                    value={value}
-                  />
-                  {resetOverride}
-                </div>
-              );
-            }
-            if (option.control === 'segmented') {
-              return (
-                <div className="builder-inspector-field-stack" key={option.key}>
-                  <div className="ui-field ui-field-compact">
-                    <span className="ui-field-label">{option.label}</span>
-                    {description ? (
-                      <p className="ui-field-description">{description}</p>
-                    ) : null}
-                    <SegmentedControl
-                      ariaLabel={option.label}
-                      onValueChange={(nextValue) =>
-                        updateSelectedStyle(option.key, nextValue)
-                      }
-                      options={option.options ?? alignmentOptions}
-                      value={value}
-                    />
-                  </div>
-                  {resetOverride}
-                </div>
-              );
-            }
-            if (option.control === 'text') {
-              return (
-                <div className="builder-inspector-field-stack" key={option.key}>
-                  <TextField
-                    compact
-                    description={description ?? option.description}
-                    label={option.label}
-                    onChange={(event) =>
-                      updateSelectedStyle(option.key, event.target.value)
-                    }
-                    value={value}
-                  />
-                  {resetOverride}
-                </div>
-              );
-            }
-            return (
-              <div className="builder-inspector-field-stack" key={option.key}>
-                <SelectField
-                  compact
-                  description={description}
-                  label={option.label}
-                  onChange={(event) =>
-                    updateSelectedStyle(option.key, event.target.value)
-                  }
-                  value={value}
-                >
-                  {option.options?.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </SelectField>
-                {resetOverride}
-              </div>
-            );
-          })}
-        </div>
-      </InspectorSection>
-    );
-  }
-
-  function renderContentInspector() {
-    if (!selected || selected.type === 'form' || selected.type === 'countdown') {
-      return null;
-    }
-    const fields = PAGE_COMPONENT_REGISTRY[selected.type].propertiesSchema.filter(
-      (property) => property.group === 'content',
-    );
-    if (fields.length === 0) return null;
-
-    return (
-      <InspectorSection
-        label="Content"
-        onToggle={(open) => toggleInspectorSection('content', open)}
-        open={openInspectorSections.content}
-      >
-        <div className="builder-inspector-fields">
-          {fields.map((property) => {
-            if (selected.type === 'text' && property.key === 'text') {
-              return (
-                <TextAreaField
-                  aria-label="Text content"
-                  compact
-                  description={property.description}
-                  key={property.key}
-                  label={property.label}
-                  onChange={updateSelectedText}
-                  rows={5}
-                  value={selected.text ?? ''}
-                />
-              );
-            }
-            if (selected.type === 'text' && property.key === 'align') {
-              return (
-                <div className="ui-field ui-field-compact" key={property.key}>
-                  <span className="ui-field-label">{property.label}</span>
-                  <SegmentedControl
-                    ariaLabel="Text alignment"
-                    onValueChange={(nextValue) =>
-                      editorRef.current?.updateSelectedAlign(nextValue)
-                    }
-                    options={alignmentOptions}
-                    value={selected.align}
-                  />
-                </div>
-              );
-            }
-            if (selected.type === 'button' && property.key === 'label') {
-              return (
-                <TextField
-                  compact
-                  description={property.description}
-                  key={property.key}
-                  label={property.label}
-                  onChange={(event) =>
-                    editorRef.current?.updateSelectedText(event.target.value)
-                  }
-                  value={selected.label ?? ''}
-                />
-              );
-            }
-            if (selected.type === 'button' && property.key === 'href') {
-              return (
-                <TextField
-                  compact
-                  description={property.description}
-                  key={property.key}
-                  label={property.label}
-                  onChange={(event) => updateSelectedAttribute('href', event)}
-                  type="url"
-                  value={selected.href ?? ''}
-                />
-              );
-            }
-            if (selected.type === 'button' && property.key === 'target') {
-              return (
-                <SelectField
-                  compact
-                  description={property.description}
-                  key={property.key}
-                  label={property.label}
-                  onChange={(event) => updateSelectedAttribute('target', event)}
-                  value={selected.target ?? '_self'}
-                >
-                  {property.options?.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </SelectField>
-              );
-            }
-            if (selected.type === 'image' && property.key === 'src') {
-              return (
-                <div key={property.key} className="builder-inspector-field-stack">
-                  <SelectField
-                    compact
-                    description={property.description}
-                    label="Workspace asset"
-                    onChange={(event) =>
-                      editorRef.current?.selectAsset(event.target.value)
-                    }
-                    value={selected.src ?? ''}
-                  >
-                    <option value="">Select an asset</option>
-                    {usableAssets.map((asset) => (
-                      <option key={asset.id} value={asset.storageKey}>
-                        {asset.filename}
-                      </option>
-                    ))}
-                  </SelectField>
-                  <TextField
-                    compact
-                    description="Use a direct URL only when the asset is not in this workspace."
-                    label="Image URL"
-                    onChange={(event) => updateSelectedAttribute('src', event)}
-                    type="url"
-                    value={selected.src ?? ''}
-                  />
-                </div>
-              );
-            }
-            if (selected.type === 'image' && property.key === 'alt') {
-              return (
-                <TextField
-                  compact
-                  description={property.description}
-                  key={property.key}
-                  label={property.label}
-                  onChange={(event) => updateSelectedAttribute('alt', event)}
-                  value={selected.alt ?? ''}
-                />
-              );
-            }
-            return null;
-          })}
-        </div>
-      </InspectorSection>
-    );
   }
 
   if (loadState === 'loading' || !pageDocument || !page || !version) {
@@ -1650,7 +1268,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 ['add', '＋', 'Add blocks'],
                 ['layers', '▤', 'Layers'],
                 ['assets', '▧', 'Assets'],
-                ['sections', '◫', 'Layout sections'],
+                ['settings', '⚙', 'Page settings'],
               ] as const
             ).map(([tool, icon, label]) => (
               <button
@@ -1662,7 +1280,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 type="button"
               >
                 <span aria-hidden="true">{icon}</span>
-                <span>{tool === 'sections' ? 'Sections' : label}</span>
+                <span>{label.replace(' blocks', '')}</span>
               </button>
             ))}
             <button
@@ -1678,17 +1296,32 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             </button>
           </nav>
           <aside className="builder-panel builder-blocks-panel">
-            {activeTool === 'add' || activeTool === 'sections' ? (
+            {activeTool === 'add' ? (
               <>
                 <div className="builder-panel-heading">
-                  <span className="eyebrow">
-                    {activeTool === 'sections' ? 'Sections' : 'Page sections'}
-                  </span>
-                  <strong>
-                    {activeTool === 'sections'
-                      ? 'Add a layout section'
-                      : 'Add section or content'}
-                  </strong>
+                  <span className="eyebrow">Components</span>
+                  <strong>Add to page</strong>
+                </div>
+                <div
+                  aria-label="Add component type"
+                  className="builder-add-tabs"
+                  role="tablist"
+                >
+                  {(['layouts', 'elements'] as const).map((tab) => (
+                    <button
+                      aria-selected={addPanelTab === tab}
+                      className={addPanelTab === tab ? 'is-active' : undefined}
+                      key={tab}
+                      onClick={() => {
+                        setAddPanelTab(tab);
+                        setAddPanelTabTouched(true);
+                      }}
+                      role="tab"
+                      type="button"
+                    >
+                      {tab === 'layouts' ? 'Layouts' : 'Elements'}
+                    </button>
+                  ))}
                 </div>
                 <label className="builder-block-search">
                   <span className="sr-only">Search components</span>
@@ -1701,48 +1334,58 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   />
                 </label>
                 <div className="builder-block-list">
-                  {toolBlockOptions.map((block) => (
-                    <div
-                      className="builder-block-row"
-                      data-block-type={block.type}
-                      key={`${block.type}:${block.extensionId ?? ''}`}
-                    >
-                      <button
-                        aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
-                        className="builder-block-drag"
-                        onClick={
-                          block.extensionId
-                            ? () =>
-                                editorRef.current?.addExtensionBlock(block.extensionId!)
-                            : undefined
-                        }
-                        onMouseDown={
-                          block.extensionId
-                            ? undefined
-                            : (event) =>
-                                editorRef.current?.startBlockDrag(
-                                  block.type,
-                                  event.nativeEvent,
-                                )
-                        }
-                        type="button"
-                      >
-                        <span aria-hidden="true">⠿</span>
-                        <span>{block.label}</span>
-                      </button>
-                      <button
-                        aria-label={`${block.label} add`}
-                        className="builder-block-add"
-                        onClick={() =>
-                          block.extensionId
-                            ? editorRef.current?.addExtensionBlock(block.extensionId)
-                            : editorRef.current?.addBlock(block.type)
-                        }
-                        type="button"
-                      >
-                        ＋
-                      </button>
-                    </div>
+                  {toolBlockGroups.map((group) => (
+                    <section className="builder-block-category" key={group.category}>
+                      <h2 className="builder-block-category-heading">
+                        {blockCategoryLabels[group.category]}
+                      </h2>
+                      {group.options.map((block) => (
+                        <div
+                          className="builder-block-row builder-block-card"
+                          data-block-category={block.category}
+                          data-block-type={block.type}
+                          key={`${block.type}:${block.extensionId ?? ''}`}
+                        >
+                          <button
+                            aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
+                            className="builder-block-drag"
+                            onClick={
+                              block.extensionId
+                                ? () =>
+                                    editorRef.current?.addExtensionBlock(
+                                      block.extensionId!,
+                                    )
+                                : undefined
+                            }
+                            onMouseDown={
+                              block.extensionId
+                                ? undefined
+                                : (event) =>
+                                    editorRef.current?.startBlockDrag(
+                                      block.type,
+                                      event.nativeEvent,
+                                    )
+                            }
+                            type="button"
+                          >
+                            <span aria-hidden="true">⠿</span>
+                            <span>{block.label}</span>
+                          </button>
+                          <button
+                            aria-label={`${block.label} add`}
+                            className="builder-block-add"
+                            onClick={() =>
+                              block.extensionId
+                                ? editorRef.current?.addExtensionBlock(block.extensionId)
+                                : editorRef.current?.addBlock(block.type)
+                            }
+                            type="button"
+                          >
+                            ＋
+                          </button>
+                        </div>
+                      ))}
+                    </section>
                   ))}
                 </div>
                 {toolBlockOptions.length === 0 ? (
@@ -1751,18 +1394,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   </p>
                 ) : null}
                 <p className="muted small builder-help">
-                  Sections map to the supported, versioned PagePayload node set and keep
-                  their canvas order when published.
+                  Components are versioned PagePayload nodes and keep their canvas order
+                  when published.
                 </p>
               </>
             ) : null}
-            {activeTool === 'add' ? (
+            {activeTool === 'settings' ? (
               <>
                 <div className="builder-layers-section builder-page-capabilities">
                   <div className="builder-panel-heading">
                     <div>
-                      <span className="eyebrow">Page runtime</span>
-                      <strong>Extension graph</strong>
+                      <span className="eyebrow">Page settings</span>
+                      <strong>Extensions</strong>
                     </div>
                     <span className="builder-capability-active">
                       {pageExtensions.filter((item) => item.enabled).length} active
@@ -1806,36 +1449,39 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                     </div>
                   )}
                   {pageCapabilities ? (
-                    <div
-                      aria-label="Page capability summary"
-                      className="builder-capability-summary"
-                    >
-                      <div className="builder-capability-metric">
-                        <strong>{pageCapabilities.capabilities.length}</strong>
-                        <span>Capabilities</span>
-                      </div>
-                      <div className="builder-capability-metric">
-                        <strong>{pageCapabilities.runtimeIds.length}</strong>
-                        <span>Runtimes</span>
-                      </div>
-                      <div className="builder-capability-metric">
-                        <strong>{pageCapabilities.slots.length}</strong>
-                        <span>Slots</span>
-                      </div>
-                      <div className="builder-capability-metric">
-                        <strong>{pageCapabilities.dataBindings.length}</strong>
-                        <span>Bindings</span>
-                      </div>
-                      {pageCapabilities.capabilities.length > 0 ? (
-                        <div className="builder-capability-chips">
-                          {pageCapabilities.capabilities.map((capability) => (
-                            <span className="builder-capability-chip" key={capability}>
-                              {capability}
-                            </span>
-                          ))}
+                    <details className="builder-page-settings-advanced">
+                      <summary>Technical capability details</summary>
+                      <div
+                        aria-label="Page capability summary"
+                        className="builder-capability-summary"
+                      >
+                        <div className="builder-capability-metric">
+                          <strong>{pageCapabilities.capabilities.length}</strong>
+                          <span>Capabilities</span>
                         </div>
-                      ) : null}
-                    </div>
+                        <div className="builder-capability-metric">
+                          <strong>{pageCapabilities.runtimeIds.length}</strong>
+                          <span>Runtimes</span>
+                        </div>
+                        <div className="builder-capability-metric">
+                          <strong>{pageCapabilities.slots.length}</strong>
+                          <span>Slots</span>
+                        </div>
+                        <div className="builder-capability-metric">
+                          <strong>{pageCapabilities.dataBindings.length}</strong>
+                          <span>Bindings</span>
+                        </div>
+                        {pageCapabilities.capabilities.length > 0 ? (
+                          <div className="builder-capability-chips">
+                            {pageCapabilities.capabilities.map((capability) => (
+                              <span className="builder-capability-chip" key={capability}>
+                                {capability}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </details>
                   ) : null}
                 </div>
               </>
@@ -1867,7 +1513,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 )}
               </div>
             ) : null}
-            {activeTool === 'layers' || activeTool === 'add' ? (
+            {activeTool === 'layers' ? (
               <>
                 <div className="builder-layers-section">
                   <div className="builder-panel-heading">
@@ -1896,7 +1542,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                         layerChildren,
                         visibleLayerIds,
                         undefined,
-                        selected?.id,
+                        selectedNodeId ?? undefined,
                         (id) => editorRef.current?.selectNode(id),
                         toggleLayer,
                         handleLayerKeyDown,
@@ -1926,15 +1572,6 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         </div>
 
         <section className="builder-canvas-panel" aria-label="Builder canvas">
-          <BuilderContextToolbar
-            onDelete={() => editorRef.current?.deleteSelected()}
-            onDuplicate={() => editorRef.current?.duplicateSelected()}
-            onMoveDown={() => editorRef.current?.moveSelected('down')}
-            onMoveUp={() => editorRef.current?.moveSelected('up')}
-            onQuickAdd={openQuickAdd}
-            onSelectParent={() => editorRef.current?.selectParent()}
-            selected={selected}
-          />
           <div className="builder-viewport-toolbar">
             <div
               className="builder-interaction-toolbar"
@@ -1986,14 +1623,32 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             </div>
           </div>
           <div className="builder-editor-shell">
+            <BuilderContextToolbar
+              onDelete={() => editorRef.current?.deleteSelected()}
+              onDuplicate={() => editorRef.current?.duplicateSelected()}
+              onMoveDown={() => editorRef.current?.moveSelected('down')}
+              onMoveUp={() => editorRef.current?.moveSelected('up')}
+              onQuickAdd={openQuickAdd}
+              onSelectParent={() => editorRef.current?.selectParent()}
+              position={contextToolbarPosition}
+              selected={selected}
+            />
             <QuickAddOverlay
+              anchor={
+                contextToolbarPosition
+                  ? {
+                      left: contextToolbarPosition.left,
+                      top: contextToolbarPosition.top + 48,
+                    }
+                  : undefined
+              }
               onClose={() => setQuickAddTarget(null)}
               onInsert={insertQuickAdd}
               open={quickAddTarget !== null}
               position={quickAddTarget?.position}
-              options={toolBlockOptions.filter(
-                (option): option is QuickAddOption => option.type !== 'extension',
-              )}
+              options={visibleBlockOptions
+                .filter((option) => option.type !== 'extension')
+                .map(({ type, label }) => ({ type, label }))}
               targetLabel={selected?.type}
             />
             <GrapesEditor
@@ -2013,7 +1668,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 )
               }
               onSelectionChange={(nextSelection) => {
-                selectedNodeRef.current = nextSelection;
+                setSelectedNodeId(nextSelection?.id ?? null);
                 setSelected(nextSelection);
               }}
               ref={editorRef}
@@ -2023,7 +1678,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               onNavigate={(x, y) => editorRef.current?.scrollToCanvasPoint(x, y)}
               onSelectNode={(id) => editorRef.current?.selectNode(id)}
               onZoomChange={(zoom) => editorRef.current?.setCanvasZoom(zoom)}
-              selectedId={selected?.id}
+              selectedId={selectedNodeId ?? undefined}
               state={canvasState}
             />
           </div>
@@ -2085,339 +1740,26 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   <span>styles</span>
                 </div>
               </div>
-
-              <div
-                aria-label="Inspector tabs"
-                className="builder-inspector-tabs"
-                role="tablist"
-              >
-                {(['content', 'style', 'settings'] as const).map((tab) => (
-                  <button
-                    aria-selected={inspectorTab === tab}
-                    className={inspectorTab === tab ? 'is-active' : ''}
-                    key={tab}
-                    onClick={() => setInspectorTab(tab)}
-                    role="tab"
-                    type="button"
-                  >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              {inspectorTab === 'content' ? (
-                <>
-                  {selected.type === 'form' && selected.form ? (
-                    <InspectorSection
-                      label="Form"
-                      onToggle={(open) => toggleInspectorSection('content', open)}
-                      open={openInspectorSections.content}
-                    >
-                      <div className="builder-inspector-fields">
-                        <label>
-                          Submit button label
-                          <input
-                            aria-label="Submit button label"
-                            onChange={(event) =>
-                              updateForm({
-                                ...selected.form!,
-                                submitLabel: event.target.value,
-                              })
-                            }
-                            value={selected.form.submitLabel}
-                          />
-                        </label>
-                        <label>
-                          Success message
-                          <textarea
-                            aria-label="Form success message"
-                            onChange={(event) =>
-                              updateForm({
-                                ...selected.form!,
-                                successMessage: event.target.value,
-                              })
-                            }
-                            rows={3}
-                            value={selected.form.successMessage}
-                          />
-                        </label>
-                        <div className="builder-form-fields">
-                          <div className="builder-property-control">
-                            <span className="builder-property-label">Fields</span>
-                            <button
-                              className="button button-secondary button-small"
-                              disabled={selected.form.fields.length >= 20}
-                              onClick={addFormField}
-                              type="button"
-                            >
-                              + Add field
-                            </button>
-                          </div>
-                          {selected.form.fields.map((field, index) => (
-                            <fieldset className="builder-form-field" key={field.id}>
-                              <legend>
-                                {index + 1}. {field.label}
-                              </legend>
-                              <label>
-                                Label
-                                <input
-                                  aria-label={`Form field label ${field.id}`}
-                                  onChange={(event) =>
-                                    patchFormField(index, { label: event.target.value })
-                                  }
-                                  value={field.label}
-                                />
-                              </label>
-                              <label>
-                                Type
-                                <select
-                                  aria-label={`Form field type ${field.id}`}
-                                  onChange={(event) =>
-                                    changeFormFieldType(
-                                      index,
-                                      event.target.value as FormField['type'],
-                                    )
-                                  }
-                                  value={field.type}
-                                >
-                                  <option value="text">Text</option>
-                                  <option value="email">Email</option>
-                                  <option value="phone">Phone</option>
-                                  <option value="textarea">Textarea</option>
-                                  <option value="select">Select</option>
-                                  <option value="checkbox">Checkbox</option>
-                                  <option value="radio">Radio</option>
-                                </select>
-                              </label>
-                              {'placeholder' in field ? (
-                                <label>
-                                  Placeholder
-                                  <input
-                                    aria-label={`Form field placeholder ${field.id}`}
-                                    onChange={(event) =>
-                                      patchFormField(index, {
-                                        placeholder: event.target.value,
-                                      })
-                                    }
-                                    value={field.placeholder ?? ''}
-                                  />
-                                </label>
-                              ) : null}
-                              <label className="checkbox-field">
-                                <input
-                                  aria-label={`Form field required ${field.id}`}
-                                  checked={field.required}
-                                  onChange={(event) =>
-                                    patchFormField(index, {
-                                      required: event.target.checked,
-                                    })
-                                  }
-                                  type="checkbox"
-                                />
-                                Required
-                              </label>
-                              <div className="row-actions">
-                                <button
-                                  aria-label={`Move field ${field.id} up`}
-                                  className="button button-ghost button-small"
-                                  disabled={index === 0}
-                                  onClick={() => moveFormField(index, -1)}
-                                  type="button"
-                                >
-                                  ↑
-                                </button>
-                                <button
-                                  aria-label={`Move field ${field.id} down`}
-                                  className="button button-ghost button-small"
-                                  disabled={index === selected.form!.fields.length - 1}
-                                  onClick={() => moveFormField(index, 1)}
-                                  type="button"
-                                >
-                                  ↓
-                                </button>
-                                <button
-                                  aria-label={`Remove field ${field.id}`}
-                                  className="button button-danger button-small"
-                                  disabled={selected.form!.fields.length <= 1}
-                                  onClick={() => removeFormField(index)}
-                                  type="button"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            </fieldset>
-                          ))}
-                        </div>
-                      </div>
-                    </InspectorSection>
-                  ) : null}
-
-                  {selected.type === 'countdown' && selected.countdown ? (
-                    <InspectorSection
-                      label="Countdown"
-                      onToggle={(open) => toggleInspectorSection('content', open)}
-                      open={openInspectorSections.content}
-                    >
-                      <div className="builder-inspector-fields">
-                        <TextField
-                          compact
-                          label="Countdown label"
-                          onChange={(event) =>
-                            updateSelectedCountdown('label', event.target.value)
-                          }
-                          value={selected.countdown.label}
-                        />
-                        <DateTimeField
-                          compact
-                          description="Stored as UTC in the existing countdown payload."
-                          label="Target date and time"
-                          onValueChange={(nextValue) => {
-                            if (nextValue) updateSelectedCountdown('targetAt', nextValue);
-                          }}
-                          value={selected.countdown.targetAt}
-                        />
-                      </div>
-                    </InspectorSection>
-                  ) : null}
-
-                  {renderContentInspector()}
-
-                  {inspectorQuickStyleSections.map((section) =>
-                    renderStyleSection(section, styleBlock),
-                  )}
-
-                  <InspectorSection
-                    label="Advanced"
-                    onToggle={(open) => toggleInspectorSection('advanced', open)}
-                    open={openInspectorSections.advanced}
-                  >
-                    <div className="builder-inspector-advanced">
-                      <span className="muted small">Node ID</span>
-                      <code>{selected.id}</code>
-                      <span className="muted small">
-                        This identifier is stable for this page and is not edited here.
-                      </span>
-                    </div>
-                  </InspectorSection>
-
-                  {selected.type !== 'root' ? (
-                    <div className="builder-selection-actions">
-                      <span className="muted small">
-                        Common actions stay available while you edit content.
-                      </span>
-                      <div className="row-actions">
-                        <button
-                          className="button button-secondary button-small"
-                          onClick={() => editorRef.current?.duplicateSelected()}
-                          type="button"
-                        >
-                          Duplicate
-                        </button>
-                        <button
-                          className="button button-danger button-small"
-                          onClick={() => {
-                            editorRef.current?.deleteSelected();
-                            selectedNodeRef.current = null;
-                            setSelected(null);
-                          }}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-
-              {inspectorTab === 'style' ? (
-                <>
-                  {inspectorStyleSections.map((section) =>
-                    renderStyleSection(section, styleBlock),
-                  )}
-                </>
-              ) : null}
-
-              {inspectorTab === 'settings' ? (
-                <>
-                  <InspectorSection
-                    label="Advanced"
-                    onToggle={(open) => toggleInspectorSection('advanced', open)}
-                    open={openInspectorSections.advanced}
-                  >
-                    <div className="builder-inspector-advanced">
-                      <span className="muted small">Node ID</span>
-                      <code>{selected.id}</code>
-                      <span className="muted small">
-                        This identifier is stable for this page and is not edited here.
-                      </span>
-                    </div>
-                  </InspectorSection>
-
-                  {selected.type !== 'root' ? (
-                    <div className="builder-selection-actions">
-                      <span className="muted small">
-                        Use the ⠿ handle to move this node. Drop before, inside, or after
-                        a target.
-                      </span>
-                      <div className="row-actions">
-                        <button
-                          aria-label="Move up"
-                          className="button button-ghost button-small"
-                          onClick={() => editorRef.current?.moveSelected('up')}
-                          type="button"
-                        >
-                          ↑ Up
-                        </button>
-                        <button
-                          aria-label="Move down"
-                          className="button button-ghost button-small"
-                          onClick={() => editorRef.current?.moveSelected('down')}
-                          type="button"
-                        >
-                          ↓ Down
-                        </button>
-                        <button
-                          aria-label="Outdent"
-                          className="button button-ghost button-small"
-                          onClick={() => editorRef.current?.moveSelected('outdent')}
-                          type="button"
-                        >
-                          ← Outdent
-                        </button>
-                        <button
-                          aria-label="Indent"
-                          className="button button-ghost button-small"
-                          onClick={() => editorRef.current?.moveSelected('indent')}
-                          type="button"
-                        >
-                          → Indent
-                        </button>
-                      </div>
-                      <div className="row-actions">
-                        <button
-                          className="button button-secondary button-small"
-                          onClick={() => editorRef.current?.duplicateSelected()}
-                          type="button"
-                        >
-                          Duplicate
-                        </button>
-                        <button
-                          className="button button-danger button-small"
-                          onClick={() => {
-                            editorRef.current?.deleteSelected();
-                            selectedNodeRef.current = null;
-                            setSelected(null);
-                          }}
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
+              <BuilderInspector
+                addFormField={addFormField}
+                changeFormFieldType={changeFormFieldType}
+                inspectorTab={inspectorTab}
+                moveFormField={moveFormField}
+                onInspectorTabChange={setInspectorTab}
+                onToggleSection={toggleInspectorSection}
+                openSections={openInspectorSections}
+                patchFormField={patchFormField}
+                removeFormField={removeFormField}
+                resetSelectedStyle={resetSelectedStyle}
+                selected={selected}
+                updateForm={updateForm}
+                updateSelectedAttribute={updateSelectedAttribute}
+                updateSelectedCountdown={updateSelectedCountdown}
+                updateSelectedStyle={updateSelectedStyle}
+                updateSelectedText={updateSelectedText}
+                usableAssets={usableAssets}
+                viewport={viewport}
+              />
             </div>
           ) : (
             <div className="builder-properties-empty">
@@ -2454,15 +1796,4 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       </div>
     </main>
   );
-}
-
-function styleValue(
-  style: Record<string, string | undefined>,
-  editorProperty: string,
-): string {
-  const property =
-    PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
-      editorProperty as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
-    ];
-  return style[property?.payloadKey ?? editorProperty] ?? '';
 }

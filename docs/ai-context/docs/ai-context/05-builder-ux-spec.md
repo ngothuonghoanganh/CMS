@@ -209,3 +209,18 @@ Restricted:
 - destructive component-schema changes.
 
 This makes the platform safer for non-design users.
+
+## Phase 14.2 builder IA
+
+The desktop builder uses an Add/Layers/Assets/Page settings activity rail,
+followed by a registry-driven left panel, dominant canvas and compact Inspector.
+Add presents Layouts/Elements categories; Layers is never repeated below Add and
+extension graph details belong to Page settings. Content owns semantic values,
+Style owns visual values and Settings owns behavior/advanced metadata. The
+selected context toolbar follows node geometry, and mobile CMS uses overlays so
+the canvas remains primary.
+
+Inspector control rendering belongs in `builder/inspector/builder-inspector.tsx`;
+`builder-shell.tsx` composes workspace state and passes command callbacks. Page
+settings keeps technical capability counts collapsed so runtime/slot details do
+not become primary no-code UX.

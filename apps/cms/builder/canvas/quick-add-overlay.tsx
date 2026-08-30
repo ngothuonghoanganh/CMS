@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import type { BuilderBlockType } from '../builder-adapter';
 import type { DropPosition } from '../builder-interaction';
 
@@ -15,6 +16,7 @@ type QuickAddOverlayProps = {
   options: readonly QuickAddOption[];
   onClose: () => void;
   onInsert: (type: BuilderBlockType) => void;
+  anchor?: { left: number; top: number } | undefined;
 };
 
 export function QuickAddOverlay({
@@ -24,10 +26,16 @@ export function QuickAddOverlay({
   options,
   onClose,
   onInsert,
+  anchor,
 }: QuickAddOverlayProps) {
   if (!open) return null;
   return (
-    <div className="builder-quick-add-overlay" aria-label="Quick add" role="dialog">
+    <div
+      aria-label="Quick add"
+      className="builder-quick-add-overlay"
+      role="dialog"
+      style={anchor as CSSProperties | undefined}
+    >
       <div className="builder-quick-add-heading">
         <strong>
           Add {position === 'inside' ? 'inside' : 'after'}{' '}

@@ -178,3 +178,13 @@ During deep audit, explicitly identify:
 - tenant-unaware caches;
 - missing indexes/constraints where visible from source;
 - inconsistent validation between frontend/backend.
+
+## Phase 14.2 consolidation rules
+
+- Content, Style and Settings have exclusive ownership; never render a style
+  property in Content or duplicate action controls in Inspector.
+- `style.textAlign` is the active alignment writer. `props.align` is a legacy
+  renderer fallback only.
+- Responsive Inspector values are effective cascade values with authored and
+  inheritance metadata, resolved by one utility.
+- Add, Layers, Assets and Page settings are separate activity-rail tools.

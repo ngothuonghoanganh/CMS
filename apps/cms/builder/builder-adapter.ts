@@ -788,15 +788,12 @@ function readNodeStyle(
   );
   const baseFromEditor = editorStyleToPayloadStyle(snapshot.style, path);
 
-  if (!responsive && Object.keys(baseFromEditor).length === 0) {
-    return undefined;
-  }
-
-  const result: PageNodeStyle = responsive ?? { base: {} };
-  if (Object.keys(baseFromEditor).length > 0 || !responsive) {
-    result.base = baseFromEditor;
-  }
-  return result;
+  // When responsive metadata exists, the GrapesJS style block is a painted
+  // effective value for the active device (base + tablet/mobile overrides).
+  // Persist the authored responsive metadata instead of accidentally copying
+  // that effective presentation back into `base` during a tablet/mobile save.
+  if (responsive) return responsive;
+  return Object.keys(baseFromEditor).length > 0 ? { base: baseFromEditor } : undefined;
 }
 
 function nodeFromSnapshot(

@@ -76,7 +76,9 @@ function styleBlockToProperties(style: PageNodeStyle['base'] | undefined): CSSPr
 
 function nodeStyle(node: RenderableNode): CSSProperties {
   const style = styleBlockToProperties(node.style?.base);
-  if (node.type === 'text' && node.props.align) {
+  // `props.align` is retained only as a legacy fallback. New edits are
+  // written to style.textAlign, which must win whenever it is authored.
+  if (node.type === 'text' && !node.style?.base?.textAlign && node.props.align) {
     style.textAlign = node.props.align;
   }
   return style;

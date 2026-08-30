@@ -106,6 +106,20 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshot)).toEqual(payload);
   });
 
+  it('does not promote a painted tablet style into the authored base block', () => {
+    const definition = payloadToEditorComponent(payload);
+    const snapshot = snapshotFromEditorDefinition(definition);
+    const hero = snapshot.children[0];
+    if (!hero) throw new Error('Hero snapshot is missing');
+    hero.style = {
+      padding: '48px 20px',
+      gap: '24px',
+    };
+    expect(serializeEditorSnapshot(snapshot).root.children[0]?.style).toEqual(
+      payload.root.children[0]?.style,
+    );
+  });
+
   it('resolves desktop, tablet, and mobile styles with the renderer cascade', () => {
     const style = {
       base: { color: '#111111', fontSize: '32px', padding: '48px' },

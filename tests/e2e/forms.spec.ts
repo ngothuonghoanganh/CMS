@@ -45,6 +45,7 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await page.getByRole('button', { name: /^Form/ }).click();
   await expect(page.getByLabel('Form field label name')).toHaveValue('Name');
   await expect(page.getByLabel('Form field label email')).toHaveValue('Email');
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await expect(
     page.locator('.builder-layer-button[aria-label="Select Form"]'),
   ).toBeVisible();
@@ -118,6 +119,7 @@ test('builds, publishes, submits and manages a form with published-schema isolat
 
   await page.getByRole('button', { name: 'Open Builder' }).click();
   await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page.locator('.builder-layer-button[aria-label^="Select Form"]').click();
   await page.getByLabel('Form field type email').selectOption('phone');
   await page.getByLabel('Form field label email').fill('Phone');
