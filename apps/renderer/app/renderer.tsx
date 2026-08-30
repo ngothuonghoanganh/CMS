@@ -18,6 +18,8 @@ import {
   type PageRuntimeExtension,
   type ResolvedNavigationItem,
   PAGE_RESPONSIVE_BREAKPOINTS,
+  isSafePageStyleValue,
+  pageStyleReactProperty,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
 } from '@payload/contracts';
 import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
@@ -56,13 +58,6 @@ type RenderContext = {
 };
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
-function isSafeCssValue(value: string): boolean {
-  return (
-    !/[;{}<>"'`\r\n]/.test(value) &&
-    !/(?:url|expression|javascript|vbscript|@import)/i.test(value)
-  );
-}
-
 function styleBlockToProperties(style: PageNodeStyle['base'] | undefined): CSSProperties {
   if (!style) {
     return {};
@@ -71,10 +66,10 @@ function styleBlockToProperties(style: PageNodeStyle['base'] | undefined): CSSPr
   const result: CSSProperties = {};
   for (const [property, value] of Object.entries(style)) {
     const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
-    if (!definition || typeof value !== 'string' || !isSafeCssValue(value)) {
+    if (!definition || typeof value !== 'string' || !isSafePageStyleValue(value)) {
       continue;
     }
-    (result as Record<string, string>)[definition.cssProperty] = value;
+    (result as Record<string, string>)[pageStyleReactProperty(definition)] = value;
   }
   return result;
 }
@@ -358,11 +353,11 @@ function responsiveRules(
           ([property, value]) =>
             property in PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY &&
             typeof value === 'string' &&
-            isSafeCssValue(value),
+            isSafePageStyleValue(value),
         )
         .map(
           ([property, value]) =>
-            `${PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.cssProperty}:${value}`,
+            `${PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.cssProperty}:${value}!important`,
         )
         .join(';')
     : '';

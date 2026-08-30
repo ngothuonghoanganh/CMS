@@ -14,15 +14,28 @@ import { renderPage } from '../../renderer';
 type PreviewBridgeProps = {
   initialPayload: PagePayload;
   extensions?: readonly PageRuntimeExtension[] | undefined;
+  siteSlug: string;
+  pageSlug?: string | undefined;
+  tenantSlug?: string | undefined;
 };
 
-function rendererContext(extensions: readonly PageRuntimeExtension[] | undefined) {
-  return extensions?.length
-    ? {
-        runtimeIds: extensions.flatMap((extension) => extension.runtimeIds),
-        extensions,
-      }
-    : {};
+function rendererContext({
+  extensions,
+  siteSlug,
+  pageSlug,
+  tenantSlug,
+}: Omit<PreviewBridgeProps, 'initialPayload'>) {
+  return {
+    siteSlug,
+    ...(pageSlug ? { pageSlug } : {}),
+    ...(tenantSlug ? { tenantSlug } : {}),
+    ...(extensions?.length
+      ? {
+          runtimeIds: extensions.flatMap((extension) => extension.runtimeIds),
+          extensions,
+        }
+      : {}),
+  };
 }
 
 function configuredCmsOrigin(): string {
@@ -36,7 +49,13 @@ function configuredCmsOrigin(): string {
   return 'http://127.0.0.1:3000';
 }
 
-export function PreviewBridge({ initialPayload, extensions }: PreviewBridgeProps) {
+export function PreviewBridge({
+  initialPayload,
+  extensions,
+  siteSlug,
+  pageSlug,
+  tenantSlug,
+}: PreviewBridgeProps) {
   const [payload, setPayload] = useState(initialPayload);
 
   useEffect(() => {
@@ -53,7 +72,10 @@ export function PreviewBridge({ initialPayload, extensions }: PreviewBridgeProps
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  return renderPage(payload, rendererContext(extensions)) as ReactElement;
+  return renderPage(
+    payload,
+    rendererContext({ extensions, siteSlug, pageSlug, tenantSlug }),
+  ) as ReactElement;
 }
 
 export { PAGE_PREVIEW_MESSAGE_TYPE };

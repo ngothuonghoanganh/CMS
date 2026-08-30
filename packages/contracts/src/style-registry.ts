@@ -406,8 +406,11 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     editorProperty: 'opacity',
     label: 'Opacity',
     group: 'style',
-    control: 'unit',
+    control: 'number',
     responsive: true,
+    min: 0,
+    max: 1,
+    step: 0.05,
   },
   {
     key: 'box-shadow',
@@ -431,6 +434,23 @@ export const PAGE_STYLE_PROPERTY_BY_EDITOR_KEY = Object.fromEntries(
 export const PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY = Object.fromEntries(
   PAGE_STYLE_PROPERTY_DEFINITIONS.map((property) => [property.payloadKey, property]),
 ) as Record<string, PageStylePropertyDefinition>;
+
+/** CSS declarations use kebab case; React's style prop requires camel case. */
+export function pageStyleReactProperty(
+  definition: Pick<PageStylePropertyDefinition, 'cssProperty'>,
+): string {
+  return definition.cssProperty.replace(/-([a-z])/g, (_, character: string) =>
+    character.toUpperCase(),
+  );
+}
+
+/** Shared CSS value guard used before authored styles reach either surface. */
+export function isSafePageStyleValue(value: string): boolean {
+  return (
+    !/[;{}<>`\r\n]/.test(value) &&
+    !/(?:url|expression|javascript|vbscript|@import)/i.test(value)
+  );
+}
 
 export const PAGE_STYLE_PROPERTY_GROUPS = {
   layout: PAGE_STYLE_PROPERTY_DEFINITIONS.filter((property) =>

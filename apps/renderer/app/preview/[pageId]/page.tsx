@@ -35,7 +35,13 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   return (
     <div className="preview-page" data-page-slug={page.page.slug}>
       <div className="preview-banner">Draft preview</div>
-      <PreviewBridge initialPayload={page.payload} extensions={page.extensions} />
+      <PreviewBridge
+        initialPayload={page.payload}
+        extensions={page.extensions}
+        siteSlug={page.site.slug}
+        pageSlug={page.page.slug}
+        tenantSlug={page.tenantSlug}
+      />
     </div>
   );
 }

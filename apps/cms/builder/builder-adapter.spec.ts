@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PagePayloadV1 } from '@payload/contracts';
+import { type PagePayloadV1 } from '@payload/contracts';
 
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -12,7 +12,9 @@ import {
   BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
   BuilderAdapterError,
   createBlockDefinition,
+  formatCountdownRemaining,
   payloadToEditorComponent,
+  resolveViewportStyle,
   serializeEditorSnapshot,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
@@ -102,6 +104,25 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshot)).toEqual(payload);
   });
 
+  it('resolves desktop, tablet, and mobile styles with the renderer cascade', () => {
+    const style = {
+      base: { color: '#111111', fontSize: '32px', padding: '48px' },
+      tablet: { fontSize: '26px', padding: '32px' },
+      mobile: { padding: '16px' },
+    } as const;
+
+    expect(resolveViewportStyle(style, 'desktop')).toEqual(style.base);
+    expect(resolveViewportStyle(style, 'tablet')).toEqual({
+      ...style.base,
+      ...style.tablet,
+    });
+    expect(resolveViewportStyle(style, 'mobile')).toEqual({
+      ...style.base,
+      ...style.tablet,
+      ...style.mobile,
+    });
+  });
+
   it('creates page-local ids for newly inserted blocks', () => {
     const definition = createBlockDefinition('text');
     const id = definition.attributes?.[BUILDER_NODE_ID_ATTRIBUTE];
@@ -135,6 +156,14 @@ describe('builder adapter', () => {
     snapshot.children[0]!.children[1]!.attributes.src = 'javascript:alert(1)';
 
     expect(() => serializeEditorSnapshot(snapshot)).toThrow('Image source must be');
+  });
+
+  it('fails validation for unsafe edited style values', () => {
+    const definition = payloadToEditorComponent(payload);
+    const snapshot = snapshotFromEditorDefinition(definition);
+    snapshot.children[0]!.style['background-color'] = 'url(javascript:alert(1))';
+
+    expect(() => serializeEditorSnapshot(snapshot)).toThrow('unsafe CSS value');
   });
 
   it('fails on editor styles outside the shared vocabulary', () => {
@@ -197,6 +226,10 @@ describe('builder adapter', () => {
         BUILDER_FORM_PREVIEW_ATTRIBUTE
       ],
     ).toBe('field');
+    // Runtime classes are painted on the iframe DOM, not persisted in the
+    // GrapesJS model (which otherwise treats preview descendants as selectors).
+    expect(formAttributes.class).toBeUndefined();
+    expect((formPreview[0]!.attributes as Record<string, unknown>).class).toBeUndefined();
     expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
       formPayload,
     );
@@ -239,6 +272,7 @@ describe('builder adapter', () => {
         snapshotFromEditorDefinition(payloadToEditorComponent(payload)),
       ),
     ).toEqual(payload);
+    expect(formatCountdownRemaining('2000-01-01T00:00:00.000Z')).toBe('0d 0h 0m 0s');
   });
 
   it('creates and round-trips a declarative custom extension block as V3', () => {

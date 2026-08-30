@@ -1,6 +1,10 @@
 'use client';
 
-import type { FormField, FormNode } from '@payload/contracts';
+import {
+  PAGE_RUNTIME_CLASS_NAMES,
+  type FormField,
+  type FormNode,
+} from '@payload/contracts';
 import React, { useState, type FormEvent } from 'react';
 
 import { getAnalyticsSessionId } from './analytics-client';
@@ -67,7 +71,11 @@ function FieldControl({
       );
     case 'radio':
       return (
-        <div className="payload-form-options" role="radiogroup" aria-label={field.label}>
+        <div
+          className={PAGE_RUNTIME_CLASS_NAMES.formOptions}
+          role="radiogroup"
+          aria-label={field.label}
+        >
           {field.options.map((option) => (
             <label key={option.value}>
               <input
@@ -158,7 +166,7 @@ export function FormRenderer({ node, submissionUrl }: FormRendererProps) {
     return (
       <div
         aria-live="polite"
-        className="payload-form-success"
+        className={PAGE_RUNTIME_CLASS_NAMES.formSuccess}
         data-payload-node-id={node.id}
         data-payload-node-type="form"
         role="status"
@@ -170,13 +178,13 @@ export function FormRenderer({ node, submissionUrl }: FormRendererProps) {
 
   return (
     <form
-      className="payload-form"
+      className={PAGE_RUNTIME_CLASS_NAMES.form}
       data-payload-node-id={node.id}
       data-payload-node-type="form"
       onSubmit={submit}
     >
       {node.props.fields.map((field) => (
-        <div className="payload-form-field" key={field.id}>
+        <div className={PAGE_RUNTIME_CLASS_NAMES.formField} key={field.id}>
           <label htmlFor={`payload-form-${field.id}`}>
             {field.label}
             {field.required ? <span aria-hidden="true"> *</span> : null}
@@ -191,7 +199,7 @@ export function FormRenderer({ node, submissionUrl }: FormRendererProps) {
         </div>
       ))}
       {error ? (
-        <p aria-live="polite" className="payload-form-error" role="alert">
+        <p aria-live="polite" className={PAGE_RUNTIME_CLASS_NAMES.formError} role="alert">
           {error}
         </p>
       ) : null}

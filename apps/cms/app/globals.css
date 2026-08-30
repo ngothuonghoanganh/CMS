@@ -1429,8 +1429,9 @@ textarea {
 }
 .builder-frame {
   display: grid;
+  height: 100dvh;
   min-height: 100vh;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   background: #0b1020;
 }
 .builder-topbar {
@@ -1480,7 +1481,9 @@ textarea {
   display: grid;
   min-height: 0;
   grid-template-columns: 210px minmax(0, 1fr) 260px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 0.8rem;
+  overflow: hidden;
   padding: 0.8rem;
 }
 .builder-panel,
@@ -1493,6 +1496,13 @@ textarea {
 .builder-panel {
   overflow: auto;
   padding: 1rem;
+}
+.builder-properties-panel {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
 }
 .builder-panel-heading {
   display: grid;
@@ -1842,7 +1852,7 @@ textarea {
 .builder-editor-shell {
   position: relative;
   min-height: 0;
-  height: calc(100vh - 132px);
+  height: 100%;
   overflow: hidden;
   background: #d9dee9;
 }
@@ -3864,6 +3874,10 @@ body {
 }
 
 @media (max-width: 820px) {
+  .builder-frame {
+    height: auto;
+    min-height: 100dvh;
+  }
   .pages-manager-layout {
     grid-template-columns: 1fr;
   }
@@ -3872,6 +3886,8 @@ body {
   }
   .builder-workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    overflow: visible;
   }
   .builder-left-dock {
     grid-template-columns: 1fr;

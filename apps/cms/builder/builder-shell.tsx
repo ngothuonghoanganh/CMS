@@ -46,6 +46,7 @@ import { ApiClientError, api } from '../app/lib/api';
 import {
   ColorField,
   DateTimeField,
+  NumberField,
   SegmentedControl,
   SelectField,
   SpacingControl,
@@ -1159,6 +1160,29 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 </div>
               );
             }
+            if (option.control === 'number') {
+              const numericValue = Number(value);
+              return (
+                <div className="builder-inspector-field-stack" key={option.key}>
+                  <NumberField
+                    compact
+                    description={description}
+                    label={option.label}
+                    max={option.max}
+                    min={option.min}
+                    onValueChange={(nextValue) =>
+                      updateSelectedStyle(
+                        option.key,
+                        nextValue === undefined ? '' : String(nextValue),
+                      )
+                    }
+                    step={option.step}
+                    value={Number.isFinite(numericValue) ? numericValue : undefined}
+                  />
+                  {resetOverride}
+                </div>
+              );
+            }
             if (option.control === 'spacing') {
               return (
                 <div className="builder-inspector-field-stack" key={option.key}>
@@ -1524,16 +1548,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         </div>
       </header>
 
-      {error ? (
-        <div className="builder-alert alert-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="builder-alert alert-success" role="status">
-          {notice}
-        </div>
-      ) : null}
+      <div className="builder-alerts">
+        {error ? (
+          <div className="builder-alert alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="builder-alert alert-success" role="status">
+            {notice}
+          </div>
+        ) : null}
+      </div>
 
       <div className="builder-workspace">
         <div

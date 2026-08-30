@@ -2,6 +2,7 @@
 
 import type { BlockProperties, Component, Editor } from 'grapesjs';
 import {
+  BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
@@ -15,6 +16,7 @@ import {
   captureEditorViewportStyle,
   createBlockDefinition,
   createExtensionBlockDefinition,
+  countdownPreviewComponents,
   formPreviewComponents,
   isBuilderNodeType,
   payloadToEditorComponent,
@@ -40,6 +42,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from 're
 import {
   CountdownPropsSchema,
   FormPropsSchema,
+  PAGE_RUNTIME_CLASS_NAMES,
+  PAGE_RUNTIME_BASELINE_CSS,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
   createPageDocument,
@@ -66,6 +70,7 @@ export type SelectedBuilderNode = {
 
 type BuilderDebugApi = {
   getPayload: () => PagePayload;
+  setCanvasZoom: (zoom: number) => void;
 };
 
 declare global {
@@ -232,6 +237,45 @@ function ensureAllFormPreviews(root: Component): void {
   root.onAll((component) => {
     const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
     if (type === 'form') ensureFormPreview(component);
+  });
+}
+
+/**
+ * Runtime classes are painted onto the iframe DOM only. Keeping them out of
+ * the GrapesJS component model avoids its selector manager treating preview
+ * descendants as editable class selectors while preserving production CSS.
+ */
+function syncRuntimePreviewClasses(root: Component): void {
+  const rootElement = root.getEl();
+  const frameDocument = rootElement?.ownerDocument;
+  if (frameDocument) {
+    frameDocument
+      .querySelectorAll<HTMLElement>('[data-payload-node-type="form"]')
+      .forEach((element) => element.classList.add(PAGE_RUNTIME_CLASS_NAMES.form));
+    frameDocument
+      .querySelectorAll<HTMLElement>('[data-payload-form-preview="field"]')
+      .forEach((element) => element.classList.add(PAGE_RUNTIME_CLASS_NAMES.formField));
+    frameDocument
+      .querySelectorAll<HTMLElement>(
+        '[data-payload-form-preview="control"][role="radiogroup"]',
+      )
+      .forEach((element) => element.classList.add(PAGE_RUNTIME_CLASS_NAMES.formOptions));
+  }
+  root.onAll((component) => {
+    const attributes = component.getAttributes({ noStyle: true });
+    const element = component.getEl();
+    if (!element) return;
+    const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+    if (type === 'form') element.classList.add(PAGE_RUNTIME_CLASS_NAMES.form);
+    if (attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] === 'field') {
+      element.classList.add(PAGE_RUNTIME_CLASS_NAMES.formField);
+    }
+    if (
+      attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] === 'control' &&
+      attributes.role === 'radiogroup'
+    ) {
+      element.classList.add(PAGE_RUNTIME_CLASS_NAMES.formOptions);
+    }
   });
 }
 
@@ -889,6 +933,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   const lastSelectedComponentRef = useRef<Component | null>(null);
   const viewportRef = useRef<BuilderViewport>('desktop');
   const internalChangeRef = useRef(false);
+  const selectingComponentRef = useRef(false);
   const canvasStateFrameRef = useRef<number | null>(null);
   const canvasGeometryRef = useRef<BuilderCanvasGeometry | null>(null);
   const canvasGeometryPendingRef = useRef(true);
@@ -1067,7 +1112,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const added = result.selection;
         if (added) {
           if (type === 'form') ensureFormPreview(added);
+          selectingComponentRef.current = true;
           editor.select(added);
+          selectingComponentRef.current = false;
           lastSelectedComponentRef.current = added;
         }
         callbacksRef.current.onDirty();
@@ -1212,7 +1259,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         commitEditorCommand(editor, {
           kind: 'update-props',
           nodeId: payloadNodeId(selected) ?? '',
-          content: parsed.data.label,
+          components: countdownPreviewComponents(parsed.data),
           attributes: {
             [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: JSON.stringify(parsed.data),
           },
@@ -1229,8 +1276,32 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const selectedSnapshot = selectionFromComponent(selected);
         internalChangeRef.current = true;
         captureAllViewportStyles(root, viewportRef.current);
-        applyAllViewportStyles(root, viewport);
         editor.setDevice(viewport);
+        const frameElement = editor.Canvas.getFrameEl();
+        if (frameElement) {
+          frameElement.style.setProperty(
+            'width',
+            PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || '100%',
+            'important',
+          );
+          frameElement.style.setProperty('min-width', '0', 'important');
+          frameElement.style.setProperty(
+            'max-width',
+            PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || 'none',
+            'important',
+          );
+          frameElement.parentElement?.style.setProperty(
+            'width',
+            PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || '100%',
+            'important',
+          );
+        }
+        applyAllViewportStyles(root, viewport);
+        window.setTimeout(() => {
+          if (editorRef.current === editor) {
+            applyAllViewportStyles(getRoot(editor), viewport);
+          }
+        }, 0);
         viewportRef.current = viewport;
         callbacksRef.current.onSelectionChange(selectedSnapshot);
         const restoreSelection = () => {
@@ -1382,6 +1453,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     let disposed = false;
     let editor: Editor | null = null;
     let unbindCanvasComponentDrag: (() => void) | undefined;
+    let unbindRuntimePreviewClasses: (() => void) | undefined;
     let bindCanvasComponentDragWhenReady: (() => void) | undefined;
     let unbindCanvasStateObservers: (() => void) | undefined;
     let bindCanvasStateObservers: (() => void) | undefined;
@@ -1462,82 +1534,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           styleManager: { sectors: [] },
           canvas: { scrollableCanvas: true },
           canvasCss: `
-            *, *::before, *::after { box-sizing: border-box; }
-            html, body { min-height: 100%; }
-            body { margin: 0; padding: 24px; background: #ffffff; color: #172033; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-            main[data-payload-node-type="root"] { min-height: calc(100vh - 48px); }
-            img[data-payload-node-type="image"] { display: block; max-width: 100%; height: auto; }
-            a[data-payload-node-type="button"] { display: inline-block; color: inherit; text-decoration: none; }
-            form[data-payload-node-type="form"] {
-              display: flex;
-              flex-direction: column;
-              gap: 16px;
-              width: min(100%, 520px);
-              margin: 0;
-              padding: 24px;
-              border: 1px solid #d8dee9;
-              border-radius: 12px;
-              background: #ffffff;
-              box-shadow: 0 8px 24px #17203312;
-            }
-            form[data-payload-node-type="form"] [data-payload-form-preview="field"] {
-              display: grid;
-              gap: 7px;
-              color: #172033;
-              font-size: 14px;
-              font-weight: 600;
-            }
-            form[data-payload-node-type="form"] [data-payload-form-preview="field"] > input,
-            form[data-payload-node-type="form"] [data-payload-form-preview="field"] > textarea,
-            form[data-payload-node-type="form"] [data-payload-form-preview="field"] > select,
-            form[data-payload-node-type="form"] [data-payload-form-preview="control"] {
-              width: 100%;
-              min-height: 40px;
-              padding: 9px 11px;
-              border: 1px solid #c7cfdb;
-              border-radius: 8px;
-              background: #ffffff;
-              color: #172033;
-              font: inherit;
-              font-weight: 400;
-            }
-            form[data-payload-node-type="form"] textarea[data-payload-form-preview="control"] {
-              min-height: 88px;
-              resize: none;
-            }
-            form[data-payload-node-type="form"] fieldset[data-payload-form-preview="field"] {
-              min-width: 0;
-              margin: 0;
-              padding: 0;
-              border: 0;
-            }
-            form[data-payload-node-type="form"] fieldset[data-payload-form-preview="field"] > div {
-              display: grid;
-              gap: 8px;
-              font-weight: 400;
-            }
-            form[data-payload-node-type="form"] [data-payload-form-preview="option"] {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              font-weight: 400;
-            }
-            form[data-payload-node-type="form"] [data-payload-form-preview="option"] input {
-              width: auto;
-              min-height: auto;
-            }
-            form[data-payload-node-type="form"] > [data-payload-form-preview="submit"] {
-              align-self: flex-start;
-              min-height: 40px;
-              padding: 9px 16px;
-              border: 0;
-              border-radius: 8px;
-              background: #172033;
-              color: #ffffff;
-              font: inherit;
-              font-weight: 700;
-            }
-            form[data-payload-node-type="form"] [data-payload-form-preview] {
+            ${PAGE_RUNTIME_BASELINE_CSS}
+            [data-payload-form-preview] {
               pointer-events: none;
             }
             [data-payload-node-type].gjs-selected {
@@ -1624,11 +1622,28 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editorRef.current = editor;
         editor.setComponents(payloadToEditorComponent(payloadRef.current));
         ensureAllFormPreviews(getRoot(editor));
+        syncRuntimePreviewClasses(getRoot(editor));
+        window.setTimeout(() => syncRuntimePreviewClasses(getRoot(editor as Editor)), 0);
         // The persisted root is an explicit <main> component. Keep GrapesJS'
         // implicit body wrapper out of the editable PagePayloadV1 tree.
         editor.getWrapper()?.set({ droppable: false, selectable: false });
         bindCanvasComponentDragWhenReady = () => {
           unbindCanvasComponentDrag?.();
+          unbindRuntimePreviewClasses?.();
+          syncRuntimePreviewClasses(getRoot(editor as Editor));
+          window.setTimeout(() => {
+            if (editorRef.current === editor)
+              syncRuntimePreviewClasses(getRoot(editor as Editor));
+          }, 50);
+          const frameDocument = editor?.Canvas.getFrameEl()?.contentDocument;
+          if (frameDocument?.body && typeof MutationObserver !== 'undefined') {
+            const observer = new MutationObserver(() => {
+              if (editorRef.current === editor)
+                syncRuntimePreviewClasses(getRoot(editor as Editor));
+            });
+            observer.observe(frameDocument.body, { childList: true, subtree: true });
+            unbindRuntimePreviewClasses = () => observer.disconnect();
+          }
           unbindCanvasComponentDrag = bindCanvasComponentDrag(
             editor as Editor,
             interactionModeRef,
@@ -1692,9 +1707,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (process.env.NODE_ENV !== 'production') {
           window.__payloadBuilderDebug = {
             getPayload: () => serializeGrapesComponent(getRoot(editor as Editor)),
+            setCanvasZoom: (zoom) => (editor as Editor).Canvas.setZoom(zoom),
           };
         }
         const handleComponentUpdate = () => {
+          window.setTimeout(() => {
+            if (editorRef.current === editor)
+              syncRuntimePreviewClasses(getRoot(editor as Editor));
+          }, 0);
           if (!internalChangeRef.current) {
             callbacksRef.current.onDirty();
             notifyDocumentChange(editor as Editor);
@@ -1706,6 +1726,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const handleSelectionChange = () => {
           const selected = (editor as Editor).getSelected();
           if (!selected) {
+            if (selectingComponentRef.current) return;
             lastSelectedComponentRef.current = null;
             callbacksRef.current.onSelectionChange(null);
             return;
@@ -1759,6 +1780,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       window.removeEventListener('keyup', handleInteractionKeyUp);
       blockDragCleanupRef.current?.();
       unbindCanvasComponentDrag?.();
+      unbindRuntimePreviewClasses?.();
       unbindCanvasStateObservers?.();
       if (canvasStateFrameRef.current !== null) {
         window.cancelAnimationFrame(canvasStateFrameRef.current);

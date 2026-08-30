@@ -1533,6 +1533,7 @@ export const PagePreviewReadyMessageSchema = z
   .strict();
 
 export * from './component-registry';
+export * from './page-runtime';
 export * from './style-registry';
 
 export const PageCompositionSchema = z

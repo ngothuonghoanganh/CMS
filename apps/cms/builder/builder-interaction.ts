@@ -2,6 +2,7 @@ import type { Component } from 'grapesjs';
 
 import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
+  BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   canContainNode,
@@ -36,10 +37,18 @@ export function payloadNodeId(component: Component): string | undefined {
 }
 
 export function isEditorOnlyPreview(component: Component): boolean {
-  return (
-    component.getAttributes({ noStyle: true })[BUILDER_FORM_PREVIEW_ATTRIBUTE] !==
-    undefined
-  );
+  let current: Component | undefined = component;
+  while (current) {
+    const attributes = current.getAttributes({ noStyle: true });
+    if (
+      attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] !== undefined ||
+      attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined
+    ) {
+      return true;
+    }
+    current = current.parent();
+  }
+  return false;
 }
 
 export function payloadAncestor(component: Component | undefined): Component | undefined {

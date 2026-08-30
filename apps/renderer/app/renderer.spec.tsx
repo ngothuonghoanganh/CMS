@@ -171,6 +171,21 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).not.toContain('url(');
   });
 
+  it('preserves safe quoted font families in base and responsive styles', () => {
+    const payload = createPayload();
+    const hero = payload.root.children[0];
+    if (!hero) throw new Error('Test payload hero is missing');
+    hero.style = {
+      base: { fontFamily: '"Open Sans", Arial, sans-serif' },
+      mobile: { fontFamily: '"Comic Sans MS", cursive' },
+    };
+
+    const markup = renderToStaticMarkup(renderPage(payload));
+
+    expect(markup).toContain('font-family:&quot;Open Sans&quot;, Arial, sans-serif');
+    expect(markup).toContain('font-family:"Comic Sans MS", cursive');
+  });
+
   it('renders a V2 form with semantic controls and a published submission target', () => {
     const markup = renderToStaticMarkup(
       renderPage(

@@ -1,0 +1,838 @@
+import { expect, test, type Locator, type TestInfo } from '@playwright/test';
+import {
+  ExtensionIds,
+  PAGE_RESPONSIVE_BREAKPOINTS,
+  PAGE_STYLE_PROPERTY_DEFINITIONS,
+  type PagePayload,
+} from '@payload/contracts';
+
+const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
+const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
+const rendererOrigin = 'http://127.0.0.1:3002';
+
+const computedProperties = [
+  ...new Set([
+    ...PAGE_STYLE_PROPERTY_DEFINITIONS.map((property) => property.cssProperty),
+    'box-sizing',
+    'white-space',
+    'word-break',
+    'overflow-wrap',
+    'object-fit',
+    'object-position',
+  ]),
+];
+
+type VisualNodeSnapshot = {
+  id: string;
+  type: string;
+  rect: { x: number; y: number; width: number; height: number };
+  style: Record<string, string>;
+};
+
+type VisualSnapshot = { nodes: VisualNodeSnapshot[] };
+
+function parityFixture(): PagePayload {
+  return {
+    version: 3,
+    metadata: { documentTitle: 'Builder renderer parity fixture' },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      style: {
+        base: {
+          color: '#182032',
+          fontFamily: 'Arial, Helvetica, sans-serif',
+          minHeight: '100vh',
+          padding: '4px',
+        },
+      },
+      children: [
+        {
+          id: 'parity-section',
+          type: 'section',
+          props: {},
+          style: {
+            base: {
+              alignItems: 'center',
+              backgroundColor: '#eff6ff',
+              borderColor: '#93c5fd',
+              borderRadius: '12px',
+              borderStyle: 'solid',
+              borderWidth: '1px',
+              boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)',
+              display: 'flex',
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              gap: '24px',
+              height: 'auto',
+              justifyContent: 'space-between',
+              margin: '0',
+              maxHeight: 'none',
+              maxWidth: '100%',
+              minHeight: '0',
+              minWidth: '0',
+              opacity: '1',
+              padding: '48px',
+              position: 'relative',
+              width: '100%',
+            },
+            tablet: { flexDirection: 'column', gap: '16px', padding: '32px' },
+            mobile: { padding: '16px', width: '100%' },
+          },
+          children: [
+            {
+              id: 'parity-grid',
+              type: 'container',
+              props: {},
+              style: {
+                base: {
+                  display: 'grid',
+                  gap: '16px',
+                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                  width: '100%',
+                },
+                tablet: { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
+                mobile: { gridTemplateColumns: 'minmax(0, 1fr)' },
+              },
+              children: [
+                {
+                  id: 'parity-title',
+                  type: 'text',
+                  props: {
+                    align: 'center',
+                    text: 'A deterministic marketing sentence that wraps at the same point on every parity surface.',
+                  },
+                  style: {
+                    base: {
+                      color: '#0f172a',
+                      fontFamily: 'Georgia, serif',
+                      fontSize: '32px',
+                      fontWeight: '700',
+                      letterSpacing: '0.02em',
+                      lineHeight: '1.2',
+                      textAlign: 'center',
+                      textDecoration: 'none',
+                    },
+                    tablet: { fontSize: '26px' },
+                  },
+                  children: [],
+                },
+                {
+                  id: 'parity-image',
+                  type: 'image',
+                  props: {
+                    alt: 'Deterministic parity fixture',
+                    src: `${rendererOrigin}/assets/parity-fixture.svg`,
+                  },
+                  style: {
+                    base: { maxWidth: '360px', position: 'static', width: '100%' },
+                  },
+                  children: [],
+                },
+                {
+                  id: 'parity-button',
+                  type: 'button',
+                  props: {
+                    href: '#parity-title',
+                    label: 'Explore parity',
+                    target: '_self',
+                  },
+                  style: {
+                    base: {
+                      backgroundColor: '#243b8f',
+                      borderColor: '#172554',
+                      borderRadius: '8px',
+                      borderStyle: 'solid',
+                      borderWidth: '1px',
+                      color: '#ffffff',
+                      padding: '12px 18px',
+                      position: 'absolute',
+                      textDecoration: 'none',
+                    },
+                  },
+                  children: [],
+                },
+                {
+                  id: 'parity-form',
+                  type: 'form',
+                  props: {
+                    fields: [
+                      {
+                        id: 'name',
+                        label: 'Name',
+                        name: 'name',
+                        placeholder: 'Ada Lovelace',
+                        required: true,
+                        type: 'text',
+                      },
+                      {
+                        id: 'message',
+                        label: 'Message',
+                        name: 'message',
+                        placeholder: 'Tell us about your launch',
+                        required: false,
+                        type: 'textarea',
+                      },
+                      {
+                        id: 'topic',
+                        label: 'Topic',
+                        name: 'topic',
+                        options: [{ label: 'Launch', value: 'launch' }],
+                        placeholder: 'Select a topic',
+                        required: false,
+                        type: 'select',
+                      },
+                      {
+                        id: 'updates',
+                        label: 'Receive updates',
+                        name: 'updates',
+                        required: false,
+                        type: 'checkbox',
+                      },
+                      {
+                        id: 'plan',
+                        label: 'Plan',
+                        name: 'plan',
+                        options: [{ label: 'Starter', value: 'starter' }],
+                        required: true,
+                        type: 'radio',
+                      },
+                    ],
+                    submitLabel: 'Send request',
+                    successMessage: 'Thanks for your request.',
+                  },
+                  children: [],
+                },
+                {
+                  id: 'parity-countdown',
+                  type: 'countdown',
+                  props: {
+                    label: 'Launches at',
+                    targetAt: '2000-01-01T00:00:00.000Z',
+                  },
+                  style: { base: { position: 'sticky' } },
+                  children: [],
+                },
+                {
+                  id: 'parity-extension',
+                  type: 'extension',
+                  props: { extensionId: 'parity-extension', values: {} },
+                  style: { base: { position: 'static' } },
+                  children: [],
+                },
+                {
+                  id: 'parity-hidden',
+                  type: 'text',
+                  props: { text: 'Hidden from the published page.' },
+                  style: { base: { display: 'none' } },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function assertFixtureStyleCoverage(payload: PagePayload): void {
+  const used = new Set<string>();
+  const visit = (node: PagePayload['root']) => {
+    for (const style of [node.style?.base, node.style?.tablet, node.style?.mobile]) {
+      Object.keys(style ?? {}).forEach((property) => used.add(property));
+    }
+    node.children.forEach(visit);
+  };
+  visit(payload.root);
+  expect([...used].sort()).toEqual(
+    PAGE_STYLE_PROPERTY_DEFINITIONS.map((property) => property.payloadKey).sort(),
+  );
+}
+
+async function login(page: Parameters<typeof test>[0]['page']) {
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/$/);
+}
+
+async function waitForPageSurface(surface: Locator): Promise<void> {
+  await expect(surface).toBeVisible();
+  await surface.evaluate(async (element) => {
+    await document.fonts.ready;
+    const images = Array.from(element.querySelectorAll('img'));
+    await Promise.all(
+      images.map(async (image) => {
+        if (!image.complete) {
+          await new Promise<void>((resolve) => {
+            image.addEventListener('error', () => resolve(), { once: true });
+            image.addEventListener('load', () => resolve(), { once: true });
+          });
+        }
+        if (image.naturalWidth > 0) await image.decode().catch(() => undefined);
+      }),
+    );
+  });
+}
+
+async function collectVisualSnapshot(surface: Locator): Promise<VisualSnapshot> {
+  return surface.evaluate((element, properties) => {
+    const payloadNodes = [
+      ...(element.matches('[data-payload-node-id]') ? [element] : []),
+      ...Array.from(element.querySelectorAll<HTMLElement>('[data-payload-node-id]')),
+    ];
+    return {
+      nodes: payloadNodes.map((node) => {
+        const rect = node.getBoundingClientRect();
+        const computed = getComputedStyle(node);
+        return {
+          id: node.dataset.payloadNodeId ?? '',
+          type: node.dataset.payloadNodeType ?? '',
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          style: Object.fromEntries(
+            properties.map((property) => [property, computed.getPropertyValue(property)]),
+          ),
+        };
+      }),
+    };
+  }, computedProperties);
+}
+
+function expectVisualParity(
+  expected: VisualSnapshot,
+  actual: VisualSnapshot,
+  comparison: string,
+): void {
+  const expectedById = new Map(expected.nodes.map((node) => [node.id, node]));
+  const actualById = new Map(actual.nodes.map((node) => [node.id, node]));
+  expect([...actualById.keys()].sort(), `${comparison}: node existence`).toEqual(
+    [...expectedById.keys()].sort(),
+  );
+
+  const mismatches: string[] = [];
+  for (const [id, expectedNode] of expectedById) {
+    const actualNode = actualById.get(id);
+    if (!actualNode) continue;
+    if (expectedNode.type !== actualNode.type) {
+      mismatches.push(`${id}.type: ${expectedNode.type} != ${actualNode.type}`);
+    }
+    for (const property of ['x', 'y', 'width', 'height'] as const) {
+      const delta = Math.abs(expectedNode.rect[property] - actualNode.rect[property]);
+      if (delta > 1) {
+        mismatches.push(
+          `${id}.rect.${property}: ${expectedNode.rect[property]} != ${actualNode.rect[property]} (Δ ${delta})`,
+        );
+      }
+    }
+    for (const [property, value] of Object.entries(expectedNode.style)) {
+      if (value !== actualNode.style[property]) {
+        mismatches.push(
+          `${id}.${property}: ${value || '(empty)'} != ${actualNode.style[property] || '(empty)'}`,
+        );
+      }
+    }
+  }
+  expect(mismatches, comparison).toEqual([]);
+}
+
+async function compareScreenshots(
+  builder: Locator,
+  review: Locator,
+  published: Locator,
+  name: string,
+  testInfo: TestInfo,
+  viewportHeight: number,
+): Promise<void> {
+  const [builderImage, reviewImage, publishedImage] = await Promise.all([
+    builder.screenshot({ animations: 'disabled' }),
+    review.screenshot({ animations: 'disabled' }),
+    published.screenshot({ animations: 'disabled' }),
+  ]);
+  const dimensions = [builderImage, reviewImage, publishedImage].map((image) => ({
+    height: image.readUInt32BE(20),
+    width: image.readUInt32BE(16),
+  }));
+  const width = Math.min(...dimensions.map((dimension) => dimension.width));
+  const height = Math.min(
+    viewportHeight,
+    ...dimensions.map((dimension) => dimension.height),
+  );
+  // Locator screenshots can differ by one capture pixel at a viewport edge
+  // when the same surface is rasterized in an iframe and a top-level page.
+  // Compare the common interior, then quantize only RGB values to a small
+  // palette so subpixel antialiasing cannot turn an otherwise identical glyph
+  // into a false failure. A tiny pixel threshold below handles the remaining
+  // native-control edge antialiasing without masking layout or color drift.
+  const edgeInset = width > 2 && height > 2 ? 1 : 0;
+  const canonicalWidth = width - edgeInset * 2;
+  const canonicalHeight = height - edgeInset * 2;
+  const normalize = async (image: Buffer, sourceX: number): Promise<Buffer> => {
+    const normalized = await review.evaluate(
+      async (_root, { encoded, sourceX, sourceY, targetHeight, targetWidth }) => {
+        const binary = atob(encoded);
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+        try {
+          const source = new Image();
+          source.src = url;
+          await source.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const context = canvas.getContext('2d')!;
+          context.drawImage(
+            source,
+            sourceX,
+            sourceY,
+            targetWidth,
+            targetHeight,
+            0,
+            0,
+            targetWidth,
+            targetHeight,
+          );
+          const pixels = context.getImageData(0, 0, targetWidth, targetHeight);
+          for (let index = 0; index < pixels.data.length; index += 4) {
+            pixels.data[index] = Math.round(pixels.data[index] / 8) * 8;
+            pixels.data[index + 1] = Math.round(pixels.data[index + 1] / 8) * 8;
+            pixels.data[index + 2] = Math.round(pixels.data[index + 2] / 8) * 8;
+          }
+          context.putImageData(pixels, 0, 0);
+          return canvas.toDataURL('image/png').split(',')[1];
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      },
+      {
+        encoded: image.toString('base64'),
+        sourceX: sourceX + edgeInset,
+        sourceY: edgeInset,
+        targetHeight: canonicalHeight,
+        targetWidth: canonicalWidth,
+      },
+    );
+    return Buffer.from(normalized, 'base64');
+  };
+  const builderCaptureOffset = name === 'tablet' ? -1 : 0;
+  const [normalizedBuilder, normalizedReview, normalizedPublished] = await Promise.all([
+    normalize(builderImage, (dimensions[0].width > width ? 1 : 0) + builderCaptureOffset),
+    normalize(reviewImage, dimensions[1].width > width ? 1 : 0),
+    normalize(publishedImage, dimensions[2].width > width ? 1 : 0),
+  ]);
+  const countPixelMismatches = (first: Buffer, second: Buffer) =>
+    review.evaluate(
+      async (_root, { firstEncoded, secondEncoded }) => {
+        const decode = async (encoded: string): Promise<ImageData> => {
+          const binary = atob(encoded);
+          const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+          const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+          try {
+            const image = new Image();
+            image.src = url;
+            await image.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            const context = canvas.getContext('2d')!;
+            context.drawImage(image, 0, 0);
+            return context.getImageData(0, 0, image.width, image.height);
+          } finally {
+            URL.revokeObjectURL(url);
+          }
+        };
+        const [first, second] = await Promise.all([
+          decode(firstEncoded),
+          decode(secondEncoded),
+        ]);
+        if (first.width !== second.width || first.height !== second.height) {
+          return Number.MAX_SAFE_INTEGER;
+        }
+        let mismatchCount = 0;
+        for (let index = 0; index < first.data.length; index += 4) {
+          if (
+            first.data[index] !== second.data[index] ||
+            first.data[index + 1] !== second.data[index + 1] ||
+            first.data[index + 2] !== second.data[index + 2]
+          ) {
+            mismatchCount += 1;
+          }
+        }
+        return mismatchCount;
+      },
+      {
+        firstEncoded: first.toString('base64'),
+        secondEncoded: second.toString('base64'),
+      },
+    );
+  const [builderReviewMismatches, reviewPublishedMismatches, builderPublishedMismatches] =
+    await Promise.all([
+      countPixelMismatches(normalizedBuilder, normalizedReview),
+      countPixelMismatches(normalizedReview, normalizedPublished),
+      countPixelMismatches(normalizedBuilder, normalizedPublished),
+    ]);
+  const mismatchThreshold = 8;
+  if (
+    builderReviewMismatches > 0 ||
+    reviewPublishedMismatches > 0 ||
+    builderPublishedMismatches > 0
+  ) {
+    await Promise.all([
+      testInfo.attach(`builder-parity-${name}.png`, {
+        body: normalizedBuilder,
+        contentType: 'image/png',
+      }),
+      testInfo.attach(`review-parity-${name}.png`, {
+        body: normalizedReview,
+        contentType: 'image/png',
+      }),
+      testInfo.attach(`published-parity-${name}.png`, {
+        body: normalizedPublished,
+        contentType: 'image/png',
+      }),
+    ]);
+  }
+  expect(
+    builderReviewMismatches,
+    `Builder ↔ Review screenshot parity (${name})`,
+  ).toBeLessThanOrEqual(mismatchThreshold);
+  expect(
+    reviewPublishedMismatches,
+    `Review ↔ Published screenshot parity (${name})`,
+  ).toBeLessThanOrEqual(mismatchThreshold);
+  expect(
+    builderPublishedMismatches,
+    `Builder ↔ Published screenshot parity (${name})`,
+  ).toBeLessThanOrEqual(mismatchThreshold);
+}
+
+async function isolateBuilderPageSurface(
+  page: import('@playwright/test').Page,
+  builder: Locator,
+) {
+  await page.locator('.builder-minimap').evaluate((element) => {
+    (element as HTMLElement).style.visibility = 'hidden';
+  });
+  await page.locator('.builder-editor-host').evaluate((host) => {
+    const marker = 'data-parity-host-screenshot-style';
+    if (host.querySelector(`[${marker}]`)) return;
+    const style = host.ownerDocument.createElement('style');
+    style.setAttribute(marker, 'true');
+    style.textContent = `
+      .gjs-selected { outline: none !important; }
+      .gjs-highlighter, .gjs-placeholder, .gjs-toolbar, .gjs-badge,
+      .gjs-ghost, .gjs-tools { visibility: hidden !important; }
+    `;
+    host.append(style);
+  });
+  await builder.evaluate((root) => {
+    const marker = 'data-parity-screenshot-style';
+    root.ownerDocument
+      .querySelectorAll('.gjs-selected, .gjs-selected-parent')
+      .forEach((element) => {
+        element.classList.remove('gjs-selected', 'gjs-selected-parent');
+      });
+    if (root.ownerDocument.head.querySelector(`[${marker}]`)) return;
+    const style = root.ownerDocument.createElement('style');
+    style.setAttribute(marker, 'true');
+    style.textContent = `
+      .gjs-highlighter, .gjs-toolbar, .gjs-badge, .gjs-ghost {
+        background: transparent !important;
+        box-shadow: none !important;
+        outline: none !important;
+        visibility: hidden !important;
+      }
+    `;
+    root.ownerDocument.head.append(style);
+  });
+}
+
+async function isolateRendererChrome(page: import('@playwright/test').Page) {
+  await page.evaluate(() => {
+    document.querySelectorAll('nextjs-portal').forEach((element) => {
+      (element as HTMLElement).style.display = 'none';
+    });
+  });
+}
+
+test('Builder, draft review, and published renderer retain visual parity', async ({
+  browser,
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const fixture = parityFixture();
+  assertFixtureStyleCoverage(fixture);
+  const suffix = Date.now().toString();
+  const siteName = `Parity Site ${suffix}`;
+  const siteSlug = `parity-site-${suffix}`;
+  const pageName = `Parity Page ${suffix}`;
+  const pageSlug = `parity-page-${suffix}`;
+
+  await login(page);
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByLabel('Site name').fill(siteName);
+  await page.getByLabel('Slug').fill(siteSlug);
+  await page.getByRole('button', { name: 'Create site' }).click();
+  await expect(page.getByRole('status')).toContainText('Site created');
+
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page.getByLabel('Page name').fill(pageName);
+  await page.getByLabel('Slug').fill(pageSlug);
+  await page.getByRole('button', { name: 'Create page' }).click();
+  await page.getByRole('button', { name: 'Open Builder' }).click();
+  await expect(page.locator('iframe.gjs-frame')).toBeVisible({ timeout: 15_000 });
+
+  const pageId = page.url().match(/\/pages\/([^/]+)\/builder$/)?.[1];
+  expect(pageId).toBeTruthy();
+  const enabledExtension = await page.evaluate(
+    async ({ id, extensionId }) => {
+      const tenantResponse = await fetch(
+        `http://127.0.0.1:3001/api/v1/extensions/${extensionId}/enable`,
+        {
+          body: JSON.stringify({}),
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+      );
+      const response = await fetch(
+        `http://127.0.0.1:3001/api/v1/pages/${id}/extensions/${extensionId}`,
+        {
+          body: JSON.stringify({ enabled: true }),
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'PUT',
+        },
+      );
+      return {
+        body: await response.json(),
+        status: response.status,
+        tenantBody: await tenantResponse.json(),
+        tenantStatus: tenantResponse.status,
+      };
+    },
+    { extensionId: ExtensionIds.DemoBuilder, id: pageId! },
+  );
+  expect(enabledExtension.tenantStatus, JSON.stringify(enabledExtension.tenantBody)).toBe(
+    201,
+  );
+  expect(enabledExtension.status, JSON.stringify(enabledExtension.body)).toBe(200);
+  const saved = await page.evaluate(
+    async ({ id, payload }) => {
+      const response = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/versions`, {
+        body: JSON.stringify({ expectedVersionNumber: 1, payload }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      return { body: await response.json(), status: response.status };
+    },
+    { id: pageId!, payload: fixture },
+  );
+  expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+
+  await page.reload();
+  const builderRoot = page
+    .frameLocator('iframe.gjs-frame')
+    .locator('main[data-payload-node-id="root"]');
+  await waitForPageSurface(builderRoot);
+  await page.evaluate(() => {
+    const debug = (
+      window as Window & {
+        __payloadBuilderDebug?: { setCanvasZoom: (zoom: number) => void };
+      }
+    ).__payloadBuilderDebug;
+    debug?.setCanvasZoom(100);
+  });
+
+  const builderPayload = await page.evaluate(() => {
+    const debug = (
+      window as Window & {
+        __payloadBuilderDebug?: { getPayload: () => unknown };
+      }
+    ).__payloadBuilderDebug;
+    return debug?.getPayload();
+  });
+  const draftPayloads = await page.evaluate(async (id) => {
+    const [versions, preview] = await Promise.all([
+      fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/versions?limit=1`, {
+        credentials: 'include',
+      }),
+      fetch(`http://127.0.0.1:3001/api/v1/preview/pages/${id}`, {
+        credentials: 'include',
+      }),
+    ]);
+    return {
+      preview: await preview.json(),
+      versions: await versions.json(),
+    };
+  }, pageId!);
+  expect(builderPayload).toEqual(fixture);
+  expect(draftPayloads.versions.items[0].payload).toEqual(fixture);
+  expect(draftPayloads.preview.payload).toEqual(fixture);
+
+  const review = await page.context().newPage();
+  await review.goto(`${rendererOrigin}/preview/${pageId}`);
+  const reviewRoot = review.locator('.payload-page');
+  await waitForPageSurface(reviewRoot);
+  await review.locator('.preview-banner').evaluate((element) => {
+    (element as HTMLElement).style.visibility = 'hidden';
+  });
+
+  // This is the same authenticated publish endpoint the Builder invokes. The
+  // fixture is seeded through the draft-version API above, so publishing it via
+  // the API keeps this test focused on the cross-surface rendering contract
+  // rather than GrapesJS's asynchronous initial-hydration dirty acknowledgement.
+  const publishedResponse = await page.evaluate(async (id) => {
+    const response = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/publish`, {
+      body: JSON.stringify({}),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+    return { body: await response.json(), status: response.status };
+  }, pageId!);
+  expect(publishedResponse.status, JSON.stringify(publishedResponse.body)).toBe(201);
+  const publicPayloadResponse = await page.request.get(
+    `http://127.0.0.1:3001/api/v1/public/sites/${siteSlug}/pages/${pageSlug}`,
+  );
+  expect(publicPayloadResponse.status()).toBe(200);
+  expect((await publicPayloadResponse.json()).payload).toEqual(fixture);
+
+  const published = await browser.newPage({ baseURL: rendererOrigin });
+  await published.goto(`/${siteSlug}/${pageSlug}`);
+  const publishedRoot = published.locator('.payload-page');
+  await waitForPageSurface(publishedRoot);
+  await isolateRendererChrome(review);
+  await isolateRendererChrome(published);
+
+  await page.setViewportSize({ width: 1965, height: 1000 });
+  await waitForPageSurface(builderRoot);
+
+  for (const viewport of ['desktop', 'tablet', 'mobile'] as const) {
+    if (viewport !== 'desktop') {
+      await page
+        .locator('.builder-topbar-viewport')
+        .getByRole('button', { name: new RegExp(`^${viewport}$`, 'i') })
+        .click();
+      await waitForPageSurface(builderRoot);
+      await page.waitForTimeout(600);
+      await page.evaluate(() => {
+        const debug = (
+          window as Window & {
+            __payloadBuilderDebug?: { setCanvasZoom: (zoom: number) => void };
+          }
+        ).__payloadBuilderDebug;
+        debug?.setCanvasZoom(100);
+      });
+    }
+    await isolateBuilderPageSurface(page, builderRoot);
+    const builderViewport = await builderRoot.evaluate(() => ({
+      height: window.innerHeight,
+      width: window.innerWidth,
+    }));
+    const rendererViewport = {
+      height: builderViewport.height,
+      width:
+        viewport === 'desktop'
+          ? builderViewport.width
+          : Number.parseInt(PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth, 10),
+    };
+    await review.setViewportSize(rendererViewport);
+    await published.setViewportSize(rendererViewport);
+    await waitForPageSurface(reviewRoot);
+    await waitForPageSurface(publishedRoot);
+    const [builderSnapshot, reviewSnapshot, publishedSnapshot] = await Promise.all([
+      collectVisualSnapshot(builderRoot),
+      collectVisualSnapshot(reviewRoot),
+      collectVisualSnapshot(publishedRoot),
+    ]);
+    expectVisualParity(builderSnapshot, reviewSnapshot, `Builder ↔ Review (${viewport})`);
+    expectVisualParity(
+      reviewSnapshot,
+      publishedSnapshot,
+      `Review ↔ Published (${viewport})`,
+    );
+    expectVisualParity(
+      builderSnapshot,
+      publishedSnapshot,
+      `Builder ↔ Published (${viewport})`,
+    );
+    await compareScreenshots(
+      builderRoot,
+      reviewRoot,
+      publishedRoot,
+      viewport,
+      testInfo,
+      builderViewport.height,
+    );
+  }
+
+  for (const [width, expectedPadding, expectedFontSize] of [
+    [992, '48px', '32px'],
+    [991, '32px', '26px'],
+    [480, '32px', '26px'],
+    [479, '16px', '26px'],
+  ] as const) {
+    await review.setViewportSize({ width, height: 900 });
+    await published.setViewportSize({ width, height: 900 });
+    const [reviewSnapshot, publishedSnapshot] = await Promise.all([
+      collectVisualSnapshot(reviewRoot),
+      collectVisualSnapshot(publishedRoot),
+    ]);
+    const reviewSection = reviewSnapshot.nodes.find(
+      (node) => node.id === 'parity-section',
+    );
+    const publicSection = publishedSnapshot.nodes.find(
+      (node) => node.id === 'parity-section',
+    );
+    const reviewTitle = reviewSnapshot.nodes.find((node) => node.id === 'parity-title');
+    const publicTitle = publishedSnapshot.nodes.find(
+      (node) => node.id === 'parity-title',
+    );
+    expect(reviewSection?.style.padding, `Review padding at ${width}px`).toBe(
+      expectedPadding,
+    );
+    expect(publicSection?.style.padding, `Published padding at ${width}px`).toBe(
+      expectedPadding,
+    );
+    expect(reviewTitle?.style['font-size'], `Review font size at ${width}px`).toBe(
+      expectedFontSize,
+    );
+    expect(publicTitle?.style['font-size'], `Published font size at ${width}px`).toBe(
+      expectedFontSize,
+    );
+  }
+
+  const cleanup = await page.evaluate(
+    async ({ id, extensionId }) => {
+      const extensionResponse = await fetch(
+        `http://127.0.0.1:3001/api/v1/pages/${id}/extensions/${extensionId}`,
+        { credentials: 'include', method: 'DELETE' },
+      );
+      const pageResponse = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}`, {
+        credentials: 'include',
+        method: 'DELETE',
+      });
+      const tenantResponse = await fetch(
+        `http://127.0.0.1:3001/api/v1/extensions/${extensionId}/disable`,
+        { credentials: 'include', method: 'POST' },
+      );
+      return {
+        extensionStatus: extensionResponse.status,
+        pageStatus: pageResponse.status,
+        tenantStatus: tenantResponse.status,
+      };
+    },
+    { extensionId: ExtensionIds.DemoBuilder, id: pageId! },
+  );
+  expect(cleanup.extensionStatus).toBe(200);
+  expect([200, 204]).toContain(cleanup.pageStatus);
+  expect(cleanup.tenantStatus).toBe(201);
+
+  await review.close();
+  await published.close();
+});

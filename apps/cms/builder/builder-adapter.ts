@@ -11,6 +11,7 @@ import {
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
+  isSafePageStyleValue,
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
@@ -32,6 +33,7 @@ export const BUILDER_METADATA_ATTRIBUTE = 'data-payload-metadata';
 export const BUILDER_TEXT_ALIGN_ATTRIBUTE = 'data-payload-text-align';
 export const BUILDER_FORM_PROPS_ATTRIBUTE = 'data-payload-form-props';
 export const BUILDER_FORM_PREVIEW_ATTRIBUTE = 'data-payload-form-preview';
+export const BUILDER_RUNTIME_PREVIEW_ATTRIBUTE = 'data-payload-runtime-preview';
 export const BUILDER_COUNTDOWN_PROPS_ATTRIBUTE = 'data-payload-countdown-props';
 export const BUILDER_EXTENSION_PROPS_ATTRIBUTE = 'data-payload-extension-props';
 export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
@@ -78,9 +80,26 @@ function editorOnlyPreview(
   };
 }
 
+function editorOnlyRuntimePreview(definition: ComponentDefinition): ComponentDefinition {
+  return {
+    ...definition,
+    attributes: {
+      ...(definition.attributes ?? {}),
+      [BUILDER_RUNTIME_PREVIEW_ATTRIBUTE]: 'true',
+    },
+    copyable: false,
+    draggable: false,
+    droppable: false,
+    removable: false,
+    selectable: false,
+  };
+}
+
 function formPreviewControl(field: FormField): ComponentDefinition {
+  const id = `payload-form-${field.id}`;
   const attributes: Record<string, string> = {
     [BUILDER_FORM_PREVIEW_ATTRIBUTE]: 'control',
+    id,
     name: field.name,
   };
   if (field.required) attributes.required = 'required';
@@ -97,15 +116,11 @@ function formPreviewControl(field: FormField): ComponentDefinition {
         tagName: 'select',
         attributes,
         components: [
-          ...(field.placeholder
-            ? [
-                {
-                  tagName: 'option',
-                  content: field.placeholder,
-                  attributes: { disabled: 'disabled' },
-                },
-              ]
-            : []),
+          {
+            tagName: 'option',
+            content: field.placeholder || 'Select an option',
+            attributes: { value: '' },
+          },
           ...field.options.map((option) => ({
             tagName: 'option',
             content: option.label,
@@ -126,6 +141,10 @@ function formPreviewControl(field: FormField): ComponentDefinition {
     return editorOnlyPreview(
       {
         tagName: 'div',
+        attributes: {
+          role: 'radiogroup',
+          'aria-label': field.label,
+        },
         components: field.options.map((option) =>
           editorOnlyPreview(
             {
@@ -141,7 +160,7 @@ function formPreviewControl(field: FormField): ComponentDefinition {
                     ...(field.required ? { required: 'required' } : {}),
                   },
                 },
-                { tagName: 'span', content: option.label },
+                option.label,
               ],
             },
             'option',
@@ -166,14 +185,12 @@ function formPreviewControl(field: FormField): ComponentDefinition {
 }
 
 function formPreviewField(field: FormField): ComponentDefinition {
+  const label = `${field.label}${field.required ? ' *' : ''}`;
   if (field.type === 'checkbox') {
     return editorOnlyPreview(
       {
-        tagName: 'label',
-        components: [
-          formPreviewControl(field),
-          { tagName: 'span', content: field.label },
-        ],
+        tagName: 'div',
+        components: [{ tagName: 'label', content: label }, formPreviewControl(field)],
       },
       'field',
     );
@@ -182,11 +199,8 @@ function formPreviewField(field: FormField): ComponentDefinition {
   if (field.type === 'radio') {
     return editorOnlyPreview(
       {
-        tagName: 'fieldset',
-        components: [
-          { tagName: 'legend', content: field.label },
-          formPreviewControl(field),
-        ],
+        tagName: 'div',
+        components: [{ tagName: 'label', content: label }, formPreviewControl(field)],
       },
       'field',
     );
@@ -194,8 +208,8 @@ function formPreviewField(field: FormField): ComponentDefinition {
 
   return editorOnlyPreview(
     {
-      tagName: 'label',
-      components: [{ tagName: 'span', content: field.label }, formPreviewControl(field)],
+      tagName: 'div',
+      components: [{ tagName: 'label', content: label }, formPreviewControl(field)],
     },
     'field',
   );
@@ -209,6 +223,37 @@ export function formPreviewComponents(props: FormProps): ComponentDefinition[] {
       'submit',
     ),
   ];
+}
+
+export function countdownPreviewComponents(props: {
+  label: string;
+  targetAt: string;
+}): ComponentDefinition[] {
+  return [
+    editorOnlyRuntimePreview({
+      tagName: 'div',
+      attributes: { 'data-extension-runtime': 'countdown.runtime' },
+      components: [
+        { tagName: 'span', content: props.label },
+        { tagName: 'span', content: ' ' },
+        {
+          tagName: 'time',
+          content: formatCountdownRemaining(props.targetAt),
+          attributes: { dateTime: props.targetAt },
+        },
+      ],
+    }),
+  ];
+}
+
+export function formatCountdownRemaining(targetAt: string, now = Date.now()): string {
+  const targetTime = new Date(targetAt).getTime();
+  const milliseconds = Number.isFinite(targetTime) ? Math.max(0, targetTime - now) : 0;
+  const seconds = Math.floor(milliseconds / 1_000);
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  return `${days}d ${hours}h ${minutes}m ${seconds % 60}s`;
 }
 
 export function isBuilderNodeType(value: unknown): value is BuilderNodeType {
@@ -242,6 +287,31 @@ function payloadViewport(viewport: BuilderViewport): PayloadViewport {
   return PAGE_RESPONSIVE_BREAKPOINTS[viewport].payloadKey;
 }
 
+/**
+ * The editor has one inline style block per component, whereas the renderer
+ * applies media rules through the normal cascade. Resolve the same cascade
+ * before painting a GrapesJS device so mobile inherits tablet overrides.
+ */
+export function resolveViewportStyle(
+  style: PageNodeStyle | undefined,
+  viewport: BuilderViewport,
+): PageNodeStyle['base'] {
+  if (!style) return {};
+  return {
+    ...style.base,
+    ...(viewport === 'desktop' ? {} : style.tablet),
+    ...(viewport === 'mobile' ? style.mobile : {}),
+  };
+}
+
+function inheritedViewportStyle(
+  style: PageNodeStyle | undefined,
+  viewport: BuilderViewport,
+): PageNodeStyle['base'] {
+  if (!style || viewport === 'desktop') return {};
+  return viewport === 'tablet' ? { ...style.base } : { ...style.base, ...style.tablet };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -255,7 +325,9 @@ function styleBlockToEditorStyle(style: PageNodeStyle['base']): Record<string, s
   for (const [property, value] of Object.entries(style)) {
     if (typeof value !== 'string') continue;
     const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
-    if (definition) result[definition.editorProperty] = value;
+    if (definition && isSafePageStyleValue(value)) {
+      result[definition.editorProperty] = value;
+    }
   }
   return result;
 }
@@ -281,6 +353,12 @@ function editorStyleToPayloadStyle(
     if (typeof value !== 'string') {
       throw new BuilderAdapterError(
         `Editor style property "${property}" must be a string`,
+        [...path, 'style', property],
+      );
+    }
+    if (!isSafePageStyleValue(value)) {
+      throw new BuilderAdapterError(
+        `Editor style property "${property}" contains an unsafe CSS value`,
         [...path, 'style', property],
       );
     }
@@ -319,6 +397,17 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
       parsed.error.issues.map((issue) => issue.message).join('; '),
       path,
     );
+  }
+
+  for (const [viewport, block] of Object.entries(parsed.data)) {
+    for (const [property, styleValue] of Object.entries(block ?? {})) {
+      if (styleValue !== undefined && !isSafePageStyleValue(styleValue)) {
+        throw new BuilderAdapterError(
+          `Responsive style property "${property}" contains an unsafe CSS value`,
+          [...path, viewport, property],
+        );
+      }
+    }
   }
 
   return parsed.data;
@@ -424,7 +513,7 @@ function componentDefinitionForNode(
       return {
         ...shared,
         tagName: 'div',
-        content: node.props.label,
+        components: countdownPreviewComponents(node.props),
         attributes: {
           ...attributes,
           [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
@@ -434,10 +523,13 @@ function componentDefinitionForNode(
       return {
         ...shared,
         tagName: 'div',
-        content: node.props.extensionId,
+        content: 'This custom extension is unavailable.',
         attributes: {
           ...attributes,
+          'aria-label': 'Unavailable custom extension',
+          'data-extension': node.props.extensionId,
           [BUILDER_EXTENSION_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+          role: 'note',
         },
       };
     case 'root':
@@ -741,7 +833,10 @@ function nodeFromSnapshot(
   }
 
   if (type === 'countdown') {
-    if (snapshot.children.length > 0) {
+    const hasUnexpectedEditorChild = snapshot.children.some(
+      (child) => child.attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] === undefined,
+    );
+    if (hasUnexpectedEditorChild) {
       throw new BuilderAdapterError('Countdown nodes cannot contain editor components', [
         ...path,
         'children',
@@ -944,10 +1039,24 @@ export function captureEditorViewportStyle(
 ): void {
   const payloadViewportKey = payloadViewport(viewport);
   const current = readEditorResponsiveStyle(component) ?? { base: {} };
-  current[payloadViewportKey] = editorStyleToPayloadStyle({ ...component.getStyle() }, [
+  const displayed = editorStyleToPayloadStyle({ ...component.getStyle() }, [
     'component',
     BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
   ]);
+  const inherited = inheritedViewportStyle(current, viewport);
+  const nextBlock: PageNodeStyle['base'] = {};
+  const nextValues = nextBlock as Record<string, string | undefined>;
+
+  for (const definition of Object.values(PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY)) {
+    const property = definition.payloadKey as keyof PageNodeStyle['base'];
+    const displayedValue = displayed[property];
+    const inheritedValue = inherited[property];
+    if (displayedValue !== undefined && displayedValue !== inheritedValue) {
+      nextValues[definition.payloadKey] = displayedValue;
+    }
+  }
+
+  current[payloadViewportKey] = nextBlock;
   const hasStyle = Object.values(current).some(
     (block) => block && Object.keys(block).length > 0,
   );
@@ -967,9 +1076,7 @@ export function applyEditorViewportStyle(
   viewport: BuilderViewport,
 ): void {
   const responsive = readEditorResponsiveStyle(component);
-  component.setStyle(
-    styleBlockToEditorStyle(responsive?.[payloadViewport(viewport)] ?? {}),
-  );
+  component.setStyle(styleBlockToEditorStyle(resolveViewportStyle(responsive, viewport)));
 }
 
 export function updateEditorViewportStyle(
@@ -984,6 +1091,18 @@ export function updateEditorViewportStyle(
     ];
   if (!definition) {
     throw new BuilderAdapterError(`Unsupported editor style property "${property}"`);
+  }
+  if (
+    definition.payloadKey === 'opacity' &&
+    value.trim() !== '' &&
+    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(value.trim())
+  ) {
+    throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
+  }
+  if (value.trim() !== '' && !isSafePageStyleValue(value)) {
+    throw new BuilderAdapterError(
+      `Editor style property "${property}" contains an unsafe CSS value`,
+    );
   }
   captureEditorViewportStyle(component, viewport);
   const payloadViewportKey = payloadViewport(viewport);
@@ -1007,7 +1126,9 @@ export function updateEditorViewportStyle(
     ...component.getAttributes({ noStyle: true }),
     [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
   });
-  component.setStyle(styleBlockToEditorStyle(parsed.data[payloadViewportKey] ?? {}));
+  component.setStyle(
+    styleBlockToEditorStyle(resolveViewportStyle(parsed.data, viewport)),
+  );
 }
 
 export function reassignEditorNodeIds(component: Component): void {

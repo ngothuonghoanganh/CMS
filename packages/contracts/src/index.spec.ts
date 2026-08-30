@@ -33,7 +33,10 @@ import {
   PageCapabilityGraphSchema,
   PublishedPageBundleSchema,
   PAGE_COMPONENT_REGISTRY,
+  PAGE_RUNTIME_BASELINE_CSS,
   PAGE_PREVIEW_MESSAGE_TYPE,
+  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  isSafePageStyleValue,
   PageDocumentSchema,
   PagePreviewMessageSchema,
   canContainPageComponent,
@@ -64,6 +67,19 @@ function createPayload(children: PageNode[] = []) {
 }
 
 describe('foundation contracts', () => {
+  it('keeps page-runtime baseline and opacity control semantics centralized', () => {
+    expect(PAGE_RUNTIME_BASELINE_CSS).toContain('.payload-form');
+    expect(PAGE_RUNTIME_BASELINE_CSS).toContain('main[data-payload-node-type');
+    expect(PAGE_STYLE_PROPERTY_BY_EDITOR_KEY.opacity).toMatchObject({
+      control: 'number',
+      min: 0,
+      max: 1,
+      step: 0.05,
+    });
+    expect(isSafePageStyleValue('"Open Sans", Arial, sans-serif')).toBe(true);
+    expect(isSafePageStyleValue('url(javascript:alert(1))')).toBe(false);
+  });
+
   it('uses Page as the canonical resource while preserving the legacy schema alias', () => {
     const page = PageSchema.parse({
       id: randomUUID(),
