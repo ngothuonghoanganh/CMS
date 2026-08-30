@@ -954,6 +954,31 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
   await expect(page.getByLabel('Width', { exact: true })).toHaveValue('240');
 });
 
+test('keeps viewport changes presentational and groups one style edit into one undo', async ({
+  page,
+}) => {
+  await openBuilder(page, 'Editor Core Hardening');
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: /^Text/ }).click();
+  await expect(
+    page.frameLocator('iframe.gjs-frame').locator('p[data-payload-node-type="text"]'),
+  ).toHaveCount(1);
+  await page.getByLabel('Width', { exact: true }).fill('320');
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('320');
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Tablet', exact: true }).click();
+  await expect(page.getByText('Saved · v2')).toBeVisible();
+  await page.getByRole('button', { name: 'Desktop', exact: true }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('');
+  await expect(
+    page.frameLocator('iframe.gjs-frame').locator('p[data-payload-node-type="text"]'),
+  ).toHaveCount(1);
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('320');
+});
+
 test('streams unsaved builder changes to the live preview window', async ({ page }) => {
   await openBuilder(page, 'Live Preview Builder');
   await page.getByRole('button', { name: 'Text add' }).click();

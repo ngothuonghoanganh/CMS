@@ -15,6 +15,7 @@ import {
   formatCountdownRemaining,
   payloadToEditorComponent,
   resolveViewportStyle,
+  reassignEditorNodeIds,
   serializeEditorSnapshot,
   sanitizeInlineText,
   snapshotFromEditorDefinition,
@@ -318,5 +319,44 @@ describe('builder adapter', () => {
 
   it('keeps inline editor content plain text at the payload boundary', () => {
     expect(sanitizeInlineText('<strong>Hello</strong>\u0000')).toBe('Hello');
+  });
+
+  it('regenerates every PagePayload id in a duplicated subtree', () => {
+    type FakeNode = {
+      attributes: Record<string, string>;
+      children: FakeNode[];
+      getAttributes: () => Record<string, string>;
+      setAttributes: (attributes: Record<string, string>) => void;
+      onAll: (callback: (node: FakeNode) => void) => void;
+    };
+    const makeNode = (id: string, children: FakeNode[] = []): FakeNode => {
+      const node: FakeNode = {
+        attributes: { [BUILDER_NODE_ID_ATTRIBUTE]: id },
+        children,
+        getAttributes: () => ({ ...node.attributes }),
+        setAttributes: (attributes) => Object.assign(node.attributes, attributes),
+        onAll: (callback) => {
+          callback(node);
+          node.children.forEach((child) => child.onAll(callback));
+        },
+      };
+      return node;
+    };
+    const text = makeNode('text-original');
+    const container = makeNode('container-original', [text]);
+    const section = makeNode('section-original', [container]);
+
+    reassignEditorNodeIds(section as never);
+
+    const ids = [section, container, text].map(
+      (node) => node.attributes[BUILDER_NODE_ID_ATTRIBUTE],
+    );
+    expect(ids).toEqual([
+      expect.stringMatching(/^copy-/),
+      expect.stringMatching(/^copy-/),
+      expect.stringMatching(/^copy-/),
+    ]);
+    expect(new Set(ids).size).toBe(3);
+    expect(ids).not.toContain('text-original');
   });
 });

@@ -1,5 +1,9 @@
 # Phase 14 Handoff — Editor Core & Interaction Engine
 
+> Phase 14.1 hardening supersedes this handoff for current ownership and
+> residual-risk details. Read [`phase-14.1-handoff.md`](phase-14.1-handoff.md)
+> before continuing editor work.
+
 ## Current truth
 
 The Builder uses Model A. GrapesJS owns the live component model and its

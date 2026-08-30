@@ -12,7 +12,6 @@ import {
   type BuilderBlockType,
   type BuilderViewport,
   applyEditorViewportStyle,
-  captureEditorViewportStyle,
   createBlockDefinition,
   createExtensionBlockDefinition,
   countdownPreviewComponents,
@@ -26,6 +25,7 @@ import {
 import {
   canInsertNode,
   findPayloadComponent,
+  isEditableTarget,
   isEditorOnlyPreview,
   payloadAncestor,
   payloadNodeId,
@@ -40,6 +40,7 @@ import {
   createEditorCommandBus,
   executeEditorCommand,
   type EditorCommand,
+  type EditorCommandResult,
 } from './editor-commands';
 import { BuilderSelection } from './builder-selection';
 import type { BuilderCanvasNode, BuilderCanvasState } from './builder-minimap';
@@ -686,6 +687,7 @@ function dropBlockAtPoint(
   type: BuilderBlockType,
   clientX: number,
   clientY: number,
+  commit: (command: EditorCommand) => boolean,
 ): Component | undefined {
   const frame = editor.Canvas.getFrameEl();
   if (!frame) return undefined;
@@ -728,21 +730,20 @@ function dropBlockAtPoint(
     target === root &&
     (type === 'text' || type === 'image' || type === 'button' || type === 'countdown')
   ) {
-    const section = executeEditorCommand(editor, {
+    const sectionChanged = commit({
       kind: 'insert',
       definition: createBlockDefinition('section'),
       parentId: payloadNodeId(root),
     });
-    target = section.selection ?? root;
+    if (!sectionChanged) return undefined;
+    target = editor.getSelected() ?? root;
   }
-  const result = executeEditorCommand(editor, {
+  const changed = commit({
     kind: 'insert',
     definition: createBlockDefinition(type),
     parentId: payloadNodeId(target),
   });
-  const added = result.selection;
-  if (added) editor.select(added);
-  return added;
+  return changed ? (editor.getSelected() ?? undefined) : undefined;
 }
 
 function findAppendTarget(
@@ -760,10 +761,6 @@ function findAppendTarget(
     }
   });
   return target;
-}
-
-function captureAllViewportStyles(root: Component, viewport: BuilderViewport): void {
-  root.onAll((component) => captureEditorViewportStyle(component, viewport));
 }
 
 function applyAllViewportStyles(root: Component, viewport: BuilderViewport): void {
@@ -1030,7 +1027,6 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
 
   function createDocumentSnapshot(editor: Editor): PageDocument {
     const root = getRoot(editor);
-    captureAllViewportStyles(root, viewportRef.current);
     return createPageDocument(serializeGrapesComponent(root));
   }
 
@@ -1087,8 +1083,16 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     // user action creates one coherent document/dirty update.
     const wasInternalChange = internalChangeRef.current;
     internalChangeRef.current = true;
-    const result =
-      commandBusRef.current?.dispatch(command) ?? executeEditorCommand(editor, command);
+    let result: EditorCommandResult;
+    try {
+      result =
+        commandBusRef.current?.dispatch(command) ?? executeEditorCommand(editor, command);
+    } catch (caughtError) {
+      callbacksRef.current.onError(
+        caughtError instanceof Error ? caughtError.message : 'Editor command failed',
+      );
+      result = { changed: false };
+    }
     queueMicrotask(() => {
       internalChangeRef.current = wasInternalChange;
     });
@@ -1230,7 +1234,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const handleUp = (upEvent: MouseEvent) => {
           cleanup();
           if (!state.dragging) return;
-          dropBlockAtPoint(editor, type, upEvent.clientX, upEvent.clientY);
+          dropBlockAtPoint(editor, type, upEvent.clientX, upEvent.clientY, (command) =>
+            commitEditorCommand(editor, command),
+          );
         };
 
         blockDragCleanupRef.current = cleanup;
@@ -1313,34 +1319,39 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const root = getRoot(editor);
         const selected = getSelectedComponent(editor);
         const selectedSnapshot = selectionFromComponent(selected);
+        const wasInternalChange = internalChangeRef.current;
         internalChangeRef.current = true;
-        captureAllViewportStyles(root, viewportRef.current);
-        editor.setDevice(viewport);
-        const frameElement = editor.Canvas.getFrameEl();
-        if (frameElement) {
-          frameElement.style.setProperty(
-            'width',
-            PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || '100%',
-            'important',
-          );
-          frameElement.style.setProperty('min-width', '0', 'important');
-          frameElement.style.setProperty(
-            'max-width',
-            PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || 'none',
-            'important',
-          );
-          frameElement.parentElement?.style.setProperty(
-            'width',
-            PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || '100%',
-            'important',
-          );
-        }
-        applyAllViewportStyles(root, viewport);
-        window.setTimeout(() => {
-          if (editorRef.current === editor) {
-            applyAllViewportStyles(getRoot(editor), viewport);
+        try {
+          // Viewport selection is editor UI state. Authored responsive deltas
+          // are already stored by the style command, so changing viewport must
+          // not capture or create a PagePayload mutation of its own.
+          editor.setDevice(viewport);
+          const frameElement = editor.Canvas.getFrameEl();
+          if (frameElement) {
+            frameElement.style.setProperty(
+              'width',
+              PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || '100%',
+              'important',
+            );
+            frameElement.style.setProperty('min-width', '0', 'important');
+            frameElement.style.setProperty(
+              'max-width',
+              PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || 'none',
+              'important',
+            );
+            frameElement.parentElement?.style.setProperty(
+              'width',
+              PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth || '100%',
+              'important',
+            );
           }
-        }, 0);
+          editor.getModel().skip(() => applyAllViewportStyles(root, viewport));
+        } finally {
+          // GrapesJS model events are synchronous for these presentation
+          // updates. Restore the previous command state immediately so a user
+          // edit after a viewport click cannot be mistaken for presentation.
+          internalChangeRef.current = wasInternalChange;
+        }
         viewportRef.current = viewport;
         callbacksRef.current.onSelectionChange(selectedSnapshot);
         const restoreSelection = () => {
@@ -1352,7 +1363,6 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editor.once('canvas:update', restoreSelection);
         window.setTimeout(() => {
           restoreSelection();
-          internalChangeRef.current = false;
         }, 500);
       },
       updateSelectedText(value) {
@@ -1574,27 +1584,22 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     let unbindCanvasStateObservers: (() => void) | undefined;
     let bindCanvasStateObservers: (() => void) | undefined;
 
-    const isTypingTarget = (
-      target: EventTarget | null,
-      currentEditor: Editor | null,
-    ): boolean => {
-      const element = target as HTMLElement | null;
-      return Boolean(
-        element &&
-        (element.tagName === 'INPUT' ||
-          element.tagName === 'TEXTAREA' ||
-          element.tagName === 'SELECT' ||
-          (element.isContentEditable && Boolean(currentEditor?.getEditing?.()))),
-      );
-    };
     const handleInteractionKeyDown = (event: KeyboardEvent) => {
       const currentEditor = editorRef.current;
-      if (isTypingTarget(event.target, currentEditor)) return;
+      if (isEditableTarget(event.target)) return;
+      const consume = () => {
+        event.preventDefault();
+        // GrapesJS registers its own global keymap listener. Stop it from
+        // applying a second undo/redo/delete after the command bus handles
+        // this user action.
+        event.stopImmediatePropagation();
+      };
       if (event.key === 'Escape') {
         blockDragCleanupRef.current?.();
         callbacksRef.current.onInteractionModeChange('select');
         interactionModeRef.current = 'select';
         if (currentEditor) setCanvasInteractionClass(currentEditor, 'select');
+        event.preventDefault();
         return;
       }
       if (currentEditor && (event.metaKey || event.ctrlKey)) {
@@ -1602,19 +1607,19 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           if (event.shiftKey)
             currentEditor && commitEditorCommand(currentEditor, { kind: 'redo' });
           else commitEditorCommand(currentEditor, { kind: 'undo' });
-          event.preventDefault();
+          consume();
           return;
         }
         if (event.key.toLowerCase() === 'y') {
           commitEditorCommand(currentEditor, { kind: 'redo' });
-          event.preventDefault();
+          consume();
           return;
         }
         if (event.key.toLowerCase() === 'd') {
           const selected = getSelectedComponent(currentEditor);
           const nodeId = selected && payloadNodeId(selected);
           if (nodeId) commitEditorCommand(currentEditor, { kind: 'duplicate', nodeId });
-          event.preventDefault();
+          consume();
           return;
         }
       }
@@ -1623,7 +1628,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const nodeId = selected && payloadNodeId(selected);
         if (nodeId && selected !== getRoot(currentEditor)) {
           commitEditorCommand(currentEditor, { kind: 'remove', nodeId });
-          event.preventDefault();
+          consume();
         }
         return;
       }
@@ -1631,19 +1636,21 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         interactionModeRef.current = 'select';
         if (currentEditor) setCanvasInteractionClass(currentEditor, 'select');
         callbacksRef.current.onInteractionModeChange('select');
+        consume();
         return;
       }
       if ((event.key === 'h' || event.key === 'H') && !event.metaKey && !event.ctrlKey) {
         interactionModeRef.current = 'hand';
         if (currentEditor) setCanvasInteractionClass(currentEditor, 'hand');
         callbacksRef.current.onInteractionModeChange('hand');
+        consume();
         return;
       }
       if (event.code === 'Space' && !event.repeat) {
         temporaryPanRef.current = true;
         if (currentEditor)
           setCanvasInteractionClass(currentEditor, interactionModeRef.current, true);
-        event.preventDefault();
+        consume();
         return;
       }
       if (!event.altKey || !currentEditor) return;
@@ -1663,7 +1670,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         ? selectedMoveIntent(getRoot(currentEditor), selected, direction)
         : undefined;
       if (intent) commitStructuralMove(currentEditor, intent);
-      event.preventDefault();
+      consume();
     };
     const handleInteractionKeyUp = (event: KeyboardEvent) => {
       if (event.code !== 'Space') return;
@@ -1671,7 +1678,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       if (editorRef.current)
         setCanvasInteractionClass(editorRef.current, interactionModeRef.current);
     };
-    window.addEventListener('keydown', handleInteractionKeyDown);
+    // Capture before GrapesJS' document keymap so a shortcut is dispatched
+    // exactly once through the CMS command boundary.
+    window.addEventListener('keydown', handleInteractionKeyDown, true);
     window.addEventListener('keyup', handleInteractionKeyUp);
 
     async function initialize() {
@@ -1893,7 +1902,11 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           callbacksRef.current.onSelectionChange(selectionFromComponent(selected));
         };
         const handleClone = (component: Component) => {
-          reassignEditorNodeIds(component as Component);
+          // The command path owns clone identity repair. Keep this guarded
+          // fallback for GrapesJS-native clone/paste integrations that may be
+          // introduced later, without double-regenerating command clones.
+          if (internalChangeRef.current) return;
+          editor?.getModel().skip(() => reassignEditorNodeIds(component as Component));
           callbacksRef.current.onDirty();
           notifySelection(editor as Editor);
           notifyHistory(editor as Editor);
@@ -1934,7 +1947,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
 
     return () => {
       disposed = true;
-      window.removeEventListener('keydown', handleInteractionKeyDown);
+      window.removeEventListener('keydown', handleInteractionKeyDown, true);
       window.removeEventListener('keyup', handleInteractionKeyUp);
       blockDragCleanupRef.current?.();
       unbindCanvasComponentDrag?.();

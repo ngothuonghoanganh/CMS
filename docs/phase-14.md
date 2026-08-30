@@ -1,5 +1,10 @@
 # Phase 14 — Editor Core & Interaction Engine
 
+> Historical note: Phase 14 was initially marked complete at `b54423c`.
+> Phase 14.1 audited the `97dbd51..b54423c` implementation and hardened
+> residual ownership, viewport, serialization, clone identity and keyboard
+> paths. See [`phase-14.1.md`](phase-14.1.md) for the audit matrix and results.
+
 ## Goal
 
 Phase 14 consolidates Builder mutations and interaction state while preserving the

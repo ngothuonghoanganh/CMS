@@ -97,6 +97,25 @@ function intent(
 }
 
 describe('builder placement engine', () => {
+  it.each([
+    ['root', 'section', true],
+    ['root', 'text', false],
+    ['section', 'container', true],
+    ['section', 'text', true],
+    ['container', 'section', true],
+    ['container', 'button', true],
+    ['text', 'text', false],
+    ['button', 'text', false],
+  ])('uses the registry for %s → %s insertion (%s)', (parent, child, expected) => {
+    const parentNode = new FakeComponent('parent', parent);
+    const root = new FakeComponent('root', 'root', [parentNode]);
+    const childDefinition = new FakeComponent('child', child);
+    parentNode.append(childDefinition);
+    expect(
+      resolveNodePlacement(asComponent(root), intent('child', 'parent', 'inside')).valid,
+    ).toBe(expected);
+  });
+
   it('moves siblings after the intended target without index shifting', () => {
     const first = new FakeComponent('first', 'text');
     const second = new FakeComponent('second', 'text');
@@ -111,6 +130,50 @@ describe('builder placement engine', () => {
       'second',
       'first',
       'third',
+    ]);
+  });
+
+  it('moves a first sibling after the last sibling', () => {
+    const first = new FakeComponent('first', 'text');
+    const middle = new FakeComponent('middle', 'text');
+    const last = new FakeComponent('last', 'text');
+    const parent = new FakeComponent('parent', 'container', [first, middle, last]);
+    const root = new FakeComponent('root', 'root', [parent]);
+
+    expect(
+      moveNodeByIntent(asComponent(root), intent('first', 'last', 'after')).valid,
+    ).toBe(true);
+    expect(parent.children.map((node) => node.attrs[BUILDER_NODE_ID_ATTRIBUTE])).toEqual([
+      'middle',
+      'last',
+      'first',
+    ]);
+  });
+
+  it('supports before placement and empty destination collections', () => {
+    const source = new FakeComponent('source', 'text');
+    const target = new FakeComponent('target', 'text');
+    const sourceParent = new FakeComponent('source-parent', 'container', [source]);
+    const targetParent = new FakeComponent('target-parent', 'container', [target]);
+    const root = new FakeComponent('root', 'root', [sourceParent, targetParent]);
+
+    expect(
+      moveNodeByIntent(asComponent(root), intent('source', 'target', 'before')).valid,
+    ).toBe(true);
+    expect(
+      targetParent.children.map((node) => node.attrs[BUILDER_NODE_ID_ATTRIBUTE]),
+    ).toEqual(['source', 'target']);
+
+    const empty = new FakeComponent('empty', 'container');
+    const secondSource = new FakeComponent('second-source', 'text');
+    sourceParent.append(secondSource);
+    root.append(empty);
+    expect(
+      moveNodeByIntent(asComponent(root), intent('second-source', 'empty', 'inside'))
+        .valid,
+    ).toBe(true);
+    expect(empty.children.map((node) => node.attrs[BUILDER_NODE_ID_ATTRIBUTE])).toEqual([
+      'second-source',
     ]);
   });
 
@@ -152,5 +215,25 @@ describe('builder placement engine', () => {
     });
     expect(section.parent()).toBe(root);
     expect(containerA.parent()).toBe(section);
+  });
+
+  it.each([
+    ['self target', 'section', 'section', 'inside'],
+    ['root source', 'root', 'section', 'inside'],
+    ['missing source', 'missing', 'section', 'inside'],
+    ['missing target', 'section', 'missing', 'inside'],
+  ])('rejects %s without changing the tree', (_label, sourceId, targetId, position) => {
+    const { root, section } = fixture();
+    const before = root.children.map((node) => node.attrs[BUILDER_NODE_ID_ATTRIBUTE]);
+    const result = resolveNodePlacement(
+      asComponent(root),
+      intent(sourceId, targetId, position as MoveNodeIntent['position']),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(root.children.map((node) => node.attrs[BUILDER_NODE_ID_ATTRIBUTE])).toEqual(
+      before,
+    );
+    expect(section.parent()).toBe(root);
   });
 });

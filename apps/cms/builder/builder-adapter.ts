@@ -304,14 +304,6 @@ export function resolveViewportStyle(
   };
 }
 
-function inheritedViewportStyle(
-  style: PageNodeStyle | undefined,
-  viewport: BuilderViewport,
-): PageNodeStyle['base'] {
-  if (!style || viewport === 'desktop') return {};
-  return viewport === 'tablet' ? { ...style.base } : { ...style.base, ...style.tablet };
-}
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -1046,42 +1038,14 @@ export function readEditorResponsiveStyle(
   );
 }
 
-export function captureEditorViewportStyle(
-  component: Component,
-  viewport: BuilderViewport,
-): void {
-  const payloadViewportKey = payloadViewport(viewport);
-  const current = readEditorResponsiveStyle(component) ?? { base: {} };
-  const displayed = editorStyleToPayloadStyle({ ...component.getStyle() }, [
-    'component',
-    BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
-  ]);
-  const inherited = inheritedViewportStyle(current, viewport);
-  const nextBlock: PageNodeStyle['base'] = {};
-  const nextValues = nextBlock as Record<string, string | undefined>;
-
-  for (const definition of Object.values(PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY)) {
-    const property = definition.payloadKey as keyof PageNodeStyle['base'];
-    const displayedValue = displayed[property];
-    const inheritedValue = inherited[property];
-    if (displayedValue !== undefined && displayedValue !== inheritedValue) {
-      nextValues[definition.payloadKey] = displayedValue;
-    }
-  }
-
-  current[payloadViewportKey] = nextBlock;
-  const hasStyle = Object.values(current).some(
-    (block) => block && Object.keys(block).length > 0,
-  );
-
-  if (hasStyle) {
-    component.setAttributes({
-      ...component.getAttributes({ noStyle: true }),
-      [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: jsonAttribute(current),
-    });
-  } else {
-    component.removeAttributes(BUILDER_RESPONSIVE_STYLE_ATTRIBUTE);
-  }
+function sameStyleValues(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
 }
 
 export function applyEditorViewportStyle(
@@ -1089,7 +1053,9 @@ export function applyEditorViewportStyle(
   viewport: BuilderViewport,
 ): void {
   const responsive = readEditorResponsiveStyle(component);
-  component.setStyle(styleBlockToEditorStyle(resolveViewportStyle(responsive, viewport)));
+  const nextStyle = styleBlockToEditorStyle(resolveViewportStyle(responsive, viewport));
+  const currentStyle = { ...component.getStyle() } as Record<string, unknown>;
+  if (!sameStyleValues(currentStyle, nextStyle)) component.setStyle(nextStyle);
 }
 
 export function updateEditorViewportStyle(
@@ -1097,7 +1063,7 @@ export function updateEditorViewportStyle(
   viewport: BuilderViewport,
   property: string,
   value: string,
-): void {
+): boolean {
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
       property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
@@ -1117,9 +1083,14 @@ export function updateEditorViewportStyle(
       `Editor style property "${property}" contains an unsafe CSS value`,
     );
   }
-  captureEditorViewportStyle(component, viewport);
   const payloadViewportKey = payloadViewport(viewport);
   const current = readEditorResponsiveStyle(component) ?? { base: {} };
+  const previousValue = (
+    current[payloadViewportKey] as Record<string, string | undefined> | undefined
+  )?.[definition.payloadKey];
+  if ((value.trim() === '' && previousValue === undefined) || previousValue === value) {
+    return false;
+  }
   const nextBlock = {
     ...(current[payloadViewportKey] ?? {}),
     [definition.payloadKey]: value,
@@ -1142,6 +1113,7 @@ export function updateEditorViewportStyle(
   component.setStyle(
     styleBlockToEditorStyle(resolveViewportStyle(parsed.data, viewport)),
   );
+  return true;
 }
 
 export function reassignEditorNodeIds(component: Component): void {

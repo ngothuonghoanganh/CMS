@@ -418,6 +418,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const layerHoverExpandTimerRef = useRef<number | null>(null);
   const layerHoverExpandTargetRef = useRef<string | null>(null);
   const previewWindowRef = useRef<Window | null>(null);
+  const previewDocumentRef = useRef<PageDocument | null>(null);
+  const previewFrameRef = useRef<number | null>(null);
 
   const isDirty =
     saveStatus === 'unsaved' ||
@@ -737,6 +739,17 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (previewFrameRef.current !== null) {
+        window.cancelAnimationFrame(previewFrameRef.current);
+        previewFrameRef.current = null;
+      }
+      previewWindowRef.current = null;
+      previewDocumentRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     const cancelTemporaryInteraction = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setQuickAddTarget(null);
@@ -863,18 +876,33 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   }
 
   function postPreviewDocument(document?: PageDocument) {
-    const previewWindow = previewWindowRef.current;
-    if (!previewWindow || previewWindow.closed) return;
+    let nextDocument = document;
     try {
-      const nextDocument = document ?? editorRef.current?.getDocument();
+      nextDocument = nextDocument ?? editorRef.current?.getDocument();
       if (!nextDocument) return;
-      previewWindow.postMessage(
-        { type: PAGE_PREVIEW_MESSAGE_TYPE, document: nextDocument },
-        rendererOrigin,
-      );
+      previewDocumentRef.current = nextDocument;
     } catch {
       previewWindowRef.current = null;
+      previewDocumentRef.current = null;
+      return;
     }
+    const previewWindow = previewWindowRef.current;
+    if (!previewWindow || previewWindow.closed) return;
+    if (previewFrameRef.current !== null) return;
+    previewFrameRef.current = window.requestAnimationFrame(() => {
+      previewFrameRef.current = null;
+      const target = previewWindowRef.current;
+      const latestDocument = previewDocumentRef.current;
+      if (!target || target.closed || !latestDocument) return;
+      try {
+        target.postMessage(
+          { type: PAGE_PREVIEW_MESSAGE_TYPE, document: latestDocument },
+          rendererOrigin,
+        );
+      } catch {
+        previewWindowRef.current = null;
+      }
+    });
   }
 
   function openLivePreview() {

@@ -31,6 +31,15 @@ engine is authoritative for Builder mutations, `PagePayload` remains the persist
 source of truth, GrapesJS remains the current live editor engine, and the renderer
 remains production authority.
 
+Phase 14.1 hardened that boundary. Treat `PagePayload` as persisted content truth,
+GrapesJS as the current live editor document engine, `editor-commands.ts` as the
+authoritative user mutation boundary, `PAGE_COMPONENT_REGISTRY` as component and
+placement capability truth, `PAGE_STYLE_PROPERTY_DEFINITIONS` as styling capability
+truth, and the public renderer as production rendering truth. UI code must not
+directly mutate GrapesJS for user document changes; documented escape hatches are
+limited to hydration, editor-only preview decoration, presentation-only viewport
+paint, selection, and guarded native clone identity repair.
+
 ## Non-negotiable product constraints
 
 ### Tenant model
@@ -53,6 +62,9 @@ remains production authority.
 - New Canvas, Layers, Inspector, keyboard, and Quick Add mutations must dispatch
   through `apps/cms/builder/editor-commands.ts` and use its shared placement
   boundary; do not mutate GrapesJS directly from a new UI surface.
+- Viewport changes are UI state and must not create PagePayload mutations. New
+  responsive style changes must use the command boundary and the shared style
+  registry; do not capture displayed editor styles during serialization.
 
 ## Known recurring problems
 

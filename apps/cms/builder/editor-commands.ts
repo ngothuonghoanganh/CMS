@@ -10,6 +10,7 @@ import {
 import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
   isBuilderNodeType,
+  reassignEditorNodeIds,
   sanitizeInlineText,
   updateEditorViewportStyle,
   type BuilderViewport,
@@ -63,6 +64,33 @@ export type BuilderCommandBus = {
   canDispatch: (command: EditorCommand) => boolean;
 };
 
+let duplicateHistorySequence = 0;
+
+type HistoryEntry = { set?: (key: string, value: unknown) => void };
+
+function getHistoryEntries(editor: Editor): HistoryEntry[] {
+  const getStack = (editor.UndoManager as unknown as { getStack?: () => unknown })
+    .getStack;
+  if (typeof getStack !== 'function') return [];
+  const stack = getStack.call(editor.UndoManager) as
+    { models?: HistoryEntry[] } | HistoryEntry[];
+  return Array.isArray(stack) ? stack : (stack.models ?? []);
+}
+
+function isolateNewHistoryActions(
+  editor: Editor,
+  previousEntries: Set<HistoryEntry>,
+): void {
+  const entries = getHistoryEntries(editor).filter(
+    (entry) => !previousEntries.has(entry),
+  );
+  if (entries.length === 0) return;
+  const marker = `builder-duplicate-${++duplicateHistorySequence}`;
+  entries.forEach((entry) => {
+    entry.set?.('magicFusionIndex', marker);
+  });
+}
+
 function getRoot(editor: Editor): Component | undefined {
   return editor.getComponents().models[0];
 }
@@ -92,8 +120,18 @@ function canInsertDefinition(
 }
 
 export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
-  return {
-    dispatch: (command) => executeEditorCommand(editor, command),
+  const bus: BuilderCommandBus = {
+    dispatch: (command) => {
+      if (!bus.canDispatch(command)) return { changed: false };
+      try {
+        return executeEditorCommand(editor, command);
+      } catch {
+        // A command is a safety boundary for untrusted inspector values. The
+        // caller can treat a failed dispatch as a no-op and keep the live
+        // document intact.
+        return { changed: false };
+      }
+    },
     canDispatch: (command) => {
       const root = getRoot(editor);
       if (!root) return false;
@@ -101,7 +139,9 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
       if (command.kind === 'undo') return editor.UndoManager.hasUndo();
       if (command.kind === 'redo') return editor.UndoManager.hasRedo();
       if (command.kind === 'insert') {
-        const target = command.targetId ? getNode(editor, command.targetId) : undefined;
+        const hasTarget = command.targetId !== undefined;
+        const target = hasTarget ? getNode(editor, command.targetId ?? '') : undefined;
+        if (hasTarget && !target) return false;
         const parent = command.parentId
           ? getNode(editor, command.parentId)
           : (target?.parent() ?? root);
@@ -118,6 +158,7 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
       return true;
     },
   };
+  return bus;
 }
 
 export function executeEditorCommand(
@@ -129,9 +170,11 @@ export function executeEditorCommand(
 
   switch (command.kind) {
     case 'insert': {
+      const hasTarget = command.targetId !== undefined;
       const requestedTarget = command.targetId
         ? getNode(editor, command.targetId)
         : undefined;
+      if (hasTarget && !requestedTarget) return { changed: false };
       const parent = command.parentId
         ? getNode(editor, command.parentId)
         : (requestedTarget?.parent() ?? root);
@@ -166,9 +209,27 @@ export function executeEditorCommand(
     case 'duplicate': {
       const node = getNode(editor, command.nodeId);
       if (!node || node === root) return { changed: false };
+      const parent = node.parent();
+      const existingChildren = parent?.components().models.slice() ?? [];
+      const previousHistoryEntries = new Set(getHistoryEntries(editor));
       editor.select(node);
       editor.runCommand('tlb-clone');
-      const selection = editor.getSelected();
+      // GrapesJS does not promise that `tlb-clone` leaves the clone selected.
+      // Resolve the newly added sibling by identity so ID repair never mutates
+      // the source node while leaving its duplicate with a stale Page ID.
+      const clone = parent
+        ?.components()
+        .models.find((candidate) => !existingChildren.includes(candidate));
+      const selection = clone ?? editor.getSelected();
+      const duplicate = clone ?? selection;
+      if (duplicate) {
+        // Native clone events are guarded in GrapesEditor, but the command
+        // itself owns the identity transition so every command invocation
+        // produces a fresh PagePayload subtree without an extra undo action.
+        editor.getModel().skip(() => reassignEditorNodeIds(duplicate));
+      }
+      if (clone) editor.select(clone);
+      isolateNewHistoryActions(editor, previousHistoryEntries);
       return selection ? { changed: true, selection } : { changed: true };
     }
     case 'set-content': {
@@ -218,8 +279,13 @@ export function executeEditorCommand(
     case 'set-responsive-style': {
       const node = getNode(editor, command.nodeId);
       if (!node) return { changed: false };
-      updateEditorViewportStyle(node, command.viewport, command.property, command.value);
-      return { changed: true, selection: node };
+      const changed = updateEditorViewportStyle(
+        node,
+        command.viewport,
+        command.property,
+        command.value,
+      );
+      return changed ? { changed: true, selection: node } : { changed: false };
     }
     case 'undo': {
       if (!editor.UndoManager.hasUndo()) return { changed: false };

@@ -36,6 +36,23 @@ export type MoveNodeResult =
 
 export type SelectedMoveDirection = 'up' | 'down' | 'outdent' | 'indent';
 
+/**
+ * Keyboard commands belong to the editor, not to controls that own text input.
+ * This deliberately works across the GrapesJS iframe boundary: `instanceof`
+ * checks against the parent window's Element constructor are not reliable for
+ * nodes created by the iframe document.
+ */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as
+    (HTMLElement & { closest?: (selector: string) => Element | null }) | null;
+  if (!element) return false;
+  if (element.isContentEditable) return true;
+  const closest = element.closest?.(
+    'input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]',
+  );
+  return Boolean(closest && closest.getAttribute('contenteditable') !== 'false');
+}
+
 export function isEditorOnlyPreview(component: Component): boolean {
   let current: Component | undefined = component;
   while (current) {
