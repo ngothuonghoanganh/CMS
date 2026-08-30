@@ -3,38 +3,38 @@ import type { Component } from 'grapesjs';
 import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
-  BUILDER_NODE_ID_ATTRIBUTE,
-  BUILDER_NODE_TYPE_ATTRIBUTE,
-  canContainNode,
-  isBuilderNodeType,
-  type BuilderNodeType,
 } from './builder-adapter';
+import {
+  canInsertNode,
+  canMoveNode,
+  canReparentNode,
+  findPayloadComponent,
+  moveNodeByIntent as moveNodeAtPlacement,
+  payloadNodeId,
+  payloadNodeType,
+  resolveInsertionPosition,
+  resolveNodePlacement,
+  type MoveNodeIntent,
+} from './builder-placement';
 
 export { isBuilderNodeType } from './builder-adapter';
-
-export type DropPosition = 'before' | 'inside' | 'after';
-
-export type MoveNodeIntent = {
-  nodeId: string;
-  targetNodeId: string;
-  position: DropPosition;
+export {
+  canInsertNode,
+  canMoveNode,
+  canReparentNode,
+  findPayloadComponent,
+  payloadNodeId,
+  payloadNodeType,
+  resolveInsertionPosition,
+  resolveNodePlacement,
 };
+export type { DropPosition, MoveNodeIntent } from './builder-placement';
 
 export type MoveNodeResult =
   | { valid: true; source: Component; target: Component }
   | { valid: false; reason: string };
 
 export type SelectedMoveDirection = 'up' | 'down' | 'outdent' | 'indent';
-
-export function payloadNodeType(component: Component): BuilderNodeType | undefined {
-  const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
-  return isBuilderNodeType(type) ? type : undefined;
-}
-
-export function payloadNodeId(component: Component): string | undefined {
-  const id = component.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
-  return typeof id === 'string' ? id : undefined;
-}
 
 export function isEditorOnlyPreview(component: Component): boolean {
   let current: Component | undefined = component;
@@ -60,103 +60,33 @@ export function payloadAncestor(component: Component | undefined): Component | u
   return undefined;
 }
 
-export function findPayloadComponent(root: Component, id: string): Component | undefined {
-  let match: Component | undefined;
-  root.onAll((component) => {
-    if (!match && payloadNodeId(component) === id) match = component;
-  });
-  return match;
-}
-
-function isAncestor(ancestor: Component, component: Component): boolean {
-  let current = component.parent();
-  while (current) {
-    if (current === ancestor) return true;
-    current = current.parent();
-  }
-  return false;
-}
-
-function invalid(reason: string): MoveNodeResult {
-  return { valid: false, reason };
-}
-
-function resolveNodeMove(
-  root: Component,
-  intent: MoveNodeIntent,
-):
-  | { source: Component; target: Component; destination: Component; at?: number }
-  | MoveNodeResult {
-  const source = findPayloadComponent(root, intent.nodeId);
-  const target = findPayloadComponent(root, intent.targetNodeId);
-  if (!source || !target) return invalid('The source or target node no longer exists.');
-
-  const sourceType = payloadNodeType(source);
-  const targetType = payloadNodeType(target);
-  if (!sourceType || !targetType || sourceType === 'root') {
-    return invalid('The page root cannot be moved.');
-  }
-  if (source === target) return invalid('A node cannot be dropped on itself.');
-  if (isAncestor(source, target)) {
-    return invalid('A node cannot be moved into its own descendant.');
-  }
-
-  let destination: Component | undefined;
-  let at: number | undefined;
-  if (intent.position === 'inside') {
-    if (!canContainNode(targetType, sourceType)) {
-      return invalid(`${targetType} cannot contain ${sourceType}.`);
-    }
-    destination = target;
-  } else {
-    destination = target.parent();
-    const destinationType = destination ? payloadNodeType(destination) : undefined;
-    if (
-      !destination ||
-      !destinationType ||
-      !canContainNode(destinationType, sourceType)
-    ) {
-      return invalid('The target position does not accept this node.');
-    }
-    at = target.index() + (intent.position === 'after' ? 1 : 0);
-  }
-
-  if (destination === source || isAncestor(source, destination)) {
-    return invalid('A node cannot be moved into its own descendant.');
-  }
-  return {
-    source,
-    target,
-    destination,
-    ...(at === undefined ? {} : { at }),
-  };
-}
-
 export function validateNodeIntent(
   root: Component,
   intent: MoveNodeIntent,
 ): MoveNodeResult {
-  const resolved = resolveNodeMove(root, intent);
-  return 'valid' in resolved
-    ? resolved
-    : { valid: true, source: resolved.source, target: resolved.target };
+  const resolved = resolveNodePlacement(root, intent);
+  return resolved.valid
+    ? {
+        valid: true,
+        source: resolved.resolution.source,
+        target: resolved.resolution.target,
+      }
+    : resolved;
 }
 
-/**
- * Validate and execute one structural move. Both Canvas and Layers call this
- * operation so the GrapesJS model remains the only source of truth.
- */
+/** Execute the validated structural command used by Canvas and Layers. */
 export function moveNodeByIntent(
   root: Component,
   intent: MoveNodeIntent,
 ): MoveNodeResult {
-  const resolved = resolveNodeMove(root, intent);
-  if ('valid' in resolved) return resolved;
-  resolved.source.move(
-    resolved.destination,
-    resolved.at === undefined ? undefined : { at: resolved.at },
-  );
-  return { valid: true, source: resolved.source, target: resolved.target };
+  const resolved = moveNodeAtPlacement(root, intent);
+  return resolved.valid
+    ? {
+        valid: true,
+        source: resolved.resolution.source,
+        target: resolved.resolution.target,
+      }
+    : resolved;
 }
 
 export function selectedMoveIntent(
@@ -195,7 +125,7 @@ export function selectedMoveIntent(
 
   const previous = siblings[sourceIndex - 1];
   const previousId = previous && payloadNodeId(previous);
-  if (!previousId || !canContainNode(payloadNodeType(previous) ?? 'text', sourceType)) {
+  if (!previousId || !canInsertNode(payloadNodeType(previous) ?? 'text', sourceType)) {
     return undefined;
   }
   return { nodeId: sourceId, targetNodeId: previousId, position: 'inside' };

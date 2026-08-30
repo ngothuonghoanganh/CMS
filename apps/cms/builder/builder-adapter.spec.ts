@@ -16,6 +16,7 @@ import {
   payloadToEditorComponent,
   resolveViewportStyle,
   serializeEditorSnapshot,
+  sanitizeInlineText,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
 import { isBuilderNodeType } from './builder-interaction';
@@ -313,5 +314,9 @@ describe('builder adapter', () => {
 
   it('recognizes extension nodes at the shared interaction boundary', () => {
     expect(isBuilderNodeType('extension')).toBe(true);
+  });
+
+  it('keeps inline editor content plain text at the payload boundary', () => {
+    expect(sanitizeInlineText('<strong>Hello</strong>\u0000')).toBe('Hello');
   });
 });

@@ -1730,6 +1730,18 @@ textarea {
   border-color: #8cf0c5;
   background: #203b41;
 }
+.builder-layer-node.drop-invalid .builder-layer-row,
+.builder-layer-node.drop-invalid .builder-layer-row::before,
+.builder-layer-node.drop-invalid .builder-layer-row::after {
+  border-color: #df627c;
+  background: #df627c18;
+}
+.builder-drop-status {
+  margin: 0.55rem 0 0;
+  color: #ffb5c2;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
 .builder-layer-node.dragging .builder-layer-row {
   opacity: 0.55;
 }
@@ -1810,6 +1822,82 @@ textarea {
 .builder-interaction-toolbar .muted {
   white-space: nowrap;
 }
+.builder-context-toolbar {
+  position: absolute;
+  pointer-events: none;
+  z-index: 30;
+  top: 0.65rem;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: calc(100% - 1.3rem);
+  padding: 0.3rem;
+  border: 1px solid #35517c;
+  border-radius: 0.5rem;
+  background: #101a2bef;
+  box-shadow: 0 0.5rem 1.5rem #07121a44;
+  transform: translateX(-50%);
+}
+.builder-context-toolbar-label {
+  padding: 0 0.45rem;
+  color: #8cf0c5;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.builder-context-toolbar button,
+.builder-quick-add-overlay button {
+  pointer-events: auto;
+  min-height: 1.8rem;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  padding: 0.2rem 0.45rem;
+  color: #dce8ff;
+  background: #1d2d4a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+}
+.builder-context-toolbar button:hover,
+.builder-context-toolbar button:focus-visible,
+.builder-quick-add-overlay button:hover,
+.builder-quick-add-overlay button:focus-visible {
+  border-color: #8cf0c5;
+  color: #07121a;
+  background: #8cf0c5;
+}
+.builder-quick-add-overlay {
+  position: absolute;
+  z-index: 35;
+  top: 3.35rem;
+  left: 50%;
+  width: min(24rem, calc(100% - 1.3rem));
+  padding: 0.6rem;
+  border: 1px solid #4d78ff;
+  border-radius: 0.55rem;
+  background: #101a2bf7;
+  box-shadow: 0 0.75rem 2rem #07121a55;
+  transform: translateX(-50%);
+}
+.builder-quick-add-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: #f5f8ff;
+  font-size: 0.76rem;
+}
+.builder-quick-add-heading button {
+  min-width: 1.8rem;
+  padding: 0.1rem;
+}
+.builder-quick-add-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
 .builder-breadcrumb {
   display: flex;
   flex-wrap: wrap;
@@ -1831,6 +1919,7 @@ textarea {
   text-decoration: underline;
 }
 .builder-canvas-panel {
+  position: relative;
   display: grid;
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);

@@ -1155,6 +1155,53 @@ test('supports duplicate, delete, undo and redo for a selected component', async
   ).toHaveCount(1);
 });
 
+test('offers a context toolbar and quick add at the selected insertion point', async ({
+  page,
+}) => {
+  await openBuilder(page, 'Context Actions');
+  await page.getByRole('button', { name: /^Section/ }).click();
+
+  const toolbar = page.locator('.builder-context-toolbar');
+  await expect(toolbar).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: /Add after selected/ })).toBeVisible();
+  await toolbar.getByRole('button', { name: /Add after selected/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Quick add' })).toBeVisible();
+  await page
+    .getByRole('dialog', { name: 'Quick add' })
+    .getByRole('button', { name: 'Container', exact: true })
+    .click();
+
+  await expect(
+    page.locator('[data-builder-layer-id]').filter({ hasText: 'Container' }),
+  ).toHaveCount(1);
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
+});
+
+test('supports keyboard delete from Layers without intercepting text fields', async ({
+  page,
+}) => {
+  await openBuilder(page, 'Keyboard Editing');
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: /^Text/ }).click();
+  await page.getByLabel('Text content').fill('Keyboard removal');
+  const canvasText = page
+    .frameLocator('iframe.gjs-frame')
+    .locator('p[data-payload-node-type="text"]');
+  await page
+    .locator('.builder-layer-button')
+    .filter({ hasText: 'Keyboard removal' })
+    .click();
+  await page.keyboard.press('Control+d');
+  await expect(canvasText).toHaveCount(2);
+  await page.keyboard.press('Control+z');
+  await expect(canvasText).toHaveCount(1);
+  await page.keyboard.press('Control+Shift+z');
+  await expect(canvasText).toHaveCount(2);
+  await page.keyboard.press('Delete');
+  await expect(canvasText).toHaveCount(1);
+});
+
 test('shows a conflict when another draft is saved first', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);

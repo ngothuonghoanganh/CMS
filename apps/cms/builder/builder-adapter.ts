@@ -492,6 +492,11 @@ function componentDefinitionForNode(
       return {
         ...shared,
         content: node.props.label,
+        // GrapesJS provides the inline editing affordance for labels. The
+        // command adapter still owns persisted updates and rejects child
+        // components during serialization, so this never becomes arbitrary
+        // HTML in PagePayload.
+        editable: true,
         attributes: {
           ...attributes,
           href: node.props.href,
@@ -703,6 +708,14 @@ function readStringAttribute(
   return value;
 }
 
+/** Keep inline labels/text plain-text only at the persistence boundary. */
+export function sanitizeInlineText(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .slice(0, 20_000);
+}
+
 function isPageNodeType(value: string): value is BuilderNodeType {
   return isBuilderNodeType(value);
 }
@@ -911,7 +924,7 @@ function nodeFromSnapshot(
       return {
         ...common,
         props: {
-          text: snapshot.content,
+          text: sanitizeInlineText(snapshot.content),
           ...(align ? { align } : {}),
         },
       };
@@ -940,7 +953,7 @@ function nodeFromSnapshot(
       return {
         ...common,
         props: {
-          label: snapshot.content,
+          label: sanitizeInlineText(snapshot.content),
           href: readStringAttribute(snapshot.attributes, 'href', path),
           target: readStringAttribute(snapshot.attributes, 'target', path),
         },

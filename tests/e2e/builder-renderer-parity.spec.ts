@@ -528,6 +528,13 @@ async function isolateBuilderPageSurface(
     `;
     host.append(style);
   });
+  await page
+    .locator('.builder-context-toolbar, .builder-quick-add-overlay')
+    .evaluateAll((elements) => {
+      elements.forEach((element) => {
+        (element as HTMLElement).style.visibility = 'hidden';
+      });
+    });
   await builder.evaluate((root) => {
     const marker = 'data-parity-screenshot-style';
     root.ownerDocument

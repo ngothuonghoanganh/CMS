@@ -71,6 +71,8 @@ import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
 import { isBuilderExtensionAvailableForPage } from './builder-extension-registry';
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 import { saveStatusAfterAcknowledgement } from './builder-save';
+import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
+import { QuickAddOverlay, type QuickAddOption } from './canvas/quick-add-overlay';
 
 type BuilderShellProps = {
   workspaceId: string;
@@ -202,6 +204,7 @@ function renderLayerNodes(
   collapsedIds: Set<string>,
   draggingId: string | null,
   dropIntent: MoveNodeIntent | null,
+  dropInvalid: boolean,
   focusableId: string | undefined,
 ): ReactNode {
   return (childrenByParent.get(parentId) ?? [])
@@ -225,11 +228,14 @@ function renderLayerNodes(
               collapsedIds,
               draggingId,
               dropIntent,
+              dropInvalid,
               focusableId,
             )
           : null;
       const dropClass =
-        dropIntent?.targetNodeId === node.id ? ` drop-${dropIntent.position}` : '';
+        dropIntent?.targetNodeId === node.id
+          ? ` drop-${dropIntent.position}${dropInvalid ? ' drop-invalid' : ''}`
+          : '';
       return (
         <div
           className={`builder-layer-node${draggingId === node.id ? ' dragging' : ''}${dropClass}`}
@@ -394,6 +400,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   );
   const [layerDraggingId, setLayerDraggingId] = useState<string | null>(null);
   const [layerDropIntent, setLayerDropIntent] = useState<MoveNodeIntent | null>(null);
+  const [layerDropValidation, setLayerDropValidation] = useState<{
+    valid: boolean;
+    reason?: string;
+  } | null>(null);
+  const [quickAddTarget, setQuickAddTarget] = useState<{
+    targetNodeId: string;
+    position: 'before' | 'inside' | 'after';
+  } | null>(null);
   const [blockQuery, setBlockQuery] = useState('');
   const [layerQuery, setLayerQuery] = useState('');
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
@@ -669,6 +683,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       layerPointerCleanupRef.current = null;
       setLayerDraggingId(null);
       setLayerDropIntent(null);
+      setLayerDropValidation(null);
     };
     const onMove = (moveEvent: PointerEvent) => {
       const distance = Math.hypot(
@@ -679,6 +694,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       state.dragging = true;
       state.intent = updateLayerDropIntent(moveEvent, node.id, state.intent);
       setLayerDropIntent(state.intent);
+      setLayerDropValidation(
+        state.intent ? (editorRef.current?.validateMove(state.intent) ?? null) : null,
+      );
       const tree = layerTreeRef.current;
       if (tree) {
         const treeRect = tree.getBoundingClientRect();
@@ -690,7 +708,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     const onUp = (upEvent: PointerEvent) => {
       if (state.dragging) {
         const intent = state.intent ?? updateLayerDropIntent(upEvent, node.id, null);
-        if (intent) editorRef.current?.moveNode(intent);
+        if (intent) {
+          const validation = editorRef.current?.validateMove(intent);
+          if (validation?.valid) editorRef.current?.moveNode(intent);
+          else if (validation?.reason) setNotice(validation.reason);
+        }
       } else {
         editorRef.current?.selectNode(node.id);
       }
@@ -712,6 +734,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         window.clearTimeout(layerHoverExpandTimerRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const cancelTemporaryInteraction = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setQuickAddTarget(null);
+      layerPointerCleanupRef.current?.();
+    };
+    window.addEventListener('keydown', cancelTemporaryInteraction);
+    return () => window.removeEventListener('keydown', cancelTemporaryInteraction);
   }, []);
 
   useEffect(() => {
@@ -986,6 +1018,24 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     window.setTimeout(() => {
       viewportChangingRef.current = false;
     }, 1_000);
+  }
+
+  function openQuickAdd() {
+    if (!selected) return;
+    setQuickAddTarget({
+      targetNodeId: selected.id,
+      position: selected.type === 'root' ? 'inside' : 'after',
+    });
+  }
+
+  function insertQuickAdd(type: BuilderBlockType) {
+    if (!quickAddTarget) return;
+    const changed = editorRef.current?.insertBlock(type, quickAddTarget);
+    if (changed) {
+      setQuickAddTarget(null);
+    } else {
+      setNotice('That component is not allowed at this insertion point.');
+    }
   }
 
   function updateSelectedText(event: ChangeEvent<HTMLTextAreaElement>) {
@@ -1826,6 +1876,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                         collapsedLayerIds,
                         layerDraggingId,
                         layerDropIntent,
+                        layerDropValidation?.valid === false,
                         focusableLayerId,
                       )
                     ) : (
@@ -1835,6 +1886,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                       <span className="muted small">No matching layers.</span>
                     ) : null}
                   </div>
+                  {layerDropValidation?.valid === false ? (
+                    <p className="builder-drop-status invalid" role="status">
+                      Cannot drop here: {layerDropValidation.reason}
+                    </p>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -1842,6 +1898,15 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         </div>
 
         <section className="builder-canvas-panel" aria-label="Builder canvas">
+          <BuilderContextToolbar
+            onDelete={() => editorRef.current?.deleteSelected()}
+            onDuplicate={() => editorRef.current?.duplicateSelected()}
+            onMoveDown={() => editorRef.current?.moveSelected('down')}
+            onMoveUp={() => editorRef.current?.moveSelected('up')}
+            onQuickAdd={openQuickAdd}
+            onSelectParent={() => editorRef.current?.selectParent()}
+            selected={selected}
+          />
           <div className="builder-viewport-toolbar">
             <div
               className="builder-interaction-toolbar"
@@ -1893,6 +1958,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             </div>
           </div>
           <div className="builder-editor-shell">
+            <QuickAddOverlay
+              onClose={() => setQuickAddTarget(null)}
+              onInsert={insertQuickAdd}
+              open={quickAddTarget !== null}
+              position={quickAddTarget?.position}
+              options={toolBlockOptions.filter(
+                (option): option is QuickAddOption => option.type !== 'extension',
+              )}
+              targetLabel={selected?.type}
+            />
             <GrapesEditor
               initialPayload={pageDocument.payload}
               onDirty={markDirty}

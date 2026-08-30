@@ -26,6 +26,11 @@ Many functional phases have already been implemented. The current bottleneck is 
 
 The project is therefore entering an **Architecture & UX Consolidation / Recovery** stage before adding large new feature areas.
 
+Phase 14 Editor Core is implemented on the existing Model A boundary: the command
+engine is authoritative for Builder mutations, `PagePayload` remains the persisted
+source of truth, GrapesJS remains the current live editor engine, and the renderer
+remains production authority.
+
 ## Non-negotiable product constraints
 
 ### Tenant model
@@ -45,6 +50,9 @@ The project is therefore entering an **Architecture & UX Consolidation / Recover
 - Editor and renderer must share a versioned component contract.
 - Property controls should be schema-driven.
 - Save behavior must be explicit and testable.
+- New Canvas, Layers, Inspector, keyboard, and Quick Add mutations must dispatch
+  through `apps/cms/builder/editor-commands.ts` and use its shared placement
+  boundary; do not mutate GrapesJS directly from a new UI surface.
 
 ## Known recurring problems
 
