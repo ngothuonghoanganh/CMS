@@ -63,6 +63,7 @@ import { builderExtensionElement } from './builder-extension-registry';
 import {
   assertUniquePersistedNodeIds,
   generateFreshNodeId,
+  repairDuplicatePersistedNodeIds,
 } from './builder-node-identity';
 
 export const BUILDER_NODE_ID_ATTRIBUTE = 'data-payload-node-id';
@@ -179,6 +180,13 @@ function editorOnlyReusablePreview(definition: ComponentDefinition): ComponentDe
 }
 
 function reusablePreviewTree(definition: ComponentDefinition): ComponentDefinition {
+  const previewAttributes = { ...(definition.attributes ?? {}) };
+  // The linked reusable is an editor-only visual projection. Its source IDs
+  // must never enter the live editor identity namespace or become a command
+  // target when the user selects/moves the persisted instance.
+  delete previewAttributes[BUILDER_NODE_ID_ATTRIBUTE];
+  delete previewAttributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  delete previewAttributes[BUILDER_NODE_SLOT_ATTRIBUTE];
   const children = Array.isArray(definition.components)
     ? definition.components.map((child) =>
         isObject(child) ? reusablePreviewTree(child as ComponentDefinition) : child,
@@ -186,6 +194,7 @@ function reusablePreviewTree(definition: ComponentDefinition): ComponentDefiniti
     : undefined;
   return editorOnlyReusablePreview({
     ...definition,
+    attributes: previewAttributes,
     ...(children ? { components: children } : {}),
   });
 }
@@ -574,6 +583,7 @@ function componentDefinitionForNode(
   metadata?: PagePayloadV1['metadata'],
   payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 = 1,
   reusableRuntime: readonly ReusableRuntime[] = [],
+  designSystem?: SiteDesignSystem,
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
   if (node.type === 'reusable-instance') {
@@ -597,6 +607,7 @@ function componentDefinitionForNode(
                 undefined,
                 7,
                 reusableRuntime,
+                designSystem,
               ),
             ),
           ]
@@ -606,7 +617,9 @@ function componentDefinitionForNode(
       removable: true,
       copyable: true,
       selectable: true,
-      style: node.style ? styleBlockToEditorStyle(node.style.base) : undefined,
+      style: node.style
+        ? styleBlockToEditorStyle(node.style.base, designSystem)
+        : undefined,
     };
   }
   const shared: ComponentDefinition = {
@@ -633,7 +646,9 @@ function componentDefinitionForNode(
     removable: node.type !== 'root',
     copyable: node.type !== 'root',
     selectable: true,
-    style: node.style ? styleBlockToEditorStyle(node.style.base) : undefined,
+    style: node.style
+      ? styleBlockToEditorStyle(node.style.base, designSystem)
+      : undefined,
   };
 
   switch (node.type) {
@@ -775,7 +790,13 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
     case 'accordion-item':
@@ -788,7 +809,13 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
     case 'tabs':
@@ -800,7 +827,13 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
     case 'tab-item':
@@ -813,7 +846,13 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
     case 'gallery':
@@ -822,7 +861,13 @@ function componentDefinitionForNode(
         tagName: 'div',
         attributes,
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
     case 'global-header':
@@ -835,7 +880,13 @@ function componentDefinitionForNode(
           [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
     case 'navigation-view':
@@ -865,7 +916,13 @@ function componentDefinitionForNode(
       return {
         ...shared,
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+          ),
         ),
       };
   }
@@ -874,20 +931,27 @@ function componentDefinitionForNode(
 
 export function payloadToEditorComponent(
   payload: PagePayload | SiteGlobalPayloadV1,
-  options: { reusableRuntime?: readonly ReusableRuntime[] } = {},
+  options: {
+    reusableRuntime?: readonly ReusableRuntime[];
+    designSystem?: SiteDesignSystem;
+  } = {},
 ): ComponentDefinition {
+  const safePayload = repairDuplicatePersistedNodeIds(payload);
   return componentDefinitionForNode(
-    payload.root,
-    payload.metadata,
-    payload.version,
+    safePayload.root,
+    safePayload.metadata,
+    safePayload.version,
     options.reusableRuntime ?? [],
+    options.designSystem,
   );
 }
 
 export function reusableDocumentToEditorDefinition(
   document: ReusableComponentDocument,
+  designSystem?: SiteDesignSystem,
 ): ComponentDefinition {
-  return componentDefinitionForNode(document.root, undefined, 7);
+  const safeDocument = repairDuplicatePersistedNodeIds(document);
+  return componentDefinitionForNode(safeDocument.root, undefined, 7, [], designSystem);
 }
 
 /**
@@ -2312,6 +2376,55 @@ export function updateEditorViewportStyle(
   if (typeof value === 'string' && value.trim() === '') {
     delete nextBlock[definition.payloadKey as keyof typeof nextBlock];
   }
+
+  const hasValue = typeof value !== 'string' || value.trim() !== '';
+  const effectiveStyle = resolveViewportStyle(current, viewport) as Record<
+    string,
+    unknown
+  >;
+  const resolvedStyleValue = (key: string): string | undefined => {
+    const candidate = effectiveStyle[key];
+    if (typeof candidate === 'string') return candidate;
+    if (
+      isObject(candidate) &&
+      candidate.kind === 'token' &&
+      typeof candidate.tokenId === 'string'
+    ) {
+      return resolveSiteDesignToken(designSystem, candidate.tokenId, key);
+    }
+    return undefined;
+  };
+  const display = resolvedStyleValue('display');
+  if (
+    hasValue &&
+    ['flexDirection', 'justifyContent', 'alignItems', 'flexWrap', 'gap'].includes(
+      definition.payloadKey,
+    ) &&
+    (!display || !['flex', 'grid'].includes(display))
+  ) {
+    nextBlock.display = 'flex';
+  }
+  if (hasValue && definition.payloadKey === 'gridTemplateColumns' && display !== 'grid') {
+    nextBlock.display = 'grid';
+  }
+  if (
+    hasValue &&
+    ['borderWidth', 'borderColor'].includes(definition.payloadKey) &&
+    (!resolvedStyleValue('borderStyle') || resolvedStyleValue('borderStyle') === 'none')
+  ) {
+    nextBlock.borderStyle = 'solid';
+  }
+  const nodeType = component.getAttributes({ noStyle: true })[
+    BUILDER_NODE_TYPE_ATTRIBUTE
+  ];
+  if (
+    hasValue &&
+    (nodeType === 'button' || nodeType === 'link') &&
+    ['width', 'height'].includes(definition.payloadKey) &&
+    (!display || display === 'inline')
+  ) {
+    nextBlock.display = 'inline-block';
+  }
   current[payloadViewportKey] = nextBlock;
   const parsed = PageNodeStyleV7Schema.safeParse(current);
   if (!parsed.success) {
@@ -2374,6 +2487,8 @@ export function updateEditorPartViewportStyle(
   }
   if (typeof value === 'string' && value.trim() === '') {
     delete nextBlock[definition.payloadKey];
+  } else {
+    nextBlock[definition.payloadKey] = value;
   }
   const nextPartStyle = { ...partStyle, [viewportKey]: nextBlock };
   const parsed = PageNodePartsStyleV7Schema.safeParse({

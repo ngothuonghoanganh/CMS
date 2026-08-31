@@ -511,38 +511,6 @@ function renderForm(node: FormNode, context: RenderContext): ReactElement {
   return <FormRenderer node={node} {...(submissionUrl ? { submissionUrl } : {})} />;
 }
 
-function navigationHref(href: string, context: RenderContext): string {
-  if (context.customDomain || !context.siteSlug || !href.startsWith('/')) return href;
-  return `/${context.siteSlug}${href === '/' ? '' : href}`;
-}
-
-function renderNavigationItems(
-  items: readonly ResolvedNavigationItem[],
-  context: RenderContext,
-): ReactElement {
-  return (
-    <ul>
-      {items.map((item) => (
-        <li key={item.id}>
-          <a
-            aria-current={
-              item.href.split(/[?#]/, 1)[0] === (context.pagePath ?? '/')
-                ? 'page'
-                : undefined
-            }
-            href={navigationHref(item.href, context)}
-            rel={item.openInNewTab ? 'noopener noreferrer' : undefined}
-            target={item.openInNewTab ? '_blank' : undefined}
-          >
-            {item.label}
-          </a>
-          {item.children?.length ? renderNavigationItems(item.children, context) : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function renderNavigationView(
   node: NavigationViewRenderableNode,
   context: RenderContext,
@@ -679,7 +647,19 @@ function renderGlobalNavigation(
   element: 'header' | 'footer',
 ): ReactElement | null {
   if (!items?.length) return null;
-  const content = <nav aria-label={label}>{renderNavigationItems(items, context)}</nav>;
+  const content = (
+    <NavigationViewRuntime
+      alignment="left"
+      ariaLabel={label}
+      customDomain={context.customDomain}
+      id={`global-navigation-${element}`}
+      items={items}
+      mobileBehavior="collapse"
+      orientation="horizontal"
+      pagePath={context.pagePath}
+      siteSlug={context.siteSlug}
+    />
+  );
   return element === 'header' ? (
     <header data-site-global="header">{content}</header>
   ) : (

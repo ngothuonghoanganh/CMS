@@ -86,6 +86,69 @@ export function assertUniquePersistedNodeIds(value: unknown): void {
   }
 }
 
+/**
+ * Repairs only duplicate persisted IDs while preserving the first occurrence
+ * of every ID. This is used when hydrating legacy/corrupted documents so a
+ * duplicate cannot reach React keys, GrapesJS selection, or command targets.
+ */
+export function repairDuplicatePersistedNodeIds<T>(value: T): T {
+  const usedIds = new Set<string>();
+
+  const repair = (
+    input: unknown,
+    references = new Map<string, string>(),
+    nodeCandidate = false,
+  ): unknown => {
+    if (Array.isArray(input)) return input.map((entry) => repair(entry, references));
+    if (!isRecord(input)) {
+      return typeof input === 'string' ? replaceReference(input, references) : input;
+    }
+
+    const ids = nodeIds(input);
+    const isNode = nodeCandidate && isPersistedNode(input) && ids.length > 0;
+    let next = { ...input };
+    let scopedReferences = references;
+    if (isNode) {
+      const duplicate = ids.some((id) => usedIds.has(id));
+      if (duplicate) {
+        const nextId = generateFreshNodeId(nodeType(input), usedIds);
+        scopedReferences = new Map(references);
+        ids.forEach((id) => scopedReferences.set(id, nextId));
+        if (typeof input.id === 'string' || !isRecord(input.attributes)) {
+          next.id = nextId;
+        }
+        if (isRecord(input.attributes)) {
+          next.attributes = {
+            ...input.attributes,
+            [NODE_ID_ATTRIBUTE]: nextId,
+          };
+        }
+        usedIds.add(nextId);
+      } else {
+        ids.forEach((id) => usedIds.add(id));
+      }
+    }
+
+    Object.entries(next).forEach(([key, child]) => {
+      if (key === 'children' || key === 'components') {
+        next[key] = Array.isArray(child)
+          ? child.map((entry) => repair(entry, scopedReferences, true))
+          : isRecord(child)
+            ? repair(child, scopedReferences, true)
+            : child;
+        return;
+      }
+      const isDocumentRoot =
+        key === 'root' &&
+        ('version' in next || 'documentKind' in next || 'schemaVersion' in next);
+      next[key] = repair(child, scopedReferences, isDocumentRoot);
+    });
+    return next;
+  };
+
+  return repair(value, new Map(), true) as T;
+}
+
 let fallbackSequence = 0;
 
 function safeTypePrefix(type: string): string {

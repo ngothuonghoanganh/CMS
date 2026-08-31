@@ -989,15 +989,7 @@ function getEditorRoot(editor: Editor): Component {
 }
 
 function findComponentById(root: Component, id: string): Component | undefined {
-  let match: Component | undefined;
-  root.onAll((component) => {
-    if (match) return;
-    const componentId = component.getAttributes({ noStyle: true })[
-      BUILDER_NODE_ID_ATTRIBUTE
-    ];
-    if (componentId === id) match = component;
-  });
-  return match;
+  return findPayloadComponent(root, id);
 }
 
 function scrollCanvasToPoint(editor: Editor, x: number, y: number): void {
@@ -1064,6 +1056,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   });
   const payloadRef = useRef(initialPayload);
   const reusableRuntimeRef = useRef(reusableRuntime);
+  const designSystemRef = useRef(designSystem);
   const interactionModeRef = useRef<InteractionMode>('select');
   const temporaryPanRef = useRef(false);
 
@@ -1077,6 +1070,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onInteractionModeChange,
     onError,
   };
+  payloadRef.current = initialPayload;
+  reusableRuntimeRef.current = reusableRuntime;
+  designSystemRef.current = designSystem;
 
   function getRoot(editor: Editor): Component {
     const root = editor.getComponents().models[0];
@@ -1886,7 +1882,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition =
           mode === 'linked'
             ? createReusableInstanceDefinition(reusableId)
-            : reusableDocumentToEditorDefinition(source.document);
+            : reusableDocumentToEditorDefinition(
+                source.document,
+                designSystemRef.current,
+              );
         const childType =
           mode === 'linked'
             ? 'reusable-instance'
@@ -1960,7 +1959,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const result = commitEditorCommandResult(editor, {
           kind: 'detach-reusable',
           nodeId,
-          definition: reusableDocumentToEditorDefinition(document),
+          definition: reusableDocumentToEditorDefinition(
+            document,
+            designSystemRef.current,
+          ),
         });
         if (result.selection) {
           selectionRef.current.select(editor, result.selection);
@@ -2318,6 +2320,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editor.setComponents(
           payloadToEditorComponent(payloadRef.current, {
             reusableRuntime: reusableRuntimeRef.current,
+            ...(designSystemRef.current ? { designSystem: designSystemRef.current } : {}),
           }),
         );
         initialPersistedSignatureRef.current = JSON.stringify(

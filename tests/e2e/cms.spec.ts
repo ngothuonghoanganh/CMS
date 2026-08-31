@@ -1159,6 +1159,12 @@ test('applies multiple inspector properties immediately and persists them after 
 test('supports duplicate, delete, undo and redo for a selected component', async ({
   page,
 }) => {
+  const duplicateKeyWarnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().includes('same key')) {
+      duplicateKeyWarnings.push(message.text());
+    }
+  });
   await openBuilder(page, 'Component Actions');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
@@ -1205,6 +1211,7 @@ test('supports duplicate, delete, undo and redo for a selected component', async
       .locator('p')
       .filter({ hasText: 'Action component' }),
   ).toHaveCount(1);
+  expect(duplicateKeyWarnings).toEqual([]);
 });
 
 test('offers a context toolbar and quick add at the selected insertion point', async ({
@@ -1229,6 +1236,29 @@ test('offers a context toolbar and quick add at the selected insertion point', a
   ).toHaveCount(1);
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
+});
+
+test('duplicates a button with a fresh identity and no React key warning', async ({
+  page,
+}) => {
+  const duplicateKeyWarnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().includes('same key')) {
+      duplicateKeyWarnings.push(message.text());
+    }
+  });
+  await openBuilder(page, 'Button Actions');
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: 'Drag Button block', exact: true }).click();
+
+  const canvas = page.frameLocator('iframe.gjs-frame');
+  await expect(canvas.locator('a[data-payload-node-type="button"]')).toHaveCount(1);
+  await page
+    .locator('.builder-context-toolbar')
+    .getByRole('button', { name: 'Clone selected element', exact: true })
+    .click();
+  await expect(canvas.locator('a[data-payload-node-type="button"]')).toHaveCount(2);
+  expect(duplicateKeyWarnings).toEqual([]);
 });
 
 test('supports keyboard delete from Layers without intercepting text fields', async ({

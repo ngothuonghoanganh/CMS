@@ -43,6 +43,7 @@ import {
   isSafePageStyleValue,
   PageDocumentSchema,
   PagePreviewMessageSchema,
+  PagePreviewSnapshotSchema,
   canContainPageComponent,
   createPageDocument,
   migratePageDocument,
@@ -429,6 +430,22 @@ describe('foundation contracts', () => {
         type: PAGE_PREVIEW_MESSAGE_TYPE,
         document: { ...document, payload: { version: 999 } },
       }).success,
+    ).toBe(false);
+    const snapshot = PagePreviewSnapshotSchema.parse({
+      page: document,
+      globals: { version: 1 },
+      navigation: { main: [] },
+      reusables: [],
+      designSystem: createDefaultSiteDesignSystem(),
+    });
+    expect(
+      PagePreviewMessageSchema.parse({
+        type: PAGE_PREVIEW_MESSAGE_TYPE,
+        snapshot,
+      }).snapshot?.page,
+    ).toEqual(document);
+    expect(
+      PagePreviewMessageSchema.safeParse({ type: PAGE_PREVIEW_MESSAGE_TYPE }).success,
     ).toBe(false);
   });
 

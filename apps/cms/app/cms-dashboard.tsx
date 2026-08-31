@@ -260,6 +260,19 @@ export default function CmsDashboard() {
   }, []);
 
   useEffect(() => {
+    if (loading) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedView = searchParams.get('view');
+    if (requestedView && requestedView in viewLabels) {
+      setView(requestedView as View);
+    }
+    const requestedSiteId = searchParams.get('siteId');
+    if (requestedSiteId && sites.some((site) => site.id === requestedSiteId)) {
+      setSelectedSiteId(requestedSiteId);
+    }
+  }, [loading, sites]);
+
+  useEffect(() => {
     const stored = window.localStorage.getItem('cms.sidebar.collapsed');
     if (stored === 'true') setSidebarCollapsed(true);
   }, []);

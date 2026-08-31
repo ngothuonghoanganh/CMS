@@ -36,6 +36,8 @@ import {
   serializeReusableSubtree,
   reusableDocumentToEditorPageDocument,
   reusableDocumentToEditorDefinition,
+  updateEditorPartViewportStyle,
+  updateEditorViewportStyle,
   sanitizeInlineText,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
@@ -150,6 +152,11 @@ describe('builder adapter', () => {
     });
     const preview = (definition.components as Array<Record<string, unknown>>)[0];
     expect(preview?.components).toHaveLength(1);
+    const sourcePreview = (preview?.components as Array<Record<string, unknown>>)[0];
+    const sourcePreviewAttributes = sourcePreview?.attributes as
+      Record<string, unknown> | undefined;
+    expect(sourcePreviewAttributes?.[BUILDER_NODE_ID_ATTRIBUTE]).toBeUndefined();
+    expect(sourcePreviewAttributes?.[BUILDER_NODE_TYPE_ATTRIBUTE]).toBeUndefined();
 
     const serialized = serializeEditorSnapshot(snapshotFromEditorDefinition(definition));
     expect(serialized).toEqual(payload);
@@ -220,6 +227,40 @@ describe('builder adapter', () => {
     );
   });
 
+  it('repairs duplicate persisted IDs before they reach the editor tree', () => {
+    const duplicatePayload: PagePayloadV7 = {
+      version: 7,
+      metadata: { documentTitle: 'Corrupted identity fixture' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'button-shared',
+            type: 'button',
+            props: { label: 'First', href: '#first', target: '_self' },
+            children: [],
+          },
+          {
+            id: 'button-shared',
+            type: 'button',
+            props: { label: 'Second', href: '#second', target: '_self' },
+            children: [],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(duplicatePayload);
+    const ids = (definition.components as Array<Record<string, unknown>>).map(
+      (child) => (child.attributes as Record<string, unknown>)[BUILDER_NODE_ID_ATTRIBUTE],
+    );
+
+    expect(ids[0]).toBe('button-shared');
+    expect(ids[1]).not.toBe('button-shared');
+    expect(new Set(ids).size).toBe(2);
+  });
+
   it('round-trips supported nodes, props, ids, styles and responsive data', () => {
     const definition = payloadToEditorComponent(payload);
     const snapshot = snapshotFromEditorDefinition(definition);
@@ -258,6 +299,80 @@ describe('builder adapter', () => {
       ...style.tablet,
       ...style.mobile,
     });
+  });
+
+  it('hydrates design tokens into the editor and establishes visual style dependencies', () => {
+    const tokenPayload: PagePayloadV7 = {
+      version: 7,
+      metadata: { documentTitle: 'Token page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section-token',
+            type: 'section',
+            props: {},
+            style: {
+              base: {
+                color: { kind: 'token', tokenId: 'color-primary' },
+              },
+            },
+            children: [],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(tokenPayload, {
+      designSystem: {
+        version: 1,
+        colors: [{ id: 'color-primary', name: 'Primary', value: '#123456' }],
+        typography: [],
+        spacing: [],
+        radii: [],
+        shadows: [],
+        containerWidths: [],
+      },
+    });
+    expect((definition.components as Array<Record<string, unknown>>)[0]?.style).toEqual({
+      color: '#123456',
+    });
+
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'button-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'button',
+      [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: JSON.stringify({ base: {} }),
+    };
+    const component = {
+      getAttributes: () => attrs,
+      setAttributes: (next: Record<string, unknown>) => Object.assign(attrs, next),
+      setStyle: () => undefined,
+    } as never;
+    updateEditorViewportStyle(component, 'desktop', 'width', '240px');
+    const responsive = JSON.parse(String(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]));
+    expect(responsive.base).toMatchObject({ width: '240px', display: 'inline-block' });
+  });
+
+  it('persists component part values instead of silently dropping them', () => {
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'accordion-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'accordion',
+    };
+    const component = {
+      getAttributes: () => attrs,
+      setAttributes: (next: Record<string, unknown>) => Object.assign(attrs, next),
+    } as never;
+    updateEditorPartViewportStyle(
+      component,
+      'accordion',
+      'trigger',
+      'mobile',
+      'padding',
+      '8px',
+    );
+    const parts = JSON.parse(String(attrs[BUILDER_PARTS_STYLE_ATTRIBUTE]));
+    expect(parts.trigger.mobile.padding).toBe('8px');
   });
 
   it('creates page-local ids for newly inserted blocks', () => {

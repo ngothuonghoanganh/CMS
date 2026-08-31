@@ -4,10 +4,14 @@ import {
   PAGE_PREVIEW_MESSAGE_TYPE,
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
   PagePreviewMessageSchema,
+  PagePreviewSnapshotSchema,
   type PagePayload,
   type PageRuntimeExtension,
   type ReusableRuntime,
   type SiteDesignSystem,
+  type SiteGlobals,
+  type PagePreviewSnapshot,
+  type ResolvedNavigationItem,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactElement } from 'react';
 
@@ -17,30 +21,42 @@ type PreviewBridgeProps = {
   initialPayload: PagePayload;
   extensions?: readonly PageRuntimeExtension[] | undefined;
   siteSlug: string;
+  siteName?: string | undefined;
+  siteLogo?: string | undefined;
   pageSlug?: string | undefined;
   tenantSlug?: string | undefined;
   reusables?: readonly ReusableRuntime[] | undefined;
   designSystem?: SiteDesignSystem | undefined;
+  globals?: SiteGlobals | undefined;
+  navigation?:
+    | {
+        main?: readonly ResolvedNavigationItem[] | undefined;
+        footer?: readonly ResolvedNavigationItem[] | undefined;
+      }
+    | undefined;
 };
 
-function rendererContext({
-  extensions,
-  siteSlug,
-  pageSlug,
-  tenantSlug,
-  reusables,
-  designSystem,
-}: Omit<PreviewBridgeProps, 'initialPayload'>) {
+function rendererContext(
+  snapshot: PagePreviewSnapshot,
+  props: Pick<
+    PreviewBridgeProps,
+    'siteSlug' | 'siteName' | 'siteLogo' | 'pageSlug' | 'tenantSlug'
+  >,
+) {
   return {
-    siteSlug,
-    ...(pageSlug ? { pageSlug } : {}),
-    ...(tenantSlug ? { tenantSlug } : {}),
-    ...(reusables?.length ? { reusables } : {}),
-    ...(designSystem ? { designSystem } : {}),
-    ...(extensions?.length
+    siteSlug: props.siteSlug,
+    ...(props.siteName ? { siteName: props.siteName } : {}),
+    ...(props.siteLogo ? { siteLogo: props.siteLogo } : {}),
+    ...(props.pageSlug ? { pageSlug: props.pageSlug } : {}),
+    ...(props.tenantSlug ? { tenantSlug: props.tenantSlug } : {}),
+    ...(snapshot.navigation ? { navigation: snapshot.navigation } : {}),
+    ...(snapshot.globals ? { globals: snapshot.globals } : {}),
+    ...(snapshot.reusables?.length ? { reusables: snapshot.reusables } : {}),
+    ...(snapshot.designSystem ? { designSystem: snapshot.designSystem } : {}),
+    ...(snapshot.extensions?.length
       ? {
-          runtimeIds: extensions.flatMap((extension) => extension.runtimeIds),
-          extensions,
+          runtimeIds: snapshot.extensions.flatMap((extension) => extension.runtimeIds),
+          extensions: snapshot.extensions,
         }
       : {}),
   };
@@ -61,12 +77,25 @@ export function PreviewBridge({
   initialPayload,
   extensions,
   siteSlug,
+  siteName,
+  siteLogo,
   pageSlug,
   tenantSlug,
   reusables,
   designSystem,
+  globals,
+  navigation,
 }: PreviewBridgeProps) {
-  const [payload, setPayload] = useState(initialPayload);
+  const [snapshot, setSnapshot] = useState(() =>
+    PagePreviewSnapshotSchema.parse({
+      page: { schemaVersion: 1, payload: initialPayload },
+      ...(extensions ? { extensions } : {}),
+      ...(reusables ? { reusables } : {}),
+      ...(designSystem ? { designSystem } : {}),
+      ...(globals ? { globals } : {}),
+      ...(navigation ? { navigation } : {}),
+    }),
+  );
 
   useEffect(() => {
     const allowedOrigin = configuredCmsOrigin();
@@ -74,7 +103,12 @@ export function PreviewBridge({
     const handleMessage = (event: MessageEvent<unknown>) => {
       if (event.origin !== allowedOrigin || event.source !== opener) return;
       const parsed = PagePreviewMessageSchema.safeParse(event.data);
-      if (parsed.success) setPayload(parsed.data.document.payload);
+      if (!parsed.success) return;
+      if (parsed.data.snapshot) {
+        setSnapshot(parsed.data.snapshot);
+      } else if (parsed.data.document) {
+        setSnapshot((current) => ({ ...current, page: parsed.data.document! }));
+      }
     };
 
     window.addEventListener('message', handleMessage);
@@ -83,15 +117,8 @@ export function PreviewBridge({
   }, []);
 
   return renderPage(
-    payload,
-    rendererContext({
-      extensions,
-      siteSlug,
-      pageSlug,
-      tenantSlug,
-      reusables,
-      designSystem,
-    }),
+    snapshot.page.payload,
+    rendererContext(snapshot, { siteSlug, siteName, siteLogo, pageSlug, tenantSlug }),
   ) as ReactElement;
 }
 

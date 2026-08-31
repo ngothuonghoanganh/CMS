@@ -39,10 +39,14 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         initialPayload={page.payload}
         extensions={page.extensions}
         siteSlug={page.site.slug}
+        siteName={page.site.name}
+        siteLogo={page.site.logo}
         pageSlug={page.page.slug}
         tenantSlug={page.tenantSlug}
         reusables={page.reusables}
         designSystem={page.designSystem}
+        globals={page.globals}
+        navigation={page.navigation}
       />
     </div>
   );

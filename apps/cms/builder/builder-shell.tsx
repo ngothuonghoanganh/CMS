@@ -40,6 +40,9 @@ import {
   type StyleTokenReference,
   type ReusableComponentDocument,
   type ReusableRuntime,
+  type ResolvedNavigationItem,
+  type PagePreviewSnapshot,
+  type PageRuntimeExtension,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -115,6 +118,10 @@ type BuilderShellProps = {
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
 type SaveDraftResult = boolean;
+type BuilderPreviewNavigation = {
+  main?: ResolvedNavigationItem[];
+  footer?: ResolvedNavigationItem[];
+};
 type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
 type AddPanelTab = 'layouts' | 'elements' | 'saved' | 'templates';
 
@@ -410,6 +417,7 @@ export default function BuilderShell({
   const [headerDocument, setHeaderDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [footerDocument, setFooterDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [globalsDraft, setGlobalsDraft] = useState<SiteGlobals>({ version: 1 });
+  const [globalsPublished, setGlobalsPublished] = useState(false);
   const [reusables, setReusables] = useState<ReusableComponent[]>([]);
   const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
     createDefaultSiteDesignSystem,
@@ -483,12 +491,14 @@ export default function BuilderShell({
   const [panelPreferencesReady, setPanelPreferencesReady] = useState(false);
   const [builderViewportWidth, setBuilderViewportWidth] = useState(1440);
   const [reusableRuntime, setReusableRuntime] = useState<ReusableRuntime[]>([]);
+  const [navigation, setNavigation] = useState<BuilderPreviewNavigation>({});
+  const [previewExtensions, setPreviewExtensions] = useState<PageRuntimeExtension[]>([]);
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
   const layerHoverExpandTimerRef = useRef<number | null>(null);
   const layerHoverExpandTargetRef = useRef<string | null>(null);
   const previewWindowRef = useRef<Window | null>(null);
-  const previewDocumentRef = useRef<PageDocument | null>(null);
+  const previewSnapshotRef = useRef<PagePreviewSnapshot | null>(null);
   const previewFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -911,7 +921,7 @@ export default function BuilderShell({
         previewFrameRef.current = null;
       }
       previewWindowRef.current = null;
-      previewDocumentRef.current = null;
+      previewSnapshotRef.current = null;
     };
   }, []);
 
@@ -995,6 +1005,7 @@ export default function BuilderShell({
           ? SiteGlobalsResponseSchema.parse(globalsResponseRaw)
           : { draft: { version: 1 as const } };
         setGlobalsDraft(globalsResponse.draft);
+        setGlobalsPublished(Boolean(globalsResponse.published));
         const nextReusables = reusablesResponseRaw
           ? ReusableListResponseSchema.parse(reusablesResponseRaw).items
           : [];
@@ -1002,6 +1013,12 @@ export default function BuilderShell({
         const preview = previewResponseRaw
           ? PublicPageSchema.safeParse(previewResponseRaw)
           : undefined;
+        const previewNavigation = preview?.success ? preview.data.navigation : undefined;
+        setNavigation({
+          ...(previewNavigation?.main ? { main: previewNavigation.main } : {}),
+          ...(previewNavigation?.footer ? { footer: previewNavigation.footer } : {}),
+        });
+        setPreviewExtensions(preview?.success ? (preview.data.extensions ?? []) : []);
         setReusableRuntime(
           preview?.success && preview.data.reusables?.length
             ? preview.data.reusables
@@ -1103,20 +1120,35 @@ export default function BuilderShell({
 
   function markDirty() {
     localMutationSequenceRef.current += 1;
+    if (documentKind !== 'page' && !isEditingReusable) setGlobalsPublished(false);
     setNotice(null);
     setSaveStatus('unsaved');
   }
 
-  function postPreviewDocument(document?: PageDocument) {
-    let nextDocument = document;
+  function postPreviewSnapshot(overrides: Partial<PagePreviewSnapshot> = {}) {
+    let nextSnapshot: PagePreviewSnapshot | null = null;
     try {
-      const candidate = nextDocument ?? editorRef.current?.getDocument();
-      if (!candidate || !('schemaVersion' in candidate)) return;
-      nextDocument = candidate;
-      previewDocumentRef.current = nextDocument;
+      const editorCandidate = !isEditingReusable
+        ? editorRef.current?.getDocument()
+        : undefined;
+      const candidate =
+        overrides.page ??
+        (editorCandidate && 'schemaVersion' in editorCandidate
+          ? editorCandidate
+          : pageDocument);
+      if (!candidate) return;
+      nextSnapshot = {
+        page: candidate,
+        globals: overrides.globals ?? globalsDraft,
+        navigation: overrides.navigation ?? navigation,
+        extensions: overrides.extensions ?? previewExtensions,
+        reusables: overrides.reusables ?? reusableRuntime,
+        designSystem: overrides.designSystem ?? designSystem,
+      };
+      previewSnapshotRef.current = nextSnapshot;
     } catch {
       previewWindowRef.current = null;
-      previewDocumentRef.current = null;
+      previewSnapshotRef.current = null;
       return;
     }
     const previewWindow = previewWindowRef.current;
@@ -1125,11 +1157,11 @@ export default function BuilderShell({
     previewFrameRef.current = window.requestAnimationFrame(() => {
       previewFrameRef.current = null;
       const target = previewWindowRef.current;
-      const latestDocument = previewDocumentRef.current;
-      if (!target || target.closed || !latestDocument) return;
+      const latestSnapshot = previewSnapshotRef.current;
+      if (!target || target.closed || !latestSnapshot) return;
       try {
         target.postMessage(
-          { type: PAGE_PREVIEW_MESSAGE_TYPE, document: latestDocument },
+          { type: PAGE_PREVIEW_MESSAGE_TYPE, snapshot: latestSnapshot },
           rendererOrigin,
         );
       } catch {
@@ -1141,12 +1173,20 @@ export default function BuilderShell({
   function handleDocumentChange(document: PageDocument | SiteGlobalPayloadV1): void {
     if ('schemaVersion' in document) {
       if (isEditingReusable) setReusableEditorDocument(document);
-      else setPageDocument(document);
-      postPreviewDocument(document);
+      else {
+        setPageDocument(document);
+        postPreviewSnapshot({ page: document });
+      }
       return;
     }
+    const nextGlobals = SiteGlobalsSchema.parse({
+      ...globalsDraft,
+      [document.documentKind === 'site-header' ? 'header' : 'footer']: document,
+    });
     if (document.documentKind === 'site-header') setHeaderDocument(document);
     else setFooterDocument(document);
+    setGlobalsDraft(nextGlobals);
+    postPreviewSnapshot({ globals: nextGlobals });
   }
 
   function openLivePreview() {
@@ -1160,7 +1200,7 @@ export default function BuilderShell({
     }
     previewWindowRef.current = previewWindow;
     previewWindow.focus();
-    postPreviewDocument();
+    postPreviewSnapshot();
   }
 
   useEffect(() => {
@@ -1174,7 +1214,7 @@ export default function BuilderShell({
       ) {
         return;
       }
-      postPreviewDocument();
+      postPreviewSnapshot();
     }
     window.addEventListener('message', handlePreviewMessage);
     return () => window.removeEventListener('message', handlePreviewMessage);
@@ -1206,13 +1246,13 @@ export default function BuilderShell({
         setReusables((current) =>
           current.map((reusable) => (reusable.id === updated.id ? updated : reusable)),
         );
-        setReusableRuntime((current) =>
-          current.map((runtime) =>
-            runtime.id === updated.id
-              ? { id: updated.id, document: updated.draft }
-              : runtime,
-          ),
+        const nextReusableRuntime = reusableRuntime.map((runtime) =>
+          runtime.id === updated.id
+            ? { id: updated.id, document: updated.draft }
+            : runtime,
         );
+        setReusableRuntime(nextReusableRuntime);
+        postPreviewSnapshot({ reusables: nextReusableRuntime });
         setReusableEditorDocument(nextDocument);
         editorRef.current.acknowledgeSaved(nextDocument.payload);
         setSaveStatus('saved');
@@ -1245,8 +1285,10 @@ export default function BuilderShell({
           );
         }
         setGlobalsDraft(savedGlobals.draft);
+        setGlobalsPublished(false);
         if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal);
         else setFooterDocument(acknowledgedGlobal);
+        postPreviewSnapshot({ globals: savedGlobals.draft });
         editorRef.current.acknowledgeSaved(acknowledgedGlobal);
         setSaveStatus('saved');
         setNotice('Saved global draft. Publish the site to make it public.');
@@ -1321,6 +1363,13 @@ export default function BuilderShell({
     try {
       if (isEditingReusable) {
         await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
+        setReusables((current) =>
+          current.map((reusable) =>
+            reusable.id === editingReusableId
+              ? { ...reusable, published: reusable.draft }
+              : reusable,
+          ),
+        );
         setNotice(
           'Site published. The public site now uses the published reusable source.',
         );
@@ -1328,6 +1377,7 @@ export default function BuilderShell({
       }
       if (documentKind !== 'page') {
         await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
+        setGlobalsPublished(true);
         setNotice('Site published. The public site now uses the published globals.');
         return;
       }
@@ -1680,10 +1730,10 @@ export default function BuilderShell({
                 ? 'Saving…'
                 : saveStatus === 'saved'
                   ? isEditingReusable
-                    ? 'Saved · reusable source'
+                    ? `Saved · reusable draft · ${editingReusable?.published ? 'published' : 'not published'}`
                     : documentKind === 'page'
-                      ? `Saved · v${version.versionNumber}`
-                      : 'Saved · global draft'
+                      ? `Saved · v${version.versionNumber} · not published`
+                      : `Saved · global draft · ${globalsPublished ? 'published' : 'not published'}`
                   : saveStatus === 'conflict'
                     ? 'Conflict'
                     : saveStatus === 'error'
@@ -2430,6 +2480,10 @@ export default function BuilderShell({
                 resetSelectedPartStyle={resetSelectedPartStyle}
                 usableAssets={usableAssets}
                 designSystem={designSystem}
+                navigationItemCount={navigation.main?.length ?? 0}
+                onEditNavigation={() =>
+                  router.push(`/?view=navigation&siteId=${encodeURIComponent(siteId)}`)
+                }
                 viewport={viewport}
               />
             </div>

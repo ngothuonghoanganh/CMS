@@ -212,9 +212,11 @@ export class NavigationService {
   async resolveForSite(
     siteId: string,
     workspaceId: string,
+    options: { published?: boolean } = {},
   ): Promise<
     { main?: ResolvedNavigationItem[]; footer?: ResolvedNavigationItem[] } | undefined
   > {
+    const published = options.published ?? true;
     const site = await this.requireSite(siteId, workspaceId);
     const records = await this.navigationModel
       .find({ siteId, workspaceId, key: { $in: ['main', 'footer'] } })
@@ -229,6 +231,7 @@ export class NavigationService {
         workspaceId,
         this.parseItems(record),
         site.homePageId,
+        published,
       );
       if (record.key === 'main' && !result.main) result.main = items;
       if (record.key === 'footer' && !result.footer) result.footer = items;
@@ -241,6 +244,7 @@ export class NavigationService {
     workspaceId: string,
     items: NavigationItem[],
     homePageId?: string,
+    published = true,
   ): Promise<ResolvedNavigationItem[]> {
     const resolvedItems = await Promise.all(
       items.map(async (item) => {
@@ -257,7 +261,10 @@ export class NavigationService {
             .findOne({ _id: item.pageId, siteId, workspaceId })
             .exec();
           if (!page) throw this.invalidTarget();
-          if (!page.publishedVersionId) return null;
+          const versionId = published
+            ? page.publishedVersionId
+            : page.currentDraftVersionId;
+          if (!versionId) return null;
           const path =
             page._id.toString() === homePageId
               ? '/'
@@ -265,7 +272,7 @@ export class NavigationService {
           if (!path) throw this.invalidTarget();
           if (item.type === 'section') {
             if (!item.anchorId) throw this.invalidTarget();
-            await this.assertAnchor(page, item.anchorId, page.publishedVersionId);
+            await this.assertAnchor(page, item.anchorId, versionId);
             href = `${path}#${item.anchorId}`;
           } else {
             href = path;
@@ -284,6 +291,7 @@ export class NavigationService {
                   workspaceId,
                   item.children,
                   homePageId,
+                  published,
                 ),
               }
             : {}),

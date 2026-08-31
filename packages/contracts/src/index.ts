@@ -3616,14 +3616,6 @@ export function migratePageDocument(input: unknown): PageDocument {
 export const PAGE_PREVIEW_MESSAGE_TYPE = 'payload-landing-page:preview' as const;
 export const PAGE_PREVIEW_READY_MESSAGE_TYPE =
   'payload-landing-page:preview-ready' as const;
-export const PagePreviewMessageSchema = z
-  .object({
-    type: z.literal(PAGE_PREVIEW_MESSAGE_TYPE),
-    document: PageDocumentSchema,
-  })
-  .strict();
-export type PagePreviewMessage = z.infer<typeof PagePreviewMessageSchema>;
-
 export const PagePreviewReadyMessageSchema = z
   .object({ type: z.literal(PAGE_PREVIEW_READY_MESSAGE_TYPE) })
   .strict();
@@ -4290,6 +4282,46 @@ export const ResolvedNavigationItemSchema: z.ZodType<ResolvedNavigationItem> = z
       })
       .strict(),
 );
+
+export const PagePreviewNavigationSchema = z
+  .object({
+    main: z.array(ResolvedNavigationItemSchema).max(100).optional(),
+    footer: z.array(ResolvedNavigationItemSchema).max(100).optional(),
+  })
+  .strict();
+
+/**
+ * The editor preview is a composite draft snapshot. Keeping the page and
+ * site-level draft context together prevents the preview iframe from mixing a
+ * fresh page payload with stale globals, navigation, or design tokens.
+ */
+export const PagePreviewSnapshotSchema = z
+  .object({
+    page: PageDocumentSchema,
+    globals: SiteGlobalsSchema.optional(),
+    navigation: PagePreviewNavigationSchema.optional(),
+    extensions: z.array(PageRuntimeExtensionSchema).max(100).optional(),
+    reusables: z.array(ReusableRuntimeSchema).max(200).optional(),
+    designSystem: SiteDesignSystemSchema.optional(),
+  })
+  .strict();
+export type PagePreviewSnapshot = z.infer<typeof PagePreviewSnapshotSchema>;
+
+/**
+ * `document` remains accepted for older builder/renderer pairs. New clients
+ * send `snapshot`; the renderer handles both shapes during rolling upgrades.
+ */
+export const PagePreviewMessageSchema = z
+  .object({
+    type: z.literal(PAGE_PREVIEW_MESSAGE_TYPE),
+    document: PageDocumentSchema.optional(),
+    snapshot: PagePreviewSnapshotSchema.optional(),
+  })
+  .strict()
+  .refine((message) => Boolean(message.document || message.snapshot), {
+    message: 'A preview message must include a document or snapshot',
+  });
+export type PagePreviewMessage = z.infer<typeof PagePreviewMessageSchema>;
 
 export const NavigationListResponseSchema = z
   .object({ items: z.array(NavigationSchema) })

@@ -106,9 +106,22 @@ test('Phase 17 switches isolated global documents, applies presets, and persists
   ]);
 
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
-  await expect(page.getByText('Saved · global draft', { exact: true })).toBeVisible({
+  await expect(
+    page.getByText('Saved · global draft · not published', { exact: true }),
+  ).toBeVisible({
     timeout: 15_000,
   });
+
+  const previewPagePromise = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Live preview', exact: true }).click();
+  const previewPage = await previewPagePromise;
+  await expect(previewPage.locator('[data-site-global="header"]')).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    previewPage.locator('[data-payload-node-type="site-brand"]'),
+  ).toContainText(/Phase 17 Site/);
+  await previewPage.close();
 
   await documentSelector.selectOption('site-footer');
   await expect(

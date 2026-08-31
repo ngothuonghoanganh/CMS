@@ -1,15 +1,20 @@
 'use client';
 
 import type { Page, Navigation, NavigationItem, Site } from '@payload/contracts';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createNavigationItemId,
+  duplicateNavigationItem,
+  findNavigationItem,
+  flattenNavigationItems,
+  indentNavigationItem,
+  moveNavigationItem,
+  outdentNavigationItem,
+  removeNavigationItem,
+  updateNavigationItem,
+} from './navigation-tree';
 
 type NavigationItemKind = NavigationItem['type'];
-
-function createItemId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
-}
 
 export function NavigationView({
   sites,
@@ -49,6 +54,9 @@ export function NavigationView({
     'phone' | 'email' | 'download' | 'custom'
   >('phone');
   const [itemActionValue, setItemActionValue] = useState('');
+  const [itemOpenInNewTab, setItemOpenInNewTab] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [parentItemId, setParentItemId] = useState<string | null>(null);
   const current = navigations.find((navigation) => navigation.key === selectedKey);
   const selectedPage = pages.find((page) => page.id === itemPageId);
   const anchors = useMemo(() => selectedPage?.anchors ?? [], [selectedPage]);
@@ -59,47 +67,216 @@ export function NavigationView({
         (selectedKey === 'footer' ? 'Footer navigation' : 'Main navigation'),
     );
     setItems(current?.items ?? []);
+    setEditingItemId(null);
+    setParentItemId(null);
   }, [current, selectedKey]);
 
-  function addItem() {
+  function resetItemForm() {
+    setEditingItemId(null);
+    setParentItemId(null);
+    setItemLabel('');
+    setItemPageId('');
+    setItemAnchorId('');
+    setItemExternalUrl('');
+    setItemActionValue('');
+    setItemOpenInNewTab(false);
+  }
+
+  function saveItem() {
     const label = itemLabel.trim();
     if (!label) return;
     let item: NavigationItem;
     if (itemKind === 'page') {
       if (!itemPageId) return;
-      item = { id: createItemId(), label, type: 'page', pageId: itemPageId };
+      item = {
+        id: editingItemId ?? createNavigationItemId(),
+        label,
+        type: 'page',
+        pageId: itemPageId,
+        ...(itemOpenInNewTab ? { openInNewTab: true } : {}),
+      };
     } else if (itemKind === 'section') {
       if (!itemPageId || !itemAnchorId.trim()) return;
       item = {
-        id: createItemId(),
+        id: editingItemId ?? createNavigationItemId(),
         label,
         type: 'section',
         pageId: itemPageId,
         anchorId: itemAnchorId.trim(),
+        ...(itemOpenInNewTab ? { openInNewTab: true } : {}),
       };
     } else if (itemKind === 'external') {
       if (!itemExternalUrl.trim()) return;
       item = {
-        id: createItemId(),
+        id: editingItemId ?? createNavigationItemId(),
         label,
         type: 'external',
         externalUrl: itemExternalUrl.trim(),
-        openInNewTab: true,
+        ...(itemOpenInNewTab ? { openInNewTab: true } : {}),
       };
     } else {
       if (!itemActionValue.trim()) return;
       item = {
-        id: createItemId(),
+        id: editingItemId ?? createNavigationItemId(),
         label,
         type: 'action',
         action: { type: itemActionType, value: itemActionValue.trim() },
+        ...(itemOpenInNewTab ? { openInNewTab: true } : {}),
       };
     }
-    setItems((currentItems) => [...currentItems, item]);
-    setItemLabel('');
-    setItemAnchorId('');
-    setItemExternalUrl('');
-    setItemActionValue('');
+    setItems((currentItems) => {
+      if (editingItemId) {
+        return updateNavigationItem(currentItems, editingItemId, (currentItem) => ({
+          ...item,
+          ...(currentItem.children ? { children: currentItem.children } : {}),
+        }));
+      }
+      if (parentItemId) {
+        return updateNavigationItem(currentItems, parentItemId, (parent) => ({
+          ...parent,
+          children: [...(parent.children ?? []), item],
+        }));
+      }
+      return [...currentItems, item];
+    });
+    resetItemForm();
+  }
+
+  function editItem(item: NavigationItem) {
+    setEditingItemId(item.id);
+    setParentItemId(null);
+    setItemKind(item.type);
+    setItemLabel(item.label);
+    setItemPageId(
+      item.type === 'page' || item.type === 'section' ? (item.pageId ?? '') : '',
+    );
+    setItemAnchorId(item.type === 'section' ? (item.anchorId ?? '') : '');
+    setItemExternalUrl(item.type === 'external' ? (item.externalUrl ?? '') : '');
+    setItemActionType(item.type === 'action' ? (item.action?.type ?? 'phone') : 'phone');
+    setItemActionValue(item.type === 'action' ? (item.action?.value ?? '') : '');
+    setItemOpenInNewTab(item.openInNewTab ?? false);
+  }
+
+  function addChild(parentId: string) {
+    resetItemForm();
+    setParentItemId(parentId);
+  }
+
+  function renderItems(itemsToRender: NavigationItem[], depth = 0): ReactNode {
+    return itemsToRender.map((item, index) => (
+      <div
+        className="list-row navigation-tree-row"
+        data-navigation-item-id={item.id}
+        key={item.id}
+        role="treeitem"
+        style={{ marginInlineStart: `${depth * 1.25}rem` }}
+      >
+        <div>
+          <strong>
+            {depth > 0 ? '↳ ' : ''}
+            {item.label}
+          </strong>
+          <span className="muted small">
+            {item.type}
+            {item.type === 'page' || item.type === 'section'
+              ? ` · ${pages.find((page) => page.id === item.pageId)?.path ?? 'missing page'}`
+              : ''}
+            {item.children?.length
+              ? ` · ${item.children.length} child${item.children.length === 1 ? '' : 'ren'}`
+              : ''}
+          </span>
+        </div>
+        {canUpdate ? (
+          <div className="row-actions">
+            <button
+              aria-label={`Edit ${item.label}`}
+              className="button button-ghost button-small"
+              onClick={() => editItem(item)}
+              type="button"
+            >
+              Edit
+            </button>
+            <button
+              aria-label={`Add child to ${item.label}`}
+              className="button button-ghost button-small"
+              onClick={() => addChild(item.id)}
+              type="button"
+            >
+              + Child
+            </button>
+            <button
+              aria-label={`Move ${item.label} up`}
+              className="button button-ghost button-small"
+              disabled={index === 0}
+              onClick={() =>
+                setItems((currentItems) => moveNavigationItem(currentItems, item.id, -1))
+              }
+              type="button"
+            >
+              ↑
+            </button>
+            <button
+              aria-label={`Move ${item.label} down`}
+              className="button button-ghost button-small"
+              disabled={index === itemsToRender.length - 1}
+              onClick={() =>
+                setItems((currentItems) => moveNavigationItem(currentItems, item.id, 1))
+              }
+              type="button"
+            >
+              ↓
+            </button>
+            <button
+              aria-label={`Indent ${item.label}`}
+              className="button button-ghost button-small"
+              disabled={index === 0}
+              onClick={() =>
+                setItems((currentItems) => indentNavigationItem(currentItems, item.id))
+              }
+              type="button"
+            >
+              →
+            </button>
+            <button
+              aria-label={`Outdent ${item.label}`}
+              className="button button-ghost button-small"
+              disabled={depth === 0}
+              onClick={() =>
+                setItems((currentItems) => outdentNavigationItem(currentItems, item.id))
+              }
+              type="button"
+            >
+              ←
+            </button>
+            <button
+              aria-label={`Duplicate ${item.label}`}
+              className="button button-ghost button-small"
+              onClick={() =>
+                setItems((currentItems) => duplicateNavigationItem(currentItems, item.id))
+              }
+              type="button"
+            >
+              Duplicate
+            </button>
+            <button
+              aria-label={`Remove ${item.label}`}
+              className="button button-ghost button-small"
+              onClick={() =>
+                setItems((currentItems) => removeNavigationItem(currentItems, item.id))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+        ) : null}
+        {item.children?.length ? (
+          <div className="navigation-tree-children">
+            {renderItems(item.children, depth + 1)}
+          </div>
+        ) : null}
+      </div>
+    ));
   }
 
   if (!selectedSiteId) {
@@ -179,7 +356,19 @@ export function NavigationView({
                 />
               </label>
               <div className="panel inset-panel">
-                <strong>Add item</strong>
+                <strong>
+                  {editingItemId
+                    ? 'Edit item'
+                    : parentItemId
+                      ? 'Add child item'
+                      : 'Add item'}
+                </strong>
+                {parentItemId ? (
+                  <p className="muted small">
+                    Child of{' '}
+                    {findNavigationItem(items, parentItemId)?.label ?? 'selected item'}
+                  </p>
+                ) : null}
                 <label>
                   Type
                   <select
@@ -276,13 +465,30 @@ export function NavigationView({
                     </label>
                   </>
                 ) : null}
+                <label className="checkbox-field">
+                  <input
+                    checked={itemOpenInNewTab}
+                    onChange={(event) => setItemOpenInNewTab(event.target.checked)}
+                    type="checkbox"
+                  />
+                  Open in a new tab
+                </label>
                 <button
                   className="button button-secondary button-small"
-                  onClick={addItem}
+                  onClick={saveItem}
                   type="button"
                 >
-                  Add item
+                  {editingItemId ? 'Update item' : 'Add item'}
                 </button>
+                {editingItemId || parentItemId ? (
+                  <button
+                    className="button button-ghost button-small"
+                    onClick={resetItemForm}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
               </div>
               <button
                 className="button button-primary"
@@ -297,57 +503,10 @@ export function NavigationView({
           )}
         </section>
         <section className="panel">
-          <PanelTitle title="Menu items" count={items.length} />
+          <PanelTitle title="Menu items" count={flattenNavigationItems(items).length} />
           {items.length ? (
-            <div className="list">
-              {items.map((item, index) => (
-                <div className="list-row" key={item.id}>
-                  <div>
-                    <strong>{item.label}</strong>
-                    <span className="muted small">
-                      {item.type}
-                      {item.type === 'page' || item.type === 'section'
-                        ? ` · ${pages.find((page) => page.id === item.pageId)?.path ?? 'missing page'}`
-                        : ''}
-                    </span>
-                  </div>
-                  {canUpdate ? (
-                    <div className="row-actions">
-                      <button
-                        className="button button-ghost button-small"
-                        disabled={index === 0}
-                        onClick={() =>
-                          setItems((currentItems) => moveItem(currentItems, index, -1))
-                        }
-                        type="button"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        className="button button-ghost button-small"
-                        disabled={index === items.length - 1}
-                        onClick={() =>
-                          setItems((currentItems) => moveItem(currentItems, index, 1))
-                        }
-                        type="button"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        className="button button-ghost button-small"
-                        onClick={() =>
-                          setItems((currentItems) =>
-                            currentItems.filter((candidate) => candidate.id !== item.id),
-                          )
-                        }
-                        type="button"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+            <div aria-label="Navigation item tree" className="list" role="tree">
+              {renderItems(items)}
             </div>
           ) : (
             <EmptyState
@@ -368,19 +527,6 @@ export function NavigationView({
       </div>
     </>
   );
-}
-
-function moveItem(
-  items: NavigationItem[],
-  index: number,
-  offset: -1 | 1,
-): NavigationItem[] {
-  const nextIndex = index + offset;
-  if (nextIndex < 0 || nextIndex >= items.length) return items;
-  const next = [...items];
-  const [item] = next.splice(index, 1);
-  if (item) next.splice(nextIndex, 0, item);
-  return next;
 }
 
 function PageHeading({

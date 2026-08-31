@@ -64,6 +64,8 @@ type BuilderInspectorProps = {
   onDuplicateStructuralChild: (nodeId: string) => void;
   usableAssets: Asset[];
   designSystem?: SiteDesignSystem;
+  navigationItemCount?: number;
+  onEditNavigation?: () => void;
 };
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
@@ -194,6 +196,8 @@ export function BuilderInspector({
   onDuplicateStructuralChild,
   usableAssets,
   designSystem,
+  navigationItemCount = 0,
+  onEditNavigation,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
@@ -258,6 +262,7 @@ export function BuilderInspector({
               selected.style,
               field.key,
               viewport,
+              designSystem,
             );
             const hasOverride =
               resolved.authoredValue !== undefined && viewport !== 'desktop';
@@ -326,6 +331,7 @@ export function BuilderInspector({
               selected.partsStyle?.[selectedPart],
               field.key,
               viewport,
+              designSystem,
             );
             const hasOverride =
               resolved.authoredValue !== undefined && viewport !== 'desktop';
@@ -402,6 +408,27 @@ export function BuilderInspector({
             {contentProperties.map((property) =>
               renderProperty(property, selected.props[property.key]),
             )}
+          </div>
+        </InspectorSection>
+      ) : null}
+
+      {selected.type === 'navigation-view' ? (
+        <InspectorSection label="Navigation source" onToggle={() => undefined} open>
+          <div className="builder-navigation-source">
+            <span className="muted small">Source</span>
+            <strong>Site navigation</strong>
+            <span className="muted small">
+              {navigationItemCount} top-level item{navigationItemCount === 1 ? '' : 's'}
+            </span>
+            {onEditNavigation ? (
+              <button
+                className="button button-secondary button-small"
+                onClick={onEditNavigation}
+                type="button"
+              >
+                Edit navigation
+              </button>
+            ) : null}
           </div>
         </InspectorSection>
       ) : null}

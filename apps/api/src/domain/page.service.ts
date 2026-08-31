@@ -16,6 +16,7 @@ import {
   PageSchema,
   PagePayloadSchema,
   SiteDesignSystemSchema,
+  SiteGlobalsSchema,
   PageListResponseSchema,
   PublicPageSchema,
   PageVersionListResponseSchema,
@@ -460,7 +461,7 @@ export class PageService {
       });
     }
 
-    return this.toPublicContract(site, page, version);
+    return this.toPublicContract(site, page, version, true);
   }
 
   async listVersions(
@@ -744,6 +745,7 @@ export class PageService {
     site: SiteDocument,
     page: PageDocument,
     version: PageVersionDocument,
+    preview = false,
   ): Promise<PublicPage> {
     try {
       const versionContract = this.toVersionContract(version);
@@ -757,11 +759,29 @@ export class PageService {
         versionContract.payload,
         false,
       );
-      const designSystem = site.designSystemDraft
-        ? SiteDesignSystemSchema.parse(site.designSystemDraft)
+      const globals = preview
+        ? site.globalsDraft
+          ? SiteGlobalsSchema.parse(site.globalsDraft)
+          : undefined
+        : site.publishedGlobals
+          ? SiteGlobalsSchema.parse(site.publishedGlobals)
+          : undefined;
+      const navigation = await this.navigation.resolveForSite(
+        page.siteId,
+        page.workspaceId,
+        { published: !preview },
+      );
+      const designSystem = (preview ? site.designSystemDraft : site.publishedDesignSystem)
+        ? SiteDesignSystemSchema.parse(
+            preview ? site.designSystemDraft : site.publishedDesignSystem,
+          )
         : undefined;
       return PublicPageSchema.parse({
-        site: { name: site.name, slug: site.slug },
+        site: {
+          name: site.name,
+          slug: site.slug,
+          ...(site.logo ? { logo: site.logo } : {}),
+        },
         page: {
           name: page.name,
           ...(page.description ? { description: page.description } : {}),
@@ -769,6 +789,8 @@ export class PageService {
         },
         payload: versionContract.payload,
         ...(extensions.length ? { extensions } : {}),
+        ...(navigation ? { navigation } : {}),
+        ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),
         ...(designSystem ? { designSystem } : {}),
       });

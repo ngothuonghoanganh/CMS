@@ -6,6 +6,7 @@ import {
   findDuplicatePersistedNodeIds,
   generateFreshNodeId,
   remapSubtreeNodeIds,
+  repairDuplicatePersistedNodeIds,
 } from './builder-node-identity';
 
 describe('builder node identity service', () => {
@@ -56,6 +57,55 @@ describe('builder node identity service', () => {
     expect(ids).not.toContain('text-source');
     expect(text?.attributes?.['aria-controls']).toBe(text?.id);
     assertUniquePersistedNodeIds(remapped);
+  });
+
+  it('repairs duplicate hydrated IDs while preserving the first node and references', () => {
+    const value = {
+      id: 'root',
+      type: 'root',
+      children: [
+        {
+          id: 'button-shared',
+          type: 'button',
+          children: [],
+        },
+        {
+          id: 'button-shared',
+          type: 'button',
+          attributes: {
+            'data-payload-node-id': 'button-shared',
+            'data-payload-node-type': 'button',
+            'aria-controls': 'button-shared',
+          },
+          children: [],
+        },
+      ],
+    };
+
+    const repaired = repairDuplicatePersistedNodeIds(value);
+    const first = repaired.children[0];
+    const second = repaired.children[1];
+    expect(first?.id).toBe('button-shared');
+    expect(second?.id).not.toBe('button-shared');
+    expect(second?.attributes?.['data-payload-node-id']).toBe(second?.id);
+    expect(second?.attributes?.['aria-controls']).toBe(second?.id);
+    assertUniquePersistedNodeIds(repaired);
+  });
+
+  it('does not treat component prop IDs as persisted page node IDs', () => {
+    const value = {
+      id: 'root',
+      type: 'root',
+      props: {
+        items: [{ id: 'button-shared', text: 'A' }],
+      },
+      children: [{ id: 'button-shared', type: 'button', children: [] }],
+    };
+
+    const repaired = repairDuplicatePersistedNodeIds(value);
+    expect(repaired.props.items[0]?.id).toBe('button-shared');
+    expect(repaired.children[0]?.id).toBe('button-shared');
+    assertUniquePersistedNodeIds(repaired);
   });
 
   it('returns an ID outside the document set even when the generated base collides', () => {

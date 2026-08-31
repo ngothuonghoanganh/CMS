@@ -1,8 +1,12 @@
 import type { Component } from 'grapesjs';
 
 import {
+  BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_QUOTE_PREVIEW_ATTRIBUTE,
+  BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
+  BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
   type BuilderNodeType,
 } from './builder-adapter';
 import {
@@ -51,7 +55,25 @@ export { liveSlotForChild, liveSlotOccupancy };
 
 export { payloadNodeType } from './builder-structural-domain';
 
+function isEditorOnlyComponent(component: Component): boolean {
+  let current: Component | undefined = component;
+  while (current) {
+    const attributes = current.getAttributes({ noStyle: true });
+    if (
+      attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] !== undefined ||
+      attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined ||
+      attributes[BUILDER_QUOTE_PREVIEW_ATTRIBUTE] !== undefined ||
+      attributes[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] !== undefined
+    ) {
+      return true;
+    }
+    current = current.parent();
+  }
+  return false;
+}
+
 export function payloadNodeId(component: Component): string | undefined {
+  if (isEditorOnlyComponent(component)) return undefined;
   const id = component.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
   return typeof id === 'string' && id.length > 0 ? id : undefined;
 }

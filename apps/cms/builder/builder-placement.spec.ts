@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
 } from './builder-adapter';
@@ -200,6 +201,19 @@ describe('builder placement engine', () => {
 
     expect(result).toEqual({ valid: false, reason: 'text cannot contain text.' });
     expect(textA.parent()).not.toBe(textB);
+  });
+
+  it('never resolves an editor-only reusable preview by its source id', () => {
+    const preview = new FakeComponent('shared-source', 'section');
+    preview.attrs[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] = 'true';
+    const root = new FakeComponent('root', 'root', [preview]);
+
+    expect(
+      resolveNodePlacement(asComponent(root), intent('shared-source', 'root', 'inside')),
+    ).toEqual({
+      valid: false,
+      reason: 'The source or target node no longer exists.',
+    });
   });
 
   it('enforces compound child types and structural parent rules', () => {
