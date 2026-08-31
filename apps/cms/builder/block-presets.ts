@@ -2,6 +2,7 @@ import type { ComponentDefinition } from 'grapesjs';
 import type { ComponentBuilderPreview } from '@payload/contracts';
 
 import { createBlockDefinition, type BuilderBlockType } from './builder-adapter';
+import { resolveBuilderPreview } from './builder-preview-model';
 
 export type BlockPresetId =
   | 'blank-section'
@@ -162,7 +163,7 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['section', 'blank', 'layout'],
     description: 'Start with an empty section for a custom composition.',
-    preview: { kind: 'wireframe', variant: 'section' },
+    preview: resolveBuilderPreview(createBlankSection(), 'blank-section'),
     create: createBlankSection,
   },
   {
@@ -172,7 +173,7 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['section', 'center', 'container'],
     description: 'A centered content container with a comfortable reading width.',
-    preview: { kind: 'wireframe', variant: 'container' },
+    preview: resolveBuilderPreview(createCenteredSection(), 'centered-section'),
     create: createCenteredSection,
   },
   {
@@ -182,7 +183,7 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['stack', 'vertical', 'layout', 'flex'],
     description: 'A vertical content stack with consistent spacing.',
-    preview: { kind: 'wireframe', variant: 'container' },
+    preview: resolveBuilderPreview(createVerticalStack(), 'vertical-stack'),
     create: createVerticalStack,
   },
   {
@@ -192,7 +193,7 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['columns', 'grid', 'layout'],
     description: 'A responsive two-column grid for side-by-side content.',
-    preview: { kind: 'wireframe', variant: 'container' },
+    preview: resolveBuilderPreview(createTwoColumns(), 'two-columns'),
     create: createTwoColumns,
   },
   {
@@ -202,7 +203,7 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['hero', 'heading', 'cta', 'section'],
     description: 'A prominent hero section with heading, copy, and call to action.',
-    preview: { kind: 'wireframe', variant: 'section' },
+    preview: resolveBuilderPreview(createHero(), 'hero'),
     create: createHero,
   },
   {
@@ -212,7 +213,7 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['cta', 'call to action', 'button', 'section'],
     description: 'A focused conversion section with supporting copy and a button.',
-    preview: { kind: 'wireframe', variant: 'section' },
+    preview: resolveBuilderPreview(createCta(), 'cta'),
     create: createCta,
   },
 ];
@@ -257,7 +258,7 @@ export const GLOBAL_HEADER_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['header', 'brand', 'menu', 'cta'],
     description: 'Replace the header content with brand, navigation, and a CTA.',
-    preview: { kind: 'component', variant: 'global-header' },
+    preview: resolveBuilderPreview(createHeaderPreset(true), 'header-brand-menu-cta'),
     applyMode: 'replace-root-children',
     create: () => createHeaderPreset(true),
   },
@@ -269,7 +270,7 @@ export const GLOBAL_HEADER_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['header', 'brand', 'menu'],
     description: 'Replace the header content with brand and navigation.',
-    preview: { kind: 'component', variant: 'global-header' },
+    preview: resolveBuilderPreview(createHeaderPreset(false), 'header-brand-menu'),
     applyMode: 'replace-root-children',
     create: () => createHeaderPreset(false),
   },
@@ -287,7 +288,7 @@ export const GLOBAL_FOOTER_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['footer', 'brand', 'menu'],
     description: 'Replace the footer content with brand and navigation.',
-    preview: { kind: 'component', variant: 'global-footer' },
+    preview: resolveBuilderPreview(createFooterPreset(false), 'footer-brand-menu'),
     applyMode: 'replace-root-children',
     create: () => createFooterPreset(false),
   },
@@ -299,7 +300,7 @@ export const GLOBAL_FOOTER_PRESET_REGISTRY: readonly Extract<
     category: 'layout',
     keywords: ['footer', 'brand', 'menu', 'legal'],
     description: 'Replace the footer content with brand, navigation, and legal copy.',
-    preview: { kind: 'component', variant: 'global-footer' },
+    preview: resolveBuilderPreview(createFooterPreset(true), 'footer-brand-menu-legal'),
     applyMode: 'replace-root-children',
     create: () => createFooterPreset(true),
   },

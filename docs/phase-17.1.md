@@ -55,30 +55,59 @@ Invalid/network/permission errors remain visible. Missing legacy globals use a
 safe default; invalid persisted globals fail loudly. A failed save returns a
 failed result to document switching, so the dirty document stays active.
 
-## Catalog UX
+## Catalog UX — composition previews V2
 
-Registry component metadata now includes a description and finite preview
-metadata. Presets and global presets carry the same metadata. The reusable
-`BuilderBlockCard`/`BuilderBlockPreview` renders local CSS wireframes and
-component variants with label, category, and description. Search includes
-label, type, description, keywords, group, and extension ID. Layouts,
-elements, presets, document-kind filtering, and an empty state remain driven
-by registry data; no remote preview images or per-block shell conditionals are
-used.
+`BuilderPreviewNode` in the contracts package is the finite preview DSL. It
+contains only approved local primitives (`row`, `column`, `box`, `text`,
+`image`, `button`, `form`, `accordion`, `tabs`, `gallery`, and the other
+registered semantic shapes), so catalog metadata cannot inject arbitrary HTML
+or JSX. `BuilderBlockPreview` recursively renders this tree with local CSS and
+exposes a deterministic composition fingerprint for regression tests.
+
+Primitive component entries use the registry's semantic tree. Presets and
+global presets are resolved by `builder-preview-model.ts` from the same
+GrapesJS `ComponentDefinition` returned by their `create` factory. The resolver
+reads the actual node hierarchy, grid/flex direction, alignment, tone, and
+compound child counts. Consequently Hero, CTA, Two Columns, Vertical Stack,
+and each global preset retain visibly different composition previews; there is
+no category-generic fallback card.
+
+Search includes label, type, preset ID, description, keywords, group, and
+extension ID. The full block name remains readable in the card, while a
+portal-based tooltip repeats it on hover and keyboard focus so it is not
+clipped by the scrollable catalog panel.
+
+## Resizable builder panels
+
+On desktop widths above `1100px`, the left catalog panel and right inspector
+have keyboard-accessible separator handles. Pointer movement uses pointer
+capture plus a parent-document resize shield, so dragging across the GrapesJS
+iframe keeps the same resize session. Left and right widths are constrained to
+usable ranges (`220–480px` and `280–640px` hard caps respectively) while
+preserving a `420px` minimum canvas where the viewport permits it.
+
+Widths persist independently under `payload-builder-left-panel-width` and
+`payload-builder-right-panel-width`. Collapse hides a panel without discarding
+its width, so expanding it restores the previous geometry. At `1100px` and
+below the desktop resizers disappear and the existing responsive dock/overlay
+layout takes over; catalog cards use an inline container query to switch to a
+two-column arrangement when the available panel width supports it.
 
 ## Verification and remaining debt
 
 Run the repository verification commands with Node `v24.11.0` and pnpm
 `10.15.0`. The Phase 17.1 focused E2E covers compound identity, recursive
-fresh IDs, catalog previews/search, exact global root cardinality, and
+fresh IDs, composition-derived catalog previews/search/tooltips, resizer
+pointer and keyboard behavior, iframe crossing, collapse restore, persistence,
+responsive fallback, exact global root cardinality, and
 confirmation-aware preset replacement. The existing Phase 17 E2E covers
 global save/reload, isolation, publishing, and public delivery. The corrected
 catalog-density regression was also rerun successfully through the existing
 canvas drag/save/reload test.
 
-The final full Playwright run executed 59 tests: 56 passed. Two stable
+The final full Playwright run executed 61 tests: 59 passed. Two stable
 baseline failures remain tracked: tenant extension disable returns `409` where
 its test expects `201`, and desktop builder/renderer screenshot parity
-exceeds its existing threshold. One canvas reorder assertion was intermittent
-in the full run and passed when isolated; it is not part of the Phase 17.1
-focused gate.
+exceeds its existing threshold. The existing canvas drag/save/reload path and
+the new Phase 17.1 focused gate both pass after catalog density was tuned to
+keep the Text drag handle reachable in the default viewport.

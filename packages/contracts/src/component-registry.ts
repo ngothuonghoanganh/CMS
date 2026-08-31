@@ -44,11 +44,116 @@ export type ComponentPropertyDefinition = {
   assetKind?: 'image' | 'video';
 };
 
+export type BuilderPreviewAlign = 'start' | 'center' | 'end';
+export type BuilderPreviewGap = 'tight' | 'normal' | 'loose';
+export type BuilderPreviewTone = 'default' | 'hero' | 'cta' | 'muted';
+
+/**
+ * A deliberately finite, serializable preview language.  The builder renders
+ * these nodes locally; registry entries never provide arbitrary JSX or HTML.
+ */
+export type BuilderPreviewNode =
+  | {
+      kind: 'row';
+      children: readonly BuilderPreviewNode[];
+      ratios?: readonly number[];
+    }
+  | {
+      kind: 'column';
+      children: readonly BuilderPreviewNode[];
+      align?: BuilderPreviewAlign;
+      gap?: BuilderPreviewGap;
+    }
+  | {
+      kind: 'box';
+      role?: 'section' | 'container' | 'media' | 'panel';
+      tone?: BuilderPreviewTone;
+      align?: BuilderPreviewAlign;
+      children?: readonly BuilderPreviewNode[];
+    }
+  | { kind: 'text'; size?: 'xs' | 'sm' | 'md' | 'lg'; lines?: 1 | 2 | 3 }
+  | { kind: 'button' }
+  | { kind: 'image' }
+  | { kind: 'divider' }
+  | { kind: 'navigation'; itemCount?: 2 | 3 | 4 }
+  | { kind: 'brand' }
+  | { kind: 'link' }
+  | { kind: 'list'; itemCount?: 2 | 3 }
+  | { kind: 'quote' }
+  | { kind: 'video' }
+  | { kind: 'form' }
+  | { kind: 'countdown' }
+  | { kind: 'accordion'; itemCount?: 2 | 3 }
+  | { kind: 'tabs'; tabCount?: 2 | 3 }
+  | { kind: 'gallery'; columns?: 2 | 3 };
+
 export type ComponentBuilderPreview = {
-  kind: 'icon' | 'wireframe' | 'component';
-  /** A finite registry variant consumed by the builder preview renderer. */
-  variant: PageComponentType;
+  kind: 'composition';
+  /** Stable registry/preset identity retained for DOM and regression tests. */
+  variant: string;
+  tree: BuilderPreviewNode;
 };
+
+const BUILDER_COMPONENT_PREVIEW_NODES: Readonly<
+  Record<PageComponentType, BuilderPreviewNode>
+> = {
+  root: { kind: 'box', role: 'section' },
+  section: { kind: 'box', role: 'section' },
+  container: { kind: 'box', role: 'container' },
+  text: { kind: 'text', size: 'md', lines: 3 },
+  image: { kind: 'image' },
+  button: { kind: 'button' },
+  form: { kind: 'form' },
+  countdown: { kind: 'countdown' },
+  extension: { kind: 'box', role: 'panel' },
+  heading: { kind: 'text', size: 'lg', lines: 1 },
+  link: { kind: 'link' },
+  divider: { kind: 'divider' },
+  list: { kind: 'list', itemCount: 3 },
+  video: { kind: 'video' },
+  quote: { kind: 'quote' },
+  accordion: { kind: 'accordion', itemCount: 2 },
+  'accordion-item': {
+    kind: 'box',
+    role: 'panel',
+    children: [{ kind: 'text', size: 'sm' }],
+  },
+  tabs: { kind: 'tabs', tabCount: 2 },
+  'tab-item': { kind: 'box', role: 'panel', children: [{ kind: 'text', size: 'sm' }] },
+  gallery: { kind: 'gallery', columns: 3 },
+  'global-header': {
+    kind: 'row',
+    children: [
+      { kind: 'brand' },
+      { kind: 'navigation', itemCount: 3 },
+      { kind: 'button' },
+    ],
+    ratios: [1, 2, 1],
+  },
+  'global-footer': {
+    kind: 'column',
+    gap: 'tight',
+    children: [
+      {
+        kind: 'row',
+        children: [{ kind: 'brand' }, { kind: 'navigation', itemCount: 3 }],
+      },
+      { kind: 'text', size: 'xs', lines: 1 },
+    ],
+  },
+  'navigation-view': { kind: 'navigation', itemCount: 3 },
+  'site-brand': { kind: 'brand' },
+};
+
+export function builderPreviewForComponent(
+  type: PageComponentType,
+): ComponentBuilderPreview {
+  return {
+    kind: 'composition',
+    variant: type,
+    tree: BUILDER_COMPONENT_PREVIEW_NODES[type],
+  };
+}
 
 export type ComponentSlotDefinition = {
   name: string;
@@ -593,10 +698,7 @@ const definition = (
       description:
         input.builder?.description ??
         `Add a ${input.label.toLowerCase()} block to your page.`,
-      preview: input.builder?.preview ?? {
-        kind: 'wireframe',
-        variant: input.type,
-      },
+      preview: input.builder?.preview ?? builderPreviewForComponent(input.type),
       documentKinds: input.builder?.documentKinds ?? ['page'],
     },
     internal: input.internal ?? false,

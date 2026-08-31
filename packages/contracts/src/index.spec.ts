@@ -617,8 +617,9 @@ describe('foundation contracts', () => {
     expect(PAGE_COMPONENT_REGISTRY.text.migrations).toEqual([]);
     expect(PAGE_COMPONENT_REGISTRY.button.builder.description).toBeTruthy();
     expect(PAGE_COMPONENT_REGISTRY.button.builder.preview).toEqual({
-      kind: 'wireframe',
+      kind: 'composition',
       variant: 'button',
+      tree: { kind: 'button' },
     });
     expect(canContainPageComponent('section', 'extension')).toBe(true);
     expect(canContainPageComponent('text', 'section')).toBe(false);

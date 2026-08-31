@@ -17,6 +17,7 @@ import {
   PageVersionListResponseSchema,
   PageVersionSchema,
   PAGE_COMPONENT_REGISTRY,
+  builderPreviewForComponent,
   type Asset,
   type ComponentBuilderExposure,
   type ComponentBuilderPreview,
@@ -38,6 +39,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 
@@ -55,6 +57,15 @@ import {
   type BuilderCanvasState,
 } from './builder-minimap';
 import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
+import {
+  BUILDER_PANEL_DEFAULT_WIDTHS,
+  normalizePanelWidths,
+  persistPanelWidths,
+  readPanelWidths,
+  type BuilderPanelSide,
+  type BuilderPanelWidths,
+} from './builder-panel-size';
+import { BuilderPanelResizer } from './builder-panel-resizer';
 import { generateFreshNodeId } from './builder-node-identity';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
@@ -423,6 +434,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [panelWidths, setPanelWidths] = useState<BuilderPanelWidths>(
+    BUILDER_PANEL_DEFAULT_WIDTHS,
+  );
+  const [panelResizeActive, setPanelResizeActive] = useState<BuilderPanelSide | null>(
+    null,
+  );
+  const [panelPreferencesReady, setPanelPreferencesReady] = useState(false);
+  const [builderViewportWidth, setBuilderViewportWidth] = useState(1440);
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
   const layerHoverExpandTimerRef = useRef<number | null>(null);
@@ -430,6 +449,33 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const previewWindowRef = useRef<Window | null>(null);
   const previewDocumentRef = useRef<PageDocument | null>(null);
   const previewFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const restorePanelPreferences = () => {
+      setBuilderViewportWidth(window.innerWidth);
+      setPanelWidths(readPanelWidths(window.localStorage, window.innerWidth));
+      setPanelPreferencesReady(true);
+    };
+    restorePanelPreferences();
+
+    const handleWindowResize = () => {
+      setBuilderViewportWidth(window.innerWidth);
+      setPanelWidths((current) => normalizePanelWidths(current, window.innerWidth));
+    };
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, []);
+
+  useEffect(() => {
+    if (!panelPreferencesReady) return;
+    persistPanelWidths(window.localStorage, panelWidths);
+  }, [panelPreferencesReady, panelWidths]);
+
+  function updatePanelWidth(side: BuilderPanelSide, width: number) {
+    setPanelWidths((current) =>
+      normalizePanelWidths({ ...current, [side]: width }, builderViewportWidth),
+    );
+  }
 
   const activeGlobalDocument =
     documentKind === 'site-header' ? headerDocument : footerDocument;
@@ -471,7 +517,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         group: 'advanced' as const,
         keywords: [extension.manifest.id, extension.manifest.name],
         description: `Add the ${extension.manifest.name} extension to this page.`,
-        preview: { kind: 'component', variant: 'extension' } as const,
+        preview: builderPreviewForComponent('extension'),
         documentKinds: ['page'] as const,
       })),
   ];
@@ -1397,7 +1443,23 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         ) : null}
       </div>
 
-      <div className="builder-workspace">
+      <div
+        className={`builder-workspace${leftPanelCollapsed ? ' is-left-collapsed' : ''}${rightPanelCollapsed ? ' is-right-collapsed' : ''}`}
+        data-left-panel-width={panelWidths.left}
+        data-right-panel-width={panelWidths.right}
+        style={
+          {
+            '--builder-left-panel-width': `${panelWidths.left}px`,
+            '--builder-right-panel-width': `${panelWidths.right}px`,
+          } as CSSProperties
+        }
+      >
+        {panelResizeActive ? (
+          <div
+            aria-hidden="true"
+            className={`builder-resize-shield is-${panelResizeActive}-active`}
+          />
+        ) : null}
         <div
           className={`builder-left-dock${leftPanelCollapsed ? ' is-collapsed' : ''}`}
           data-active-tool={activeTool}
@@ -1435,7 +1497,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               <span>{leftPanelCollapsed ? 'Expand' : 'Collapse'}</span>
             </button>
           </nav>
-          <aside className="builder-panel builder-blocks-panel">
+          <aside className="builder-panel builder-blocks-panel" data-panel="left">
             {activeTool === 'add' ? (
               <>
                 <div className="builder-panel-heading">
@@ -1704,6 +1766,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           </aside>
         </div>
 
+        {!leftPanelCollapsed ? (
+          <BuilderPanelResizer
+            onChange={(width) => updatePanelWidth('left', width)}
+            onResizeEnd={() => setPanelResizeActive(null)}
+            onResizeStart={() => setPanelResizeActive('left')}
+            otherPanelWidth={panelWidths.right}
+            side="left"
+            value={panelWidths.left}
+            viewportWidth={builderViewportWidth}
+          />
+        ) : null}
+
         <section className="builder-canvas-panel" aria-label="Builder canvas">
           <div className="builder-viewport-toolbar">
             <div
@@ -1825,8 +1899,21 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           </div>
         </section>
 
+        {!rightPanelCollapsed ? (
+          <BuilderPanelResizer
+            onChange={(width) => updatePanelWidth('right', width)}
+            onResizeEnd={() => setPanelResizeActive(null)}
+            onResizeStart={() => setPanelResizeActive('right')}
+            otherPanelWidth={panelWidths.left}
+            side="right"
+            value={panelWidths.right}
+            viewportWidth={builderViewportWidth}
+          />
+        ) : null}
+
         <aside
           className={`builder-panel builder-properties-panel${rightPanelCollapsed ? ' is-collapsed' : ''}`}
+          data-panel="right"
         >
           {selected ? (
             <div className="builder-properties-stack">

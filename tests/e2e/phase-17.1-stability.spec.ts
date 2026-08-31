@@ -97,7 +97,9 @@ test('Phase 17.1 keeps compound duplicate identity and global preset roots canon
   await page.getByLabel('Editing document').selectOption('site-header');
   await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
   await expect(
-    page.locator('.builder-block-preview[data-preview-variant="global-header"]').first(),
+    page
+      .locator('.builder-block-preview[data-preview-variant="header-brand-menu-cta"]')
+      .first(),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Brand · Menu · CTA add', exact: true }),
@@ -117,4 +119,117 @@ test('Phase 17.1 keeps compound duplicate identity and global preset roots canon
   expect(root.children[0]?.children).toHaveLength(2);
   ids = collectIds(root);
   expect(new Set(ids).size).toBe(ids.length);
+});
+
+test('Phase 17.1 V2 catalog previews expose real shapes and full-name tooltips', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await openBuilder(page);
+
+  const previews = page.locator(
+    '.builder-block-preview[data-preview-kind="composition"]',
+  );
+  await expect(previews.first()).toBeVisible();
+  const previewData = await previews.evaluateAll((elements) =>
+    elements.map((element) => ({
+      fingerprint: element.getAttribute('data-preview-fingerprint'),
+      variant: element.getAttribute('data-preview-variant'),
+    })),
+  );
+  expect(previewData.length).toBeGreaterThan(10);
+  expect(new Set(previewData.map((item) => item.fingerprint)).size).toBe(
+    previewData.length,
+  );
+  expect(previewData.some((item) => item.variant === 'hero')).toBe(true);
+  expect(previewData.some((item) => item.variant === 'two-columns')).toBe(true);
+
+  await page.getByLabel('Search components').fill('comfortable reading');
+  await expect(
+    page.getByRole('button', { name: 'Centered Section preset add', exact: true }),
+  ).toBeVisible();
+  await page.getByLabel('Search components').fill('');
+
+  const centeredCard = page.locator('[data-block-label="Centered Section"]');
+  await centeredCard.hover();
+  await expect(
+    page.getByRole('tooltip', { name: 'Centered Section', exact: true }),
+  ).toBeVisible();
+  await centeredCard
+    .getByRole('button', { name: 'Centered Section preset add', exact: true })
+    .focus();
+  await expect(
+    page.getByRole('tooltip', { name: 'Centered Section', exact: true }),
+  ).toBeVisible();
+});
+
+test('Phase 17.1 desktop builder panels resize, restore, persist, and fall back responsively', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await openBuilder(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  const workspace = page.locator('.builder-workspace');
+  const leftPanel = page.locator('[data-panel="left"]');
+  const rightPanel = page.locator('[data-panel="right"]');
+  const leftResizer = page.locator('[data-panel-resizer="left"]');
+  const rightResizer = page.locator('[data-panel-resizer="right"]');
+  await expect(leftResizer).toBeVisible();
+  await expect(rightResizer).toBeVisible();
+
+  const initialLeftWidth = (await leftPanel.boundingBox())!.width;
+  const leftHandle = (await leftResizer.boundingBox())!;
+  await page.mouse.move(leftHandle.x + leftHandle.width / 2, leftHandle.y + 100);
+  await page.mouse.down();
+  // The move crosses the iframe canvas; the resize shield must keep ownership
+  // of the pointer stream in the parent document.
+  await page.mouse.move(leftHandle.x + leftHandle.width / 2 + 80, leftHandle.y + 100, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  const resizedLeftWidth = (await leftPanel.boundingBox())!.width;
+  expect(resizedLeftWidth).toBeGreaterThan(initialLeftWidth + 40);
+
+  await leftResizer.focus();
+  await page.keyboard.press('ArrowLeft');
+  expect((await leftPanel.boundingBox())!.width).toBeLessThan(resizedLeftWidth);
+
+  const persistedLeftWidth = (await leftPanel.boundingBox())!.width;
+  await page
+    .getByRole('button', { name: 'Collapse builder panel', exact: true })
+    .dispatchEvent('click');
+  await expect(page.locator('.builder-left-dock.is-collapsed')).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Expand builder panel', exact: true })
+    .dispatchEvent('click');
+  await expect(leftPanel).toBeVisible();
+  expect((await leftPanel.boundingBox())!.width).toBeCloseTo(persistedLeftWidth, 0);
+
+  const persistedRightWidth = (await rightPanel.boundingBox())!.width;
+  await page
+    .getByRole('button', { name: 'Collapse inspector', exact: true })
+    .dispatchEvent('click');
+  await expect(page.locator('.builder-properties-panel.is-collapsed')).toHaveCount(1);
+  await page
+    .getByRole('button', { name: 'Expand inspector', exact: true })
+    .dispatchEvent('click');
+  await expect(rightPanel).toBeVisible();
+  expect((await rightPanel.boundingBox())!.width).toBeCloseTo(persistedRightWidth, 0);
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem('payload-builder-left-panel-width')),
+    )
+    .toBe(String(Math.round(persistedLeftWidth)));
+  await page.reload();
+  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(async () => (await leftPanel.boundingBox())?.width ?? 0)
+    .toBeCloseTo(persistedLeftWidth, 0);
+
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await expect(leftResizer).toBeHidden();
+  await expect(rightResizer).toBeHidden();
+  await expect(workspace).toBeVisible();
 });
