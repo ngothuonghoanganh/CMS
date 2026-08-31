@@ -2,9 +2,8 @@
 
 ## Current state
 
-Phase 18.1 implementation is committed as `e798d8b` (`feat: stabilize builder
-preview and navigation`) on `main`; the requested push is the final delivery
-step.
+Phase 18.1 implementation is committed as `ac5badf` (`feat: stabilize builder
+preview and navigation`) on `main` and pushed to `origin/main`.
 
 The builder/preview boundary now uses a validated composite snapshot. Hydration
 also repairs legacy duplicate persisted IDs while preserving the first node and
@@ -52,4 +51,3 @@ raise the screenshot threshold to hide the mismatch.
    fix the shared rendering/style source rather than adjusting the threshold.
 3. Run on Node 24+ and repeat `pnpm lint`, `pnpm typecheck`, `pnpm test`,
    `pnpm build`, and full Playwright.
-4. The user authorized the final state; push commit `e798d8b` to `origin/main`.

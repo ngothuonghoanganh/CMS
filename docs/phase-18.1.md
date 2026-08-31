@@ -17,10 +17,10 @@ The worktree was clean and `HEAD` matched `origin/main` before Phase 18.1.
 
 ## DELIVERED COMMIT
 
-Commit: `e798d8b` (`feat: stabilize builder preview and navigation`)
+Commit: `ac5badf` (`feat: stabilize builder preview and navigation`)
 
 The Phase 18.1 implementation and regression coverage are committed on
-`main`; the requested push is the final delivery step.
+`main` and pushed to `origin/main`.
 
 ## SCOPE
 
