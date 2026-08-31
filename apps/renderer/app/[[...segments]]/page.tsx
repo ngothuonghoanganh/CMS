@@ -85,6 +85,8 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
         customDomain: resolved.customDomain,
         navigation: resolved.page.navigation,
         globals: resolved.page.globals,
+        reusables: resolved.page.reusables,
+        designSystem: resolved.page.designSystem,
         ...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {}),
         ...(resolved.page.extensions
           ? {

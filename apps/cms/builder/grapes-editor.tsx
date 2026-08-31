@@ -14,11 +14,15 @@ import {
   applyEditorViewportStyle,
   createBlockDefinition,
   createExtensionBlockDefinition,
+  createReusableInstanceDefinition,
+  reusableDocumentToEditorDefinition,
   countdownPreviewComponents,
   formPreviewComponents,
   isBuilderNodeType,
   payloadToEditorComponent,
   serializeGrapesComponent,
+  serializeReusableSubtree,
+  snapshotFromGrapesComponent,
 } from './builder-adapter';
 import {
   findPayloadComponent,
@@ -66,6 +70,10 @@ import {
   type PagePayload,
   type SiteGlobalPayloadV1,
   type BuilderDocumentKind,
+  type ReusableComponentDocument,
+  type ReusableRuntime,
+  type SiteDesignSystem,
+  type StyleTokenReference,
 } from '@payload/contracts';
 
 import {
@@ -105,9 +113,13 @@ export type GrapesEditorHandle = {
     name: 'href' | 'target' | 'src' | 'alt',
     value: string,
   ) => void;
-  updateSelectedStyle: (property: string, value: string) => void;
+  updateSelectedStyle: (property: string, value: string | StyleTokenReference) => void;
   resetSelectedStyle: (property: string) => void;
-  updateSelectedPartStyle: (partName: string, property: string, value: string) => void;
+  updateSelectedPartStyle: (
+    partName: string,
+    property: string,
+    value: string | StyleTokenReference,
+  ) => void;
   resetSelectedPartStyle: (partName: string, property: string) => void;
   updateSelectedForm: (form: FormProps) => void;
   updateSelectedCountdown: (props: { targetAt: string; label: string }) => void;
@@ -129,6 +141,13 @@ export type GrapesEditorHandle = {
   setInteractionMode: (mode: InteractionMode) => void;
   moveNode: (intent: MoveNodeIntent) => boolean;
   moveSelected: (direction: 'up' | 'down' | 'outdent' | 'indent') => boolean;
+  insertReusable: (
+    reusableId: string,
+    mode: 'copy' | 'linked',
+    placement?: { targetNodeId: string; position: DropPosition },
+  ) => boolean;
+  getSelectedReusableDocument: () => ReusableComponentDocument | null;
+  detachSelectedReusable: (document: ReusableComponentDocument) => boolean;
 };
 
 export type InteractionMode = 'select' | 'hand';
@@ -136,6 +155,8 @@ export type InteractionMode = 'select' | 'hand';
 type GrapesEditorProps = {
   documentKind: BuilderDocumentKind;
   initialPayload: PagePayload | SiteGlobalPayloadV1;
+  reusableRuntime?: readonly ReusableRuntime[];
+  designSystem?: SiteDesignSystem;
   onDirty: () => void;
   onDocumentChange: (document: PageDocument | SiteGlobalPayloadV1) => void;
   onSelectionChange: (node: SelectedBuilderNode | null) => void;
@@ -689,7 +710,10 @@ function insertableNodeType(
   definition: ComponentDefinition,
 ): BuilderBlockType | undefined {
   const type = definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
-  return typeof type === 'string' && isBuilderNodeType(type) && type !== 'root'
+  return typeof type === 'string' &&
+    isBuilderNodeType(type) &&
+    type !== 'root' &&
+    type !== 'reusable-instance'
     ? type
     : undefined;
 }
@@ -789,8 +813,12 @@ function findAppendTarget(
   return target;
 }
 
-function applyAllViewportStyles(root: Component, viewport: BuilderViewport): void {
-  root.onAll((component) => applyEditorViewportStyle(component, viewport));
+function applyAllViewportStyles(
+  root: Component,
+  viewport: BuilderViewport,
+  designSystem?: SiteDesignSystem,
+): void {
+  root.onAll((component) => applyEditorViewportStyle(component, viewport, designSystem));
 }
 
 type BuiltInBuilderBlockType = Exclude<BuilderBlockType, 'extension'>;
@@ -801,6 +829,7 @@ const blockTypes: readonly BuiltInBuilderBlockType[] = [
       isBuilderNodeType(type) &&
       type !== 'root' &&
       type !== 'extension' &&
+      type !== 'reusable-instance' &&
       PAGE_COMPONENT_REGISTRY[type].builder.insertable,
   ) as BuiltInBuilderBlockType[]),
 ];
@@ -847,6 +876,7 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   'global-footer': 'Global Footer',
   'navigation-view': 'Navigation',
   'site-brand': 'Site Brand',
+  'reusable-instance': 'Linked reusable',
 };
 
 function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
@@ -901,6 +931,7 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
   const nodes: BuilderCanvasNode[] = [];
 
   root.onAll((component) => {
+    if (isEditorOnlyPreview(component)) return;
     const attributes = component.getAttributes({ noStyle: true });
     const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
     const id = attributes[BUILDER_NODE_ID_ATTRIBUTE];
@@ -992,6 +1023,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   {
     documentKind,
     initialPayload,
+    reusableRuntime = [],
+    designSystem,
     onDirty,
     onDocumentChange,
     onSelectionChange,
@@ -1030,6 +1063,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onError,
   });
   const payloadRef = useRef(initialPayload);
+  const reusableRuntimeRef = useRef(reusableRuntime);
   const interactionModeRef = useRef<InteractionMode>('select');
   const temporaryPanRef = useRef(false);
 
@@ -1559,7 +1593,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
               'important',
             );
           }
-          editor.getModel().skip(() => applyAllViewportStyles(root, viewport));
+          editor
+            .getModel()
+            .skip(() => applyAllViewportStyles(root, viewport, designSystem));
         } finally {
           // GrapesJS model events are synchronous for these presentation
           // updates. Restore the previous command state immediately so a user
@@ -1840,6 +1876,98 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           parentId: payloadNodeId(parent),
         });
       },
+      insertReusable(reusableId, mode, placement) {
+        const editor = editorRef.current;
+        if (!editor || documentKind !== 'page') return false;
+        const source = reusableRuntimeRef.current.find(
+          (candidate) => candidate.id === reusableId,
+        );
+        if (!source) return false;
+        const definition =
+          mode === 'linked'
+            ? createReusableInstanceDefinition(reusableId)
+            : reusableDocumentToEditorDefinition(source.document);
+        const childType =
+          mode === 'linked'
+            ? 'reusable-instance'
+            : definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
+        if (!isPayloadNodeType(childType)) return false;
+        if (placement) {
+          const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
+          if (!target) return false;
+          if (placement.position === 'inside') {
+            if (!canInsertIntoComponent(target, childType)) return false;
+            return commitEditorCommand(editor, {
+              kind: 'insert',
+              definition,
+              parentId: placement.targetNodeId,
+            });
+          }
+          const parent = target.parent();
+          if (!parent || !canInsertIntoComponent(parent, childType)) return false;
+          return commitEditorCommand(editor, {
+            kind: 'insert',
+            definition,
+            targetId: placement.targetNodeId,
+            position: placement.position,
+          });
+        }
+        if (childType === 'root') return false;
+        const insertType = childType as BuilderBlockType;
+        const selected = getSelectedComponent(editor);
+        const selectedType = selected?.getAttributes({ noStyle: true })[
+          BUILDER_NODE_TYPE_ATTRIBUTE
+        ];
+        const target =
+          selected &&
+          isPayloadNodeType(selectedType) &&
+          canInsertIntoComponent(selected, childType)
+            ? selected
+            : findAppendTarget(getRoot(editor), insertType);
+        const parent = target ?? getRoot(editor);
+        if (!canInsertIntoComponent(parent, insertType)) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'insert',
+          definition,
+          parentId: payloadNodeId(parent),
+        });
+        if (result.selection) {
+          selectingComponentRef.current = true;
+          selectionRef.current.select(editor, result.selection);
+          selectingComponentRef.current = false;
+          notifySelection(editor);
+        }
+        return result.changed;
+      },
+      getSelectedReusableDocument() {
+        const editor = editorRef.current;
+        const selected = editor ? getSelectedComponent(editor) : undefined;
+        if (!editor || !selected || payloadNodeType(selected) === 'root') return null;
+        try {
+          return serializeReusableSubtree(snapshotFromGrapesComponent(selected));
+        } catch {
+          return null;
+        }
+      },
+      detachSelectedReusable(document) {
+        const editor = editorRef.current;
+        const selected = editor ? getSelectedComponent(editor) : undefined;
+        const nodeId =
+          selected && payloadNodeType(selected) === 'reusable-instance'
+            ? payloadNodeId(selected)
+            : undefined;
+        if (!editor || !nodeId) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'detach-reusable',
+          nodeId,
+          definition: reusableDocumentToEditorDefinition(document),
+        });
+        if (result.selection) {
+          selectionRef.current.select(editor, result.selection);
+          notifySelection(editor);
+        }
+        return result.changed;
+      },
       addStructuralChild(slotName, requestedChildType) {
         const editor = editorRef.current;
         if (!editor) return false;
@@ -1859,7 +1987,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
                 ),
             );
         const childType = requestedChildType ?? slot?.accepts[0];
-        if (!childType || childType === 'root') return false;
+        if (!childType || childType === 'root' || childType === 'reusable-instance')
+          return false;
         if (
           !slot ||
           !slot.accepts.includes(childType) ||
@@ -1871,7 +2000,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           kind: 'insert-child',
           parentId: payloadNodeId(parent) ?? '',
           slotName: slot.name,
-          childType,
+          childType: childType as BuilderBlockType,
         });
       },
       removeStructuralChild(nodeId) {
@@ -2182,8 +2311,15 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           },
         });
         editorRef.current = editor;
-        commandBusRef.current = createEditorCommandBus(editor);
-        editor.setComponents(payloadToEditorComponent(payloadRef.current));
+        commandBusRef.current = createEditorCommandBus(
+          editor,
+          designSystem ? { designSystem } : {},
+        );
+        editor.setComponents(
+          payloadToEditorComponent(payloadRef.current, {
+            reusableRuntime: reusableRuntimeRef.current,
+          }),
+        );
         initialPersistedSignatureRef.current = JSON.stringify(
           serializeGrapesComponent(getRoot(editor), documentKind),
         );

@@ -6,6 +6,8 @@ import {
   type Asset,
   type ComponentPropertyDefinition,
   type PageComponentType,
+  type SiteDesignSystem,
+  type StyleTokenReference,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BuilderViewport } from '../builder-adapter';
@@ -42,9 +44,13 @@ type BuilderInspectorProps = {
   openSections: Record<InspectorSectionKey, boolean>;
   onToggleSection: (section: InspectorSectionKey, open: boolean) => void;
   updateSelectedProperty: (property: string, value: unknown) => void;
-  updateSelectedStyle: (property: string, value: string) => void;
+  updateSelectedStyle: (property: string, value: string | StyleTokenReference) => void;
   resetSelectedStyle: (property: string) => void;
-  updateSelectedPartStyle: (partName: string, property: string, value: string) => void;
+  updateSelectedPartStyle: (
+    partName: string,
+    property: string,
+    value: string | StyleTokenReference,
+  ) => void;
   resetSelectedPartStyle: (partName: string, property: string) => void;
   onSelectNode: (nodeId: string) => void;
   onAddStructuralChild: (slotName?: string, childType?: PageComponentType) => void;
@@ -57,6 +63,7 @@ type BuilderInspectorProps = {
   ) => void;
   onDuplicateStructuralChild: (nodeId: string) => void;
   usableAssets: Asset[];
+  designSystem?: SiteDesignSystem;
 };
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
@@ -68,6 +75,71 @@ const inspectorStyleSections: readonly InspectorStyleSection[] = (
   label: key.charAt(0).toUpperCase() + key.slice(1),
   fields,
 }));
+
+type TokenCategory = keyof Pick<
+  SiteDesignSystem,
+  'colors' | 'typography' | 'spacing' | 'radii' | 'shadows' | 'containerWidths'
+>;
+
+function tokenCategoryForProperty(property: string): TokenCategory | undefined {
+  if (
+    property === 'color' ||
+    property === 'background-color' ||
+    property === 'border-color'
+  ) {
+    return 'colors';
+  }
+  if (['padding', 'margin', 'gap'].includes(property)) return 'spacing';
+  if (property === 'border-radius') return 'radii';
+  if (property === 'box-shadow') return 'shadows';
+  if (property === 'max-width') return 'containerWidths';
+  if (
+    ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing'].includes(
+      property,
+    )
+  ) {
+    return 'typography';
+  }
+  return undefined;
+}
+
+function TokenChoice({
+  category,
+  designSystem,
+  value,
+  property,
+  onChange,
+}: {
+  category: TokenCategory;
+  designSystem: SiteDesignSystem;
+  value: ReturnType<typeof resolveInspectorStyleValue>;
+  property: string;
+  onChange: (nextValue: string | StyleTokenReference) => void;
+}) {
+  const tokens = designSystem[category];
+  const currentTokenId =
+    typeof value.effectiveRawValue === 'object' ? value.effectiveRawValue.tokenId : '';
+  return (
+    <label className="builder-inspector-field">
+      <span>{category === 'typography' ? 'Typography token' : `${property} token`}</span>
+      <select
+        aria-label={`${property} design token`}
+        onChange={(event) => {
+          const tokenId = event.target.value;
+          onChange(tokenId ? { kind: 'token', tokenId } : (value.effectiveValue ?? ''));
+        }}
+        value={currentTokenId}
+      >
+        <option value="">Custom value</option>
+        {tokens.map((token) => (
+          <option key={token.id} value={token.id}>
+            {token.name} ({token.id})
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function InspectorSection({
   children,
@@ -121,6 +193,7 @@ export function BuilderInspector({
   onReorderStructuralChild,
   onDuplicateStructuralChild,
   usableAssets,
+  designSystem,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
@@ -190,6 +263,15 @@ export function BuilderInspector({
               resolved.authoredValue !== undefined && viewport !== 'desktop';
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
+                {designSystem && tokenCategoryForProperty(field.key) ? (
+                  <TokenChoice
+                    category={tokenCategoryForProperty(field.key)!}
+                    designSystem={designSystem}
+                    onChange={(nextValue) => updateSelectedStyle(field.key, nextValue)}
+                    property={field.key}
+                    value={resolved}
+                  />
+                ) : null}
                 <PropertyControlRenderer
                   definition={field}
                   description={inheritedDescription(field, resolved)}
@@ -249,6 +331,17 @@ export function BuilderInspector({
               resolved.authoredValue !== undefined && viewport !== 'desktop';
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
+                {designSystem && tokenCategoryForProperty(field.key) ? (
+                  <TokenChoice
+                    category={tokenCategoryForProperty(field.key)!}
+                    designSystem={designSystem}
+                    onChange={(nextValue) =>
+                      updateSelectedPartStyle(selectedPart, field.key, nextValue)
+                    }
+                    property={field.key}
+                    value={resolved}
+                  />
+                ) : null}
                 <PropertyControlRenderer
                   definition={field}
                   description={inheritedDescription(field, resolved)}

@@ -3,8 +3,12 @@ import {
   FormPropsSchema,
   PageNodeStyleSchema,
   PagePayloadSchema,
+  PagePayloadV7Schema,
   PagePayloadV1Schema,
-  PageNodePartsStyleSchema,
+  ReusableComponentDocumentSchema,
+  ReusableInstancePropsSchema,
+  PageNodePartsStyleV7Schema,
+  PageNodeStyleV7Schema,
   CountdownPropsSchema,
   ListPropsSchema,
   VideoPropsSchema,
@@ -20,6 +24,7 @@ import {
   NavigationViewPropsSchema,
   SiteBrandPropsSchema,
   SiteGlobalPayloadV1Schema,
+  createPageDocument,
   CustomExtensionNodePropsSchema,
   canContainPageComponent,
   isPageComponentType,
@@ -27,6 +32,7 @@ import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   isSafePageStyleValue,
+  resolveSiteDesignToken,
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
@@ -38,11 +44,18 @@ import {
   type PageNodeV4,
   type PageNodeV5,
   type PageNodeV6,
+  type PageNodeV7,
   type PageNodeStyle,
-  type PageNodePartsStyle,
+  type PageNodeStyleV7,
+  type StyleTokenReference,
+  type SiteDesignSystem,
   type PagePayload,
   type PagePayloadV1,
+  type PageDocument,
+  type PagePayloadV7,
   type SiteGlobalPayloadV1,
+  type ReusableComponentDocument,
+  type ReusableRuntime,
   type BuilderDocumentKind,
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
@@ -71,14 +84,16 @@ export const BUILDER_QUOTE_PREVIEW_ATTRIBUTE = 'data-payload-quote-preview';
 export const BUILDER_COMPOUND_PROPS_ATTRIBUTE = 'data-payload-compound-props';
 export const BUILDER_PARTS_STYLE_ATTRIBUTE = 'data-payload-parts-style';
 export const BUILDER_GLOBAL_PROPS_ATTRIBUTE = 'data-payload-global-props';
+export const BUILDER_REUSABLE_PROPS_ATTRIBUTE = 'data-payload-reusable-props';
+export const BUILDER_REUSABLE_PREVIEW_ATTRIBUTE = 'data-payload-reusable-preview';
 /** Editor-only slot ownership marker; it is intentionally omitted from payload props. */
 export const BUILDER_NODE_SLOT_ATTRIBUTE = 'data-payload-slot';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
 export type BuilderNode =
-  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
+  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6 | PageNodeV7;
 export type BuilderNodeType = PageComponentType;
-export type BuilderBlockType = Exclude<BuilderNodeType, 'root'>;
+export type BuilderBlockType = Exclude<BuilderNodeType, 'root' | 'reusable-instance'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
 
 export function listPreviewComponents(props: ListProps): ComponentDefinition[] {
@@ -146,6 +161,33 @@ function editorOnlyRuntimePreview(definition: ComponentDefinition): ComponentDef
     removable: false,
     selectable: false,
   };
+}
+
+function editorOnlyReusablePreview(definition: ComponentDefinition): ComponentDefinition {
+  return {
+    ...definition,
+    attributes: {
+      ...(definition.attributes ?? {}),
+      [BUILDER_REUSABLE_PREVIEW_ATTRIBUTE]: 'true',
+    },
+    copyable: false,
+    draggable: false,
+    droppable: false,
+    removable: false,
+    selectable: false,
+  };
+}
+
+function reusablePreviewTree(definition: ComponentDefinition): ComponentDefinition {
+  const children = Array.isArray(definition.components)
+    ? definition.components.map((child) =>
+        isObject(child) ? reusablePreviewTree(child as ComponentDefinition) : child,
+      )
+    : undefined;
+  return editorOnlyReusablePreview({
+    ...definition,
+    ...(children ? { components: children } : {}),
+  });
 }
 
 function formPreviewControl(field: FormField): ComponentDefinition {
@@ -378,9 +420,9 @@ function payloadViewport(viewport: BuilderViewport): PayloadViewport {
  * before painting a GrapesJS device so mobile inherits tablet overrides.
  */
 export function resolveViewportStyle(
-  style: PageNodeStyle | undefined,
+  style: PageNodeStyle | PageNodeStyleV7 | undefined,
   viewport: BuilderViewport,
-): PageNodeStyle['base'] {
+): PageNodeStyle['base'] | PageNodeStyleV7['base'] {
   if (!style) return {};
   return {
     ...style.base,
@@ -397,13 +439,21 @@ function jsonAttribute(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function styleBlockToEditorStyle(style: PageNodeStyle['base']): Record<string, string> {
+function styleBlockToEditorStyle(
+  style: Record<string, unknown>,
+  designSystem?: SiteDesignSystem,
+): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [property, value] of Object.entries(style)) {
-    if (typeof value !== 'string') continue;
     const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
-    if (definition && isSafePageStyleValue(value)) {
-      result[definition.editorProperty] = value;
+    const resolved =
+      typeof value === 'string'
+        ? value
+        : isObject(value) && value.kind === 'token' && typeof value.tokenId === 'string'
+          ? resolveSiteDesignToken(designSystem, value.tokenId, definition?.key)
+          : undefined;
+    if (definition && resolved && isSafePageStyleValue(resolved)) {
+      result[definition.editorProperty] = resolved;
     }
   }
   return result;
@@ -453,7 +503,10 @@ function editorStyleToPayloadStyle(
   return parsed.data.base;
 }
 
-function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | undefined {
+function parseResponsiveStyle(
+  value: unknown,
+  path: string[],
+): PageNodeStyle | PageNodeStyleV7 | undefined {
   if (value === undefined || value === '') {
     return undefined;
   }
@@ -468,7 +521,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
     throw new BuilderAdapterError('Responsive style metadata is not valid JSON', path);
   }
 
-  const parsed = PageNodeStyleSchema.safeParse(parsedJson);
+  const parsed = PageNodeStyleV7Schema.safeParse(parsedJson);
   if (!parsed.success) {
     throw new BuilderAdapterError(
       parsed.error.issues.map((issue) => issue.message).join('; '),
@@ -478,7 +531,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
 
   for (const [viewport, block] of Object.entries(parsed.data)) {
     for (const [property, styleValue] of Object.entries(block ?? {})) {
-      if (styleValue !== undefined && !isSafePageStyleValue(styleValue)) {
+      if (typeof styleValue === 'string' && !isSafePageStyleValue(styleValue)) {
         throw new BuilderAdapterError(
           `Responsive style property "${property}" contains an unsafe CSS value`,
           [...path, viewport, property],
@@ -493,7 +546,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
 function attributesForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 = 1,
 ) {
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
@@ -519,9 +572,43 @@ function attributesForNode(
 function componentDefinitionForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 = 1,
+  reusableRuntime: readonly ReusableRuntime[] = [],
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
+  if (node.type === 'reusable-instance') {
+    const source = reusableRuntime.find(
+      (candidate) => candidate.id === node.props.reusableId,
+    );
+    return {
+      type: 'default',
+      tagName: 'div',
+      name: source ? 'Linked reusable section' : 'Missing reusable section',
+      attributes: {
+        ...attributes,
+        [BUILDER_REUSABLE_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        'aria-label': source ? 'Linked reusable section' : 'Missing reusable section',
+      },
+      components: source
+        ? [
+            reusablePreviewTree(
+              componentDefinitionForNode(
+                source.document.root,
+                undefined,
+                7,
+                reusableRuntime,
+              ),
+            ),
+          ]
+        : [{ tagName: 'div', content: 'Reusable section unavailable' }],
+      droppable: false,
+      draggable: false,
+      removable: true,
+      copyable: true,
+      selectable: true,
+      style: node.style ? styleBlockToEditorStyle(node.style.base) : undefined,
+    };
+  }
   const shared: ComponentDefinition = {
     type: node.type === 'text' ? 'text' : node.type === 'image' ? 'image' : 'default',
     tagName: PAGE_COMPONENT_REGISTRY[node.type].editorTagName,
@@ -688,7 +775,7 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
     case 'accordion-item':
@@ -701,7 +788,7 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
     case 'tabs':
@@ -713,7 +800,7 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
     case 'tab-item':
@@ -726,7 +813,7 @@ function componentDefinitionForNode(
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
     case 'gallery':
@@ -735,7 +822,7 @@ function componentDefinitionForNode(
         tagName: 'div',
         attributes,
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
     case 'global-header':
@@ -748,7 +835,7 @@ function componentDefinitionForNode(
           [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
     case 'navigation-view':
@@ -778,7 +865,7 @@ function componentDefinitionForNode(
       return {
         ...shared,
         components: node.children.map((child) =>
-          componentDefinitionForNode(child, undefined, payloadVersion),
+          componentDefinitionForNode(child, undefined, payloadVersion, reusableRuntime),
         ),
       };
   }
@@ -787,8 +874,118 @@ function componentDefinitionForNode(
 
 export function payloadToEditorComponent(
   payload: PagePayload | SiteGlobalPayloadV1,
+  options: { reusableRuntime?: readonly ReusableRuntime[] } = {},
 ): ComponentDefinition {
-  return componentDefinitionForNode(payload.root, payload.metadata, payload.version);
+  return componentDefinitionForNode(
+    payload.root,
+    payload.metadata,
+    payload.version,
+    options.reusableRuntime ?? [],
+  );
+}
+
+export function reusableDocumentToEditorDefinition(
+  document: ReusableComponentDocument,
+): ComponentDefinition {
+  return componentDefinitionForNode(document.root, undefined, 7);
+}
+
+/**
+ * Reusable sources use the page editor's existing envelope while they are
+ * open. A section/container can be a direct page-root child; other component
+ * roots get a temporary container wrapper so the page schema remains valid.
+ * The wrapper is removed before the reusable document is saved.
+ */
+export function reusableDocumentToEditorPageDocument(
+  document: ReusableComponentDocument,
+): {
+  document: PageDocument;
+  wrappedSource: boolean;
+} {
+  const wrappedSource =
+    document.root.type !== 'section' && document.root.type !== 'container';
+  const usedIds = new Set(['root', document.root.id]);
+  const editorRoot = wrappedSource
+    ? {
+        id: generateFreshNodeId('reusable-editor', usedIds),
+        type: 'container' as const,
+        props: {},
+        children: [document.root],
+      }
+    : document.root;
+  const payload: PagePayloadV7 = PagePayloadV7Schema.parse({
+    version: 7,
+    metadata: { documentTitle: 'Reusable source' },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [editorRoot],
+    },
+  });
+  return { document: createPageDocument(payload), wrappedSource };
+}
+
+export function editorPageDocumentToReusableDocument(
+  document: PageDocument,
+  wrappedSource: boolean,
+): ReusableComponentDocument {
+  const payload = PagePayloadV7Schema.parse(document.payload);
+  if (payload.root.children.length !== 1) {
+    throw new BuilderAdapterError(
+      'Reusable source editor must contain exactly one source root',
+    );
+  }
+  const editorRoot = payload.root.children[0];
+  if (!editorRoot) throw new BuilderAdapterError('Reusable source root is missing');
+  if (
+    wrappedSource &&
+    (editorRoot.type !== 'container' || editorRoot.children.length !== 1)
+  ) {
+    throw new BuilderAdapterError(
+      'Reusable component source wrapper must contain exactly one source root',
+    );
+  }
+  const sourceRoot = wrappedSource ? editorRoot.children[0] : editorRoot;
+  if (!sourceRoot) throw new BuilderAdapterError('Reusable source subtree is missing');
+  return ReusableComponentDocumentSchema.parse({ version: 1, root: sourceRoot });
+}
+
+export function createReusableInstanceDefinition(
+  reusableId: string,
+): ComponentDefinition {
+  const id = newNodeId('reusable-instance');
+  return {
+    type: 'default',
+    tagName: 'div',
+    name: 'Linked reusable section',
+    attributes: {
+      [BUILDER_NODE_ID_ATTRIBUTE]: id,
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'reusable-instance',
+      [BUILDER_REUSABLE_PROPS_ATTRIBUTE]: jsonAttribute({ reusableId }),
+      [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: '7',
+    },
+    content: 'Linked reusable section',
+    droppable: false,
+    draggable: false,
+    removable: true,
+    copyable: true,
+    selectable: true,
+  };
+}
+
+export function serializeReusableSubtree(
+  snapshot: BuilderEditorSnapshot,
+): ReusableComponentDocument {
+  const root = nodeFromSnapshot(snapshot, ['root']);
+  const parsed = ReusableComponentDocumentSchema.safeParse({ version: 1, root });
+  if (!parsed.success) {
+    throw new BuilderAdapterError(
+      parsed.error.issues.map((issue) => issue.message).join('; '),
+      ['reusable'],
+    );
+  }
+  return parsed.data;
 }
 
 export function snapshotFromEditorDefinition(
@@ -1320,7 +1517,7 @@ function readHeadingLevel(attributes: Record<string, unknown>, path: string[]): 
 function readNodeStyle(
   snapshot: BuilderEditorSnapshot,
   path: string[],
-): PageNodeStyle | undefined {
+): PageNodeStyle | PageNodeStyleV7 | undefined {
   const responsive = parseResponsiveStyle(
     snapshot.attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
     [...path, BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
@@ -1352,6 +1549,29 @@ function nodeFromSnapshotInternal(
       ...path,
       'type',
     ]);
+  }
+
+  if (type === 'reusable-instance') {
+    if (
+      snapshot.children.some(
+        (child) => child.attributes[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] === undefined,
+      )
+    ) {
+      throw new BuilderAdapterError(
+        'Reusable instances may only contain editor preview components',
+        [...path, 'children'],
+      );
+    }
+    const props = ReusableInstancePropsSchema.safeParse(
+      readJsonAttribute(snapshot.attributes, BUILDER_REUSABLE_PROPS_ATTRIBUTE, path),
+    );
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children: [] };
   }
 
   if (type === 'form') {
@@ -1685,7 +1905,7 @@ function readNodePartsStyle(
   snapshot: BuilderEditorSnapshot,
   type: BuilderNodeType,
   path: string[],
-): Record<string, PageNodeStyle> | undefined {
+): Record<string, PageNodeStyle | PageNodeStyleV7> | undefined {
   const raw = snapshot.attributes[BUILDER_PARTS_STYLE_ATTRIBUTE];
   if (raw === undefined || raw === '') return undefined;
   if (typeof raw !== 'string') {
@@ -1697,7 +1917,7 @@ function readNodePartsStyle(
   } catch {
     throw new BuilderAdapterError('Component part styles are not valid JSON', path);
   }
-  const parsed = PageNodePartsStyleSchema.safeParse(value);
+  const parsed = PageNodePartsStyleV7Schema.safeParse(value);
   if (!parsed.success) {
     throw new BuilderAdapterError(
       parsed.error.issues.map((issue) => issue.message).join('; '),
@@ -1727,7 +1947,12 @@ function readNodePartsStyle(
             [...path, 'partsStyle', partName, viewport, property],
           );
         }
-        if (typeof styleValue !== 'string' || !isSafePageStyleValue(styleValue)) {
+        const validValue =
+          (typeof styleValue === 'string' && isSafePageStyleValue(styleValue)) ||
+          (isObject(styleValue) &&
+            styleValue.kind === 'token' &&
+            typeof styleValue.tokenId === 'string');
+        if (!validValue) {
           throw new BuilderAdapterError(
             'Component part style contains an unsafe CSS value',
             [...path, 'partsStyle', partName, viewport, property],
@@ -1762,20 +1987,22 @@ export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePa
   }
   const versionValue = snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE];
   const version =
-    versionValue === '6' || versionValue === 6 || containsV6Node(root)
-      ? 6
-      : versionValue === '5' || versionValue === 5 || containsV5Node(root)
-        ? 5
-        : versionValue === '4' || versionValue === 4 || containsV4Node(root)
-          ? 4
-          : versionValue === '3' ||
-              versionValue === 3 ||
-              containsCountdownNode(root) ||
-              containsExtensionNode(root)
-            ? 3
-            : versionValue === '2' || versionValue === 2 || containsFormNode(root)
-              ? 2
-              : 1;
+    versionValue === '7' || versionValue === 7 || containsV7Node(root)
+      ? 7
+      : versionValue === '6' || versionValue === 6 || containsV6Node(root)
+        ? 6
+        : versionValue === '5' || versionValue === 5 || containsV5Node(root)
+          ? 5
+          : versionValue === '4' || versionValue === 4 || containsV4Node(root)
+            ? 4
+            : versionValue === '3' ||
+                versionValue === 3 ||
+                containsCountdownNode(root) ||
+                containsExtensionNode(root)
+              ? 3
+              : versionValue === '2' || versionValue === 2 || containsFormNode(root)
+                ? 2
+                : 1;
   const candidate: unknown = {
     version,
     metadata: readMetadata(snapshot.attributes),
@@ -1903,6 +2130,31 @@ function containsV6Node(node: Record<string, unknown>): boolean {
   );
 }
 
+function containsV7Node(node: Record<string, unknown>): boolean {
+  if (
+    node.type === 'reusable-instance' ||
+    hasTokenReference(node.style) ||
+    hasTokenReference(node.partsStyle)
+  ) {
+    return true;
+  }
+  return (
+    Array.isArray(node.children) &&
+    node.children.some(
+      (child): child is Record<string, unknown> =>
+        isObject(child) && containsV7Node(child),
+    )
+  );
+}
+
+function hasTokenReference(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasTokenReference);
+  const candidate = value as Record<string, unknown>;
+  if (candidate.kind === 'token' && typeof candidate.tokenId === 'string') return true;
+  return Object.values(candidate).some(hasTokenReference);
+}
+
 export function snapshotFromGrapesComponent(component: Component): BuilderEditorSnapshot {
   return {
     tagName: String(component.get('tagName') ?? ''),
@@ -1927,21 +2179,21 @@ export function serializeGrapesComponent(
 
 export function readEditorResponsiveStyle(
   component: Component,
-): PageNodeStyle | undefined {
+): PageNodeStyle | PageNodeStyleV7 | undefined {
   return parseResponsiveStyle(
     component.getAttributes({ noStyle: true })[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
     [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
-  );
+  ) as PageNodeStyle | PageNodeStyleV7 | undefined;
 }
 
 export function readEditorPartsStyle(
   component: Component,
   type: BuilderNodeType,
-): PageNodePartsStyle | undefined {
+): Record<string, PageNodeStyle | PageNodeStyleV7> | undefined {
   const raw = component.getAttributes({ noStyle: true })[BUILDER_PARTS_STYLE_ATTRIBUTE];
   if (typeof raw !== 'string' || raw.trim() === '') return undefined;
   try {
-    const parsed = PageNodePartsStyleSchema.safeParse(JSON.parse(raw) as unknown);
+    const parsed = PageNodePartsStyleV7Schema.safeParse(JSON.parse(raw) as unknown);
     if (!parsed.success) return undefined;
     const parts = PAGE_COMPONENT_REGISTRY[type].componentParts;
     const safeEntries = Object.entries(parsed.data).flatMap(([partName, style]) => {
@@ -1953,11 +2205,14 @@ export function readEditorPartsStyle(
           if (!block) return [];
           return Object.entries(block).filter(
             ([property, value]) =>
-              part.styleCapabilities.includes(
+              (part.styleCapabilities.includes(
                 PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
               ) &&
-              typeof value === 'string' &&
-              isSafePageStyleValue(value),
+                typeof value === 'string' &&
+                isSafePageStyleValue(value)) ||
+              (isObject(value) &&
+                value.kind === 'token' &&
+                typeof value.tokenId === 'string'),
           ).length > 0
             ? [
                 [
@@ -1965,11 +2220,14 @@ export function readEditorPartsStyle(
                   Object.fromEntries(
                     Object.entries(block).filter(
                       ([property, value]) =>
-                        part.styleCapabilities.includes(
+                        (part.styleCapabilities.includes(
                           PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
                         ) &&
-                        typeof value === 'string' &&
-                        isSafePageStyleValue(value),
+                          typeof value === 'string' &&
+                          isSafePageStyleValue(value)) ||
+                        (isObject(value) &&
+                          value.kind === 'token' &&
+                          typeof value.tokenId === 'string'),
                     ),
                   ),
                 ],
@@ -1979,9 +2237,7 @@ export function readEditorPartsStyle(
       );
       return Object.keys(safeStyle).length > 0 ? [[partName, safeStyle]] : [];
     });
-    return safeEntries.length > 0
-      ? (Object.fromEntries(safeEntries) as PageNodePartsStyle)
-      : undefined;
+    return safeEntries.length > 0 ? Object.fromEntries(safeEntries) : undefined;
   } catch {
     return undefined;
   }
@@ -2000,9 +2256,13 @@ function sameStyleValues(
 export function applyEditorViewportStyle(
   component: Component,
   viewport: BuilderViewport,
+  designSystem?: SiteDesignSystem,
 ): void {
   const responsive = readEditorResponsiveStyle(component);
-  const nextStyle = styleBlockToEditorStyle(resolveViewportStyle(responsive, viewport));
+  const nextStyle = styleBlockToEditorStyle(
+    resolveViewportStyle(responsive, viewport),
+    designSystem,
+  );
   const currentStyle = { ...component.getStyle() } as Record<string, unknown>;
   if (!sameStyleValues(currentStyle, nextStyle)) component.setStyle(nextStyle);
 }
@@ -2011,7 +2271,8 @@ export function updateEditorViewportStyle(
   component: Component,
   viewport: BuilderViewport,
   property: string,
-  value: string,
+  value: string | StyleTokenReference,
+  designSystem?: SiteDesignSystem,
 ): boolean {
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
@@ -2021,13 +2282,14 @@ export function updateEditorViewportStyle(
     throw new BuilderAdapterError(`Unsupported editor style property "${property}"`);
   }
   if (
+    typeof value === 'string' &&
     definition.payloadKey === 'opacity' &&
     value.trim() !== '' &&
     !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(value.trim())
   ) {
     throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
   }
-  if (value.trim() !== '' && !isSafePageStyleValue(value)) {
+  if (typeof value === 'string' && value.trim() !== '' && !isSafePageStyleValue(value)) {
     throw new BuilderAdapterError(
       `Editor style property "${property}" contains an unsafe CSS value`,
     );
@@ -2035,20 +2297,23 @@ export function updateEditorViewportStyle(
   const payloadViewportKey = payloadViewport(viewport);
   const current = readEditorResponsiveStyle(component) ?? { base: {} };
   const previousValue = (
-    current[payloadViewportKey] as Record<string, string | undefined> | undefined
+    current[payloadViewportKey] as Record<string, unknown> | undefined
   )?.[definition.payloadKey];
-  if ((value.trim() === '' && previousValue === undefined) || previousValue === value) {
+  if (
+    (typeof value === 'string' && value.trim() === '' && previousValue === undefined) ||
+    JSON.stringify(previousValue) === JSON.stringify(value)
+  ) {
     return false;
   }
   const nextBlock = {
     ...(current[payloadViewportKey] ?? {}),
     [definition.payloadKey]: value,
   };
-  if (value.trim() === '') {
+  if (typeof value === 'string' && value.trim() === '') {
     delete nextBlock[definition.payloadKey as keyof typeof nextBlock];
   }
   current[payloadViewportKey] = nextBlock;
-  const parsed = PageNodeStyleSchema.safeParse(current);
+  const parsed = PageNodeStyleV7Schema.safeParse(current);
   if (!parsed.success) {
     throw new BuilderAdapterError(
       parsed.error.issues.map((issue) => issue.message).join('; '),
@@ -2060,7 +2325,7 @@ export function updateEditorViewportStyle(
     [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
   });
   component.setStyle(
-    styleBlockToEditorStyle(resolveViewportStyle(parsed.data, viewport)),
+    styleBlockToEditorStyle(resolveViewportStyle(parsed.data, viewport), designSystem),
   );
   return true;
 }
@@ -2071,8 +2336,10 @@ export function updateEditorPartViewportStyle(
   partName: string,
   viewport: BuilderViewport,
   property: string,
-  value: string,
+  value: string | StyleTokenReference,
+  designSystem?: SiteDesignSystem,
 ): boolean {
+  void designSystem;
   const part = PAGE_COMPONENT_REGISTRY[type].componentParts[partName];
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
@@ -2084,26 +2351,32 @@ export function updateEditorPartViewportStyle(
     );
   }
   if (
+    typeof value === 'string' &&
     definition.payloadKey === 'opacity' &&
     value.trim() !== '' &&
     !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(value.trim())
   ) {
     throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
   }
-  if (value.trim() !== '' && !isSafePageStyleValue(value)) {
+  if (typeof value === 'string' && value.trim() !== '' && !isSafePageStyleValue(value)) {
     throw new BuilderAdapterError('Component part style contains an unsafe CSS value');
   }
   const current = readEditorPartsStyle(component, type) ?? {};
   const partStyle = current[partName] ?? { base: {} };
   const viewportKey = payloadViewport(viewport);
-  const nextBlock = { ...(partStyle[viewportKey] ?? {}) } as Record<string, string>;
+  const nextBlock = { ...(partStyle[viewportKey] ?? {}) } as Record<string, unknown>;
   const previousValue = nextBlock[definition.payloadKey];
-  if ((value.trim() === '' && previousValue === undefined) || previousValue === value) {
+  if (
+    (typeof value === 'string' && value.trim() === '' && previousValue === undefined) ||
+    JSON.stringify(previousValue) === JSON.stringify(value)
+  ) {
     return false;
   }
-  if (value.trim() === '') delete nextBlock[definition.payloadKey];
+  if (typeof value === 'string' && value.trim() === '') {
+    delete nextBlock[definition.payloadKey];
+  }
   const nextPartStyle = { ...partStyle, [viewportKey]: nextBlock };
-  const parsed = PageNodePartsStyleSchema.safeParse({
+  const parsed = PageNodePartsStyleV7Schema.safeParse({
     ...current,
     [partName]: nextPartStyle,
   });

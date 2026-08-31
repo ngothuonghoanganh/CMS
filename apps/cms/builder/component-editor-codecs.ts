@@ -16,9 +16,11 @@ import {
   GlobalFooterPropsSchema,
   NavigationViewPropsSchema,
   SiteBrandPropsSchema,
+  ReusableInstancePropsSchema,
   type FormProps,
   type PageComponentType,
   type PageNodeStyle,
+  type PageNodeStyleV7,
 } from '@payload/contracts';
 import {
   resolveEditorPropertyUpdate,
@@ -44,7 +46,6 @@ import {
   formPreviewComponents,
   quotePreviewComponents,
 } from './builder-adapter';
-
 export type ComponentSelectionSnapshot = {
   id: string;
   type: PageComponentType;
@@ -57,8 +58,8 @@ export type ComponentSelectionSnapshot = {
   src?: string;
   alt?: string;
   align?: 'left' | 'center' | 'right';
-  style?: PageNodeStyle;
-  partsStyle?: Record<string, PageNodeStyle>;
+  style?: PageNodeStyle | PageNodeStyleV7;
+  partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7>;
   form?: FormProps;
   countdown?: { targetAt: string; label: string };
 };
@@ -119,6 +120,10 @@ const componentPropsReaders: Partial<Record<PageComponentType, ComponentPropsRea
   container: emptyPropsReader,
   divider: emptyPropsReader,
   gallery: emptyPropsReader,
+  'reusable-instance': jsonPropsReader(
+    'data-payload-reusable-props',
+    ReusableInstancePropsSchema,
+  ),
   text: (_attributes, content) => ({ props: { text: content } }),
   heading: (attributes, content) => {
     const level = Number(attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE]);
@@ -300,6 +305,7 @@ export const COMPONENT_EDITOR_CODECS: Readonly<
   'global-footer': globalFooterCodec,
   'navigation-view': navigationViewCodec,
   'site-brand': siteBrandCodec,
+  'reusable-instance': genericCodec,
 };
 
 export function getComponentEditorCodec(type: PageComponentType): ComponentEditorCodec {

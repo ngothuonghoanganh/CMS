@@ -11,6 +11,8 @@ type BuilderContextToolbarProps = {
   onDuplicate: () => void;
   onDelete: () => void;
   onQuickAdd: () => void;
+  onSaveAsReusable?: () => void;
+  onDetachReusable?: () => void;
   position?: { left: number; top: number; placement: 'above' | 'below' } | undefined;
 };
 
@@ -23,6 +25,8 @@ export function BuilderContextToolbar({
   onDuplicate,
   onDelete,
   onQuickAdd,
+  onSaveAsReusable,
+  onDetachReusable,
   position,
 }: BuilderContextToolbarProps) {
   if (!selected) return null;
@@ -42,6 +46,24 @@ export function BuilderContextToolbar({
       </button>
       {selected.type !== 'root' ? (
         <>
+          {selected.type === 'reusable-instance' && onDetachReusable ? (
+            <button
+              aria-label="Detach reusable section"
+              onClick={onDetachReusable}
+              type="button"
+            >
+              Detach
+            </button>
+          ) : null}
+          {selected.type !== 'reusable-instance' && onSaveAsReusable ? (
+            <button
+              aria-label="Save selected element as reusable"
+              onClick={onSaveAsReusable}
+              type="button"
+            >
+              Save
+            </button>
+          ) : null}
           <button aria-label="Select parent" onClick={onSelectParent} type="button">
             Parent
           </button>

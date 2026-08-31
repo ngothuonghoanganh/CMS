@@ -14,10 +14,14 @@ import {
   PaginationQuerySchema,
   UpdateSiteRequestSchema,
   SiteGlobalsSchema,
+  SiteDesignSystemSchema,
+  DesignTokenUsageQuerySchema,
   type CreateSiteRequest,
   type PaginationQuery,
   type SiteGlobals,
+  type SiteDesignSystem,
   type UpdateSiteRequest,
+  type DesignTokenUsageQuery,
 } from '@payload/contracts';
 
 import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
@@ -142,6 +146,62 @@ export class SiteController {
       })
       .catch(() => undefined);
     return result;
+  }
+
+  @Get(':siteId/design-system')
+  async getDesignSystem(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.read', workspaceId);
+    return this.siteService.getDesignSystem(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+    );
+  }
+
+  @Patch(':siteId/design-system')
+  async updateDesignSystem(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @Body(new ZodValidationPipe(SiteDesignSystemSchema)) input: SiteDesignSystem,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.update', workspaceId);
+    const result = await this.siteService.updateDesignSystem(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.design-system.update',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Get(':siteId/design-system/usage')
+  async getDesignTokenUsage(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @Query(new ZodValidationPipe(DesignTokenUsageQuerySchema))
+    query: DesignTokenUsageQuery,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.read', workspaceId);
+    return this.siteService.getDesignTokenUsage(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      query.tokenId,
+    );
   }
 
   @Get(':siteId/manifest')

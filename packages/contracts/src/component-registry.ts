@@ -1,10 +1,10 @@
-import type { BuilderDocumentKind, PageNodeV6 } from './index';
+import type { BuilderDocumentKind, PageNodeV6, PageNodeV7 } from './index';
 import {
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PageStylePropertyKey,
 } from './style-registry';
 
-export type PageComponentType = PageNodeV6['type'];
+export type PageComponentType = PageNodeV6['type'] | PageNodeV7['type'];
 
 export type ComponentPropertyGroup = 'content' | 'style' | 'advanced';
 
@@ -143,6 +143,7 @@ const BUILDER_COMPONENT_PREVIEW_NODES: Readonly<
   },
   'navigation-view': { kind: 'navigation', itemCount: 3 },
   'site-brand': { kind: 'brand' },
+  'reusable-instance': { kind: 'box', role: 'panel', tone: 'muted' },
 };
 
 export function builderPreviewForComponent(
@@ -635,6 +636,19 @@ export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
     'margin',
     'padding',
   ],
+  'reusable-instance': [
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'opacity',
+    'box-shadow',
+  ],
 };
 
 export const styleSchemaFor = (
@@ -718,7 +732,13 @@ const rawPageComponentRegistry = {
       {
         name: 'children',
         label: 'Page content',
-        accepts: ['section', 'container', 'global-header', 'global-footer'],
+        accepts: [
+          'section',
+          'container',
+          'reusable-instance',
+          'global-header',
+          'global-footer',
+        ],
       },
     ],
   }),
@@ -750,6 +770,7 @@ const rawPageComponentRegistry = {
           'accordion',
           'tabs',
           'gallery',
+          'reusable-instance',
         ],
       },
     ],
@@ -783,6 +804,7 @@ const rawPageComponentRegistry = {
           'accordion',
           'tabs',
           'gallery',
+          'reusable-instance',
         ],
       },
     ],
@@ -1595,6 +1617,22 @@ const rawPageComponentRegistry = {
         ],
       },
     ]),
+  }),
+  'reusable-instance': definition({
+    type: 'reusable-instance',
+    version: 1,
+    label: 'Reusable section',
+    category: 'layout',
+    editorTagName: 'div',
+    defaultProps: {},
+    builder: {
+      insertable: false,
+      group: 'layout',
+      documentKinds: ['page'],
+      keywords: ['reusable', 'linked', 'saved section', 'symbol'],
+      description: 'A linked reusable section resolved from the site library.',
+    },
+    slots: [],
   }),
 } satisfies Record<PageComponentType, PageComponentDefinition>;
 

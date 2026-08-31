@@ -41,6 +41,8 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         siteSlug={page.site.slug}
         pageSlug={page.page.slug}
         tenantSlug={page.tenantSlug}
+        reusables={page.reusables}
+        designSystem={page.designSystem}
       />
     </div>
   );

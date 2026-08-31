@@ -54,6 +54,11 @@ import {
   normalizePagePath,
   SiteGlobalPayloadV1Schema,
   SiteGlobalsSchema,
+  PagePayloadV7Schema,
+  ReusableComponentDocumentSchema,
+  SiteDesignSystemSchema,
+  createDefaultSiteDesignSystem,
+  resolvePageStyleValue,
 } from './index';
 
 function createPayload(children: PageNode[] = []) {
@@ -73,6 +78,127 @@ function createPayload(children: PageNode[] = []) {
 }
 
 describe('foundation contracts', () => {
+  it('validates linked reusable leaves without changing V1 semantics', () => {
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
+      metadata: { documentTitle: 'Reusable page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section-1',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'linked-1',
+                type: 'reusable-instance',
+                props: { reusableId: randomUUID() },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(payload.root.children[0]?.children[0]?.type).toBe('reusable-instance');
+    expect(
+      PagePayloadV7Schema.safeParse({
+        ...payload,
+        root: {
+          ...payload.root,
+          children: [
+            {
+              ...payload.root.children[0]!,
+              children: [
+                {
+                  id: 'linked-1',
+                  type: 'reusable-instance',
+                  props: { reusableId: randomUUID() },
+                  children: [
+                    { id: 'illegal', type: 'text', props: { text: 'x' }, children: [] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects nested reusable sources and accepts finite token references', () => {
+    const reusable = {
+      version: 1 as const,
+      root: {
+        id: 'source',
+        type: 'section' as const,
+        props: {},
+        style: {
+          base: { backgroundColor: { kind: 'token' as const, tokenId: 'color-primary' } },
+        },
+        children: [],
+      },
+    };
+    expect(ReusableComponentDocumentSchema.safeParse(reusable).success).toBe(true);
+    expect(
+      ReusableComponentDocumentSchema.safeParse({
+        ...reusable,
+        root: {
+          ...reusable.root,
+          children: [
+            {
+              id: 'nested',
+              type: 'reusable-instance',
+              props: { reusableId: randomUUID() },
+              children: [],
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      ReusableComponentDocumentSchema.safeParse({
+        ...reusable,
+        root: {
+          ...reusable.root,
+          children: [
+            {
+              id: 'extension',
+              type: 'extension',
+              props: { extensionId: 'unsafe-extension', props: {} },
+              children: [],
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      ReusableComponentDocumentSchema.safeParse({
+        ...reusable,
+        root: { ...reusable.root, type: 'global-header', props: { position: 'static' } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps design token ids stable and resolves tokens through the shared helper', () => {
+    const system = createDefaultSiteDesignSystem();
+    expect(
+      resolvePageStyleValue({ kind: 'token', tokenId: 'color-primary' }, system, 'color'),
+    ).toBe('#2563eb');
+    expect(
+      SiteDesignSystemSchema.safeParse({
+        ...system,
+        spacing: [
+          ...system.spacing,
+          { id: 'color-primary', name: 'Duplicate', value: '8px' },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('keeps page-runtime baseline and opacity control semantics centralized', () => {
     expect(PAGE_RUNTIME_BASELINE_CSS).toContain('.payload-form');
     expect(PAGE_RUNTIME_BASELINE_CSS).toContain('main[data-payload-node-type');

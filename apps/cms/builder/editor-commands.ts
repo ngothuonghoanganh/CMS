@@ -5,6 +5,8 @@ import {
   canDuplicateInSlot,
   canRemoveFromSlot,
   resolveSlotForChild,
+  type SiteDesignSystem,
+  type StyleTokenReference,
 } from '@payload/contracts';
 
 import {
@@ -60,6 +62,11 @@ export type EditorCommand =
   | { kind: 'remove'; nodeId: string }
   | { kind: 'duplicate'; nodeId: string }
   | {
+      kind: 'detach-reusable';
+      nodeId: string;
+      definition: ComponentDefinition;
+    }
+  | {
       kind: 'apply-global-preset';
       nodeId: string;
       definition: ComponentDefinition;
@@ -79,7 +86,7 @@ export type EditorCommand =
       kind: 'set-responsive-style';
       nodeId: string;
       property: string;
-      value: string;
+      value: string | StyleTokenReference;
       viewport: BuilderViewport;
     }
   | {
@@ -87,7 +94,7 @@ export type EditorCommand =
       nodeId: string;
       partName: string;
       property: string;
-      value: string;
+      value: string | StyleTokenReference;
       viewport: BuilderViewport;
     }
   | {
@@ -253,14 +260,17 @@ function definitionFromComponent(component: Component): ComponentDefinition {
     snapshot: ReturnType<typeof snapshotFromGrapesComponent>,
   ): ComponentDefinition => {
     const nodeType = snapshot.attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
-    return {
+    const definition: ComponentDefinition = {
       type: nodeType === 'text' || nodeType === 'image' ? nodeType : 'default',
       tagName: snapshot.tagName,
       attributes: snapshot.attributes,
       content: snapshot.content,
       style: snapshot.style,
-      components: snapshot.children.map((child) => toDefinition(child)),
     };
+    if (snapshot.attributes['data-payload-node-type'] !== 'reusable-instance') {
+      definition.components = snapshot.children.map((child) => toDefinition(child));
+    }
+    return definition;
   };
   return toDefinition(snapshotFromGrapesComponent(component));
 }
@@ -282,11 +292,14 @@ function globalPresetTargetIsValid(
   return globalRoots.length === 1 && globalRoots[0] === node;
 }
 
-export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
+export function createEditorCommandBus(
+  editor: Editor,
+  options: { designSystem?: SiteDesignSystem } = {},
+): BuilderCommandBus {
   const bus: BuilderCommandBus = {
     dispatch: (command) => {
       if (!bus.canDispatch(command)) return { changed: false };
-      return executeEditorCommand(editor, command);
+      return executeEditorCommand(editor, command, options);
     },
     canDispatch: (command) => {
       const root = getRoot(editor);
@@ -328,6 +341,16 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
           root,
           getNode(editor, command.nodeId),
           command.definition,
+        );
+      }
+      if (command.kind === 'detach-reusable') {
+        const node = getNode(editor, command.nodeId);
+        return Boolean(
+          node &&
+          payloadNodeType(node) === 'reusable-instance' &&
+          definitionNodeType(command.definition) &&
+          node.parent() &&
+          canInsertDefinition(node.parent() as Component, command.definition),
         );
       }
       if (command.kind === 'set-property') {
@@ -382,6 +405,7 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
 export function executeEditorCommand(
   editor: Editor,
   command: EditorCommand,
+  options: { designSystem?: SiteDesignSystem } = {},
 ): EditorCommandResult {
   const root = getRoot(editor);
   if (!root) return { changed: false };
@@ -474,6 +498,28 @@ export function executeEditorCommand(
       const safeDefinition = definitionWithFreshIds(root, sourceDefinition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: node.index() + 1 });
+      const selection = created[0];
+      if (selection) editor.select(selection);
+      groupNewHistoryActions(editor, previousHistoryEntries);
+      return selection ? { changed: true, selection } : { changed: true };
+    }
+    case 'detach-reusable': {
+      const node = getNode(editor, command.nodeId);
+      const parent = node?.parent();
+      if (
+        !node ||
+        !parent ||
+        payloadNodeType(node) !== 'reusable-instance' ||
+        !canInsertDefinition(parent, command.definition)
+      ) {
+        return { changed: false };
+      }
+      const safeDefinition = definitionWithFreshIds(root, command.definition);
+      const previousHistoryEntries = new Set(getHistoryEntries(editor));
+      const at = node.index();
+      editor.select(node);
+      editor.runCommand('core:component-delete');
+      const created = parent.append(safeDefinition, { at });
       const selection = created[0];
       if (selection) editor.select(selection);
       groupNewHistoryActions(editor, previousHistoryEntries);
@@ -573,6 +619,7 @@ export function executeEditorCommand(
         command.viewport,
         command.property,
         command.value,
+        options.designSystem,
       );
       return changed ? { changed: true, selection: node } : { changed: false };
     }
@@ -588,6 +635,7 @@ export function executeEditorCommand(
         command.viewport,
         command.property,
         command.value,
+        options.designSystem,
       );
       return changed ? { changed: true, selection: node } : { changed: false };
     }

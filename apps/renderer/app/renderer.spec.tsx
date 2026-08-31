@@ -1,9 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PagePayloadV5Schema,
+  PagePayloadV7Schema,
+  createDefaultSiteDesignSystem,
   SITE_GLOBAL_COMPONENT_TYPES,
   type PagePayloadV1,
 } from '@payload/contracts';
@@ -128,6 +131,57 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('data-payload-part="trigger"');
     expect(markup).toContain('[data-payload-part="trigger"]');
     expect(markup).toContain('aria-expanded="true"');
+  });
+
+  it('resolves linked reusable sources and site tokens in the public renderer', () => {
+    const reusableId = randomUUID();
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
+      metadata: { documentTitle: 'Reusable runtime' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'linked',
+            type: 'reusable-instance',
+            props: { reusableId },
+            children: [],
+          },
+        ],
+      },
+    });
+    const reusable = {
+      version: 1 as const,
+      root: {
+        id: 'source',
+        type: 'section' as const,
+        props: {},
+        style: {
+          base: { backgroundColor: { kind: 'token' as const, tokenId: 'color-primary' } },
+          mobile: { padding: { kind: 'token' as const, tokenId: 'space-2' } },
+        },
+        children: [
+          {
+            id: 'source-heading',
+            type: 'heading' as const,
+            props: { text: 'Shared source', level: 2 as const },
+            children: [],
+          },
+        ],
+      },
+    };
+    const markup = renderToStaticMarkup(
+      renderPage(payload, {
+        reusables: [{ id: reusableId, document: reusable }],
+        designSystem: createDefaultSiteDesignSystem(),
+      }),
+    );
+    expect(markup).toContain('Shared source');
+    expect(markup).toContain('data-reusable-id="' + reusableId + '"');
+    expect(markup).toContain('background-color:#2563eb');
+    expect(markup).toContain('padding:16px!important');
   });
 
   it('keeps base styles and emits controlled responsive rules', () => {
@@ -742,7 +796,8 @@ describe('PagePayloadV1 renderer', () => {
     const markup = renderToStaticMarkup(renderPage(payload));
     for (const type of Object.keys(PAGE_COMPONENT_REGISTRY).filter(
       (candidate) =>
-        !(SITE_GLOBAL_COMPONENT_TYPES as readonly string[]).includes(candidate),
+        !(SITE_GLOBAL_COMPONENT_TYPES as readonly string[]).includes(candidate) &&
+        candidate !== 'reusable-instance',
     )) {
       expect(markup).toContain(`data-payload-node-type="${type}"`);
     }

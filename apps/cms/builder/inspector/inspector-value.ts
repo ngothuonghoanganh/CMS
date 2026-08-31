@@ -1,6 +1,10 @@
 import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  resolvePageStyleValue,
   type PageNodeStyle,
+  type PageNodeStyleV7,
+  type SiteDesignSystem,
+  type StyleTokenReference,
 } from '@payload/contracts';
 
 import type { BuilderViewport } from '../builder-adapter';
@@ -8,9 +12,11 @@ import type { BuilderViewport } from '../builder-adapter';
 /** The value shown by an Inspector control for a responsive property. */
 export type ResolvedInspectorValue = {
   /** Value authored directly at the active viewport, when one exists. */
-  authoredValue?: string;
+  authoredValue?: string | StyleTokenReference;
   /** Value that is effective after the desktop → tablet → mobile cascade. */
   effectiveValue?: string;
+  /** The persisted value supplying the effective value, including token refs. */
+  effectiveRawValue?: string | StyleTokenReference;
   /** Whether the effective value comes from an ancestor viewport. */
   inherited: boolean;
   /** Viewport that supplied the effective value. */
@@ -23,9 +29,10 @@ export type ResolvedInspectorValue = {
  * affordances use `authoredValue` to distinguish inherited values.
  */
 export function resolveInspectorStyleValue(
-  style: PageNodeStyle | undefined,
+  style: PageNodeStyle | PageNodeStyleV7 | undefined,
   property: string,
   viewport: BuilderViewport,
+  designSystem?: SiteDesignSystem,
 ): ResolvedInspectorValue {
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
@@ -36,7 +43,10 @@ export function resolveInspectorStyleValue(
   const authoredBlock = style?.[activeKey];
   const authoredValue = authoredBlock?.[payloadKey as keyof typeof authoredBlock];
 
-  const candidates: Array<{ viewport: BuilderViewport; value: string | undefined }> =
+  const candidates: Array<{
+    viewport: BuilderViewport;
+    value: string | StyleTokenReference | undefined;
+  }> =
     viewport === 'desktop'
       ? [
           {
@@ -73,15 +83,26 @@ export function resolveInspectorStyleValue(
             },
           ];
 
-  const source = candidates.find(({ value }) => typeof value === 'string');
+  const isStyleValue = (
+    value: string | StyleTokenReference | undefined,
+  ): value is string | StyleTokenReference =>
+    typeof value === 'string' ||
+    (typeof value === 'object' && value !== null && value.kind === 'token');
+  const source = candidates.find(({ value }) => isStyleValue(value));
+  const sourceValue = source?.value;
+  const effectiveValue = isStyleValue(sourceValue)
+    ? resolvePageStyleValue(sourceValue, designSystem, payloadKey)
+    : undefined;
+  const authoredStyleValue = isStyleValue(authoredValue) ? authoredValue : undefined;
   return {
-    ...(typeof authoredValue === 'string' ? { authoredValue } : {}),
-    ...(source && typeof source.value === 'string'
-      ? { effectiveValue: source.value, sourceViewport: source.viewport }
+    ...(authoredStyleValue !== undefined ? { authoredValue: authoredStyleValue } : {}),
+    ...(source && effectiveValue !== undefined
+      ? { effectiveValue, sourceViewport: source.viewport }
+      : {}),
+    ...(typeof sourceValue === 'object' && isStyleValue(sourceValue)
+      ? { effectiveRawValue: sourceValue }
       : {}),
     inherited:
-      viewport !== 'desktop' &&
-      typeof source?.value === 'string' &&
-      source.viewport !== viewport,
+      viewport !== 'desktop' && source !== undefined && source.viewport !== viewport,
   };
 }

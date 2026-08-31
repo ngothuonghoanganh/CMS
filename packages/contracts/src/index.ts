@@ -11,7 +11,10 @@ import {
   PageResourceSchema,
 } from './extension-platform';
 import { PAGE_COMPONENT_REGISTRY, isPageComponentType } from './component-registry';
-import { PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY } from './style-registry';
+import {
+  PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
+  isSafePageStyleValue,
+} from './style-registry';
 
 export const apiVersion = 'v1' as const;
 
@@ -91,6 +94,12 @@ export const TenantPermissions = {
   TemplateCreate: 'template.create',
   TemplateUpdate: 'template.update',
   TemplateDelete: 'template.delete',
+  ReusableRead: 'reusable.read',
+  ReusableCreate: 'reusable.create',
+  ReusableUpdate: 'reusable.update',
+  ReusableDelete: 'reusable.delete',
+  DesignSystemRead: 'design-system.read',
+  DesignSystemUpdate: 'design-system.update',
   FormIntegrationRead: 'form-integration.read',
   FormIntegrationUpdate: 'form-integration.update',
   WorkflowRead: 'workflow.read',
@@ -2541,8 +2550,818 @@ export const PagePayloadV6Schema = z
   });
 
 export type PagePayloadV6 = z.infer<typeof PagePayloadV6Schema>;
+
+// V7 introduces linked reusable instances and explicit design-token references.
+// Previous payload versions intentionally remain immutable so existing pages do
+// not get rewritten merely because the platform learned a new capability.
+export const StyleTokenReferenceSchema = z
+  .object({
+    kind: z.literal('token'),
+    tokenId: pageNodeId,
+  })
+  .strict();
+export type StyleTokenReference = z.infer<typeof StyleTokenReferenceSchema>;
+
+const tokenOrLiteralStyleValue = z.union([styleValue, StyleTokenReferenceSchema]);
+const tokenOrLiteralFontWeight = z.union([
+  z.enum(['400', '500', '600', '700', '800']),
+  StyleTokenReferenceSchema,
+]);
+
+export const PageNodeStyleV7Schema = z
+  .object({
+    base: z
+      .object({
+        display: z
+          .enum(['block', 'flex', 'grid', 'inline', 'inline-block', 'none'])
+          .optional(),
+        flexDirection: z
+          .enum(['row', 'column', 'row-reverse', 'column-reverse'])
+          .optional(),
+        justifyContent: z
+          .enum([
+            'flex-start',
+            'center',
+            'flex-end',
+            'space-between',
+            'space-around',
+            'space-evenly',
+          ])
+          .optional(),
+        alignItems: z
+          .enum(['flex-start', 'center', 'flex-end', 'stretch', 'baseline'])
+          .optional(),
+        flexWrap: z.enum(['nowrap', 'wrap', 'wrap-reverse']).optional(),
+        gridTemplateColumns: tokenOrLiteralStyleValue.optional(),
+        position: z.enum(['static', 'relative', 'sticky', 'absolute']).optional(),
+        width: tokenOrLiteralStyleValue.optional(),
+        height: tokenOrLiteralStyleValue.optional(),
+        minWidth: tokenOrLiteralStyleValue.optional(),
+        maxWidth: tokenOrLiteralStyleValue.optional(),
+        minHeight: tokenOrLiteralStyleValue.optional(),
+        maxHeight: tokenOrLiteralStyleValue.optional(),
+        padding: tokenOrLiteralStyleValue.optional(),
+        margin: tokenOrLiteralStyleValue.optional(),
+        gap: tokenOrLiteralStyleValue.optional(),
+        fontFamily: tokenOrLiteralStyleValue.optional(),
+        backgroundColor: tokenOrLiteralStyleValue.optional(),
+        color: tokenOrLiteralStyleValue.optional(),
+        fontSize: tokenOrLiteralStyleValue.optional(),
+        fontWeight: tokenOrLiteralFontWeight.optional(),
+        lineHeight: tokenOrLiteralStyleValue.optional(),
+        letterSpacing: tokenOrLiteralStyleValue.optional(),
+        textAlign: z.enum(['left', 'center', 'right']).optional(),
+        textDecoration: z.enum(['none', 'underline', 'line-through']).optional(),
+        borderWidth: tokenOrLiteralStyleValue.optional(),
+        borderStyle: z.enum(['none', 'solid', 'dashed', 'dotted']).optional(),
+        borderColor: tokenOrLiteralStyleValue.optional(),
+        borderRadius: tokenOrLiteralStyleValue.optional(),
+        opacity: tokenOrLiteralStyleValue.optional(),
+        boxShadow: tokenOrLiteralStyleValue.optional(),
+      })
+      .strict(),
+    tablet: z
+      .object({
+        display: z
+          .enum(['block', 'flex', 'grid', 'inline', 'inline-block', 'none'])
+          .optional(),
+        flexDirection: z
+          .enum(['row', 'column', 'row-reverse', 'column-reverse'])
+          .optional(),
+        justifyContent: z
+          .enum([
+            'flex-start',
+            'center',
+            'flex-end',
+            'space-between',
+            'space-around',
+            'space-evenly',
+          ])
+          .optional(),
+        alignItems: z
+          .enum(['flex-start', 'center', 'flex-end', 'stretch', 'baseline'])
+          .optional(),
+        flexWrap: z.enum(['nowrap', 'wrap', 'wrap-reverse']).optional(),
+        gridTemplateColumns: tokenOrLiteralStyleValue.optional(),
+        position: z.enum(['static', 'relative', 'sticky', 'absolute']).optional(),
+        width: tokenOrLiteralStyleValue.optional(),
+        height: tokenOrLiteralStyleValue.optional(),
+        minWidth: tokenOrLiteralStyleValue.optional(),
+        maxWidth: tokenOrLiteralStyleValue.optional(),
+        minHeight: tokenOrLiteralStyleValue.optional(),
+        maxHeight: tokenOrLiteralStyleValue.optional(),
+        padding: tokenOrLiteralStyleValue.optional(),
+        margin: tokenOrLiteralStyleValue.optional(),
+        gap: tokenOrLiteralStyleValue.optional(),
+        fontFamily: tokenOrLiteralStyleValue.optional(),
+        backgroundColor: tokenOrLiteralStyleValue.optional(),
+        color: tokenOrLiteralStyleValue.optional(),
+        fontSize: tokenOrLiteralStyleValue.optional(),
+        fontWeight: tokenOrLiteralFontWeight.optional(),
+        lineHeight: tokenOrLiteralStyleValue.optional(),
+        letterSpacing: tokenOrLiteralStyleValue.optional(),
+        textAlign: z.enum(['left', 'center', 'right']).optional(),
+        textDecoration: z.enum(['none', 'underline', 'line-through']).optional(),
+        borderWidth: tokenOrLiteralStyleValue.optional(),
+        borderStyle: z.enum(['none', 'solid', 'dashed', 'dotted']).optional(),
+        borderColor: tokenOrLiteralStyleValue.optional(),
+        borderRadius: tokenOrLiteralStyleValue.optional(),
+        opacity: tokenOrLiteralStyleValue.optional(),
+        boxShadow: tokenOrLiteralStyleValue.optional(),
+      })
+      .strict()
+      .optional(),
+    mobile: z
+      .object({
+        display: z
+          .enum(['block', 'flex', 'grid', 'inline', 'inline-block', 'none'])
+          .optional(),
+        flexDirection: z
+          .enum(['row', 'column', 'row-reverse', 'column-reverse'])
+          .optional(),
+        justifyContent: z
+          .enum([
+            'flex-start',
+            'center',
+            'flex-end',
+            'space-between',
+            'space-around',
+            'space-evenly',
+          ])
+          .optional(),
+        alignItems: z
+          .enum(['flex-start', 'center', 'flex-end', 'stretch', 'baseline'])
+          .optional(),
+        flexWrap: z.enum(['nowrap', 'wrap', 'wrap-reverse']).optional(),
+        gridTemplateColumns: tokenOrLiteralStyleValue.optional(),
+        position: z.enum(['static', 'relative', 'sticky', 'absolute']).optional(),
+        width: tokenOrLiteralStyleValue.optional(),
+        height: tokenOrLiteralStyleValue.optional(),
+        minWidth: tokenOrLiteralStyleValue.optional(),
+        maxWidth: tokenOrLiteralStyleValue.optional(),
+        minHeight: tokenOrLiteralStyleValue.optional(),
+        maxHeight: tokenOrLiteralStyleValue.optional(),
+        padding: tokenOrLiteralStyleValue.optional(),
+        margin: tokenOrLiteralStyleValue.optional(),
+        gap: tokenOrLiteralStyleValue.optional(),
+        fontFamily: tokenOrLiteralStyleValue.optional(),
+        backgroundColor: tokenOrLiteralStyleValue.optional(),
+        color: tokenOrLiteralStyleValue.optional(),
+        fontSize: tokenOrLiteralStyleValue.optional(),
+        fontWeight: tokenOrLiteralFontWeight.optional(),
+        lineHeight: tokenOrLiteralStyleValue.optional(),
+        letterSpacing: tokenOrLiteralStyleValue.optional(),
+        textAlign: z.enum(['left', 'center', 'right']).optional(),
+        textDecoration: z.enum(['none', 'underline', 'line-through']).optional(),
+        borderWidth: tokenOrLiteralStyleValue.optional(),
+        borderStyle: z.enum(['none', 'solid', 'dashed', 'dotted']).optional(),
+        borderColor: tokenOrLiteralStyleValue.optional(),
+        borderRadius: tokenOrLiteralStyleValue.optional(),
+        opacity: tokenOrLiteralStyleValue.optional(),
+        boxShadow: tokenOrLiteralStyleValue.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type PageNodeStyleV7 = z.infer<typeof PageNodeStyleV7Schema>;
+
+export type PageNodePartsStyleV7 = Record<string, PageNodeStyleV7>;
+export const PageNodePartsStyleV7Schema = z.record(
+  z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+  PageNodeStyleV7Schema,
+);
+
+type PageNodeV7Base = {
+  id: string;
+  style?: PageNodeStyleV7 | undefined;
+  partsStyle?: PageNodePartsStyleV7 | undefined;
+  children: PageNodeV7[];
+};
+export type ReusableInstanceProps = { reusableId: EntityId };
+export const ReusableInstancePropsSchema = z
+  .object({ reusableId: EntityIdSchema })
+  .strict();
+export type RootNodeV7 = PageNodeV7Base & { type: 'root'; props: {} };
+export type SectionNodeV7 = PageNodeV7Base & { type: 'section'; props: {} };
+export type ContainerNodeV7 = PageNodeV7Base & { type: 'container'; props: {} };
+export type TextNodeV7 = PageNodeV7Base & {
+  type: 'text';
+  props: { text: string; align?: 'left' | 'center' | 'right' | undefined };
+};
+export type ImageNodeV7 = PageNodeV7Base & {
+  type: 'image';
+  props: { src: string; alt: string };
+};
+export type ButtonNodeV7 = PageNodeV7Base & {
+  type: 'button';
+  props: { label: string; href: string; target: '_self' | '_blank' };
+};
+export type FormNodeV7 = PageNodeV7Base & { type: 'form'; props: FormProps };
+export type CountdownNodeV7 = PageNodeV7Base & {
+  type: 'countdown';
+  props: CountdownProps;
+};
+export type ExtensionNodeV7 = PageNodeV7Base & {
+  type: 'extension';
+  props: CustomExtensionNodeProps;
+};
+export type HeadingNodeV7 = PageNodeV7Base & { type: 'heading'; props: HeadingProps };
+export type LinkNodeV7 = PageNodeV7Base & { type: 'link'; props: LinkProps };
+export type DividerNodeV7 = PageNodeV7Base & { type: 'divider'; props: {} };
+export type ListNodeV7 = PageNodeV7Base & { type: 'list'; props: ListProps };
+export type VideoNodeV7 = PageNodeV7Base & { type: 'video'; props: VideoProps };
+export type QuoteNodeV7 = PageNodeV7Base & { type: 'quote'; props: QuoteProps };
+export type AccordionNodeV7 = PageNodeV7Base & {
+  type: 'accordion';
+  props: AccordionPropsV6 | AccordionProps;
+};
+export type AccordionItemNodeV7 = PageNodeV7Base & {
+  type: 'accordion-item';
+  props: AccordionItemProps;
+};
+export type TabsNodeV7 = PageNodeV7Base & {
+  type: 'tabs';
+  props: TabsPropsV6 | TabsProps;
+};
+export type TabItemNodeV7 = PageNodeV7Base & { type: 'tab-item'; props: TabItemProps };
+export type GalleryNodeV7 = PageNodeV7Base & { type: 'gallery'; props: {} };
+export type GlobalHeaderNodeV7 = PageNodeV7Base & {
+  type: 'global-header';
+  props: GlobalHeaderProps;
+};
+export type GlobalFooterNodeV7 = PageNodeV7Base & {
+  type: 'global-footer';
+  props: GlobalFooterProps;
+};
+export type NavigationViewNodeV7 = PageNodeV7Base & {
+  type: 'navigation-view';
+  props: NavigationViewProps;
+};
+export type SiteBrandNodeV7 = PageNodeV7Base & {
+  type: 'site-brand';
+  props: SiteBrandProps;
+};
+export type ReusableInstanceNodeV7 = PageNodeV7Base & {
+  type: 'reusable-instance';
+  props: ReusableInstanceProps;
+};
+export type PageNodeV7 =
+  | RootNodeV7
+  | SectionNodeV7
+  | ContainerNodeV7
+  | TextNodeV7
+  | ImageNodeV7
+  | ButtonNodeV7
+  | FormNodeV7
+  | CountdownNodeV7
+  | ExtensionNodeV7
+  | HeadingNodeV7
+  | LinkNodeV7
+  | DividerNodeV7
+  | ListNodeV7
+  | VideoNodeV7
+  | QuoteNodeV7
+  | AccordionNodeV7
+  | AccordionItemNodeV7
+  | TabsNodeV7
+  | TabItemNodeV7
+  | GalleryNodeV7
+  | GlobalHeaderNodeV7
+  | GlobalFooterNodeV7
+  | NavigationViewNodeV7
+  | SiteBrandNodeV7
+  | ReusableInstanceNodeV7;
+
+const pageNodeV7Children = () => z.array(PageNodeV7Schema);
+const emptyPageV7Children = () => z.array(z.never()).length(0);
+const pageNodeV7Base = <
+  T extends z.ZodTypeAny,
+  P extends z.ZodTypeAny,
+  C extends z.ZodTypeAny,
+>(
+  type: T,
+  props: P,
+  children: C,
+) =>
+  z
+    .object({
+      id: pageNodeId,
+      type,
+      props,
+      style: PageNodeStyleV7Schema.optional(),
+      partsStyle: PageNodePartsStyleV7Schema.optional(),
+      children,
+    })
+    .strict();
+
+export const PageNodeV7Schema: z.ZodType<PageNodeV7> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    pageNodeV7Base(z.literal('root'), z.object({}).strict(), pageNodeV7Children()),
+    pageNodeV7Base(z.literal('section'), z.object({}).strict(), pageNodeV7Children()),
+    pageNodeV7Base(z.literal('container'), z.object({}).strict(), pageNodeV7Children()),
+    pageNodeV7Base(
+      z.literal('text'),
+      z
+        .object({
+          text: nonEmptyText.max(PAGE_PAYLOAD_MAX_TEXT_LENGTH),
+          align: z.enum(['left', 'center', 'right']).optional(),
+        })
+        .strict(),
+      emptyPageV7Children(),
+    ),
+    pageNodeV7Base(
+      z.literal('image'),
+      z.object({ src: safeImageSource, alt: z.string().trim().max(500) }).strict(),
+      emptyPageV7Children(),
+    ),
+    pageNodeV7Base(
+      z.literal('button'),
+      z
+        .object({
+          label: nonEmptyText.max(200),
+          href: safeButtonHref,
+          target: z.enum(['_self', '_blank']),
+        })
+        .strict(),
+      emptyPageV7Children(),
+    ),
+    pageNodeV7Base(z.literal('form'), FormPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(z.literal('countdown'), CountdownPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(
+      z.literal('extension'),
+      CustomExtensionNodePropsSchema,
+      emptyPageV7Children(),
+    ),
+    pageNodeV7Base(z.literal('heading'), HeadingPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(z.literal('link'), LinkPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(z.literal('divider'), z.object({}).strict(), emptyPageV7Children()),
+    pageNodeV7Base(z.literal('list'), ListPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(z.literal('video'), VideoPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(z.literal('quote'), QuotePropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(
+      z.literal('accordion'),
+      z.union([AccordionPropsV6Schema, AccordionPropsSchema]),
+      pageNodeV7Children(),
+    ),
+    pageNodeV7Base(
+      z.literal('accordion-item'),
+      AccordionItemPropsSchema,
+      pageNodeV7Children(),
+    ),
+    pageNodeV7Base(
+      z.literal('tabs'),
+      z.union([TabsPropsV6Schema, TabsPropsSchema]),
+      pageNodeV7Children(),
+    ),
+    pageNodeV7Base(z.literal('tab-item'), TabItemPropsSchema, pageNodeV7Children()),
+    pageNodeV7Base(z.literal('gallery'), z.object({}).strict(), pageNodeV7Children()),
+    pageNodeV7Base(
+      z.literal('global-header'),
+      GlobalHeaderPropsSchema,
+      pageNodeV7Children(),
+    ),
+    pageNodeV7Base(
+      z.literal('global-footer'),
+      GlobalFooterPropsSchema,
+      pageNodeV7Children(),
+    ),
+    pageNodeV7Base(
+      z.literal('navigation-view'),
+      NavigationViewPropsSchema,
+      emptyPageV7Children(),
+    ),
+    pageNodeV7Base(z.literal('site-brand'), SiteBrandPropsSchema, emptyPageV7Children()),
+    pageNodeV7Base(
+      z.literal('reusable-instance'),
+      ReusableInstancePropsSchema,
+      emptyPageV7Children(),
+    ),
+  ]),
+);
+
+function validatePageNodeV7Tree(
+  root: PageNodeV7,
+  context: z.RefinementCtx,
+  options: { requirePageRoot: boolean; allowGlobals: boolean; allowReusable: boolean },
+  pathPrefix: (string | number)[] = ['root'],
+): void {
+  if (options.requirePageRoot && (root.type !== 'root' || root.id !== 'root')) {
+    context.addIssue({
+      code: 'custom',
+      message: 'The payload root must have type root and id root',
+      path: pathPrefix,
+    });
+  }
+  const nodeIds = new Set<string>();
+  const pending: Array<{ node: PageNodeV7; path: (string | number)[]; depth: number }> = [
+    { node: root, path: pathPrefix, depth: 1 },
+  ];
+  let nodeCount = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    nodeCount += 1;
+    if (nodeCount > PAGE_PAYLOAD_MAX_NODES) {
+      context.addIssue({
+        code: 'custom',
+        message: `PAGE_PAYLOAD_NODE_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_NODES}`,
+        path: current.path,
+      });
+      break;
+    }
+    if (current.depth > PAGE_PAYLOAD_MAX_TREE_DEPTH) {
+      context.addIssue({
+        code: 'custom',
+        message: `PAGE_PAYLOAD_DEPTH_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_TREE_DEPTH}`,
+        path: current.path,
+      });
+      continue;
+    }
+    if (nodeIds.has(current.node.id)) {
+      context.addIssue({
+        code: 'custom',
+        message: `Duplicate page node id: ${current.node.id}`,
+        path: [...current.path, 'id'],
+      });
+    }
+    nodeIds.add(current.node.id);
+    if (!options.allowGlobals && isSiteGlobalComponentType(current.node.type)) {
+      context.addIssue({
+        code: 'custom',
+        message: `${current.node.type} is only valid in a site global document`,
+        path: [...current.path, 'type'],
+      });
+    }
+    if (!options.allowReusable && current.node.type === 'reusable-instance') {
+      context.addIssue({
+        code: 'custom',
+        message: 'Reusable documents cannot contain nested reusable instances',
+        path: [...current.path, 'type'],
+      });
+    }
+    if (!options.allowReusable && current.node.type === 'extension') {
+      context.addIssue({
+        code: 'custom',
+        message: 'Reusable documents cannot contain extension nodes',
+        path: [...current.path, 'type'],
+      });
+    }
+    const definition = PAGE_COMPONENT_REGISTRY[current.node.type];
+    for (const [partName, partStyle] of Object.entries(current.node.partsStyle ?? {})) {
+      const part = definition.componentParts[partName];
+      if (!part) {
+        context.addIssue({
+          code: 'custom',
+          message: `Unknown ${current.node.type} component part: ${partName}`,
+          path: [...current.path, 'partsStyle', partName],
+        });
+        continue;
+      }
+      for (const viewport of ['base', 'tablet', 'mobile'] as const) {
+        for (const property of Object.keys(partStyle[viewport] ?? {})) {
+          if (
+            !part.styleCapabilities.includes(
+              PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
+            )
+          ) {
+            context.addIssue({
+              code: 'custom',
+              message: `Style property ${property} is not allowed for ${current.node.type}.${partName}`,
+              path: [...current.path, 'partsStyle', partName, viewport, property],
+            });
+          }
+        }
+      }
+    }
+    for (const [index, child] of current.node.children.entries()) {
+      const slot = definition.slots.find((candidate) =>
+        candidate.accepts.includes(child.type),
+      );
+      if (!slot) {
+        context.addIssue({
+          code: 'custom',
+          message: `Node type ${current.node.type} cannot contain ${child.type} children`,
+          path: [...current.path, 'children', index, 'type'],
+        });
+      }
+      pending.push({
+        node: child,
+        path: [...current.path, 'children', index],
+        depth: current.depth + 1,
+      });
+    }
+    for (const slot of definition.slots) {
+      const count = current.node.children.filter((child) =>
+        slot.accepts.includes(child.type),
+      ).length;
+      if (slot.minChildren !== undefined && count < slot.minChildren) {
+        context.addIssue({
+          code: 'custom',
+          message: `${current.node.type} requires at least ${slot.minChildren} ${slot.label.toLowerCase()}`,
+          path: [...current.path, 'children'],
+        });
+      }
+      if (slot.maxChildren !== undefined && count > slot.maxChildren) {
+        context.addIssue({
+          code: 'custom',
+          message: `${current.node.type} allows at most ${slot.maxChildren} ${slot.label.toLowerCase()}`,
+          path: [...current.path, 'children'],
+        });
+      }
+    }
+    validateAccordionOpenState(current.node, context, current.path);
+  }
+}
+
+export const PagePayloadV7Schema = z
+  .object({
+    version: z.literal(7),
+    metadata: PagePayloadV1Schema.shape.metadata,
+    root: PageNodeV7Schema,
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    validatePageNodeV7Tree(payload.root, context, {
+      requirePageRoot: true,
+      allowGlobals: false,
+      allowReusable: true,
+    });
+    const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
+    if (serializedSize > PAGE_PAYLOAD_MAX_SERIALIZED_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        message: `PAGE_PAYLOAD_TOO_LARGE: maximum serialized size is ${PAGE_PAYLOAD_MAX_SERIALIZED_BYTES} bytes`,
+        path: [],
+      });
+    }
+  });
+export type PagePayloadV7 = z.infer<typeof PagePayloadV7Schema>;
+
+export const ReusableComponentDocumentSchema = z
+  .object({ version: z.literal(1), root: PageNodeV7Schema })
+  .strict()
+  .superRefine((document, context) => {
+    if (document.root.type === 'root' || isSiteGlobalComponentType(document.root.type)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A reusable document must contain a normal section or component subtree',
+        path: ['root', 'type'],
+      });
+    }
+    validatePageNodeV7Tree(document.root, context, {
+      requirePageRoot: false,
+      allowGlobals: false,
+      allowReusable: false,
+    });
+  });
+export type ReusableComponentDocument = z.infer<typeof ReusableComponentDocumentSchema>;
+
+export const ReusableKindSchema = z.enum(['section', 'component']);
+export const ReusableStatusSchema = z.enum(['active', 'archived']);
+export const ReusableComponentSchema = z
+  .object({
+    id: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    siteId: EntityIdSchema,
+    name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    kind: ReusableKindSchema,
+    status: ReusableStatusSchema,
+    draft: ReusableComponentDocumentSchema,
+    published: ReusableComponentDocumentSchema.optional(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type ReusableComponent = z.infer<typeof ReusableComponentSchema>;
+export const ReusableRuntimeSchema = z
+  .object({ id: EntityIdSchema, document: ReusableComponentDocumentSchema })
+  .strict();
+export type ReusableRuntime = z.infer<typeof ReusableRuntimeSchema>;
+export const ReusableListResponseSchema = z
+  .object({
+    items: z.array(ReusableComponentSchema),
+    pagination: z
+      .object({
+        limit: z.number().int().min(1),
+        offset: z.number().int().nonnegative(),
+        total: z.number().int().nonnegative(),
+        hasNextPage: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict();
+export type ReusableListResponse = z.infer<typeof ReusableListResponseSchema>;
+export const CreateReusableRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    kind: ReusableKindSchema,
+    document: ReusableComponentDocumentSchema,
+  })
+  .strict();
+export const UpdateReusableRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+    kind: ReusableKindSchema.optional(),
+    document: ReusableComponentDocumentSchema.optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export type CreateReusableRequest = z.infer<typeof CreateReusableRequestSchema>;
+export type UpdateReusableRequest = z.infer<typeof UpdateReusableRequestSchema>;
+export const ReusableUsagePageSchema = z
+  .object({
+    pageId: EntityIdSchema,
+    pageName: nonEmptyText.max(200),
+    instanceCount: z.number().int().positive(),
+  })
+  .strict();
+export const ReusableUsageResponseSchema = z
+  .object({
+    reusableId: EntityIdSchema,
+    instanceCount: z.number().int().nonnegative(),
+    pages: z.array(ReusableUsagePageSchema).max(2_000),
+  })
+  .strict();
+export type ReusableUsageResponse = z.infer<typeof ReusableUsageResponseSchema>;
+
+const designTokenId = z
+  .string()
+  .regex(
+    /^[A-Za-z][A-Za-z0-9_-]{0,127}$/,
+    'Token ids must be stable URL-safe identifiers',
+  );
+const safeDesignTokenValue = z
+  .string()
+  .trim()
+  .min(1)
+  .max(PAGE_PAYLOAD_MAX_STYLE_VALUE_LENGTH)
+  .refine(isSafePageStyleValue, 'Design token value contains unsafe CSS');
+const DesignScalarTokenSchema = z
+  .object({ id: designTokenId, name: nonEmptyText.max(100), value: safeDesignTokenValue })
+  .strict();
+export type DesignScalarToken = z.infer<typeof DesignScalarTokenSchema>;
+export const TypographyTokenSchema = z
+  .object({
+    id: designTokenId,
+    name: nonEmptyText.max(100),
+    fontFamily: safeDesignTokenValue.optional(),
+    fontSize: safeDesignTokenValue.optional(),
+    fontWeight: z.enum(['400', '500', '600', '700', '800']).optional(),
+    lineHeight: safeDesignTokenValue.optional(),
+    letterSpacing: safeDesignTokenValue.optional(),
+  })
+  .strict()
+  .refine(
+    (token) =>
+      Boolean(
+        token.fontFamily ||
+        token.fontSize ||
+        token.fontWeight ||
+        token.lineHeight ||
+        token.letterSpacing,
+      ),
+    'Typography tokens must define at least one value',
+  );
+export type TypographyToken = z.infer<typeof TypographyTokenSchema>;
+
+export const DesignTokenUsageReferenceSchema = z
+  .object({
+    kind: z.enum(['page', 'global', 'reusable']),
+    id: EntityIdSchema,
+    name: nonEmptyText.max(200),
+    count: z.number().int().positive(),
+  })
+  .strict();
+export type DesignTokenUsageReference = z.infer<typeof DesignTokenUsageReferenceSchema>;
+export const DesignTokenUsageResponseSchema = z
+  .object({
+    tokenId: designTokenId,
+    referenceCount: z.number().int().nonnegative(),
+    references: z.array(DesignTokenUsageReferenceSchema).max(2_000),
+  })
+  .strict();
+export type DesignTokenUsageResponse = z.infer<typeof DesignTokenUsageResponseSchema>;
+export const DesignTokenUsageQuerySchema = z.object({ tokenId: designTokenId }).strict();
+export type DesignTokenUsageQuery = z.infer<typeof DesignTokenUsageQuerySchema>;
+
+export const SiteDesignSystemSchema = z
+  .object({
+    version: z.literal(1),
+    colors: z.array(DesignScalarTokenSchema).max(100),
+    typography: z.array(TypographyTokenSchema).max(50),
+    spacing: z.array(DesignScalarTokenSchema).max(100),
+    radii: z.array(DesignScalarTokenSchema).max(50),
+    shadows: z.array(DesignScalarTokenSchema).max(50),
+    containerWidths: z.array(DesignScalarTokenSchema).max(50),
+  })
+  .strict()
+  .superRefine((system, context) => {
+    const seen = new Set<string>();
+    for (const [category, tokens] of Object.entries(system)) {
+      if (category === 'version') continue;
+      for (const [index, token] of (tokens as Array<{ id: string }>).entries()) {
+        if (seen.has(token.id)) {
+          context.addIssue({
+            code: 'custom',
+            message: `Design token id must be globally unique: ${token.id}`,
+            path: [category, index, 'id'],
+          });
+        }
+        seen.add(token.id);
+      }
+    }
+  });
+export type SiteDesignSystem = z.infer<typeof SiteDesignSystemSchema>;
+
+export function createDefaultSiteDesignSystem(): SiteDesignSystem {
+  return SiteDesignSystemSchema.parse({
+    version: 1,
+    colors: [
+      { id: 'color-primary', name: 'Primary', value: '#2563eb' },
+      { id: 'color-surface', name: 'Surface', value: '#ffffff' },
+      { id: 'color-text', name: 'Text', value: '#111827' },
+      { id: 'color-muted', name: 'Muted text', value: '#6b7280' },
+    ],
+    typography: [
+      {
+        id: 'type-body',
+        name: 'Body',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '16px',
+        lineHeight: '1.5',
+      },
+      {
+        id: 'type-heading',
+        name: 'Heading',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 'clamp(2rem, 5vw, 4rem)',
+        fontWeight: '700',
+        lineHeight: '1.1',
+      },
+    ],
+    spacing: [
+      { id: 'space-1', name: 'Small', value: '8px' },
+      { id: 'space-2', name: 'Medium', value: '16px' },
+      { id: 'space-3', name: 'Large', value: '32px' },
+    ],
+    radii: [
+      { id: 'radius-sm', name: 'Small', value: '4px' },
+      { id: 'radius-md', name: 'Medium', value: '8px' },
+    ],
+    shadows: [
+      { id: 'shadow-card', name: 'Card', value: '0 4px 20px rgba(15, 23, 42, .12)' },
+    ],
+    containerWidths: [
+      { id: 'container-narrow', name: 'Narrow', value: '720px' },
+      { id: 'container-wide', name: 'Wide', value: '1200px' },
+    ],
+  });
+}
+
+const designTokenPropertyMap: Record<string, keyof TypographyToken | undefined> = {
+  'font-family': 'fontFamily',
+  'font-size': 'fontSize',
+  'font-weight': 'fontWeight',
+  'line-height': 'lineHeight',
+  'letter-spacing': 'letterSpacing',
+};
+
+export function resolveSiteDesignToken(
+  system: SiteDesignSystem | undefined,
+  tokenId: string,
+  property?: string,
+): string | undefined {
+  if (!system) return undefined;
+  const scalar = [
+    ...system.colors,
+    ...system.spacing,
+    ...system.radii,
+    ...system.shadows,
+    ...system.containerWidths,
+  ].find((token) => token.id === tokenId);
+  if (scalar) return scalar.value;
+  const typography = system.typography.find((token) => token.id === tokenId);
+  if (!typography) return undefined;
+  const key = property ? designTokenPropertyMap[property] : undefined;
+  const value = key ? typography[key] : undefined;
+  return typeof value === 'string' ? value : undefined;
+}
+
+export function resolvePageStyleValue(
+  value: string | StyleTokenReference,
+  system: SiteDesignSystem | undefined,
+  property?: string,
+): string | undefined {
+  if (typeof value === 'string') return isSafePageStyleValue(value) ? value : undefined;
+  return resolveSiteDesignToken(system, value.tokenId, property);
+}
+
 export type AnyPageNode =
-  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
+  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6 | PageNodeV7;
 export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV1Schema,
   PagePayloadV2Schema,
@@ -2550,6 +3369,7 @@ export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV4Schema,
   PagePayloadV5Schema,
   PagePayloadV6Schema,
+  PagePayloadV7Schema,
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
 
@@ -2747,6 +3567,14 @@ export const SiteGlobalsResponseSchema = z
   })
   .strict();
 export type SiteGlobalsResponse = z.infer<typeof SiteGlobalsResponseSchema>;
+
+export const SiteDesignSystemResponseSchema = z
+  .object({
+    draft: SiteDesignSystemSchema,
+    published: SiteDesignSystemSchema.optional(),
+  })
+  .strict();
+export type SiteDesignSystemResponse = z.infer<typeof SiteDesignSystemResponseSchema>;
 
 /**
  * Editor-facing document envelope. The persisted/public payload remains the
@@ -3551,6 +4379,8 @@ export const PublicPageSchema = z
       .strict()
       .optional(),
     globals: SiteGlobalsSchema.optional(),
+    reusables: z.array(ReusableRuntimeSchema).max(200).optional(),
+    designSystem: SiteDesignSystemSchema.optional(),
   })
   .strict();
 
@@ -3703,6 +4533,7 @@ export const UpdateSiteRequestSchema = z
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export const UpdateSiteDesignSystemRequestSchema = SiteDesignSystemSchema;
 export const CreatePageRequestSchema = z
   .object({
     name: nonEmptyText.max(200),
@@ -3774,6 +4605,9 @@ export type UpdateOrganizationMembershipRequest = z.infer<
 export type SwitchAuthContextRequest = z.infer<typeof SwitchAuthContextRequestSchema>;
 export type CreateSiteRequest = z.infer<typeof CreateSiteRequestSchema>;
 export type UpdateSiteRequest = z.infer<typeof UpdateSiteRequestSchema>;
+export type UpdateSiteDesignSystemRequest = z.infer<
+  typeof UpdateSiteDesignSystemRequestSchema
+>;
 export type CreatePageRequest = z.infer<typeof CreatePageRequestSchema>;
 export type UpdatePageRequest = z.infer<typeof UpdatePageRequestSchema>;
 export type CreatePageVersionRequest = z.infer<typeof CreatePageVersionRequestSchema>;

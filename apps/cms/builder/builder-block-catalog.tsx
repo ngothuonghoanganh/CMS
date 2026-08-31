@@ -24,6 +24,7 @@ type BuilderBlockCardProps = BuilderBlockPreviewProps & {
   addLabel: string;
   onAdd: () => void;
   onDragStart: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  secondaryActions?: readonly { label: string; onClick: () => void }[] | undefined;
 };
 
 function PreviewNode({ node }: { node: BuilderPreviewNode }): ReactElement {
@@ -238,6 +239,7 @@ export function BuilderBlockCard({
   addLabel,
   onAdd,
   onDragStart,
+  secondaryActions,
 }: BuilderBlockCardProps): ReactElement {
   const cardRef = useRef<HTMLDivElement>(null);
   const tooltipId = `builder-block-tooltip-${useId().replace(/:/g, '')}`;
@@ -319,6 +321,20 @@ export function BuilderBlockCard({
           <span aria-hidden="true">⠿</span>
           <span>Drag to canvas</span>
         </button>
+        {secondaryActions?.length ? (
+          <div className="builder-block-secondary-actions">
+            {secondaryActions.map((action) => (
+              <button
+                className="button button-small button-ghost builder-block-secondary-action"
+                key={action.label}
+                onClick={action.onClick}
+                type="button"
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
       <button
         aria-describedby={tooltipVisible ? tooltipId : undefined}

@@ -58,6 +58,12 @@ export class SiteRecord {
   @Prop({ type: Object, required: false, minimize: false })
   publishedGlobals?: Record<string, unknown>;
 
+  @Prop({ type: Object, required: false, minimize: false })
+  designSystemDraft?: Record<string, unknown>;
+
+  @Prop({ type: Object, required: false, minimize: false })
+  publishedDesignSystem?: Record<string, unknown>;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

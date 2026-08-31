@@ -51,6 +51,8 @@ import {
   WorkflowStepExecutionSchema,
   NavigationRecord,
   NavigationSchema,
+  ReusableRecord,
+  ReusableSchema,
 } from '../persistence/schemas';
 import { TenantUserRecord, TenantUserSchema } from './schemas/tenant-user.schema';
 import {
@@ -89,6 +91,7 @@ const models = [
   [WorkflowExecutionRecord, WorkflowExecutionSchema],
   [WorkflowStepExecutionRecord, WorkflowStepExecutionSchema],
   [NavigationRecord, NavigationSchema],
+  [ReusableRecord, ReusableSchema],
 ] as const;
 
 const providers = models.map(([record, schema]) =>

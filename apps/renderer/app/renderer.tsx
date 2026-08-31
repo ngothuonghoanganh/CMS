@@ -9,7 +9,9 @@ import {
   type PageNodeV4,
   type PageNodeV5,
   type PageNodeV6,
+  type PageNodeV7,
   type PageNodeStyle,
+  type PageNodeStyleV7,
   type FormNode,
   type RootNode,
   type SectionNode,
@@ -36,6 +38,9 @@ import {
   isSafePageStyleValue,
   pageStyleReactProperty,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
+  resolvePageStyleValue,
+  type ReusableRuntime,
+  type SiteDesignSystem,
 } from '@payload/contracts';
 import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 
@@ -48,40 +53,54 @@ import {
 } from './runtime/navigation-view-runtime';
 
 type RenderableNode =
-  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
+  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6 | PageNodeV7;
 type RootRenderableNode =
   | RootNode
   | Extract<PageNodeV2, { type: 'root' }>
   | Extract<PageNodeV3, { type: 'root' }>
   | Extract<PageNodeV4, { type: 'root' }>
   | Extract<PageNodeV5, { type: 'root' }>
-  | Extract<PageNodeV6, { type: 'root' }>;
+  | Extract<PageNodeV6, { type: 'root' }>
+  | Extract<PageNodeV7, { type: 'root' }>;
 type SectionRenderableNode =
   | SectionNode
   | Extract<PageNodeV2, { type: 'section' }>
   | Extract<PageNodeV3, { type: 'section' }>
   | Extract<PageNodeV4, { type: 'section' }>
   | Extract<PageNodeV5, { type: 'section' }>
-  | Extract<PageNodeV6, { type: 'section' }>;
+  | Extract<PageNodeV6, { type: 'section' }>
+  | Extract<PageNodeV7, { type: 'section' }>;
 type ContainerRenderableNode =
   | ContainerNode
   | Extract<PageNodeV2, { type: 'container' }>
   | Extract<PageNodeV3, { type: 'container' }>
   | Extract<PageNodeV4, { type: 'container' }>
   | Extract<PageNodeV5, { type: 'container' }>
-  | Extract<PageNodeV6, { type: 'container' }>;
+  | Extract<PageNodeV6, { type: 'container' }>
+  | Extract<PageNodeV7, { type: 'container' }>;
 
 type AccordionRenderableNode =
-  AccordionNodeV5 | Extract<PageNodeV6, { type: 'accordion' }>;
+  AccordionNodeV5 | Extract<PageNodeV6 | PageNodeV7, { type: 'accordion' }>;
 type AccordionItemRenderableNode =
-  AccordionItemNodeV5 | Extract<PageNodeV6, { type: 'accordion-item' }>;
-type TabsRenderableNode = TabsNodeV5 | Extract<PageNodeV6, { type: 'tabs' }>;
-type TabItemRenderableNode = TabItemNodeV5 | Extract<PageNodeV6, { type: 'tab-item' }>;
-type GalleryRenderableNode = GalleryNodeV5 | Extract<PageNodeV6, { type: 'gallery' }>;
-type GlobalHeaderRenderableNode = Extract<PageNodeV6, { type: 'global-header' }>;
-type GlobalFooterRenderableNode = Extract<PageNodeV6, { type: 'global-footer' }>;
-type NavigationViewRenderableNode = Extract<PageNodeV6, { type: 'navigation-view' }>;
-type SiteBrandRenderableNode = Extract<PageNodeV6, { type: 'site-brand' }>;
+  AccordionItemNodeV5 | Extract<PageNodeV6 | PageNodeV7, { type: 'accordion-item' }>;
+type TabsRenderableNode = TabsNodeV5 | Extract<PageNodeV6 | PageNodeV7, { type: 'tabs' }>;
+type TabItemRenderableNode =
+  TabItemNodeV5 | Extract<PageNodeV6 | PageNodeV7, { type: 'tab-item' }>;
+type GalleryRenderableNode =
+  GalleryNodeV5 | Extract<PageNodeV6 | PageNodeV7, { type: 'gallery' }>;
+type GlobalHeaderRenderableNode = Extract<
+  PageNodeV6 | PageNodeV7,
+  { type: 'global-header' }
+>;
+type GlobalFooterRenderableNode = Extract<
+  PageNodeV6 | PageNodeV7,
+  { type: 'global-footer' }
+>;
+type NavigationViewRenderableNode = Extract<
+  PageNodeV6 | PageNodeV7,
+  { type: 'navigation-view' }
+>;
+type SiteBrandRenderableNode = Extract<PageNodeV6 | PageNodeV7, { type: 'site-brand' }>;
 export type RenderContext = {
   siteSlug?: string;
   pagePath?: string;
@@ -100,10 +119,16 @@ export type RenderContext = {
       }
     | undefined;
   globals?: SiteGlobals | undefined;
+  reusables?: readonly ReusableRuntime[] | undefined;
+  designSystem?: SiteDesignSystem | undefined;
+  reusableStack?: readonly string[] | undefined;
 };
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
-function styleBlockToProperties(style: PageNodeStyle['base'] | undefined): CSSProperties {
+function styleBlockToProperties(
+  style: PageNodeStyle['base'] | PageNodeStyleV7['base'] | undefined,
+  context: RenderContext = {},
+): CSSProperties {
   if (!style) {
     return {};
   }
@@ -111,16 +136,22 @@ function styleBlockToProperties(style: PageNodeStyle['base'] | undefined): CSSPr
   const result: CSSProperties = {};
   for (const [property, value] of Object.entries(style)) {
     const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
-    if (!definition || typeof value !== 'string' || !isSafePageStyleValue(value)) {
+    if (!definition || (typeof value !== 'string' && typeof value !== 'object')) {
       continue;
     }
-    (result as Record<string, string>)[pageStyleReactProperty(definition)] = value;
+    const resolved = resolvePageStyleValue(
+      value as string | { kind: 'token'; tokenId: string },
+      context.designSystem,
+      definition.key,
+    );
+    if (!resolved || !isSafePageStyleValue(resolved)) continue;
+    (result as Record<string, string>)[pageStyleReactProperty(definition)] = resolved;
   }
   return result;
 }
 
-function nodeStyle(node: RenderableNode): CSSProperties {
-  const style = styleBlockToProperties(node.style?.base);
+function nodeStyle(node: RenderableNode, context: RenderContext = {}): CSSProperties {
+  const style = styleBlockToProperties(node.style?.base, context);
   // `props.align` is retained only as a legacy fallback. New edits are
   // written to style.textAlign, which must win whenever it is authored.
   if (node.type === 'text' && !node.style?.base?.textAlign && node.props.align) {
@@ -129,9 +160,17 @@ function nodeStyle(node: RenderableNode): CSSProperties {
   return style;
 }
 
-function nodePartStyle(node: RenderableNode, part: string): CSSProperties | undefined {
-  const partsStyle = (node as { partsStyle?: Record<string, PageNodeStyle> }).partsStyle;
-  return partsStyle?.[part] ? styleBlockToProperties(partsStyle[part].base) : undefined;
+function nodePartStyle(
+  node: RenderableNode,
+  part: string,
+  context: RenderContext = {},
+): CSSProperties | undefined {
+  const partsStyle = (
+    node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
+  ).partsStyle;
+  return partsStyle?.[part]
+    ? styleBlockToProperties(partsStyle[part].base, context)
+    : undefined;
 }
 
 function nodeAttributes(node: RenderableNode): {
@@ -152,7 +191,7 @@ function renderChildren(node: RenderableNode, context: RenderContext): ReactElem
 
 function renderRoot(node: RootRenderableNode, context: RenderContext): ReactElement {
   return (
-    <main {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <main {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {renderChildren(node, context)}
     </main>
   );
@@ -163,7 +202,7 @@ function renderSection(
   context: RenderContext,
 ): ReactElement {
   return (
-    <section {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <section {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {renderChildren(node, context)}
     </section>
   );
@@ -174,21 +213,21 @@ function renderContainer(
   context: RenderContext,
 ): ReactElement {
   return (
-    <div {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <div {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {renderChildren(node, context)}
     </div>
   );
 }
 
-function renderText(node: TextNode): ReactElement {
+function renderText(node: TextNode, context: RenderContext): ReactElement {
   return (
-    <p {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <p {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {node.props.text}
     </p>
   );
 }
 
-function renderImage(node: ImageNode): ReactElement {
+function renderImage(node: ImageNode, context: RenderContext): ReactElement {
   return (
     <img
       {...nodeAttributes(node)}
@@ -196,7 +235,7 @@ function renderImage(node: ImageNode): ReactElement {
       decoding="async"
       loading="lazy"
       src={node.props.src}
-      style={nodeStyle(node)}
+      style={nodeStyle(node, context)}
     />
   );
 }
@@ -219,14 +258,14 @@ function isSafeHref(value: string): boolean {
   }
 }
 
-function renderButton(node: ButtonNode): ReactElement {
+function renderButton(node: ButtonNode, context: RenderContext): ReactElement {
   const href = isSafeHref(node.props.href) ? node.props.href : '#';
   return (
     <a
       {...nodeAttributes(node)}
       href={href}
       rel={node.props.target === '_blank' ? 'noopener noreferrer' : undefined}
-      style={nodeStyle(node)}
+      style={nodeStyle(node, context)}
       target={node.props.target}
     >
       {node.props.label}
@@ -234,23 +273,23 @@ function renderButton(node: ButtonNode): ReactElement {
   );
 }
 
-function renderHeading(node: HeadingNode): ReactElement {
+function renderHeading(node: HeadingNode, context: RenderContext): ReactElement {
   const Tag = `h${node.props.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
   return (
-    <Tag {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <Tag {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {node.props.text}
     </Tag>
   );
 }
 
-function renderLink(node: LinkNode): ReactElement {
+function renderLink(node: LinkNode, context: RenderContext): ReactElement {
   const href = isSafeHref(node.props.href) ? node.props.href : '#';
   return (
     <a
       {...nodeAttributes(node)}
       href={href}
       rel={node.props.target === '_blank' ? 'noopener noreferrer' : undefined}
-      style={nodeStyle(node)}
+      style={nodeStyle(node, context)}
       target={node.props.target}
     >
       {node.props.text}
@@ -258,14 +297,14 @@ function renderLink(node: LinkNode): ReactElement {
   );
 }
 
-function renderDivider(node: DividerNode): ReactElement {
-  return <hr {...nodeAttributes(node)} style={nodeStyle(node)} />;
+function renderDivider(node: DividerNode, context: RenderContext): ReactElement {
+  return <hr {...nodeAttributes(node)} style={nodeStyle(node, context)} />;
 }
 
-function renderList(node: ListNode): ReactElement {
+function renderList(node: ListNode, context: RenderContext): ReactElement {
   const Tag = node.props.ordered ? 'ol' : 'ul';
   return (
-    <Tag {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <Tag {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {node.props.items.map((item) => (
         <li key={item.id}>{item.text}</li>
       ))}
@@ -273,7 +312,7 @@ function renderList(node: ListNode): ReactElement {
   );
 }
 
-function renderVideo(node: VideoNode): ReactElement {
+function renderVideo(node: VideoNode, context: RenderContext): ReactElement {
   return (
     <video
       {...nodeAttributes(node)}
@@ -284,14 +323,14 @@ function renderVideo(node: VideoNode): ReactElement {
       playsInline={node.props.playsInline}
       poster={node.props.poster}
       src={node.props.src}
-      style={nodeStyle(node)}
+      style={nodeStyle(node, context)}
     />
   );
 }
 
-function renderQuote(node: QuoteNodeV5): ReactElement {
+function renderQuote(node: QuoteNodeV5, context: RenderContext): ReactElement {
   return (
-    <blockquote {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <blockquote {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       <p>{node.props.text}</p>
       {node.props.cite?.trim() ? <cite>{node.props.cite}</cite> : null}
     </blockquote>
@@ -315,16 +354,16 @@ function renderAccordion(
         title: item.type === 'accordion-item' ? item.props.title : 'Accordion item',
         defaultOpen: item.type === 'accordion-item' ? item.props.defaultOpen : false,
         content: renderChildren(item, context),
-        ...(item.style ? { style: nodeStyle(item) } : {}),
+        ...(item.style ? { style: nodeStyle(item, context) } : {}),
       }))}
       partsStyle={{
-        root: nodePartStyle(node, 'root'),
-        item: nodePartStyle(node, 'item'),
-        trigger: nodePartStyle(node, 'trigger'),
-        panel: nodePartStyle(node, 'panel'),
-        icon: nodePartStyle(node, 'icon'),
+        root: nodePartStyle(node, 'root', context),
+        item: nodePartStyle(node, 'item', context),
+        trigger: nodePartStyle(node, 'trigger', context),
+        panel: nodePartStyle(node, 'panel', context),
+        icon: nodePartStyle(node, 'icon', context),
       }}
-      style={nodeStyle(node)}
+      style={nodeStyle(node, context)}
     />
   );
 }
@@ -334,7 +373,7 @@ function renderAccordionItem(
   context: RenderContext,
 ): ReactElement {
   return (
-    <section {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <section {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {renderChildren(node, context)}
     </section>
   );
@@ -352,17 +391,17 @@ function renderTabs(node: TabsRenderableNode, context: RenderContext): ReactElem
         id: item.id,
         label: item.type === 'tab-item' ? item.props.label : 'Tab',
         content: renderChildren(item, context),
-        ...(item.style ? { style: nodeStyle(item) } : {}),
+        ...(item.style ? { style: nodeStyle(item, context) } : {}),
       }))}
       orientation={node.props.orientation}
       partsStyle={{
-        root: nodePartStyle(node, 'root'),
-        list: nodePartStyle(node, 'list'),
-        tab: nodePartStyle(node, 'tab'),
-        activeTab: nodePartStyle(node, 'activeTab'),
-        panel: nodePartStyle(node, 'panel'),
+        root: nodePartStyle(node, 'root', context),
+        list: nodePartStyle(node, 'list', context),
+        tab: nodePartStyle(node, 'tab', context),
+        activeTab: nodePartStyle(node, 'activeTab', context),
+        panel: nodePartStyle(node, 'panel', context),
       }}
-      style={nodeStyle(node)}
+      style={nodeStyle(node, context)}
     />
   );
 }
@@ -372,7 +411,7 @@ function renderTabItem(
   context: RenderContext,
 ): ReactElement {
   return (
-    <section {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <section {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {renderChildren(node, context)}
     </section>
   );
@@ -389,7 +428,7 @@ function renderGallery(
         display: 'grid',
         gap: '16px',
         gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        ...nodeStyle(node),
+        ...nodeStyle(node, context),
       }}
     >
       {renderChildren(node, context)}
@@ -403,14 +442,14 @@ function renderCountdown(node: CountdownNode, context: RenderContext): ReactElem
       <div
         {...nodeAttributes(node)}
         data-extension="demo-builder-countdown"
-        style={nodeStyle(node)}
+        style={nodeStyle(node, context)}
       >
         <CountdownRuntime label={node.props.label} targetAt={node.props.targetAt} />
       </div>
     );
   }
   return (
-    <div {...nodeAttributes(node)} style={nodeStyle(node)}>
+    <div {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       <span>{node.props.label}</span>{' '}
       <time dateTime={node.props.targetAt}>{node.props.targetAt}</time>
     </div>
@@ -429,7 +468,7 @@ function renderExtension(node: ExtensionNode, context: RenderContext): ReactElem
         aria-label="Unavailable custom extension"
         data-extension={node.props.extensionId}
         role="note"
-        style={nodeStyle(node)}
+        style={nodeStyle(node, context)}
       >
         This custom extension is unavailable.
       </div>
@@ -439,7 +478,7 @@ function renderExtension(node: ExtensionNode, context: RenderContext): ReactElem
   const { render } = custom;
   const href =
     render.buttonHref && isSafeHref(render.buttonHref) ? render.buttonHref : null;
-  const style = nodeStyle(node);
+  const style = nodeStyle(node, context);
   return (
     <section
       {...nodeAttributes(node)}
@@ -524,13 +563,13 @@ function renderNavigationView(
       pagePath={context.pagePath}
       partsStyle={
         {
-          root: nodePartStyle(node, 'root'),
-          list: nodePartStyle(node, 'list'),
-          item: nodePartStyle(node, 'item'),
-          link: nodePartStyle(node, 'link'),
-          activeLink: nodePartStyle(node, 'activeLink'),
-          mobileToggle: nodePartStyle(node, 'mobileToggle'),
-          mobilePanel: nodePartStyle(node, 'mobilePanel'),
+          root: nodePartStyle(node, 'root', context),
+          list: nodePartStyle(node, 'list', context),
+          item: nodePartStyle(node, 'item', context),
+          link: nodePartStyle(node, 'link', context),
+          activeLink: nodePartStyle(node, 'activeLink', context),
+          mobileToggle: nodePartStyle(node, 'mobileToggle', context),
+          mobilePanel: nodePartStyle(node, 'mobilePanel', context),
         } satisfies NavigationViewPartStyles
       }
       siteSlug={context.siteSlug}
@@ -549,7 +588,7 @@ function renderSiteBrand(
       {...nodeAttributes(node)}
       data-payload-part="root"
       href={isSafeHref(node.props.href) ? node.props.href : '/'}
-      style={{ ...nodeStyle(node), ...nodePartStyle(node, 'root') }}
+      style={{ ...nodeStyle(node, context), ...nodePartStyle(node, 'root', context) }}
     >
       {showLogo && context.siteLogo ? (
         <img alt="" data-payload-part="logo" src={context.siteLogo} />
@@ -602,8 +641,8 @@ function renderGlobalHeader(
       data-site-global="header"
       data-site-global-position={node.props.position}
       style={{
-        ...nodeStyle(node),
-        ...nodePartStyle(node, 'root'),
+        ...nodeStyle(node, context),
+        ...nodePartStyle(node, 'root', context),
         ...(node.props.position === 'sticky'
           ? { position: 'sticky', top: 0, zIndex: 10 }
           : {}),
@@ -624,7 +663,7 @@ function renderGlobalFooter(
     <footer
       {...nodeAttributes(node)}
       data-site-global="footer"
-      style={{ ...nodeStyle(node), ...nodePartStyle(node, 'root') }}
+      style={{ ...nodeStyle(node, context), ...nodePartStyle(node, 'root', context) }}
     >
       {node.children.map((child) => (
         <Fragment key={child.id}>{renderGlobalFooterChild(child, context)}</Fragment>
@@ -648,24 +687,61 @@ function renderGlobalNavigation(
   );
 }
 
+function renderReusableInstance(
+  node: Extract<PageNodeV7, { type: 'reusable-instance' }>,
+  context: RenderContext,
+): ReactElement {
+  const source = context.reusables?.find(
+    (candidate) => candidate.id === node.props.reusableId,
+  );
+  const stack = context.reusableStack ?? [];
+  if (!source || stack.includes(node.props.reusableId)) {
+    return (
+      <div
+        {...nodeAttributes(node)}
+        aria-label="Reusable section unavailable"
+        data-reusable-unavailable="true"
+        data-reusable-source-id={node.props.reusableId}
+        role="note"
+      >
+        Reusable section unavailable.
+      </div>
+    );
+  }
+  const nextContext: RenderContext = {
+    ...context,
+    reusableStack: [...stack, node.props.reusableId],
+  };
+  return (
+    <div
+      {...nodeAttributes(node)}
+      data-reusable-id={node.props.reusableId}
+      style={nodeStyle(node, context)}
+    >
+      {renderResponsiveStyles(source.document, nextContext)}
+      {renderNode(source.document.root, nextContext)}
+    </div>
+  );
+}
+
 // This registry is intentionally explicit: the payload node type is the only
 // dispatch key, and the renderer never imports editor or persistence modules.
 export const PAGE_RENDERER_REGISTRY = {
   root: (node, context) => renderRoot(node as RootNode, context),
   section: (node, context) => renderSection(node as SectionNode, context),
   container: (node, context) => renderContainer(node as ContainerNode, context),
-  text: (node) => renderText(node as TextNode),
-  image: (node) => renderImage(node as ImageNode),
-  button: (node) => renderButton(node as ButtonNode),
+  text: (node, context) => renderText(node as TextNode, context),
+  image: (node, context) => renderImage(node as ImageNode, context),
+  button: (node, context) => renderButton(node as ButtonNode, context),
   form: (node, context) => renderForm(node as FormNode, context),
   countdown: (node, context) => renderCountdown(node as CountdownNode, context),
   extension: (node, context) => renderExtension(node as ExtensionNode, context),
-  heading: (node) => renderHeading(node as HeadingNode),
-  link: (node) => renderLink(node as LinkNode),
-  divider: (node) => renderDivider(node as DividerNode),
-  list: (node) => renderList(node as ListNode),
-  video: (node) => renderVideo(node as VideoNode),
-  quote: (node) => renderQuote(node as QuoteNodeV5),
+  heading: (node, context) => renderHeading(node as HeadingNode, context),
+  link: (node, context) => renderLink(node as LinkNode, context),
+  divider: (node, context) => renderDivider(node as DividerNode, context),
+  list: (node, context) => renderList(node as ListNode, context),
+  video: (node, context) => renderVideo(node as VideoNode, context),
+  quote: (node, context) => renderQuote(node as QuoteNodeV5, context),
   accordion: (node, context) => renderAccordion(node as AccordionNodeV5, context),
   'accordion-item': (node, context) =>
     renderAccordionItem(node as AccordionItemNodeV5, context),
@@ -680,6 +756,11 @@ export const PAGE_RENDERER_REGISTRY = {
     renderNavigationView(node as NavigationViewRenderableNode, context),
   'site-brand': (node, context) =>
     renderSiteBrand(node as SiteBrandRenderableNode, context),
+  'reusable-instance': (node, context) =>
+    renderReusableInstance(
+      node as Extract<PageNodeV7, { type: 'reusable-instance' }>,
+      context,
+    ),
 } satisfies Record<RenderableNode['type'], NodeRenderer>;
 
 function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): ReactElement {
@@ -717,7 +798,7 @@ export function renderSiteGlobalDocument(
     return null;
   return (
     <>
-      {renderResponsiveStyles(parsed.data)}
+      {renderResponsiveStyles(parsed.data, context)}
       {parsed.data.root.children.map((child) => (
         <Fragment key={child.id}>{renderNode(child, context)}</Fragment>
       ))}
@@ -730,30 +811,40 @@ type ResponsiveRule = {
   declarations: string;
 };
 
+function responsiveNodeSelector(nodeId: string, context: RenderContext): string {
+  const selector = `[data-payload-node-id="${nodeId}"]`;
+  const reusableId = context.reusableStack?.at(-1);
+  return reusableId ? `[data-reusable-id="${reusableId}"] ${selector}` : selector;
+}
+
 function responsiveRules(
   node: RenderableNode,
   viewport: 'tablet' | 'mobile',
   rules: ResponsiveRule[],
+  context: RenderContext,
 ): void {
   const style = node.style?.[viewport];
   const declarations = style
     ? Object.entries(style)
-        .filter(
-          ([property, value]) =>
-            property in PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY &&
-            typeof value === 'string' &&
-            isSafePageStyleValue(value),
-        )
-        .map(
-          ([property, value]) =>
-            `${PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.cssProperty}:${value}!important`,
-        )
+        .flatMap(([property, value]) => {
+          const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
+          if (!definition || (typeof value !== 'string' && typeof value !== 'object'))
+            return [];
+          const resolved = resolvePageStyleValue(
+            value as string | { kind: 'token'; tokenId: string },
+            context.designSystem,
+            definition.key,
+          );
+          return resolved && isSafePageStyleValue(resolved)
+            ? [`${definition.cssProperty}:${resolved}!important`]
+            : [];
+        })
         .join(';')
     : '';
 
   if (declarations) {
     rules.push({
-      selector: `[data-payload-node-id="${node.id}"]`,
+      selector: responsiveNodeSelector(node.id, context),
       declarations,
     });
   }
@@ -763,37 +854,43 @@ function responsiveRules(
   )) {
     const partDeclarations = partStyle[viewport]
       ? Object.entries(partStyle[viewport] ?? {})
-          .filter(
-            ([property, value]) =>
-              property in PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY &&
-              typeof value === 'string' &&
-              isSafePageStyleValue(value),
-          )
-          .map(
-            ([property, value]) =>
-              `${PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.cssProperty}:${value}!important`,
-          )
+          .flatMap(([property, value]) => {
+            const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
+            if (!definition || (typeof value !== 'string' && typeof value !== 'object'))
+              return [];
+            const resolved = resolvePageStyleValue(
+              value as string | { kind: 'token'; tokenId: string },
+              context.designSystem,
+              definition.key,
+            );
+            return resolved && isSafePageStyleValue(resolved)
+              ? [`${definition.cssProperty}:${resolved}!important`]
+              : [];
+          })
           .join(';')
       : '';
     if (partDeclarations) {
       rules.push({
         selector:
           partName === 'root'
-            ? `[data-payload-node-id="${node.id}"]`
-            : `[data-payload-node-id="${node.id}"] [data-payload-part="${partName}"]`,
+            ? responsiveNodeSelector(node.id, context)
+            : `${responsiveNodeSelector(node.id, context)} [data-payload-part="${partName}"]`,
         declarations: partDeclarations,
       });
     }
   }
 
-  node.children.forEach((child) => responsiveRules(child, viewport, rules));
+  node.children.forEach((child) => responsiveRules(child, viewport, rules, context));
 }
 
-function renderResponsiveStyles(payload: { root: RenderableNode }): ReactElement | null {
+function renderResponsiveStyles(
+  payload: { root: RenderableNode },
+  context: RenderContext = {},
+): ReactElement | null {
   const tabletRules: ResponsiveRule[] = [];
   const mobileRules: ResponsiveRule[] = [];
-  responsiveRules(payload.root, 'tablet', tabletRules);
-  responsiveRules(payload.root, 'mobile', mobileRules);
+  responsiveRules(payload.root, 'tablet', tabletRules, context);
+  responsiveRules(payload.root, 'mobile', mobileRules, context);
 
   const tablet = tabletRules.length
     ? `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.tablet.maxWidth}px){${tabletRules.map((rule) => `${rule.selector}{${rule.declarations}}`).join('')}}`
@@ -846,7 +943,7 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
             'Main navigation',
             'header',
           )}
-      {renderResponsiveStyles(parsed.data)}
+      {renderResponsiveStyles(parsed.data, context)}
       {renderNode(parsed.data.root, context)}
       {context.globals?.footer
         ? (renderSiteGlobalDocument(context.globals.footer, context) ??

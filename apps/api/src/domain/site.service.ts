@@ -27,6 +27,11 @@ import {
   SiteGlobalsResponseSchema,
   type SiteGlobals,
   type SiteGlobalsResponse,
+  SiteDesignSystemSchema,
+  SiteDesignSystemResponseSchema,
+  createDefaultSiteDesignSystem,
+  type SiteDesignSystem,
+  type SiteDesignSystemResponse,
 } from '@payload/contracts';
 
 import { DomainError } from './domain-error';
@@ -40,6 +45,7 @@ import { SiteUrlService } from './site-url.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { TenantResolver } from '../tenancy/tenant-resolver';
 import { NavigationService } from './navigation.service';
+import { ReusableService } from './reusable.service';
 
 @Injectable()
 export class SiteService {
@@ -59,6 +65,7 @@ export class SiteService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
     @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(ReusableService) private readonly reusables: ReusableService,
   ) {}
 
   async create(workspaceId: string, input: CreateSiteRequest): Promise<Site> {
@@ -201,8 +208,16 @@ export class SiteService {
     }
 
     await this.navigation.validateBeforeSitePublish(siteId, workspaceId);
+    const designSystem = this.readDesignSystem(record.designSystemDraft);
+    await this.reusables.assertDesignTokenDependenciesAvailable(
+      workspaceId,
+      siteId,
+      designSystem,
+    );
+    await this.reusables.publishReferencedForSite(workspaceId, siteId);
     const draftGlobals = this.readGlobals(record.globalsDraft);
     record.publishedGlobals = draftGlobals;
+    record.publishedDesignSystem = designSystem;
     record.status = 'published';
     await record.save();
     return this.toContract(record);
@@ -242,6 +257,50 @@ export class SiteService {
     record.globalsDraft = globals;
     await record.save();
     return this.getGlobals(workspaceId, siteId);
+  }
+
+  async getDesignSystem(
+    workspaceId: string,
+    siteId: string,
+  ): Promise<SiteDesignSystemResponse> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+    const draft = this.readDesignSystem(record.designSystemDraft);
+    const published = record.publishedDesignSystem
+      ? this.readDesignSystem(record.publishedDesignSystem)
+      : undefined;
+    return SiteDesignSystemResponseSchema.parse({
+      draft,
+      ...(published ? { published } : {}),
+    });
+  }
+
+  async updateDesignSystem(
+    workspaceId: string,
+    siteId: string,
+    input: SiteDesignSystem,
+  ): Promise<SiteDesignSystemResponse> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+    const designSystem = SiteDesignSystemSchema.parse(input);
+    await this.reusables.assertDesignTokenRemovalSafe(workspaceId, siteId, designSystem);
+    record.designSystemDraft = designSystem;
+    await record.save();
+    return this.getDesignSystem(workspaceId, siteId);
+  }
+
+  async getDesignTokenUsage(workspaceId: string, siteId: string, tokenId: string) {
+    return this.reusables.getDesignTokenUsage(workspaceId, siteId, tokenId);
   }
 
   async getOfficialUrl(workspaceId: string, siteId: string) {
@@ -518,6 +577,19 @@ export class SiteService {
       throw new DomainError(
         'INVALID_PERSISTED_SITE_GLOBALS',
         'Persisted site global data is invalid',
+        500,
+      );
+    }
+    return parsed.data;
+  }
+
+  private readDesignSystem(value: unknown): SiteDesignSystem {
+    if (!value) return createDefaultSiteDesignSystem();
+    const parsed = SiteDesignSystemSchema.safeParse(value);
+    if (!parsed.success) {
+      throw new DomainError(
+        'INVALID_PERSISTED_SITE_DESIGN_SYSTEM',
+        'Persisted site design system is invalid',
         500,
       );
     }

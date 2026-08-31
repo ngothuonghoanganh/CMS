@@ -12,6 +12,7 @@ import {
   PublicPageSchema,
   PublicSeoSettingsSchema,
   SiteGlobalsSchema,
+  SiteDesignSystemSchema,
   normalizeHostname,
   type PublicPage,
   normalizePagePath,
@@ -30,6 +31,7 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { SiteUrlService } from './site-url.service';
 import { NavigationService } from './navigation.service';
+import { ReusableService } from './reusable.service';
 
 @Injectable()
 export class PublicPageResolver {
@@ -49,6 +51,7 @@ export class PublicPageResolver {
     private readonly pageExtensions: PageExtensionService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(ReusableService) private readonly reusables: ReusableService,
   ) {}
 
   async resolveByLegacySlug(siteSlug: string, pageSlug: string): Promise<PublicPage> {
@@ -211,6 +214,15 @@ export class PublicPageResolver {
       const globals = site.publishedGlobals
         ? SiteGlobalsSchema.parse(site.publishedGlobals)
         : undefined;
+      const reusables = await this.reusables.resolveForPayload(
+        page.workspaceId,
+        page.siteId,
+        payload,
+        true,
+      );
+      const designSystem = site.publishedDesignSystem
+        ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
+        : undefined;
       const publishedBundle = version.publishedBundle
         ? PublishedPageBundleSchema.parse(version.publishedBundle)
         : undefined;
@@ -236,6 +248,8 @@ export class PublicPageResolver {
         ...(canonicalUrl ? { canonicalUrl } : {}),
         ...(navigation ? { navigation } : {}),
         ...(globals ? { globals } : {}),
+        ...(reusables.length ? { reusables } : {}),
+        ...(designSystem ? { designSystem } : {}),
       });
     } catch (error) {
       if (

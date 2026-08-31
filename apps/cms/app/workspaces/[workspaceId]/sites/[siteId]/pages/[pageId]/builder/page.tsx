@@ -6,9 +6,19 @@ type BuilderPageProps = {
     siteId: string;
     pageId: string;
   }>;
+  searchParams?: Promise<{ reusableId?: string | string[] }>;
 };
 
-export default async function BuilderPage({ params }: BuilderPageProps) {
+export default async function BuilderPage({ params, searchParams }: BuilderPageProps) {
   const { workspaceId, siteId, pageId } = await params;
-  return <BuilderShell pageId={pageId} siteId={siteId} workspaceId={workspaceId} />;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const reusableId = resolvedSearchParams?.reusableId;
+  return (
+    <BuilderShell
+      pageId={pageId}
+      {...(typeof reusableId === 'string' ? { reusableId } : {})}
+      siteId={siteId}
+      workspaceId={workspaceId}
+    />
+  );
 }

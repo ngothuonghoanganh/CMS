@@ -15,6 +15,7 @@ import {
   DuplicatePageRequestSchema,
   PageSchema,
   PagePayloadSchema,
+  SiteDesignSystemSchema,
   PageListResponseSchema,
   PublicPageSchema,
   PageVersionListResponseSchema,
@@ -53,6 +54,7 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { WorkflowService } from '../workflows/workflow.service';
 import { SiteService } from './site.service';
 import { NavigationService } from './navigation.service';
+import { ReusableService } from './reusable.service';
 
 @Injectable()
 export class PageService {
@@ -73,6 +75,7 @@ export class PageService {
     @Inject(WorkflowService) private readonly workflows: WorkflowService,
     @Inject(SiteService) private readonly sites: SiteService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(ReusableService) private readonly reusables: ReusableService,
   ) {}
 
   async create(
@@ -386,6 +389,18 @@ export class PageService {
     }
 
     const payload = PagePayloadSchema.parse(version.payload);
+    await this.reusables.assertDependenciesAvailable(
+      page.workspaceId,
+      page.siteId,
+      payload,
+    );
+    const designSystem = await this.sites.getDesignSystem(page.workspaceId, page.siteId);
+    await this.reusables.assertDesignTokenDependenciesAvailable(
+      page.workspaceId,
+      page.siteId,
+      designSystem.draft,
+      [payload],
+    );
     await this.workflows.validatePagePublishDependencies(pageId, workspaceId);
     await this.navigation.validateBeforePagePublish(page.siteId, pageId, workspaceId);
     await this.pageExtensions.validateBeforePublish(pageId, workspaceId, payload);
@@ -736,6 +751,15 @@ export class PageService {
         page._id.toString(),
         page.workspaceId,
       );
+      const reusables = await this.reusables.resolveForPayload(
+        page.workspaceId,
+        page.siteId,
+        versionContract.payload,
+        false,
+      );
+      const designSystem = site.designSystemDraft
+        ? SiteDesignSystemSchema.parse(site.designSystemDraft)
+        : undefined;
       return PublicPageSchema.parse({
         site: { name: site.name, slug: site.slug },
         page: {
@@ -745,6 +769,8 @@ export class PageService {
         },
         payload: versionContract.payload,
         ...(extensions.length ? { extensions } : {}),
+        ...(reusables.length ? { reusables } : {}),
+        ...(designSystem ? { designSystem } : {}),
       });
     } catch {
       throw this.invalidPublishedPage();

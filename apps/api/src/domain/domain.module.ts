@@ -61,6 +61,8 @@ import { WorkflowModule } from '../workflows/workflow.module';
 import { NavigationController } from './navigation.controller';
 import { NavigationService } from './navigation.service';
 import { SiteUrlService } from './site-url.service';
+import { ReusableController } from './reusable.controller';
+import { ReusableService } from './reusable.service';
 
 @Module({
   imports: [
@@ -93,6 +95,7 @@ import { SiteUrlService } from './site-url.service';
     SeoController,
     OrganizationController,
     NavigationController,
+    ReusableController,
   ],
   providers: [
     AssetService,
@@ -114,6 +117,7 @@ import { SiteUrlService } from './site-url.service';
     CustomDomainService,
     PublicPageResolver,
     SeoService,
+    ReusableService,
     {
       provide: DOMAIN_VERIFICATION_RESOLVER,
       useFactory: () =>

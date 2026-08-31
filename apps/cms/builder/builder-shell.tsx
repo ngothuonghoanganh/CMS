@@ -13,6 +13,7 @@ import {
   SiteGlobalsResponseSchema,
   SiteGlobalsSchema,
   SiteGlobalPayloadV1Schema,
+  PublicPageSchema,
   createPageDocument,
   PageVersionListResponseSchema,
   PageVersionSchema,
@@ -30,6 +31,15 @@ import {
   type SiteGlobals,
   type SiteGlobalPayloadV1,
   type BuilderDocumentKind,
+  ReusableListResponseSchema,
+  ReusableComponentSchema,
+  SiteDesignSystemResponseSchema,
+  createDefaultSiteDesignSystem,
+  type ReusableComponent,
+  type SiteDesignSystem,
+  type StyleTokenReference,
+  type ReusableComponentDocument,
+  type ReusableRuntime,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -56,7 +66,13 @@ import {
   type BuilderCanvasNode,
   type BuilderCanvasState,
 } from './builder-minimap';
-import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
+import {
+  reusableDocumentToEditorDefinition,
+  reusableDocumentToEditorPageDocument,
+  editorPageDocumentToReusableDocument,
+  type BuilderBlockType,
+  type BuilderViewport,
+} from './builder-adapter';
 import {
   BUILDER_PANEL_DEFAULT_WIDTHS,
   normalizePanelWidths,
@@ -80,7 +96,9 @@ import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 import { saveStatusAfterAcknowledgement } from './builder-save';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
 import { QuickAddOverlay } from './canvas/quick-add-overlay';
-import { BuilderBlockCard } from './builder-block-catalog';
+import { BuilderBlockCard, BuilderBlockPreview } from './builder-block-catalog';
+import { BUILT_IN_TEMPLATE_REGISTRY } from './template-registry';
+import { resolveBuilderPreview } from './builder-preview-model';
 import {
   BuilderInspector,
   type InspectorSectionKey,
@@ -91,13 +109,14 @@ type BuilderShellProps = {
   workspaceId: string;
   siteId: string;
   pageId: string;
+  reusableId?: string;
 };
 
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
 type SaveDraftResult = boolean;
 type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
-type AddPanelTab = 'layouts' | 'elements';
+type AddPanelTab = 'layouts' | 'elements' | 'saved' | 'templates';
 
 type AvailableBlockOption = {
   kind: 'component' | 'preset' | 'global-preset';
@@ -364,7 +383,12 @@ function layerPath(nodes: BuilderCanvasNode[], selectedId: string): BuilderCanva
   return result;
 }
 
-export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShellProps) {
+export default function BuilderShell({
+  workspaceId,
+  siteId,
+  pageId,
+  reusableId: initialReusableId,
+}: BuilderShellProps) {
   const router = useRouter();
   const editorRef = useRef<GrapesEditorHandle>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -376,10 +400,26 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   // validated server snapshot used to initialize the editor, never a second
   // mutable source of truth for Canvas/Layers/Inspector.
   const [pageDocument, setPageDocument] = useState<PageDocument | null>(null);
+  const [editingReusableId, setEditingReusableId] = useState<string | null>(
+    initialReusableId ?? null,
+  );
+  const [reusableEditorDocument, setReusableEditorDocument] =
+    useState<PageDocument | null>(null);
+  const [reusableEditorWrappedSource, setReusableEditorWrappedSource] = useState(false);
   const [documentKind, setDocumentKind] = useState<BuilderDocumentKind>('page');
   const [headerDocument, setHeaderDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [footerDocument, setFooterDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [globalsDraft, setGlobalsDraft] = useState<SiteGlobals>({ version: 1 });
+  const [reusables, setReusables] = useState<ReusableComponent[]>([]);
+  const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
+    createDefaultSiteDesignSystem,
+  );
+  const [reusableSaveDraft, setReusableSaveDraft] = useState<{
+    document: ReusableComponentDocument;
+    name: string;
+    description: string;
+  } | null>(null);
+  const [reusableSaveInFlight, setReusableSaveInFlight] = useState(false);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [enabledExtensionIds, setEnabledExtensionIds] = useState<Set<string>>(
     () => new Set(),
@@ -442,6 +482,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   );
   const [panelPreferencesReady, setPanelPreferencesReady] = useState(false);
   const [builderViewportWidth, setBuilderViewportWidth] = useState(1440);
+  const [reusableRuntime, setReusableRuntime] = useState<ReusableRuntime[]>([]);
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
   const layerHoverExpandTimerRef = useRef<number | null>(null);
@@ -479,8 +520,15 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
 
   const activeGlobalDocument =
     documentKind === 'site-header' ? headerDocument : footerDocument;
-  const activePayload =
-    documentKind === 'page' ? pageDocument?.payload : activeGlobalDocument;
+  const editingReusable = editingReusableId
+    ? reusables.find((reusable) => reusable.id === editingReusableId)
+    : undefined;
+  const isEditingReusable = editingReusable !== undefined;
+  const activePayload = isEditingReusable
+    ? reusableEditorDocument?.payload
+    : documentKind === 'page'
+      ? pageDocument?.payload
+      : activeGlobalDocument;
 
   const isDirty =
     saveStatus === 'unsaved' ||
@@ -493,6 +541,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const availableBlockOptions: AvailableBlockOption[] = [
     ...blockOptions.filter(
       (block) =>
+        (!isEditingReusable ||
+          (block.kind !== 'global-preset' && block.type !== 'extension')) &&
         block.documentKinds.includes(documentKind) &&
         (block.type !== 'countdown' ||
           isBuilderExtensionAvailableForPage(
@@ -505,6 +555,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       .filter(
         (extension) =>
           documentKind === 'page' &&
+          !isEditingReusable &&
           extension.tenantEnabled &&
           pageExtensionState.get(extension.manifest.id) !== false,
       )
@@ -539,11 +590,13 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   // flows; the Layouts/Elements tabs provide an explicit focused filter once
   // the user chooses one.
   const toolBlockOptions = addPanelTabTouched
-    ? visibleBlockOptions.filter((block) =>
-        addPanelTab === 'layouts'
-          ? block.group === 'layout' || block.group === 'preset'
-          : block.group !== 'layout' && block.group !== 'preset',
-      )
+    ? addPanelTab === 'layouts' || addPanelTab === 'elements'
+      ? visibleBlockOptions.filter((block) =>
+          addPanelTab === 'layouts'
+            ? block.group === 'layout' || block.group === 'preset'
+            : block.group !== 'layout' && block.group !== 'preset',
+        )
+      : []
     : visibleBlockOptions;
   const toolBlockGroups = blockGroupOrder
     .map((category) => ({
@@ -879,23 +932,47 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       setLoadState('loading');
       setError(null);
       try {
-        const [pageResponse, versionsResponse, assetsResponse, globalsResponseRaw] =
-          await Promise.all([
-            api.get(`/pages/${pageId}`),
-            api.get(`/pages/${pageId}/versions?limit=100`),
-            api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-            api
-              .get(`/workspaces/${workspaceId}/sites/${siteId}/globals`)
-              .catch((caughtError: unknown) => {
-                // Older sites may not have a globals endpoint/document yet;
-                // a missing globals record is the safe empty default. Other
-                // errors (including invalid persisted data) remain visible.
-                if (caughtError instanceof ApiClientError && caughtError.status === 404) {
-                  return null;
-                }
-                throw caughtError;
-              }),
-          ]);
+        const [
+          pageResponse,
+          versionsResponse,
+          assetsResponse,
+          globalsResponseRaw,
+          reusablesResponseRaw,
+          designSystemResponseRaw,
+          previewResponseRaw,
+        ] = await Promise.all([
+          api.get(`/pages/${pageId}`),
+          api.get(`/pages/${pageId}/versions?limit=100`),
+          api.get(`/workspaces/${workspaceId}/assets?limit=100`),
+          api
+            .get(`/workspaces/${workspaceId}/sites/${siteId}/globals`)
+            .catch((caughtError: unknown) => {
+              // Older sites may not have a globals endpoint/document yet;
+              // a missing globals record is the safe empty default. Other
+              // errors (including invalid persisted data) remain visible.
+              if (caughtError instanceof ApiClientError && caughtError.status === 404) {
+                return null;
+              }
+              throw caughtError;
+            }),
+          api
+            .get(`/workspaces/${workspaceId}/sites/${siteId}/reusables?limit=100`)
+            .catch((caughtError: unknown) => {
+              if (caughtError instanceof ApiClientError && caughtError.status === 404) {
+                return null;
+              }
+              throw caughtError;
+            }),
+          api
+            .get(`/workspaces/${workspaceId}/sites/${siteId}/design-system`)
+            .catch((caughtError: unknown) => {
+              if (caughtError instanceof ApiClientError && caughtError.status === 404) {
+                return null;
+              }
+              throw caughtError;
+            }),
+          api.get(`/preview/pages/${pageId}`).catch(() => null),
+        ]);
         if (cancelled) return;
 
         const nextPage = PageSchema.parse(pageResponse);
@@ -918,6 +995,36 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           ? SiteGlobalsResponseSchema.parse(globalsResponseRaw)
           : { draft: { version: 1 as const } };
         setGlobalsDraft(globalsResponse.draft);
+        const nextReusables = reusablesResponseRaw
+          ? ReusableListResponseSchema.parse(reusablesResponseRaw).items
+          : [];
+        setReusables(nextReusables);
+        const preview = previewResponseRaw
+          ? PublicPageSchema.safeParse(previewResponseRaw)
+          : undefined;
+        setReusableRuntime(
+          preview?.success && preview.data.reusables?.length
+            ? preview.data.reusables
+            : nextReusables.map((reusable) => ({
+                id: reusable.id,
+                document: reusable.draft,
+              })),
+        );
+        const nextEditingReusable = initialReusableId
+          ? nextReusables.find((reusable) => reusable.id === initialReusableId)
+          : undefined;
+        if (nextEditingReusable) {
+          const editorDocument = reusableDocumentToEditorPageDocument(
+            nextEditingReusable.draft,
+          );
+          setReusableEditorDocument(editorDocument.document);
+          setReusableEditorWrappedSource(editorDocument.wrappedSource);
+        }
+        setDesignSystem(
+          designSystemResponseRaw
+            ? SiteDesignSystemResponseSchema.parse(designSystemResponseRaw).draft
+            : createDefaultSiteDesignSystem(),
+        );
         setHeaderDocument(
           globalsResponse.draft.header ??
             createDefaultGlobalDocument('site-header', nextPage.name),
@@ -975,7 +1082,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     return () => {
       cancelled = true;
     };
-  }, [pageId, router, workspaceId]);
+  }, [initialReusableId, pageId, router, siteId, workspaceId]);
 
   useEffect(() => {
     function protectUnsavedNavigation(event: BeforeUnloadEvent) {
@@ -1033,7 +1140,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
 
   function handleDocumentChange(document: PageDocument | SiteGlobalPayloadV1): void {
     if ('schemaVersion' in document) {
-      setPageDocument(document);
+      if (isEditingReusable) setReusableEditorDocument(document);
+      else setPageDocument(document);
       postPreviewDocument(document);
       return;
     }
@@ -1081,6 +1189,38 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     setNotice(null);
     try {
       const nextDocument = editorRef.current.getDocument();
+      if (isEditingReusable) {
+        if (!('schemaVersion' in nextDocument)) {
+          throw new Error('Invalid reusable editor document');
+        }
+        const nextReusableDocument = editorPageDocumentToReusableDocument(
+          nextDocument,
+          reusableEditorWrappedSource,
+        );
+        const updated = ReusableComponentSchema.parse(
+          await api.patch(
+            `/workspaces/${workspaceId}/sites/${siteId}/reusables/${editingReusableId}`,
+            { document: nextReusableDocument },
+          ),
+        );
+        setReusables((current) =>
+          current.map((reusable) => (reusable.id === updated.id ? updated : reusable)),
+        );
+        setReusableRuntime((current) =>
+          current.map((runtime) =>
+            runtime.id === updated.id
+              ? { id: updated.id, document: updated.draft }
+              : runtime,
+          ),
+        );
+        setReusableEditorDocument(nextDocument);
+        editorRef.current.acknowledgeSaved(nextDocument.payload);
+        setSaveStatus('saved');
+        setNotice(
+          `Saved reusable source “${updated.name}”. Publish the site to make it public.`,
+        );
+        return true;
+      }
       if (documentKind !== 'page') {
         if ('schemaVersion' in nextDocument)
           throw new Error('Invalid global editor document');
@@ -1179,6 +1319,13 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     setError(null);
     setNotice(null);
     try {
+      if (isEditingReusable) {
+        await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
+        setNotice(
+          'Site published. The public site now uses the published reusable source.',
+        );
+        return;
+      }
       if (documentKind !== 'page') {
         await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
         setNotice('Site published. The public site now uses the published globals.');
@@ -1227,7 +1374,46 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     setCanvasState(null);
     setHistory({ canUndo: false, canRedo: false });
     setSaveStatus('initializing');
+    setEditingReusableId(null);
+    setReusableEditorDocument(null);
     setDocumentKind(next);
+  }
+
+  async function editReusableSource(reusableId: string): Promise<void> {
+    if (reusableId === editingReusableId) return;
+    if (isDirty && !window.confirm('Save this document before switching?')) return;
+    if (isDirty && !(await saveDraft())) return;
+    const reusable = reusables.find((candidate) => candidate.id === reusableId);
+    if (!reusable) {
+      setNotice('The reusable source is no longer available. Refresh the library.');
+      return;
+    }
+    const editorDocument = reusableDocumentToEditorPageDocument(reusable.draft);
+    setEditingReusableId(reusable.id);
+    setReusableEditorDocument(editorDocument.document);
+    setReusableEditorWrappedSource(editorDocument.wrappedSource);
+    setSelected(null);
+    setSelectedNodeId(null);
+    setCanvasState(null);
+    setHistory({ canUndo: false, canRedo: false });
+    setAddPanelTab('layouts');
+    setAddPanelTabTouched(true);
+    setSaveStatus('initializing');
+    setNotice(`Editing reusable source “${reusable.name}”.`);
+  }
+
+  async function exitReusableSource(): Promise<void> {
+    if (!isEditingReusable) return;
+    if (isDirty && !window.confirm('Save this reusable source before switching?')) return;
+    if (isDirty && !(await saveDraft())) return;
+    setEditingReusableId(null);
+    setReusableEditorDocument(null);
+    setSelected(null);
+    setSelectedNodeId(null);
+    setCanvasState(null);
+    setHistory({ canUndo: false, canRedo: false });
+    setSaveStatus('initializing');
+    setNotice('Returned to the page document.');
   }
 
   function changeViewport(nextViewport: BuilderViewport) {
@@ -1257,7 +1443,117 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     }
   }
 
-  function updateSelectedStyle(property: string, value: string) {
+  function insertSavedReusable(reusableId: string, mode: 'copy' | 'linked') {
+    const changed = editorRef.current?.insertReusable(reusableId, mode);
+    if (changed) {
+      setNotice(
+        `${mode === 'linked' ? 'Linked' : 'Copied'} reusable section into the page.`,
+      );
+    } else {
+      setNotice('That reusable section is not allowed at this insertion point.');
+    }
+  }
+
+  function openSaveSelectedAsReusable() {
+    if (documentKind !== 'page') {
+      setNotice('Reusable sections can only be saved from a page document.');
+      return;
+    }
+    const document = editorRef.current?.getSelectedReusableDocument();
+    if (!document) {
+      setNotice('Select a normal section or component before saving it as reusable.');
+      return;
+    }
+    setReusableSaveDraft({ document, name: '', description: '' });
+  }
+
+  async function saveSelectedAsReusable() {
+    if (!reusableSaveDraft || !reusableSaveDraft.name.trim()) return;
+    setReusableSaveInFlight(true);
+    try {
+      const rootType =
+        reusableSaveDraft.document.root.type === 'section' ? 'section' : 'component';
+      const created = await api.post(
+        `/workspaces/${workspaceId}/sites/${siteId}/reusables`,
+        {
+          name: reusableSaveDraft.name.trim(),
+          ...(reusableSaveDraft.description.trim()
+            ? { description: reusableSaveDraft.description.trim() }
+            : {}),
+          kind: rootType,
+          document: reusableSaveDraft.document,
+        },
+      );
+      const reusable = ReusableComponentSchema.parse(created);
+      setReusables((current) => [reusable, ...current]);
+      setReusableRuntime((current) => [
+        { id: reusable.id, document: reusable.draft },
+        ...current.filter((candidate) => candidate.id !== reusable.id),
+      ]);
+      setReusableSaveDraft(null);
+      setNotice(`Saved “${reusable.name}” to the reusable library.`);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    } finally {
+      setReusableSaveInFlight(false);
+    }
+  }
+
+  async function renameReusable(reusable: ReusableComponent): Promise<void> {
+    const name = window.prompt('Rename reusable section', reusable.name)?.trim();
+    if (!name || name === reusable.name) return;
+    try {
+      const updated = ReusableComponentSchema.parse(
+        await api.patch(
+          `/workspaces/${workspaceId}/sites/${siteId}/reusables/${reusable.id}`,
+          { name },
+        ),
+      );
+      setReusables((current) =>
+        current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+      );
+      setNotice(`Renamed reusable source to “${updated.name}”.`);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  async function archiveReusable(reusable: ReusableComponent): Promise<void> {
+    if (
+      !window.confirm(
+        `Archive “${reusable.name}”? Existing linked instances will keep their source snapshot.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.delete(
+        `/workspaces/${workspaceId}/sites/${siteId}/reusables/${reusable.id}`,
+      );
+      setReusables((current) =>
+        current.filter((candidate) => candidate.id !== reusable.id),
+      );
+      setNotice(`Archived “${reusable.name}”. Existing links remain resolvable.`);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  function detachSelectedReusable() {
+    if (selected?.type !== 'reusable-instance') return;
+    const reusableId = selected.props.reusableId;
+    if (typeof reusableId !== 'string') return;
+    const reusable = reusables.find((candidate) => candidate.id === reusableId);
+    if (!reusable || !editorRef.current?.detachSelectedReusable(reusable.draft)) {
+      setNotice('The reusable source is unavailable, so it cannot be detached.');
+      return;
+    }
+    setNotice(
+      `Detached “${reusable.name}”; future source edits no longer affect this copy.`,
+    );
+  }
+
+  function updateSelectedStyle(property: string, value: string | StyleTokenReference) {
     editorRef.current?.updateSelectedStyle(property, value);
   }
 
@@ -1265,7 +1561,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     editorRef.current?.resetSelectedStyle(property);
   }
 
-  function updateSelectedPartStyle(partName: string, property: string, value: string) {
+  function updateSelectedPartStyle(
+    partName: string,
+    property: string,
+    value: string | StyleTokenReference,
+  ) {
     editorRef.current?.updateSelectedPartStyle(partName, property, value);
   }
 
@@ -1316,32 +1616,49 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           <div>
             <span className="eyebrow">Visual builder</span>
             <h1>
-              {documentKind === 'page'
-                ? page.name
-                : documentKind === 'site-header'
-                  ? 'Global Header'
-                  : 'Global Footer'}
+              {isEditingReusable
+                ? editingReusable.name
+                : documentKind === 'page'
+                  ? page.name
+                  : documentKind === 'site-header'
+                    ? 'Global Header'
+                    : 'Global Footer'}
             </h1>
             <code className="builder-page-path">
-              {documentKind === 'page' ? page.path : `Site · ${siteId}`}
+              {isEditingReusable
+                ? `Reusable source · ${siteId}`
+                : documentKind === 'page'
+                  ? page.path
+                  : `Site · ${siteId}`}
             </code>
           </div>
         </div>
         <div className="builder-actions">
-          <label className="builder-document-selector">
-            <span className="sr-only">Editing document</span>
-            <select
-              aria-label="Editing document"
-              onChange={(event) =>
-                void switchDocumentKind(event.target.value as BuilderDocumentKind)
-              }
-              value={documentKind}
+          {isEditingReusable ? (
+            <button
+              aria-label="Back to page document"
+              className="button button-small button-ghost"
+              onClick={() => void exitReusableSource()}
+              type="button"
             >
-              <option value="page">Page</option>
-              <option value="site-header">Global Header</option>
-              <option value="site-footer">Global Footer</option>
-            </select>
-          </label>
+              ← Page
+            </button>
+          ) : (
+            <label className="builder-document-selector">
+              <span className="sr-only">Editing document</span>
+              <select
+                aria-label="Editing document"
+                onChange={(event) =>
+                  void switchDocumentKind(event.target.value as BuilderDocumentKind)
+                }
+                value={documentKind}
+              >
+                <option value="page">Page</option>
+                <option value="site-header">Global Header</option>
+                <option value="site-footer">Global Footer</option>
+              </select>
+            </label>
+          )}
           <div className="builder-topbar-viewport" aria-label="Viewport">
             {BUILDER_VIEWPORTS.map((item) => (
               <button
@@ -1362,9 +1679,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               : saveStatus === 'saving'
                 ? 'Saving…'
                 : saveStatus === 'saved'
-                  ? documentKind === 'page'
-                    ? `Saved · v${version.versionNumber}`
-                    : 'Saved · global draft'
+                  ? isEditingReusable
+                    ? 'Saved · reusable source'
+                    : documentKind === 'page'
+                      ? `Saved · v${version.versionNumber}`
+                      : 'Saved · global draft'
                   : saveStatus === 'conflict'
                     ? 'Conflict'
                     : saveStatus === 'error'
@@ -1425,7 +1744,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             onClick={() => void publishPage()}
             type="button"
           >
-            {documentKind === 'page' ? 'Publish' : 'Publish site'}
+            {isEditingReusable || documentKind !== 'page' ? 'Publish site' : 'Publish'}
           </button>
         </div>
       </header>
@@ -1509,10 +1828,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   className="builder-add-tabs"
                   role="tablist"
                 >
-                  {(['layouts', 'elements'] as const).map((tab) => (
+                  {(['layouts', 'elements', 'saved', 'templates'] as const).map((tab) => (
                     <button
                       aria-selected={addPanelTab === tab}
                       className={addPanelTab === tab ? 'is-active' : undefined}
+                      disabled={isEditingReusable && tab === 'saved'}
                       key={tab}
                       onClick={() => {
                         setAddPanelTab(tab);
@@ -1521,7 +1841,13 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                       role="tab"
                       type="button"
                     >
-                      {tab === 'layouts' ? 'Layouts' : 'Elements'}
+                      {tab === 'layouts'
+                        ? 'Layouts'
+                        : tab === 'elements'
+                          ? 'Elements'
+                          : tab === 'saved'
+                            ? 'Saved'
+                            : 'Templates'}
                     </button>
                   ))}
                 </div>
@@ -1535,54 +1861,144 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                     value={blockQuery}
                   />
                 </label>
-                <div className="builder-block-list">
-                  {toolBlockGroups.map((group) => (
-                    <section className="builder-block-category" key={group.category}>
-                      <h2 className="builder-block-category-heading">
-                        {blockGroupLabels[group.category]}
-                      </h2>
-                      {group.options.map((block) => {
-                        const insertable =
-                          block.globalPresetId ?? block.presetId ?? block.type;
-                        if (!insertable && !block.extensionId) return null;
+                {addPanelTab === 'saved' &&
+                documentKind === 'page' &&
+                !isEditingReusable ? (
+                  <div className="builder-block-list" data-catalog-tab="saved">
+                    {reusables
+                      .filter((reusable) => {
+                        const query = blockQuery.trim().toLowerCase();
                         return (
-                          <BuilderBlockCard
-                            addLabel={`${block.label}${
-                              block.kind === 'preset' && block.label.endsWith('Section')
-                                ? ' preset'
-                                : ''
-                            } add`}
-                            category={block.category}
-                            dataBlockType={insertable}
-                            description={block.description}
-                            dragLabel={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
-                            key={`${insertable ?? 'extension'}:${block.extensionId ?? ''}`}
-                            label={block.label}
-                            onAdd={() =>
-                              block.extensionId
-                                ? editorRef.current?.addExtensionBlock(block.extensionId)
-                                : insertable
-                                  ? editorRef.current?.addBlock(
-                                      insertable as BuilderInsertable,
-                                    )
-                                  : undefined
-                            }
-                            onDragStart={
-                              block.extensionId || !insertable
-                                ? undefined
-                                : (event) =>
-                                    editorRef.current?.startBlockDrag(
-                                      insertable as BuilderInsertable,
-                                      event.nativeEvent,
-                                    )
-                            }
-                            preview={block.preview}
-                          />
+                          !query ||
+                          reusable.name.toLowerCase().includes(query) ||
+                          reusable.description?.toLowerCase().includes(query)
                         );
-                      })}
-                    </section>
-                  ))}
-                </div>
+                      })
+                      .map((reusable) => (
+                        <BuilderBlockCard
+                          addLabel={`Copy ${reusable.name}`}
+                          category="saved"
+                          dataBlockType={reusable.id}
+                          description={
+                            reusable.description ?? 'Reusable section from this site.'
+                          }
+                          dragLabel={`Copy ${reusable.name} to canvas`}
+                          key={reusable.id}
+                          label={reusable.name}
+                          onAdd={() => insertSavedReusable(reusable.id, 'copy')}
+                          onDragStart={undefined}
+                          preview={resolveBuilderPreview(
+                            reusableDocumentToEditorDefinition(reusable.draft),
+                            `reusable-${reusable.id}`,
+                          )}
+                          secondaryActions={[
+                            {
+                              label: 'Link',
+                              onClick: () => insertSavedReusable(reusable.id, 'linked'),
+                            },
+                            {
+                              label: 'Edit source',
+                              onClick: () => void editReusableSource(reusable.id),
+                            },
+                            {
+                              label: 'Rename',
+                              onClick: () => void renameReusable(reusable),
+                            },
+                            {
+                              label: 'Archive',
+                              onClick: () => void archiveReusable(reusable),
+                            },
+                          ]}
+                        />
+                      ))}
+                    {reusables.length === 0 ? (
+                      <p className="muted small builder-empty-message">
+                        No saved sections yet. Select a page element and use “Save as
+                        reusable”.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {addPanelTab === 'templates' ? (
+                  <div className="builder-block-list" data-catalog-tab="templates">
+                    {BUILT_IN_TEMPLATE_REGISTRY.filter((block) => {
+                      const query = blockQuery.trim().toLowerCase();
+                      return (
+                        !query ||
+                        block.name.toLowerCase().includes(query) ||
+                        block.description.toLowerCase().includes(query) ||
+                        block.keywords.some((keyword) => keyword.includes(query))
+                      );
+                    }).map((block) => {
+                      return (
+                        <BuilderBlockCard
+                          addLabel={`${block.name} template add`}
+                          category="template"
+                          dataBlockType={block.id}
+                          description={block.description}
+                          dragLabel={`Add ${block.name} template`}
+                          key={block.id}
+                          label={block.name}
+                          onAdd={() => editorRef.current?.addBlock(block.sourcePreset)}
+                          onDragStart={undefined}
+                          preview={block.preview}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {addPanelTab !== 'saved' && addPanelTab !== 'templates' ? (
+                  <div className="builder-block-list">
+                    {toolBlockGroups.map((group) => (
+                      <section className="builder-block-category" key={group.category}>
+                        <h2 className="builder-block-category-heading">
+                          {blockGroupLabels[group.category]}
+                        </h2>
+                        {group.options.map((block) => {
+                          const insertable =
+                            block.globalPresetId ?? block.presetId ?? block.type;
+                          if (!insertable && !block.extensionId) return null;
+                          return (
+                            <BuilderBlockCard
+                              addLabel={`${block.label}${
+                                block.kind === 'preset' && block.label.endsWith('Section')
+                                  ? ' preset'
+                                  : ''
+                              } add`}
+                              category={block.category}
+                              dataBlockType={insertable}
+                              description={block.description}
+                              dragLabel={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
+                              key={`${insertable ?? 'extension'}:${block.extensionId ?? ''}`}
+                              label={block.label}
+                              onAdd={() =>
+                                block.extensionId
+                                  ? editorRef.current?.addExtensionBlock(
+                                      block.extensionId,
+                                    )
+                                  : insertable
+                                    ? editorRef.current?.addBlock(
+                                        insertable as BuilderInsertable,
+                                      )
+                                    : undefined
+                              }
+                              onDragStart={
+                                block.extensionId || !insertable
+                                  ? undefined
+                                  : (event) =>
+                                      editorRef.current?.startBlockDrag(
+                                        insertable as BuilderInsertable,
+                                        event.nativeEvent,
+                                      )
+                              }
+                              preview={block.preview}
+                            />
+                          );
+                        })}
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
                 {toolBlockOptions.length === 0 ? (
                   <p className="muted small builder-empty-message">
                     No matching components.
@@ -1803,30 +2219,32 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               <span className="muted small">V/H · Space + drag · middle drag</span>
             </div>
           </div>
-          <div aria-label="Site global content" className="builder-global-chrome">
-            <div className="builder-global-chrome-row">
-              <span className="eyebrow">Site header</span>
-              <span className="builder-global-lock">Locked preview · Header</span>
-              <button
-                className="button button-small button-ghost"
-                onClick={() => void switchDocumentKind('site-header')}
-                type="button"
-              >
-                Edit header
-              </button>
+          {!isEditingReusable ? (
+            <div aria-label="Site global content" className="builder-global-chrome">
+              <div className="builder-global-chrome-row">
+                <span className="eyebrow">Site header</span>
+                <span className="builder-global-lock">Locked preview · Header</span>
+                <button
+                  className="button button-small button-ghost"
+                  onClick={() => void switchDocumentKind('site-header')}
+                  type="button"
+                >
+                  Edit header
+                </button>
+              </div>
+              <div className="builder-global-chrome-row is-footer">
+                <span className="eyebrow">Site footer</span>
+                <span className="builder-global-lock">Locked preview · Footer</span>
+                <button
+                  className="button button-small button-ghost"
+                  onClick={() => void switchDocumentKind('site-footer')}
+                  type="button"
+                >
+                  Edit footer
+                </button>
+              </div>
             </div>
-            <div className="builder-global-chrome-row is-footer">
-              <span className="eyebrow">Site footer</span>
-              <span className="builder-global-lock">Locked preview · Footer</span>
-              <button
-                className="button button-small button-ghost"
-                onClick={() => void switchDocumentKind('site-footer')}
-                type="button"
-              >
-                Edit footer
-              </button>
-            </div>
-          </div>
+          ) : null}
           <div className="builder-editor-shell">
             <BuilderContextToolbar
               onDelete={() => editorRef.current?.deleteSelected()}
@@ -1834,6 +2252,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               onMoveDown={() => editorRef.current?.moveSelected('down')}
               onMoveUp={() => editorRef.current?.moveSelected('up')}
               onQuickAdd={openQuickAdd}
+              onSaveAsReusable={openSaveSelectedAsReusable}
+              onDetachReusable={detachSelectedReusable}
               onSelectParent={() => editorRef.current?.selectParent()}
               position={contextToolbarPosition}
               selected={selected}
@@ -1867,7 +2287,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             <GrapesEditor
               documentKind={documentKind}
               initialPayload={activePayload}
-              key={`${documentKind}-${activePayload.root.id}`}
+              reusableRuntime={reusableRuntime}
+              designSystem={designSystem}
+              key={`${editingReusableId ?? documentKind}-${activePayload.root.id}`}
               onDirty={markDirty}
               onDocumentChange={handleDocumentChange}
               onError={(message) => {
@@ -1972,8 +2394,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 inspectorTab={inspectorTab}
                 onInspectorTabChange={setInspectorTab}
                 onAddStructuralChild={(slotName, childType) =>
-                  childType && childType !== 'root'
-                    ? editorRef.current?.addStructuralChild(slotName, childType)
+                  childType && childType !== 'root' && childType !== 'reusable-instance'
+                    ? editorRef.current?.addStructuralChild(
+                        slotName,
+                        childType as BuilderBlockType,
+                      )
                     : undefined
                 }
                 onMoveStructuralChild={(nodeId, direction) =>
@@ -2004,6 +2429,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                 updateSelectedPartStyle={updateSelectedPartStyle}
                 resetSelectedPartStyle={resetSelectedPartStyle}
                 usableAssets={usableAssets}
+                designSystem={designSystem}
                 viewport={viewport}
               />
             </div>
@@ -2040,6 +2466,75 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           </button>
         ) : null}
       </div>
+      {reusableSaveDraft ? (
+        <div className="builder-dialog-backdrop" role="presentation">
+          <section
+            aria-labelledby="save-reusable-title"
+            aria-modal="true"
+            className="builder-dialog"
+            role="dialog"
+          >
+            <div className="builder-panel-heading">
+              <span className="eyebrow">Saved library</span>
+              <h2 id="save-reusable-title">Save as reusable</h2>
+            </div>
+            <p className="muted small">
+              Reuse this validated component tree as a copy or a linked source.
+            </p>
+            <BuilderBlockPreview
+              label="Selected reusable preview"
+              preview={resolveBuilderPreview(
+                reusableDocumentToEditorDefinition(reusableSaveDraft.document),
+                'selected-reusable',
+              )}
+            />
+            <label className="form-field">
+              <span>Name *</span>
+              <input
+                autoFocus
+                onChange={(event) =>
+                  setReusableSaveDraft((current) =>
+                    current ? { ...current, name: event.target.value } : current,
+                  )
+                }
+                placeholder="Company Hero"
+                value={reusableSaveDraft.name}
+              />
+            </label>
+            <label className="form-field">
+              <span>Description</span>
+              <textarea
+                onChange={(event) =>
+                  setReusableSaveDraft((current) =>
+                    current ? { ...current, description: event.target.value } : current,
+                  )
+                }
+                placeholder="A shared hero section for marketing pages"
+                rows={3}
+                value={reusableSaveDraft.description}
+              />
+            </label>
+            <div className="builder-dialog-actions">
+              <button
+                className="button button-ghost"
+                disabled={reusableSaveInFlight}
+                onClick={() => setReusableSaveDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="button button-primary"
+                disabled={reusableSaveInFlight || !reusableSaveDraft.name.trim()}
+                onClick={() => void saveSelectedAsReusable()}
+                type="button"
+              >
+                {reusableSaveInFlight ? 'Saving…' : 'Save reusable'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

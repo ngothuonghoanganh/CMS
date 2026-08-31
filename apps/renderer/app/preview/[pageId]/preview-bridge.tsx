@@ -6,6 +6,8 @@ import {
   PagePreviewMessageSchema,
   type PagePayload,
   type PageRuntimeExtension,
+  type ReusableRuntime,
+  type SiteDesignSystem,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactElement } from 'react';
 
@@ -17,6 +19,8 @@ type PreviewBridgeProps = {
   siteSlug: string;
   pageSlug?: string | undefined;
   tenantSlug?: string | undefined;
+  reusables?: readonly ReusableRuntime[] | undefined;
+  designSystem?: SiteDesignSystem | undefined;
 };
 
 function rendererContext({
@@ -24,11 +28,15 @@ function rendererContext({
   siteSlug,
   pageSlug,
   tenantSlug,
+  reusables,
+  designSystem,
 }: Omit<PreviewBridgeProps, 'initialPayload'>) {
   return {
     siteSlug,
     ...(pageSlug ? { pageSlug } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
+    ...(reusables?.length ? { reusables } : {}),
+    ...(designSystem ? { designSystem } : {}),
     ...(extensions?.length
       ? {
           runtimeIds: extensions.flatMap((extension) => extension.runtimeIds),
@@ -55,6 +63,8 @@ export function PreviewBridge({
   siteSlug,
   pageSlug,
   tenantSlug,
+  reusables,
+  designSystem,
 }: PreviewBridgeProps) {
   const [payload, setPayload] = useState(initialPayload);
 
@@ -74,7 +84,14 @@ export function PreviewBridge({
 
   return renderPage(
     payload,
-    rendererContext({ extensions, siteSlug, pageSlug, tenantSlug }),
+    rendererContext({
+      extensions,
+      siteSlug,
+      pageSlug,
+      tenantSlug,
+      reusables,
+      designSystem,
+    }),
   ) as ReactElement;
 }
 

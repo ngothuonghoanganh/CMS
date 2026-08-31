@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import {
   type PagePayloadV1,
   type PagePayloadV4,
   type PagePayloadV5,
   type PagePayloadV6,
+  type PagePayloadV7,
+  type ReusableComponentDocument,
   type SiteGlobalPayloadV1,
 } from '@payload/contracts';
 
@@ -23,11 +26,16 @@ import {
   BUILDER_GLOBAL_PROPS_ATTRIBUTE,
   BuilderAdapterError,
   createBlockDefinition,
+  createReusableInstanceDefinition,
+  editorPageDocumentToReusableDocument,
   formatCountdownRemaining,
   payloadToEditorComponent,
   resolveViewportStyle,
   serializeEditorSnapshot,
   serializeSiteGlobalSnapshot,
+  serializeReusableSubtree,
+  reusableDocumentToEditorPageDocument,
+  reusableDocumentToEditorDefinition,
   sanitizeInlineText,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
@@ -102,6 +110,103 @@ const payload: PagePayloadV1 = {
 };
 
 describe('builder adapter', () => {
+  it('serializes linked instances as leaves while rendering source previews in the editor', () => {
+    const reusableId = randomUUID();
+    const source: ReusableComponentDocument = {
+      version: 1,
+      root: {
+        id: 'saved-hero',
+        type: 'section',
+        props: {},
+        children: [
+          {
+            id: 'saved-heading',
+            type: 'heading',
+            props: { text: 'Shared', level: 2 },
+            children: [],
+          },
+        ],
+      },
+    };
+    const payload: PagePayloadV7 = {
+      version: 7,
+      metadata: { documentTitle: 'Linked page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'linked',
+            type: 'reusable-instance',
+            props: { reusableId },
+            children: [],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(payload, {
+      reusableRuntime: [{ id: reusableId, document: source }],
+    });
+    const preview = (definition.components as Array<Record<string, unknown>>)[0];
+    expect(preview?.components).toHaveLength(1);
+
+    const serialized = serializeEditorSnapshot(snapshotFromEditorDefinition(definition));
+    expect(serialized).toEqual(payload);
+    expect(serialized.root.children[0]?.children).toEqual([]);
+    expect(
+      serializeReusableSubtree(
+        snapshotFromEditorDefinition(reusableDocumentToEditorDefinition(source)),
+      ),
+    ).toEqual(source);
+  });
+
+  it('creates a linked instance definition without persisted preview children', () => {
+    const definition = createReusableInstanceDefinition(randomUUID());
+    expect(definition.components).toBeUndefined();
+    expect(definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe(
+      'reusable-instance',
+    );
+  });
+
+  it('opens reusable sources in a valid page envelope and removes temporary wrappers', () => {
+    const sectionSource: ReusableComponentDocument = {
+      version: 1,
+      root: {
+        id: 'source-section',
+        type: 'section',
+        props: {},
+        children: [],
+      },
+    };
+    const sectionEditor = reusableDocumentToEditorPageDocument(sectionSource);
+    expect(sectionEditor.wrappedSource).toBe(false);
+    expect(
+      editorPageDocumentToReusableDocument(
+        sectionEditor.document,
+        sectionEditor.wrappedSource,
+      ),
+    ).toEqual(sectionSource);
+
+    const componentSource: ReusableComponentDocument = {
+      version: 1,
+      root: {
+        id: 'source-button',
+        type: 'button',
+        props: { label: 'Shared CTA', href: '#shared', target: '_self' },
+        children: [],
+      },
+    };
+    const componentEditor = reusableDocumentToEditorPageDocument(componentSource);
+    expect(componentEditor.wrappedSource).toBe(true);
+    expect(
+      editorPageDocumentToReusableDocument(
+        componentEditor.document,
+        componentEditor.wrappedSource,
+      ),
+    ).toEqual(componentSource);
+  });
+
   it('hydrates the frozen payload into an explicit editor definition', () => {
     const definition = payloadToEditorComponent(payload);
 

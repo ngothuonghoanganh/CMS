@@ -65,6 +65,7 @@ import { AppHeader } from './app-header';
 import { ExtensionsView } from './extensions-view';
 import { WorkflowsView } from './workflows-view';
 import { NavigationView } from './navigation-view';
+import { DesignSystemView } from './design-system-view';
 import { PagesView as SiteMapPagesView } from './pages/pages-view';
 import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
 
@@ -73,6 +74,7 @@ type View =
   | 'sites'
   | 'pages'
   | 'navigation'
+  | 'design-system'
   | 'assets'
   | 'templates'
   | 'submissions'
@@ -127,6 +129,7 @@ const viewLabels: Record<View, string> = {
   organization: 'Organization',
   pages: 'Pages',
   navigation: 'Navigation',
+  'design-system': 'Design system',
   roles: 'Roles',
   seo: 'SEO',
   sites: 'Sites',
@@ -1291,6 +1294,9 @@ export default function CmsDashboard() {
         ...(can('site.read')
           ? [{ icon: '≡', key: 'navigation' as const, label: 'Navigation' }]
           : []),
+        ...(can('design-system.read')
+          ? [{ icon: '✦', key: 'design-system' as const, label: 'Design system' }]
+          : []),
         ...(can('asset.read')
           ? [{ icon: '◈', key: 'assets' as const, label: 'Assets' }]
           : []),
@@ -1658,6 +1664,19 @@ export default function CmsDashboard() {
               selectedSiteId={selectedSiteId}
               sites={sites}
             />
+          ) : null}
+          {view === 'design-system' ? (
+            selectedSiteId ? (
+              <DesignSystemView
+                canUpdate={can('design-system.update')}
+                siteId={selectedSiteId}
+                workspaceId={session.workspace.id}
+              />
+            ) : (
+              <section className="panel">
+                <p>Select a site to manage its design system.</p>
+              </section>
+            )
           ) : null}
           {view === 'assets' ? (
             <AssetsView
