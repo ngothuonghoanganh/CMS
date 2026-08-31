@@ -9,8 +9,10 @@ import {
 } from './builder-adapter';
 import {
   readComponentProps,
+  applyEditorPropertyUpdate,
   selectionFromComponentCodec,
 } from './component-editor-codecs';
+import { resolveEditorPropertyUpdate } from './component-editor-bindings';
 
 class FakeComponent {
   constructor(
@@ -37,6 +39,35 @@ class FakeComponent {
 }
 
 const asComponent = (component: FakeComponent) => component as never;
+
+class MutableComponent {
+  parentComponent?: MutableComponent;
+  constructor(
+    readonly attributes: Record<string, string>,
+    readonly children: MutableComponent[] = [],
+  ) {
+    children.forEach((child) => {
+      child.parentComponent = this;
+    });
+  }
+  getAttributes(): Record<string, string> {
+    return this.attributes;
+  }
+  setAttributes(next: Record<string, string>): void {
+    Object.keys(this.attributes).forEach((key) => delete this.attributes[key]);
+    Object.assign(this.attributes, next);
+  }
+  get(): unknown {
+    return '';
+  }
+  set(): void {}
+  parent(): MutableComponent | undefined {
+    return this.parentComponent;
+  }
+  components(): { models: MutableComponent[] } {
+    return { models: this.children };
+  }
+}
 
 function attrs(id: string, type: string, extra: Record<string, string> = {}) {
   return {
@@ -101,5 +132,59 @@ describe('component editor codecs', () => {
         asComponent(new FakeComponent(attrs('unknown', 'unknown'))),
       ),
     ).toBeNull();
+  });
+
+  it('promotes V6 accessibility edits and normalizes one-open accordions atomically', () => {
+    const first = new MutableComponent(
+      attrs('item-1', 'accordion-item', {
+        [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: JSON.stringify({
+          title: 'First',
+          defaultOpen: true,
+        }),
+      }),
+    );
+    const second = new MutableComponent(
+      attrs('item-2', 'accordion-item', {
+        [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: JSON.stringify({
+          title: 'Second',
+          defaultOpen: false,
+        }),
+      }),
+    );
+    const accordion = new MutableComponent(
+      attrs('accordion', 'accordion', {
+        [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: JSON.stringify({ allowMultiple: false }),
+      }),
+      [first, second],
+    );
+
+    const openUpdate = resolveEditorPropertyUpdate('accordion-item', 'defaultOpen', true);
+    expect(openUpdate).not.toBeNull();
+    expect(
+      applyEditorPropertyUpdate(second as never, 'accordion-item', openUpdate!),
+    ).toBe(true);
+    expect(JSON.parse(first.attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE]!)).toMatchObject(
+      {
+        defaultOpen: false,
+      },
+    );
+    expect(
+      JSON.parse(second.attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE]!),
+    ).toMatchObject({
+      defaultOpen: true,
+    });
+
+    const labelUpdate = resolveEditorPropertyUpdate('accordion', 'ariaLabel', 'FAQ');
+    expect(labelUpdate).not.toBeNull();
+    expect(applyEditorPropertyUpdate(accordion as never, 'accordion', labelUpdate!)).toBe(
+      true,
+    );
+    expect(
+      JSON.parse(accordion.attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE]!),
+    ).toMatchObject({
+      allowMultiple: false,
+      headingLevel: 3,
+      ariaLabel: 'FAQ',
+    });
   });
 });

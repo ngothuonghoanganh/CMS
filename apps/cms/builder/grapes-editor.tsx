@@ -5,6 +5,7 @@ import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_NODE_SLOT_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   type BuilderNodeType,
@@ -21,7 +22,6 @@ import {
   serializeGrapesComponent,
 } from './builder-adapter';
 import {
-  canInsertNode,
   findPayloadComponent,
   isEditableTarget,
   isEditorOnlyPreview,
@@ -57,7 +57,11 @@ import {
   PAGE_RUNTIME_BASELINE_CSS,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
+  canInsertIntoSlot,
   createPageDocument,
+  resolveSlotForChild,
+  resolveSlotsForChild,
+  type ComponentSlotDefinition,
   type FormProps,
   type PageDocument,
   type PagePayload,
@@ -100,6 +104,8 @@ export type GrapesEditorHandle = {
   ) => void;
   updateSelectedStyle: (property: string, value: string) => void;
   resetSelectedStyle: (property: string) => void;
+  updateSelectedPartStyle: (partName: string, property: string, value: string) => void;
+  resetSelectedPartStyle: (partName: string, property: string) => void;
   updateSelectedForm: (form: FormProps) => void;
   updateSelectedCountdown: (props: { targetAt: string; label: string }) => void;
   selectAsset: (src: string) => void;
@@ -109,9 +115,10 @@ export type GrapesEditorHandle = {
     type: BuilderInsertable,
     placement?: { targetNodeId: string; position: DropPosition },
   ) => boolean;
-  addStructuralChild: () => boolean;
+  addStructuralChild: (slotName?: string, childType?: BuilderBlockType) => boolean;
   removeStructuralChild: (nodeId: string) => boolean;
   moveStructuralChild: (nodeId: string, direction: 'up' | 'down') => boolean;
+  duplicateStructuralChild: (nodeId: string) => boolean;
   validateMove: (intent: MoveNodeIntent) => { valid: boolean; reason?: string };
   scrollToCanvasPoint: (x: number, y: number) => void;
   setCanvasZoom: (zoom: number) => void;
@@ -139,6 +146,41 @@ const allViewports: BuilderViewport[] = ['desktop', 'tablet', 'mobile'];
 
 function isPayloadNodeType(value: unknown): value is BuilderNodeType {
   return isBuilderNodeType(value);
+}
+
+function liveSlotOccupancy(
+  parent: Component,
+  slot: ComponentSlotDefinition,
+  excluded?: Component,
+): { count: number; bySlot: Record<string, number> } {
+  const count = parent.components().models.filter((child) => {
+    if (child === excluded) return false;
+    const attributes = child.getAttributes({ noStyle: true });
+    const ownedSlot = attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
+    return typeof ownedSlot === 'string'
+      ? ownedSlot === slot.name
+      : slot.accepts.includes(payloadNodeType(child) as never);
+  }).length;
+  return { count, bySlot: { [slot.name]: count } };
+}
+
+function canInsertIntoComponent(
+  parent: Component,
+  childType: BuilderNodeType,
+  excluded?: Component,
+): boolean {
+  const parentType = payloadNodeType(parent);
+  if (!parentType) return false;
+  const slot = resolveSlotForChild(parentType, childType);
+  return Boolean(
+    slot &&
+    canInsertIntoSlot({
+      parentType,
+      slotName: slot.name,
+      childType,
+      occupancy: liveSlotOccupancy(parent, slot, excluded),
+    }),
+  );
 }
 
 function selectionFromComponent(
@@ -285,14 +327,21 @@ function canvasDropIntent(
         ? 'after'
         : 'inside';
   if (initialPosition === 'inside') {
-    if (target && !canInsertNode(payloadNodeType(target) ?? 'text', sourceType)) {
+    if (
+      target &&
+      !canInsertIntoComponent(
+        target,
+        sourceType,
+        target.parent() === source.parent() ? source : undefined,
+      )
+    ) {
       const parent = payloadAncestor(target.parent());
       const parentType = parent ? payloadNodeType(parent) : undefined;
       if (
         parent &&
         parentType &&
         parentType !== 'root' &&
-        canInsertNode(parentType, sourceType)
+        canInsertIntoComponent(parent, sourceType)
       ) {
         target = parent;
       }
@@ -700,7 +749,7 @@ function dropBlockAtPoint(
       ];
       if (
         isPayloadNodeType(targetType) &&
-        (canInsertNode(targetType, childType, payloadChildCount(candidate)) ||
+        (canInsertIntoComponent(candidate, childType) ||
           (targetType === 'root' && !rootAcceptsDirectly && canWrapInSection))
       ) {
         target = candidate;
@@ -750,21 +799,11 @@ function findAppendTarget(
       return;
     }
     const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
-    if (
-      isPayloadNodeType(type) &&
-      canInsertNode(type, childType, payloadChildCount(component))
-    ) {
+    if (isPayloadNodeType(type) && canInsertIntoComponent(component, childType)) {
       target = component;
     }
   });
   return target;
-}
-
-function payloadChildCount(component: Component): number {
-  return component.components().models.filter((child) => {
-    const type = child.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
-    return isPayloadNodeType(type);
-  }).length;
 }
 
 function applyAllViewportStyles(root: Component, viewport: BuilderViewport): void {
@@ -1241,7 +1280,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const target =
           selected &&
           isPayloadNodeType(selectedType) &&
-          canInsertNode(selectedType, childType, payloadChildCount(selected))
+          canInsertIntoComponent(selected, childType)
             ? selected
             : findAppendTarget(getRoot(editor), childType);
 
@@ -1280,7 +1319,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const target =
           selected &&
           isPayloadNodeType(selectedType) &&
-          canInsertNode(selectedType, 'extension', payloadChildCount(selected))
+          canInsertIntoComponent(selected, 'extension')
             ? selected
             : findAppendTarget(getRoot(editor), 'extension');
         let parent: Component | undefined = target ?? undefined;
@@ -1547,6 +1586,48 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           });
         });
       },
+      updateSelectedPartStyle(partName, property, value) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          const type = selected && payloadNodeType(selected);
+          if (!selected || !type) return;
+          internalChangeRef.current = true;
+          commitEditorCommand(editor, {
+            kind: 'set-part-responsive-style',
+            nodeId: payloadNodeId(selected) ?? '',
+            partName,
+            property,
+            value,
+            viewport: viewportRef.current,
+          });
+          queueMicrotask(() => {
+            internalChangeRef.current = false;
+          });
+        });
+      },
+      resetSelectedPartStyle(partName, property) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        mutateAfterInlineEdit(editor, () => {
+          const selected = getSelectedComponent(editor);
+          const type = selected && payloadNodeType(selected);
+          if (!selected || !type) return;
+          internalChangeRef.current = true;
+          commitEditorCommand(editor, {
+            kind: 'set-part-responsive-style',
+            nodeId: payloadNodeId(selected) ?? '',
+            partName,
+            property,
+            value: '',
+            viewport: viewportRef.current,
+          });
+          queueMicrotask(() => {
+            internalChangeRef.current = false;
+          });
+        });
+      },
       selectAsset(src) {
         const editor = editorRef.current;
         if (!editor) return;
@@ -1644,11 +1725,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
             const targetType = target && payloadNodeType(target);
             if (
               targetType === 'root' &&
-              !canInsertNode(
-                targetType,
-                childType,
-                target ? payloadChildCount(target) : 0,
-              )
+              (!target || !canInsertIntoComponent(target, childType))
             ) {
               const sectionResult = commitEditorCommand(editor, {
                 kind: 'insert',
@@ -1682,7 +1759,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const target =
           selected &&
           isPayloadNodeType(selectedType) &&
-          canInsertNode(selectedType, childType, payloadChildCount(selected))
+          canInsertIntoComponent(selected, childType)
             ? selected
             : findAppendTarget(getRoot(editor), childType);
         let parent: Component | undefined = target ?? undefined;
@@ -1702,21 +1779,37 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           parentId: payloadNodeId(parent),
         });
       },
-      addStructuralChild() {
+      addStructuralChild(slotName, requestedChildType) {
         const editor = editorRef.current;
         if (!editor) return false;
         const parent = getSelectedComponent(editor);
         if (!parent) return false;
         const parentType = payloadNodeType(parent);
         if (!parentType) return false;
-        const slot = PAGE_COMPONENT_REGISTRY[parentType].slots.find(
-          (candidate) => candidate.structural && candidate.accepts.length > 0,
-        );
-        const childType = slot?.accepts[0];
+        const slot = slotName
+          ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+              (candidate) => candidate.name === slotName && candidate.structural,
+            )
+          : PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+              (candidate) =>
+                candidate.structural &&
+                candidate.accepts.some((candidateType) =>
+                  canInsertIntoComponent(parent, candidateType),
+                ),
+            );
+        const childType = requestedChildType ?? slot?.accepts[0];
         if (!childType || childType === 'root') return false;
+        if (
+          !slot ||
+          !slot.accepts.includes(childType) ||
+          !canInsertIntoComponent(parent, childType)
+        ) {
+          return false;
+        }
         return commitEditorCommand(editor, {
-          kind: 'insert-structural-child',
+          kind: 'insert-child',
           parentId: payloadNodeId(parent) ?? '',
+          slotName: slot.name,
           childType,
         });
       },
@@ -1730,9 +1823,23 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!editor || !parent) return false;
         const child = findPayloadComponent(parent, nodeId);
         if (!child || child.parent() !== parent) return false;
-        const siblings = parent
-          .components()
-          .models.filter((candidate) => Boolean(payloadNodeType(candidate)));
+        const parentType = payloadNodeType(parent);
+        const childType = payloadNodeType(child);
+        const slot =
+          parentType && childType
+            ? resolveSlotsForChild(parentType, childType).find(
+                (candidate) => candidate.structural,
+              )
+            : undefined;
+        if (!slot) return false;
+        const siblings = parent.components().models.filter((candidate) => {
+          const ownedSlot = candidate.getAttributes({ noStyle: true })[
+            BUILDER_NODE_SLOT_ATTRIBUTE
+          ];
+          return typeof ownedSlot === 'string'
+            ? ownedSlot === slot.name
+            : slot.accepts.includes(payloadNodeType(candidate) as never);
+        });
         const index = siblings.indexOf(child);
         const target = siblings[index + (direction === 'up' ? -1 : 1)];
         const sourceId = payloadNodeId(child);
@@ -1746,6 +1853,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
             position: direction === 'up' ? 'before' : 'after',
           },
         });
+      },
+      duplicateStructuralChild(nodeId) {
+        const editor = editorRef.current;
+        return editor
+          ? commitEditorCommand(editor, { kind: 'duplicate', nodeId })
+          : false;
       },
       validateMove(intent) {
         const editor = editorRef.current;

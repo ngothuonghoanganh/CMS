@@ -3,9 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_COMPONENT_STYLE_CAPABILITIES,
+  MULTI_SLOT_TEST_COMPONENT_DEFINITION,
+  MULTI_SLOT_TEST_REGISTRY,
+  assertStructuralSlotRegistry,
   canDuplicateChild,
   canInsertChild,
   canRemoveChild,
+  createStructuralSlotEngine,
   findAcceptingSlot,
   styleSchemaFor,
 } from './component-registry';
@@ -76,5 +80,55 @@ describe('component style capabilities', () => {
     expect(canRemoveChild('accordion', 'accordion-item', 1)).toBe(false);
     expect(canRemoveChild('accordion', 'accordion-item', 2)).toBe(true);
     expect(canDuplicateChild('tabs', 'tab-item', 20)).toBe(false);
+  });
+
+  it('tracks occupancy per slot and rejects implicit ambiguous placement', () => {
+    const engine = createStructuralSlotEngine(MULTI_SLOT_TEST_REGISTRY);
+    const parent = {
+      type: MULTI_SLOT_TEST_COMPONENT_DEFINITION.type,
+      children: [
+        { type: 'text' as const, slot: 'primary' },
+        { type: 'image' as const, slot: 'secondary' },
+      ],
+    };
+
+    expect(engine.resolveSlotsForChild(parent.type, 'text')).toHaveLength(2);
+    expect(engine.resolveSlotForChild(parent.type, 'text')).toBeUndefined();
+    expect(
+      engine.canInsertIntoSlot({
+        parentType: parent.type,
+        slotName: 'primary',
+        childType: 'text',
+        occupancy: engine.getSlotOccupancy(parent, 'primary'),
+      }),
+    ).toBe(false);
+    expect(
+      engine.canInsertIntoSlot({
+        parentType: parent.type,
+        slotName: 'secondary',
+        childType: 'image',
+        occupancy: engine.getSlotOccupancy(parent, 'secondary'),
+      }),
+    ).toBe(false);
+    const partiallyOccupiedParent = {
+      type: MULTI_SLOT_TEST_COMPONENT_DEFINITION.type,
+      children: [{ type: 'text' as const, slot: 'primary' }],
+    };
+    expect(engine.getSlotOccupancy(partiallyOccupiedParent, 'secondary')).toEqual({
+      count: 0,
+      bySlot: { secondary: 0 },
+    });
+    expect(
+      engine.canInsertIntoSlot({
+        parentType: partiallyOccupiedParent.type,
+        slotName: 'secondary',
+        childType: 'image',
+        occupancy: engine.getSlotOccupancy(partiallyOccupiedParent, 'secondary'),
+      }),
+    ).toBe(true);
+    expect(() => assertStructuralSlotRegistry(MULTI_SLOT_TEST_REGISTRY)).toThrow(
+      'Ambiguous child placement',
+    );
+    expect(PAGE_COMPONENT_REGISTRY).not.toHaveProperty('multi-slot-test');
   });
 });

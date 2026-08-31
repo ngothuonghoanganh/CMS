@@ -1,16 +1,13 @@
 import type { Component, ComponentDefinition, Editor } from 'grapesjs';
 import {
-  AccordionItemPropsSchema,
-  AccordionPropsSchema,
-  CountdownPropsSchema,
-  ListPropsSchema,
-  QuotePropsSchema,
-  TabItemPropsSchema,
-  TabsPropsSchema,
-  canDuplicateChild,
-  canInsertChild,
-  canRemoveChild,
-  findAcceptingSlot,
+  PAGE_COMPONENT_REGISTRY,
+  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  canDuplicateInSlot,
+  canInsertIntoSlot,
+  canRemoveFromSlot,
+  resolveSlotForChild,
+  resolveSlotsForChild,
+  type ComponentSlotDefinition,
 } from '@payload/contracts';
 
 import {
@@ -20,24 +17,23 @@ import {
   payloadNodeType,
   type MoveNodeIntent,
 } from './builder-interaction';
-import { resolveEditorPropertyUpdate } from './component-editor-bindings';
 import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
-  BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
-  BUILDER_COMPOUND_PROPS_ATTRIBUTE,
-  BUILDER_QUOTE_PROPS_ATTRIBUTE,
+  BUILDER_NODE_SLOT_ATTRIBUTE,
   createBlockDefinition,
   isBuilderNodeType,
   reassignEditorNodeIds,
   sanitizeInlineText,
-  listPreviewComponents,
-  formPreviewComponents,
-  quotePreviewComponents,
   updateEditorViewportStyle,
+  updateEditorPartViewportStyle,
   type BuilderViewport,
   type BuilderBlockType,
   type BuilderNodeType,
 } from './builder-adapter';
+import {
+  applyEditorPropertyUpdate,
+  getComponentEditorCodec,
+} from './component-editor-codecs';
 
 /**
  * The builder deliberately keeps GrapesJS as the Model-A document engine.
@@ -74,7 +70,28 @@ export type EditorCommand =
       value: string;
       viewport: BuilderViewport;
     }
-  | { kind: 'insert-structural-child'; parentId: string; childType: BuilderBlockType }
+  | {
+      kind: 'set-part-responsive-style';
+      nodeId: string;
+      partName: string;
+      property: string;
+      value: string;
+      viewport: BuilderViewport;
+    }
+  | {
+      kind: 'insert-child';
+      parentId: string;
+      slotName: string;
+      childType: BuilderBlockType;
+      index?: number;
+    }
+  /** @deprecated Kept as a compatibility shim for older callers. */
+  | {
+      kind: 'insert-structural-child';
+      parentId: string;
+      childType: BuilderBlockType;
+      slotName?: string;
+    }
   | { kind: 'undo' }
   | { kind: 'redo' };
 
@@ -131,9 +148,28 @@ function definitionNodeType(
   return typeof type === 'string' && isBuilderNodeType(type) ? type : undefined;
 }
 
-function payloadChildCount(parent: Component): number {
-  return parent.components().models.filter((child) => Boolean(payloadNodeType(child)))
-    .length;
+function liveSlotOccupancy(
+  parent: Component,
+  slot: ComponentSlotDefinition,
+  excluded?: Component,
+): { count: number; bySlot: Record<string, number> } {
+  const count = parent.components().models.filter((child) => {
+    if (child === excluded) return false;
+    const attributes = child.getAttributes({ noStyle: true });
+    const ownedSlot = attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
+    return typeof ownedSlot === 'string'
+      ? ownedSlot === slot.name
+      : slot.accepts.includes(payloadNodeType(child) as never);
+  }).length;
+  return { count, bySlot: { [slot.name]: count } };
+}
+
+function liveSlotForChild(
+  parent: Component | undefined,
+  childType: BuilderNodeType,
+): ComponentSlotDefinition | undefined {
+  const parentType = parent && payloadNodeType(parent);
+  return parentType ? resolveSlotsForChild(parentType, childType)[0] : undefined;
 }
 
 function canRemoveLiveNode(root: Component, node: Component): boolean {
@@ -142,8 +178,16 @@ function canRemoveLiveNode(root: Component, node: Component): boolean {
   const parentType = parent && payloadNodeType(parent);
   const nodeType = payloadNodeType(node);
   if (!parent || !parentType || !nodeType) return true;
-  const slot = findAcceptingSlot(parentType, nodeType);
-  return !slot || canRemoveChild(parentType, nodeType, payloadChildCount(parent));
+  const slot = liveSlotForChild(parent, nodeType);
+  return (
+    !slot ||
+    canRemoveFromSlot({
+      parentType,
+      slotName: slot.name,
+      childType: nodeType,
+      occupancy: liveSlotOccupancy(parent, slot),
+    })
+  );
 }
 
 function canDuplicateLiveNode(root: Component, node: Component): boolean {
@@ -152,20 +196,66 @@ function canDuplicateLiveNode(root: Component, node: Component): boolean {
   const parentType = parent && payloadNodeType(parent);
   const nodeType = payloadNodeType(node);
   if (!parent || !parentType || !nodeType) return true;
-  const slot = findAcceptingSlot(parentType, nodeType);
-  return !slot || canDuplicateChild(parentType, nodeType, payloadChildCount(parent));
+  const slot = liveSlotForChild(parent, nodeType);
+  return (
+    !slot ||
+    canDuplicateInSlot({
+      parentType,
+      slotName: slot.name,
+      childType: nodeType,
+      occupancy: liveSlotOccupancy(parent, slot),
+    })
+  );
 }
 
 function canInsertDefinition(
   parent: Component,
   definition: ComponentDefinition,
+  slotName?: string,
 ): boolean {
   const parentType = parent.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
   const childType = definitionNodeType(definition);
   if (!isBuilderNodeType(parentType) || !childType) return false;
+  const slot = slotName
+    ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+        (candidate) => candidate.name === slotName,
+      )
+    : resolveSlotForChild(parentType, childType);
   // `droppable` is presentation behavior; command validation remains domain
   // driven and therefore also applies to Quick Add, Layers and keyboard paths.
-  return canInsertChild(parentType, childType, payloadChildCount(parent));
+  return Boolean(
+    slot &&
+    canInsertIntoSlot({
+      parentType,
+      slotName: slot.name,
+      childType,
+      occupancy: liveSlotOccupancy(parent, slot),
+    }),
+  );
+}
+
+function canInsertLiveType(
+  parent: Component,
+  childType: BuilderNodeType,
+  slotName?: string,
+): boolean {
+  const parentType = payloadNodeType(parent);
+  if (!parentType) return false;
+  const slot = slotName
+    ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+        (candidate) => candidate.name === slotName,
+      )
+    : resolveSlotForChild(parentType, childType);
+  return Boolean(
+    slot &&
+    slot.structural &&
+    canInsertIntoSlot({
+      parentType,
+      slotName: slot.name,
+      childType,
+      occupancy: liveSlotOccupancy(parent, slot),
+    }),
+  );
 }
 
 export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
@@ -200,15 +290,21 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
           (!target || target.parent() === parent),
         );
       }
-      if (command.kind === 'insert-structural-child') {
+      if (command.kind === 'insert-child' || command.kind === 'insert-structural-child') {
         const parent = getNode(editor, command.parentId);
         if (!parent) return false;
         const parentType = payloadNodeType(parent);
         if (!parentType) return false;
-        const childCount = parent
-          .components()
-          .models.filter((child) => Boolean(payloadNodeType(child))).length;
-        return canInsertChild(parentType, command.childType, childCount);
+        const slotName =
+          command.slotName ?? resolveSlotForChild(parentType, command.childType)?.name;
+        const slot = slotName
+          ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+              (candidate) => candidate.name === slotName,
+            )
+          : undefined;
+        return Boolean(
+          slot?.structural && canInsertLiveType(parent, command.childType, slotName),
+        );
       }
       if (command.kind === 'set-property') {
         const node = getNode(editor, command.nodeId);
@@ -216,39 +312,34 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
         const type = node.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
         if (!isBuilderNodeType(type)) return false;
         try {
-          let property = command.property;
-          const value =
-            type === 'list' && command.property === 'ordered'
-              ? {
-                  ...ListPropsSchema.parse(
-                    JSON.parse(
-                      String(
-                        node.getAttributes({ noStyle: true })['data-payload-list-props'],
-                      ),
-                    ) as unknown,
-                  ),
-                  ordered: command.value,
-                }
-              : type === 'countdown' &&
-                  (command.property === 'label' || command.property === 'targetAt')
-                ? {
-                    ...CountdownPropsSchema.parse(
-                      JSON.parse(
-                        String(
-                          node.getAttributes({ noStyle: true })[
-                            BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
-                          ],
-                        ),
-                      ) as unknown,
-                    ),
-                    [command.property]: command.value,
-                  }
-                : command.value;
-          if (type === 'list' && command.property === 'ordered') property = 'items';
-          return Boolean(resolveEditorPropertyUpdate(type, property, value));
+          return Boolean(
+            getComponentEditorCodec(type).resolvePropertyMutation(
+              type,
+              command.property,
+              command.value,
+              node,
+            ),
+          );
         } catch {
           return false;
         }
+      }
+      if (command.kind === 'set-part-responsive-style') {
+        const node = getNode(editor, command.nodeId);
+        const type = node && payloadNodeType(node);
+        const part =
+          type && PAGE_COMPONENT_REGISTRY[type].componentParts[command.partName];
+        const styleDefinition =
+          PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+            command.property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+          ];
+        return Boolean(
+          node &&
+          type &&
+          part &&
+          styleDefinition &&
+          part.styleCapabilities.includes(command.property as never),
+        );
       }
       if ('nodeId' in command) {
         const node = getNode(editor, command.nodeId);
@@ -296,11 +387,35 @@ export function executeEditorCommand(
       const selection = created[0];
       return selection ? { changed: true, selection } : { changed: false };
     }
+    case 'insert-child': {
+      const parent = getNode(editor, command.parentId);
+      if (!parent || !canInsertLiveType(parent, command.childType, command.slotName)) {
+        return { changed: false };
+      }
+      const definition = createBlockDefinition(command.childType);
+      definition.attributes = {
+        ...(definition.attributes ?? {}),
+        [BUILDER_NODE_SLOT_ATTRIBUTE]: command.slotName,
+      };
+      const created = parent.append(definition, { at: command.index });
+      const selection = created[0];
+      return selection ? { changed: true, selection } : { changed: false };
+    }
     case 'insert-structural-child': {
+      const parent = getNode(editor, command.parentId);
+      const parentType = parent && payloadNodeType(parent);
+      if (!parent || !parentType) return { changed: false };
+      const slot = command.slotName
+        ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
+            (candidate) => candidate.name === command.slotName,
+          )
+        : resolveSlotForChild(parentType, command.childType);
+      if (!slot) return { changed: false };
       return executeEditorCommand(editor, {
-        kind: 'insert',
-        definition: createBlockDefinition(command.childType),
+        kind: 'insert-child',
         parentId: command.parentId,
+        slotName: slot.name,
+        childType: command.childType,
       });
     }
     case 'move': {
@@ -354,104 +469,16 @@ export function executeEditorCommand(
       if (!node) return { changed: false };
       const type = node.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
       if (!isBuilderNodeType(type)) return { changed: false };
-      let value = command.value;
-      let property = command.property;
-      if (type === 'list' && command.property === 'ordered') {
-        const raw = node.getAttributes({ noStyle: true })['data-payload-list-props'];
-        let current: unknown;
-        try {
-          current = JSON.parse(String(raw)) as unknown;
-        } catch {
-          return { changed: false };
-        }
-        const parsed = ListPropsSchema.safeParse(current);
-        if (!parsed.success || typeof command.value !== 'boolean')
-          return { changed: false };
-        value = { ...parsed.data, ordered: command.value };
-        property = 'items';
-      }
-      if (
-        type === 'countdown' &&
-        (command.property === 'label' || command.property === 'targetAt')
-      ) {
-        const raw = node.getAttributes({ noStyle: true })[
-          BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
-        ];
-        let current: unknown;
-        try {
-          current = JSON.parse(String(raw)) as unknown;
-        } catch {
-          return { changed: false };
-        }
-        const parsed = CountdownPropsSchema.safeParse(current);
-        if (!parsed.success || typeof command.value !== 'string') {
-          return { changed: false };
-        }
-        value = { ...parsed.data, [command.property]: command.value };
-      }
-      const update = resolveEditorPropertyUpdate(type, property, value);
+      const update = getComponentEditorCodec(type).resolvePropertyMutation(
+        type,
+        command.property,
+        command.value,
+        node,
+      );
       if (!update) return { changed: false };
-      if (update.kind === 'attributes' && update.semanticPropsPatch) {
-        const semanticAttribute =
-          type === 'quote'
-            ? BUILDER_QUOTE_PROPS_ATTRIBUTE
-            : BUILDER_COMPOUND_PROPS_ATTRIBUTE;
-        const propsSchema =
-          type === 'quote'
-            ? QuotePropsSchema
-            : type === 'accordion'
-              ? AccordionPropsSchema
-              : type === 'accordion-item'
-                ? AccordionItemPropsSchema
-                : type === 'tabs'
-                  ? TabsPropsSchema
-                  : TabItemPropsSchema;
-        const raw = node.getAttributes({ noStyle: true })[semanticAttribute];
-        if (typeof raw !== 'string') return { changed: false };
-        let current: unknown;
-        try {
-          current = JSON.parse(raw) as unknown;
-        } catch {
-          return { changed: false };
-        }
-        const parsed = propsSchema.safeParse(current);
-        if (!parsed.success) return { changed: false };
-        const next = propsSchema.safeParse({
-          ...parsed.data,
-          [update.semanticPropsPatch.property]: update.semanticPropsPatch.value,
-        });
-        if (!next.success) return { changed: false };
-        node.setAttributes({
-          ...node.getAttributes({ noStyle: true }),
-          [semanticAttribute]: JSON.stringify(next.data),
-        });
-        if (type === 'quote') {
-          const quote = QuotePropsSchema.safeParse(next.data);
-          if (quote.success) node.components(quotePreviewComponents(quote.data));
-        }
-        if (type === 'accordion-item' && 'title' in next.data)
-          node.set('content', next.data.title);
-        if (type === 'tab-item' && 'label' in next.data)
-          node.set('content', next.data.label);
-        return { changed: true, selection: node };
-      }
-      if (update.kind === 'content') {
-        node.set('content', update.value);
-      } else {
-        node.setAttributes({
-          ...node.getAttributes({ noStyle: true }),
-          ...update.attributes,
-        });
-        if (update.tagName) node.set('tagName', update.tagName);
-        if (update.listProps) {
-          // List item controls are editor-only descendants. Their semantic
-          // representation is the validated list props JSON above.
-          node.set('tagName', update.listProps.ordered ? 'ol' : 'ul');
-          node.components(listPreviewComponents(update.listProps));
-        }
-        if (update.formProps) node.components(formPreviewComponents(update.formProps));
-      }
-      return { changed: true, selection: node };
+      return applyEditorPropertyUpdate(node, type, update)
+        ? { changed: true, selection: node }
+        : { changed: false };
     }
     case 'set-attributes': {
       return executeEditorCommand(editor, {
@@ -495,6 +522,21 @@ export function executeEditorCommand(
       if (!node) return { changed: false };
       const changed = updateEditorViewportStyle(
         node,
+        command.viewport,
+        command.property,
+        command.value,
+      );
+      return changed ? { changed: true, selection: node } : { changed: false };
+    }
+    case 'set-part-responsive-style': {
+      const node = getNode(editor, command.nodeId);
+      if (!node) return { changed: false };
+      const type = payloadNodeType(node);
+      if (!type) return { changed: false };
+      const changed = updateEditorPartViewportStyle(
+        node,
+        type,
+        command.partName,
         command.viewport,
         command.property,
         command.value,

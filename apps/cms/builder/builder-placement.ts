@@ -3,10 +3,18 @@ import type { Component } from 'grapesjs';
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_NODE_SLOT_ATTRIBUTE,
   isBuilderNodeType,
   type BuilderNodeType,
 } from './builder-adapter';
-import { canInsertChild, canRemoveChild, findAcceptingSlot } from '@payload/contracts';
+import {
+  canInsertChild,
+  canRemoveFromSlot,
+  resolveSlotForChild,
+  resolveSlotsForChild,
+  type ComponentSlotDefinition,
+  type ComponentSlotOccupancy,
+} from '@payload/contracts';
 
 /** The three insertion semantics shared by Canvas, Layers and Quick Add. */
 export type DropPosition = 'before' | 'inside' | 'after';
@@ -32,14 +40,47 @@ export type PlacementValidation =
 export function canInsertNode(
   parentType: BuilderNodeType,
   childType: BuilderNodeType,
-  currentChildCount = 0,
+  occupancy: ComponentSlotOccupancy | number = 0,
 ): boolean {
-  return canInsertChild(parentType, childType, currentChildCount);
+  return canInsertChild(parentType, childType, occupancy);
 }
 
-function payloadChildCount(parent: Component): number {
-  return parent.components().models.filter((child) => Boolean(payloadNodeType(child)))
-    .length;
+function liveSlotOccupancy(
+  parent: Component,
+  slot: ComponentSlotDefinition,
+  excluded?: Component,
+): ComponentSlotOccupancy {
+  const count = parent.components().models.filter((child) => {
+    if (child === excluded) return false;
+    const attributes = child.getAttributes({ noStyle: true });
+    const ownedSlot = attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
+    return typeof ownedSlot === 'string'
+      ? ownedSlot === slot.name
+      : slot.accepts.includes(payloadNodeType(child) as never);
+  }).length;
+  return { count, bySlot: { [slot.name]: count } };
+}
+
+function liveSlotForChild(
+  parent: Component | undefined,
+  childType: BuilderNodeType,
+): ComponentSlotDefinition | undefined {
+  const parentType = parent && payloadNodeType(parent);
+  return parentType ? resolveSlotsForChild(parentType, childType)[0] : undefined;
+}
+
+function canInsertLiveChild(
+  parent: Component,
+  childType: BuilderNodeType,
+  excluded?: Component,
+): boolean {
+  const parentType = payloadNodeType(parent);
+  const slot = parentType && resolveSlotForChild(parentType, childType);
+  return Boolean(
+    parentType &&
+    slot &&
+    canInsertNode(parentType, childType, liveSlotOccupancy(parent, slot, excluded)),
+  );
 }
 
 export function payloadNodeType(component: Component): BuilderNodeType | undefined {
@@ -95,32 +136,21 @@ export function resolveNodePlacement(
   let destination: Component | undefined;
   let index: number | undefined;
   const sourceParent = source.parent();
+  const sourceSlot = liveSlotForChild(sourceParent, sourceType);
   if (intent.position === 'inside') {
-    const destinationChildCount = payloadChildCount(target);
     const sameParent = sourceParent === target;
-    if (
-      !canInsertChild(
-        targetType,
-        sourceType,
-        Math.max(0, destinationChildCount - (sameParent ? 1 : 0)),
-      )
-    ) {
+    if (!canInsertLiveChild(target, sourceType, sameParent ? source : undefined)) {
       return invalid(`${targetType} cannot contain ${sourceType}.`);
     }
     destination = target;
   } else {
     destination = target.parent();
     const destinationType = destination ? payloadNodeType(destination) : undefined;
-    const destinationChildCount = destination ? payloadChildCount(destination) : 0;
     const sameParent = sourceParent === destination;
     if (
       !destination ||
       !destinationType ||
-      !canInsertChild(
-        destinationType,
-        sourceType,
-        Math.max(0, destinationChildCount - (sameParent ? 1 : 0)),
-      )
+      !canInsertLiveChild(destination, sourceType, sameParent ? source : undefined)
     ) {
       return invalid('The target position does not accept this node.');
     }
@@ -136,8 +166,13 @@ export function resolveNodePlacement(
     const sourceParentType = payloadNodeType(sourceParent);
     if (
       sourceParentType &&
-      findAcceptingSlot(sourceParentType, sourceType) &&
-      !canRemoveChild(sourceParentType, sourceType, payloadChildCount(sourceParent))
+      sourceSlot &&
+      !canRemoveFromSlot({
+        parentType: sourceParentType,
+        slotName: sourceSlot.name,
+        childType: sourceType,
+        occupancy: liveSlotOccupancy(sourceParent, sourceSlot),
+      })
     ) {
       return invalid(`${sourceParentType} must keep at least one structural child.`);
     }
@@ -187,6 +222,17 @@ export function moveNodeByIntent(
   const result = resolveNodePlacement(root, intent);
   if (!result.valid) return result;
   const { source, destination, index } = result.resolution;
+  const sourceType = payloadNodeType(source);
+  const destinationType = payloadNodeType(destination);
+  if (sourceType && destinationType) {
+    const slot = resolveSlotForChild(destinationType, sourceType);
+    if (slot && typeof source.setAttributes === 'function') {
+      source.setAttributes({
+        ...source.getAttributes({ noStyle: true }),
+        [BUILDER_NODE_SLOT_ATTRIBUTE]: slot.name,
+      });
+    }
+  }
   source.move(destination, index === undefined ? undefined : { at: index });
   return result;
 }

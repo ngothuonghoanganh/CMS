@@ -10,7 +10,8 @@ import {
   PageExtensionAttachmentSchema,
   PageResourceSchema,
 } from './extension-platform';
-import { PAGE_COMPONENT_REGISTRY } from './component-registry';
+import { PAGE_COMPONENT_REGISTRY, isPageComponentType } from './component-registry';
+import { PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY } from './style-registry';
 
 export const apiVersion = 'v1' as const;
 
@@ -2129,13 +2130,328 @@ export const PagePayloadV5Schema = z
   });
 
 export type PagePayloadV5 = z.infer<typeof PagePayloadV5Schema>;
-export type AnyPageNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5;
+
+// V6 adds authored accessibility settings and registry-controlled styles for
+// semantic component parts. V5 remains immutable; a document only promotes to
+// V6 when one of these persisted capabilities is actually present.
+export const AccordionPropsV6Schema = AccordionPropsSchema.extend({
+  headingLevel: z.union([
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+    z.literal(5),
+    z.literal(6),
+  ]),
+  ariaLabel: z.string().trim().max(200).optional(),
+}).strict();
+export type AccordionPropsV6 = z.infer<typeof AccordionPropsV6Schema>;
+
+export const TabsPropsV6Schema = TabsPropsSchema.extend({
+  ariaLabel: nonEmptyText.max(200),
+  activationMode: z.enum(['manual', 'automatic']),
+}).strict();
+export type TabsPropsV6 = z.infer<typeof TabsPropsV6Schema>;
+
+export type PageNodePartsStyle = Record<string, PageNodeStyle>;
+export const PageNodePartsStyleSchema = z.record(
+  z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+  PageNodeStyleSchema,
+);
+
+type PageNodeV6Base = {
+  id: string;
+  style?: PageNodeStyle | undefined;
+  partsStyle?: PageNodePartsStyle | undefined;
+  children: PageNodeV6[];
+};
+export type RootNodeV6 = PageNodeV6Base & { type: 'root'; props: {} };
+export type SectionNodeV6 = PageNodeV6Base & { type: 'section'; props: {} };
+export type ContainerNodeV6 = PageNodeV6Base & { type: 'container'; props: {} };
+export type TextNodeV6 = PageNodeV6Base & {
+  type: 'text';
+  props: { text: string; align?: 'left' | 'center' | 'right' | undefined };
+};
+export type ImageNodeV6 = PageNodeV6Base & {
+  type: 'image';
+  props: { src: string; alt: string };
+};
+export type ButtonNodeV6 = PageNodeV6Base & {
+  type: 'button';
+  props: { label: string; href: string; target: '_self' | '_blank' };
+};
+export type FormNodeV6 = PageNodeV6Base & { type: 'form'; props: FormProps };
+export type CountdownNodeV6 = PageNodeV6Base & {
+  type: 'countdown';
+  props: CountdownProps;
+};
+export type ExtensionNodeV6 = PageNodeV6Base & {
+  type: 'extension';
+  props: CustomExtensionNodeProps;
+};
+export type HeadingNodeV6 = PageNodeV6Base & { type: 'heading'; props: HeadingProps };
+export type LinkNodeV6 = PageNodeV6Base & { type: 'link'; props: LinkProps };
+export type DividerNodeV6 = PageNodeV6Base & { type: 'divider'; props: {} };
+export type ListNodeV6 = PageNodeV6Base & { type: 'list'; props: ListProps };
+export type VideoNodeV6 = PageNodeV6Base & { type: 'video'; props: VideoProps };
+export type QuoteNodeV6 = PageNodeV6Base & { type: 'quote'; props: QuoteProps };
+export type AccordionNodeV6 = PageNodeV6Base & {
+  type: 'accordion';
+  props: AccordionPropsV6;
+};
+export type AccordionItemNodeV6 = PageNodeV6Base & {
+  type: 'accordion-item';
+  props: AccordionItemProps;
+};
+export type TabsNodeV6 = PageNodeV6Base & { type: 'tabs'; props: TabsPropsV6 };
+export type TabItemNodeV6 = PageNodeV6Base & { type: 'tab-item'; props: TabItemProps };
+export type GalleryNodeV6 = PageNodeV6Base & { type: 'gallery'; props: {} };
+export type PageNodeV6 =
+  | RootNodeV6
+  | SectionNodeV6
+  | ContainerNodeV6
+  | TextNodeV6
+  | ImageNodeV6
+  | ButtonNodeV6
+  | FormNodeV6
+  | CountdownNodeV6
+  | ExtensionNodeV6
+  | HeadingNodeV6
+  | LinkNodeV6
+  | DividerNodeV6
+  | ListNodeV6
+  | VideoNodeV6
+  | QuoteNodeV6
+  | AccordionNodeV6
+  | AccordionItemNodeV6
+  | TabsNodeV6
+  | TabItemNodeV6
+  | GalleryNodeV6;
+
+const pageNodeV6Children = () => z.array(PageNodeV6Schema);
+const pageNodeV6Base = <
+  T extends z.ZodTypeAny,
+  P extends z.ZodTypeAny,
+  C extends z.ZodTypeAny,
+>(
+  type: T,
+  props: P,
+  children: C,
+) =>
+  z
+    .object({
+      id: pageNodeId,
+      type,
+      props,
+      style: PageNodeStyleSchema.optional(),
+      partsStyle: PageNodePartsStyleSchema.optional(),
+      children,
+    })
+    .strict();
+
+export const PageNodeV6Schema: z.ZodType<PageNodeV6> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    pageNodeV6Base(z.literal('root'), z.object({}).strict(), pageNodeV6Children()),
+    pageNodeV6Base(z.literal('section'), z.object({}).strict(), pageNodeV6Children()),
+    pageNodeV6Base(z.literal('container'), z.object({}).strict(), pageNodeV6Children()),
+    pageNodeV6Base(
+      z.literal('text'),
+      z
+        .object({
+          text: nonEmptyText.max(PAGE_PAYLOAD_MAX_TEXT_LENGTH),
+          align: z.enum(['left', 'center', 'right']).optional(),
+        })
+        .strict(),
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(
+      z.literal('image'),
+      z.object({ src: safeImageSource, alt: z.string().trim().max(500) }).strict(),
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(
+      z.literal('button'),
+      z
+        .object({
+          label: nonEmptyText.max(200),
+          href: safeButtonHref,
+          target: z.enum(['_self', '_blank']),
+        })
+        .strict(),
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(z.literal('form'), FormPropsSchema, z.array(z.never()).length(0)),
+    pageNodeV6Base(
+      z.literal('countdown'),
+      CountdownPropsSchema,
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(
+      z.literal('extension'),
+      CustomExtensionNodePropsSchema,
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(
+      z.literal('heading'),
+      HeadingPropsSchema,
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(z.literal('link'), LinkPropsSchema, z.array(z.never()).length(0)),
+    pageNodeV6Base(
+      z.literal('divider'),
+      z.object({}).strict(),
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(z.literal('list'), ListPropsSchema, z.array(z.never()).length(0)),
+    pageNodeV6Base(z.literal('video'), VideoPropsSchema, z.array(z.never()).length(0)),
+    pageNodeV6Base(z.literal('quote'), QuotePropsSchema, z.array(z.never()).length(0)),
+    pageNodeV6Base(z.literal('accordion'), AccordionPropsV6Schema, pageNodeV6Children()),
+    pageNodeV6Base(
+      z.literal('accordion-item'),
+      AccordionItemPropsSchema,
+      pageNodeV6Children(),
+    ),
+    pageNodeV6Base(z.literal('tabs'), TabsPropsV6Schema, pageNodeV6Children()),
+    pageNodeV6Base(z.literal('tab-item'), TabItemPropsSchema, pageNodeV6Children()),
+    pageNodeV6Base(z.literal('gallery'), z.object({}).strict(), pageNodeV6Children()),
+  ]),
+);
+
+export const PagePayloadV6Schema = z
+  .object({
+    version: z.literal(6),
+    metadata: PagePayloadV1Schema.shape.metadata,
+    root: PageNodeV6Schema,
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.root.type !== 'root' || payload.root.id !== 'root') {
+      context.addIssue({
+        code: 'custom',
+        message: 'The payload root must have type root and id root',
+        path: ['root'],
+      });
+    }
+    const nodeIds = new Set<string>();
+    const pending: Array<{ node: PageNodeV6; path: (string | number)[]; depth: number }> =
+      [{ node: payload.root, path: ['root'], depth: 1 }];
+    let nodeCount = 0;
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current) continue;
+      nodeCount += 1;
+      if (nodeCount > PAGE_PAYLOAD_MAX_NODES) {
+        context.addIssue({
+          code: 'custom',
+          message: `PAGE_PAYLOAD_NODE_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_NODES}`,
+          path: current.path,
+        });
+        break;
+      }
+      if (current.depth > PAGE_PAYLOAD_MAX_TREE_DEPTH) {
+        context.addIssue({
+          code: 'custom',
+          message: `PAGE_PAYLOAD_DEPTH_LIMIT_EXCEEDED: maximum is ${PAGE_PAYLOAD_MAX_TREE_DEPTH}`,
+          path: current.path,
+        });
+        continue;
+      }
+      if (nodeIds.has(current.node.id)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate page node id: ${current.node.id}`,
+          path: [...current.path, 'id'],
+        });
+      }
+      nodeIds.add(current.node.id);
+      const definition = PAGE_COMPONENT_REGISTRY[current.node.type];
+      for (const [partName, partStyle] of Object.entries(current.node.partsStyle ?? {})) {
+        const part = definition.componentParts[partName];
+        if (!part) {
+          context.addIssue({
+            code: 'custom',
+            message: `Unknown ${current.node.type} component part: ${partName}`,
+            path: [...current.path, 'partsStyle', partName],
+          });
+          continue;
+        }
+        for (const viewport of ['base', 'tablet', 'mobile'] as const) {
+          for (const property of Object.keys(partStyle[viewport] ?? {})) {
+            if (
+              !part.styleCapabilities.includes(
+                PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
+              )
+            ) {
+              context.addIssue({
+                code: 'custom',
+                message: `Style property ${property} is not allowed for ${current.node.type}.${partName}`,
+                path: [...current.path, 'partsStyle', partName, viewport, property],
+              });
+            }
+          }
+        }
+      }
+      for (const child of current.node.children) {
+        if (!isPageComponentType(child.type)) {
+          context.addIssue({
+            code: 'custom',
+            message: `Unknown page component type: ${child.type}`,
+            path: [...current.path, 'children'],
+          });
+          continue;
+        }
+        const slot = definition.slots.find((candidate) =>
+          candidate.accepts.includes(child.type),
+        );
+        if (!slot) {
+          context.addIssue({
+            code: 'custom',
+            message: `Node type ${current.node.type} cannot contain ${child.type} children`,
+            path: [...current.path, 'children'],
+          });
+        }
+        pending.push({
+          node: child,
+          path: [...current.path, 'children'],
+          depth: current.depth + 1,
+        });
+      }
+      for (const slot of definition.slots) {
+        const count = current.node.children.filter((child) =>
+          slot.accepts.includes(child.type),
+        ).length;
+        if (slot.minChildren !== undefined && count < slot.minChildren)
+          context.addIssue({
+            code: 'custom',
+            message: `${current.node.type} requires at least ${slot.minChildren} ${slot.label.toLowerCase()}`,
+            path: [...current.path, 'children'],
+          });
+        if (slot.maxChildren !== undefined && count > slot.maxChildren)
+          context.addIssue({
+            code: 'custom',
+            message: `${current.node.type} allows at most ${slot.maxChildren} ${slot.label.toLowerCase()}`,
+            path: [...current.path, 'children'],
+          });
+      }
+    }
+    const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
+    if (serializedSize > PAGE_PAYLOAD_MAX_SERIALIZED_BYTES)
+      context.addIssue({
+        code: 'custom',
+        message: `PAGE_PAYLOAD_TOO_LARGE: maximum serialized size is ${PAGE_PAYLOAD_MAX_SERIALIZED_BYTES} bytes`,
+        path: [],
+      });
+  });
+
+export type PagePayloadV6 = z.infer<typeof PagePayloadV6Schema>;
+export type AnyPageNode =
+  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
 export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV1Schema,
   PagePayloadV2Schema,
   PagePayloadV3Schema,
   PagePayloadV4Schema,
   PagePayloadV5Schema,
+  PagePayloadV6Schema,
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
 

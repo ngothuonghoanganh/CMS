@@ -4103,6 +4103,33 @@ body {
   gap: 0.55rem;
 }
 
+.builder-structure-editor {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.9rem;
+}
+
+.builder-structure-slot {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid #d8deec;
+  border-radius: 0.55rem;
+  padding: 0.65rem;
+}
+
+.builder-structure-slot-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.builder-structure-add-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .builder-structural-row {
   display: flex;
   align-items: center;

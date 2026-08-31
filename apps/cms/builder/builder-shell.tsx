@@ -16,6 +16,7 @@ import {
   PageVersionSchema,
   PAGE_COMPONENT_REGISTRY,
   type Asset,
+  type ComponentBuilderExposure,
   type Page,
   type PageDocument,
   type PageVersion,
@@ -84,13 +85,25 @@ type AvailableBlockOption = {
   category: 'layout' | 'content' | 'extension' | 'preset';
   extensionId?: string;
   keywords?: readonly string[];
+  group: ComponentBuilderExposure['group'] | 'preset';
 };
 
-const blockCategoryOrder = ['layout', 'content', 'extension', 'preset'] as const;
-const blockCategoryLabels: Record<(typeof blockCategoryOrder)[number], string> = {
+const blockGroupOrder = [
+  'layout',
+  'conversion',
+  'typography',
+  'media',
+  'interactive',
+  'advanced',
+  'preset',
+] as const;
+const blockGroupLabels: Record<(typeof blockGroupOrder)[number], string> = {
   layout: 'Layout',
-  content: 'Elements',
-  extension: 'Extensions',
+  typography: 'Text & type',
+  media: 'Media',
+  interactive: 'Interactive',
+  conversion: 'Conversion',
+  advanced: 'Extensions & advanced',
   preset: 'Presets',
 };
 
@@ -108,6 +121,7 @@ const blockOptions: AvailableBlockOption[] = [
       label: definition.label,
       category:
         definition.category === 'layout' ? ('layout' as const) : ('content' as const),
+      group: definition.builder.group,
       keywords: [definition.type, definition.label],
     })),
   ...BUILDER_BLOCK_PRESET_REGISTRY.map((preset) => ({
@@ -115,6 +129,7 @@ const blockOptions: AvailableBlockOption[] = [
     presetId: preset.id,
     label: preset.label,
     category: 'preset' as const,
+    group: 'preset' as const,
     keywords: [...preset.keywords],
   })),
 ];
@@ -378,6 +393,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         extensionId: extension.manifest.id,
         label: extension.manifest.name,
         category: 'extension' as const,
+        group: 'advanced' as const,
         keywords: [extension.manifest.id, extension.manifest.name],
       })),
   ];
@@ -398,14 +414,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const toolBlockOptions = addPanelTabTouched
     ? visibleBlockOptions.filter((block) =>
         addPanelTab === 'layouts'
-          ? block.category === 'layout' || block.kind === 'preset'
-          : block.category !== 'layout',
+          ? block.group === 'layout' || block.group === 'preset'
+          : block.group !== 'layout' && block.group !== 'preset',
       )
     : visibleBlockOptions;
-  const toolBlockGroups = blockCategoryOrder
+  const toolBlockGroups = blockGroupOrder
     .map((category) => ({
       category,
-      options: toolBlockOptions.filter((block) => block.category === category),
+      options: toolBlockOptions.filter((block) => block.group === category),
     }))
     .filter((group) => group.options.length > 0);
   const layerChildren = useMemo(() => {
@@ -1044,6 +1060,14 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     editorRef.current?.resetSelectedStyle(property);
   }
 
+  function updateSelectedPartStyle(partName: string, property: string, value: string) {
+    editorRef.current?.updateSelectedPartStyle(partName, property, value);
+  }
+
+  function resetSelectedPartStyle(partName: string, property: string) {
+    editorRef.current?.resetSelectedPartStyle(partName, property);
+  }
+
   function toggleInspectorSection(section: InspectorSectionKey, open: boolean) {
     setOpenInspectorSections((current) => ({ ...current, [section]: open }));
   }
@@ -1270,7 +1294,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   {toolBlockGroups.map((group) => (
                     <section className="builder-block-category" key={group.category}>
                       <h2 className="builder-block-category-heading">
-                        {blockCategoryLabels[group.category]}
+                        {blockGroupLabels[group.category]}
                       </h2>
                       {group.options.map((block) => {
                         const insertable = block.presetId ?? block.type;
@@ -1694,12 +1718,26 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               <BuilderInspector
                 inspectorTab={inspectorTab}
                 onInspectorTabChange={setInspectorTab}
-                onAddStructuralChild={() => editorRef.current?.addStructuralChild()}
+                onAddStructuralChild={(slotName, childType) =>
+                  childType && childType !== 'root'
+                    ? editorRef.current?.addStructuralChild(slotName, childType)
+                    : undefined
+                }
                 onMoveStructuralChild={(nodeId, direction) =>
                   editorRef.current?.moveStructuralChild(nodeId, direction)
                 }
                 onRemoveStructuralChild={(nodeId) =>
                   editorRef.current?.removeStructuralChild(nodeId)
+                }
+                onDuplicateStructuralChild={(nodeId) =>
+                  editorRef.current?.duplicateStructuralChild(nodeId)
+                }
+                onReorderStructuralChild={(sourceId, targetId, position) =>
+                  editorRef.current?.moveNode({
+                    nodeId: sourceId,
+                    targetNodeId: targetId,
+                    position,
+                  })
                 }
                 onSelectNode={(nodeId) => editorRef.current?.selectNode(nodeId)}
                 onToggleSection={toggleInspectorSection}
@@ -1710,6 +1748,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                   editorRef.current?.updateSelectedProperty(property, value)
                 }
                 updateSelectedStyle={updateSelectedStyle}
+                updateSelectedPartStyle={updateSelectedPartStyle}
+                resetSelectedPartStyle={resetSelectedPartStyle}
                 usableAssets={usableAssets}
                 viewport={viewport}
               />

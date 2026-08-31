@@ -6,8 +6,10 @@ import {
   ListPropsSchema,
   QuotePropsSchema,
   AccordionPropsSchema,
+  AccordionPropsV6Schema,
   AccordionItemPropsSchema,
   TabsPropsSchema,
+  TabsPropsV6Schema,
   TabItemPropsSchema,
   isSafePageHref,
   isSafePageImageSource,
@@ -97,8 +99,15 @@ export function resolveEditorPropertyUpdate(
     };
   }
 
-  if (type === 'accordion' && property === 'allowMultiple') {
-    const parsed = AccordionPropsSchema.shape.allowMultiple.safeParse(value);
+  if (
+    type === 'accordion' &&
+    ['allowMultiple', 'headingLevel', 'ariaLabel'].includes(property)
+  ) {
+    const schema =
+      property === 'allowMultiple'
+        ? AccordionPropsSchema.shape.allowMultiple
+        : AccordionPropsV6Schema.shape[property as 'headingLevel' | 'ariaLabel'];
+    const parsed = schema.safeParse(value);
     if (!parsed.success) throw new Error('allowMultiple must be boolean');
     return {
       kind: 'attributes',
@@ -121,8 +130,15 @@ export function resolveEditorPropertyUpdate(
     };
   }
 
-  if (type === 'tabs' && property === 'orientation') {
-    const parsed = TabsPropsSchema.shape.orientation.safeParse(value);
+  if (
+    type === 'tabs' &&
+    ['orientation', 'ariaLabel', 'activationMode'].includes(property)
+  ) {
+    const schema =
+      property === 'orientation'
+        ? TabsPropsSchema.shape.orientation
+        : TabsPropsV6Schema.shape[property as 'ariaLabel' | 'activationMode'];
+    const parsed = schema.safeParse(value);
     if (!parsed.success) throw new Error('Invalid tabs orientation');
     return {
       kind: 'attributes',

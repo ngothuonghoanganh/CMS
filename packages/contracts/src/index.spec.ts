@@ -16,6 +16,7 @@ import {
   PagePayloadV3Schema,
   PagePayloadV4Schema,
   PagePayloadV5Schema,
+  PagePayloadV6Schema,
   PagePayloadSchema,
   CreateIntegrationRequestSchema,
   CreateCustomDomainRequestSchema,
@@ -414,6 +415,67 @@ describe('foundation contracts', () => {
                 : node,
             ),
           })),
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates V6 accessibility props and component-part responsive styles', () => {
+    const payload = {
+      version: 6 as const,
+      metadata: { documentTitle: 'Accessible compound page' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'accordion',
+                type: 'accordion' as const,
+                props: { allowMultiple: false, headingLevel: 2, ariaLabel: 'FAQ' },
+                partsStyle: {
+                  trigger: {
+                    base: { backgroundColor: '#ffffff' },
+                    mobile: { padding: '8px' },
+                  },
+                },
+                children: [
+                  {
+                    id: 'item',
+                    type: 'accordion-item' as const,
+                    props: { title: 'Question', defaultOpen: true },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(PagePayloadV6Schema.parse(payload)).toEqual(payload);
+    expect(
+      PagePayloadV6Schema.safeParse({
+        ...payload,
+        root: {
+          ...payload.root,
+          children: [
+            {
+              ...payload.root.children[0],
+              children: [
+                {
+                  ...payload.root.children[0]!.children[0]!,
+                  partsStyle: { trigger: { base: { position: 'fixed' } } },
+                },
+              ],
+            },
+          ],
         },
       }).success,
     ).toBe(false);

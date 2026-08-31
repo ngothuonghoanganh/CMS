@@ -88,6 +88,47 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('rel="noopener noreferrer"');
   });
 
+  it('renders V6 accessible compound runtime and part responsive rules', () => {
+    const payload = {
+      version: 6 as const,
+      metadata: { documentTitle: 'Accessible runtime' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'accordion',
+                type: 'accordion' as const,
+                props: { allowMultiple: false, headingLevel: 2, ariaLabel: 'FAQ' },
+                partsStyle: { trigger: { mobile: { padding: '8px' }, base: {} } },
+                children: [
+                  {
+                    id: 'item',
+                    type: 'accordion-item' as const,
+                    props: { title: 'Question', defaultOpen: true },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const markup = renderToStaticMarkup(renderPage(payload));
+    expect(markup).toContain('aria-label="FAQ"');
+    expect(markup).toContain('<h2>');
+    expect(markup).toContain('data-payload-part="trigger"');
+    expect(markup).toContain('[data-payload-part="trigger"]');
+    expect(markup).toContain('aria-expanded="true"');
+  });
+
   it('keeps base styles and emits controlled responsive rules', () => {
     const markup = renderToStaticMarkup(renderPage(createPayload()));
 

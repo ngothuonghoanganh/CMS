@@ -4,13 +4,16 @@ import {
   PageNodeStyleSchema,
   PagePayloadSchema,
   PagePayloadV1Schema,
+  PageNodePartsStyleSchema,
   CountdownPropsSchema,
   ListPropsSchema,
   VideoPropsSchema,
   QuotePropsSchema,
   AccordionPropsSchema,
+  AccordionPropsV6Schema,
   AccordionItemPropsSchema,
   TabsPropsSchema,
+  TabsPropsV6Schema,
   TabItemPropsSchema,
   CustomExtensionNodePropsSchema,
   canContainPageComponent,
@@ -29,7 +32,9 @@ import {
   type PageNodeV3,
   type PageNodeV4,
   type PageNodeV5,
+  type PageNodeV6,
   type PageNodeStyle,
+  type PageNodePartsStyle,
   type PagePayload,
   type PagePayloadV1,
 } from '@payload/contracts';
@@ -53,9 +58,13 @@ export const BUILDER_LIST_PREVIEW_ATTRIBUTE = 'data-payload-list-preview';
 export const BUILDER_QUOTE_PROPS_ATTRIBUTE = 'data-payload-quote-props';
 export const BUILDER_QUOTE_PREVIEW_ATTRIBUTE = 'data-payload-quote-preview';
 export const BUILDER_COMPOUND_PROPS_ATTRIBUTE = 'data-payload-compound-props';
+export const BUILDER_PARTS_STYLE_ATTRIBUTE = 'data-payload-parts-style';
+/** Editor-only slot ownership marker; it is intentionally omitted from payload props. */
+export const BUILDER_NODE_SLOT_ATTRIBUTE = 'data-payload-slot';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
-export type BuilderNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5;
+export type BuilderNode =
+  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
 export type BuilderNodeType = PageComponentType;
 export type BuilderBlockType = Exclude<BuilderNodeType, 'root'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
@@ -472,7 +481,7 @@ function parseResponsiveStyle(value: unknown, path: string[]): PageNodeStyle | u
 function attributesForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 | 4 | 5 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 = 1,
 ) {
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
@@ -485,6 +494,9 @@ function attributesForNode(
   if (metadata) {
     attributes[BUILDER_METADATA_ATTRIBUTE] = jsonAttribute(metadata);
   }
+  if ('partsStyle' in node && node.partsStyle) {
+    attributes[BUILDER_PARTS_STYLE_ATTRIBUTE] = jsonAttribute(node.partsStyle);
+  }
   if (node.type === 'root') {
     attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE] = String(payloadVersion);
   }
@@ -495,7 +507,7 @@ function attributesForNode(
 function componentDefinitionForNode(
   node: BuilderNode,
   metadata?: PagePayloadV1['metadata'],
-  payloadVersion: 1 | 2 | 3 | 4 | 5 = 1,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 = 1,
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
   const shared: ComponentDefinition = {
@@ -1224,7 +1236,7 @@ function readNodeStyle(
   return Object.keys(baseFromEditor).length > 0 ? { base: baseFromEditor } : undefined;
 }
 
-function nodeFromSnapshot(
+function nodeFromSnapshotInternal(
   snapshot: BuilderEditorSnapshot,
   path: string[],
 ): Record<string, unknown> {
@@ -1438,17 +1450,27 @@ function nodeFromSnapshot(
     type === 'tabs' ||
     type === 'tab-item'
   ) {
-    const propsSchema =
-      type === 'accordion'
-        ? AccordionPropsSchema
-        : type === 'accordion-item'
-          ? AccordionItemPropsSchema
-          : type === 'tabs'
-            ? TabsPropsSchema
-            : TabItemPropsSchema;
-    const props = propsSchema.safeParse(
-      readJsonAttribute(snapshot.attributes, BUILDER_COMPOUND_PROPS_ATTRIBUTE, path),
+    const rawProps = readJsonAttribute(
+      snapshot.attributes,
+      BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+      path,
     );
+    const propsSchemas =
+      type === 'accordion'
+        ? [AccordionPropsV6Schema, AccordionPropsSchema]
+        : type === 'accordion-item'
+          ? [AccordionItemPropsSchema]
+          : type === 'tabs'
+            ? [TabsPropsV6Schema, TabsPropsSchema]
+            : [TabItemPropsSchema];
+    const propsSchema = propsSchemas.find((schema) => schema.safeParse(rawProps).success);
+    if (!propsSchema) {
+      throw new BuilderAdapterError('Compound component properties are invalid', [
+        ...path,
+        'props',
+      ]);
+    }
+    const props = propsSchema.safeParse(rawProps);
     if (!props.success) {
       throw new BuilderAdapterError(
         props.error.issues.map((issue) => issue.message).join('; '),
@@ -1528,22 +1550,93 @@ function nodeFromSnapshot(
   throw new BuilderAdapterError('Unsupported editor node type');
 }
 
+function readNodePartsStyle(
+  snapshot: BuilderEditorSnapshot,
+  type: BuilderNodeType,
+  path: string[],
+): Record<string, PageNodeStyle> | undefined {
+  const raw = snapshot.attributes[BUILDER_PARTS_STYLE_ATTRIBUTE];
+  if (raw === undefined || raw === '') return undefined;
+  if (typeof raw !== 'string') {
+    throw new BuilderAdapterError('Component part styles must be JSON text', path);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch {
+    throw new BuilderAdapterError('Component part styles are not valid JSON', path);
+  }
+  const parsed = PageNodePartsStyleSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new BuilderAdapterError(
+      parsed.error.issues.map((issue) => issue.message).join('; '),
+      [...path, 'partsStyle'],
+    );
+  }
+  const componentParts = PAGE_COMPONENT_REGISTRY[type].componentParts;
+  for (const [partName, partStyle] of Object.entries(parsed.data)) {
+    const part = componentParts[partName];
+    if (!part) {
+      throw new BuilderAdapterError(`Unknown component part "${partName}"`, [
+        ...path,
+        'partsStyle',
+        partName,
+      ]);
+    }
+    if (!part) continue;
+    for (const viewport of ['base', 'tablet', 'mobile'] as const) {
+      for (const [property, styleValue] of Object.entries(partStyle[viewport] ?? {})) {
+        if (
+          !part.styleCapabilities.includes(
+            PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
+          )
+        ) {
+          throw new BuilderAdapterError(
+            `Style property "${property}" is not allowed for ${type}.${partName}`,
+            [...path, 'partsStyle', partName, viewport, property],
+          );
+        }
+        if (typeof styleValue !== 'string' || !isSafePageStyleValue(styleValue)) {
+          throw new BuilderAdapterError(
+            'Component part style contains an unsafe CSS value',
+            [...path, 'partsStyle', partName, viewport, property],
+          );
+        }
+      }
+    }
+  }
+  return parsed.data;
+}
+
+function nodeFromSnapshot(
+  snapshot: BuilderEditorSnapshot,
+  path: string[],
+): Record<string, unknown> {
+  const node = nodeFromSnapshotInternal(snapshot, path);
+  const type = node.type;
+  if (typeof type !== 'string' || !isPageNodeType(type)) return node;
+  const partsStyle = readNodePartsStyle(snapshot, type, path);
+  return partsStyle ? { ...node, partsStyle } : node;
+}
+
 export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePayload {
   const root = nodeFromSnapshot(snapshot, ['root']);
   const versionValue = snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE];
   const version =
-    versionValue === '5' || versionValue === 5 || containsV5Node(root)
-      ? 5
-      : versionValue === '4' || versionValue === 4 || containsV4Node(root)
-        ? 4
-        : versionValue === '3' ||
-            versionValue === 3 ||
-            containsCountdownNode(root) ||
-            containsExtensionNode(root)
-          ? 3
-          : versionValue === '2' || versionValue === 2 || containsFormNode(root)
-            ? 2
-            : 1;
+    versionValue === '6' || versionValue === 6 || containsV6Node(root)
+      ? 6
+      : versionValue === '5' || versionValue === 5 || containsV5Node(root)
+        ? 5
+        : versionValue === '4' || versionValue === 4 || containsV4Node(root)
+          ? 4
+          : versionValue === '3' ||
+              versionValue === 3 ||
+              containsCountdownNode(root) ||
+              containsExtensionNode(root)
+            ? 3
+            : versionValue === '2' || versionValue === 2 || containsFormNode(root)
+              ? 2
+              : 1;
   const candidate: unknown = {
     version,
     metadata: readMetadata(snapshot.attributes),
@@ -1622,6 +1715,27 @@ function containsV5Node(node: Record<string, unknown>): boolean {
   );
 }
 
+function containsV6Node(node: Record<string, unknown>): boolean {
+  if (
+    isObject(node.partsStyle) ||
+    (node.type === 'accordion' &&
+      isObject(node.props) &&
+      ('headingLevel' in node.props || 'ariaLabel' in node.props)) ||
+    (node.type === 'tabs' &&
+      isObject(node.props) &&
+      ('ariaLabel' in node.props || 'activationMode' in node.props))
+  ) {
+    return true;
+  }
+  return (
+    Array.isArray(node.children) &&
+    node.children.some(
+      (child): child is Record<string, unknown> =>
+        isObject(child) && containsV6Node(child),
+    )
+  );
+}
+
 export function snapshotFromGrapesComponent(component: Component): BuilderEditorSnapshot {
   return {
     tagName: String(component.get('tagName') ?? ''),
@@ -1645,6 +1759,59 @@ export function readEditorResponsiveStyle(
     component.getAttributes({ noStyle: true })[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
     [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
   );
+}
+
+export function readEditorPartsStyle(
+  component: Component,
+  type: BuilderNodeType,
+): PageNodePartsStyle | undefined {
+  const raw = component.getAttributes({ noStyle: true })[BUILDER_PARTS_STYLE_ATTRIBUTE];
+  if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+  try {
+    const parsed = PageNodePartsStyleSchema.safeParse(JSON.parse(raw) as unknown);
+    if (!parsed.success) return undefined;
+    const parts = PAGE_COMPONENT_REGISTRY[type].componentParts;
+    const safeEntries = Object.entries(parsed.data).flatMap(([partName, style]) => {
+      const part = parts[partName];
+      if (!part) return [];
+      const safeStyle = Object.fromEntries(
+        (['base', 'tablet', 'mobile'] as const).flatMap((viewport) => {
+          const block = style[viewport];
+          if (!block) return [];
+          return Object.entries(block).filter(
+            ([property, value]) =>
+              part.styleCapabilities.includes(
+                PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
+              ) &&
+              typeof value === 'string' &&
+              isSafePageStyleValue(value),
+          ).length > 0
+            ? [
+                [
+                  viewport,
+                  Object.fromEntries(
+                    Object.entries(block).filter(
+                      ([property, value]) =>
+                        part.styleCapabilities.includes(
+                          PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.key as never,
+                        ) &&
+                        typeof value === 'string' &&
+                        isSafePageStyleValue(value),
+                    ),
+                  ),
+                ],
+              ]
+            : [];
+        }),
+      );
+      return Object.keys(safeStyle).length > 0 ? [[partName, safeStyle]] : [];
+    });
+    return safeEntries.length > 0
+      ? (Object.fromEntries(safeEntries) as PageNodePartsStyle)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function sameStyleValues(
@@ -1722,6 +1889,61 @@ export function updateEditorViewportStyle(
   component.setStyle(
     styleBlockToEditorStyle(resolveViewportStyle(parsed.data, viewport)),
   );
+  return true;
+}
+
+export function updateEditorPartViewportStyle(
+  component: Component,
+  type: BuilderNodeType,
+  partName: string,
+  viewport: BuilderViewport,
+  property: string,
+  value: string,
+): boolean {
+  const part = PAGE_COMPONENT_REGISTRY[type].componentParts[partName];
+  const definition =
+    PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+      property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+    ];
+  if (!part || !definition || !part.styleCapabilities.includes(property as never)) {
+    throw new BuilderAdapterError(
+      `Style property "${property}" is not allowed for ${type}.${partName}`,
+    );
+  }
+  if (
+    definition.payloadKey === 'opacity' &&
+    value.trim() !== '' &&
+    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(value.trim())
+  ) {
+    throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
+  }
+  if (value.trim() !== '' && !isSafePageStyleValue(value)) {
+    throw new BuilderAdapterError('Component part style contains an unsafe CSS value');
+  }
+  const current = readEditorPartsStyle(component, type) ?? {};
+  const partStyle = current[partName] ?? { base: {} };
+  const viewportKey = payloadViewport(viewport);
+  const nextBlock = { ...(partStyle[viewportKey] ?? {}) } as Record<string, string>;
+  const previousValue = nextBlock[definition.payloadKey];
+  if ((value.trim() === '' && previousValue === undefined) || previousValue === value) {
+    return false;
+  }
+  if (value.trim() === '') delete nextBlock[definition.payloadKey];
+  const nextPartStyle = { ...partStyle, [viewportKey]: nextBlock };
+  const parsed = PageNodePartsStyleSchema.safeParse({
+    ...current,
+    [partName]: nextPartStyle,
+  });
+  if (!parsed.success) {
+    throw new BuilderAdapterError(
+      parsed.error.issues.map((issue) => issue.message).join('; '),
+      ['partsStyle', partName, property],
+    );
+  }
+  component.setAttributes({
+    ...component.getAttributes({ noStyle: true }),
+    [BUILDER_PARTS_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
+  });
   return true;
 }
 

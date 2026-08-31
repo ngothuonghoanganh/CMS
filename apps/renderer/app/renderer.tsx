@@ -8,6 +8,7 @@ import {
   type PageNodeV3,
   type PageNodeV4,
   type PageNodeV5,
+  type PageNodeV6,
   type PageNodeStyle,
   type PagePayload,
   type FormNode,
@@ -41,19 +42,37 @@ import { FormRenderer } from './form-renderer';
 import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
 import { AccordionRuntime, TabsRuntime } from './core-interactive-runtime';
 
-type RenderableNode = PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5;
+type RenderableNode =
+  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
 type RootRenderableNode =
   | RootNode
   | Extract<PageNodeV2, { type: 'root' }>
-  | Extract<PageNodeV3, { type: 'root' }>;
+  | Extract<PageNodeV3, { type: 'root' }>
+  | Extract<PageNodeV4, { type: 'root' }>
+  | Extract<PageNodeV5, { type: 'root' }>
+  | Extract<PageNodeV6, { type: 'root' }>;
 type SectionRenderableNode =
   | SectionNode
   | Extract<PageNodeV2, { type: 'section' }>
-  | Extract<PageNodeV3, { type: 'section' }>;
+  | Extract<PageNodeV3, { type: 'section' }>
+  | Extract<PageNodeV4, { type: 'section' }>
+  | Extract<PageNodeV5, { type: 'section' }>
+  | Extract<PageNodeV6, { type: 'section' }>;
 type ContainerRenderableNode =
   | ContainerNode
   | Extract<PageNodeV2, { type: 'container' }>
-  | Extract<PageNodeV3, { type: 'container' }>;
+  | Extract<PageNodeV3, { type: 'container' }>
+  | Extract<PageNodeV4, { type: 'container' }>
+  | Extract<PageNodeV5, { type: 'container' }>
+  | Extract<PageNodeV6, { type: 'container' }>;
+
+type AccordionRenderableNode =
+  AccordionNodeV5 | Extract<PageNodeV6, { type: 'accordion' }>;
+type AccordionItemRenderableNode =
+  AccordionItemNodeV5 | Extract<PageNodeV6, { type: 'accordion-item' }>;
+type TabsRenderableNode = TabsNodeV5 | Extract<PageNodeV6, { type: 'tabs' }>;
+type TabItemRenderableNode = TabItemNodeV5 | Extract<PageNodeV6, { type: 'tab-item' }>;
+type GalleryRenderableNode = GalleryNodeV5 | Extract<PageNodeV6, { type: 'gallery' }>;
 type RenderContext = {
   siteSlug?: string;
   pagePath?: string;
@@ -96,6 +115,11 @@ function nodeStyle(node: RenderableNode): CSSProperties {
     style.textAlign = node.props.align;
   }
   return style;
+}
+
+function nodePartStyle(node: RenderableNode, part: string): CSSProperties | undefined {
+  const partsStyle = (node as { partsStyle?: Record<string, PageNodeStyle> }).partsStyle;
+  return partsStyle?.[part] ? styleBlockToProperties(partsStyle[part].base) : undefined;
 }
 
 function nodeAttributes(node: RenderableNode): {
@@ -262,10 +286,17 @@ function renderQuote(node: QuoteNodeV5): ReactElement {
   );
 }
 
-function renderAccordion(node: AccordionNodeV5, context: RenderContext): ReactElement {
+function renderAccordion(
+  node: AccordionRenderableNode,
+  context: RenderContext,
+): ReactElement {
   return (
     <AccordionRuntime
       allowMultiple={node.props.allowMultiple}
+      {...('ariaLabel' in node.props && node.props.ariaLabel
+        ? { ariaLabel: node.props.ariaLabel }
+        : {})}
+      headingLevel={'headingLevel' in node.props ? node.props.headingLevel : 3}
       id={node.id}
       items={node.children.map((item) => ({
         id: item.id,
@@ -274,13 +305,20 @@ function renderAccordion(node: AccordionNodeV5, context: RenderContext): ReactEl
         content: renderChildren(item, context),
         ...(item.style ? { style: nodeStyle(item) } : {}),
       }))}
+      partsStyle={{
+        root: nodePartStyle(node, 'root'),
+        item: nodePartStyle(node, 'item'),
+        trigger: nodePartStyle(node, 'trigger'),
+        panel: nodePartStyle(node, 'panel'),
+        icon: nodePartStyle(node, 'icon'),
+      }}
       style={nodeStyle(node)}
     />
   );
 }
 
 function renderAccordionItem(
-  node: AccordionItemNodeV5,
+  node: AccordionItemRenderableNode,
   context: RenderContext,
 ): ReactElement {
   return (
@@ -290,9 +328,13 @@ function renderAccordionItem(
   );
 }
 
-function renderTabs(node: TabsNodeV5, context: RenderContext): ReactElement {
+function renderTabs(node: TabsRenderableNode, context: RenderContext): ReactElement {
   return (
     <TabsRuntime
+      activationMode={
+        'activationMode' in node.props ? node.props.activationMode : 'automatic'
+      }
+      ariaLabel={'ariaLabel' in node.props ? node.props.ariaLabel : 'Tabs'}
       id={node.id}
       items={node.children.map((item) => ({
         id: item.id,
@@ -301,12 +343,22 @@ function renderTabs(node: TabsNodeV5, context: RenderContext): ReactElement {
         ...(item.style ? { style: nodeStyle(item) } : {}),
       }))}
       orientation={node.props.orientation}
+      partsStyle={{
+        root: nodePartStyle(node, 'root'),
+        list: nodePartStyle(node, 'list'),
+        tab: nodePartStyle(node, 'tab'),
+        activeTab: nodePartStyle(node, 'activeTab'),
+        panel: nodePartStyle(node, 'panel'),
+      }}
       style={nodeStyle(node)}
     />
   );
 }
 
-function renderTabItem(node: TabItemNodeV5, context: RenderContext): ReactElement {
+function renderTabItem(
+  node: TabItemRenderableNode,
+  context: RenderContext,
+): ReactElement {
   return (
     <section {...nodeAttributes(node)} style={nodeStyle(node)}>
       {renderChildren(node, context)}
@@ -314,7 +366,10 @@ function renderTabItem(node: TabItemNodeV5, context: RenderContext): ReactElemen
   );
 }
 
-function renderGallery(node: GalleryNodeV5, context: RenderContext): ReactElement {
+function renderGallery(
+  node: GalleryRenderableNode,
+  context: RenderContext,
+): ReactElement {
   return (
     <div
       {...nodeAttributes(node)}
@@ -527,6 +582,34 @@ function responsiveRules(
       selector: `[data-payload-node-id="${node.id}"]`,
       declarations,
     });
+  }
+
+  for (const [partName, partStyle] of Object.entries(
+    (node as { partsStyle?: Record<string, PageNodeStyle> }).partsStyle ?? {},
+  )) {
+    const partDeclarations = partStyle[viewport]
+      ? Object.entries(partStyle[viewport] ?? {})
+          .filter(
+            ([property, value]) =>
+              property in PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY &&
+              typeof value === 'string' &&
+              isSafePageStyleValue(value),
+          )
+          .map(
+            ([property, value]) =>
+              `${PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property]?.cssProperty}:${value}!important`,
+          )
+          .join(';')
+      : '';
+    if (partDeclarations) {
+      rules.push({
+        selector:
+          partName === 'root'
+            ? `[data-payload-node-id="${node.id}"]`
+            : `[data-payload-node-id="${node.id}"] [data-payload-part="${partName}"]`,
+        declarations: partDeclarations,
+      });
+    }
   }
 
   node.children.forEach((child) => responsiveRules(child, viewport, rules));

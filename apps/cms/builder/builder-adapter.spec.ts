@@ -3,6 +3,7 @@ import {
   type PagePayloadV1,
   type PagePayloadV4,
   type PagePayloadV5,
+  type PagePayloadV6,
 } from '@payload/contracts';
 
 import {
@@ -17,6 +18,7 @@ import {
   BUILDER_HEADING_LEVEL_ATTRIBUTE,
   BUILDER_LIST_PROPS_ATTRIBUTE,
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  BUILDER_PARTS_STYLE_ATTRIBUTE,
   BuilderAdapterError,
   createBlockDefinition,
   formatCountdownRemaining,
@@ -523,6 +525,69 @@ describe('builder adapter', () => {
           .attributes as Record<string, unknown> | undefined
       )?.[BUILDER_NODE_TYPE_ATTRIBUTE],
     ).toBe('accordion-item');
+  });
+
+  it('round-trips V6 accessibility props and registry-controlled part styles', () => {
+    const payload: PagePayloadV6 = {
+      version: 6,
+      metadata: { documentTitle: 'V6 page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'tabs',
+                type: 'tabs',
+                props: {
+                  orientation: 'vertical',
+                  ariaLabel: 'Examples',
+                  activationMode: 'manual',
+                },
+                partsStyle: {
+                  tab: {
+                    base: { backgroundColor: '#ffffff' },
+                    mobile: { padding: '8px' },
+                  },
+                },
+                children: [
+                  {
+                    id: 'tab',
+                    type: 'tab-item',
+                    props: { label: 'One' },
+                    children: [
+                      {
+                        id: 'copy',
+                        type: 'text',
+                        props: { text: 'Content' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(payload);
+    expect(definition.attributes?.[BUILDER_PAYLOAD_VERSION_ATTRIBUTE]).toBe('6');
+    const section = (definition.components as Array<Record<string, unknown>>)[0]!;
+    const tabs = (section.components as Array<Record<string, unknown>>)[0]!;
+    expect(
+      (tabs.attributes as Record<string, unknown> | undefined)?.[
+        BUILDER_PARTS_STYLE_ATTRIBUTE
+      ],
+    ).toContain('backgroundColor');
+    expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
+      payload,
+    );
   });
 
   it('recognizes extension nodes at the shared interaction boundary', () => {

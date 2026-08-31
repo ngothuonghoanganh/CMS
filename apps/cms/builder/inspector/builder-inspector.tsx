@@ -5,6 +5,7 @@ import {
   PAGE_STYLE_PROPERTY_GROUPS,
   type Asset,
   type ComponentPropertyDefinition,
+  type PageComponentType,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { BuilderViewport } from '../builder-adapter';
@@ -12,6 +13,7 @@ import type { SelectedBuilderNode } from '../grapes-editor';
 import { resolveInspectorStyleValue } from './inspector-value';
 import { CUSTOM_PROPERTY_EDITORS } from './custom-property-editors';
 import { PropertyControlRenderer } from './property-control-renderer';
+import { StructureEditor } from './structure-editor/structure-editor';
 
 export type InspectorTab = 'content' | 'style' | 'settings';
 
@@ -42,10 +44,18 @@ type BuilderInspectorProps = {
   updateSelectedProperty: (property: string, value: unknown) => void;
   updateSelectedStyle: (property: string, value: string) => void;
   resetSelectedStyle: (property: string) => void;
+  updateSelectedPartStyle: (partName: string, property: string, value: string) => void;
+  resetSelectedPartStyle: (partName: string, property: string) => void;
   onSelectNode: (nodeId: string) => void;
-  onAddStructuralChild: () => void;
+  onAddStructuralChild: (slotName?: string, childType?: PageComponentType) => void;
   onRemoveStructuralChild: (nodeId: string) => void;
   onMoveStructuralChild: (nodeId: string, direction: 'up' | 'down') => void;
+  onReorderStructuralChild: (
+    sourceId: string,
+    targetId: string,
+    position: 'before' | 'after',
+  ) => void;
+  onDuplicateStructuralChild: (nodeId: string) => void;
   usableAssets: Asset[];
 };
 
@@ -102,24 +112,33 @@ export function BuilderInspector({
   updateSelectedProperty,
   updateSelectedStyle,
   resetSelectedStyle,
+  updateSelectedPartStyle,
+  resetSelectedPartStyle,
   onSelectNode,
   onAddStructuralChild,
   onRemoveStructuralChild,
   onMoveStructuralChild,
+  onReorderStructuralChild,
+  onDuplicateStructuralChild,
   usableAssets,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
+  const definition = PAGE_COMPONENT_REGISTRY[selected.type];
+  const partNames = Object.keys(definition.componentParts);
+  const [selectedPart, setSelectedPart] = useState(partNames[0] ?? '');
 
   useEffect(() => setContentSectionsOpen(openSections.content), [openSections.content]);
+  useEffect(
+    () =>
+      setSelectedPart(
+        Object.keys(PAGE_COMPONENT_REGISTRY[selected.type].componentParts)[0] ?? '',
+      ),
+    [selected.type],
+  );
 
-  const definition = PAGE_COMPONENT_REGISTRY[selected.type];
   const contentProperties = definition.propertiesSchema.filter(
     (property) => property.group === 'content',
   );
-  const structuralSlot = definition.slots.find((slot) => slot.structural);
-  const structuralChildren = structuralSlot
-    ? selected.children.filter((child) => structuralSlot.accepts.includes(child.type))
-    : [];
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {
     if (property.control === 'custom' && property.customEditor) {
@@ -197,6 +216,69 @@ export function BuilderInspector({
     );
   }
 
+  function renderPartStyleEditor() {
+    const part = definition.componentParts[selectedPart];
+    if (!part) return null;
+    const allowed = new Set(part.styleCapabilities);
+    const fields = inspectorStyleSections.flatMap((section) =>
+      section.fields.filter((field) => allowed.has(field.key as never)),
+    );
+    return (
+      <InspectorSection label="Component part" onToggle={() => undefined} open>
+        <label className="builder-inspector-field">
+          <span>Target</span>
+          <select
+            onChange={(event) => setSelectedPart(event.target.value)}
+            value={selectedPart}
+          >
+            {partNames.map((name) => (
+              <option key={name} value={name}>
+                {definition.componentParts[name]?.label ?? name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="builder-inspector-fields">
+          {fields.map((field) => {
+            const resolved = resolveInspectorStyleValue(
+              selected.partsStyle?.[selectedPart],
+              field.key,
+              viewport,
+            );
+            const hasOverride =
+              resolved.authoredValue !== undefined && viewport !== 'desktop';
+            return (
+              <div className="builder-inspector-field-stack" key={field.key}>
+                <PropertyControlRenderer
+                  definition={field}
+                  description={inheritedDescription(field, resolved)}
+                  onChange={(nextValue) =>
+                    updateSelectedPartStyle(
+                      selectedPart,
+                      field.key,
+                      String(nextValue ?? ''),
+                    )
+                  }
+                  value={resolved.effectiveValue ?? ''}
+                />
+                {hasOverride ? (
+                  <button
+                    aria-label={`Reset ${field.label} override`}
+                    className="button button-small button-ghost builder-reset-override"
+                    onClick={() => resetSelectedPartStyle(selectedPart, field.key)}
+                    type="button"
+                  >
+                    Reset override
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </InspectorSection>
+    );
+  }
+
   return (
     <>
       <div aria-label="Inspector tabs" className="builder-inspector-tabs" role="tablist">
@@ -231,69 +313,23 @@ export function BuilderInspector({
         </InspectorSection>
       ) : null}
 
-      {inspectorTab === 'content' && structuralSlot ? (
-        <InspectorSection label={structuralSlot.label} onToggle={() => undefined} open>
-          <div className="builder-structural-editor">
-            {structuralChildren.map((child, index) => (
-              <div className="builder-structural-row" key={child.id}>
-                <button
-                  className="button button-ghost builder-structural-select"
-                  onClick={() => onSelectNode(child.id)}
-                  type="button"
-                >
-                  {child.label}
-                </button>
-                <div className="row-actions">
-                  <button
-                    aria-label={`Move ${child.label} up`}
-                    className="button button-ghost button-small"
-                    disabled={index === 0}
-                    onClick={() => onMoveStructuralChild(child.id, 'up')}
-                    type="button"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    aria-label={`Move ${child.label} down`}
-                    className="button button-ghost button-small"
-                    disabled={index === structuralChildren.length - 1}
-                    onClick={() => onMoveStructuralChild(child.id, 'down')}
-                    type="button"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    aria-label={`Remove ${child.label}`}
-                    className="button button-danger button-small"
-                    disabled={
-                      structuralSlot.minChildren !== undefined &&
-                      structuralChildren.length <= structuralSlot.minChildren
-                    }
-                    onClick={() => onRemoveStructuralChild(child.id)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))}
-            <button
-              className="button button-secondary button-small"
-              disabled={
-                structuralSlot.maxChildren !== undefined &&
-                structuralChildren.length >= structuralSlot.maxChildren
-              }
-              onClick={onAddStructuralChild}
-              type="button"
-            >
-              + {structuralSlot.addLabel ?? `Add ${structuralSlot.label}`}
-            </button>
-          </div>
-        </InspectorSection>
+      {inspectorTab === 'content' ? (
+        <StructureEditor
+          onAdd={(slotName, childType) => onAddStructuralChild(slotName, childType)}
+          onDelete={onRemoveStructuralChild}
+          onDuplicate={onDuplicateStructuralChild}
+          onMove={onMoveStructuralChild}
+          onDrop={onReorderStructuralChild}
+          onSelect={onSelectNode}
+          selected={selected}
+        />
       ) : null}
 
       {inspectorTab === 'style' ? (
-        <>{inspectorStyleSections.map((section) => renderStyleSection(section))}</>
+        <>
+          {inspectorStyleSections.map((section) => renderStyleSection(section))}
+          {partNames.length > 0 ? renderPartStyleEditor() : null}
+        </>
       ) : null}
 
       {inspectorTab === 'settings' ? (

@@ -2,6 +2,7 @@ import type { Component } from 'grapesjs';
 import {
   AccordionItemPropsSchema,
   AccordionPropsSchema,
+  AccordionPropsV6Schema,
   CountdownPropsSchema,
   FormPropsSchema,
   ListPropsSchema,
@@ -9,11 +10,16 @@ import {
   QuotePropsSchema,
   TabItemPropsSchema,
   TabsPropsSchema,
+  TabsPropsV6Schema,
   VideoPropsSchema,
   type FormProps,
   type PageComponentType,
   type PageNodeStyle,
 } from '@payload/contracts';
+import {
+  resolveEditorPropertyUpdate,
+  type EditorPropertyUpdate,
+} from './component-editor-bindings';
 
 import {
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
@@ -25,15 +31,20 @@ import {
   BUILDER_TEXT_ALIGN_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_NODE_SLOT_ATTRIBUTE,
+  readEditorPartsStyle,
   readEditorResponsiveStyle,
   sanitizeInlineText,
+  listPreviewComponents,
+  formPreviewComponents,
+  quotePreviewComponents,
 } from './builder-adapter';
 
 export type ComponentSelectionSnapshot = {
   id: string;
   type: PageComponentType;
   props: Record<string, unknown>;
-  children: Array<{ id: string; type: PageComponentType; label: string }>;
+  children: Array<{ id: string; type: PageComponentType; label: string; slot?: string }>;
   text?: string;
   label?: string;
   href?: string;
@@ -42,8 +53,27 @@ export type ComponentSelectionSnapshot = {
   alt?: string;
   align?: 'left' | 'center' | 'right';
   style?: PageNodeStyle;
+  partsStyle?: Record<string, PageNodeStyle>;
   form?: FormProps;
   countdown?: { targetAt: string; label: string };
+};
+
+export type ComponentEditorCodec = {
+  readProps: (
+    component: Component,
+    type: PageComponentType,
+    content: string,
+  ) => {
+    props: Record<string, unknown>;
+    form?: FormProps;
+    countdown?: { targetAt: string; label: string };
+  };
+  resolvePropertyMutation: (
+    type: PageComponentType,
+    property: string,
+    value: unknown,
+    component?: Component,
+  ) => EditorPropertyUpdate | null;
 };
 
 function parsedJson<T>(
@@ -59,7 +89,7 @@ function parsedJson<T>(
   }
 }
 
-export function readComponentProps(
+function readComponentPropsFromAttributes(
   component: Component,
   type: PageComponentType,
   content: string,
@@ -104,6 +134,10 @@ export function readComponentProps(
   if (type === 'accordion') {
     return {
       props:
+        parsedJson(
+          attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE],
+          AccordionPropsV6Schema,
+        ) ??
         parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], AccordionPropsSchema) ??
         {},
     };
@@ -120,7 +154,9 @@ export function readComponentProps(
   if (type === 'tabs') {
     return {
       props:
-        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsSchema) ?? {},
+        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsV6Schema) ??
+        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsSchema) ??
+        {},
     };
   }
   if (type === 'tab-item') {
@@ -164,6 +200,209 @@ export function readComponentProps(
   return { props };
 }
 
+const genericCodec: ComponentEditorCodec = {
+  readProps: readComponentPropsFromAttributes,
+  resolvePropertyMutation: (type, property, value, component) => {
+    if (type === 'list' && property === 'ordered' && component) {
+      const raw = component.getAttributes({ noStyle: true })[
+        BUILDER_LIST_PROPS_ATTRIBUTE
+      ];
+      const current = parsedJson(raw, ListPropsSchema);
+      if (!current || typeof value !== 'boolean') return null;
+      return resolveEditorPropertyUpdate(type, 'items', { ...current, ordered: value });
+    }
+    if (
+      type === 'countdown' &&
+      (property === 'label' || property === 'targetAt') &&
+      component
+    ) {
+      const raw = component.getAttributes({ noStyle: true })[
+        BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
+      ];
+      const current = parsedJson(raw, CountdownPropsSchema);
+      if (!current || typeof value !== 'string') return null;
+      return resolveEditorPropertyUpdate(type, property, {
+        ...current,
+        [property]: value,
+      });
+    }
+    return resolveEditorPropertyUpdate(type, property, value);
+  },
+};
+
+/**
+ * Component semantics are registered here. Most components intentionally use
+ * the generic schema/binding path; a future component can add a codec without
+ * changing the Inspector or command executor.
+ */
+export const COMPONENT_EDITOR_CODECS: Readonly<
+  Record<PageComponentType, ComponentEditorCodec>
+> = Object.fromEntries(
+  Object.keys(PAGE_COMPONENT_REGISTRY).map((type) => [type, genericCodec]),
+) as Record<PageComponentType, ComponentEditorCodec>;
+
+export function getComponentEditorCodec(type: PageComponentType): ComponentEditorCodec {
+  return COMPONENT_EDITOR_CODECS[type] ?? genericCodec;
+}
+
+export function readComponentProps(
+  component: Component,
+  type: PageComponentType,
+  content: string,
+): ReturnType<ComponentEditorCodec['readProps']> {
+  return getComponentEditorCodec(type).readProps(component, type, content);
+}
+
+const semanticAttributeByType: Partial<Record<PageComponentType, string>> = {
+  quote: BUILDER_QUOTE_PROPS_ATTRIBUTE,
+  accordion: BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  'accordion-item': BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  tabs: BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  'tab-item': BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+};
+
+const semanticSchemaByType: Partial<
+  Record<
+    PageComponentType,
+    Array<{ safeParse: (value: unknown) => { success: boolean; data?: unknown } }>
+  >
+> = {
+  quote: [QuotePropsSchema],
+  accordion: [AccordionPropsV6Schema, AccordionPropsSchema],
+  'accordion-item': [AccordionItemPropsSchema],
+  tabs: [TabsPropsV6Schema, TabsPropsSchema],
+  'tab-item': [TabItemPropsSchema],
+};
+
+function applyEditorSemanticPatch(
+  component: Component,
+  type: PageComponentType,
+  update: Extract<EditorPropertyUpdate, { kind: 'attributes' }>,
+): boolean {
+  const propertyPatch = update.semanticPropsPatch;
+  const attributeName = semanticAttributeByType[type];
+  const schemas = semanticSchemaByType[type];
+  if (!propertyPatch || !attributeName || !schemas) return false;
+  const raw = component.getAttributes({ noStyle: true })[attributeName];
+  if (typeof raw !== 'string') return false;
+  let current: unknown;
+  try {
+    current = JSON.parse(raw) as unknown;
+  } catch {
+    return false;
+  }
+  const v6OnlyProperty =
+    (type === 'accordion' &&
+      ['headingLevel', 'ariaLabel'].includes(propertyPatch.property)) ||
+    (type === 'tabs' && ['ariaLabel', 'activationMode'].includes(propertyPatch.property));
+  const schema = v6OnlyProperty
+    ? schemas[0]
+    : schemas.find((candidate) => candidate.safeParse(current).success);
+  if (!schema) return false;
+  let parsed = schema.safeParse(current);
+  if (!parsed.success && v6OnlyProperty) {
+    const legacySchema = schemas[schemas.length - 1];
+    if (!legacySchema) return false;
+    const legacy = legacySchema.safeParse(current);
+    if (legacy.success && legacy.data && typeof legacy.data === 'object') {
+      const defaults =
+        type === 'accordion'
+          ? { headingLevel: 3, ariaLabel: 'Accordion' }
+          : { ariaLabel: 'Tabs', activationMode: 'automatic' };
+      parsed = schema.safeParse({ ...defaults, ...legacy.data });
+    }
+  }
+  if (!parsed.success || !parsed.data || typeof parsed.data !== 'object') return false;
+  const next = schema.safeParse({
+    ...parsed.data,
+    [propertyPatch.property]: propertyPatch.value,
+  });
+  if (!next.success) return false;
+  const nextData = next.data as Record<string, unknown>;
+  component.setAttributes({
+    ...component.getAttributes({ noStyle: true }),
+    [attributeName]: JSON.stringify(nextData),
+  });
+  if (
+    type === 'accordion-item' &&
+    propertyPatch.property === 'defaultOpen' &&
+    nextData.defaultOpen === true
+  ) {
+    normalizeSingleOpenAccordion(component);
+  }
+  if (type === 'quote') {
+    component.components(
+      quotePreviewComponents(next.data as { text: string; cite?: string }),
+    );
+  } else if (type === 'accordion-item' && typeof nextData.title === 'string') {
+    component.set('content', nextData.title);
+  } else if (type === 'tab-item' && typeof nextData.label === 'string') {
+    component.set('content', nextData.label);
+  }
+  return true;
+}
+
+/**
+ * A single Inspector action owns this whole transition: when an accordion is
+ * single-open, opening one item closes all other open siblings before the
+ * command returns. The siblings are model mutations, never independent UI
+ * state, so serialization and undo observe one coherent semantic result.
+ */
+function normalizeSingleOpenAccordion(item: Component): void {
+  const parent = item.parent();
+  if (!parent) return;
+  const parentType = parent.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+  if (parentType !== 'accordion') return;
+  const raw = parent.getAttributes({ noStyle: true })[BUILDER_COMPOUND_PROPS_ATTRIBUTE];
+  const props =
+    parsedJson(raw, AccordionPropsV6Schema) ?? parsedJson(raw, AccordionPropsSchema);
+  if (!props || props.allowMultiple) return;
+  parent.components().models.forEach((sibling) => {
+    if (sibling === item) return;
+    const type = sibling.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+    if (type !== 'accordion-item') return;
+    const siblingAttributes = sibling.getAttributes({ noStyle: true });
+    const siblingProps = parsedJson(
+      siblingAttributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE],
+      AccordionItemPropsSchema,
+    );
+    if (!siblingProps?.defaultOpen) return;
+    sibling.setAttributes({
+      ...siblingAttributes,
+      [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: JSON.stringify({
+        ...siblingProps,
+        defaultOpen: false,
+      }),
+    });
+  });
+}
+
+export function applyEditorPropertyUpdate(
+  component: Component,
+  type: PageComponentType,
+  update: EditorPropertyUpdate,
+): boolean {
+  if (update.kind === 'attributes' && update.semanticPropsPatch) {
+    return applyEditorSemanticPatch(component, type, update);
+  }
+  if (update.kind === 'content') {
+    component.set('content', update.value);
+    return true;
+  }
+  component.setAttributes({
+    ...component.getAttributes({ noStyle: true }),
+    ...update.attributes,
+  });
+  if (update.tagName) component.set('tagName', update.tagName);
+  if (update.listProps) {
+    component.set('tagName', update.listProps.ordered ? 'ol' : 'ul');
+    component.components(listPreviewComponents(update.listProps));
+  }
+  if (update.formProps) component.components(formPreviewComponents(update.formProps));
+  if (update.countdownProps) component.components([]);
+  return true;
+}
+
 export function selectionFromComponentCodec(
   component: Component | undefined,
 ): ComponentSelectionSnapshot | null {
@@ -188,6 +427,7 @@ export function selectionFromComponentCodec(
     content,
   );
   const responsiveStyle = readEditorResponsiveStyle(component);
+  const partsStyle = readEditorPartsStyle(component, componentType);
   const styleAlign = responsiveStyle?.base.textAlign;
   const legacyAlign = attributes[BUILDER_TEXT_ALIGN_ATTRIBUTE];
   const align = styleAlign ?? legacyAlign;
@@ -213,7 +453,15 @@ export function selectionFromComponentCodec(
     );
     if (typeof childProps?.title === 'string') label = `${label}: ${childProps.title}`;
     if (typeof childProps?.label === 'string') label = `${label}: ${childProps.label}`;
-    return [{ id: childId, type: childType as PageComponentType, label }];
+    const slot = childAttributes[BUILDER_NODE_SLOT_ATTRIBUTE];
+    return [
+      {
+        id: childId,
+        type: childType as PageComponentType,
+        label,
+        ...(typeof slot === 'string' ? { slot } : {}),
+      },
+    ];
   });
   return {
     id,
@@ -236,6 +484,7 @@ export function selectionFromComponentCodec(
       : {}),
     ...(align === 'left' || align === 'center' || align === 'right' ? { align } : {}),
     ...(responsiveStyle ? { style: responsiveStyle } : {}),
+    ...(partsStyle ? { partsStyle } : {}),
     ...(form ? { form } : {}),
     ...(countdown ? { countdown } : {}),
   };

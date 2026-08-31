@@ -1,10 +1,10 @@
-import type { PageNodeV5 } from './index';
+import type { PageNodeV6 } from './index';
 import {
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PageStylePropertyKey,
 } from './style-registry';
 
-export type PageComponentType = PageNodeV5['type'];
+export type PageComponentType = PageNodeV6['type'];
 
 export type ComponentPropertyGroup = 'content' | 'style' | 'advanced';
 
@@ -61,7 +61,15 @@ export type ComponentSlotDefinition = {
 export type ComponentBuilderExposure = {
   /** Internal nodes remain selectable/persisted but are not global Add blocks. */
   insertable: boolean;
+  group: 'layout' | 'typography' | 'media' | 'interactive' | 'conversion' | 'advanced';
   keywords: readonly string[];
+  description?: string;
+};
+
+export type ComponentPartDefinition = {
+  name: string;
+  label: string;
+  styleCapabilities: readonly PageStylePropertyKey[];
 };
 
 export type ComponentMigrationDefinition = {
@@ -80,6 +88,7 @@ export type PageComponentDefinition = {
   allowedParents: readonly PageComponentType[];
   allowedChildren: readonly PageComponentType[];
   slots: readonly ComponentSlotDefinition[];
+  componentParts: Readonly<Record<string, ComponentPartDefinition>>;
   migrations: readonly ComponentMigrationDefinition[];
   propertiesSchema: readonly ComponentPropertyDefinition[];
   builder: ComponentBuilderExposure;
@@ -472,37 +481,55 @@ const content = (
 const definition = (
   input: Omit<
     PageComponentDefinition,
-    'propertiesSchema' | 'slots' | 'migrations' | 'builder' | 'internal'
+    | 'propertiesSchema'
+    | 'allowedParents'
+    | 'allowedChildren'
+    | 'slots'
+    | 'componentParts'
+    | 'migrations'
+    | 'builder'
+    | 'internal'
   > & {
     propertiesSchema?: readonly ComponentPropertyDefinition[];
     slots?: readonly ComponentSlotDefinition[];
+    componentParts?: Readonly<Record<string, ComponentPartDefinition>>;
     migrations?: readonly ComponentMigrationDefinition[];
     builder?: Partial<ComponentBuilderExposure>;
     internal?: boolean;
   },
-): PageComponentDefinition => ({
-  ...input,
-  slots:
-    input.slots ??
-    (input.allowedChildren.length > 0
-      ? [{ name: 'children', label: 'Content', accepts: input.allowedChildren }]
-      : []),
-  migrations: input.migrations ?? [],
-  propertiesSchema: [...(input.propertiesSchema ?? []), ...styleSchemaFor(input.type)],
-  builder: {
-    insertable: input.builder?.insertable ?? !input.internal,
-    keywords: input.builder?.keywords ?? [input.type, input.label],
-  },
-  internal: input.internal ?? false,
-});
+): Omit<PageComponentDefinition, 'allowedParents'> & {
+  allowedParents: readonly PageComponentType[];
+} => {
+  const slots = input.slots ?? [];
+  const allowedChildren = [...new Set(slots.flatMap((slot) => slot.accepts))];
+  const categoryToGroup: Record<
+    PageComponentDefinition['category'],
+    ComponentBuilderExposure['group']
+  > = {
+    layout: 'layout',
+    content: 'typography',
+    conversion: 'conversion',
+    extension: 'advanced',
+  };
+  return {
+    ...input,
+    allowedParents: [],
+    allowedChildren,
+    slots,
+    componentParts: input.componentParts ?? {},
+    migrations: input.migrations ?? [],
+    propertiesSchema: [...(input.propertiesSchema ?? []), ...styleSchemaFor(input.type)],
+    builder: {
+      insertable: input.builder?.insertable ?? !input.internal,
+      group: input.builder?.group ?? categoryToGroup[input.category],
+      keywords: input.builder?.keywords ?? [input.type, input.label],
+      ...(input.builder?.description ? { description: input.builder.description } : {}),
+    },
+    internal: input.internal ?? false,
+  };
+};
 
-const commonLayoutParents: readonly PageComponentType[] = [
-  'root',
-  'section',
-  'container',
-];
-
-export const PAGE_COMPONENT_REGISTRY = {
+const rawPageComponentRegistry = {
   root: definition({
     type: 'root',
     version: 1,
@@ -510,8 +537,9 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'layout',
     editorTagName: 'main',
     defaultProps: {},
-    allowedParents: [],
-    allowedChildren: ['section', 'container'],
+    slots: [
+      { name: 'children', label: 'Page content', accepts: ['section', 'container'] },
+    ],
   }),
   section: definition({
     type: 'section',
@@ -520,24 +548,29 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'layout',
     editorTagName: 'section',
     defaultProps: {},
-    allowedParents: ['root', 'section', 'container'],
-    allowedChildren: [
-      'container',
-      'text',
-      'image',
-      'button',
-      'form',
-      'countdown',
-      'extension',
-      'heading',
-      'link',
-      'divider',
-      'list',
-      'video',
-      'quote',
-      'accordion',
-      'tabs',
-      'gallery',
+    slots: [
+      {
+        name: 'children',
+        label: 'Section content',
+        accepts: [
+          'container',
+          'text',
+          'image',
+          'button',
+          'form',
+          'countdown',
+          'extension',
+          'heading',
+          'link',
+          'divider',
+          'list',
+          'video',
+          'quote',
+          'accordion',
+          'tabs',
+          'gallery',
+        ],
+      },
     ],
   }),
   container: definition({
@@ -547,25 +580,30 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'layout',
     editorTagName: 'div',
     defaultProps: {},
-    allowedParents: ['root', 'section', 'container'],
-    allowedChildren: [
-      'section',
-      'container',
-      'text',
-      'image',
-      'button',
-      'form',
-      'countdown',
-      'extension',
-      'heading',
-      'link',
-      'divider',
-      'list',
-      'video',
-      'quote',
-      'accordion',
-      'tabs',
-      'gallery',
+    slots: [
+      {
+        name: 'children',
+        label: 'Container content',
+        accepts: [
+          'section',
+          'container',
+          'text',
+          'image',
+          'button',
+          'form',
+          'countdown',
+          'extension',
+          'heading',
+          'link',
+          'divider',
+          'list',
+          'video',
+          'quote',
+          'accordion',
+          'tabs',
+          'gallery',
+        ],
+      },
     ],
   }),
   text: definition({
@@ -577,8 +615,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     // `props.align` remains in the payload schema as a legacy compatibility
     // fallback, but newly-created text nodes write visual alignment to style.
     defaultProps: { text: 'Edit this text' },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
     ]),
@@ -590,8 +626,7 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'img',
     defaultProps: { src: '/assets/placeholder.png', alt: 'Image' },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
+    builder: { group: 'media' },
     propertiesSchema: content([
       {
         key: 'src',
@@ -610,8 +645,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'conversion',
     editorTagName: 'a',
     defaultProps: { label: 'Button', href: '#section', target: '_self' },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       { key: 'label', label: 'Label', group: 'content', control: 'text' },
       { key: 'href', label: 'Link', group: 'content', control: 'url' },
@@ -634,8 +667,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'conversion',
     editorTagName: 'form',
     defaultProps: {},
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       {
         key: 'form',
@@ -653,8 +684,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'extension',
     editorTagName: 'div',
     defaultProps: {},
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       { key: 'label', label: 'Countdown label', group: 'content', control: 'text' },
       {
@@ -672,8 +701,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'extension',
     editorTagName: 'div',
     defaultProps: {},
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: [],
   }),
   heading: definition({
@@ -683,8 +710,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'h2',
     defaultProps: { text: 'Heading', level: 2 },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
       {
@@ -706,8 +731,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'a',
     defaultProps: { text: 'Learn more', href: '/', target: '_self' },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       { key: 'text', label: 'Text', group: 'content', control: 'text' },
       { key: 'href', label: 'Link', group: 'content', control: 'url' },
@@ -730,8 +753,6 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'hr',
     defaultProps: {},
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: [],
   }),
   list: definition({
@@ -747,8 +768,6 @@ export const PAGE_COMPONENT_REGISTRY = {
         { id: 'item-2', text: 'Second item' },
       ],
     },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
     propertiesSchema: content([
       { key: 'ordered', label: 'Ordered list', group: 'content', control: 'toggle' },
       {
@@ -774,8 +793,7 @@ export const PAGE_COMPONENT_REGISTRY = {
       loop: false,
       playsInline: true,
     },
-    allowedParents: commonLayoutParents,
-    allowedChildren: [],
+    builder: { group: 'media' },
     propertiesSchema: content([
       {
         key: 'src',
@@ -805,8 +823,7 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'blockquote',
     defaultProps: { text: 'A thoughtful quote', cite: '' },
-    allowedParents: commonLayoutParents.concat(['accordion-item', 'tab-item']),
-    allowedChildren: [],
+    slots: [],
     propertiesSchema: content([
       { key: 'text', label: 'Quote', group: 'content', control: 'textarea' },
       { key: 'cite', label: 'Citation', group: 'content', control: 'text' },
@@ -819,8 +836,7 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'div',
     defaultProps: { allowMultiple: false },
-    allowedParents: commonLayoutParents,
-    allowedChildren: ['accordion-item'],
+    builder: { group: 'interactive' },
     slots: [
       {
         name: 'items',
@@ -832,6 +848,77 @@ export const PAGE_COMPONENT_REGISTRY = {
         structural: true,
       },
     ],
+    componentParts: {
+      root: {
+        name: 'root',
+        label: 'Root',
+        styleCapabilities: [
+          'width',
+          'max-width',
+          'margin',
+          'padding',
+          'gap',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+          'opacity',
+          'box-shadow',
+        ],
+      },
+      item: {
+        name: 'item',
+        label: 'Item',
+        styleCapabilities: [
+          'margin',
+          'padding',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+      trigger: {
+        name: 'trigger',
+        label: 'Trigger',
+        styleCapabilities: [
+          'padding',
+          'background-color',
+          'color',
+          'font-family',
+          'font-size',
+          'font-weight',
+          'line-height',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+      panel: {
+        name: 'panel',
+        label: 'Panel',
+        styleCapabilities: [
+          'padding',
+          'background-color',
+          'color',
+          'font-family',
+          'font-size',
+          'line-height',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+      icon: {
+        name: 'icon',
+        label: 'Icon',
+        styleCapabilities: ['color', 'font-size', 'width', 'height', 'margin'],
+      },
+    },
     propertiesSchema: content([
       {
         key: 'allowMultiple',
@@ -839,6 +926,17 @@ export const PAGE_COMPONENT_REGISTRY = {
         group: 'content',
         control: 'toggle',
       },
+      {
+        key: 'headingLevel',
+        label: 'Heading level',
+        group: 'content',
+        control: 'select',
+        options: [2, 3, 4, 5, 6].map((level) => ({
+          label: `H${level}`,
+          value: String(level),
+        })),
+      },
+      { key: 'ariaLabel', label: 'Accessible label', group: 'content', control: 'text' },
     ]),
   }),
   'accordion-item': definition({
@@ -848,21 +946,26 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'section',
     defaultProps: { title: 'Accordion item', defaultOpen: false },
-    allowedParents: ['accordion'],
-    allowedChildren: [
-      'container',
-      'text',
-      'heading',
-      'image',
-      'button',
-      'link',
-      'divider',
-      'list',
-      'video',
-      'form',
-      'countdown',
-      'extension',
-      'quote',
+    slots: [
+      {
+        name: 'content',
+        label: 'Item content',
+        accepts: [
+          'container',
+          'text',
+          'heading',
+          'image',
+          'button',
+          'link',
+          'divider',
+          'list',
+          'video',
+          'form',
+          'countdown',
+          'extension',
+          'quote',
+        ],
+      },
     ],
     propertiesSchema: content([
       { key: 'title', label: 'Title', group: 'content', control: 'text' },
@@ -882,8 +985,7 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'div',
     defaultProps: { orientation: 'horizontal' },
-    allowedParents: commonLayoutParents,
-    allowedChildren: ['tab-item'],
+    builder: { group: 'interactive' },
     slots: [
       {
         name: 'items',
@@ -895,6 +997,94 @@ export const PAGE_COMPONENT_REGISTRY = {
         structural: true,
       },
     ],
+    componentParts: {
+      root: {
+        name: 'root',
+        label: 'Root',
+        styleCapabilities: [
+          'width',
+          'max-width',
+          'margin',
+          'padding',
+          'gap',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+          'opacity',
+          'box-shadow',
+        ],
+      },
+      list: {
+        name: 'list',
+        label: 'Tab list',
+        styleCapabilities: [
+          'display',
+          'gap',
+          'padding',
+          'margin',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+      tab: {
+        name: 'tab',
+        label: 'Tab',
+        styleCapabilities: [
+          'padding',
+          'margin',
+          'background-color',
+          'color',
+          'font-family',
+          'font-size',
+          'font-weight',
+          'line-height',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+      activeTab: {
+        name: 'activeTab',
+        label: 'Active tab',
+        styleCapabilities: [
+          'padding',
+          'margin',
+          'background-color',
+          'color',
+          'font-family',
+          'font-size',
+          'font-weight',
+          'line-height',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+      panel: {
+        name: 'panel',
+        label: 'Panel',
+        styleCapabilities: [
+          'padding',
+          'margin',
+          'background-color',
+          'color',
+          'font-family',
+          'font-size',
+          'line-height',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+    },
     propertiesSchema: content([
       {
         key: 'orientation',
@@ -906,6 +1096,17 @@ export const PAGE_COMPONENT_REGISTRY = {
           { value: 'vertical', label: 'Vertical' },
         ],
       },
+      { key: 'ariaLabel', label: 'Accessible label', group: 'content', control: 'text' },
+      {
+        key: 'activationMode',
+        label: 'Activation',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'automatic', label: 'Automatic' },
+          { value: 'manual', label: 'Manual' },
+        ],
+      },
     ]),
   }),
   'tab-item': definition({
@@ -915,21 +1116,26 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'section',
     defaultProps: { label: 'Tab' },
-    allowedParents: ['tabs'],
-    allowedChildren: [
-      'container',
-      'text',
-      'heading',
-      'image',
-      'button',
-      'link',
-      'divider',
-      'list',
-      'video',
-      'form',
-      'countdown',
-      'extension',
-      'quote',
+    slots: [
+      {
+        name: 'content',
+        label: 'Tab content',
+        accepts: [
+          'container',
+          'text',
+          'heading',
+          'image',
+          'button',
+          'link',
+          'divider',
+          'list',
+          'video',
+          'form',
+          'countdown',
+          'extension',
+          'quote',
+        ],
+      },
     ],
     propertiesSchema: content([
       { key: 'label', label: 'Tab label', group: 'content', control: 'text' },
@@ -943,8 +1149,7 @@ export const PAGE_COMPONENT_REGISTRY = {
     category: 'content',
     editorTagName: 'div',
     defaultProps: {},
-    allowedParents: commonLayoutParents,
-    allowedChildren: ['image'],
+    builder: { group: 'media' },
     slots: [
       {
         name: 'images',
@@ -958,6 +1163,338 @@ export const PAGE_COMPONENT_REGISTRY = {
     ],
   }),
 } satisfies Record<PageComponentType, PageComponentDefinition>;
+
+function deriveAllowedParents(
+  registry: typeof rawPageComponentRegistry,
+): Record<PageComponentType, readonly PageComponentType[]> {
+  return Object.fromEntries(
+    Object.keys(registry).map((childType) => [
+      childType,
+      Object.entries(registry)
+        .filter(([, parent]) =>
+          parent.slots.some((slot) =>
+            slot.accepts.includes(childType as PageComponentType),
+          ),
+        )
+        .map(([parentType]) => parentType as PageComponentType),
+    ]),
+  ) as unknown as Record<PageComponentType, readonly PageComponentType[]>;
+}
+
+const derivedParents = deriveAllowedParents(rawPageComponentRegistry);
+
+export const PAGE_COMPONENT_REGISTRY = Object.fromEntries(
+  Object.entries(rawPageComponentRegistry).map(([type, component]) => [
+    type,
+    { ...component, allowedParents: derivedParents[type as PageComponentType] },
+  ]),
+) as { [K in PageComponentType]: PageComponentDefinition };
+
+export type ComponentSlotOccupancy = {
+  count: number;
+  bySlot?: Record<string, number>;
+};
+
+export type StructuralSlotRegistry = Readonly<
+  Record<string, { slots: readonly ComponentSlotDefinition[] }>
+>;
+
+/**
+ * Test-only fixture for proving that a child type accepted by two slots cannot
+ * be placed through an implicit command. It deliberately does not belong to
+ * PAGE_COMPONENT_REGISTRY or the public builder palette.
+ */
+export const MULTI_SLOT_TEST_COMPONENT_DEFINITION = {
+  type: 'multi-slot-test',
+  slots: [
+    {
+      name: 'primary',
+      label: 'Primary content',
+      accepts: ['text', 'image'] as const,
+      maxChildren: 1,
+      structural: true,
+    },
+    {
+      name: 'secondary',
+      label: 'Secondary content',
+      accepts: ['text', 'image'] as const,
+      maxChildren: 1,
+      structural: true,
+    },
+  ],
+} as const;
+
+export const MULTI_SLOT_TEST_REGISTRY: StructuralSlotRegistry = {
+  [MULTI_SLOT_TEST_COMPONENT_DEFINITION.type]: MULTI_SLOT_TEST_COMPONENT_DEFINITION,
+};
+
+type SlotChild = { type: PageComponentType; slot?: string };
+
+function slotFor(
+  parentType: PageComponentType,
+  slotName: string,
+): ComponentSlotDefinition | undefined {
+  return PAGE_COMPONENT_REGISTRY[parentType].slots.find((slot) => slot.name === slotName);
+}
+
+function occupancyCount(
+  occupancy: ComponentSlotOccupancy | number | undefined,
+  slotName?: string,
+): number {
+  if (typeof occupancy === 'number') return Math.max(0, occupancy);
+  if (!occupancy) return 0;
+  if (occupancy.bySlot && slotName !== undefined) {
+    return Math.max(0, occupancy.bySlot[slotName] ?? 0);
+  }
+  return Math.max(0, occupancy.count);
+}
+
+export function getSlotChildren(
+  parent: { children?: readonly SlotChild[] },
+  slotName: string,
+): readonly SlotChild[] {
+  const parentType = (parent as { type?: PageComponentType }).type;
+  const slot = parentType ? slotFor(parentType, slotName) : undefined;
+  return slot
+    ? (parent.children ?? []).filter((child) =>
+        child.slot ? child.slot === slotName : slot.accepts.includes(child.type),
+      )
+    : [];
+}
+
+export function getSlotOccupancy(
+  parent: { type?: PageComponentType; children?: readonly SlotChild[] },
+  slotName: string,
+): ComponentSlotOccupancy {
+  const children = getSlotChildren(parent, slotName);
+  return { count: children.length, bySlot: { [slotName]: children.length } };
+}
+
+export function resolveSlotsForChild(
+  parentType: PageComponentType,
+  childType: PageComponentType,
+): readonly ComponentSlotDefinition[] {
+  return PAGE_COMPONENT_REGISTRY[parentType].slots.filter((slot) =>
+    slot.accepts.includes(childType),
+  );
+}
+
+export function resolveSlotForChild(
+  parentType: PageComponentType,
+  childType: PageComponentType,
+  occupancy?: ComponentSlotOccupancy | number,
+): ComponentSlotDefinition | undefined {
+  const slots = resolveSlotsForChild(parentType, childType);
+  // Implicit placement is safe only when the registry gives us exactly one
+  // semantic destination. Callers must name the slot for ambiguous fixtures.
+  if (slots.length !== 1) return undefined;
+  return slots.find(
+    (slot) =>
+      slot.maxChildren === undefined ||
+      occupancyCount(occupancy, slot.name) < slot.maxChildren,
+  );
+}
+
+export function createStructuralSlotEngine(registry: StructuralSlotRegistry) {
+  function definitionFor(parentType: string) {
+    return registry[parentType];
+  }
+
+  function resolveSlotsForRegistry(
+    parentType: string,
+    childType: PageComponentType,
+  ): readonly ComponentSlotDefinition[] {
+    return (
+      definitionFor(parentType)?.slots.filter((slot) =>
+        slot.accepts.includes(childType),
+      ) ?? []
+    );
+  }
+
+  function resolveSlotForRegistry(
+    parentType: string,
+    childType: PageComponentType,
+    occupancy?: ComponentSlotOccupancy | number,
+  ): ComponentSlotDefinition | undefined {
+    const slots = resolveSlotsForRegistry(parentType, childType);
+    if (slots.length !== 1) return undefined;
+    const slot = slots[0];
+    return slot &&
+      (slot.maxChildren === undefined ||
+        occupancyCount(occupancy, slot.name) < slot.maxChildren)
+      ? slot
+      : undefined;
+  }
+
+  function occupancyFor(
+    parent: { type: string; children?: readonly SlotChild[] },
+    slot: ComponentSlotDefinition,
+  ): ComponentSlotOccupancy {
+    const count = (parent.children ?? []).filter((child) =>
+      child.slot ? child.slot === slot.name : slot.accepts.includes(child.type),
+    ).length;
+    return { count, bySlot: { [slot.name]: count } };
+  }
+
+  return {
+    getSlotOccupancy: (
+      parent: { type: string; children?: readonly SlotChild[] },
+      slotName: string,
+    ): ComponentSlotOccupancy => {
+      const slot = definitionFor(parent.type)?.slots.find(
+        (candidate) => candidate.name === slotName,
+      );
+      return slot ? occupancyFor(parent, slot) : { count: 0, bySlot: { [slotName]: 0 } };
+    },
+    resolveSlotsForChild: resolveSlotsForRegistry,
+    resolveSlotForChild: resolveSlotForRegistry,
+    canInsertIntoSlot: (args: {
+      parentType: string;
+      slotName: string;
+      childType: PageComponentType;
+      occupancy: ComponentSlotOccupancy | number;
+    }): boolean => {
+      const slot = definitionFor(args.parentType)?.slots.find(
+        (candidate) => candidate.name === args.slotName,
+      );
+      return Boolean(
+        slot &&
+        slot.accepts.includes(args.childType) &&
+        (slot.maxChildren === undefined ||
+          occupancyCount(args.occupancy, slot.name) < slot.maxChildren),
+      );
+    },
+    canRemoveFromSlot: (args: {
+      parentType: string;
+      slotName: string;
+      childType: PageComponentType;
+      occupancy: ComponentSlotOccupancy | number;
+    }): boolean => {
+      const slot = definitionFor(args.parentType)?.slots.find(
+        (candidate) => candidate.name === args.slotName,
+      );
+      return Boolean(
+        slot &&
+        slot.accepts.includes(args.childType) &&
+        (slot.minChildren === undefined ||
+          occupancyCount(args.occupancy, slot.name) - 1 >= slot.minChildren),
+      );
+    },
+  };
+}
+
+export function canInsertIntoSlot({
+  parentType,
+  slotName,
+  childType,
+  occupancy,
+}: {
+  parentType: PageComponentType;
+  slotName: string;
+  childType: PageComponentType;
+  occupancy: ComponentSlotOccupancy | number;
+}): boolean {
+  const slot = slotFor(parentType, slotName);
+  return Boolean(
+    slot &&
+    slot.accepts.includes(childType) &&
+    (slot.maxChildren === undefined ||
+      occupancyCount(occupancy, slot.name) < slot.maxChildren),
+  );
+}
+
+export function canRemoveFromSlot({
+  parentType,
+  slotName,
+  childType,
+  occupancy,
+}: {
+  parentType: PageComponentType;
+  slotName: string;
+  childType: PageComponentType;
+  occupancy: ComponentSlotOccupancy | number;
+}): boolean {
+  const slot = slotFor(parentType, slotName);
+  return Boolean(
+    slot &&
+    slot.accepts.includes(childType) &&
+    (slot.minChildren === undefined ||
+      occupancyCount(occupancy, slot.name) - 1 >= slot.minChildren),
+  );
+}
+
+export function canDuplicateInSlot(args: {
+  parentType: PageComponentType;
+  slotName: string;
+  childType: PageComponentType;
+  occupancy: ComponentSlotOccupancy | number;
+}): boolean {
+  return canInsertIntoSlot(args);
+}
+
+export function allowedChildrenFor(
+  type: PageComponentType,
+): readonly PageComponentType[] {
+  return [
+    ...new Set(PAGE_COMPONENT_REGISTRY[type].slots.flatMap((slot) => slot.accepts)),
+  ];
+}
+
+export function allowedParentsFor(type: PageComponentType): readonly PageComponentType[] {
+  return PAGE_COMPONENT_REGISTRY[type].allowedParents;
+}
+
+export function assertStructuralSlotRegistry(registry: StructuralSlotRegistry): void {
+  for (const [parentType, definition] of Object.entries(registry)) {
+    const seenSlotNames = new Set<string>();
+    const seenChildTypes = new Set<PageComponentType>();
+    for (const slot of definition.slots) {
+      if (seenSlotNames.has(slot.name)) {
+        throw new Error(`Duplicate slot ${parentType}.${slot.name}`);
+      }
+      seenSlotNames.add(slot.name);
+      for (const childType of slot.accepts) {
+        if (seenChildTypes.has(childType)) {
+          throw new Error(
+            `Ambiguous child placement: ${parentType} accepts ${childType} in multiple slots`,
+          );
+        }
+        seenChildTypes.add(childType);
+      }
+    }
+  }
+}
+
+export function assertPageComponentRegistry(
+  registry: Record<PageComponentType, PageComponentDefinition> = PAGE_COMPONENT_REGISTRY,
+): void {
+  assertStructuralSlotRegistry(registry);
+  for (const [parentType, definition] of Object.entries(registry) as Array<
+    [PageComponentType, PageComponentDefinition]
+  >) {
+    const seenChildTypes = new Set<PageComponentType>();
+    const seenSlotNames = new Set<string>();
+    for (const slot of definition.slots) {
+      if (seenSlotNames.has(slot.name))
+        throw new Error(`Duplicate slot ${parentType}.${slot.name}`);
+      seenSlotNames.add(slot.name);
+      for (const childType of slot.accepts) {
+        if (!registry[childType]) throw new Error(`Unknown child type ${childType}`);
+        if (seenChildTypes.has(childType)) {
+          throw new Error(
+            `Ambiguous child placement: ${parentType} accepts ${childType} in multiple slots`,
+          );
+        }
+        seenChildTypes.add(childType);
+      }
+    }
+    if (definition.allowedChildren.join('|') !== [...seenChildTypes].join('|')) {
+      throw new Error(`allowedChildren must be derived from slots for ${parentType}`);
+    }
+  }
+}
+
+assertPageComponentRegistry();
 
 export type PageComponentRegistry = typeof PAGE_COMPONENT_REGISTRY;
 
@@ -978,47 +1515,44 @@ export function canContainPageComponent(
   parentType: PageComponentType,
   childType: PageComponentType,
 ): boolean {
-  return Boolean(findAcceptingSlot(parentType, childType));
+  return resolveSlotsForChild(parentType, childType).length === 1;
 }
 
 export function findAcceptingSlot(
   parentType: PageComponentType,
   childType: PageComponentType,
-  currentChildCount = 0,
+  occupancy: ComponentSlotOccupancy | number = 0,
 ): ComponentSlotDefinition | undefined {
-  return PAGE_COMPONENT_REGISTRY[parentType].slots.find(
-    (slot) =>
-      slot.accepts.includes(childType) &&
-      (slot.maxChildren === undefined || currentChildCount < slot.maxChildren),
-  );
+  return resolveSlotForChild(parentType, childType, occupancy);
 }
 
 export function canInsertChild(
   parentType: PageComponentType,
   childType: PageComponentType,
-  currentChildCount = 0,
+  occupancy: ComponentSlotOccupancy | number = 0,
 ): boolean {
-  return Boolean(findAcceptingSlot(parentType, childType, currentChildCount));
+  return Boolean(resolveSlotForChild(parentType, childType, occupancy));
 }
 
 export function canRemoveChild(
   parentType: PageComponentType,
   childType: PageComponentType,
-  currentChildCount: number,
+  occupancy: ComponentSlotOccupancy | number,
 ): boolean {
-  const slot = PAGE_COMPONENT_REGISTRY[parentType].slots.find((candidate) =>
-    candidate.accepts.includes(childType),
-  );
+  const slot = resolveSlotForChild(parentType, childType);
   if (!slot) return false;
-  return slot.minChildren === undefined || currentChildCount - 1 >= slot.minChildren;
+  return canRemoveFromSlot({ parentType, slotName: slot.name, childType, occupancy });
 }
 
 export function canDuplicateChild(
   parentType: PageComponentType,
   childType: PageComponentType,
-  currentChildCount: number,
+  occupancy: ComponentSlotOccupancy | number,
 ): boolean {
-  return canInsertChild(parentType, childType, currentChildCount);
+  const slot = resolveSlotForChild(parentType, childType, occupancy);
+  return Boolean(
+    slot && canDuplicateInSlot({ parentType, slotName: slot.name, childType, occupancy }),
+  );
 }
 
 export { PAGE_STYLE_PROPERTY_GROUPS } from './style-registry';

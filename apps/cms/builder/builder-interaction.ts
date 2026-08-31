@@ -4,6 +4,7 @@ import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
   BUILDER_QUOTE_PREVIEW_ATTRIBUTE,
+  BUILDER_NODE_SLOT_ATTRIBUTE,
 } from './builder-adapter';
 import {
   canInsertNode,
@@ -17,6 +18,7 @@ import {
   resolveNodePlacement,
   type MoveNodeIntent,
 } from './builder-placement';
+import { resolveSlotsForChild } from '@payload/contracts';
 
 export { isBuilderNodeType } from './builder-adapter';
 export {
@@ -119,13 +121,27 @@ export function selectedMoveIntent(
 
   const parent = selected.parent();
   if (!parent) return undefined;
+  const parentType = payloadNodeType(parent);
+  const structuralSlot =
+    parentType &&
+    resolveSlotsForChild(parentType, sourceType).find((slot) => slot.structural);
   const siblings = parent
     .components()
     .models.filter((item) => Boolean(payloadNodeType(item)));
-  const sourceIndex = siblings.indexOf(selected);
+  const slotSiblings = structuralSlot
+    ? siblings.filter((item) => {
+        const ownedSlot = item.getAttributes({ noStyle: true })[
+          BUILDER_NODE_SLOT_ATTRIBUTE
+        ];
+        return typeof ownedSlot === 'string'
+          ? ownedSlot === structuralSlot.name
+          : structuralSlot.accepts.includes(payloadNodeType(item) as never);
+      })
+    : siblings;
+  const sourceIndex = slotSiblings.indexOf(selected);
 
   if (direction === 'up' || direction === 'down') {
-    const target = siblings[sourceIndex + (direction === 'up' ? -1 : 1)];
+    const target = slotSiblings[sourceIndex + (direction === 'up' ? -1 : 1)];
     const targetId = target && payloadNodeId(target);
     if (!targetId) return undefined;
     return {
@@ -142,7 +158,7 @@ export function selectedMoveIntent(
     return { nodeId: sourceId, targetNodeId: parentId, position: 'after' };
   }
 
-  const previous = siblings[sourceIndex - 1];
+  const previous = slotSiblings[sourceIndex - 1];
   const previousId = previous && payloadNodeId(previous);
   if (!previousId || !canInsertNode(payloadNodeType(previous) ?? 'text', sourceType)) {
     return undefined;
