@@ -574,6 +574,30 @@ describe('foundation contracts', () => {
         documentKind: 'site-footer',
       }).success,
     ).toBe(false);
+    expect(
+      SiteGlobalPayloadV1Schema.safeParse({
+        ...header,
+        root: {
+          ...header.root,
+          children: [...header.root.children, header.root.children[0]!],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      SiteGlobalPayloadV1Schema.safeParse({
+        ...header,
+        root: {
+          ...header.root,
+          children: [
+            {
+              ...header.root.children[0]!,
+              type: 'global-footer' as const,
+              props: {},
+            },
+          ],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it('exposes one typed component registry for structure and property metadata', () => {
@@ -591,6 +615,11 @@ describe('foundation contracts', () => {
       ]),
     );
     expect(PAGE_COMPONENT_REGISTRY.text.migrations).toEqual([]);
+    expect(PAGE_COMPONENT_REGISTRY.button.builder.description).toBeTruthy();
+    expect(PAGE_COMPONENT_REGISTRY.button.builder.preview).toEqual({
+      kind: 'wireframe',
+      variant: 'button',
+    });
     expect(canContainPageComponent('section', 'extension')).toBe(true);
     expect(canContainPageComponent('text', 'section')).toBe(false);
     expect(isPageComponentType('toString')).toBe(false);

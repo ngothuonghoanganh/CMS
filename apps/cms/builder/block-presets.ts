@@ -1,4 +1,5 @@
 import type { ComponentDefinition } from 'grapesjs';
+import type { ComponentBuilderPreview } from '@payload/contracts';
 
 import { createBlockDefinition, type BuilderBlockType } from './builder-adapter';
 
@@ -26,6 +27,8 @@ export type BuilderBlockDefinition =
       label: string;
       category: 'layout' | 'content' | 'conversion';
       keywords: readonly string[];
+      description: string;
+      preview: ComponentBuilderPreview;
     }
   | {
       kind: 'preset';
@@ -33,6 +36,8 @@ export type BuilderBlockDefinition =
       label: string;
       category: 'layout';
       keywords: readonly string[];
+      description: string;
+      preview: ComponentBuilderPreview;
       create: () => ComponentDefinition;
     }
   | {
@@ -42,6 +47,9 @@ export type BuilderBlockDefinition =
       label: string;
       category: 'layout';
       keywords: readonly string[];
+      description: string;
+      preview: ComponentBuilderPreview;
+      applyMode: 'replace-root-children';
       create: () => ComponentDefinition;
     };
 
@@ -153,6 +161,8 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     label: 'Blank Section',
     category: 'layout',
     keywords: ['section', 'blank', 'layout'],
+    description: 'Start with an empty section for a custom composition.',
+    preview: { kind: 'wireframe', variant: 'section' },
     create: createBlankSection,
   },
   {
@@ -161,6 +171,8 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     label: 'Centered Section',
     category: 'layout',
     keywords: ['section', 'center', 'container'],
+    description: 'A centered content container with a comfortable reading width.',
+    preview: { kind: 'wireframe', variant: 'container' },
     create: createCenteredSection,
   },
   {
@@ -169,6 +181,8 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     label: 'Vertical Stack',
     category: 'layout',
     keywords: ['stack', 'vertical', 'layout', 'flex'],
+    description: 'A vertical content stack with consistent spacing.',
+    preview: { kind: 'wireframe', variant: 'container' },
     create: createVerticalStack,
   },
   {
@@ -177,6 +191,8 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     label: 'Two Columns',
     category: 'layout',
     keywords: ['columns', 'grid', 'layout'],
+    description: 'A responsive two-column grid for side-by-side content.',
+    preview: { kind: 'wireframe', variant: 'container' },
     create: createTwoColumns,
   },
   {
@@ -185,6 +201,8 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     label: 'Hero',
     category: 'layout',
     keywords: ['hero', 'heading', 'cta', 'section'],
+    description: 'A prominent hero section with heading, copy, and call to action.',
+    preview: { kind: 'wireframe', variant: 'section' },
     create: createHero,
   },
   {
@@ -193,6 +211,8 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     label: 'CTA',
     category: 'layout',
     keywords: ['cta', 'call to action', 'button', 'section'],
+    description: 'A focused conversion section with supporting copy and a button.',
+    preview: { kind: 'wireframe', variant: 'section' },
     create: createCta,
   },
 ];
@@ -236,6 +256,9 @@ export const GLOBAL_HEADER_PRESET_REGISTRY: readonly Extract<
     label: 'Brand · Menu · CTA',
     category: 'layout',
     keywords: ['header', 'brand', 'menu', 'cta'],
+    description: 'Replace the header content with brand, navigation, and a CTA.',
+    preview: { kind: 'component', variant: 'global-header' },
+    applyMode: 'replace-root-children',
     create: () => createHeaderPreset(true),
   },
   {
@@ -245,6 +268,9 @@ export const GLOBAL_HEADER_PRESET_REGISTRY: readonly Extract<
     label: 'Brand · Menu',
     category: 'layout',
     keywords: ['header', 'brand', 'menu'],
+    description: 'Replace the header content with brand and navigation.',
+    preview: { kind: 'component', variant: 'global-header' },
+    applyMode: 'replace-root-children',
     create: () => createHeaderPreset(false),
   },
 ];
@@ -260,6 +286,9 @@ export const GLOBAL_FOOTER_PRESET_REGISTRY: readonly Extract<
     label: 'Brand · Menu',
     category: 'layout',
     keywords: ['footer', 'brand', 'menu'],
+    description: 'Replace the footer content with brand and navigation.',
+    preview: { kind: 'component', variant: 'global-footer' },
+    applyMode: 'replace-root-children',
     create: () => createFooterPreset(false),
   },
   {
@@ -269,6 +298,9 @@ export const GLOBAL_FOOTER_PRESET_REGISTRY: readonly Extract<
     label: 'Brand · Menu · Legal',
     category: 'layout',
     keywords: ['footer', 'brand', 'menu', 'legal'],
+    description: 'Replace the footer content with brand, navigation, and legal copy.',
+    preview: { kind: 'component', variant: 'global-footer' },
+    applyMode: 'replace-root-children',
     create: () => createFooterPreset(true),
   },
 ];

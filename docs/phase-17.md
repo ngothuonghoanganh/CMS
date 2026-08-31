@@ -48,7 +48,9 @@ previews with Edit affordances; global mode shows editable global content while
 the surrounding chrome remains preview-only.
 
 The palette is filtered by registry-declared `documentKinds`, global roots stay
-out of the Add panel, and global presets create fresh IDs:
+out of the Add panel, and global presets apply their registry-declared
+`replace-root-children` mode to the existing semantic root. They never append a
+second `global-header`/`global-footer` node:
 
 - Brand · Menu · CTA
 - Brand · Menu
@@ -58,6 +60,13 @@ out of the Add panel, and global presets create fresh IDs:
 Saving a page creates a page draft version. Saving a header/footer updates the
 scoped site-global draft. Inspector and structural operations remain the shared
 generic Phase 16 paths.
+
+Every insertion and duplicate crosses the shared builder identity service
+before it reaches GrapesJS. The service reserves fresh IDs recursively, keeps
+the editor root sentinel as `root`, remaps supported internal references, and
+rejects duplicate IDs at the serialization boundary. A global preset replaces
+only the existing region's children, is one command/Undo boundary, and asks for
+confirmation when that region is non-empty.
 
 ## Renderer and responsive behavior
 

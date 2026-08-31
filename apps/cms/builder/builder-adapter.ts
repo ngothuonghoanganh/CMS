@@ -47,6 +47,10 @@ import {
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
 import { builderExtensionElement } from './builder-extension-registry';
+import {
+  assertUniquePersistedNodeIds,
+  generateFreshNodeId,
+} from './builder-node-identity';
 
 export const BUILDER_NODE_ID_ATTRIBUTE = 'data-payload-node-id';
 export const BUILDER_NODE_TYPE_ATTRIBUTE = 'data-payload-node-type';
@@ -806,9 +810,12 @@ export function snapshotFromEditorDefinition(
   };
 }
 
+const generatedDefinitionIds = new Set<string>();
+
 function newNodeId(prefix: string): string {
-  const uuid = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return `${prefix}-${uuid.replace(/[^A-Za-z0-9_-]/g, '')}`;
+  const id = generateFreshNodeId(prefix, generatedDefinitionIds);
+  generatedDefinitionIds.add(id);
+  return id;
 }
 
 export function createBlockDefinition(
@@ -1745,6 +1752,14 @@ function nodeFromSnapshot(
 
 export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePayload {
   const root = nodeFromSnapshot(snapshot, ['root']);
+  try {
+    assertUniquePersistedNodeIds(root);
+  } catch (error) {
+    throw new BuilderAdapterError(
+      error instanceof Error ? error.message : 'Persisted node identity is invalid',
+      ['root'],
+    );
+  }
   const versionValue = snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE];
   const version =
     versionValue === '6' || versionValue === 6 || containsV6Node(root)
@@ -1780,11 +1795,20 @@ export function serializeSiteGlobalSnapshot(
   snapshot: BuilderEditorSnapshot,
   documentKind: Exclude<BuilderDocumentKind, 'page'>,
 ): SiteGlobalPayloadV1 {
+  const root = nodeFromSnapshot(snapshot, ['root']);
+  try {
+    assertUniquePersistedNodeIds(root);
+  } catch (error) {
+    throw new BuilderAdapterError(
+      error instanceof Error ? error.message : 'Persisted node identity is invalid',
+      ['root'],
+    );
+  }
   const parsed = SiteGlobalPayloadV1Schema.safeParse({
     version: 1,
     documentKind,
     metadata: readMetadata(snapshot.attributes),
-    root: nodeFromSnapshot(snapshot, ['root']),
+    root,
   });
   if (!parsed.success) {
     throw new BuilderAdapterError(
@@ -2094,16 +2118,4 @@ export function updateEditorPartViewportStyle(
     [BUILDER_PARTS_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
   });
   return true;
-}
-
-export function reassignEditorNodeIds(component: Component): void {
-  component.onAll((current) => {
-    const attributes = current.getAttributes({ noStyle: true });
-    if (attributes[BUILDER_NODE_ID_ATTRIBUTE]) {
-      current.setAttributes({
-        ...attributes,
-        [BUILDER_NODE_ID_ATTRIBUTE]: newNodeId('copy'),
-      });
-    }
-  });
 }

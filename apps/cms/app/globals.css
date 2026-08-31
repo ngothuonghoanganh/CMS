@@ -1544,6 +1544,112 @@ textarea {
   border-radius: 0.6rem;
   background: #0d1426;
 }
+.builder-block-card {
+  display: grid;
+  grid-template-columns: 4.2rem minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.65rem;
+  padding: 0.35rem;
+}
+.builder-block-preview {
+  position: relative;
+  min-height: 2.4rem;
+  overflow: hidden;
+  border: 1px solid #405174;
+  border-radius: 0.45rem;
+  background: linear-gradient(145deg, #172542, #101a30);
+}
+.builder-block-preview-bar,
+.builder-block-preview-line,
+.builder-block-preview-control {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  background: #8cf0c5;
+}
+.builder-block-preview-bar {
+  top: 0.55rem;
+  right: 0.55rem;
+  left: 0.55rem;
+  height: 0.35rem;
+  opacity: 0.9;
+}
+.builder-block-preview-line {
+  top: 1.15rem;
+  right: 0.85rem;
+  left: 0.85rem;
+  height: 0.22rem;
+  background: #9aadd0;
+}
+.builder-block-preview-line.is-short {
+  top: 1.55rem;
+  right: 1.25rem;
+  left: 0.85rem;
+  opacity: 0.7;
+}
+.builder-block-preview-control {
+  right: 0.85rem;
+  bottom: 0.35rem;
+  left: 0.85rem;
+  height: 0.4rem;
+  background: #f5b96b;
+}
+.builder-block-preview-wireframe {
+  background: linear-gradient(145deg, #182c48, #10192d);
+}
+.builder-block-preview-component {
+  background: linear-gradient(145deg, #20334b, #111a2e);
+}
+.builder-block-preview-icon {
+  background: #172542;
+}
+.builder-block-preview-container .builder-block-preview-bar,
+.builder-block-preview-section .builder-block-preview-bar {
+  right: 0.8rem;
+  left: 0.8rem;
+}
+.builder-block-card-content {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 0.12rem;
+}
+.builder-block-card-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.builder-block-card-heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.builder-block-card-heading span {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+.builder-block-card-content p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.64rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.builder-block-card .builder-block-drag {
+  width: fit-content;
+  padding: 0.05rem 0;
+  color: var(--color-muted);
+  font-size: 0.65rem;
+}
+.builder-block-card .builder-block-drag span:first-child {
+  color: #8cf0c5;
+}
 .builder-block-row:has(.builder-block-drag:hover),
 .builder-block-row:has(.builder-block-add:hover) {
   border-color: #8cf0c5;

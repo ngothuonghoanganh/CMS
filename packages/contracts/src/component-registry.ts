@@ -44,6 +44,12 @@ export type ComponentPropertyDefinition = {
   assetKind?: 'image' | 'video';
 };
 
+export type ComponentBuilderPreview = {
+  kind: 'icon' | 'wireframe' | 'component';
+  /** A finite registry variant consumed by the builder preview renderer. */
+  variant: PageComponentType;
+};
+
 export type ComponentSlotDefinition = {
   name: string;
   label: string;
@@ -63,7 +69,8 @@ export type ComponentBuilderExposure = {
   insertable: boolean;
   group: 'layout' | 'typography' | 'media' | 'interactive' | 'conversion' | 'advanced';
   keywords: readonly string[];
-  description?: string;
+  description: string;
+  preview: ComponentBuilderPreview;
   /** Documents in which this component may be inserted by the builder. */
   documentKinds: readonly BuilderDocumentKind[];
 };
@@ -583,7 +590,13 @@ const definition = (
       insertable: input.builder?.insertable ?? !input.internal,
       group: input.builder?.group ?? categoryToGroup[input.category],
       keywords: input.builder?.keywords ?? [input.type, input.label],
-      ...(input.builder?.description ? { description: input.builder.description } : {}),
+      description:
+        input.builder?.description ??
+        `Add a ${input.label.toLowerCase()} block to your page.`,
+      preview: input.builder?.preview ?? {
+        kind: 'wireframe',
+        variant: input.type,
+      },
       documentKinds: input.builder?.documentKinds ?? ['page'],
     },
     internal: input.internal ?? false,

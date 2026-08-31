@@ -10,6 +10,11 @@ import {
   executeEditorCommand,
   type EditorCommand,
 } from './editor-commands';
+import { createGlobalPresetDefinition } from './block-presets';
+import {
+  assertUniquePersistedNodeIds,
+  collectPersistedNodeIds,
+} from './builder-node-identity';
 
 class FakeComponent {
   private parentNode: FakeComponent | undefined;
@@ -31,23 +36,25 @@ class FakeComponent {
     definition: FakeComponent | Record<string, unknown>,
     options?: { at?: number },
   ): FakeComponent[] {
+    const fromDefinition = (value: Record<string, unknown>): FakeComponent => {
+      const attributes = value.attributes as Record<string, unknown>;
+      const children = Array.isArray(value.components)
+        ? value.components
+            .filter(
+              (child): child is Record<string, unknown> =>
+                typeof child === 'object' && child !== null,
+            )
+            .map((child) => fromDefinition(child))
+        : [];
+      return new FakeComponent(
+        String(attributes[BUILDER_NODE_ID_ATTRIBUTE]),
+        String(attributes[BUILDER_NODE_TYPE_ATTRIBUTE]),
+        children,
+        String(value.content ?? ''),
+      );
+    };
     const child =
-      definition instanceof FakeComponent
-        ? definition
-        : new FakeComponent(
-            String(
-              (definition.attributes as Record<string, unknown>)[
-                BUILDER_NODE_ID_ATTRIBUTE
-              ],
-            ),
-            String(
-              (definition.attributes as Record<string, unknown>)[
-                BUILDER_NODE_TYPE_ATTRIBUTE
-              ],
-            ),
-            [],
-            String(definition.content ?? ''),
-          );
+      definition instanceof FakeComponent ? definition : fromDefinition(definition);
     child.parentNode = this;
     const index = Math.min(
       Math.max(options?.at ?? this.children.length, 0),
@@ -120,6 +127,14 @@ class FakeComponent {
     return { ...this.style };
   }
 
+  toJSON(): Record<string, unknown> {
+    return {
+      attributes: this.getAttributes(),
+      content: this.content,
+      components: this.children.map((child) => child.toJSON()),
+    };
+  }
+
   setStyle(style: Record<string, string>): void {
     this.style = { ...style };
   }
@@ -157,20 +172,6 @@ class FakeEditor {
       const parent = this.selected.parent();
       if (parent) parent.children.splice(parent.children.indexOf(this.selected), 1);
       this.selected = undefined;
-    }
-    if (command === 'tlb-clone' && this.selected) {
-      const source = this.selected;
-      const parent = source.parent();
-      if (!parent) return;
-      const attributes = source.getAttributes();
-      const clone = new FakeComponent(
-        String(attributes[BUILDER_NODE_ID_ATTRIBUTE]),
-        String(attributes[BUILDER_NODE_TYPE_ATTRIBUTE]),
-        [],
-        String(source.get('content') ?? ''),
-      );
-      parent.append(clone, { at: source.index() + 1 });
-      this.selected = clone;
     }
   }
 
@@ -259,9 +260,69 @@ describe('editor command boundary', () => {
       'text-source',
     );
     expect(section.children[1]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]).toMatch(
-      /^copy-/,
+      /^text-/,
+    );
+    expect(section.children[1]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]).not.toBe(
+      'text-source',
     );
     expect(editor.getSelected()).toBe(section.children[1]);
+  });
+
+  it('duplicates a compound subtree with fresh recursive ids in one insertion', () => {
+    const text = new FakeComponent('text-source', 'text');
+    const container = new FakeComponent('container-source', 'container', [text]);
+    const section = new FakeComponent('section-source', 'section', [container]);
+    const editor = new FakeEditor(new FakeComponent('root', 'root', [section]));
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    const result = bus.dispatch({ kind: 'duplicate', nodeId: 'section-source' });
+    const duplicate = editor.root.children[1];
+
+    expect(result.changed).toBe(true);
+    expect(duplicate).toBeDefined();
+    expect(duplicate?.children[0]?.children[0]).toBeDefined();
+    expect(duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]).not.toBe(
+      'section-source',
+    );
+    expect(duplicate?.children[0]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]).not.toBe(
+      'container-source',
+    );
+    expect(
+      duplicate?.children[0]?.children[0]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+    ).not.toBe('text-source');
+    expect(editor.getSelected()).toBe(duplicate);
+  });
+
+  it('applies a global preset inside the existing global root', () => {
+    const header = new FakeComponent('header-existing', 'global-header', [
+      new FakeComponent('custom-brand', 'site-brand'),
+    ]);
+    const root = new FakeComponent('root', 'root', [header]);
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+    const definition = createGlobalPresetDefinition('header-brand-menu-cta');
+
+    const result = bus.dispatch({
+      kind: 'apply-global-preset',
+      nodeId: 'header-existing',
+      definition,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(root.children).toHaveLength(1);
+    expect(root.children[0]).toBe(header);
+    const snapshot = {
+      attributes: root.getAttributes(),
+      children: root.children.map((child) => ({
+        attributes: child.getAttributes(),
+        children: child.children.map((grandchild) => ({
+          attributes: grandchild.getAttributes(),
+          children: [],
+        })),
+      })),
+    };
+    assertUniquePersistedNodeIds(snapshot);
+    expect(collectPersistedNodeIds(snapshot).size).toBe(5);
   });
 
   it('treats an unchanged responsive style as a command no-op', () => {

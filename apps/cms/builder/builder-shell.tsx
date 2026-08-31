@@ -19,6 +19,7 @@ import {
   PAGE_COMPONENT_REGISTRY,
   type Asset,
   type ComponentBuilderExposure,
+  type ComponentBuilderPreview,
   type Page,
   type PageDocument,
   type PageVersion,
@@ -54,6 +55,7 @@ import {
   type BuilderCanvasState,
 } from './builder-minimap';
 import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
+import { generateFreshNodeId } from './builder-node-identity';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
   GLOBAL_HEADER_PRESET_REGISTRY,
@@ -67,6 +69,7 @@ import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 import { saveStatusAfterAcknowledgement } from './builder-save';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
 import { QuickAddOverlay } from './canvas/quick-add-overlay';
+import { BuilderBlockCard } from './builder-block-catalog';
 import {
   BuilderInspector,
   type InspectorSectionKey,
@@ -81,6 +84,7 @@ type BuilderShellProps = {
 
 type LoadState = 'loading' | 'ready' | 'error';
 type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
+type SaveDraftResult = boolean;
 type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
 type AddPanelTab = 'layouts' | 'elements';
 
@@ -93,6 +97,8 @@ type AvailableBlockOption = {
   category: 'layout' | 'content' | 'extension' | 'preset';
   extensionId?: string;
   keywords?: readonly string[];
+  description: string;
+  preview: ComponentBuilderPreview;
   group: ComponentBuilderExposure['group'] | 'preset';
   documentKinds: readonly BuilderDocumentKind[];
 };
@@ -131,8 +137,10 @@ const blockOptions: AvailableBlockOption[] = [
       category:
         definition.category === 'layout' ? ('layout' as const) : ('content' as const),
       group: definition.builder.group,
-      keywords: [definition.type, definition.label],
-      documentKinds: definition.builder.documentKinds ?? ['page'],
+      keywords: [...definition.builder.keywords],
+      description: definition.builder.description,
+      preview: definition.builder.preview,
+      documentKinds: definition.builder.documentKinds,
     })),
   ...BUILDER_BLOCK_PRESET_REGISTRY.map((preset) => ({
     kind: 'preset' as const,
@@ -141,6 +149,8 @@ const blockOptions: AvailableBlockOption[] = [
     category: 'preset' as const,
     group: 'preset' as const,
     keywords: [...preset.keywords],
+    description: preset.description,
+    preview: preset.preview,
     documentKinds: ['page'] as const,
   })),
   ...[...GLOBAL_HEADER_PRESET_REGISTRY, ...GLOBAL_FOOTER_PRESET_REGISTRY].map(
@@ -151,6 +161,8 @@ const blockOptions: AvailableBlockOption[] = [
       category: 'preset' as const,
       group: 'preset' as const,
       keywords: [...preset.keywords],
+      description: preset.description,
+      preview: preset.preview,
       documentKinds: [preset.documentKind] as const,
     }),
   ),
@@ -177,6 +189,7 @@ function createDefaultGlobalDocument(
   documentKind: Exclude<BuilderDocumentKind, 'page'>,
   siteName: string,
 ): SiteGlobalPayloadV1 {
+  const globalType = documentKind === 'site-header' ? 'global-header' : 'global-footer';
   return SiteGlobalPayloadV1Schema.parse({
     version: 1,
     documentKind,
@@ -190,13 +203,13 @@ function createDefaultGlobalDocument(
       children: [
         documentKind === 'site-header'
           ? {
-              id: 'global-header',
+              id: generateFreshNodeId(globalType, new Set(['root'])),
               type: 'global-header',
               props: { position: 'static' },
               children: [],
             }
           : {
-              id: 'global-footer',
+              id: generateFreshNodeId(globalType, new Set(['root'])),
               type: 'global-footer',
               props: {},
               children: [],
@@ -457,6 +470,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         category: 'extension' as const,
         group: 'advanced' as const,
         keywords: [extension.manifest.id, extension.manifest.name],
+        description: `Add the ${extension.manifest.name} extension to this page.`,
+        preview: { kind: 'component', variant: 'extension' } as const,
         documentKinds: ['page'] as const,
       })),
   ];
@@ -468,6 +483,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       block.type?.toLowerCase().includes(query) ||
       block.presetId?.toLowerCase().includes(query) ||
       block.globalPresetId?.toLowerCase().includes(query) ||
+      block.description.toLowerCase().includes(query) ||
+      block.group.toLowerCase().includes(query) ||
       block.keywords?.some((keyword) => keyword.toLowerCase().includes(query)) ||
       block.extensionId?.toLowerCase().includes(query)
     );
@@ -821,7 +838,17 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             api.get(`/pages/${pageId}`),
             api.get(`/pages/${pageId}/versions?limit=100`),
             api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-            api.get(`/workspaces/${workspaceId}/sites/${siteId}/globals`),
+            api
+              .get(`/workspaces/${workspaceId}/sites/${siteId}/globals`)
+              .catch((caughtError: unknown) => {
+                // Older sites may not have a globals endpoint/document yet;
+                // a missing globals record is the safe empty default. Other
+                // errors (including invalid persisted data) remain visible.
+                if (caughtError instanceof ApiClientError && caughtError.status === 404) {
+                  return null;
+                }
+                throw caughtError;
+              }),
           ]);
         if (cancelled) return;
 
@@ -841,22 +868,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         setVersion(PageVersionSchema.parse(nextVersion));
         setPageDocument(createPageDocument(nextPayload));
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
-        try {
-          const globalsResponse = SiteGlobalsResponseSchema.parse(globalsResponseRaw);
-          setGlobalsDraft(globalsResponse.draft);
-          setHeaderDocument(
-            globalsResponse.draft.header ??
-              createDefaultGlobalDocument('site-header', nextPage.name),
-          );
-          setFooterDocument(
-            globalsResponse.draft.footer ??
-              createDefaultGlobalDocument('site-footer', nextPage.name),
-          );
-        } catch {
-          setGlobalsDraft({ version: 1 });
-          setHeaderDocument(createDefaultGlobalDocument('site-header', nextPage.name));
-          setFooterDocument(createDefaultGlobalDocument('site-footer', nextPage.name));
-        }
+        const globalsResponse = globalsResponseRaw
+          ? SiteGlobalsResponseSchema.parse(globalsResponseRaw)
+          : { draft: { version: 1 as const } };
+        setGlobalsDraft(globalsResponse.draft);
+        setHeaderDocument(
+          globalsResponse.draft.header ??
+            createDefaultGlobalDocument('site-header', nextPage.name),
+        );
+        setFooterDocument(
+          globalsResponse.draft.footer ??
+            createDefaultGlobalDocument('site-footer', nextPage.name),
+        );
         try {
           const [extensionResult, pageExtensionResult, capabilityResult] =
             await Promise.all([
@@ -1003,8 +1026,8 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     return () => window.removeEventListener('message', handlePreviewMessage);
   }, []);
 
-  async function saveDraft() {
-    if (!editorRef.current || saveInFlightRef.current) return;
+  async function saveDraft(): Promise<SaveDraftResult> {
+    if (!editorRef.current || saveInFlightRef.current) return false;
     saveInFlightRef.current = true;
     setSaveInFlight(true);
     setSaveStatus('saving');
@@ -1026,14 +1049,24 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             nextGlobals,
           ),
         );
+        const acknowledgedGlobal =
+          documentKind === 'site-header'
+            ? savedGlobals.draft.header
+            : savedGlobals.draft.footer;
+        if (!acknowledgedGlobal) {
+          throw new Error(
+            `Global save response did not include the acknowledged ${documentKind} snapshot.`,
+          );
+        }
         setGlobalsDraft(savedGlobals.draft);
-        if (documentKind === 'site-header') setHeaderDocument(nextGlobal);
-        else setFooterDocument(nextGlobal);
+        if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal);
+        else setFooterDocument(acknowledgedGlobal);
+        editorRef.current.acknowledgeSaved(acknowledgedGlobal);
         setSaveStatus('saved');
         setNotice('Saved global draft. Publish the site to make it public.');
-        return;
+        return true;
       }
-      if (!version) return;
+      if (!version) return false;
       if (!('schemaVersion' in nextDocument))
         throw new Error('Invalid page editor document');
       const nextPayload = PagePayloadSchema.parse(nextDocument.payload);
@@ -1056,6 +1089,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         !currentPayloadResult.success ||
         JSON.stringify(currentPayloadResult.data) !== JSON.stringify(nextPayload);
       setVersion(nextVersion);
+      editorRef.current.acknowledgeSaved(nextPayload);
       const nextPageExtensions = PageExtensionListResponseSchema.parse(
         await api.get(`/pages/${pageId}/extensions`),
       );
@@ -1073,16 +1107,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           `Saved draft version ${nextVersion.versionNumber}. Newer local changes remain unsaved.`,
         );
       }
+      return true;
     } catch (caughtError) {
       if (caughtError instanceof ApiClientError && caughtError.status === 409) {
         setSaveStatus('conflict');
         setError(
           'This draft was changed elsewhere. Reload the latest draft before saving again.',
         );
-        return;
+        return false;
       }
       setSaveStatus('error');
       setError(toErrorMessage(caughtError));
+      return false;
     } finally {
       saveInFlightRef.current = false;
       setSaveInFlight(false);
@@ -1139,7 +1175,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   async function switchDocumentKind(next: BuilderDocumentKind): Promise<void> {
     if (next === documentKind) return;
     if (isDirty && !window.confirm('Save this document before switching?')) return;
-    if (isDirty) await saveDraft();
+    if (isDirty && !(await saveDraft())) return;
     setSelected(null);
     setSelectedNodeId(null);
     setCanvasState(null);
@@ -1448,60 +1484,38 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                           block.globalPresetId ?? block.presetId ?? block.type;
                         if (!insertable && !block.extensionId) return null;
                         return (
-                          <div
-                            className="builder-block-row builder-block-card"
-                            data-block-category={block.category}
-                            data-block-type={insertable}
+                          <BuilderBlockCard
+                            addLabel={`${block.label}${
+                              block.kind === 'preset' && block.label.endsWith('Section')
+                                ? ' preset'
+                                : ''
+                            } add`}
+                            category={block.category}
+                            dataBlockType={insertable}
+                            description={block.description}
+                            dragLabel={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
                             key={`${insertable ?? 'extension'}:${block.extensionId ?? ''}`}
-                          >
-                            <button
-                              aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
-                              className="builder-block-drag"
-                              onClick={
-                                block.extensionId
-                                  ? () =>
-                                      editorRef.current?.addExtensionBlock(
-                                        block.extensionId!,
-                                      )
-                                  : undefined
-                              }
-                              onMouseDown={
-                                block.extensionId || !insertable
-                                  ? undefined
-                                  : (event) =>
-                                      editorRef.current?.startBlockDrag(
-                                        insertable as BuilderInsertable,
-                                        event.nativeEvent,
-                                      )
-                              }
-                              type="button"
-                            >
-                              <span aria-hidden="true">⠿</span>
-                              <span>{block.label}</span>
-                            </button>
-                            <button
-                              aria-label={`${block.label}${
-                                block.kind === 'preset' && block.label.endsWith('Section')
-                                  ? ' preset'
-                                  : ''
-                              } add`}
-                              className="builder-block-add"
-                              onClick={() =>
-                                block.extensionId
-                                  ? editorRef.current?.addExtensionBlock(
-                                      block.extensionId,
+                            label={block.label}
+                            onAdd={() =>
+                              block.extensionId
+                                ? editorRef.current?.addExtensionBlock(block.extensionId)
+                                : insertable
+                                  ? editorRef.current?.addBlock(
+                                      insertable as BuilderInsertable,
                                     )
-                                  : insertable
-                                    ? editorRef.current?.addBlock(
-                                        insertable as BuilderInsertable,
-                                      )
-                                    : undefined
-                              }
-                              type="button"
-                            >
-                              ＋
-                            </button>
-                          </div>
+                                  : undefined
+                            }
+                            onDragStart={
+                              block.extensionId || !insertable
+                                ? undefined
+                                : (event) =>
+                                    editorRef.current?.startBlockDrag(
+                                      insertable as BuilderInsertable,
+                                      event.nativeEvent,
+                                    )
+                            }
+                            preview={block.preview}
+                          />
                         );
                       })}
                     </section>

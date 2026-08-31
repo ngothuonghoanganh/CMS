@@ -26,13 +26,17 @@ import {
   formatCountdownRemaining,
   payloadToEditorComponent,
   resolveViewportStyle,
-  reassignEditorNodeIds,
   serializeEditorSnapshot,
   serializeSiteGlobalSnapshot,
   sanitizeInlineText,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
 import { isBuilderNodeType } from './builder-interaction';
+import {
+  assertUniquePersistedNodeIds,
+  collectPersistedNodeIds,
+  remapSubtreeNodeIds,
+} from './builder-node-identity';
 
 const payload: PagePayloadV1 = {
   version: 1 as const,
@@ -652,42 +656,37 @@ describe('builder adapter', () => {
     expect(sanitizeInlineText('<strong>Hello</strong>\u0000')).toBe('Hello');
   });
 
-  it('regenerates every PagePayload id in a duplicated subtree', () => {
-    type FakeNode = {
-      attributes: Record<string, string>;
-      children: FakeNode[];
-      getAttributes: () => Record<string, string>;
-      setAttributes: (attributes: Record<string, string>) => void;
-      onAll: (callback: (node: FakeNode) => void) => void;
-    };
-    const makeNode = (id: string, children: FakeNode[] = []): FakeNode => {
-      const node: FakeNode = {
-        attributes: { [BUILDER_NODE_ID_ATTRIBUTE]: id },
-        children,
-        getAttributes: () => ({ ...node.attributes }),
-        setAttributes: (attributes) => Object.assign(node.attributes, attributes),
-        onAll: (callback) => {
-          callback(node);
-          node.children.forEach((child) => child.onAll(callback));
+  it('remaps every definition id before a duplicated subtree enters the editor', () => {
+    const section = {
+      attributes: {
+        [BUILDER_NODE_ID_ATTRIBUTE]: 'section-original',
+        [BUILDER_NODE_TYPE_ATTRIBUTE]: 'section',
+      },
+      components: [
+        {
+          attributes: {
+            [BUILDER_NODE_ID_ATTRIBUTE]: 'container-original',
+            [BUILDER_NODE_TYPE_ATTRIBUTE]: 'container',
+          },
+          components: [
+            {
+              attributes: {
+                [BUILDER_NODE_ID_ATTRIBUTE]: 'text-original',
+                [BUILDER_NODE_TYPE_ATTRIBUTE]: 'text',
+              },
+            },
+          ],
         },
-      };
-      return node;
+      ],
     };
-    const text = makeNode('text-original');
-    const container = makeNode('container-original', [text]);
-    const section = makeNode('section-original', [container]);
+    const remapped = remapSubtreeNodeIds(section, new Set(['root', 'section-original']));
+    const ids = [...collectPersistedNodeIds(remapped)];
 
-    reassignEditorNodeIds(section as never);
-
-    const ids = [section, container, text].map(
-      (node) => node.attributes[BUILDER_NODE_ID_ATTRIBUTE],
-    );
-    expect(ids).toEqual([
-      expect.stringMatching(/^copy-/),
-      expect.stringMatching(/^copy-/),
-      expect.stringMatching(/^copy-/),
-    ]);
-    expect(new Set(ids).size).toBe(3);
+    assertUniquePersistedNodeIds(remapped);
+    expect(ids).toHaveLength(3);
+    expect(ids).not.toContain('section-original');
+    expect(ids).not.toContain('container-original');
     expect(ids).not.toContain('text-original');
+    expect(new Set(ids).size).toBe(3);
   });
 });

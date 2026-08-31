@@ -18,7 +18,6 @@ import {
   formPreviewComponents,
   isBuilderNodeType,
   payloadToEditorComponent,
-  reassignEditorNodeIds,
   serializeGrapesComponent,
 } from './builder-adapter';
 import {
@@ -98,6 +97,7 @@ export type GrapesEditorHandle = {
   redo: () => void;
   getDocument: () => PageDocument | SiteGlobalPayloadV1;
   serialize: () => PagePayload | SiteGlobalPayloadV1;
+  acknowledgeSaved: (payload: PagePayload | SiteGlobalPayloadV1) => void;
   setViewport: (viewport: BuilderViewport) => void;
   updateSelectedText: (value: string) => void;
   updateSelectedProperty: (property: string, value: unknown) => void;
@@ -1013,6 +1013,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   const pendingProgrammaticSelectionRef = useRef<string | null>(null);
   const viewportRef = useRef<BuilderViewport>('desktop');
   const internalChangeRef = useRef(false);
+  const initializationSettlingRef = useRef(true);
+  const initialPersistedSignatureRef = useRef<string | null>(null);
   const selectingComponentRef = useRef(false);
   const canvasStateFrameRef = useRef<number | null>(null);
   const canvasGeometryRef = useRef<BuilderCanvasGeometry | null>(null);
@@ -1263,6 +1265,37 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       return createDocumentSnapshot(editor);
     };
 
+    const applyGlobalPreset = (
+      editor: Editor,
+      definition: ComponentDefinition,
+    ): boolean => {
+      const root = getRoot(editor);
+      if (!root) return false;
+      const globalType = insertableNodeType(definition);
+      if (globalType !== 'global-header' && globalType !== 'global-footer') return false;
+      const existing = root
+        .components()
+        .models.filter((child) => payloadNodeType(child) === globalType);
+      if (existing.length !== 1) return false;
+      const target = existing[0];
+      if (!target) return false;
+      if (
+        target.components().models.length > 0 &&
+        !window.confirm(
+          'This global region already has content. Replace it with this preset?',
+        )
+      ) {
+        return false;
+      }
+      const result = commitEditorCommandResult(editor, {
+        kind: 'apply-global-preset',
+        nodeId: payloadNodeId(target) ?? '',
+        definition,
+      });
+      if (result.selection) selectionRef.current.select(editor, result.selection);
+      return result.changed;
+    };
+
     return {
       addBlock(type) {
         const editor = editorRef.current;
@@ -1271,25 +1304,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const childType = insertableNodeType(definition);
         if (!childType) return;
         if (documentKind !== 'page' && isGlobalBuilderPresetId(type)) {
-          const root = getRoot(editor);
-          const expectedType =
-            documentKind === 'site-header' ? 'global-header' : 'global-footer';
-          const existing = root
-            .components()
-            .models.find((child) => payloadNodeType(child) === expectedType);
-          if (existing) {
-            commitEditorCommand(editor, {
-              kind: 'remove',
-              nodeId: payloadNodeId(existing) ?? '',
-            });
-          }
-          const result = commitEditorCommand(editor, {
-            kind: 'insert',
-            definition,
-            parentId: payloadNodeId(root),
-          });
-          const added = result ? getSelectedComponent(editor) : undefined;
-          if (added) selectionRef.current.select(editor, added);
+          applyGlobalPreset(editor, definition);
           return;
         }
         const selected = editor.getSelected();
@@ -1508,6 +1523,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       serialize() {
         const document = serializeDocument();
         return 'schemaVersion' in document ? document.payload : document;
+      },
+      acknowledgeSaved(payload) {
+        initialPersistedSignatureRef.current = JSON.stringify(payload);
       },
       setViewport(viewport) {
         const editor = editorRef.current;
@@ -1751,6 +1769,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return false;
+        if (documentKind !== 'page' && isGlobalBuilderPresetId(type)) {
+          return applyGlobalPreset(editor, definition);
+        }
         if (placement) {
           if (placement.position === 'inside') {
             const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
@@ -2163,6 +2184,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editorRef.current = editor;
         commandBusRef.current = createEditorCommandBus(editor);
         editor.setComponents(payloadToEditorComponent(payloadRef.current));
+        initialPersistedSignatureRef.current = JSON.stringify(
+          serializeGrapesComponent(getRoot(editor), documentKind),
+        );
         ensureAllFormPreviews(getRoot(editor));
         syncRuntimePreviewClasses(getRoot(editor));
         window.setTimeout(() => syncRuntimePreviewClasses(getRoot(editor as Editor)), 0);
@@ -2255,11 +2279,25 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           };
         }
         const handleComponentUpdate = () => {
+          if (editorRef.current !== editor) return;
           window.setTimeout(() => {
             if (editorRef.current === editor)
               syncRuntimePreviewClasses(getRoot(editor as Editor));
           }, 0);
-          if (!internalChangeRef.current) {
+          let persistedDocumentChanged = true;
+          try {
+            persistedDocumentChanged =
+              JSON.stringify(
+                serializeGrapesComponent(getRoot(editor as Editor), documentKind),
+              ) !== initialPersistedSignatureRef.current;
+          } catch {
+            persistedDocumentChanged = true;
+          }
+          if (
+            !internalChangeRef.current &&
+            !initializationSettlingRef.current &&
+            persistedDocumentChanged
+          ) {
             callbacksRef.current.onDirty();
             notifyDocumentChange(editor as Editor);
           }
@@ -2284,18 +2322,6 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           selectionRef.current.set(selected);
           callbacksRef.current.onSelectionChange(selectionFromComponent(selected));
         };
-        const handleClone = (component: Component) => {
-          // The command path owns clone identity repair. Keep this guarded
-          // fallback for GrapesJS-native clone/paste integrations that may be
-          // introduced later, without double-regenerating command clones.
-          if (internalChangeRef.current) return;
-          editor?.getModel().skip(() => reassignEditorNodeIds(component as Component));
-          callbacksRef.current.onDirty();
-          notifySelection(editor as Editor);
-          notifyHistory(editor as Editor);
-          notifyDocumentChange(editor as Editor);
-          scheduleCanvasState(editor as Editor, true);
-        };
         const handleComponentDragEnd = () => handleComponentUpdate();
         // GrapesJS emits `component:input` for every RTE keystroke. Refresh the
         // selected snapshot from the live model so Canvas inline edits appear
@@ -2315,7 +2341,6 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editor.on('component:input', handleComponentInput);
         editor.on('component:selected', handleSelectionChange);
         editor.on('component:deselected', handleSelectionChange);
-        editor.on('component:clone', handleClone);
         editor.on('undo', handleHistoryChange);
         editor.on('redo', handleHistoryChange);
         const handleCanvasViewportChange = () => scheduleCanvasState(editor as Editor);
@@ -2326,6 +2351,11 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         scheduleCanvasState(editor, true);
         notifyHistory(editor);
         callbacksRef.current.onReady();
+        // GrapesJS can emit canvas/layout updates immediately after the model
+        // is mounted. They describe initialization, not an authored edit.
+        window.setTimeout(() => {
+          if (editorRef.current === editor) initializationSettlingRef.current = false;
+        }, 250);
       } catch (caughtError) {
         callbacksRef.current.onError(
           caughtError instanceof Error

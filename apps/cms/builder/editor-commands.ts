@@ -19,8 +19,8 @@ import {
   BUILDER_NODE_SLOT_ATTRIBUTE,
   createBlockDefinition,
   isBuilderNodeType,
-  reassignEditorNodeIds,
   sanitizeInlineText,
+  snapshotFromGrapesComponent,
   updateEditorViewportStyle,
   updateEditorPartViewportStyle,
   type BuilderViewport,
@@ -36,6 +36,11 @@ import {
   liveSlotForChild,
   liveSlotOccupancy,
 } from './builder-structural-domain';
+import {
+  assertUniquePersistedNodeIds,
+  collectPersistedNodeIds,
+  remapSubtreeNodeIds,
+} from './builder-node-identity';
 
 /**
  * The builder deliberately keeps GrapesJS as the Model-A document engine.
@@ -54,6 +59,11 @@ export type EditorCommand =
   | { kind: 'move'; intent: MoveNodeIntent }
   | { kind: 'remove'; nodeId: string }
   | { kind: 'duplicate'; nodeId: string }
+  | {
+      kind: 'apply-global-preset';
+      nodeId: string;
+      definition: ComponentDefinition;
+    }
   | {
       kind: 'update-props';
       nodeId: string;
@@ -214,18 +224,69 @@ function canInsertLiveType(
   );
 }
 
+function definitionWithFreshIds(
+  root: Component,
+  definition: ComponentDefinition,
+): ComponentDefinition {
+  const currentSnapshot = {
+    attributes: root.getAttributes({ noStyle: true }),
+    children: root.components().models.map((child) => componentIdentitySnapshot(child)),
+  };
+  assertUniquePersistedNodeIds(currentSnapshot);
+  return remapSubtreeNodeIds(definition, collectPersistedNodeIds(currentSnapshot));
+}
+
+function componentIdentitySnapshot(component: Component): {
+  attributes: Record<string, unknown>;
+  children: ReturnType<typeof componentIdentitySnapshot>[];
+} {
+  return {
+    attributes: component.getAttributes({ noStyle: true }),
+    children: component
+      .components()
+      .models.map((child) => componentIdentitySnapshot(child)),
+  };
+}
+
+function definitionFromComponent(component: Component): ComponentDefinition {
+  const toDefinition = (
+    snapshot: ReturnType<typeof snapshotFromGrapesComponent>,
+  ): ComponentDefinition => {
+    const nodeType = snapshot.attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+    return {
+      type: nodeType === 'text' || nodeType === 'image' ? nodeType : 'default',
+      tagName: snapshot.tagName,
+      attributes: snapshot.attributes,
+      content: snapshot.content,
+      style: snapshot.style,
+      components: snapshot.children.map((child) => toDefinition(child)),
+    };
+  };
+  return toDefinition(snapshotFromGrapesComponent(component));
+}
+
+function globalPresetTargetIsValid(
+  root: Component,
+  node: Component | undefined,
+  definition: ComponentDefinition,
+): boolean {
+  if (!node || node.parent() !== root) return false;
+  const nodeType = payloadNodeType(node);
+  const definitionType = definitionNodeType(definition);
+  if (nodeType !== 'global-header' && nodeType !== 'global-footer') return false;
+  if (nodeType !== definitionType) return false;
+  const globalRoots = root.components().models.filter((child) => {
+    const type = payloadNodeType(child);
+    return type === 'global-header' || type === 'global-footer';
+  });
+  return globalRoots.length === 1 && globalRoots[0] === node;
+}
+
 export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
   const bus: BuilderCommandBus = {
     dispatch: (command) => {
       if (!bus.canDispatch(command)) return { changed: false };
-      try {
-        return executeEditorCommand(editor, command);
-      } catch {
-        // A command is a safety boundary for untrusted inspector values. The
-        // caller can treat a failed dispatch as a no-op and keep the live
-        // document intact.
-        return { changed: false };
-      }
+      return executeEditorCommand(editor, command);
     },
     canDispatch: (command) => {
       const root = getRoot(editor);
@@ -260,6 +321,13 @@ export function createEditorCommandBus(editor: Editor): BuilderCommandBus {
           : undefined;
         return Boolean(
           slot?.structural && canInsertLiveType(parent, command.childType, slotName),
+        );
+      }
+      if (command.kind === 'apply-global-preset') {
+        return globalPresetTargetIsValid(
+          root,
+          getNode(editor, command.nodeId),
+          command.definition,
         );
       }
       if (command.kind === 'set-property') {
@@ -331,6 +399,7 @@ export function executeEditorCommand(
       if (!parent || !canInsertDefinition(parent, command.definition)) {
         return { changed: false };
       }
+      const safeDefinition = definitionWithFreshIds(root, command.definition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       let at: number | undefined;
       if (requestedTarget) {
@@ -338,10 +407,10 @@ export function executeEditorCommand(
         at = requestedTarget.index() + (command.position === 'after' ? 1 : 0);
       }
       const created = parent.append(
-        command.definition,
+        safeDefinition,
         at === undefined ? undefined : { at },
       );
-      if (command.definition.components !== undefined) {
+      if (safeDefinition.components !== undefined) {
         groupNewHistoryActions(editor, previousHistoryEntries);
       }
       const selection = created[0];
@@ -357,9 +426,10 @@ export function executeEditorCommand(
         ...(definition.attributes ?? {}),
         [BUILDER_NODE_SLOT_ATTRIBUTE]: command.slotName,
       };
+      const safeDefinition = definitionWithFreshIds(root, definition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
-      const created = parent.append(definition, { at: command.index });
-      if (definition.components !== undefined) {
+      const created = parent.append(safeDefinition, { at: command.index });
+      if (safeDefinition.components !== undefined) {
         groupNewHistoryActions(editor, previousHistoryEntries);
       }
       const selection = created[0];
@@ -399,27 +469,32 @@ export function executeEditorCommand(
       const node = getNode(editor, command.nodeId);
       if (!node || !canDuplicateLiveNode(root, node)) return { changed: false };
       const parent = node.parent();
-      const existingChildren = parent?.components().models.slice() ?? [];
+      if (!parent) return { changed: false };
+      const sourceDefinition = definitionFromComponent(node);
+      const safeDefinition = definitionWithFreshIds(root, sourceDefinition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
-      editor.select(node);
-      editor.runCommand('tlb-clone');
-      // GrapesJS does not promise that `tlb-clone` leaves the clone selected.
-      // Resolve the newly added sibling by identity so ID repair never mutates
-      // the source node while leaving its duplicate with a stale Page ID.
-      const clone = parent
-        ?.components()
-        .models.find((candidate) => !existingChildren.includes(candidate));
-      const selection = clone ?? editor.getSelected();
-      const duplicate = clone ?? selection;
-      if (duplicate) {
-        // Native clone events are guarded in GrapesEditor, but the command
-        // itself owns the identity transition so every command invocation
-        // produces a fresh PagePayload subtree without an extra undo action.
-        editor.getModel().skip(() => reassignEditorNodeIds(duplicate));
-      }
-      if (clone) editor.select(clone);
+      const created = parent.append(safeDefinition, { at: node.index() + 1 });
+      const selection = created[0];
+      if (selection) editor.select(selection);
       groupNewHistoryActions(editor, previousHistoryEntries);
       return selection ? { changed: true, selection } : { changed: true };
+    }
+    case 'apply-global-preset': {
+      const node = getNode(editor, command.nodeId);
+      if (!globalPresetTargetIsValid(root, node, command.definition)) {
+        return { changed: false };
+      }
+      if (!node) return { changed: false };
+      const safeDefinition = definitionWithFreshIds(root, command.definition);
+      const previousHistoryEntries = new Set(getHistoryEntries(editor));
+      const components = Array.isArray(safeDefinition.components)
+        ? safeDefinition.components
+        : safeDefinition.components
+          ? [safeDefinition.components]
+          : [];
+      node.components(components);
+      groupNewHistoryActions(editor, previousHistoryEntries);
+      return { changed: true, selection: node };
     }
     case 'set-content': {
       return executeEditorCommand(editor, {
