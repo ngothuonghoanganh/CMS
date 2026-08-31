@@ -3,11 +3,8 @@ import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   canDuplicateInSlot,
-  canInsertIntoSlot,
   canRemoveFromSlot,
   resolveSlotForChild,
-  resolveSlotsForChild,
-  type ComponentSlotDefinition,
 } from '@payload/contracts';
 
 import {
@@ -34,6 +31,11 @@ import {
   applyEditorPropertyUpdate,
   getComponentEditorCodec,
 } from './component-editor-codecs';
+import {
+  canInsertLiveChild,
+  liveSlotForChild,
+  liveSlotOccupancy,
+} from './builder-structural-domain';
 
 /**
  * The builder deliberately keeps GrapesJS as the Model-A document engine.
@@ -118,7 +120,7 @@ function getHistoryEntries(editor: Editor): HistoryEntry[] {
   return Array.isArray(stack) ? stack : (stack.models ?? []);
 }
 
-function isolateNewHistoryActions(
+function groupNewHistoryActions(
   editor: Editor,
   previousEntries: Set<HistoryEntry>,
 ): void {
@@ -146,30 +148,6 @@ function definitionNodeType(
 ): BuilderNodeType | undefined {
   const type = definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
   return typeof type === 'string' && isBuilderNodeType(type) ? type : undefined;
-}
-
-function liveSlotOccupancy(
-  parent: Component,
-  slot: ComponentSlotDefinition,
-  excluded?: Component,
-): { count: number; bySlot: Record<string, number> } {
-  const count = parent.components().models.filter((child) => {
-    if (child === excluded) return false;
-    const attributes = child.getAttributes({ noStyle: true });
-    const ownedSlot = attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
-    return typeof ownedSlot === 'string'
-      ? ownedSlot === slot.name
-      : slot.accepts.includes(payloadNodeType(child) as never);
-  }).length;
-  return { count, bySlot: { [slot.name]: count } };
-}
-
-function liveSlotForChild(
-  parent: Component | undefined,
-  childType: BuilderNodeType,
-): ComponentSlotDefinition | undefined {
-  const parentType = parent && payloadNodeType(parent);
-  return parentType ? resolveSlotsForChild(parentType, childType)[0] : undefined;
 }
 
 function canRemoveLiveNode(root: Component, node: Component): boolean {
@@ -213,25 +191,10 @@ function canInsertDefinition(
   definition: ComponentDefinition,
   slotName?: string,
 ): boolean {
-  const parentType = parent.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
   const childType = definitionNodeType(definition);
-  if (!isBuilderNodeType(parentType) || !childType) return false;
-  const slot = slotName
-    ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
-        (candidate) => candidate.name === slotName,
-      )
-    : resolveSlotForChild(parentType, childType);
   // `droppable` is presentation behavior; command validation remains domain
   // driven and therefore also applies to Quick Add, Layers and keyboard paths.
-  return Boolean(
-    slot &&
-    canInsertIntoSlot({
-      parentType,
-      slotName: slot.name,
-      childType,
-      occupancy: liveSlotOccupancy(parent, slot),
-    }),
-  );
+  return Boolean(childType && canInsertLiveChild(parent, childType, undefined, slotName));
 }
 
 function canInsertLiveType(
@@ -247,14 +210,7 @@ function canInsertLiveType(
       )
     : resolveSlotForChild(parentType, childType);
   return Boolean(
-    slot &&
-    slot.structural &&
-    canInsertIntoSlot({
-      parentType,
-      slotName: slot.name,
-      childType,
-      occupancy: liveSlotOccupancy(parent, slot),
-    }),
+    slot?.structural && canInsertLiveChild(parent, childType, undefined, slot.name),
   );
 }
 
@@ -375,6 +331,7 @@ export function executeEditorCommand(
       if (!parent || !canInsertDefinition(parent, command.definition)) {
         return { changed: false };
       }
+      const previousHistoryEntries = new Set(getHistoryEntries(editor));
       let at: number | undefined;
       if (requestedTarget) {
         if (requestedTarget.parent() !== parent) return { changed: false };
@@ -384,6 +341,9 @@ export function executeEditorCommand(
         command.definition,
         at === undefined ? undefined : { at },
       );
+      if (command.definition.components !== undefined) {
+        groupNewHistoryActions(editor, previousHistoryEntries);
+      }
       const selection = created[0];
       return selection ? { changed: true, selection } : { changed: false };
     }
@@ -397,7 +357,11 @@ export function executeEditorCommand(
         ...(definition.attributes ?? {}),
         [BUILDER_NODE_SLOT_ATTRIBUTE]: command.slotName,
       };
+      const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(definition, { at: command.index });
+      if (definition.components !== undefined) {
+        groupNewHistoryActions(editor, previousHistoryEntries);
+      }
       const selection = created[0];
       return selection ? { changed: true, selection } : { changed: false };
     }
@@ -454,7 +418,7 @@ export function executeEditorCommand(
         editor.getModel().skip(() => reassignEditorNodeIds(duplicate));
       }
       if (clone) editor.select(clone);
-      isolateNewHistoryActions(editor, previousHistoryEntries);
+      groupNewHistoryActions(editor, previousHistoryEntries);
       return selection ? { changed: true, selection } : { changed: true };
     }
     case 'set-content': {
@@ -476,9 +440,18 @@ export function executeEditorCommand(
         node,
       );
       if (!update) return { changed: false };
-      return applyEditorPropertyUpdate(node, type, update)
-        ? { changed: true, selection: node }
-        : { changed: false };
+      const previousHistoryEntries =
+        type === 'accordion-item' && command.property === 'defaultOpen'
+          ? new Set(getHistoryEntries(editor))
+          : undefined;
+      const changed = applyEditorPropertyUpdate(node, type, update);
+      if (changed && previousHistoryEntries) {
+        // Opening an item in a single-open accordion changes the item and any
+        // open siblings. Give all model actions one GrapesJS fusion marker so
+        // one Undo restores the complete semantic transition.
+        groupNewHistoryActions(editor, previousHistoryEntries);
+      }
+      return changed ? { changed: true, selection: node } : { changed: false };
     }
     case 'set-attributes': {
       return executeEditorCommand(editor, {
@@ -545,13 +518,21 @@ export function executeEditorCommand(
     }
     case 'undo': {
       if (!editor.UndoManager.hasUndo()) return { changed: false };
-      editor.runCommand('core:undo');
+      const undoManager = editor.UndoManager as typeof editor.UndoManager & {
+        undo?: (all?: boolean) => void;
+      };
+      if (typeof undoManager.undo === 'function') undoManager.undo(true);
+      else editor.runCommand('core:undo');
       const selection = editor.getSelected() ?? root;
       return selection ? { changed: true, selection } : { changed: true };
     }
     case 'redo': {
       if (!editor.UndoManager.hasRedo()) return { changed: false };
-      editor.runCommand('core:redo');
+      const undoManager = editor.UndoManager as typeof editor.UndoManager & {
+        redo?: (all?: boolean) => void;
+      };
+      if (typeof undoManager.redo === 'function') undoManager.redo(true);
+      else editor.runCommand('core:redo');
       const selection = editor.getSelected() ?? root;
       return selection ? { changed: true, selection } : { changed: true };
     }

@@ -3,7 +3,14 @@ import type { HydratedDocument } from 'mongoose';
 
 export type SiteDocument = HydratedDocument<SiteRecord>;
 
-@Schema({ collection: 'sites', timestamps: true, versionKey: false })
+@Schema({
+  collection: 'sites',
+  timestamps: true,
+  versionKey: false,
+  // Global documents contain required empty props objects for structural
+  // nodes. Keep those objects intact when Mongoose casts/saves the site.
+  minimize: false,
+})
 export class SiteRecord {
   @Prop({ type: String, required: true })
   _id!: string;
@@ -40,6 +47,16 @@ export class SiteRecord {
 
   @Prop({ type: String, required: false })
   footerNavigationId?: string;
+
+  @Prop({ type: String, required: false })
+  logo?: string;
+
+  /** Versioned builder-owned global documents. Published globals are a snapshot. */
+  @Prop({ type: Object, required: false, minimize: false })
+  globalsDraft?: Record<string, unknown>;
+
+  @Prop({ type: Object, required: false, minimize: false })
+  publishedGlobals?: Record<string, unknown>;
 
   createdAt!: Date;
   updatedAt!: Date;

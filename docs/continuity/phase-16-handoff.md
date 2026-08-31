@@ -1,77 +1,64 @@
 # Phase 16 Handoff — Compound Components, Structural Contracts & Runtime
 
-Read [`phase-16.md`](../phase-16.md) for the implementation report.
+Read [`phase-16.md`](../phase-16.md) for the closure report.
 
-## Invariants
+## Durable invariants
 
-- `PagePayload` and `PageDocument.payload` are persisted content truth.
+- `PagePayload` is persisted content truth.
 - GrapesJS is the live editor document engine.
-- `editor-commands.ts` is the authoritative user mutation boundary.
-- `PAGE_COMPONENT_REGISTRY` is the semantic, structural and placement source.
-- Style capability metadata and the responsive vocabulary are registry-owned.
-- The production renderer is the public rendering truth.
-- GrapesJS UndoManager is the sole history owner.
-- `selectedNodeId` is canonical selection identity; React holds snapshots, not
-  a copied page tree.
-- Editor-only previews, slot markers and runtime state never enter
-  `PagePayload`.
+- `editor-commands.ts` is the only builder mutation boundary.
+- `PAGE_COMPONENT_REGISTRY` owns component, placement, slot, cardinality and
+  component-part capabilities.
+- `style-registry.ts` owns the finite responsive style vocabulary.
+- The production renderer is public rendering truth.
+- GrapesJS UndoManager is the sole builder history owner.
+- `selectedNodeId` is canonical selection identity; React stores snapshots, not
+  a second mutable page tree.
+- Editor-only previews, slot markers and runtime interaction state never enter
+  persisted payloads.
 
-## Structural registry contract
+## Structural platform
 
-`ComponentSlotDefinition` describes accepted child types, optional
-`minChildren`/`maxChildren`, `addLabel` and structural ownership.
-`getSlotOccupancy`, `resolveSlotForChild`, `canInsertIntoSlot`,
-`canRemoveFromSlot` and `canDuplicateInSlot` are the per-slot helpers; legacy
-aggregate helpers delegate to them. Placement, drag/drop, Quick Add,
-structural Inspector actions, command execution and V5/V6 parsing use these
-rules. Implicit resolution rejects a child type that matches multiple slots.
+`builder-structural-domain.ts` centralizes live slot occupancy, child ownership,
+slot resolution and insertion checks. Placement, drag/drop, Quick Add,
+structural Inspector actions, command execution and V5/V6 parsing use the same
+rules. Implicit placement rejects a child type that matches multiple slots.
 
-The public palette exposes only definitions whose `builder.insertable` is true.
-Accordion and Tabs internal children are created by their owner slots. Gallery
-owns an image-only slot with min 1 and max 50.
+Accordion and Tabs own internal item nodes through structural slots. Internal
+items are addressable but not palette-insertable. Gallery owns an image-only
+slot with minimum one and maximum fifty children. Compound insertion,
+normalization and duplication are grouped as single UndoManager actions, and
+duplicated subtrees receive fresh IDs.
 
-## Editor contract
+## V6 and runtime
 
-The Structure Editor is generic over every structural slot and provides add,
-remove, duplicate, keyboard move and drag reorder. Remove and duplicate are
-disabled at cardinality limits in the UI and rejected again at the command
-boundary. The codec map provides a generic fallback for registered components;
-semantic schemas and finite bindings remain the safety boundary.
+V6 adds Accordion/Tabs accessibility props and registry-owned component-part
+styles. Part names, style properties, values and responsive viewports are
+validated at contracts and adapter boundaries; responsive output is scoped to
+the owning node. Accordion uses semantic headings/buttons, stable controls and
+labelled regions. Tabs uses tablist/tab/tabpanel relationships, roving focus,
+orientation-aware keys, Home/End and automatic/manual activation.
 
-## PagePayload V5/V6 contract
+## Verification handoff
 
-V5 preserves V1–V4 and adds Quote, Accordion, Accordion Item, Tabs, Tab Item and
-Gallery. V6 adds optional Accordion/Tabs accessibility props and registry-owned
-component-part styles. Part names, style properties, values and responsive
-viewports are validated; responsive part rules are scoped to the owning node.
-V5 payloads are not rewritten merely because a document is opened or previewed.
+Validated with Node `v24.11.0` and pnpm `10.15.0`:
 
-API traversal must use the complete payload union; forms, submissions,
-integrations and analytics must continue to work when a compound node contains
-a form descendant.
+- format, lint, typecheck and build — PASS
+- unit suites — PASS: Contracts 36, CMS 76, Renderer 16, API 47 passed / 12
+  skipped
+- focused Phase 15–17 Playwright gate — PASS: 7/7
+- Phase 16 Playwright suite — PASS: 4/4
+- full Playwright suite — 56/58 passed; the two known baseline failures are
+  tenant-extension disable (`409` instead of expected `201`) and builder /
+  renderer screenshot parity (65 mismatches versus threshold 8)
 
-## Runtime accessibility contract
+The starting HEAD was `747d47cdfb394ccc807ea5f9a0fe53b223d934cd`; no commit was
+created during this work, so the implementation and documentation are staged
+only as working-tree changes. There is no dedicated Phase14 Playwright file;
+use the full suite for those existing regression paths.
 
-Accordion and Tabs behavior is client-only session state. Accordion uses
-semantic headings/buttons, `aria-expanded`, `aria-controls`, stable panel IDs
-and labelled regions. Tabs uses `tablist`/`tab`/`tabpanel`, stable
-relationships, roving `tabIndex`, orientation-aware Arrow keys, Home/End and
-manual or automatic activation. Runtime state is never serialized.
+## Next phase
 
-## Validation handoff
-
-Final closure validation ran under Node 22.19.0 and prints the repository's
-existing Node `>=24` engine warning:
-
-- `pnpm verify`: passed. API: 47 passed and 12 skipped; CMS: 74 passed;
-  Contracts: 34 passed; Renderer: 15 passed. Format, lint, typecheck and all
-  package builds passed.
-- Phase 16 Playwright suite: 4/4 passed.
-- Full Playwright suite: 55/57 passed. The two failures are the known baseline
-  tenant-extension disable response (`409` vs expected `201`) and builder /
-  renderer screenshot parity (65 mismatches vs threshold 8); no Phase 16 test
-  or legacy builder drag flow failed.
-
-The two baseline failures remain separate release-owner follow-up items. Also
-repeat the validation under Node 24 or newer before release, or explicitly
-accept the Node-version limitation with the release owner.
+Phase 17 is complete for the implemented site-global scope. Phase 18 can begin
+after release ownership decides whether to resolve the two unrelated full-suite
+baseline failures.

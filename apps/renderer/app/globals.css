@@ -80,3 +80,39 @@
   text-align: center;
   text-transform: uppercase;
 }
+
+.payload-navigation > div > ul {
+  display: flex;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.payload-navigation[data-navigation-orientation='vertical'] > div > ul,
+.payload-navigation[data-navigation-mobile-behavior='stack'] > div > ul {
+  flex-direction: column;
+}
+
+.payload-navigation[data-navigation-mobile-behavior='wrap'] > div > ul {
+  flex-wrap: wrap;
+}
+
+.payload-navigation[data-navigation-alignment='center'] > div > ul {
+  justify-content: center;
+}
+
+.payload-navigation[data-navigation-alignment='right'] > div > ul {
+  justify-content: flex-end;
+}
+
+.payload-navigation > button {
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .payload-navigation[data-navigation-mobile-behavior='stack'] > div > ul,
+  .payload-navigation[data-navigation-mobile-behavior='collapse'] > div > ul {
+    flex-direction: column;
+  }
+}

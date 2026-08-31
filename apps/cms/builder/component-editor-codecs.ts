@@ -12,6 +12,10 @@ import {
   TabsPropsSchema,
   TabsPropsV6Schema,
   VideoPropsSchema,
+  GlobalHeaderPropsSchema,
+  GlobalFooterPropsSchema,
+  NavigationViewPropsSchema,
+  SiteBrandPropsSchema,
   type FormProps,
   type PageComponentType,
   type PageNodeStyle,
@@ -23,6 +27,7 @@ import {
 
 import {
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  BUILDER_GLOBAL_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_HEADING_LEVEL_ATTRIBUTE,
@@ -89,144 +94,158 @@ function parsedJson<T>(
   }
 }
 
-function readComponentPropsFromAttributes(
-  component: Component,
-  type: PageComponentType,
-  content: string,
-): {
+type ComponentPropsReadResult = {
   props: Record<string, unknown>;
   form?: FormProps;
   countdown?: { targetAt: string; label: string };
-} {
-  const attributes = component.getAttributes({ noStyle: true });
-  const props: Record<string, unknown> = {};
-  const form = parsedJson(attributes[BUILDER_FORM_PROPS_ATTRIBUTE], FormPropsSchema);
-  const countdown = parsedJson(
-    attributes[BUILDER_COUNTDOWN_PROPS_ATTRIBUTE],
-    CountdownPropsSchema,
-  );
+};
 
-  if (type === 'form' && form) return { props: form, form };
-  if (type === 'countdown' && countdown) return { props: countdown, countdown };
+type ComponentPropsReader = (
+  attributes: Record<string, string>,
+  content: string,
+) => ComponentPropsReadResult;
 
-  if (type === 'list') {
-    const value = parsedJson(attributes[BUILDER_LIST_PROPS_ATTRIBUTE], ListPropsSchema);
-    return { props: value ?? {} };
-  }
-  if (type === 'video') {
-    const value = VideoPropsSchema.safeParse({
+const emptyPropsReader: ComponentPropsReader = () => ({ props: {} });
+const jsonPropsReader =
+  <T extends Record<string, unknown>>(
+    attribute: string,
+    schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
+  ): ComponentPropsReader =>
+  (attributes) => ({ props: parsedJson(attributes[attribute], schema) ?? {} });
+
+const componentPropsReaders: Partial<Record<PageComponentType, ComponentPropsReader>> = {
+  root: emptyPropsReader,
+  section: emptyPropsReader,
+  container: emptyPropsReader,
+  divider: emptyPropsReader,
+  gallery: emptyPropsReader,
+  text: (_attributes, content) => ({ props: { text: content } }),
+  heading: (attributes, content) => {
+    const level = Number(attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE]);
+    return { props: { text: content, level: Number.isInteger(level) ? level : 2 } };
+  },
+  button: (attributes, content) => ({
+    props: {
+      label: content,
+      href: attributes.href ?? '#',
+      target: attributes.target === '_blank' ? '_blank' : '_self',
+    },
+  }),
+  link: (attributes, content) => ({
+    props: {
+      text: content,
+      href: attributes.href ?? '/',
+      target: attributes.target === '_blank' ? '_blank' : '_self',
+    },
+  }),
+  image: (attributes) => ({
+    props: { src: attributes.src ?? '', alt: attributes.alt ?? '' },
+  }),
+  video: (attributes) => {
+    const parsed = VideoPropsSchema.safeParse({
       src: attributes.src,
-      ...(typeof attributes.poster === 'string' ? { poster: attributes.poster } : {}),
+      ...(attributes.poster ? { poster: attributes.poster } : {}),
       controls: attributes.controls === 'true',
       autoplay: attributes.autoplay === 'true',
       muted: attributes.muted === 'true',
       loop: attributes.loop === 'true',
       playsInline: attributes.playsinline === 'true',
     });
-    return { props: value.success ? value.data : {} };
-  }
-  if (type === 'quote') {
-    return {
-      props:
-        parsedJson(attributes[BUILDER_QUOTE_PROPS_ATTRIBUTE], QuotePropsSchema) ?? {},
-    };
-  }
-  if (type === 'accordion') {
-    return {
-      props:
-        parsedJson(
-          attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE],
-          AccordionPropsV6Schema,
-        ) ??
-        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], AccordionPropsSchema) ??
-        {},
-    };
-  }
-  if (type === 'accordion-item') {
-    return {
-      props:
-        parsedJson(
-          attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE],
-          AccordionItemPropsSchema,
-        ) ?? {},
-    };
-  }
-  if (type === 'tabs') {
-    return {
-      props:
-        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsV6Schema) ??
-        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsSchema) ??
-        {},
-    };
-  }
-  if (type === 'tab-item') {
-    return {
-      props:
-        parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabItemPropsSchema) ??
-        {},
-    };
-  }
-  if (type === 'heading') {
-    const level = Number(attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE]);
-    return { props: { text: content, level: Number.isInteger(level) ? level : 2 } };
-  }
-  if (type === 'link') {
-    return {
-      props: {
-        text: content,
-        href: typeof attributes.href === 'string' ? attributes.href : '/',
-        target: attributes.target === '_blank' ? '_blank' : '_self',
-      },
-    };
-  }
-  if (type === 'text') return { props: { text: content } };
-  if (type === 'button') {
-    return {
-      props: {
-        label: content,
-        href: typeof attributes.href === 'string' ? attributes.href : '#',
-        target: attributes.target === '_blank' ? '_blank' : '_self',
-      },
-    };
-  }
-  if (type === 'image') {
-    return {
-      props: {
-        src: typeof attributes.src === 'string' ? attributes.src : '',
-        alt: typeof attributes.alt === 'string' ? attributes.alt : '',
-      },
-    };
-  }
-  return { props };
+    return { props: parsed.success ? parsed.data : {} };
+  },
+  form: (attributes) => {
+    const form = parsedJson(attributes[BUILDER_FORM_PROPS_ATTRIBUTE], FormPropsSchema);
+    return form ? { props: form, form } : { props: {} };
+  },
+  countdown: (attributes) => {
+    const countdown = parsedJson(
+      attributes[BUILDER_COUNTDOWN_PROPS_ATTRIBUTE],
+      CountdownPropsSchema,
+    );
+    return countdown ? { props: countdown, countdown } : { props: {} };
+  },
+  list: jsonPropsReader(BUILDER_LIST_PROPS_ATTRIBUTE, ListPropsSchema),
+  quote: jsonPropsReader(BUILDER_QUOTE_PROPS_ATTRIBUTE, QuotePropsSchema),
+  accordion: (attributes) => ({
+    props:
+      parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], AccordionPropsV6Schema) ??
+      parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], AccordionPropsSchema) ??
+      {},
+  }),
+  'accordion-item': jsonPropsReader(
+    BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+    AccordionItemPropsSchema,
+  ),
+  tabs: (attributes) => ({
+    props:
+      parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsV6Schema) ??
+      parsedJson(attributes[BUILDER_COMPOUND_PROPS_ATTRIBUTE], TabsPropsSchema) ??
+      {},
+  }),
+  'tab-item': jsonPropsReader(BUILDER_COMPOUND_PROPS_ATTRIBUTE, TabItemPropsSchema),
+  'global-header': jsonPropsReader(
+    BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+    GlobalHeaderPropsSchema,
+  ),
+  'global-footer': jsonPropsReader(
+    BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+    GlobalFooterPropsSchema,
+  ),
+  'navigation-view': jsonPropsReader(
+    BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+    NavigationViewPropsSchema,
+  ),
+  'site-brand': jsonPropsReader(BUILDER_GLOBAL_PROPS_ATTRIBUTE, SiteBrandPropsSchema),
+};
+
+function readComponentPropsFromAttributes(
+  component: Component,
+  type: PageComponentType,
+  content: string,
+): ComponentPropsReadResult {
+  const reader = componentPropsReaders[type] ?? emptyPropsReader;
+  return reader(component.getAttributes({ noStyle: true }), content);
 }
 
 const genericCodec: ComponentEditorCodec = {
   readProps: readComponentPropsFromAttributes,
+  resolvePropertyMutation: (type, property, value) =>
+    resolveEditorPropertyUpdate(type, property, value),
+};
+
+const listCodec: ComponentEditorCodec = {
+  ...genericCodec,
   resolvePropertyMutation: (type, property, value, component) => {
-    if (type === 'list' && property === 'ordered' && component) {
-      const raw = component.getAttributes({ noStyle: true })[
-        BUILDER_LIST_PROPS_ATTRIBUTE
-      ];
-      const current = parsedJson(raw, ListPropsSchema);
-      if (!current || typeof value !== 'boolean') return null;
-      return resolveEditorPropertyUpdate(type, 'items', { ...current, ordered: value });
+    if (property !== 'ordered' || !component || typeof value !== 'boolean') {
+      return genericCodec.resolvePropertyMutation(type, property, value, component);
     }
+    const current = parsedJson(
+      component.getAttributes({ noStyle: true })[BUILDER_LIST_PROPS_ATTRIBUTE],
+      ListPropsSchema,
+    );
+    return current
+      ? resolveEditorPropertyUpdate(type, 'items', { ...current, ordered: value })
+      : null;
+  },
+};
+
+const countdownCodec: ComponentEditorCodec = {
+  ...genericCodec,
+  resolvePropertyMutation: (type, property, value, component) => {
     if (
-      type === 'countdown' &&
-      (property === 'label' || property === 'targetAt') &&
-      component
+      (property !== 'label' && property !== 'targetAt') ||
+      !component ||
+      typeof value !== 'string'
     ) {
-      const raw = component.getAttributes({ noStyle: true })[
-        BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
-      ];
-      const current = parsedJson(raw, CountdownPropsSchema);
-      if (!current || typeof value !== 'string') return null;
-      return resolveEditorPropertyUpdate(type, property, {
-        ...current,
-        [property]: value,
-      });
+      return genericCodec.resolvePropertyMutation(type, property, value, component);
     }
-    return resolveEditorPropertyUpdate(type, property, value);
+    const current = parsedJson(
+      component.getAttributes({ noStyle: true })[BUILDER_COUNTDOWN_PROPS_ATTRIBUTE],
+      CountdownPropsSchema,
+    );
+    return current
+      ? resolveEditorPropertyUpdate(type, property, { ...current, [property]: value })
+      : null;
   },
 };
 
@@ -235,11 +254,53 @@ const genericCodec: ComponentEditorCodec = {
  * the generic schema/binding path; a future component can add a codec without
  * changing the Inspector or command executor.
  */
+const semanticCodec: ComponentEditorCodec = {
+  ...genericCodec,
+  resolvePropertyMutation: (type, property, value) =>
+    resolveEditorPropertyUpdate(type, property, value),
+};
+
+// Semantic components keep named codec entries even while they share the
+// common schema/binding path. Each entry is an intentional extension point for
+// component-specific validation or editor preview behavior.
+const quoteCodec: ComponentEditorCodec = { ...semanticCodec };
+const accordionCodec: ComponentEditorCodec = { ...semanticCodec };
+const accordionItemCodec: ComponentEditorCodec = { ...semanticCodec };
+const tabsCodec: ComponentEditorCodec = { ...semanticCodec };
+const tabItemCodec: ComponentEditorCodec = { ...semanticCodec };
+const globalHeaderCodec: ComponentEditorCodec = { ...semanticCodec };
+const globalFooterCodec: ComponentEditorCodec = { ...semanticCodec };
+const navigationViewCodec: ComponentEditorCodec = { ...semanticCodec };
+const siteBrandCodec: ComponentEditorCodec = { ...semanticCodec };
+
 export const COMPONENT_EDITOR_CODECS: Readonly<
   Record<PageComponentType, ComponentEditorCodec>
-> = Object.fromEntries(
-  Object.keys(PAGE_COMPONENT_REGISTRY).map((type) => [type, genericCodec]),
-) as Record<PageComponentType, ComponentEditorCodec>;
+> = {
+  root: genericCodec,
+  section: genericCodec,
+  container: genericCodec,
+  text: genericCodec,
+  image: genericCodec,
+  button: genericCodec,
+  form: genericCodec,
+  countdown: countdownCodec,
+  extension: genericCodec,
+  heading: genericCodec,
+  link: genericCodec,
+  divider: genericCodec,
+  list: listCodec,
+  video: genericCodec,
+  quote: quoteCodec,
+  accordion: accordionCodec,
+  'accordion-item': accordionItemCodec,
+  tabs: tabsCodec,
+  'tab-item': tabItemCodec,
+  gallery: genericCodec,
+  'global-header': globalHeaderCodec,
+  'global-footer': globalFooterCodec,
+  'navigation-view': navigationViewCodec,
+  'site-brand': siteBrandCodec,
+};
 
 export function getComponentEditorCodec(type: PageComponentType): ComponentEditorCodec {
   return COMPONENT_EDITOR_CODECS[type] ?? genericCodec;
@@ -259,6 +320,10 @@ const semanticAttributeByType: Partial<Record<PageComponentType, string>> = {
   'accordion-item': BUILDER_COMPOUND_PROPS_ATTRIBUTE,
   tabs: BUILDER_COMPOUND_PROPS_ATTRIBUTE,
   'tab-item': BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  'global-header': BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+  'global-footer': BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+  'navigation-view': BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+  'site-brand': BUILDER_GLOBAL_PROPS_ATTRIBUTE,
 };
 
 const semanticSchemaByType: Partial<
@@ -272,6 +337,10 @@ const semanticSchemaByType: Partial<
   'accordion-item': [AccordionItemPropsSchema],
   tabs: [TabsPropsV6Schema, TabsPropsSchema],
   'tab-item': [TabItemPropsSchema],
+  'global-header': [GlobalHeaderPropsSchema],
+  'global-footer': [GlobalFooterPropsSchema],
+  'navigation-view': [NavigationViewPropsSchema],
+  'site-brand': [SiteBrandPropsSchema],
 };
 
 function applyEditorSemanticPatch(

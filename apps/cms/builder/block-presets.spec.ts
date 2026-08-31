@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
   createBlockPresetDefinition,
+  GLOBAL_HEADER_PRESET_REGISTRY,
+  GLOBAL_FOOTER_PRESET_REGISTRY,
+  createGlobalPresetDefinition,
 } from './block-presets';
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -67,5 +70,22 @@ describe('builder block presets', () => {
         (column) => attributesOf(column)[BUILDER_NODE_TYPE_ATTRIBUTE] === 'container',
       ),
     ).toBe(true);
+  });
+
+  it('keeps header and footer presets in document-specific registries', () => {
+    expect(GLOBAL_HEADER_PRESET_REGISTRY).toHaveLength(2);
+    expect(GLOBAL_FOOTER_PRESET_REGISTRY).toHaveLength(2);
+    const header = createGlobalPresetDefinition('header-brand-menu-cta') as Record<
+      string,
+      unknown
+    >;
+    const footer = createGlobalPresetDefinition('footer-brand-menu-legal') as Record<
+      string,
+      unknown
+    >;
+    expect(attributesOf(header)[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('global-header');
+    expect(attributesOf(footer)[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('global-footer');
+    expect(childDefinitions(header)).toHaveLength(3);
+    expect(childDefinitions(footer)).toHaveLength(3);
   });
 });

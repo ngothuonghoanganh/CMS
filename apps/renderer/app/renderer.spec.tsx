@@ -4,6 +4,7 @@ import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PagePayloadV5Schema,
+  SITE_GLOBAL_COMPONENT_TYPES,
   type PagePayloadV1,
 } from '@payload/contracts';
 
@@ -191,6 +192,78 @@ describe('PagePayloadV1 renderer', () => {
     );
     expect(customDomainMarkup).toContain('href="/docs"');
     expect(customDomainMarkup).not.toContain('href="/demo/docs"');
+  });
+
+  it('renders published global documents without duplicating navigation truth', () => {
+    const globals = {
+      version: 1 as const,
+      header: {
+        version: 1 as const,
+        documentKind: 'site-header' as const,
+        metadata: { documentTitle: 'Global header' },
+        root: {
+          id: 'root',
+          type: 'root' as const,
+          props: {},
+          children: [
+            {
+              id: 'header',
+              type: 'global-header' as const,
+              props: { position: 'sticky' as const },
+              style: {
+                base: { padding: '16px' },
+                mobile: { padding: '8px' },
+              },
+              partsStyle: {
+                brand: { base: {}, mobile: { margin: '4px' } },
+              },
+              children: [
+                {
+                  id: 'brand',
+                  type: 'site-brand' as const,
+                  props: { display: 'logo-text' as const, href: '/' },
+                  children: [],
+                },
+                {
+                  id: 'navigation',
+                  type: 'navigation-view' as const,
+                  props: {
+                    source: 'main' as const,
+                    orientation: 'horizontal' as const,
+                    mobileBehavior: 'collapse' as const,
+                    alignment: 'left' as const,
+                    ariaLabel: 'Main navigation',
+                  },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const markup = renderToStaticMarkup(
+      renderPage(createPayload(), {
+        globals,
+        navigation: {
+          main: [{ id: 'home', label: 'Home', type: 'page', href: '/' }],
+        },
+        pagePath: '/',
+        siteLogo: '/assets/logo.png',
+        siteName: 'Acme',
+        siteSlug: 'acme',
+      }),
+    );
+
+    expect(markup).toContain('data-site-global="header"');
+    expect(markup).toContain('data-navigation-mobile-behavior="collapse"');
+    expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain('Acme');
+    expect(markup).toContain('src="/assets/logo.png"');
+    expect(markup).toContain('padding:16px');
+    expect(markup).toContain('padding:8px!important');
+    expect(markup).toContain('margin:4px!important');
+    expect(markup).not.toContain('data-site-global="footer"');
   });
 
   it('fails safely for invalid or unsupported payload data', () => {
@@ -667,7 +740,10 @@ describe('PagePayloadV1 renderer', () => {
     });
 
     const markup = renderToStaticMarkup(renderPage(payload));
-    for (const type of Object.keys(PAGE_COMPONENT_REGISTRY)) {
+    for (const type of Object.keys(PAGE_COMPONENT_REGISTRY).filter(
+      (candidate) =>
+        !(SITE_GLOBAL_COMPONENT_TYPES as readonly string[]).includes(candidate),
+    )) {
       expect(markup).toContain(`data-payload-node-type="${type}"`);
     }
     expect(markup).not.toContain('This page component is not supported.');

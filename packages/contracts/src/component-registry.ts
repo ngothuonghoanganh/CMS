@@ -1,4 +1,4 @@
-import type { PageNodeV6 } from './index';
+import type { BuilderDocumentKind, PageNodeV6 } from './index';
 import {
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PageStylePropertyKey,
@@ -64,6 +64,8 @@ export type ComponentBuilderExposure = {
   group: 'layout' | 'typography' | 'media' | 'interactive' | 'conversion' | 'advanced';
   keywords: readonly string[];
   description?: string;
+  /** Documents in which this component may be inserted by the builder. */
+  documentKinds: readonly BuilderDocumentKind[];
 };
 
 export type ComponentPartDefinition = {
@@ -463,6 +465,64 @@ export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
     'margin',
     'padding',
   ],
+  'global-header': [
+    'display',
+    'flex-direction',
+    'justify-content',
+    'align-items',
+    'gap',
+    'position',
+    'width',
+    'padding',
+    'margin',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'box-shadow',
+  ],
+  'global-footer': [
+    'display',
+    'flex-direction',
+    'justify-content',
+    'align-items',
+    'gap',
+    'width',
+    'padding',
+    'margin',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+    'box-shadow',
+  ],
+  'navigation-view': [
+    'display',
+    'flex-direction',
+    'justify-content',
+    'align-items',
+    'gap',
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+  ],
+  'site-brand': [
+    'display',
+    'align-items',
+    'gap',
+    'color',
+    'font-family',
+    'font-size',
+    'font-weight',
+    'line-height',
+    'width',
+    'height',
+    'margin',
+    'padding',
+  ],
 };
 
 export const styleSchemaFor = (
@@ -524,6 +584,7 @@ const definition = (
       group: input.builder?.group ?? categoryToGroup[input.category],
       keywords: input.builder?.keywords ?? [input.type, input.label],
       ...(input.builder?.description ? { description: input.builder.description } : {}),
+      documentKinds: input.builder?.documentKinds ?? ['page'],
     },
     internal: input.internal ?? false,
   };
@@ -537,8 +598,13 @@ const rawPageComponentRegistry = {
     category: 'layout',
     editorTagName: 'main',
     defaultProps: {},
+    builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     slots: [
-      { name: 'children', label: 'Page content', accepts: ['section', 'container'] },
+      {
+        name: 'children',
+        label: 'Page content',
+        accepts: ['section', 'container', 'global-header', 'global-footer'],
+      },
     ],
   }),
   section: definition({
@@ -615,6 +681,7 @@ const rawPageComponentRegistry = {
     // `props.align` remains in the payload schema as a legacy compatibility
     // fallback, but newly-created text nodes write visual alignment to style.
     defaultProps: { text: 'Edit this text' },
+    builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
       { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
     ]),
@@ -645,6 +712,7 @@ const rawPageComponentRegistry = {
     category: 'conversion',
     editorTagName: 'a',
     defaultProps: { label: 'Button', href: '#section', target: '_self' },
+    builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
       { key: 'label', label: 'Label', group: 'content', control: 'text' },
       { key: 'href', label: 'Link', group: 'content', control: 'url' },
@@ -710,6 +778,7 @@ const rawPageComponentRegistry = {
     category: 'content',
     editorTagName: 'h2',
     defaultProps: { text: 'Heading', level: 2 },
+    builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
       { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
       {
@@ -731,6 +800,7 @@ const rawPageComponentRegistry = {
     category: 'content',
     editorTagName: 'a',
     defaultProps: { text: 'Learn more', href: '/', target: '_self' },
+    builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
       { key: 'text', label: 'Text', group: 'content', control: 'text' },
       { key: 'href', label: 'Link', group: 'content', control: 'url' },
@@ -1161,6 +1231,255 @@ const rawPageComponentRegistry = {
         structural: true,
       },
     ],
+  }),
+  'global-header': definition({
+    type: 'global-header',
+    version: 1,
+    label: 'Global Header',
+    category: 'layout',
+    editorTagName: 'header',
+    defaultProps: { position: 'static' },
+    builder: {
+      insertable: false,
+      group: 'layout',
+      documentKinds: ['site-header'],
+      keywords: ['header', 'site header', 'global header'],
+    },
+    slots: [
+      {
+        name: 'brand',
+        label: 'Brand',
+        accepts: ['site-brand'],
+        maxChildren: 1,
+        structural: true,
+      },
+      {
+        name: 'navigation',
+        label: 'Navigation',
+        accepts: ['navigation-view'],
+        maxChildren: 1,
+        structural: true,
+      },
+      {
+        name: 'actions',
+        label: 'Actions',
+        accepts: ['button', 'link'],
+        maxChildren: 3,
+        structural: true,
+      },
+    ],
+    componentParts: {
+      root: {
+        name: 'root',
+        label: 'Header',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['global-header'],
+      },
+      brand: {
+        name: 'brand',
+        label: 'Brand',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['site-brand'],
+      },
+      navigation: {
+        name: 'navigation',
+        label: 'Navigation',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['navigation-view'],
+      },
+      actions: {
+        name: 'actions',
+        label: 'Actions',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['global-header'],
+      },
+    },
+    propertiesSchema: content([
+      {
+        key: 'position',
+        label: 'Position',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'static', label: 'Static' },
+          { value: 'sticky', label: 'Sticky' },
+        ],
+      },
+    ]),
+  }),
+  'global-footer': definition({
+    type: 'global-footer',
+    version: 1,
+    label: 'Global Footer',
+    category: 'layout',
+    editorTagName: 'footer',
+    defaultProps: {},
+    builder: {
+      insertable: false,
+      group: 'layout',
+      documentKinds: ['site-footer'],
+      keywords: ['footer', 'site footer', 'global footer'],
+    },
+    slots: [
+      {
+        name: 'content',
+        label: 'Footer content',
+        accepts: ['site-brand', 'navigation-view', 'text', 'heading', 'button', 'link'],
+        structural: true,
+      },
+    ],
+    componentParts: {
+      root: {
+        name: 'root',
+        label: 'Footer',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['global-footer'],
+      },
+      content: {
+        name: 'content',
+        label: 'Content',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['global-footer'],
+      },
+    },
+  }),
+  'navigation-view': definition({
+    type: 'navigation-view',
+    version: 1,
+    label: 'Navigation View',
+    category: 'content',
+    editorTagName: 'nav',
+    defaultProps: {
+      source: 'main',
+      orientation: 'horizontal',
+      mobileBehavior: 'collapse',
+      alignment: 'left',
+      ariaLabel: 'Main navigation',
+    },
+    builder: {
+      group: 'interactive',
+      documentKinds: ['site-header', 'site-footer'],
+      keywords: ['navigation', 'menu', 'nav'],
+    },
+    componentParts: {
+      root: {
+        name: 'root',
+        label: 'Navigation',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['navigation-view'],
+      },
+      list: {
+        name: 'list',
+        label: 'List',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['navigation-view'],
+      },
+      item: {
+        name: 'item',
+        label: 'Item',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['navigation-view'],
+      },
+      link: {
+        name: 'link',
+        label: 'Link',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['site-brand'],
+      },
+      activeLink: {
+        name: 'activeLink',
+        label: 'Active link',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['site-brand'],
+      },
+      mobileToggle: {
+        name: 'mobileToggle',
+        label: 'Mobile toggle',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['button'],
+      },
+      mobilePanel: {
+        name: 'mobilePanel',
+        label: 'Mobile panel',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['navigation-view'],
+      },
+    },
+    propertiesSchema: content([
+      {
+        key: 'source',
+        label: 'Navigation source',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'main', label: 'Main navigation' },
+          { value: 'footer', label: 'Footer navigation' },
+        ],
+      },
+      {
+        key: 'orientation',
+        label: 'Orientation',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'horizontal', label: 'Horizontal' },
+          { value: 'vertical', label: 'Vertical' },
+        ],
+      },
+      {
+        key: 'mobileBehavior',
+        label: 'Mobile behavior',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'collapse', label: 'Collapse' },
+          { value: 'wrap', label: 'Wrap' },
+          { value: 'stack', label: 'Stack' },
+        ],
+      },
+      {
+        key: 'alignment',
+        label: 'Alignment',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'left', label: 'Left' },
+          { value: 'center', label: 'Center' },
+          { value: 'right', label: 'Right' },
+        ],
+      },
+      { key: 'ariaLabel', label: 'Accessible label', group: 'content', control: 'text' },
+    ]),
+  }),
+  'site-brand': definition({
+    type: 'site-brand',
+    version: 1,
+    label: 'Site Brand',
+    category: 'content',
+    editorTagName: 'a',
+    defaultProps: { display: 'logo-text', href: '/' },
+    builder: {
+      group: 'typography',
+      documentKinds: ['site-header', 'site-footer'],
+      keywords: ['brand', 'logo', 'site identity'],
+    },
+    componentParts: {
+      root: {
+        name: 'root',
+        label: 'Brand',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['site-brand'],
+      },
+      logo: {
+        name: 'logo',
+        label: 'Logo',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['image'],
+      },
+      text: {
+        name: 'text',
+        label: 'Site name',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES['text'],
+      },
+    },
+    propertiesSchema: content([
+      {
+        key: 'display',
+        label: 'Display',
+        group: 'content',
+        control: 'select',
+        options: [
+          { value: 'logo', label: 'Logo' },
+          { value: 'text', label: 'Site name' },
+          { value: 'logo-text', label: 'Logo and name' },
+        ],
+      },
+    ]),
   }),
 } satisfies Record<PageComponentType, PageComponentDefinition>;
 

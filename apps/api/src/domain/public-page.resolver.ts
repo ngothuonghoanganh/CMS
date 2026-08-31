@@ -11,6 +11,7 @@ import {
   PublishedPageBundleSchema,
   PublicPageSchema,
   PublicSeoSettingsSchema,
+  SiteGlobalsSchema,
   normalizeHostname,
   type PublicPage,
   normalizePagePath,
@@ -207,6 +208,9 @@ export class PublicPageResolver {
         site._id.toString(),
         site.workspaceId,
       );
+      const globals = site.publishedGlobals
+        ? SiteGlobalsSchema.parse(site.publishedGlobals)
+        : undefined;
       const publishedBundle = version.publishedBundle
         ? PublishedPageBundleSchema.parse(version.publishedBundle)
         : undefined;
@@ -216,7 +220,11 @@ export class PublicPageResolver {
 
       return PublicPageSchema.parse({
         tenantSlug: this.tenantContext.require().slug,
-        site: { name: site.name, slug: site.slug },
+        site: {
+          name: site.name,
+          slug: site.slug,
+          ...(site.logo ? { logo: site.logo } : {}),
+        },
         page: {
           name: page.name,
           ...(page.description ? { description: page.description } : {}),
@@ -227,6 +235,7 @@ export class PublicPageResolver {
         ...(seo ? { seo } : {}),
         ...(canonicalUrl ? { canonicalUrl } : {}),
         ...(navigation ? { navigation } : {}),
+        ...(globals ? { globals } : {}),
       });
     } catch (error) {
       if (

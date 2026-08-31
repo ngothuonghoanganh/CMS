@@ -15,6 +15,9 @@ import { PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY } from './style-registry';
 
 export const apiVersion = 'v1' as const;
 
+export const BuilderDocumentKindSchema = z.enum(['page', 'site-header', 'site-footer']);
+export type BuilderDocumentKind = z.infer<typeof BuilderDocumentKindSchema>;
+
 export const EntityIdSchema = z.string().uuid();
 export type EntityId = z.infer<typeof EntityIdSchema>;
 
@@ -1871,6 +1874,31 @@ export const AccordionItemPropsSchema = z
   .strict();
 export type AccordionItemProps = z.infer<typeof AccordionItemPropsSchema>;
 
+function validateAccordionOpenState(
+  node: {
+    type: string;
+    props: unknown;
+    children: Array<{ type: string; props: unknown }>;
+  },
+  context: z.RefinementCtx,
+  path: (string | number)[],
+): void {
+  const props = node.props as { allowMultiple?: unknown };
+  if (node.type !== 'accordion' || props.allowMultiple !== false) return;
+  const openItems = node.children.filter(
+    (child) =>
+      child.type === 'accordion-item' &&
+      (child.props as { defaultOpen?: unknown }).defaultOpen === true,
+  );
+  if (openItems.length > 1) {
+    context.addIssue({
+      code: 'custom',
+      message: 'An accordion with allowMultiple=false may have only one open item',
+      path: [...path, 'children'],
+    });
+  }
+}
+
 export const TabsPropsSchema = z
   .object({ orientation: z.enum(['horizontal', 'vertical']) })
   .strict();
@@ -2118,6 +2146,7 @@ export const PagePayloadV5Schema = z
           });
         }
       }
+      validateAccordionOpenState(current.node, context, current.path);
     }
     const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
     if (serializedSize > PAGE_PAYLOAD_MAX_SERIALIZED_BYTES) {
@@ -2151,6 +2180,33 @@ export const TabsPropsV6Schema = TabsPropsSchema.extend({
   activationMode: z.enum(['manual', 'automatic']),
 }).strict();
 export type TabsPropsV6 = z.infer<typeof TabsPropsV6Schema>;
+
+export const GlobalHeaderPropsSchema = z
+  .object({ position: z.enum(['static', 'sticky']) })
+  .strict();
+export type GlobalHeaderProps = z.infer<typeof GlobalHeaderPropsSchema>;
+
+export const GlobalFooterPropsSchema = z.object({}).strict();
+export type GlobalFooterProps = z.infer<typeof GlobalFooterPropsSchema>;
+
+export const NavigationViewPropsSchema = z
+  .object({
+    source: z.enum(['main', 'footer']),
+    orientation: z.enum(['horizontal', 'vertical']),
+    mobileBehavior: z.enum(['collapse', 'wrap', 'stack']),
+    alignment: z.enum(['left', 'center', 'right']),
+    ariaLabel: nonEmptyText.max(200),
+  })
+  .strict();
+export type NavigationViewProps = z.infer<typeof NavigationViewPropsSchema>;
+
+export const SiteBrandPropsSchema = z
+  .object({
+    display: z.enum(['logo', 'text', 'logo-text']),
+    href: safeButtonHref,
+  })
+  .strict();
+export type SiteBrandProps = z.infer<typeof SiteBrandPropsSchema>;
 
 export type PageNodePartsStyle = Record<string, PageNodeStyle>;
 export const PageNodePartsStyleSchema = z.record(
@@ -2205,6 +2261,22 @@ export type AccordionItemNodeV6 = PageNodeV6Base & {
 export type TabsNodeV6 = PageNodeV6Base & { type: 'tabs'; props: TabsPropsV6 };
 export type TabItemNodeV6 = PageNodeV6Base & { type: 'tab-item'; props: TabItemProps };
 export type GalleryNodeV6 = PageNodeV6Base & { type: 'gallery'; props: {} };
+export type GlobalHeaderNodeV6 = PageNodeV6Base & {
+  type: 'global-header';
+  props: GlobalHeaderProps;
+};
+export type GlobalFooterNodeV6 = PageNodeV6Base & {
+  type: 'global-footer';
+  props: GlobalFooterProps;
+};
+export type NavigationViewNodeV6 = PageNodeV6Base & {
+  type: 'navigation-view';
+  props: NavigationViewProps;
+};
+export type SiteBrandNodeV6 = PageNodeV6Base & {
+  type: 'site-brand';
+  props: SiteBrandProps;
+};
 export type PageNodeV6 =
   | RootNodeV6
   | SectionNodeV6
@@ -2225,7 +2297,11 @@ export type PageNodeV6 =
   | AccordionItemNodeV6
   | TabsNodeV6
   | TabItemNodeV6
-  | GalleryNodeV6;
+  | GalleryNodeV6
+  | GlobalHeaderNodeV6
+  | GlobalFooterNodeV6
+  | NavigationViewNodeV6
+  | SiteBrandNodeV6;
 
 const pageNodeV6Children = () => z.array(PageNodeV6Schema);
 const pageNodeV6Base = <
@@ -2313,6 +2389,26 @@ export const PageNodeV6Schema: z.ZodType<PageNodeV6> = z.lazy(() =>
     pageNodeV6Base(z.literal('tabs'), TabsPropsV6Schema, pageNodeV6Children()),
     pageNodeV6Base(z.literal('tab-item'), TabItemPropsSchema, pageNodeV6Children()),
     pageNodeV6Base(z.literal('gallery'), z.object({}).strict(), pageNodeV6Children()),
+    pageNodeV6Base(
+      z.literal('global-header'),
+      GlobalHeaderPropsSchema,
+      pageNodeV6Children(),
+    ),
+    pageNodeV6Base(
+      z.literal('global-footer'),
+      GlobalFooterPropsSchema,
+      pageNodeV6Children(),
+    ),
+    pageNodeV6Base(
+      z.literal('navigation-view'),
+      NavigationViewPropsSchema,
+      z.array(z.never()).length(0),
+    ),
+    pageNodeV6Base(
+      z.literal('site-brand'),
+      SiteBrandPropsSchema,
+      z.array(z.never()).length(0),
+    ),
   ]),
 );
 
@@ -2324,6 +2420,7 @@ export const PagePayloadV6Schema = z
   })
   .strict()
   .superRefine((payload, context) => {
+    validatePagePayloadDoesNotContainGlobals(payload, context);
     if (payload.root.type !== 'root' || payload.root.id !== 'root') {
       context.addIssue({
         code: 'custom',
@@ -2432,6 +2529,7 @@ export const PagePayloadV6Schema = z
             path: [...current.path, 'children'],
           });
       }
+      validateAccordionOpenState(current.node, context, current.path);
     }
     const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
     if (serializedSize > PAGE_PAYLOAD_MAX_SERIALIZED_BYTES)
@@ -2454,6 +2552,201 @@ export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV6Schema,
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
+
+export const SITE_GLOBAL_COMPONENT_TYPES = [
+  'global-header',
+  'global-footer',
+  'navigation-view',
+  'site-brand',
+] as const;
+export type SiteGlobalComponentType = (typeof SITE_GLOBAL_COMPONENT_TYPES)[number];
+
+export function isSiteGlobalComponentType(
+  value: unknown,
+): value is SiteGlobalComponentType {
+  return (
+    typeof value === 'string' &&
+    (SITE_GLOBAL_COMPONENT_TYPES as readonly string[]).includes(value)
+  );
+}
+
+function validatePagePayloadDoesNotContainGlobals(
+  payload: PagePayloadV6,
+  context: z.RefinementCtx,
+): void {
+  const pending: Array<{ node: PageNodeV6; path: (string | number)[] }> = [
+    { node: payload.root, path: ['root'] },
+  ];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    if (isSiteGlobalComponentType(current.node.type)) {
+      context.addIssue({
+        code: 'custom',
+        message: `${current.node.type} is only valid in a site global document`,
+        path: [...current.path, 'type'],
+      });
+    }
+    current.node.children.forEach((child, index) =>
+      pending.push({ node: child, path: [...current.path, 'children', index] }),
+    );
+  }
+}
+
+export const SiteGlobalPayloadV1Schema = z
+  .object({
+    version: z.literal(1),
+    documentKind: z.enum(['site-header', 'site-footer']),
+    metadata: PagePayloadV1Schema.shape.metadata,
+    root: PageNodeV6Schema,
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    const expectedRootType =
+      payload.documentKind === 'site-header' ? 'global-header' : 'global-footer';
+    if (payload.root.type !== 'root' || payload.root.id !== 'root') {
+      context.addIssue({
+        code: 'custom',
+        message: 'The site global root must have type root and id root',
+        path: ['root'],
+      });
+    }
+    const rootGlobals = payload.root.children.filter(
+      (child) => child.type === 'global-header' || child.type === 'global-footer',
+    );
+    if (
+      payload.root.children.length !== 1 ||
+      rootGlobals.length !== 1 ||
+      rootGlobals[0]?.type !== expectedRootType
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: `A ${payload.documentKind} document must contain exactly one ${expectedRootType} root child`,
+        path: ['root', 'children'],
+      });
+    }
+
+    const nodeIds = new Set<string>();
+    const pending: Array<{ node: PageNodeV6; path: (string | number)[] }> = [
+      { node: payload.root, path: ['root'] },
+    ];
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (!current) continue;
+      if (nodeIds.has(current.node.id)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate site global node id: ${current.node.id}`,
+          path: [...current.path, 'id'],
+        });
+      }
+      nodeIds.add(current.node.id);
+      const definition = PAGE_COMPONENT_REGISTRY[current.node.type];
+      if (!definition.builder.documentKinds.includes(payload.documentKind)) {
+        context.addIssue({
+          code: 'custom',
+          message: `${current.node.type} is not available in ${payload.documentKind} documents`,
+          path: [...current.path, 'type'],
+        });
+      }
+      current.node.children.forEach((child, index) => {
+        const slot = definition.slots.find((candidate) =>
+          candidate.accepts.includes(child.type),
+        );
+        if (!slot) {
+          context.addIssue({
+            code: 'custom',
+            message: `Node type ${current.node.type} cannot contain ${child.type} children`,
+            path: [...current.path, 'children', index, 'type'],
+          });
+        }
+        pending.push({ node: child, path: [...current.path, 'children', index] });
+      });
+      for (const slot of definition.slots) {
+        const count = current.node.children.filter((child) =>
+          slot.accepts.includes(child.type),
+        ).length;
+        if (slot.minChildren !== undefined && count < slot.minChildren) {
+          context.addIssue({
+            code: 'custom',
+            message: `${current.node.type} requires at least ${slot.minChildren} ${slot.label.toLowerCase()}`,
+            path: [...current.path, 'children'],
+          });
+        }
+        if (slot.maxChildren !== undefined && count > slot.maxChildren) {
+          context.addIssue({
+            code: 'custom',
+            message: `${current.node.type} allows at most ${slot.maxChildren} ${slot.label.toLowerCase()}`,
+            path: [...current.path, 'children'],
+          });
+        }
+      }
+    }
+  });
+export type SiteGlobalPayloadV1 = z.infer<typeof SiteGlobalPayloadV1Schema>;
+
+export const SocialLinkSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+    platform: z.enum([
+      'facebook',
+      'instagram',
+      'linkedin',
+      'x',
+      'youtube',
+      'tiktok',
+      'zalo',
+      'custom',
+    ]),
+    label: nonEmptyText.max(100),
+    href: z
+      .string()
+      .trim()
+      .max(2_048)
+      .refine(isSafeMetadataUrl, 'URL must use http(s) or a safe relative path'),
+  })
+  .strict();
+export type SocialLink = z.infer<typeof SocialLinkSchema>;
+
+export const SiteGlobalsSchema = z
+  .object({
+    version: z.literal(1),
+    header: SiteGlobalPayloadV1Schema.optional(),
+    footer: SiteGlobalPayloadV1Schema.optional(),
+    socialLinks: z.array(SocialLinkSchema).max(20).optional(),
+  })
+  .strict()
+  .superRefine((globals, context) => {
+    if (
+      globals.header?.documentKind !== undefined &&
+      globals.header.documentKind !== 'site-header'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Site globals.header must be a site-header document',
+        path: ['header', 'documentKind'],
+      });
+    }
+    if (
+      globals.footer?.documentKind !== undefined &&
+      globals.footer.documentKind !== 'site-footer'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Site globals.footer must be a site-footer document',
+        path: ['footer', 'documentKind'],
+      });
+    }
+  });
+export type SiteGlobals = z.infer<typeof SiteGlobalsSchema>;
+
+export const SiteGlobalsResponseSchema = z
+  .object({
+    draft: SiteGlobalsSchema,
+    published: SiteGlobalsSchema.optional(),
+  })
+  .strict();
+export type SiteGlobalsResponse = z.infer<typeof SiteGlobalsResponseSchema>;
 
 /**
  * Editor-facing document envelope. The persisted/public payload remains the
@@ -2857,6 +3150,7 @@ export const SiteSchema = z
     status: z.enum(['draft', 'published', 'archived']),
     primaryNavigationId: EntityIdSchema.optional(),
     footerNavigationId: EntityIdSchema.optional(),
+    logo: safeImageSource.optional(),
     officialUrl: z.string().url().optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
@@ -2903,6 +3197,7 @@ const PublicSiteSchema = z
   .object({
     name: nonEmptyText.max(200),
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    logo: safeImageSource.optional(),
   })
   .strict();
 
@@ -3255,6 +3550,7 @@ export const PublicPageSchema = z
       })
       .strict()
       .optional(),
+    globals: SiteGlobalsSchema.optional(),
   })
   .strict();
 
@@ -3393,6 +3689,7 @@ export const CreateSiteRequestSchema = z
   .object({
     name: nonEmptyText.max(200),
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    logo: safeImageSource.optional(),
   })
   .strict();
 export const UpdateSiteRequestSchema = z
@@ -3402,6 +3699,7 @@ export const UpdateSiteRequestSchema = z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       .optional(),
+    logo: safeImageSource.nullable().optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');

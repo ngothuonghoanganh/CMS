@@ -10,7 +10,9 @@ import {
   PAGE_PREVIEW_MESSAGE_TYPE,
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
   PagePayloadSchema,
-  NavigationListResponseSchema,
+  SiteGlobalsResponseSchema,
+  SiteGlobalsSchema,
+  SiteGlobalPayloadV1Schema,
   createPageDocument,
   PageVersionListResponseSchema,
   PageVersionSchema,
@@ -23,7 +25,9 @@ import {
   type ExtensionDescriptor,
   type PageExtensionInstance,
   type PageCapabilityGraph,
-  type Navigation,
+  type SiteGlobals,
+  type SiteGlobalPayloadV1,
+  type BuilderDocumentKind,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -52,7 +56,10 @@ import {
 import type { BuilderBlockType, BuilderViewport } from './builder-adapter';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
+  GLOBAL_HEADER_PRESET_REGISTRY,
+  GLOBAL_FOOTER_PRESET_REGISTRY,
   type BlockPresetId,
+  type GlobalPresetId,
   type BuilderInsertable,
 } from './block-presets';
 import { isBuilderExtensionAvailableForPage } from './builder-extension-registry';
@@ -78,14 +85,16 @@ type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
 type AddPanelTab = 'layouts' | 'elements';
 
 type AvailableBlockOption = {
-  kind: 'component' | 'preset';
+  kind: 'component' | 'preset' | 'global-preset';
   type?: BuilderBlockType;
   presetId?: BlockPresetId;
+  globalPresetId?: GlobalPresetId;
   label: string;
   category: 'layout' | 'content' | 'extension' | 'preset';
   extensionId?: string;
   keywords?: readonly string[];
   group: ComponentBuilderExposure['group'] | 'preset';
+  documentKinds: readonly BuilderDocumentKind[];
 };
 
 const blockGroupOrder = [
@@ -123,6 +132,7 @@ const blockOptions: AvailableBlockOption[] = [
         definition.category === 'layout' ? ('layout' as const) : ('content' as const),
       group: definition.builder.group,
       keywords: [definition.type, definition.label],
+      documentKinds: definition.builder.documentKinds ?? ['page'],
     })),
   ...BUILDER_BLOCK_PRESET_REGISTRY.map((preset) => ({
     kind: 'preset' as const,
@@ -131,7 +141,19 @@ const blockOptions: AvailableBlockOption[] = [
     category: 'preset' as const,
     group: 'preset' as const,
     keywords: [...preset.keywords],
+    documentKinds: ['page'] as const,
   })),
+  ...[...GLOBAL_HEADER_PRESET_REGISTRY, ...GLOBAL_FOOTER_PRESET_REGISTRY].map(
+    (preset) => ({
+      kind: 'global-preset' as const,
+      globalPresetId: preset.id,
+      label: preset.label,
+      category: 'preset' as const,
+      group: 'preset' as const,
+      keywords: [...preset.keywords],
+      documentKinds: [preset.documentKind] as const,
+    }),
+  ),
 ];
 
 const rendererBaseUrl =
@@ -149,6 +171,39 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : 'The builder could not load this page.';
+}
+
+function createDefaultGlobalDocument(
+  documentKind: Exclude<BuilderDocumentKind, 'page'>,
+  siteName: string,
+): SiteGlobalPayloadV1 {
+  return SiteGlobalPayloadV1Schema.parse({
+    version: 1,
+    documentKind,
+    metadata: {
+      documentTitle: `${siteName} ${documentKind === 'site-header' ? 'header' : 'footer'}`,
+    },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [
+        documentKind === 'site-header'
+          ? {
+              id: 'global-header',
+              type: 'global-header',
+              props: { position: 'static' },
+              children: [],
+            }
+          : {
+              id: 'global-footer',
+              type: 'global-footer',
+              props: {},
+              children: [],
+            },
+      ],
+    },
+  });
 }
 
 function isUsableImageSource(value: string): boolean {
@@ -297,11 +352,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   // validated server snapshot used to initialize the editor, never a second
   // mutable source of truth for Canvas/Layers/Inspector.
   const [pageDocument, setPageDocument] = useState<PageDocument | null>(null);
+  const [documentKind, setDocumentKind] = useState<BuilderDocumentKind>('page');
+  const [headerDocument, setHeaderDocument] = useState<SiteGlobalPayloadV1 | null>(null);
+  const [footerDocument, setFooterDocument] = useState<SiteGlobalPayloadV1 | null>(null);
+  const [globalsDraft, setGlobalsDraft] = useState<SiteGlobals>({ version: 1 });
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [siteGlobals, setSiteGlobals] = useState<{
-    header: Navigation | null;
-    footer: Navigation | null;
-  }>({ header: null, footer: null });
   const [enabledExtensionIds, setEnabledExtensionIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -363,6 +418,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const previewDocumentRef = useRef<PageDocument | null>(null);
   const previewFrameRef = useRef<number | null>(null);
 
+  const activeGlobalDocument =
+    documentKind === 'site-header' ? headerDocument : footerDocument;
+  const activePayload =
+    documentKind === 'page' ? pageDocument?.payload : activeGlobalDocument;
+
   const isDirty =
     saveStatus === 'unsaved' ||
     saveStatus === 'saving' ||
@@ -374,16 +434,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   const availableBlockOptions: AvailableBlockOption[] = [
     ...blockOptions.filter(
       (block) =>
-        block.type !== 'countdown' ||
-        isBuilderExtensionAvailableForPage(
-          'countdown',
-          enabledExtensionIds,
-          pageExtensionState,
-        ),
+        block.documentKinds.includes(documentKind) &&
+        (block.type !== 'countdown' ||
+          isBuilderExtensionAvailableForPage(
+            'countdown',
+            enabledExtensionIds,
+            pageExtensionState,
+          )),
     ),
     ...customExtensions
       .filter(
         (extension) =>
+          documentKind === 'page' &&
           extension.tenantEnabled &&
           pageExtensionState.get(extension.manifest.id) !== false,
       )
@@ -395,6 +457,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         category: 'extension' as const,
         group: 'advanced' as const,
         keywords: [extension.manifest.id, extension.manifest.name],
+        documentKinds: ['page'] as const,
       })),
   ];
   const visibleBlockOptions = availableBlockOptions.filter((block) => {
@@ -404,6 +467,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       block.label.toLowerCase().includes(query) ||
       block.type?.toLowerCase().includes(query) ||
       block.presetId?.toLowerCase().includes(query) ||
+      block.globalPresetId?.toLowerCase().includes(query) ||
       block.keywords?.some((keyword) => keyword.toLowerCase().includes(query)) ||
       block.extensionId?.toLowerCase().includes(query)
     );
@@ -752,11 +816,13 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
       setLoadState('loading');
       setError(null);
       try {
-        const [pageResponse, versionsResponse, assetsResponse] = await Promise.all([
-          api.get(`/pages/${pageId}`),
-          api.get(`/pages/${pageId}/versions?limit=100`),
-          api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-        ]);
+        const [pageResponse, versionsResponse, assetsResponse, globalsResponseRaw] =
+          await Promise.all([
+            api.get(`/pages/${pageId}`),
+            api.get(`/pages/${pageId}/versions?limit=100`),
+            api.get(`/workspaces/${workspaceId}/assets?limit=100`),
+            api.get(`/workspaces/${workspaceId}/sites/${siteId}/globals`),
+          ]);
         if (cancelled) return;
 
         const nextPage = PageSchema.parse(pageResponse);
@@ -776,16 +842,20 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         setPageDocument(createPageDocument(nextPayload));
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
         try {
-          const navigationResponse = NavigationListResponseSchema.parse(
-            await api.get(`/sites/${siteId}/navigations`),
+          const globalsResponse = SiteGlobalsResponseSchema.parse(globalsResponseRaw);
+          setGlobalsDraft(globalsResponse.draft);
+          setHeaderDocument(
+            globalsResponse.draft.header ??
+              createDefaultGlobalDocument('site-header', nextPage.name),
           );
-          setSiteGlobals({
-            header: navigationResponse.items.find((item) => item.key === 'main') ?? null,
-            footer:
-              navigationResponse.items.find((item) => item.key === 'footer') ?? null,
-          });
+          setFooterDocument(
+            globalsResponse.draft.footer ??
+              createDefaultGlobalDocument('site-footer', nextPage.name),
+          );
         } catch {
-          setSiteGlobals({ header: null, footer: null });
+          setGlobalsDraft({ version: 1 });
+          setHeaderDocument(createDefaultGlobalDocument('site-header', nextPage.name));
+          setFooterDocument(createDefaultGlobalDocument('site-footer', nextPage.name));
         }
         try {
           const [extensionResult, pageExtensionResult, capabilityResult] =
@@ -864,8 +934,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   function postPreviewDocument(document?: PageDocument) {
     let nextDocument = document;
     try {
-      nextDocument = nextDocument ?? editorRef.current?.getDocument();
-      if (!nextDocument) return;
+      const candidate = nextDocument ?? editorRef.current?.getDocument();
+      if (!candidate || !('schemaVersion' in candidate)) return;
+      nextDocument = candidate;
       previewDocumentRef.current = nextDocument;
     } catch {
       previewWindowRef.current = null;
@@ -889,6 +960,16 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
         previewWindowRef.current = null;
       }
     });
+  }
+
+  function handleDocumentChange(document: PageDocument | SiteGlobalPayloadV1): void {
+    if ('schemaVersion' in document) {
+      setPageDocument(document);
+      postPreviewDocument(document);
+      return;
+    }
+    if (document.documentKind === 'site-header') setHeaderDocument(document);
+    else setFooterDocument(document);
   }
 
   function openLivePreview() {
@@ -923,7 +1004,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
   }, []);
 
   async function saveDraft() {
-    if (!version || !editorRef.current || saveInFlightRef.current) return;
+    if (!editorRef.current || saveInFlightRef.current) return;
     saveInFlightRef.current = true;
     setSaveInFlight(true);
     setSaveStatus('saving');
@@ -931,6 +1012,30 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     setNotice(null);
     try {
       const nextDocument = editorRef.current.getDocument();
+      if (documentKind !== 'page') {
+        if ('schemaVersion' in nextDocument)
+          throw new Error('Invalid global editor document');
+        const nextGlobal = SiteGlobalPayloadV1Schema.parse(nextDocument);
+        const nextGlobals = SiteGlobalsSchema.parse({
+          ...globalsDraft,
+          [documentKind === 'site-header' ? 'header' : 'footer']: nextGlobal,
+        });
+        const savedGlobals = SiteGlobalsResponseSchema.parse(
+          await api.patch(
+            `/workspaces/${workspaceId}/sites/${siteId}/globals`,
+            nextGlobals,
+          ),
+        );
+        setGlobalsDraft(savedGlobals.draft);
+        if (documentKind === 'site-header') setHeaderDocument(nextGlobal);
+        else setFooterDocument(nextGlobal);
+        setSaveStatus('saved');
+        setNotice('Saved global draft. Publish the site to make it public.');
+        return;
+      }
+      if (!version) return;
+      if (!('schemaVersion' in nextDocument))
+        throw new Error('Invalid page editor document');
       const nextPayload = PagePayloadSchema.parse(nextDocument.payload);
       // GrapesJS can emit the final component:update asynchronously after an
       // inspector input event. Capture the acknowledgement point after the
@@ -943,8 +1048,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           payload: nextPayload,
         }),
       );
+      const currentDocument = editorRef.current.getDocument();
       const currentPayloadResult = PagePayloadSchema.safeParse(
-        editorRef.current.getDocument().payload,
+        'schemaVersion' in currentDocument ? currentDocument.payload : undefined,
       );
       const hasNewerPayloadChanges =
         !currentPayloadResult.success ||
@@ -991,6 +1097,11 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     setError(null);
     setNotice(null);
     try {
+      if (documentKind !== 'page') {
+        await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
+        setNotice('Site published. The public site now uses the published globals.');
+        return;
+      }
       const updated = PageSchema.parse(await api.post(`/pages/${pageId}/publish`, {}));
       setPage(updated);
       setNotice('Page published. The public site now uses the published snapshot.');
@@ -1023,6 +1134,18 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
 
   function reloadLatestDraft() {
     window.location.reload();
+  }
+
+  async function switchDocumentKind(next: BuilderDocumentKind): Promise<void> {
+    if (next === documentKind) return;
+    if (isDirty && !window.confirm('Save this document before switching?')) return;
+    if (isDirty) await saveDraft();
+    setSelected(null);
+    setSelectedNodeId(null);
+    setCanvasState(null);
+    setHistory({ canUndo: false, canRedo: false });
+    setSaveStatus('initializing');
+    setDocumentKind(next);
   }
 
   function changeViewport(nextViewport: BuilderViewport) {
@@ -1072,7 +1195,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
     setOpenInspectorSections((current) => ({ ...current, [section]: open }));
   }
 
-  if (loadState === 'loading' || !pageDocument || !page || !version) {
+  if (loadState === 'loading' || !pageDocument || !page || !version || !activePayload) {
     return (
       <main className="builder-loading" aria-busy="true">
         <span className="eyebrow">Visual builder</span>
@@ -1110,11 +1233,33 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           </button>
           <div>
             <span className="eyebrow">Visual builder</span>
-            <h1>{page.name}</h1>
-            <code className="builder-page-path">{page.path}</code>
+            <h1>
+              {documentKind === 'page'
+                ? page.name
+                : documentKind === 'site-header'
+                  ? 'Global Header'
+                  : 'Global Footer'}
+            </h1>
+            <code className="builder-page-path">
+              {documentKind === 'page' ? page.path : `Site · ${siteId}`}
+            </code>
           </div>
         </div>
         <div className="builder-actions">
+          <label className="builder-document-selector">
+            <span className="sr-only">Editing document</span>
+            <select
+              aria-label="Editing document"
+              onChange={(event) =>
+                void switchDocumentKind(event.target.value as BuilderDocumentKind)
+              }
+              value={documentKind}
+            >
+              <option value="page">Page</option>
+              <option value="site-header">Global Header</option>
+              <option value="site-footer">Global Footer</option>
+            </select>
+          </label>
           <div className="builder-topbar-viewport" aria-label="Viewport">
             {BUILDER_VIEWPORTS.map((item) => (
               <button
@@ -1135,7 +1280,9 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               : saveStatus === 'saving'
                 ? 'Saving…'
                 : saveStatus === 'saved'
-                  ? `Saved · v${version.versionNumber}`
+                  ? documentKind === 'page'
+                    ? `Saved · v${version.versionNumber}`
+                    : 'Saved · global draft'
                   : saveStatus === 'conflict'
                     ? 'Conflict'
                     : saveStatus === 'error'
@@ -1196,7 +1343,7 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
             onClick={() => void publishPage()}
             type="button"
           >
-            Publish
+            {documentKind === 'page' ? 'Publish' : 'Publish site'}
           </button>
         </div>
       </header>
@@ -1297,14 +1444,15 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
                         {blockGroupLabels[group.category]}
                       </h2>
                       {group.options.map((block) => {
-                        const insertable = block.presetId ?? block.type;
+                        const insertable =
+                          block.globalPresetId ?? block.presetId ?? block.type;
                         if (!insertable && !block.extensionId) return null;
                         return (
                           <div
                             className="builder-block-row builder-block-card"
                             data-block-category={block.category}
-                            data-block-type={block.presetId ?? block.type}
-                            key={`${block.presetId ?? block.type ?? 'extension'}:${block.extensionId ?? ''}`}
+                            data-block-type={insertable}
+                            key={`${insertable ?? 'extension'}:${block.extensionId ?? ''}`}
                           >
                             <button
                               aria-label={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
@@ -1570,27 +1718,25 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
           <div aria-label="Site global content" className="builder-global-chrome">
             <div className="builder-global-chrome-row">
               <span className="eyebrow">Site header</span>
-              <div className="builder-global-links">
-                {(siteGlobals.header?.items ?? []).slice(0, 6).map((item) => (
-                  <span key={item.id}>{item.label}</span>
-                ))}
-                {!siteGlobals.header?.items.length ? (
-                  <span className="muted small">No main navigation configured</span>
-                ) : null}
-              </div>
-              <span className="builder-global-lock">Locked · Navigation</span>
+              <span className="builder-global-lock">Locked preview · Header</span>
+              <button
+                className="button button-small button-ghost"
+                onClick={() => void switchDocumentKind('site-header')}
+                type="button"
+              >
+                Edit header
+              </button>
             </div>
             <div className="builder-global-chrome-row is-footer">
               <span className="eyebrow">Site footer</span>
-              <div className="builder-global-links">
-                {(siteGlobals.footer?.items ?? []).slice(0, 6).map((item) => (
-                  <span key={item.id}>{item.label}</span>
-                ))}
-                {!siteGlobals.footer?.items.length ? (
-                  <span className="muted small">No footer navigation configured</span>
-                ) : null}
-              </div>
-              <span className="builder-global-lock">Locked · Navigation</span>
+              <span className="builder-global-lock">Locked preview · Footer</span>
+              <button
+                className="button button-small button-ghost"
+                onClick={() => void switchDocumentKind('site-footer')}
+                type="button"
+              >
+                Edit footer
+              </button>
             </div>
           </div>
           <div className="builder-editor-shell">
@@ -1619,17 +1765,23 @@ export default function BuilderShell({ workspaceId, siteId, pageId }: BuilderShe
               position={quickAddTarget?.position}
               options={visibleBlockOptions
                 .filter((option) => option.type !== 'extension')
-                .filter((option) => option.presetId || option.type)
+                .filter(
+                  (option) => option.globalPresetId || option.presetId || option.type,
+                )
                 .map((option) => ({
-                  type: (option.presetId ?? option.type) as BuilderInsertable,
+                  type: (option.globalPresetId ??
+                    option.presetId ??
+                    option.type) as BuilderInsertable,
                   label: option.label,
                 }))}
               targetLabel={selected?.type}
             />
             <GrapesEditor
-              initialPayload={pageDocument.payload}
+              documentKind={documentKind}
+              initialPayload={activePayload}
+              key={`${documentKind}-${activePayload.root.id}`}
               onDirty={markDirty}
-              onDocumentChange={postPreviewDocument}
+              onDocumentChange={handleDocumentChange}
               onError={(message) => {
                 setSaveStatus('error');
                 setError(`Editor error: ${message}`);

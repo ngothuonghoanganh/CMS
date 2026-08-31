@@ -52,6 +52,8 @@ import {
   PageSchema,
   LandingPageSchema,
   normalizePagePath,
+  SiteGlobalPayloadV1Schema,
+  SiteGlobalsSchema,
 } from './index';
 
 function createPayload(children: PageNode[] = []) {
@@ -481,6 +483,99 @@ describe('foundation contracts', () => {
     ).toBe(false);
   });
 
+  it('enforces single-open accordion payload state at the contract boundary', () => {
+    const payload = {
+      version: 5 as const,
+      metadata: { documentTitle: 'FAQ' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section' as const,
+            props: {},
+            children: [
+              {
+                id: 'accordion',
+                type: 'accordion' as const,
+                props: { allowMultiple: false },
+                children: [
+                  {
+                    id: 'item-1',
+                    type: 'accordion-item' as const,
+                    props: { title: 'One', defaultOpen: true },
+                    children: [],
+                  },
+                  {
+                    id: 'item-2',
+                    type: 'accordion-item' as const,
+                    props: { title: 'Two', defaultOpen: true },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(PagePayloadV5Schema.safeParse(payload).success).toBe(false);
+  });
+
+  it('validates site global document kinds and keeps globals out of PagePayload', () => {
+    const header = {
+      version: 1 as const,
+      documentKind: 'site-header' as const,
+      metadata: { documentTitle: 'Site header' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'global-header',
+            type: 'global-header' as const,
+            props: { position: 'sticky' as const },
+            children: [
+              {
+                id: 'brand',
+                type: 'site-brand' as const,
+                props: { display: 'logo-text' as const, href: '/' },
+                children: [],
+              },
+              {
+                id: 'nav',
+                type: 'navigation-view' as const,
+                props: {
+                  source: 'main' as const,
+                  orientation: 'horizontal' as const,
+                  mobileBehavior: 'collapse' as const,
+                  alignment: 'left' as const,
+                  ariaLabel: 'Main navigation',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(SiteGlobalPayloadV1Schema.parse(header)).toEqual(header);
+    expect(SiteGlobalsSchema.parse({ version: 1, header })).toMatchObject({
+      header: { documentKind: 'site-header' },
+    });
+    expect(PagePayloadV6Schema.safeParse({ ...header, version: 6 }).success).toBe(false);
+    expect(
+      SiteGlobalPayloadV1Schema.safeParse({
+        ...header,
+        documentKind: 'site-footer',
+      }).success,
+    ).toBe(false);
+  });
+
   it('exposes one typed component registry for structure and property metadata', () => {
     expect(PAGE_COMPONENT_REGISTRY.text.propertiesSchema).toEqual(
       expect.arrayContaining([
@@ -514,10 +609,10 @@ describe('foundation contracts', () => {
       }
       for (const slot of definition.slots) {
         expect(slot.name).toBeTruthy();
-        expect(slot.accepts).toEqual(
-          expect.arrayContaining([...definition.allowedChildren]),
-        );
       }
+      expect(definition.allowedChildren).toEqual(
+        expect.arrayContaining(definition.slots.flatMap((slot) => [...slot.accepts])),
+      );
     }
   });
 

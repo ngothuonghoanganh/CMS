@@ -2,19 +2,21 @@ import type { Component } from 'grapesjs';
 
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
-  BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
-  isBuilderNodeType,
   type BuilderNodeType,
 } from './builder-adapter';
 import {
   canInsertChild,
   canRemoveFromSlot,
-  resolveSlotForChild,
-  resolveSlotsForChild,
-  type ComponentSlotDefinition,
   type ComponentSlotOccupancy,
 } from '@payload/contracts';
+import {
+  canInsertLiveChild,
+  liveSlotForChild,
+  liveSlotOccupancy,
+  payloadNodeType,
+  resolveSlotForChild,
+} from './builder-structural-domain';
 
 /** The three insertion semantics shared by Canvas, Layers and Quick Add. */
 export type DropPosition = 'before' | 'inside' | 'after';
@@ -45,48 +47,9 @@ export function canInsertNode(
   return canInsertChild(parentType, childType, occupancy);
 }
 
-function liveSlotOccupancy(
-  parent: Component,
-  slot: ComponentSlotDefinition,
-  excluded?: Component,
-): ComponentSlotOccupancy {
-  const count = parent.components().models.filter((child) => {
-    if (child === excluded) return false;
-    const attributes = child.getAttributes({ noStyle: true });
-    const ownedSlot = attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
-    return typeof ownedSlot === 'string'
-      ? ownedSlot === slot.name
-      : slot.accepts.includes(payloadNodeType(child) as never);
-  }).length;
-  return { count, bySlot: { [slot.name]: count } };
-}
+export { liveSlotForChild, liveSlotOccupancy };
 
-function liveSlotForChild(
-  parent: Component | undefined,
-  childType: BuilderNodeType,
-): ComponentSlotDefinition | undefined {
-  const parentType = parent && payloadNodeType(parent);
-  return parentType ? resolveSlotsForChild(parentType, childType)[0] : undefined;
-}
-
-function canInsertLiveChild(
-  parent: Component,
-  childType: BuilderNodeType,
-  excluded?: Component,
-): boolean {
-  const parentType = payloadNodeType(parent);
-  const slot = parentType && resolveSlotForChild(parentType, childType);
-  return Boolean(
-    parentType &&
-    slot &&
-    canInsertNode(parentType, childType, liveSlotOccupancy(parent, slot, excluded)),
-  );
-}
-
-export function payloadNodeType(component: Component): BuilderNodeType | undefined {
-  const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
-  return isBuilderNodeType(type) ? type : undefined;
-}
+export { payloadNodeType } from './builder-structural-domain';
 
 export function payloadNodeId(component: Component): string | undefined {
   const id = component.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];

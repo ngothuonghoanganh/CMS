@@ -13,8 +13,10 @@ import {
   CreateSiteRequestSchema,
   PaginationQuerySchema,
   UpdateSiteRequestSchema,
+  SiteGlobalsSchema,
   type CreateSiteRequest,
   type PaginationQuery,
+  type SiteGlobals,
   type UpdateSiteRequest,
 } from '@payload/contracts';
 
@@ -99,6 +101,47 @@ export class SiteController {
       requireRequestedWorkspace(principal, workspaceId),
       siteId,
     );
+  }
+
+  @Get(':siteId/globals')
+  async getGlobals(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.read', workspaceId);
+    return this.siteService.getGlobals(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+    );
+  }
+
+  @Patch(':siteId/globals')
+  async updateGlobals(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @Body(new ZodValidationPipe(SiteGlobalsSchema)) input: SiteGlobals,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    const result = await this.siteService.updateGlobals(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.globals.update',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+        metadata: { changedFields: Object.keys(input) },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Get(':siteId/manifest')

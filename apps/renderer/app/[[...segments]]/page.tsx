@@ -80,8 +80,11 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
       {renderPage(resolved.page.payload, {
         pagePath: resolved.pagePath,
         siteSlug,
+        siteName: resolved.page.site.name,
+        ...(resolved.page.site.logo ? { siteLogo: resolved.page.site.logo } : {}),
         customDomain: resolved.customDomain,
         navigation: resolved.page.navigation,
+        globals: resolved.page.globals,
         ...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {}),
         ...(resolved.page.extensions
           ? {

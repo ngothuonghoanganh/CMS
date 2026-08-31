@@ -4,6 +4,7 @@ import {
   type PagePayloadV4,
   type PagePayloadV5,
   type PagePayloadV6,
+  type SiteGlobalPayloadV1,
 } from '@payload/contracts';
 
 import {
@@ -19,6 +20,7 @@ import {
   BUILDER_LIST_PROPS_ATTRIBUTE,
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
   BUILDER_PARTS_STYLE_ATTRIBUTE,
+  BUILDER_GLOBAL_PROPS_ATTRIBUTE,
   BuilderAdapterError,
   createBlockDefinition,
   formatCountdownRemaining,
@@ -26,6 +28,7 @@ import {
   resolveViewportStyle,
   reassignEditorNodeIds,
   serializeEditorSnapshot,
+  serializeSiteGlobalSnapshot,
   sanitizeInlineText,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
@@ -588,6 +591,57 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
       payload,
     );
+  });
+
+  it('round-trips a site header document through the same live editor adapter', () => {
+    const global: SiteGlobalPayloadV1 = {
+      version: 1,
+      documentKind: 'site-header',
+      metadata: { documentTitle: 'Site header' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'header',
+            type: 'global-header',
+            props: { position: 'sticky' },
+            children: [
+              {
+                id: 'brand',
+                type: 'site-brand',
+                props: { display: 'logo-text', href: '/' },
+                children: [],
+              },
+              {
+                id: 'navigation',
+                type: 'navigation-view',
+                props: {
+                  source: 'main',
+                  orientation: 'horizontal',
+                  mobileBehavior: 'collapse',
+                  alignment: 'left',
+                  ariaLabel: 'Main navigation',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(global);
+    const header = (definition.components as Array<Record<string, unknown>>)[0]!;
+    expect(
+      (header.attributes as Record<string, unknown>)[BUILDER_GLOBAL_PROPS_ATTRIBUTE],
+    ).toContain('sticky');
+    expect(
+      serializeSiteGlobalSnapshot(
+        snapshotFromEditorDefinition(definition),
+        'site-header',
+      ),
+    ).toEqual(global);
   });
 
   it('recognizes extension nodes at the shared interaction boundary', () => {

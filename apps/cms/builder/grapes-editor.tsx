@@ -44,8 +44,11 @@ import { createEditorPropertyCommand } from './component-editor-bindings';
 import { BuilderSelection } from './builder-selection';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
+  createGlobalPresetDefinition,
   createBlockPresetDefinition,
+  isGlobalPresetId,
   type BlockPresetId,
+  type GlobalPresetId,
   type BuilderInsertable,
 } from './block-presets';
 import type { BuilderCanvasNode, BuilderCanvasState } from './builder-minimap';
@@ -57,25 +60,25 @@ import {
   PAGE_RUNTIME_BASELINE_CSS,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
-  canInsertIntoSlot,
   createPageDocument,
-  resolveSlotForChild,
   resolveSlotsForChild,
-  type ComponentSlotDefinition,
   type FormProps,
   type PageDocument,
   type PagePayload,
+  type SiteGlobalPayloadV1,
+  type BuilderDocumentKind,
 } from '@payload/contracts';
 
 import {
   selectionFromComponentCodec,
   type ComponentSelectionSnapshot,
 } from './component-editor-codecs';
+import { canInsertLiveChild } from './builder-structural-domain';
 
 export type SelectedBuilderNode = ComponentSelectionSnapshot;
 
 type BuilderDebugApi = {
-  getPayload: () => PagePayload;
+  getPayload: () => PagePayload | SiteGlobalPayloadV1;
   setCanvasZoom: (zoom: number) => void;
 };
 
@@ -93,8 +96,8 @@ export type GrapesEditorHandle = {
   deleteSelected: () => void;
   undo: () => void;
   redo: () => void;
-  getDocument: () => PageDocument;
-  serialize: () => PagePayload;
+  getDocument: () => PageDocument | SiteGlobalPayloadV1;
+  serialize: () => PagePayload | SiteGlobalPayloadV1;
   setViewport: (viewport: BuilderViewport) => void;
   updateSelectedText: (value: string) => void;
   updateSelectedProperty: (property: string, value: unknown) => void;
@@ -131,9 +134,10 @@ export type GrapesEditorHandle = {
 export type InteractionMode = 'select' | 'hand';
 
 type GrapesEditorProps = {
-  initialPayload: PagePayload;
+  documentKind: BuilderDocumentKind;
+  initialPayload: PagePayload | SiteGlobalPayloadV1;
   onDirty: () => void;
-  onDocumentChange: (document: PageDocument) => void;
+  onDocumentChange: (document: PageDocument | SiteGlobalPayloadV1) => void;
   onSelectionChange: (node: SelectedBuilderNode | null) => void;
   onReady: () => void;
   onHistoryChange: (state: { canUndo: boolean; canRedo: boolean }) => void;
@@ -148,22 +152,6 @@ function isPayloadNodeType(value: unknown): value is BuilderNodeType {
   return isBuilderNodeType(value);
 }
 
-function liveSlotOccupancy(
-  parent: Component,
-  slot: ComponentSlotDefinition,
-  excluded?: Component,
-): { count: number; bySlot: Record<string, number> } {
-  const count = parent.components().models.filter((child) => {
-    if (child === excluded) return false;
-    const attributes = child.getAttributes({ noStyle: true });
-    const ownedSlot = attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
-    return typeof ownedSlot === 'string'
-      ? ownedSlot === slot.name
-      : slot.accepts.includes(payloadNodeType(child) as never);
-  }).length;
-  return { count, bySlot: { [slot.name]: count } };
-}
-
 function canInsertIntoComponent(
   parent: Component,
   childType: BuilderNodeType,
@@ -171,16 +159,7 @@ function canInsertIntoComponent(
 ): boolean {
   const parentType = payloadNodeType(parent);
   if (!parentType) return false;
-  const slot = resolveSlotForChild(parentType, childType);
-  return Boolean(
-    slot &&
-    canInsertIntoSlot({
-      parentType,
-      slotName: slot.name,
-      childType,
-      occupancy: liveSlotOccupancy(parent, slot, excluded),
-    }),
-  );
+  return canInsertLiveChild(parent, childType, excluded);
 }
 
 function selectionFromComponent(
@@ -696,10 +675,14 @@ function isBlockPresetId(value: BuilderInsertable): value is BlockPresetId {
   );
 }
 
+function isGlobalBuilderPresetId(value: BuilderInsertable): value is GlobalPresetId {
+  return typeof value === 'string' && isGlobalPresetId(value);
+}
+
 function createInsertableDefinition(type: BuilderInsertable): ComponentDefinition {
-  return isBlockPresetId(type)
-    ? createBlockPresetDefinition(type)
-    : createBlockDefinition(type);
+  if (isBlockPresetId(type)) return createBlockPresetDefinition(type);
+  if (isGlobalBuilderPresetId(type)) return createGlobalPresetDefinition(type);
+  return createBlockDefinition(type);
 }
 
 function insertableNodeType(
@@ -822,15 +805,21 @@ const blockTypes: readonly BuiltInBuilderBlockType[] = [
   ) as BuiltInBuilderBlockType[]),
 ];
 
-function createBlockManagerDefinitions(): BlockProperties[] {
-  return blockTypes.map((type) => ({
-    category: 'PagePayloadV1',
-    content: () => createBlockDefinition(type),
-    id: type,
-    label: PAGE_COMPONENT_REGISTRY[type].label,
-    resetId: true,
-    select: true,
-  }));
+function createBlockManagerDefinitions(
+  documentKind: BuilderDocumentKind,
+): BlockProperties[] {
+  return blockTypes
+    .filter((type) =>
+      PAGE_COMPONENT_REGISTRY[type].builder.documentKinds.includes(documentKind),
+    )
+    .map((type) => ({
+      category: documentKind === 'page' ? 'PagePayloadV1' : documentKind,
+      content: () => createBlockDefinition(type),
+      id: type,
+      label: PAGE_COMPONENT_REGISTRY[type].label,
+      resetId: true,
+      select: true,
+    }));
 }
 
 const canvasNodeLabels: Record<BuilderNodeType, string> = {
@@ -854,6 +843,10 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   tabs: 'Tabs',
   'tab-item': 'Tab Item',
   gallery: 'Gallery',
+  'global-header': 'Global Header',
+  'global-footer': 'Global Footer',
+  'navigation-view': 'Navigation',
+  'site-brand': 'Site Brand',
 };
 
 function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
@@ -997,6 +990,7 @@ function scrollCanvasToPoint(editor: Editor, x: number, y: number): void {
 
 export const GrapesEditor = forwardRef(function GrapesEditor(
   {
+    documentKind,
     initialPayload,
     onDirty,
     onDocumentChange,
@@ -1117,9 +1111,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     });
   }
 
-  function createDocumentSnapshot(editor: Editor): PageDocument {
+  function createDocumentSnapshot(editor: Editor): PageDocument | SiteGlobalPayloadV1 {
     const root = getRoot(editor);
-    return createPageDocument(serializeGrapesComponent(root));
+    if (documentKind === 'page') {
+      return createPageDocument(serializeGrapesComponent(root, 'page') as PagePayload);
+    }
+    return serializeGrapesComponent(root, documentKind) as SiteGlobalPayloadV1;
   }
 
   function notifyDocumentChange(editor: Editor): void {
@@ -1258,7 +1255,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   }
 
   useImperativeHandle(ref, () => {
-    const serializeDocument = (): PageDocument => {
+    const serializeDocument = (): PageDocument | SiteGlobalPayloadV1 => {
       const editor = editorRef.current;
       if (!editor) {
         throw new Error('Builder editor is not ready');
@@ -1273,6 +1270,28 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return;
+        if (documentKind !== 'page' && isGlobalBuilderPresetId(type)) {
+          const root = getRoot(editor);
+          const expectedType =
+            documentKind === 'site-header' ? 'global-header' : 'global-footer';
+          const existing = root
+            .components()
+            .models.find((child) => payloadNodeType(child) === expectedType);
+          if (existing) {
+            commitEditorCommand(editor, {
+              kind: 'remove',
+              nodeId: payloadNodeId(existing) ?? '',
+            });
+          }
+          const result = commitEditorCommand(editor, {
+            kind: 'insert',
+            definition,
+            parentId: payloadNodeId(root),
+          });
+          const added = result ? getSelectedComponent(editor) : undefined;
+          if (added) selectionRef.current.select(editor, added);
+          return;
+        }
         const selected = editor.getSelected();
         const selectedType = selected?.getAttributes({ noStyle: true })[
           BUILDER_NODE_TYPE_ATTRIBUTE
@@ -1288,11 +1307,23 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!parent && (childType === 'section' || childType === 'container')) {
           parent = getRoot(editor);
         } else if (!parent) {
-          const sectionResult = commitEditorCommand(editor, {
+          // Wrapper creation and the first child are one authored compound
+          // insertion, so Undo removes the complete subtree in one step.
+          const sectionDefinition = createBlockDefinition('section');
+          sectionDefinition.components = [definition];
+          const sectionResult = commitEditorCommandResult(editor, {
             kind: 'insert',
-            definition: createBlockDefinition('section'),
+            definition: sectionDefinition,
           });
-          parent = sectionResult ? getSelectedComponent(editor) : undefined;
+          const child = sectionResult.selection?.components().models[0];
+          if (child) {
+            pendingProgrammaticSelectionRef.current = payloadNodeId(child) ?? null;
+            selectingComponentRef.current = true;
+            selectionRef.current.select(editor, child);
+            selectingComponentRef.current = false;
+            if (childType === 'form') ensureFormPreview(child);
+          }
+          return;
         }
         if (!parent) return;
         const result = commitEditorCommand(editor, {
@@ -1475,7 +1506,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         });
       },
       serialize() {
-        return serializeDocument().payload;
+        const document = serializeDocument();
+        return 'schemaVersion' in document ? document.payload : document;
       },
       setViewport(viewport) {
         const editor = editorRef.current;
@@ -1727,17 +1759,18 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
               targetType === 'root' &&
               (!target || !canInsertIntoComponent(target, childType))
             ) {
-              const sectionResult = commitEditorCommand(editor, {
+              const sectionDefinition = createBlockDefinition('section');
+              sectionDefinition.components = [definition];
+              const result = commitEditorCommandResult(editor, {
                 kind: 'insert',
-                definition: createBlockDefinition('section'),
+                definition: sectionDefinition,
               });
-              const section = sectionResult ? getSelectedComponent(editor) : undefined;
-              if (!section) return false;
-              return commitEditorCommand(editor, {
-                kind: 'insert',
-                definition,
-                parentId: payloadNodeId(section),
-              });
+              const child = result.selection?.components().models[0];
+              if (!child) return false;
+              pendingProgrammaticSelectionRef.current = payloadNodeId(child) ?? null;
+              selectionRef.current.select(editor, child);
+              notifySelection(editor);
+              return true;
             }
           }
           return commitEditorCommand(
@@ -1766,11 +1799,18 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!parent && (childType === 'section' || childType === 'container'))
           parent = getRoot(editor);
         if (!parent) {
-          const insertedSection = commitEditorCommand(editor, {
+          const sectionDefinition = createBlockDefinition('section');
+          sectionDefinition.components = [definition];
+          const result = commitEditorCommandResult(editor, {
             kind: 'insert',
-            definition: createBlockDefinition('section'),
+            definition: sectionDefinition,
           });
-          parent = insertedSection ? getSelectedComponent(editor) : undefined;
+          const child = result.selection?.components().models[0];
+          if (!child) return false;
+          pendingProgrammaticSelectionRef.current = payloadNodeId(child) ?? null;
+          selectionRef.current.select(editor, child);
+          notifySelection(editor);
+          return true;
         }
         if (!parent) return false;
         return commitEditorCommand(editor, {
@@ -2028,7 +2068,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           width: 'auto',
           storageManager: false,
           panels: { defaults: [] },
-          blockManager: { blocks: createBlockManagerDefinitions(), custom: true },
+          blockManager: {
+            blocks: createBlockManagerDefinitions(documentKind),
+            custom: true,
+          },
           styleManager: { sectors: [] },
           canvas: { scrollableCanvas: true },
           canvasCss: `
@@ -2206,7 +2249,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         window.setTimeout(() => bindCanvasStateObservers?.(), 0);
         if (process.env.NODE_ENV !== 'production') {
           window.__payloadBuilderDebug = {
-            getPayload: () => serializeGrapesComponent(getRoot(editor as Editor)),
+            getPayload: () =>
+              serializeGrapesComponent(getRoot(editor as Editor), documentKind),
             setCanvasZoom: (zoom) => (editor as Editor).Canvas.setZoom(zoom),
           };
         }

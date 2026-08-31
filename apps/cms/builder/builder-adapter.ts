@@ -15,6 +15,11 @@ import {
   TabsPropsSchema,
   TabsPropsV6Schema,
   TabItemPropsSchema,
+  GlobalHeaderPropsSchema,
+  GlobalFooterPropsSchema,
+  NavigationViewPropsSchema,
+  SiteBrandPropsSchema,
+  SiteGlobalPayloadV1Schema,
   CustomExtensionNodePropsSchema,
   canContainPageComponent,
   isPageComponentType,
@@ -37,6 +42,8 @@ import {
   type PageNodePartsStyle,
   type PagePayload,
   type PagePayloadV1,
+  type SiteGlobalPayloadV1,
+  type BuilderDocumentKind,
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
 import { builderExtensionElement } from './builder-extension-registry';
@@ -59,6 +66,7 @@ export const BUILDER_QUOTE_PROPS_ATTRIBUTE = 'data-payload-quote-props';
 export const BUILDER_QUOTE_PREVIEW_ATTRIBUTE = 'data-payload-quote-preview';
 export const BUILDER_COMPOUND_PROPS_ATTRIBUTE = 'data-payload-compound-props';
 export const BUILDER_PARTS_STYLE_ATTRIBUTE = 'data-payload-parts-style';
+export const BUILDER_GLOBAL_PROPS_ATTRIBUTE = 'data-payload-global-props';
 /** Editor-only slot ownership marker; it is intentionally omitted from payload props. */
 export const BUILDER_NODE_SLOT_ATTRIBUTE = 'data-payload-slot';
 
@@ -726,6 +734,40 @@ function componentDefinitionForNode(
           componentDefinitionForNode(child, undefined, payloadVersion),
         ),
       };
+    case 'global-header':
+    case 'global-footer':
+      return {
+        ...shared,
+        tagName: PAGE_COMPONENT_REGISTRY[node.type].editorTagName,
+        attributes: {
+          ...attributes,
+          [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(child, undefined, payloadVersion),
+        ),
+      };
+    case 'navigation-view':
+      return {
+        ...shared,
+        tagName: 'nav',
+        content: 'Navigation menu',
+        attributes: {
+          ...attributes,
+          [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+      };
+    case 'site-brand':
+      return {
+        ...shared,
+        tagName: 'a',
+        content: 'Site Brand',
+        attributes: {
+          ...attributes,
+          href: node.props.href,
+          [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+      };
     case 'root':
     case 'section':
     case 'container':
@@ -739,7 +781,9 @@ function componentDefinitionForNode(
   throw new BuilderAdapterError('Unsupported builder node type');
 }
 
-export function payloadToEditorComponent(payload: PagePayload): ComponentDefinition {
+export function payloadToEditorComponent(
+  payload: PagePayload | SiteGlobalPayloadV1,
+): ComponentDefinition {
   return componentDefinitionForNode(payload.root, payload.metadata, payload.version);
 }
 
@@ -1063,6 +1107,54 @@ export function createBlockDefinition(
         },
         undefined,
         5,
+      );
+    case 'global-header':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'global-header',
+          props: { position: 'static' },
+          children: [],
+        },
+        undefined,
+        6,
+      );
+    case 'global-footer':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'global-footer',
+          props: {},
+          children: [],
+        },
+        undefined,
+        6,
+      );
+    case 'navigation-view':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'navigation-view',
+          props: {
+            source: 'main',
+            orientation: 'horizontal',
+            mobileBehavior: 'collapse',
+            alignment: 'left',
+            ariaLabel: 'Main navigation',
+          },
+        },
+        undefined,
+        6,
+      );
+    case 'site-brand':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'site-brand',
+          props: { display: 'logo-text', href: '/' },
+        },
+        undefined,
+        6,
       );
   }
   throw new BuilderAdapterError(`Unsupported builder block type "${String(type)}"`);
@@ -1440,6 +1532,38 @@ function nodeFromSnapshotInternal(
     return { id, type, style, props: props.data, children: [] };
   }
 
+  if (
+    type === 'global-header' ||
+    type === 'global-footer' ||
+    type === 'navigation-view' ||
+    type === 'site-brand'
+  ) {
+    const rawProps = readJsonAttribute(
+      snapshot.attributes,
+      BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+      path,
+    );
+    const propsSchema =
+      type === 'global-header'
+        ? GlobalHeaderPropsSchema
+        : type === 'global-footer'
+          ? GlobalFooterPropsSchema
+          : type === 'navigation-view'
+            ? NavigationViewPropsSchema
+            : SiteBrandPropsSchema;
+    const props = propsSchema.safeParse(rawProps);
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    const children = snapshot.children.map((child, index) =>
+      nodeFromSnapshot(child, [...path, 'children', String(index)]),
+    );
+    return { id, type, style, props: props.data, children };
+  }
+
   const children = snapshot.children.map((child, index) =>
     nodeFromSnapshot(child, [...path, 'children', String(index)]),
   );
@@ -1652,6 +1776,25 @@ export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePa
   return parsed.data;
 }
 
+export function serializeSiteGlobalSnapshot(
+  snapshot: BuilderEditorSnapshot,
+  documentKind: Exclude<BuilderDocumentKind, 'page'>,
+): SiteGlobalPayloadV1 {
+  const parsed = SiteGlobalPayloadV1Schema.safeParse({
+    version: 1,
+    documentKind,
+    metadata: readMetadata(snapshot.attributes),
+    root: nodeFromSnapshot(snapshot, ['root']),
+  });
+  if (!parsed.success) {
+    throw new BuilderAdapterError(
+      parsed.error.issues.map((issue) => issue.message).join('; '),
+      ['site-global'],
+    );
+  }
+  return parsed.data;
+}
+
 function containsFormNode(node: Record<string, unknown>): boolean {
   if (node.type === 'form') return true;
   return (
@@ -1748,8 +1891,14 @@ export function snapshotFromGrapesComponent(component: Component): BuilderEditor
   };
 }
 
-export function serializeGrapesComponent(component: Component): PagePayload {
-  return serializeEditorSnapshot(snapshotFromGrapesComponent(component));
+export function serializeGrapesComponent(
+  component: Component,
+  documentKind: BuilderDocumentKind = 'page',
+): PagePayload | SiteGlobalPayloadV1 {
+  const snapshot = snapshotFromGrapesComponent(component);
+  return documentKind === 'page'
+    ? serializeEditorSnapshot(snapshot)
+    : serializeSiteGlobalSnapshot(snapshot, documentKind);
 }
 
 export function readEditorResponsiveStyle(

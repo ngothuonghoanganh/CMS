@@ -10,7 +10,6 @@ import {
   type PageNodeV5,
   type PageNodeV6,
   type PageNodeStyle,
-  type PagePayload,
   type FormNode,
   type RootNode,
   type SectionNode,
@@ -31,6 +30,8 @@ import {
   type GalleryNodeV5,
   type PageRuntimeExtension,
   type ResolvedNavigationItem,
+  SiteGlobalPayloadV1Schema,
+  type SiteGlobals,
   PAGE_RESPONSIVE_BREAKPOINTS,
   isSafePageStyleValue,
   pageStyleReactProperty,
@@ -41,6 +42,10 @@ import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 import { FormRenderer } from './form-renderer';
 import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
 import { AccordionRuntime, TabsRuntime } from './core-interactive-runtime';
+import {
+  NavigationViewRuntime,
+  type NavigationViewPartStyles,
+} from './runtime/navigation-view-runtime';
 
 type RenderableNode =
   PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6;
@@ -73,12 +78,18 @@ type AccordionItemRenderableNode =
 type TabsRenderableNode = TabsNodeV5 | Extract<PageNodeV6, { type: 'tabs' }>;
 type TabItemRenderableNode = TabItemNodeV5 | Extract<PageNodeV6, { type: 'tab-item' }>;
 type GalleryRenderableNode = GalleryNodeV5 | Extract<PageNodeV6, { type: 'gallery' }>;
-type RenderContext = {
+type GlobalHeaderRenderableNode = Extract<PageNodeV6, { type: 'global-header' }>;
+type GlobalFooterRenderableNode = Extract<PageNodeV6, { type: 'global-footer' }>;
+type NavigationViewRenderableNode = Extract<PageNodeV6, { type: 'navigation-view' }>;
+type SiteBrandRenderableNode = Extract<PageNodeV6, { type: 'site-brand' }>;
+export type RenderContext = {
   siteSlug?: string;
   pagePath?: string;
   /** @deprecated legacy renderer callers may still provide pageSlug. */
   pageSlug?: string;
   tenantSlug?: string;
+  siteName?: string;
+  siteLogo?: string;
   runtimeIds?: readonly string[];
   extensions?: readonly PageRuntimeExtension[];
   customDomain?: boolean;
@@ -88,6 +99,7 @@ type RenderContext = {
         footer?: readonly ResolvedNavigationItem[] | undefined;
       }
     | undefined;
+  globals?: SiteGlobals | undefined;
 };
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
@@ -474,6 +486,11 @@ function renderNavigationItems(
       {items.map((item) => (
         <li key={item.id}>
           <a
+            aria-current={
+              item.href.split(/[?#]/, 1)[0] === (context.pagePath ?? '/')
+                ? 'page'
+                : undefined
+            }
             href={navigationHref(item.href, context)}
             rel={item.openInNewTab ? 'noopener noreferrer' : undefined}
             target={item.openInNewTab ? '_blank' : undefined}
@@ -484,6 +501,135 @@ function renderNavigationItems(
         </li>
       ))}
     </ul>
+  );
+}
+
+function renderNavigationView(
+  node: NavigationViewRenderableNode,
+  context: RenderContext,
+): ReactElement {
+  const items =
+    node.props.source === 'footer'
+      ? (context.navigation?.footer ?? [])
+      : (context.navigation?.main ?? []);
+  return (
+    <NavigationViewRuntime
+      alignment={node.props.alignment}
+      ariaLabel={node.props.ariaLabel}
+      customDomain={context.customDomain}
+      id={node.id}
+      items={items}
+      mobileBehavior={node.props.mobileBehavior}
+      orientation={node.props.orientation}
+      pagePath={context.pagePath}
+      partsStyle={
+        {
+          root: nodePartStyle(node, 'root'),
+          list: nodePartStyle(node, 'list'),
+          item: nodePartStyle(node, 'item'),
+          link: nodePartStyle(node, 'link'),
+          activeLink: nodePartStyle(node, 'activeLink'),
+          mobileToggle: nodePartStyle(node, 'mobileToggle'),
+          mobilePanel: nodePartStyle(node, 'mobilePanel'),
+        } satisfies NavigationViewPartStyles
+      }
+      siteSlug={context.siteSlug}
+    />
+  );
+}
+
+function renderSiteBrand(
+  node: SiteBrandRenderableNode,
+  context: RenderContext,
+): ReactElement {
+  const showLogo = node.props.display === 'logo' || node.props.display === 'logo-text';
+  const showText = node.props.display === 'text' || node.props.display === 'logo-text';
+  return (
+    <a
+      {...nodeAttributes(node)}
+      data-payload-part="root"
+      href={isSafeHref(node.props.href) ? node.props.href : '/'}
+      style={{ ...nodeStyle(node), ...nodePartStyle(node, 'root') }}
+    >
+      {showLogo && context.siteLogo ? (
+        <img alt="" data-payload-part="logo" src={context.siteLogo} />
+      ) : null}
+      {showText ? (
+        <span data-payload-part="text">{context.siteName ?? 'Site'}</span>
+      ) : null}
+    </a>
+  );
+}
+
+function renderGlobalHeaderChild(
+  node: RenderableNode,
+  context: RenderContext,
+): ReactElement {
+  const part =
+    node.type === 'site-brand'
+      ? 'brand'
+      : node.type === 'navigation-view'
+        ? 'navigation'
+        : node.type === 'button' || node.type === 'link'
+          ? 'actions'
+          : undefined;
+  const rendered = renderNode(node, context);
+  return part
+    ? React.cloneElement(
+        rendered as React.ReactElement<{ 'data-payload-part'?: string }>,
+        { 'data-payload-part': part },
+      )
+    : rendered;
+}
+
+function renderGlobalFooterChild(
+  node: RenderableNode,
+  context: RenderContext,
+): ReactElement {
+  return React.cloneElement(
+    renderNode(node, context) as React.ReactElement<{ 'data-payload-part'?: string }>,
+    { 'data-payload-part': 'content' },
+  );
+}
+
+function renderGlobalHeader(
+  node: GlobalHeaderRenderableNode,
+  context: RenderContext,
+): ReactElement {
+  return (
+    <header
+      {...nodeAttributes(node)}
+      data-site-global="header"
+      data-site-global-position={node.props.position}
+      style={{
+        ...nodeStyle(node),
+        ...nodePartStyle(node, 'root'),
+        ...(node.props.position === 'sticky'
+          ? { position: 'sticky', top: 0, zIndex: 10 }
+          : {}),
+      }}
+    >
+      {node.children.map((child) => (
+        <Fragment key={child.id}>{renderGlobalHeaderChild(child, context)}</Fragment>
+      ))}
+    </header>
+  );
+}
+
+function renderGlobalFooter(
+  node: GlobalFooterRenderableNode,
+  context: RenderContext,
+): ReactElement {
+  return (
+    <footer
+      {...nodeAttributes(node)}
+      data-site-global="footer"
+      style={{ ...nodeStyle(node), ...nodePartStyle(node, 'root') }}
+    >
+      {node.children.map((child) => (
+        <Fragment key={child.id}>{renderGlobalFooterChild(child, context)}</Fragment>
+      ))}
+    </footer>
   );
 }
 
@@ -526,6 +672,14 @@ export const PAGE_RENDERER_REGISTRY = {
   tabs: (node, context) => renderTabs(node as TabsNodeV5, context),
   'tab-item': (node, context) => renderTabItem(node as TabItemNodeV5, context),
   gallery: (node, context) => renderGallery(node as GalleryNodeV5, context),
+  'global-header': (node, context) =>
+    renderGlobalHeader(node as GlobalHeaderRenderableNode, context),
+  'global-footer': (node, context) =>
+    renderGlobalFooter(node as GlobalFooterRenderableNode, context),
+  'navigation-view': (node, context) =>
+    renderNavigationView(node as NavigationViewRenderableNode, context),
+  'site-brand': (node, context) =>
+    renderSiteBrand(node as SiteBrandRenderableNode, context),
 } satisfies Record<RenderableNode['type'], NodeRenderer>;
 
 function renderUnsupportedNode(node: Pick<RenderableNode, 'id' | 'type'>): ReactElement {
@@ -549,6 +703,26 @@ export function renderNode(
   const definition = PAGE_COMPONENT_REGISTRY[node.type];
   const Renderer = PAGE_RENDERER_REGISTRY[node.type];
   return definition ? Renderer(node, context) : renderUnsupportedNode(node);
+}
+
+export function renderSiteGlobalDocument(
+  payload: unknown,
+  context: RenderContext = {},
+): ReactElement | null {
+  const parsed = SiteGlobalPayloadV1Schema.safeParse(payload);
+  if (!parsed.success) return null;
+  const expectedType =
+    parsed.data.documentKind === 'site-header' ? 'global-header' : 'global-footer';
+  if (!parsed.data.root.children.some((child) => child.type === expectedType))
+    return null;
+  return (
+    <>
+      {renderResponsiveStyles(parsed.data)}
+      {parsed.data.root.children.map((child) => (
+        <Fragment key={child.id}>{renderNode(child, context)}</Fragment>
+      ))}
+    </>
+  );
 }
 
 type ResponsiveRule = {
@@ -615,7 +789,7 @@ function responsiveRules(
   node.children.forEach((child) => responsiveRules(child, viewport, rules));
 }
 
-function renderResponsiveStyles(payload: PagePayload): ReactElement | null {
+function renderResponsiveStyles(payload: { root: RenderableNode }): ReactElement | null {
   const tabletRules: ResponsiveRule[] = [];
   const mobileRules: ResponsiveRule[] = [];
   responsiveRules(payload.root, 'tablet', tabletRules);
@@ -658,20 +832,36 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
       {context.runtimeIds?.length ? (
         <ExtensionRuntimeBootstrap runtimeIds={context.runtimeIds} />
       ) : null}
-      {renderGlobalNavigation(
-        context.navigation?.main,
-        context,
-        'Main navigation',
-        'header',
-      )}
+      {context.globals?.header
+        ? (renderSiteGlobalDocument(context.globals.header, context) ??
+          renderGlobalNavigation(
+            context.navigation?.main,
+            context,
+            'Main navigation',
+            'header',
+          ))
+        : renderGlobalNavigation(
+            context.navigation?.main,
+            context,
+            'Main navigation',
+            'header',
+          )}
       {renderResponsiveStyles(parsed.data)}
       {renderNode(parsed.data.root, context)}
-      {renderGlobalNavigation(
-        context.navigation?.footer,
-        context,
-        'Footer navigation',
-        'footer',
-      )}
+      {context.globals?.footer
+        ? (renderSiteGlobalDocument(context.globals.footer, context) ??
+          renderGlobalNavigation(
+            context.navigation?.footer,
+            context,
+            'Footer navigation',
+            'footer',
+          ))
+        : renderGlobalNavigation(
+            context.navigation?.footer,
+            context,
+            'Footer navigation',
+            'footer',
+          )}
     </div>
   );
 }

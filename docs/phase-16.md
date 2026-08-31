@@ -2,105 +2,70 @@
 
 ## Status
 
-Phase 16 closure is implemented on the Phase 15 registry-driven component
-platform. Current HEAD is `0b4a8c2` (`feat(cms): add compound components and
-interactive runtime`);
-the closure implementation is in the working tree.
+**PHASE 16 COMPLETE: YES** for the focused release gate. The implementation
+started from `747d47cdfb394ccc807ea5f9a0fe53b223d934cd` and remains uncommitted
+in the working tree; the ending HEAD is still `747d47c`.
 
-## Architecture
+## Closure
 
-`packages/contracts/src/component-registry.ts` is the single source of truth
-for component definitions, slots, cardinality, builder exposure, style
-capabilities and reverse parent relationships. `allowedChildren` is derived
-from slots and `allowedParents` is derived from the reverse slot graph.
+Phase 16 now has one registry-driven structural platform for compound
+components, rather than component-specific placement branches:
 
-The slot engine exposes per-slot occupancy and explicit slot predicates for
-insert, remove and duplicate. Implicit placement returns no result when a
-child type matches multiple slots. A test-only multi-slot fixture proves that
-overlap is rejected and that explicit slot occupancy remains independent; it
-is not part of the production registry or palette.
-
-Accordion and Tabs own persisted internal `accordion-item` and `tab-item`
-nodes. These nodes are addressable but `internal: true` and
-`builder.insertable: false`, so they are created only through their owning
-structural slots. Gallery is a first-class insertable component with an
-image-only slot, minimum one child and maximum fifty children.
-
-Canvas, Layers, Quick Add, drag/drop, structural Inspector actions and command
-execution use the same slot-aware placement rules. New structural children are
-created with stable IDs and an editor-only slot ownership marker; the adapter
-does not persist that marker as payload data.
-
-## Editor and runtime
-
-`component-editor-codecs.ts` contains the registry-keyed selection codec map
-and generic fallback. It converts a selected GrapesJS model into a validated
-semantic snapshot for the Inspector; it does not create a second page tree.
-All mutations flow through `editor-commands.ts`; GrapesJS UndoManager remains
-the history owner.
-
-The generic Structure Editor renders every structural slot and supports add,
-remove, duplicate, keyboard reorder and drag reorder. It is shared by Gallery,
-Accordion and Tabs rather than branching in the shell.
-
-Interactive runtime code is split into `runtime/accordion-runtime.tsx`,
-`runtime/tabs-runtime.tsx` and `runtime/runtime-registry.ts`. Accordion uses
-semantic headings/buttons, `aria-expanded`, `aria-controls`, labelled regions
-and default-open state. Tabs uses `tablist`/`tab`/`tabpanel`, stable IDs,
-orientation-aware Arrow keys, Home/End, roving focus and manual or automatic
-activation.
-
-## PagePayload V5 and V6
-
-V5 adds Quote, Accordion, Accordion Item, Tabs, Tab Item and Gallery while
-preserving V1–V4 schemas. Recursive validation enforces stable unique IDs,
-registry-approved relationships and slot min/max cardinality.
-
-V6 is additive and only selected when a persisted V6 capability is present:
-
-- Accordion can persist `headingLevel` and an optional `ariaLabel`.
-- Tabs can persist `ariaLabel` and `activationMode` (`automatic` or `manual`).
-- Accordion and Tabs expose registry-owned `componentParts` with allowlisted
-  base/tablet/mobile style capabilities.
-
-Part styles are validated at the payload and adapter boundaries, rendered with
-scoped responsive rules and exposed through the Inspector's component-part
-target selector. V5 payloads remain unchanged when no V6 capability is used.
-
-Navbar, Slider/Carousel, Lightbox, arbitrary HTML, scripts and provider embeds
-remain outside this phase.
-
-## Main files
-
-- Contracts and registry: `packages/contracts/src/index.ts`,
-  `packages/contracts/src/component-registry.ts`.
-- Builder: `builder-adapter.ts`, `builder-placement.ts`,
-  `editor-commands.ts`, `component-editor-bindings.ts`,
-  `component-editor-codecs.ts`, `grapes-editor.tsx`, Inspector and shell.
-- Structure UI: `apps/cms/builder/inspector/structure-editor/`.
-- Runtime and renderer: `apps/renderer/app/runtime/`,
-  `core-interactive-runtime.tsx` and `renderer.tsx`.
-- Coverage: contracts, adapter, command, codec, placement and renderer specs;
-  the Phase 16 Playwright scenario remains the end-to-end gate.
+- `builder-structural-domain.ts` is the shared live-slot domain used by
+  placement, commands, drag/drop, Quick Add and structural Inspector actions.
+- Slot ownership remains editor-only (`data-payload-slot`); it is not persisted
+  in `PagePayload`.
+- Registry relationships, slot occupancy and min/max cardinality are validated
+  at contract, adapter and command boundaries. Test-only overlapping-slot
+  fixtures prove that occupancy is independent and implicit ambiguous placement
+  is rejected.
+- Compound insert, duplicate, Accordion sibling normalization and structural
+  operations are grouped through GrapesJS UndoManager, which remains the sole
+  builder history owner. Duplicated subtrees receive fresh IDs.
+- `COMPONENT_EDITOR_CODECS` uses generic primitive handling plus named semantic
+  codec entries for list, countdown, Accordion, Tabs and the V6/global semantic
+  components. Commands own lifecycle, lookup, history and mutation boundaries;
+  Inspector sends semantic node/property/value data.
+- V6 Accordion/Tabs accessibility props and registry-owned component-part
+  styles use the finite style vocabulary and responsive validation. Renderer
+  coverage verifies base and responsive part-style output.
+- Accordion enforces the single-default-open invariant in contracts, editor
+  normalization and runtime defensive initialization. Tabs and Accordion
+  runtime modules provide their required ARIA semantics and keyboard behavior.
+- Gallery remains image-only with structural min/max enforcement and authored
+  responsive styles; no Asset Manager redesign was added.
 
 ## Verification
 
-Validation completed locally under Node 22.19.0 (the repository requires
-Node >=24, so pnpm prints its existing engine warning):
+Commands were run with Node `v24.11.0` and pnpm `10.15.0`:
 
-- `pnpm verify`: passed — API 47 passed/12 skipped, CMS 74, Contracts 34,
-  Renderer 15; lint, typecheck and all builds passed.
-- `pnpm exec playwright test tests/e2e/phase-16-compound-components.spec.ts`:
-  4 passed.
-- `pnpm test:e2e`: 55 passed, with the two unchanged baseline failures in
-  tenant-extension disable status and builder/renderer screenshot parity.
+- `pnpm format:check` — PASS
+- `pnpm lint` — PASS
+- `TURBO_FORCE=true pnpm typecheck` — PASS
+- `pnpm test` — PASS: Contracts 36, CMS 76, Renderer 16, API 47 passed / 12
+  skipped
+- `pnpm build` — PASS: all five workspace build tasks
+- Phase 15 + Phase 16 + Phase 17 focused Playwright gate — PASS: 7/7
+- Phase 16 Playwright suite — PASS: 4/4
 
-The remaining full-suite failures are outside the Phase 16 closure changes and
-are retained as release-owner follow-up items.
+There is no dedicated `tests/e2e/phase-14*` file in this repository. The
+available regression suite was run through the complete Playwright command;
+Phase 14 behavior is represented by the existing compatibility, publishing,
+CMS and renderer suites.
+
+The complete Playwright run had 58 tests: **56 passed and 2 failed**. Both
+failures reproduce the pre-existing baseline and are outside the Phase 16/17
+scope:
+
+1. `tests/e2e/api.spec.ts:147` — tenant extension disable expected HTTP 201 but
+   received 409.
+2. `tests/e2e/builder-renderer-parity.spec.ts:568` — desktop screenshot parity
+   measured 65 mismatches against a threshold of 8.
+
+No focused Phase 15–17 test failed. These two items remain explicit release
+owner follow-ups rather than being hidden or reclassified as passing.
 
 ## Phase 17 readiness
 
-**YES for the architecture gate.** A future FAQ-style component can reuse the
-Accordion structural contract and runtime pattern, and another compound
-component can define registry-owned slots without adding shell-specific
-structural branches.
+**YES.** The Phase 16 structural, style, codec, command, runtime and registry
+contracts are reusable by the site-global documents implemented in Phase 17.

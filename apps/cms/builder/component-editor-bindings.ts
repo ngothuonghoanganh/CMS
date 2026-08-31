@@ -11,6 +11,10 @@ import {
   TabsPropsSchema,
   TabsPropsV6Schema,
   TabItemPropsSchema,
+  GlobalHeaderPropsSchema,
+  GlobalFooterPropsSchema,
+  NavigationViewPropsSchema,
+  SiteBrandPropsSchema,
   isSafePageHref,
   isSafePageImageSource,
   isSafePageVideoSource,
@@ -92,6 +96,53 @@ export function resolveEditorPropertyUpdate(
         ? QuotePropsSchema.shape.text.safeParse(value)
         : QuotePropsSchema.shape.cite.safeParse(value);
     if (!parsed.success) throw new Error(`${property} is invalid`);
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'global-header' && property === 'position') {
+    const parsed = GlobalHeaderPropsSchema.shape.position.safeParse(value);
+    if (!parsed.success) throw new Error('Header position is invalid');
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (
+    type === 'global-footer' &&
+    Object.keys(GlobalFooterPropsSchema.shape).includes(property)
+  ) {
+    return { kind: 'attributes', attributes: {} };
+  }
+
+  if (
+    type === 'navigation-view' &&
+    ['source', 'orientation', 'mobileBehavior', 'alignment', 'ariaLabel'].includes(
+      property,
+    )
+  ) {
+    const parsed =
+      NavigationViewPropsSchema.shape[
+        property as keyof typeof NavigationViewPropsSchema.shape
+      ].safeParse(value);
+    if (!parsed.success) throw new Error('Navigation setting is invalid');
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'site-brand' && ['display', 'href'].includes(property)) {
+    const schema =
+      SiteBrandPropsSchema.shape[property as keyof typeof SiteBrandPropsSchema.shape];
+    const parsed = schema.safeParse(value);
+    if (!parsed.success) throw new Error('Brand setting is invalid');
     return {
       kind: 'attributes',
       attributes: {},

@@ -23,6 +23,10 @@ import {
   type SiteManifest,
   type UpdateSiteRequest,
   PagePayloadSchema,
+  SiteGlobalsSchema,
+  SiteGlobalsResponseSchema,
+  type SiteGlobals,
+  type SiteGlobalsResponse,
 } from '@payload/contracts';
 
 import { DomainError } from './domain-error';
@@ -72,6 +76,7 @@ export class SiteService {
         workspaceId,
         name: input.name,
         slug,
+        ...(input.logo ? { logo: input.logo } : {}),
       });
       try {
         await this.ensureHomePage(record);
@@ -152,6 +157,10 @@ export class SiteService {
     }
     if (input.name !== undefined) record.name = input.name;
     if (input.slug !== undefined) record.slug = nextSlug;
+    if (input.logo !== undefined) {
+      if (input.logo === null) delete record.logo;
+      else record.logo = input.logo;
+    }
     const slugChanged = nextSlug !== previousSlug;
     if (slugChanged) await this.registerPublicRoute(record);
     try {
@@ -192,9 +201,47 @@ export class SiteService {
     }
 
     await this.navigation.validateBeforeSitePublish(siteId, workspaceId);
+    const draftGlobals = this.readGlobals(record.globalsDraft);
+    record.publishedGlobals = draftGlobals;
     record.status = 'published';
     await record.save();
     return this.toContract(record);
+  }
+
+  async getGlobals(workspaceId: string, siteId: string): Promise<SiteGlobalsResponse> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+    const draft = this.readGlobals(record.globalsDraft);
+    const published = record.publishedGlobals
+      ? this.readGlobals(record.publishedGlobals)
+      : undefined;
+    return SiteGlobalsResponseSchema.parse({
+      draft,
+      ...(published ? { published } : {}),
+    });
+  }
+
+  async updateGlobals(
+    workspaceId: string,
+    siteId: string,
+    input: SiteGlobals,
+  ): Promise<SiteGlobalsResponse> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+    const globals = SiteGlobalsSchema.parse(input);
+    record.globalsDraft = globals;
+    await record.save();
+    return this.getGlobals(workspaceId, siteId);
   }
 
   async getOfficialUrl(workspaceId: string, siteId: string) {
@@ -450,6 +497,7 @@ export class SiteService {
         ...(record.footerNavigationId
           ? { footerNavigationId: record.footerNavigationId }
           : {}),
+        ...(record.logo ? { logo: record.logo } : {}),
         ...(urlState.url ? { officialUrl: urlState.url } : {}),
         createdAt: record.createdAt.toISOString(),
         updatedAt: record.updatedAt.toISOString(),
@@ -461,6 +509,19 @@ export class SiteService {
         500,
       );
     }
+  }
+
+  private readGlobals(value: unknown): SiteGlobals {
+    if (!value) return { version: 1 };
+    const parsed = SiteGlobalsSchema.safeParse(value);
+    if (!parsed.success) {
+      throw new DomainError(
+        'INVALID_PERSISTED_SITE_GLOBALS',
+        'Persisted site global data is invalid',
+        500,
+      );
+    }
+    return parsed.data;
   }
 }
 

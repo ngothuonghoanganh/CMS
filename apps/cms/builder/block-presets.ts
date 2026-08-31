@@ -10,7 +10,13 @@ export type BlockPresetId =
   | 'hero'
   | 'cta';
 
-export type BuilderInsertable = BuilderBlockType | BlockPresetId;
+export type GlobalPresetId =
+  | 'header-brand-menu-cta'
+  | 'header-brand-menu'
+  | 'footer-brand-menu'
+  | 'footer-brand-menu-legal';
+
+export type BuilderInsertable = BuilderBlockType | BlockPresetId | GlobalPresetId;
 
 export type BuilderBlockDefinition =
   | {
@@ -24,6 +30,15 @@ export type BuilderBlockDefinition =
   | {
       kind: 'preset';
       id: BlockPresetId;
+      label: string;
+      category: 'layout';
+      keywords: readonly string[];
+      create: () => ComponentDefinition;
+    }
+  | {
+      kind: 'global-preset';
+      id: GlobalPresetId;
+      documentKind: 'site-header' | 'site-footer';
       label: string;
       category: 'layout';
       keywords: readonly string[];
@@ -182,6 +197,87 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
   },
 ];
 
+function createHeaderPreset(withCta: boolean): ComponentDefinition {
+  const header = createBlockDefinition('global-header');
+  const children = [
+    createBlockDefinition('site-brand'),
+    createBlockDefinition('navigation-view'),
+  ];
+  if (withCta)
+    children.push(styled(createBlockDefinition('button'), { padding: '10px 16px' }));
+  return childrenForGlobal(header, children);
+}
+
+function createFooterPreset(withLegal: boolean): ComponentDefinition {
+  const footer = createBlockDefinition('global-footer');
+  const children = [
+    createBlockDefinition('site-brand'),
+    createBlockDefinition('navigation-view'),
+  ];
+  if (withLegal) children.push(createBlockDefinition('text'));
+  return childrenForGlobal(footer, children);
+}
+
+function childrenForGlobal(
+  parent: ComponentDefinition,
+  components: ComponentDefinition[],
+): ComponentDefinition {
+  return children(parent, components);
+}
+
+export const GLOBAL_HEADER_PRESET_REGISTRY: readonly Extract<
+  BuilderBlockDefinition,
+  { kind: 'global-preset' }
+>[] = [
+  {
+    kind: 'global-preset',
+    id: 'header-brand-menu-cta',
+    documentKind: 'site-header',
+    label: 'Brand · Menu · CTA',
+    category: 'layout',
+    keywords: ['header', 'brand', 'menu', 'cta'],
+    create: () => createHeaderPreset(true),
+  },
+  {
+    kind: 'global-preset',
+    id: 'header-brand-menu',
+    documentKind: 'site-header',
+    label: 'Brand · Menu',
+    category: 'layout',
+    keywords: ['header', 'brand', 'menu'],
+    create: () => createHeaderPreset(false),
+  },
+];
+
+export const GLOBAL_FOOTER_PRESET_REGISTRY: readonly Extract<
+  BuilderBlockDefinition,
+  { kind: 'global-preset' }
+>[] = [
+  {
+    kind: 'global-preset',
+    id: 'footer-brand-menu',
+    documentKind: 'site-footer',
+    label: 'Brand · Menu',
+    category: 'layout',
+    keywords: ['footer', 'brand', 'menu'],
+    create: () => createFooterPreset(false),
+  },
+  {
+    kind: 'global-preset',
+    id: 'footer-brand-menu-legal',
+    documentKind: 'site-footer',
+    label: 'Brand · Menu · Legal',
+    category: 'layout',
+    keywords: ['footer', 'brand', 'menu', 'legal'],
+    create: () => createFooterPreset(true),
+  },
+];
+
+export const GLOBAL_PRESET_REGISTRY = [
+  ...GLOBAL_HEADER_PRESET_REGISTRY,
+  ...GLOBAL_FOOTER_PRESET_REGISTRY,
+] as const;
+
 export function getBlockPreset(
   id: BlockPresetId,
 ): Extract<BuilderBlockDefinition, { kind: 'preset' }> {
@@ -195,4 +291,14 @@ export function getBlockPreset(
 
 export function createBlockPresetDefinition(id: BlockPresetId): ComponentDefinition {
   return getBlockPreset(id).create();
+}
+
+export function isGlobalPresetId(value: string): value is GlobalPresetId {
+  return GLOBAL_PRESET_REGISTRY.some((candidate) => candidate.id === value);
+}
+
+export function createGlobalPresetDefinition(id: GlobalPresetId): ComponentDefinition {
+  const definition = GLOBAL_PRESET_REGISTRY.find((candidate) => candidate.id === id);
+  if (!definition) throw new Error(`Unknown global preset: ${id}`);
+  return definition.create();
 }
