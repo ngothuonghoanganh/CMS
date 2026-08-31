@@ -8,7 +8,10 @@ import {
 } from '@payload/contracts';
 import type { ComponentDefinition } from 'grapesjs';
 
-import { BUILDER_NODE_TYPE_ATTRIBUTE } from './builder-adapter';
+import {
+  BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE,
+} from './builder-adapter';
 
 type DefinitionStyle = Record<string, unknown>;
 
@@ -21,7 +24,10 @@ function definitionChildren(definition: ComponentDefinition): ComponentDefinitio
   const components = definition.components;
   if (!Array.isArray(components)) return [];
   return components.filter(
-    (child): child is ComponentDefinition => typeof child === 'object' && child !== null,
+    (child): child is ComponentDefinition =>
+      typeof child === 'object' &&
+      child !== null &&
+      child.attributes?.[BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE] !== 'true',
   );
 }
 

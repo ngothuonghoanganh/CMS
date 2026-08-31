@@ -84,6 +84,21 @@ class PageExtensionStore {
       },
     };
   }
+
+  deleteMany(filter: { pageId: string; workspaceId: string }) {
+    return {
+      exec: async () => {
+        for (const [key, record] of this.records) {
+          if (
+            record.pageId === filter.pageId &&
+            record.workspaceId === filter.workspaceId
+          ) {
+            this.records.delete(key);
+          }
+        }
+      },
+    };
+  }
 }
 
 class PageStore {
@@ -228,6 +243,48 @@ describe('PageExtensionService', () => {
         workspaceId,
       ),
     ).rejects.toMatchObject({ response: { code: 'TENANT_EXTENSION_DISABLED' } });
+  });
+
+  it('cascades every extension instance when a page is deleted', async () => {
+    const tenantContext = new TenantContext();
+    const registry = new ExtensionRegistry(
+      [demoBuilderExtension],
+      new CapabilityRegistry(),
+      new EventBus(tenantContext),
+    );
+    await registry.onModuleInit();
+    const instances = new PageExtensionStore();
+    const service = new PageExtensionService(
+      instances as unknown as Model<PageExtensionInstanceRecord>,
+      new PageStore() as unknown as Model<PageRecord>,
+      new TenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
+      registry,
+    );
+
+    await service.upsert(
+      pageId,
+      demoBuilderExtension.manifest.id,
+      { enabled: true },
+      workspaceId,
+    );
+    instances.records.set(`other-page:${demoBuilderExtension.manifest.id}`, {
+      _id: 'other',
+      pageId: 'other-page',
+      workspaceId,
+      extensionId: demoBuilderExtension.manifest.id,
+      enabled: true,
+      configuration: {},
+      capabilities: [],
+      runtimeIds: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await service.removeAllForPage(pageId, workspaceId);
+
+    expect([...instances.records.values()].map((record) => record.pageId)).toEqual([
+      'other-page',
+    ]);
   });
 
   it('attaches and resolves a custom extension without invoking the code registry', async () => {

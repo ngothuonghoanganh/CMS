@@ -12,6 +12,7 @@ import {
   type BuilderBlockType,
   type BuilderViewport,
   applyEditorViewportStyle,
+  applyEditorPartViewportStyles,
   createBlockDefinition,
   createExtensionBlockDefinition,
   createReusableInstanceDefinition,
@@ -74,6 +75,7 @@ import {
   type ReusableRuntime,
   type SiteDesignSystem,
   type StyleTokenReference,
+  type ResolvedNavigationItem,
 } from '@payload/contracts';
 
 import {
@@ -81,6 +83,7 @@ import {
   type ComponentSelectionSnapshot,
 } from './component-editor-codecs';
 import { canInsertLiveChild } from './builder-structural-domain';
+import { collectPersistedNodeIds, remapSubtreeNodeIds } from './builder-node-identity';
 
 export type SelectedBuilderNode = ComponentSelectionSnapshot;
 
@@ -157,6 +160,12 @@ type GrapesEditorProps = {
   initialPayload: PagePayload | SiteGlobalPayloadV1;
   reusableRuntime?: readonly ReusableRuntime[];
   designSystem?: SiteDesignSystem;
+  siteName?: string;
+  siteLogo?: string;
+  navigation?: {
+    main?: readonly ResolvedNavigationItem[];
+    footer?: readonly ResolvedNavigationItem[];
+  };
   onDirty: () => void;
   onDocumentChange: (document: PageDocument | SiteGlobalPayloadV1) => void;
   onSelectionChange: (node: SelectedBuilderNode | null) => void;
@@ -818,7 +827,18 @@ function applyAllViewportStyles(
   viewport: BuilderViewport,
   designSystem?: SiteDesignSystem,
 ): void {
-  root.onAll((component) => applyEditorViewportStyle(component, viewport, designSystem));
+  const components: Component[] = [];
+  root.onAll((component) => {
+    components.push(component);
+    applyEditorViewportStyle(component, viewport, designSystem);
+  });
+  // Part presentation is a second pass so a parent compound part cannot be
+  // overwritten by the ordinary inline style of its projected child. Reverse
+  // order also lets a global wrapper part win over a child component root part.
+  [...components].reverse().forEach((component) => {
+    const type = payloadNodeType(component);
+    if (type) applyEditorPartViewportStyles(component, type, viewport, designSystem);
+  });
 }
 
 type BuiltInBuilderBlockType = Exclude<BuilderBlockType, 'extension'>;
@@ -1017,6 +1037,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     initialPayload,
     reusableRuntime = [],
     designSystem,
+    siteName,
+    siteLogo,
+    navigation,
     onDirty,
     onDocumentChange,
     onSelectionChange,
@@ -1057,6 +1080,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   const payloadRef = useRef(initialPayload);
   const reusableRuntimeRef = useRef(reusableRuntime);
   const designSystemRef = useRef(designSystem);
+  const projectionContextRef = useRef<{
+    siteName?: string;
+    siteLogo?: string;
+    navigation?: {
+      main?: readonly ResolvedNavigationItem[];
+      footer?: readonly ResolvedNavigationItem[];
+    };
+  }>({});
   const interactionModeRef = useRef<InteractionMode>('select');
   const temporaryPanRef = useRef(false);
 
@@ -1073,6 +1104,11 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   payloadRef.current = initialPayload;
   reusableRuntimeRef.current = reusableRuntime;
   designSystemRef.current = designSystem;
+  projectionContextRef.current = {
+    ...(siteName !== undefined ? { siteName } : {}),
+    ...(siteLogo !== undefined ? { siteLogo } : {}),
+    ...(navigation !== undefined ? { navigation } : {}),
+  };
 
   function getRoot(editor: Editor): Component {
     const root = editor.getComponents().models[0];
@@ -1080,6 +1116,26 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       throw new Error('Builder editor root is missing');
     }
     return root;
+  }
+
+  function refreshClonedComponentIdentity(editor: Editor, clone: Component): void {
+    const safeClone = remapSubtreeNodeIds(
+      snapshotFromGrapesComponent(clone),
+      collectPersistedNodeIds(snapshotFromGrapesComponent(getRoot(editor))),
+    );
+
+    const apply = (
+      component: Component,
+      snapshot: ReturnType<typeof snapshotFromGrapesComponent>,
+    ): void => {
+      component.setAttributes(snapshot.attributes);
+      snapshot.children.forEach((childSnapshot, index) => {
+        const child = component.components().models[index];
+        if (child) apply(child, childSnapshot);
+      });
+    };
+
+    apply(clone, safeClone);
   }
 
   function notifySelection(editor: Editor): void {
@@ -2108,6 +2164,22 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     let bindCanvasComponentDragWhenReady: (() => void) | undefined;
     let unbindCanvasStateObservers: (() => void) | undefined;
     let bindCanvasStateObservers: (() => void) | undefined;
+    const handleComponentClone = (clone: Component) => {
+      if (disposed || !editor) return;
+      const cloneSnapshot = snapshotFromGrapesComponent(clone);
+      if (collectPersistedNodeIds(cloneSnapshot).size === 0) return;
+      const wasInternalChange = internalChangeRef.current;
+      internalChangeRef.current = true;
+      try {
+        // GrapesJS creates a new internal model ID but copies custom Payload
+        // identity attributes verbatim. Remap the Payload IDs before the
+        // cloned model is inserted, so Layers/Canvas/React never see a stale
+        // identity during copy/paste or the native toolbar clone lifecycle.
+        refreshClonedComponentIdentity(editor, clone);
+      } finally {
+        internalChangeRef.current = wasInternalChange;
+      }
+    };
 
     const handleInteractionKeyDown = (event: KeyboardEvent) => {
       const currentEditor = editorRef.current;
@@ -2313,6 +2385,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           },
         });
         editorRef.current = editor;
+        editor.on('component:clone', handleComponentClone);
         commandBusRef.current = createEditorCommandBus(
           editor,
           designSystem ? { designSystem } : {},
@@ -2321,11 +2394,21 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           payloadToEditorComponent(payloadRef.current, {
             reusableRuntime: reusableRuntimeRef.current,
             ...(designSystemRef.current ? { designSystem: designSystemRef.current } : {}),
+            projectionContext: projectionContextRef.current,
           }),
         );
         initialPersistedSignatureRef.current = JSON.stringify(
           serializeGrapesComponent(getRoot(editor), documentKind),
         );
+        editor
+          .getModel()
+          .skip(() =>
+            applyAllViewportStyles(
+              getRoot(editor as Editor),
+              viewportRef.current,
+              designSystemRef.current,
+            ),
+          );
         ensureAllFormPreviews(getRoot(editor));
         syncRuntimePreviewClasses(getRoot(editor));
         window.setTimeout(() => syncRuntimePreviewClasses(getRoot(editor as Editor)), 0);
@@ -2336,6 +2419,11 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           unbindCanvasComponentDrag?.();
           unbindRuntimePreviewClasses?.();
           syncRuntimePreviewClasses(getRoot(editor as Editor));
+          applyAllViewportStyles(
+            getRoot(editor as Editor),
+            viewportRef.current,
+            designSystemRef.current,
+          );
           window.setTimeout(() => {
             if (editorRef.current === editor)
               syncRuntimePreviewClasses(getRoot(editor as Editor));
@@ -2343,8 +2431,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           const frameDocument = editor?.Canvas.getFrameEl()?.contentDocument;
           if (frameDocument?.body && typeof MutationObserver !== 'undefined') {
             const observer = new MutationObserver(() => {
-              if (editorRef.current === editor)
+              if (editorRef.current === editor) {
                 syncRuntimePreviewClasses(getRoot(editor as Editor));
+                applyAllViewportStyles(
+                  getRoot(editor as Editor),
+                  viewportRef.current,
+                  designSystemRef.current,
+                );
+              }
             });
             observer.observe(frameDocument.body, { childList: true, subtree: true });
             unbindRuntimePreviewClasses = () => observer.disconnect();
@@ -2420,8 +2514,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const handleComponentUpdate = () => {
           if (editorRef.current !== editor) return;
           window.setTimeout(() => {
-            if (editorRef.current === editor)
+            if (editorRef.current === editor) {
               syncRuntimePreviewClasses(getRoot(editor as Editor));
+              applyAllViewportStyles(
+                getRoot(editor as Editor),
+                viewportRef.current,
+                designSystemRef.current,
+              );
+            }
           }, 0);
           let persistedDocumentChanged = true;
           try {
@@ -2524,6 +2624,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       if (editor && bindCanvasStateObservers) {
         editor.off('canvas:frame:load:body', bindCanvasStateObservers);
       }
+      if (editor) editor.off('component:clone', handleComponentClone);
       if (window.__payloadBuilderDebug) {
         delete window.__payloadBuilderDebug;
       }

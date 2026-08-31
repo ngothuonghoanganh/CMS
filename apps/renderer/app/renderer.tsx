@@ -109,6 +109,8 @@ export type RenderContext = {
   tenantSlug?: string;
   siteName?: string;
   siteLogo?: string;
+  /** Base style supplied by a containing site-global component part. */
+  globalPartStyle?: CSSProperties;
   runtimeIds?: readonly string[];
   extensions?: readonly PageRuntimeExtension[];
   customDomain?: boolean;
@@ -531,7 +533,7 @@ function renderNavigationView(
       pagePath={context.pagePath}
       partsStyle={
         {
-          root: nodePartStyle(node, 'root', context),
+          root: { ...nodePartStyle(node, 'root', context), ...context.globalPartStyle },
           list: nodePartStyle(node, 'list', context),
           item: nodePartStyle(node, 'item', context),
           link: nodePartStyle(node, 'link', context),
@@ -556,7 +558,11 @@ function renderSiteBrand(
       {...nodeAttributes(node)}
       data-payload-part="root"
       href={isSafeHref(node.props.href) ? node.props.href : '/'}
-      style={{ ...nodeStyle(node, context), ...nodePartStyle(node, 'root', context) }}
+      style={{
+        ...nodeStyle(node, context),
+        ...nodePartStyle(node, 'root', context),
+        ...context.globalPartStyle,
+      }}
     >
       {showLogo && context.siteLogo ? (
         <img alt="" data-payload-part="logo" src={context.siteLogo} />
@@ -570,6 +576,7 @@ function renderSiteBrand(
 
 function renderGlobalHeaderChild(
   node: RenderableNode,
+  parent: GlobalHeaderRenderableNode,
   context: RenderContext,
 ): ReactElement {
   const part =
@@ -580,23 +587,42 @@ function renderGlobalHeaderChild(
         : node.type === 'button' || node.type === 'link'
           ? 'actions'
           : undefined;
-  const rendered = renderNode(node, context);
+  const partStyle = part ? nodePartStyle(parent, part, context) : undefined;
+  const rendered = renderNode(
+    node,
+    partStyle ? { ...context, globalPartStyle: partStyle } : context,
+  ) as React.ReactElement<{
+    'data-payload-part'?: string;
+    style?: CSSProperties;
+  }>;
   return part
-    ? React.cloneElement(
-        rendered as React.ReactElement<{ 'data-payload-part'?: string }>,
-        { 'data-payload-part': part },
-      )
+    ? React.cloneElement(rendered, {
+        'data-payload-part': part,
+        style: { ...rendered.props.style, ...partStyle },
+      })
     : rendered;
 }
 
 function renderGlobalFooterChild(
   node: RenderableNode,
+  parent: GlobalFooterRenderableNode,
   context: RenderContext,
 ): ReactElement {
-  return React.cloneElement(
-    renderNode(node, context) as React.ReactElement<{ 'data-payload-part'?: string }>,
-    { 'data-payload-part': 'content' },
-  );
+  const partStyle = nodePartStyle(parent, 'content', context);
+  const rendered = renderNode(
+    node,
+    partStyle ? { ...context, globalPartStyle: partStyle } : context,
+  ) as React.ReactElement<{
+    'data-payload-part'?: string;
+    style?: CSSProperties;
+  }>;
+  return React.cloneElement(rendered, {
+    'data-payload-part': 'content',
+    style: {
+      ...rendered.props.style,
+      ...partStyle,
+    },
+  });
 }
 
 function renderGlobalHeader(
@@ -617,7 +643,9 @@ function renderGlobalHeader(
       }}
     >
       {node.children.map((child) => (
-        <Fragment key={child.id}>{renderGlobalHeaderChild(child, context)}</Fragment>
+        <Fragment key={child.id}>
+          {renderGlobalHeaderChild(child, node, context)}
+        </Fragment>
       ))}
     </header>
   );
@@ -634,7 +662,9 @@ function renderGlobalFooter(
       style={{ ...nodeStyle(node, context), ...nodePartStyle(node, 'root', context) }}
     >
       {node.children.map((child) => (
-        <Fragment key={child.id}>{renderGlobalFooterChild(child, context)}</Fragment>
+        <Fragment key={child.id}>
+          {renderGlobalFooterChild(child, node, context)}
+        </Fragment>
       ))}
     </footer>
   );

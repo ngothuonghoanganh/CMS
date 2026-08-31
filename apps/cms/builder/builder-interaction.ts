@@ -5,6 +5,7 @@ import {
   BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
   BUILDER_QUOTE_PREVIEW_ATTRIBUTE,
   BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
+  BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
 } from './builder-adapter';
 import {
@@ -65,7 +66,8 @@ export function isEditorOnlyPreview(component: Component): boolean {
       attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] !== undefined ||
       attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined ||
       attributes[BUILDER_QUOTE_PREVIEW_ATTRIBUTE] !== undefined ||
-      attributes[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] !== undefined
+      attributes[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] !== undefined ||
+      attributes[BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE] !== undefined
     ) {
       return true;
     }

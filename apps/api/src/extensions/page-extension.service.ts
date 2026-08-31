@@ -145,6 +145,14 @@ export class PageExtensionService {
     await this.instanceModel.deleteOne({ pageId, workspaceId, extensionId }).exec();
   }
 
+  /**
+   * Removes all page-scoped extension state after the page's ownership and
+   * delete rules have already been checked by PageService.
+   */
+  async removeAllForPage(pageId: string, workspaceId: string): Promise<void> {
+    await this.instanceModel.deleteMany({ pageId, workspaceId }).exec();
+  }
+
   async synchronizePayload(
     pageId: string,
     workspaceId: string,

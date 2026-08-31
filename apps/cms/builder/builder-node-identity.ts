@@ -29,10 +29,12 @@ function isRecord(value: unknown): value is UnknownRecord {
 function childValues(node: UnknownRecord): unknown[] {
   const children = node.children;
   const components = node.components;
+  const root = node.root;
   const values: unknown[] = [];
   if (Array.isArray(children)) values.push(...children);
   if (Array.isArray(components)) values.push(...components);
   else if (isRecord(components)) values.push(components);
+  if (isRecord(root)) values.push(root);
   return values;
 }
 
@@ -147,6 +149,19 @@ export function repairDuplicatePersistedNodeIds<T>(value: T): T {
   };
 
   return repair(value, new Map(), true) as T;
+}
+
+export function repairDuplicatePersistedNodeIdsWithReport<T>(value: T): {
+  value: T;
+  normalized: boolean;
+  duplicateIds: string[];
+} {
+  const duplicateIds = findDuplicatePersistedNodeIds(value);
+  return {
+    value: repairDuplicatePersistedNodeIds(value),
+    normalized: duplicateIds.length > 0,
+    duplicateIds,
+  };
 }
 
 let fallbackSequence = 0;

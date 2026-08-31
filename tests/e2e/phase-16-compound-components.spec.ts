@@ -181,6 +181,62 @@ test('Phase 16 tabs expose ARIA runtime semantics and keyboard activation', asyn
   await preview.close();
 });
 
+test('Phase 18.2 paints responsive component-part styles before save and after reload', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await openBuilder(page, 'Phase 18.2 Parts');
+  const canvas = page.frameLocator('iframe.gjs-frame');
+
+  await page.getByRole('button', { name: 'Accordion add', exact: true }).click();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  await page.getByRole('treeitem', { name: 'Select Accordion', exact: true }).click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
+  await page
+    .locator('.builder-inspector-field')
+    .filter({ hasText: /^Target/ })
+    .locator('select')
+    .selectOption('trigger');
+
+  const partStyleSection = page
+    .locator('details.builder-inspector-section')
+    .filter({ hasText: 'Component part' });
+  await partStyleSection.getByLabel('All', { exact: true }).fill('20');
+  const trigger = canvas.locator('[data-payload-part="trigger"]').first();
+  await expect(trigger).toHaveCSS('padding', '20px');
+
+  await page.getByRole('button', { name: 'Tablet', exact: true }).click();
+  await partStyleSection.getByLabel('All', { exact: true }).fill('32');
+  await expect(trigger).toHaveCSS('padding', '32px');
+  await page.getByRole('button', { name: 'Mobile', exact: true }).click();
+  await partStyleSection.getByLabel('All', { exact: true }).fill('16');
+  await expect(trigger).toHaveCSS('padding', '16px');
+
+  const authoredBeforeViewportCycle = await canvas
+    .locator('[data-payload-node-type="accordion"]')
+    .getAttribute('data-payload-parts-style');
+  await page.getByRole('button', { name: 'Desktop', exact: true }).click();
+  await page.getByRole('button', { name: 'Tablet', exact: true }).click();
+  await page.getByRole('button', { name: 'Mobile', exact: true }).click();
+  await page.getByRole('button', { name: 'Desktop', exact: true }).click();
+  expect(
+    await canvas
+      .locator('[data-payload-node-type="accordion"]')
+      .getAttribute('data-payload-parts-style'),
+  ).toBe(authoredBeforeViewportCycle);
+  await expect(trigger).toHaveCSS('padding', '20px');
+
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
+  await page.reload();
+  await expect(
+    page
+      .frameLocator('iframe.gjs-frame')
+      .locator('[data-payload-part="trigger"]')
+      .first(),
+  ).toHaveCSS('padding', '20px');
+});
+
 test('Phase 16 gallery enforces image-only structure and responsive authored styles', async ({
   page,
 }) => {

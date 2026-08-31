@@ -1261,6 +1261,37 @@ test('duplicates a button with a fresh identity and no React key warning', async
   expect(duplicateKeyWarnings).toEqual([]);
 });
 
+test('native copy and paste assigns fresh identities to cloned elements', async ({
+  page,
+}) => {
+  const duplicateKeyWarnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().includes('same key')) {
+      duplicateKeyWarnings.push(message.text());
+    }
+  });
+  await openBuilder(page, 'Native Copy Paste');
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.getByRole('button', { name: 'Drag Button block', exact: true }).click();
+
+  const before = await readBuilderModel(page);
+  const originalId = before.root.children[0]?.children[0]?.id;
+  expect(originalId).toBeTruthy();
+
+  await page.keyboard.press('Control+c');
+  await page.keyboard.press('Control+v');
+
+  const canvas = page.frameLocator('iframe.gjs-frame');
+  await expect(canvas.locator('a[data-payload-node-type="button"]')).toHaveCount(2);
+  const after = await readBuilderModel(page);
+  const buttonIds = after.root.children[0]?.children.map((child) => child.id) ?? [];
+  expect(buttonIds).toHaveLength(2);
+  expect(new Set(buttonIds).size).toBe(2);
+  expect(buttonIds).toContain(originalId);
+  expect(buttonIds).not.toEqual([originalId, originalId]);
+  expect(duplicateKeyWarnings).toEqual([]);
+});
+
 test('supports keyboard delete from Layers without intercepting text fields', async ({
   page,
 }) => {

@@ -12,6 +12,7 @@ import {
   PagePayloadSchema,
   SiteGlobalsResponseSchema,
   SiteGlobalsSchema,
+  SiteSchema,
   SiteGlobalPayloadV1Schema,
   PublicPageSchema,
   createPageDocument,
@@ -121,6 +122,10 @@ type SaveDraftResult = boolean;
 type BuilderPreviewNavigation = {
   main?: ResolvedNavigationItem[];
   footer?: ResolvedNavigationItem[];
+};
+type BuilderSiteContext = {
+  name: string;
+  logo?: string;
 };
 type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
 type AddPanelTab = 'layouts' | 'elements' | 'saved' | 'templates';
@@ -492,6 +497,7 @@ export default function BuilderShell({
   const [builderViewportWidth, setBuilderViewportWidth] = useState(1440);
   const [reusableRuntime, setReusableRuntime] = useState<ReusableRuntime[]>([]);
   const [navigation, setNavigation] = useState<BuilderPreviewNavigation>({});
+  const [siteContext, setSiteContext] = useState<BuilderSiteContext | null>(null);
   const [previewExtensions, setPreviewExtensions] = useState<PageRuntimeExtension[]>([]);
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
@@ -946,6 +952,7 @@ export default function BuilderShell({
           pageResponse,
           versionsResponse,
           assetsResponse,
+          siteResponse,
           globalsResponseRaw,
           reusablesResponseRaw,
           designSystemResponseRaw,
@@ -954,6 +961,7 @@ export default function BuilderShell({
           api.get(`/pages/${pageId}`),
           api.get(`/pages/${pageId}/versions?limit=100`),
           api.get(`/workspaces/${workspaceId}/assets?limit=100`),
+          api.get(`/workspaces/${workspaceId}/sites/${siteId}`),
           api
             .get(`/workspaces/${workspaceId}/sites/${siteId}/globals`)
             .catch((caughtError: unknown) => {
@@ -986,6 +994,7 @@ export default function BuilderShell({
         if (cancelled) return;
 
         const nextPage = PageSchema.parse(pageResponse);
+        const nextSite = SiteSchema.parse(siteResponse);
         if (nextPage.siteId !== siteId || nextPage.workspaceId !== workspaceId) {
           throw new Error('This page does not belong to the selected workspace/site.');
         }
@@ -998,6 +1007,10 @@ export default function BuilderShell({
         }
         const nextPayload = PagePayloadSchema.parse(nextVersion.payload);
         setPage(nextPage);
+        setSiteContext({
+          name: nextSite.name,
+          ...(nextSite.logo ? { logo: nextSite.logo } : {}),
+        });
         setVersion(PageVersionSchema.parse(nextVersion));
         setPageDocument(createPageDocument(nextPayload));
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
@@ -2339,6 +2352,9 @@ export default function BuilderShell({
               initialPayload={activePayload}
               reusableRuntime={reusableRuntime}
               designSystem={designSystem}
+              {...(siteContext ? { siteName: siteContext.name } : {})}
+              {...(siteContext?.logo ? { siteLogo: siteContext.logo } : {})}
+              navigation={navigation}
               key={`${editingReusableId ?? documentKind}-${activePayload.root.id}`}
               onDirty={markDirty}
               onDocumentChange={handleDocumentChange}

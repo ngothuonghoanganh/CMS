@@ -8,6 +8,7 @@ import {
   PagePayloadV7Schema,
   createDefaultSiteDesignSystem,
   SITE_GLOBAL_COMPONENT_TYPES,
+  type SiteGlobalPayloadV1,
   type PagePayloadV1,
 } from '@payload/contracts';
 
@@ -269,7 +270,11 @@ describe('PagePayloadV1 renderer', () => {
                 mobile: { padding: '8px' },
               },
               partsStyle: {
-                brand: { base: {}, mobile: { margin: '4px' } },
+                brand: {
+                  base: { backgroundColor: '#fee2e2' },
+                  mobile: { margin: '4px' },
+                },
+                navigation: { base: { backgroundColor: '#dbeafe' } },
               },
               children: [
                 {
@@ -315,9 +320,48 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('Acme');
     expect(markup).toContain('src="/assets/logo.png"');
     expect(markup).toContain('padding:16px');
+    expect(markup).toContain('background-color:#fee2e2');
+    expect(markup).toContain('background-color:#dbeafe');
     expect(markup).toContain('padding:8px!important');
     expect(markup).toContain('margin:4px!important');
     expect(markup).not.toContain('data-site-global="footer"');
+  });
+
+  it('applies the global footer content part base style to its live child', () => {
+    const footer: SiteGlobalPayloadV1 = {
+      version: 1,
+      documentKind: 'site-footer',
+      metadata: { documentTitle: 'Global footer' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'footer',
+            type: 'global-footer',
+            props: {},
+            partsStyle: { content: { base: { color: '#1d4ed8' } } },
+            children: [
+              {
+                id: 'footer-text',
+                type: 'text',
+                props: { text: 'Footer content' },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      renderPage(createPayload(), { globals: { version: 1, footer } }),
+    );
+
+    expect(markup).toContain('data-site-global="footer"');
+    expect(markup).toContain('data-payload-part="content"');
+    expect(markup).toContain('color:#1d4ed8');
   });
 
   it('fails safely for invalid or unsupported payload data', () => {

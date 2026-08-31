@@ -277,6 +277,7 @@ export class PageService {
       });
     }
     await this.navigation.assertPageCanBeDeleted(page.siteId, pageId, workspaceId);
+    await this.pageExtensions.removeAllForPage(pageId, workspaceId);
     await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
     await page.deleteOne();
   }

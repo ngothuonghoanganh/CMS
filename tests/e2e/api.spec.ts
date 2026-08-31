@@ -341,6 +341,131 @@ test('tenant extensions are registry-backed, tenant-scoped and auditable', async
   );
 });
 
+test('extension disable contract distinguishes draft-only and published page usage', async ({
+  request,
+}) => {
+  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const loginResponse = await request.post(`${baseUrl}/auth/login`, {
+    data: {
+      email: process.env.AUTH_EMAIL ?? 'admin@example.com',
+      password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
+    },
+  });
+  expect(loginResponse.status()).toBe(200);
+  const currentContext = (await (await request.get(`${baseUrl}/auth/me`)).json()) as {
+    workspace: { organizationId: string; id: string };
+  };
+  const suffix = Date.now();
+  const organizationResponse = await request.post(`${baseUrl}/organizations`, {
+    data: { name: `Extension Contract ${suffix}`, slug: `extension-contract-${suffix}` },
+  });
+  expect(organizationResponse.status()).toBe(201);
+  const organization = (await organizationResponse.json()) as { id: string };
+  const workspacesResponse = await request.get(
+    `${baseUrl}/organizations/${organization.id}/workspaces`,
+  );
+  expect(workspacesResponse.status()).toBe(200);
+  const workspace = (
+    (await workspacesResponse.json()) as { items: Array<{ id: string }> }
+  ).items[0];
+  expect(workspace).toBeTruthy();
+  const switchResponse = await request.post(`${baseUrl}/auth/context`, {
+    data: { organizationId: organization.id, workspaceId: workspace?.id },
+  });
+  expect(switchResponse.status()).toBe(200);
+
+  const extensionId = 'demo-builder-countdown';
+  const enableTenantResponse = await request.post(
+    `${baseUrl}/extensions/${extensionId}/enable`,
+    { data: {} },
+  );
+  expect(enableTenantResponse.status()).toBe(201);
+  const siteResponse = await request.post(
+    `${baseUrl}/workspaces/${workspace?.id}/sites`,
+    {
+      data: {
+        name: `Extension Contract Site ${suffix}`,
+        slug: `extension-contract-site-${suffix}`,
+      },
+    },
+  );
+  expect(siteResponse.status()).toBe(201);
+  const site = (await siteResponse.json()) as { id: string };
+  const payload = {
+    version: 3,
+    metadata: { documentTitle: 'Extension contract page' },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [
+        {
+          id: 'section',
+          type: 'section',
+          props: {},
+          children: [
+            {
+              id: 'countdown',
+              type: 'countdown',
+              props: { label: 'Launch', targetAt: '2030-01-01T00:00:00.000Z' },
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const pageResponse = await request.post(`${baseUrl}/sites/${site.id}/pages`, {
+    data: {
+      name: `Extension Contract Page ${suffix}`,
+      slug: `extension-contract-page-${suffix}`,
+      payload,
+    },
+  });
+  expect(pageResponse.status()).toBe(201);
+  const page = (await pageResponse.json()) as { id: string };
+
+  try {
+    const draftDisableResponse = await request.post(
+      `${baseUrl}/extensions/${extensionId}/disable`,
+    );
+    expect(draftDisableResponse.status()).toBe(201);
+
+    expect(
+      (
+        await request.post(`${baseUrl}/extensions/${extensionId}/enable`, { data: {} })
+      ).status(),
+    ).toBe(201);
+    const attachResponse = await request.put(
+      `${baseUrl}/pages/${page.id}/extensions/${extensionId}`,
+      { data: { enabled: true } },
+    );
+    expect(attachResponse.status()).toBe(200);
+    const publishResponse = await request.post(`${baseUrl}/pages/${page.id}/publish`, {
+      data: {},
+    });
+    expect(publishResponse.status()).toBe(201);
+
+    const publishedDisableResponse = await request.post(
+      `${baseUrl}/extensions/${extensionId}/disable`,
+    );
+    expect(publishedDisableResponse.status()).toBe(409);
+    expect(
+      ((await publishedDisableResponse.json()) as { error: { code: string } }).error.code,
+    ).toBe('EXTENSION_PUBLISHED_DEPENDENCY');
+  } finally {
+    await request.post(`${baseUrl}/pages/${page.id}/unpublish`);
+    await request.delete(`${baseUrl}/pages/${page.id}`);
+    await request.post(`${baseUrl}/extensions/${extensionId}/disable`);
+    await request.post(`${baseUrl}/auth/context`, {
+      data: {
+        organizationId: currentContext.workspace.organizationId,
+        workspaceId: currentContext.workspace.id,
+      },
+    });
+  }
+});
+
 test('tenant user management enforces lifecycle, session revocation and safe access data', async ({
   request,
 }) => {

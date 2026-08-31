@@ -57,6 +57,7 @@ import {
   type ReusableComponentDocument,
   type ReusableRuntime,
   type BuilderDocumentKind,
+  type ResolvedNavigationItem,
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
 import { builderExtensionElement } from './builder-extension-registry';
@@ -64,6 +65,7 @@ import {
   assertUniquePersistedNodeIds,
   generateFreshNodeId,
   repairDuplicatePersistedNodeIds,
+  repairDuplicatePersistedNodeIdsWithReport,
 } from './builder-node-identity';
 
 export const BUILDER_NODE_ID_ATTRIBUTE = 'data-payload-node-id';
@@ -87,6 +89,12 @@ export const BUILDER_PARTS_STYLE_ATTRIBUTE = 'data-payload-parts-style';
 export const BUILDER_GLOBAL_PROPS_ATTRIBUTE = 'data-payload-global-props';
 export const BUILDER_REUSABLE_PROPS_ATTRIBUTE = 'data-payload-reusable-props';
 export const BUILDER_REUSABLE_PREVIEW_ATTRIBUTE = 'data-payload-reusable-preview';
+/** Marker for semantic Canvas projections that never belong to PagePayload. */
+export const BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE = 'data-payload-semantic-preview';
+export const BUILDER_NAVIGATION_PREVIEW_ATTRIBUTE = 'data-payload-navigation-preview';
+export const BUILDER_IDENTITY_NORMALIZED_ATTRIBUTE = 'data-payload-identity-normalized';
+export const BUILDER_IDENTITY_NORMALIZED_IDS_ATTRIBUTE =
+  'data-payload-identity-normalized-ids';
 /** Editor-only slot ownership marker; it is intentionally omitted from payload props. */
 export const BUILDER_NODE_SLOT_ATTRIBUTE = 'data-payload-slot';
 
@@ -178,6 +186,186 @@ function editorOnlyReusablePreview(definition: ComponentDefinition): ComponentDe
     selectable: false,
   };
 }
+
+function editorOnlySemanticPreview(
+  definition: ComponentDefinition,
+  part?: string,
+): ComponentDefinition {
+  const attributes = { ...(definition.attributes ?? {}) } as Record<string, unknown>;
+  delete attributes[BUILDER_NODE_ID_ATTRIBUTE];
+  delete attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  delete attributes[BUILDER_NODE_SLOT_ATTRIBUTE];
+  attributes[BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE] = 'true';
+  if (part) attributes['data-payload-part'] = part;
+  return {
+    ...definition,
+    attributes,
+    copyable: false,
+    draggable: false,
+    droppable: false,
+    removable: false,
+    selectable: false,
+  };
+}
+
+function markEditorPart(
+  definition: ComponentDefinition,
+  part: string,
+): ComponentDefinition {
+  return {
+    ...definition,
+    attributes: {
+      ...(definition.attributes ?? {}),
+      'data-payload-part': part,
+    },
+  };
+}
+
+function navigationPreviewItem(item: ResolvedNavigationItem): ComponentDefinition {
+  return editorOnlySemanticPreview(
+    {
+      tagName: 'li',
+      components: [
+        editorOnlySemanticPreview(
+          {
+            tagName: 'a',
+            content: sanitizeInlineText(item.label),
+            attributes: {
+              href: item.href,
+              ...(item.openInNewTab ? { target: '_blank' } : {}),
+            },
+          },
+          'link',
+        ),
+        ...(item.children?.length ? [navigationPreviewList(item.children)] : []),
+      ],
+    },
+    'item',
+  );
+}
+
+function navigationPreviewList(
+  items: readonly ResolvedNavigationItem[],
+): ComponentDefinition {
+  return editorOnlySemanticPreview(
+    {
+      tagName: 'ul',
+      attributes: { [BUILDER_NAVIGATION_PREVIEW_ATTRIBUTE]: 'true' },
+      components: items.map(navigationPreviewItem),
+    },
+    'list',
+  );
+}
+
+function navigationPreviewComponents(
+  items: readonly ResolvedNavigationItem[] | undefined,
+): ComponentDefinition[] {
+  return [
+    editorOnlySemanticPreview(
+      {
+        tagName: 'button',
+        content: 'Menu',
+        attributes: { type: 'button', 'aria-label': 'Open navigation' },
+      },
+      'mobileToggle',
+    ),
+    editorOnlySemanticPreview(
+      {
+        tagName: 'div',
+        components: [navigationPreviewList(items ?? [])],
+      },
+      'mobilePanel',
+    ),
+  ];
+}
+
+function accordionPreviewComponents(
+  node: Extract<BuilderNode, { type: 'accordion-item' }>,
+  payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  reusableRuntime: readonly ReusableRuntime[],
+  designSystem: SiteDesignSystem | undefined,
+  projectionContext?: BuilderProjectionContext,
+): ComponentDefinition[] {
+  const headingLevel = 'headingLevel' in node.props ? node.props.headingLevel : 3;
+  return [
+    editorOnlySemanticPreview({
+      tagName: `h${headingLevel}`,
+      components: [
+        editorOnlySemanticPreview(
+          {
+            tagName: 'button',
+            content: sanitizeInlineText(node.props.title),
+            attributes: {
+              type: 'button',
+              'aria-expanded': String(node.props.defaultOpen),
+            },
+            components: [
+              editorOnlySemanticPreview({ tagName: 'span', content: '+' }, 'icon'),
+            ],
+          },
+          'trigger',
+        ),
+      ],
+    }),
+    editorOnlySemanticPreview(
+      {
+        tagName: 'div',
+        attributes: { role: 'region', 'aria-label': node.props.title },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+            projectionContext,
+          ),
+        ),
+      },
+      'panel',
+    ),
+  ];
+}
+
+function tabsPreviewList(
+  node: Extract<BuilderNode, { type: 'tabs' }>,
+): ComponentDefinition {
+  return editorOnlySemanticPreview(
+    {
+      tagName: 'div',
+      attributes: {
+        role: 'tablist',
+        'aria-label': 'ariaLabel' in node.props ? node.props.ariaLabel : 'Tabs',
+      },
+      components: node.children.map((child, index) =>
+        editorOnlySemanticPreview(
+          {
+            tagName: 'button',
+            content: sanitizeInlineText(
+              child.type === 'tab-item' ? child.props.label : `Tab ${index + 1}`,
+            ),
+            attributes: {
+              role: 'tab',
+              type: 'button',
+              'aria-selected': String(index === 0),
+            },
+          },
+          index === 0 ? 'activeTab' : 'tab',
+        ),
+      ),
+    },
+    'list',
+  );
+}
+
+type BuilderProjectionContext = {
+  siteName?: string;
+  siteLogo?: string;
+  navigation?: {
+    main?: readonly ResolvedNavigationItem[];
+    footer?: readonly ResolvedNavigationItem[];
+  };
+};
 
 function reusablePreviewTree(definition: ComponentDefinition): ComponentDefinition {
   const previewAttributes = { ...(definition.attributes ?? {}) };
@@ -584,6 +772,7 @@ function componentDefinitionForNode(
   payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7 = 1,
   reusableRuntime: readonly ReusableRuntime[] = [],
   designSystem?: SiteDesignSystem,
+  projectionContext?: BuilderProjectionContext,
 ): ComponentDefinition {
   const attributes = attributesForNode(node, metadata, payloadVersion);
   if (node.type === 'reusable-instance') {
@@ -789,33 +978,34 @@ function componentDefinitionForNode(
           ...attributes,
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
-        components: node.children.map((child) =>
-          componentDefinitionForNode(
+        components: node.children.map((child) => {
+          const definition = componentDefinitionForNode(
             child,
             undefined,
             payloadVersion,
             reusableRuntime,
             designSystem,
-          ),
-        ),
+            projectionContext,
+          );
+          return child.type === 'accordion-item'
+            ? markEditorPart(definition, 'item')
+            : definition;
+        }),
       };
     case 'accordion-item':
       return {
         ...shared,
         tagName: 'section',
-        content: node.props.title,
         attributes: {
           ...attributes,
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
-        components: node.children.map((child) =>
-          componentDefinitionForNode(
-            child,
-            undefined,
-            payloadVersion,
-            reusableRuntime,
-            designSystem,
-          ),
+        components: accordionPreviewComponents(
+          node,
+          payloadVersion,
+          reusableRuntime,
+          designSystem,
+          projectionContext,
         ),
       };
     case 'tabs':
@@ -826,34 +1016,46 @@ function componentDefinitionForNode(
           ...attributes,
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
-        components: node.children.map((child) =>
-          componentDefinitionForNode(
-            child,
-            undefined,
-            payloadVersion,
-            reusableRuntime,
-            designSystem,
+        components: [
+          tabsPreviewList(node),
+          ...node.children.map((child) =>
+            componentDefinitionForNode(
+              child,
+              undefined,
+              payloadVersion,
+              reusableRuntime,
+              designSystem,
+              projectionContext,
+            ),
           ),
-        ),
+        ],
       };
     case 'tab-item':
       return {
         ...shared,
         tagName: 'section',
-        content: node.props.label,
         attributes: {
           ...attributes,
           [BUILDER_COMPOUND_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
-        components: node.children.map((child) =>
-          componentDefinitionForNode(
-            child,
-            undefined,
-            payloadVersion,
-            reusableRuntime,
-            designSystem,
+        components: [
+          editorOnlySemanticPreview(
+            {
+              tagName: 'div',
+              components: node.children.map((child) =>
+                componentDefinitionForNode(
+                  child,
+                  undefined,
+                  payloadVersion,
+                  reusableRuntime,
+                  designSystem,
+                  projectionContext,
+                ),
+              ),
+            },
+            'panel',
           ),
-        ),
+        ],
       };
     case 'gallery':
       return {
@@ -867,6 +1069,7 @@ function componentDefinitionForNode(
             payloadVersion,
             reusableRuntime,
             designSystem,
+            projectionContext,
           ),
         ),
       };
@@ -879,36 +1082,76 @@ function componentDefinitionForNode(
           ...attributes,
           [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
-        components: node.children.map((child) =>
-          componentDefinitionForNode(
+        components: node.children.map((child) => {
+          const part =
+            node.type === 'global-footer'
+              ? 'content'
+              : child.type === 'site-brand'
+                ? 'brand'
+                : child.type === 'navigation-view'
+                  ? 'navigation'
+                  : child.type === 'button' || child.type === 'link'
+                    ? 'actions'
+                    : undefined;
+          const definition = componentDefinitionForNode(
             child,
             undefined,
             payloadVersion,
             reusableRuntime,
             designSystem,
-          ),
-        ),
+            projectionContext,
+          );
+          return part ? markEditorPart(definition, part) : definition;
+        }),
       };
     case 'navigation-view':
       return {
         ...shared,
         tagName: 'nav',
-        content: 'Navigation menu',
         attributes: {
           ...attributes,
           [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
+        components: navigationPreviewComponents(
+          projectionContext?.navigation?.[node.props.source],
+        ),
       };
     case 'site-brand':
       return {
         ...shared,
         tagName: 'a',
-        content: 'Site Brand',
         attributes: {
           ...attributes,
           href: node.props.href,
           [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
+        components: [
+          ...(node.props.display === 'logo' || node.props.display === 'logo-text'
+            ? projectionContext?.siteLogo
+              ? [
+                  editorOnlySemanticPreview(
+                    {
+                      tagName: 'img',
+                      void: true,
+                      attributes: { src: projectionContext.siteLogo, alt: '' },
+                    },
+                    'logo',
+                  ),
+                ]
+              : []
+            : []),
+          ...(node.props.display === 'text' || node.props.display === 'logo-text'
+            ? [
+                editorOnlySemanticPreview(
+                  {
+                    tagName: 'span',
+                    content: sanitizeInlineText(projectionContext?.siteName ?? 'Site'),
+                  },
+                  'text',
+                ),
+              ]
+            : []),
+        ],
       };
     case 'root':
     case 'section':
@@ -922,6 +1165,7 @@ function componentDefinitionForNode(
             payloadVersion,
             reusableRuntime,
             designSystem,
+            projectionContext,
           ),
         ),
       };
@@ -934,16 +1178,27 @@ export function payloadToEditorComponent(
   options: {
     reusableRuntime?: readonly ReusableRuntime[];
     designSystem?: SiteDesignSystem;
+    projectionContext?: BuilderProjectionContext;
   } = {},
 ): ComponentDefinition {
-  const safePayload = repairDuplicatePersistedNodeIds(payload);
-  return componentDefinitionForNode(
-    safePayload.root,
-    safePayload.metadata,
-    safePayload.version,
+  const repaired = repairDuplicatePersistedNodeIdsWithReport(payload);
+  const definition = componentDefinitionForNode(
+    repaired.value.root,
+    repaired.value.metadata,
+    repaired.value.version,
     options.reusableRuntime ?? [],
     options.designSystem,
+    options.projectionContext,
   );
+  if (!repaired.normalized) return definition;
+  return {
+    ...definition,
+    attributes: {
+      ...(definition.attributes ?? {}),
+      [BUILDER_IDENTITY_NORMALIZED_ATTRIBUTE]: 'true',
+      [BUILDER_IDENTITY_NORMALIZED_IDS_ATTRIBUTE]: JSON.stringify(repaired.duplicateIds),
+    },
+  };
 }
 
 export function reusableDocumentToEditorDefinition(
@@ -1596,6 +1851,17 @@ function readNodeStyle(
   return Object.keys(baseFromEditor).length > 0 ? { base: baseFromEditor } : undefined;
 }
 
+function isEditorOnlySnapshot(snapshot: BuilderEditorSnapshot): boolean {
+  const attributes = snapshot.attributes;
+  return (
+    attributes[BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE] !== undefined ||
+    attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] !== undefined ||
+    attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined ||
+    attributes[BUILDER_QUOTE_PREVIEW_ATTRIBUTE] !== undefined ||
+    attributes[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] !== undefined
+  );
+}
+
 function nodeFromSnapshotInternal(
   snapshot: BuilderEditorSnapshot,
   path: string[],
@@ -1849,13 +2115,21 @@ function nodeFromSnapshotInternal(
         [...path, 'props'],
       );
     }
-    const children = snapshot.children.map((child, index) =>
-      nodeFromSnapshot(child, [...path, 'children', String(index)]),
-    );
+    if (type === 'navigation-view' || type === 'site-brand') {
+      return { id, type, style, props: props.data, children: [] };
+    }
+    const children = snapshot.children
+      .filter((child) => !isEditorOnlySnapshot(child))
+      .map((child, index) =>
+        nodeFromSnapshot(child, [...path, 'children', String(index)]),
+      );
     return { id, type, style, props: props.data, children };
   }
 
-  const children = snapshot.children.map((child, index) =>
+  const persistedChildren = snapshot.children.filter(
+    (child) => !isEditorOnlySnapshot(child),
+  );
+  const children = persistedChildren.map((child, index) =>
     nodeFromSnapshot(child, [...path, 'children', String(index)]),
   );
 
@@ -1891,6 +2165,31 @@ function nodeFromSnapshotInternal(
         props.error.issues.map((issue) => issue.message).join('; '),
         [...path, 'props'],
       );
+    }
+    if (type === 'accordion-item' || type === 'tab-item') {
+      const panel = snapshot.children.find(
+        (child) =>
+          child.attributes[BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE] !== undefined &&
+          child.attributes['data-payload-part'] === 'panel',
+      );
+      const panelChildren = panel?.children
+        .filter((child) => !isEditorOnlySnapshot(child))
+        .map((child, index) =>
+          nodeFromSnapshot(child, [...path, 'children', 'panel', String(index)]),
+        );
+      // GrapesJS appends newly inserted children to the selected compound item
+      // rather than to the editor-only panel projection. Preserve both sources
+      // until the next hydration puts the canonical children back in the panel.
+      const canonicalChildren = panel
+        ? [...(panelChildren ?? []), ...children]
+        : children;
+      return {
+        id,
+        type,
+        style,
+        props: props.data,
+        children: canonicalChildren,
+      };
     }
     return { id, type, style, props: props.data, children };
   }
@@ -2067,19 +2366,44 @@ export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePa
               : versionValue === '2' || versionValue === 2 || containsFormNode(root)
                 ? 2
                 : 1;
+  const canonicalRoot = version === 6 ? promoteLegacyV6CompoundProps(root) : root;
   const candidate: unknown = {
     version,
     metadata: readMetadata(snapshot.attributes),
-    root,
+    root: canonicalRoot,
   };
   const parsed = PagePayloadSchema.safeParse(candidate);
   if (!parsed.success) {
     throw new BuilderAdapterError(
-      parsed.error.issues.map((issue) => issue.message).join('; '),
+      parsed.error.issues
+        .map((issue) => `${issue.path.join('.') || 'payload'}: ${issue.message}`)
+        .join('; '),
       ['payload'],
     );
   }
   return parsed.data;
+}
+
+function promoteLegacyV6CompoundProps(
+  node: Record<string, unknown>,
+): Record<string, unknown> {
+  const props = isObject(node.props) ? node.props : undefined;
+  const nextProps =
+    node.type === 'accordion' && props && !('headingLevel' in props)
+      ? { ...props, headingLevel: 3, ariaLabel: 'Accordion' }
+      : node.type === 'tabs' && props && !('ariaLabel' in props)
+        ? { ...props, ariaLabel: 'Tabs', activationMode: 'automatic' }
+        : props;
+  const children = Array.isArray(node.children)
+    ? node.children.map((child) =>
+        isObject(child) ? promoteLegacyV6CompoundProps(child) : child,
+      )
+    : node.children;
+  return {
+    ...node,
+    ...(nextProps ? { props: nextProps } : {}),
+    ...(Array.isArray(children) ? { children } : {}),
+  };
 }
 
 export function serializeSiteGlobalSnapshot(
@@ -2307,6 +2631,51 @@ export function readEditorPartsStyle(
   }
 }
 
+const appliedEditorPartProperties = new WeakMap<object, Map<string, Set<string>>>();
+
+/** Paints the persisted component-part cascade onto the live Canvas DOM. */
+export function applyEditorPartViewportStyles(
+  component: Component,
+  type: BuilderNodeType,
+  viewport: BuilderViewport,
+  designSystem?: SiteDesignSystem,
+): void {
+  const element = component.getEl?.() as HTMLElement | undefined;
+  if (!element) return;
+  const parts = PAGE_COMPONENT_REGISTRY[type].componentParts;
+  const persisted = readEditorPartsStyle(component, type) ?? {};
+
+  for (const partName of Object.keys(parts)) {
+    const targets =
+      partName === 'root'
+        ? [element]
+        : Array.from(
+            element.querySelectorAll<HTMLElement>(`[data-payload-part="${partName}"]`),
+          );
+    const effective = styleBlockToEditorStyle(
+      resolveViewportStyle(persisted[partName], viewport),
+      designSystem,
+    );
+    const cssStyles = Object.entries(effective).flatMap(([editorProperty, value]) => {
+      const definition =
+        PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+          editorProperty as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+        ];
+      return definition ? [[definition.cssProperty, value] as const] : [];
+    });
+    for (const target of targets) {
+      const targetProperties =
+        appliedEditorPartProperties.get(target) ?? new Map<string, Set<string>>();
+      const styleKey = `${type}.${partName}`;
+      const previous = targetProperties.get(styleKey) ?? new Set<string>();
+      previous.forEach((property) => target.style.removeProperty(property));
+      cssStyles.forEach(([property, value]) => target.style.setProperty(property, value));
+      targetProperties.set(styleKey, new Set(cssStyles.map(([property]) => property)));
+      appliedEditorPartProperties.set(target, targetProperties);
+    }
+  }
+}
+
 function sameStyleValues(
   left: Record<string, unknown>,
   right: Record<string, unknown>,
@@ -2452,7 +2821,6 @@ export function updateEditorPartViewportStyle(
   value: string | StyleTokenReference,
   designSystem?: SiteDesignSystem,
 ): boolean {
-  void designSystem;
   const part = PAGE_COMPONENT_REGISTRY[type].componentParts[partName];
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
@@ -2505,5 +2873,6 @@ export function updateEditorPartViewportStyle(
     ...component.getAttributes({ noStyle: true }),
     [BUILDER_PARTS_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
   });
+  applyEditorPartViewportStyles(component, type, viewport, designSystem);
   return true;
 }

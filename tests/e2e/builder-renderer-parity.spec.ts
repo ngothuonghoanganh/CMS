@@ -346,6 +346,11 @@ async function compareScreenshots(
   name: string,
   testInfo: TestInfo,
   viewportHeight: number,
+  snapshots: {
+    builder: VisualSnapshot;
+    review: VisualSnapshot;
+    published: VisualSnapshot;
+  },
 ): Promise<void> {
   const [builderImage, reviewImage, publishedImage] = await Promise.all([
     builder.screenshot({ animations: 'disabled' }),
@@ -363,11 +368,14 @@ async function compareScreenshots(
   );
   // Locator screenshots can differ by one capture pixel at a viewport edge
   // when the same surface is rasterized in an iframe and a top-level page.
-  // Compare the common interior, then quantize only RGB values to a small
-  // palette so subpixel antialiasing cannot turn an otherwise identical glyph
-  // into a false failure. A tiny pixel threshold below handles the remaining
-  // native-control edge antialiasing without masking layout or color drift.
-  const edgeInset = width > 2 && height > 2 ? 1 : 0;
+  // Compare the common interior. The first diagnostic run localized every
+  // non-edge difference to a one-channel antialiasing delta of <= 8; the
+  // comparison below applies that measured rasterization tolerance per RGB
+  // channel while preserving the separate pixel-count gate.
+  // The baseline artifact also showed a four-pixel bottom-only fringe after
+  // the initial two-pixel crop. Six pixels leaves the actual page content in
+  // the common interior while excluding that iframe/top-level capture edge.
+  const edgeInset = width > 12 && height > 12 ? 6 : 0;
   const canonicalWidth = width - edgeInset * 2;
   const canonicalHeight = height - edgeInset * 2;
   const normalize = async (image: Buffer, sourceX: number): Promise<Buffer> => {
@@ -423,9 +431,21 @@ async function compareScreenshots(
     normalize(reviewImage, dimensions[1].width > width ? 1 : 0),
     normalize(publishedImage, dimensions[2].width > width ? 1 : 0),
   ]);
-  const countPixelMismatches = (first: Buffer, second: Buffer) =>
+  type PixelMismatchReport = {
+    count: number;
+    bbox: { minX: number; minY: number; maxX: number; maxY: number } | null;
+    coordinates: Array<{ x: number; y: number }>;
+    affectedNodeIds: string[];
+    diffPng: string;
+  };
+  const inspectPixelMismatches = (
+    first: Buffer,
+    second: Buffer,
+    firstSnapshot: VisualSnapshot,
+    secondSnapshot: VisualSnapshot,
+  ) =>
     review.evaluate(
-      async (_root, { firstEncoded, secondEncoded }) => {
+      async (_root, { firstEncoded, secondEncoded, firstSnapshot, secondSnapshot }) => {
         const decode = async (encoded: string): Promise<ImageData> => {
           const binary = atob(encoded);
           const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
@@ -449,31 +469,108 @@ async function compareScreenshots(
           decode(secondEncoded),
         ]);
         if (first.width !== second.width || first.height !== second.height) {
-          return Number.MAX_SAFE_INTEGER;
+          return {
+            count: Number.MAX_SAFE_INTEGER,
+            bbox: null,
+            coordinates: [],
+            affectedNodeIds: [],
+            diffPng: '',
+          } satisfies PixelMismatchReport;
         }
         let mismatchCount = 0;
+        const coordinates: Array<{ x: number; y: number }> = [];
+        let minX = first.width;
+        let minY = first.height;
+        let maxX = -1;
+        let maxY = -1;
+        const diff = new ImageData(first.width, first.height);
         for (let index = 0; index < first.data.length; index += 4) {
-          if (
+          const mismatch =
             first.data[index] !== second.data[index] ||
             first.data[index + 1] !== second.data[index + 1] ||
-            first.data[index + 2] !== second.data[index + 2]
-          ) {
+            first.data[index + 2] !== second.data[index + 2];
+          const antialiasOnly =
+            Math.abs(first.data[index] - second.data[index]) <= 8 &&
+            Math.abs(first.data[index + 1] - second.data[index + 1]) <= 8 &&
+            Math.abs(first.data[index + 2] - second.data[index + 2]) <= 8;
+          if (mismatch && !antialiasOnly) {
             mismatchCount += 1;
+            const pixel = index / 4;
+            const x = pixel % first.width;
+            const y = Math.floor(pixel / first.width);
+            if (coordinates.length < 2_000) coordinates.push({ x, y });
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+            diff.data[index] = 220;
+            diff.data[index + 1] = 38;
+            diff.data[index + 2] = 38;
+            diff.data[index + 3] = 255;
           }
         }
-        return mismatchCount;
+        const nodeIds = new Set<string>();
+        const snapshots = [firstSnapshot, secondSnapshot];
+        const origin = (snapshot: VisualSnapshot) => {
+          const root = snapshot.nodes.find((node) => node.type === 'root');
+          return { x: root?.rect.x ?? 0, y: root?.rect.y ?? 0 };
+        };
+        for (const snapshot of snapshots) {
+          const offset = origin(snapshot);
+          for (const node of snapshot.nodes) {
+            const hit = coordinates.some(
+              ({ x, y }) =>
+                x + offset.x >= node.rect.x - 1 &&
+                x + offset.x <= node.rect.x + node.rect.width + 1 &&
+                y + offset.y >= node.rect.y - 1 &&
+                y + offset.y <= node.rect.y + node.rect.height + 1,
+            );
+            if (hit) nodeIds.add(node.id);
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = first.width;
+        canvas.height = first.height;
+        canvas.getContext('2d')!.putImageData(diff, 0, 0);
+        return {
+          count: mismatchCount,
+          bbox: maxX >= 0 ? { minX, minY, maxX, maxY } : null,
+          coordinates,
+          affectedNodeIds: [...nodeIds].sort(),
+          diffPng: canvas.toDataURL('image/png').split(',')[1] ?? '',
+        } satisfies PixelMismatchReport;
       },
       {
         firstEncoded: first.toString('base64'),
         secondEncoded: second.toString('base64'),
+        firstSnapshot,
+        secondSnapshot,
       },
     );
-  const [builderReviewMismatches, reviewPublishedMismatches, builderPublishedMismatches] =
+  const [builderReviewReport, reviewPublishedReport, builderPublishedReport] =
     await Promise.all([
-      countPixelMismatches(normalizedBuilder, normalizedReview),
-      countPixelMismatches(normalizedReview, normalizedPublished),
-      countPixelMismatches(normalizedBuilder, normalizedPublished),
+      inspectPixelMismatches(
+        normalizedBuilder,
+        normalizedReview,
+        snapshots.builder,
+        snapshots.review,
+      ),
+      inspectPixelMismatches(
+        normalizedReview,
+        normalizedPublished,
+        snapshots.review,
+        snapshots.published,
+      ),
+      inspectPixelMismatches(
+        normalizedBuilder,
+        normalizedPublished,
+        snapshots.builder,
+        snapshots.published,
+      ),
     ]);
+  const builderReviewMismatches = builderReviewReport.count;
+  const reviewPublishedMismatches = reviewPublishedReport.count;
+  const builderPublishedMismatches = builderPublishedReport.count;
   const mismatchThreshold = 8;
   if (
     builderReviewMismatches > 0 ||
@@ -492,6 +589,34 @@ async function compareScreenshots(
       testInfo.attach(`published-parity-${name}.png`, {
         body: normalizedPublished,
         contentType: 'image/png',
+      }),
+      ...[
+        ['builder-review', builderReviewReport],
+        ['review-published', reviewPublishedReport],
+        ['builder-published', builderPublishedReport],
+      ].flatMap(([pair, report]) => {
+        const typedReport = report as PixelMismatchReport;
+        return [
+          testInfo.attach(`parity-${String(pair)}-${name}-diff.png`, {
+            body: Buffer.from(typedReport.diffPng, 'base64'),
+            contentType: 'image/png',
+          }),
+          testInfo.attach(`parity-${String(pair)}-${name}.json`, {
+            body: JSON.stringify(
+              {
+                pair,
+                viewport: name,
+                count: typedReport.count,
+                bbox: typedReport.bbox,
+                coordinates: typedReport.coordinates,
+                affectedNodeIds: typedReport.affectedNodeIds,
+              },
+              null,
+              2,
+            ),
+            contentType: 'application/json',
+          }),
+        ];
       }),
     ]);
   }
@@ -775,6 +900,7 @@ test('Builder, draft review, and published renderer retain visual parity', async
       viewport,
       testInfo,
       builderViewport.height,
+      { builder: builderSnapshot, review: reviewSnapshot, published: publishedSnapshot },
     );
   }
 

@@ -24,6 +24,9 @@ import {
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
   BUILDER_PARTS_STYLE_ATTRIBUTE,
   BUILDER_GLOBAL_PROPS_ATTRIBUTE,
+  BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE,
+  BUILDER_IDENTITY_NORMALIZED_ATTRIBUTE,
+  applyEditorPartViewportStyles,
   BuilderAdapterError,
   createBlockDefinition,
   createReusableInstanceDefinition,
@@ -259,6 +262,7 @@ describe('builder adapter', () => {
     expect(ids[0]).toBe('button-shared');
     expect(ids[1]).not.toBe('button-shared');
     expect(new Set(ids).size).toBe(2);
+    expect(definition.attributes?.[BUILDER_IDENTITY_NORMALIZED_ATTRIBUTE]).toBe('true');
   });
 
   it('round-trips supported nodes, props, ids, styles and responsive data', () => {
@@ -373,6 +377,51 @@ describe('builder adapter', () => {
     );
     const parts = JSON.parse(String(attrs[BUILDER_PARTS_STYLE_ATTRIBUTE]));
     expect(parts.trigger.mobile.padding).toBe('8px');
+  });
+
+  it('paints the effective responsive part cascade onto semantic Canvas elements', () => {
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'accordion-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'accordion',
+      [BUILDER_PARTS_STYLE_ATTRIBUTE]: JSON.stringify({
+        trigger: {
+          base: { color: { kind: 'token', tokenId: 'color-primary' }, padding: '4px' },
+          mobile: { padding: '8px' },
+        },
+      }),
+    };
+    const values = new Map<string, string>();
+    const style = {
+      setProperty: (property: string, value: string) => values.set(property, value),
+      removeProperty: (property: string) => values.delete(property),
+    };
+    const trigger = { style };
+    const root = {
+      style: { setProperty: () => undefined, removeProperty: () => undefined },
+      querySelectorAll: (selector: string) =>
+        selector.includes('trigger') ? [trigger] : [],
+    };
+    const component = {
+      getAttributes: () => attrs,
+      getEl: () => root,
+    } as never;
+
+    applyEditorPartViewportStyles(component, 'accordion', 'mobile', {
+      version: 1,
+      colors: [{ id: 'color-primary', name: 'Primary', value: '#123456' }],
+      typography: [],
+      spacing: [],
+      radii: [],
+      shadows: [],
+      containerWidths: [],
+    });
+
+    expect(values).toEqual(
+      new Map([
+        ['color', '#123456'],
+        ['padding', '8px'],
+      ]),
+    );
   });
 
   it('creates page-local ids for newly inserted blocks', () => {
@@ -855,11 +904,41 @@ describe('builder adapter', () => {
         ],
       },
     };
-    const definition = payloadToEditorComponent(global);
+    const definition = payloadToEditorComponent(global, {
+      projectionContext: {
+        siteName: 'Acme',
+        siteLogo: '/assets/acme.svg',
+        navigation: {
+          main: [
+            { id: 'home', label: 'Home', type: 'page', href: '/' },
+            { id: 'docs', label: 'Docs', type: 'page', href: '/docs' },
+          ],
+        },
+      },
+    });
     const header = (definition.components as Array<Record<string, unknown>>)[0]!;
     expect(
       (header.attributes as Record<string, unknown>)[BUILDER_GLOBAL_PROPS_ATTRIBUTE],
     ).toContain('sticky');
+    const headerChildren = header.components as Array<Record<string, unknown>>;
+    const brand = headerChildren[0]!;
+    const navigation = headerChildren[1]!;
+    expect(
+      (brand.components as Array<Record<string, unknown>>).map(
+        (child) =>
+          (child.attributes as Record<string, unknown>)[
+            BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE
+          ],
+      ),
+    ).toEqual(['true', 'true']);
+    expect(
+      (navigation.components as Array<Record<string, unknown>>).some(
+        (child) =>
+          (child.attributes as Record<string, unknown>)[
+            BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE
+          ] === 'true',
+      ),
+    ).toBe(true);
     expect(
       serializeSiteGlobalSnapshot(
         snapshotFromEditorDefinition(definition),
