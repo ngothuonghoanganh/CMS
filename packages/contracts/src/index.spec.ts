@@ -54,7 +54,10 @@ import {
   LandingPageSchema,
   normalizePagePath,
   SiteGlobalPayloadV1Schema,
+  type SiteGlobalPayloadV1,
   SiteGlobalsSchema,
+  deriveSiteGlobalsState,
+  resolveEffectiveGlobalsDraft,
   PagePayloadV7Schema,
   ReusableComponentDocumentSchema,
   SiteDesignSystemSchema,
@@ -76,6 +79,30 @@ function createPayload(children: PageNode[] = []) {
       children,
     },
   };
+}
+
+function createGlobalDocument(
+  documentKind: 'site-header' | 'site-footer',
+  id: string,
+): SiteGlobalPayloadV1 {
+  return SiteGlobalPayloadV1Schema.parse({
+    version: 1,
+    documentKind,
+    metadata: { documentTitle: id },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [
+        {
+          id: `${id}-global`,
+          type: documentKind === 'site-header' ? 'global-header' : 'global-footer',
+          props: documentKind === 'site-header' ? { position: 'static' } : {},
+          children: [],
+        },
+      ],
+    },
+  });
 }
 
 describe('foundation contracts', () => {
@@ -741,6 +768,56 @@ describe('foundation contracts', () => {
         },
       }).success,
     ).toBe(false);
+  });
+
+  it('resolves globals per resource with clone isolation and explicit removal', () => {
+    const publishedHeader = createGlobalDocument('site-header', 'published-header');
+    const publishedFooter = createGlobalDocument('site-footer', 'published-footer');
+    const draftFooter = createGlobalDocument('site-footer', 'draft-footer');
+
+    const effective = resolveEffectiveGlobalsDraft(
+      { version: 1, footer: draftFooter },
+      { version: 1, header: publishedHeader, footer: publishedFooter },
+    );
+
+    expect(effective.header?.root.children[0]?.id).toBe('published-header-global');
+    expect(effective.footer?.root.children[0]?.id).toBe('draft-footer-global');
+    expect(effective.header).not.toBe(publishedHeader);
+    if (!effective.header) throw new Error('Expected inherited header');
+    effective.header.root.children[0]!.id = 'mutated-in-editor';
+    expect(publishedHeader.root.children[0]?.id).toBe('published-header-global');
+
+    const removed = resolveEffectiveGlobalsDraft(
+      { version: 1, header: null },
+      { version: 1, header: publishedHeader },
+    );
+    expect(removed.header).toBeNull();
+  });
+
+  it('derives independent global resource states from persisted snapshots', () => {
+    const publishedHeader = createGlobalDocument('site-header', 'published-header');
+    const publishedFooter = createGlobalDocument('site-footer', 'published-footer');
+
+    expect(
+      deriveSiteGlobalsState(undefined, {
+        version: 1,
+        header: publishedHeader,
+        footer: publishedFooter,
+      }),
+    ).toEqual({
+      header: { hasPublishedSnapshot: true, hasUnpublishedChanges: false },
+      footer: { hasPublishedSnapshot: true, hasUnpublishedChanges: false },
+    });
+
+    expect(
+      deriveSiteGlobalsState(
+        { version: 1, header: null },
+        { version: 1, header: publishedHeader, footer: publishedFooter },
+      ),
+    ).toEqual({
+      header: { hasPublishedSnapshot: true, hasUnpublishedChanges: true },
+      footer: { hasPublishedSnapshot: true, hasUnpublishedChanges: false },
+    });
   });
 
   it('exposes one typed component registry for structure and property metadata', () => {

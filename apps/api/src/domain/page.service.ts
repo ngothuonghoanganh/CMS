@@ -17,6 +17,7 @@ import {
   PagePayloadSchema,
   SiteDesignSystemSchema,
   SiteGlobalsSchema,
+  resolveEffectiveGlobalsDraft,
   PageListResponseSchema,
   PublicPageSchema,
   PageVersionListResponseSchema,
@@ -760,9 +761,12 @@ export class PageService {
         false,
       );
       const globals = preview
-        ? site.globalsDraft
-          ? SiteGlobalsSchema.parse(site.globalsDraft)
-          : undefined
+        ? resolveEffectiveGlobalsDraft(
+            site.globalsDraft ? SiteGlobalsSchema.parse(site.globalsDraft) : undefined,
+            site.publishedGlobals
+              ? SiteGlobalsSchema.parse(site.publishedGlobals)
+              : undefined,
+          )
         : site.publishedGlobals
           ? SiteGlobalsSchema.parse(site.publishedGlobals)
           : undefined;

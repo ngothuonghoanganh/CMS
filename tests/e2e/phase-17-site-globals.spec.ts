@@ -81,9 +81,7 @@ test('Phase 17 switches isolated global documents, applies presets, and persists
   ]);
 
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
-  await expect(
-    page.getByText('Saved · global draft · not published', { exact: true }),
-  ).toBeVisible({
+  await expect(page.getByText('Draft · Not published', { exact: true })).toBeVisible({
     timeout: 15_000,
   });
 

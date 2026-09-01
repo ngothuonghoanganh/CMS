@@ -51,7 +51,7 @@ export class SiteRecord {
   @Prop({ type: String, required: false })
   logo?: string;
 
-  /** Versioned builder-owned global documents. Published globals are a snapshot. */
+  /** Versioned builder-owned global documents. Omitted resources inherit; null means removed. */
   @Prop({ type: Object, required: false, minimize: false })
   globalsDraft?: Record<string, unknown>;
 

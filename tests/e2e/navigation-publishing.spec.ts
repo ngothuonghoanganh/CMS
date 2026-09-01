@@ -109,7 +109,9 @@ test('navigation structure publishes independently from page availability', asyn
       .click();
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(
-      page.getByText('Saved · global draft · not published', { exact: true }),
+      page.getByText(/(?:Draft · Not published|Live · Draft saved · Not published)/, {
+        exact: true,
+      }),
     ).toBeVisible({ timeout: 15_000 });
     globalsChanged = true;
     if (!main) throw new Error('Canonical site did not expose a main navigation');

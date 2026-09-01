@@ -14,11 +14,13 @@ import {
   PaginationQuerySchema,
   UpdateSiteRequestSchema,
   SiteGlobalsSchema,
+  SiteGlobalResourceSnapshotSchema,
   SiteDesignSystemSchema,
   DesignTokenUsageQuerySchema,
   type CreateSiteRequest,
   type PaginationQuery,
   type SiteGlobals,
+  type SiteGlobalResourceSnapshot,
   type SiteDesignSystem,
   type UpdateSiteRequest,
   type DesignTokenUsageQuery,
@@ -146,6 +148,144 @@ export class SiteController {
       })
       .catch(() => undefined);
     return result;
+  }
+
+  @Patch(':siteId/globals/header')
+  async updateGlobalHeader(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @Body(new ZodValidationPipe(SiteGlobalResourceSnapshotSchema))
+    input: SiteGlobalResourceSnapshot,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    const result = await this.siteService.updateGlobalResource(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      'header',
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.globals.header.update',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Patch(':siteId/globals/footer')
+  async updateGlobalFooter(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @Body(new ZodValidationPipe(SiteGlobalResourceSnapshotSchema))
+    input: SiteGlobalResourceSnapshot,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    const result = await this.siteService.updateGlobalResource(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      'footer',
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.globals.footer.update',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Post(':siteId/globals/header/publish')
+  async publishGlobalHeader(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.publish', workspaceId);
+    const result = await this.siteService.publishGlobalResource(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      'header',
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.globals.header.publish',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Post(':siteId/globals/footer/publish')
+  async publishGlobalFooter(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.publish', workspaceId);
+    const result = await this.siteService.publishGlobalResource(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      'footer',
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.globals.footer.publish',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Post(':siteId/globals/header/discard')
+  async discardGlobalHeader(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    return this.siteService.discardGlobalResource(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      'header',
+    );
+  }
+
+  @Post(':siteId/globals/footer/discard')
+  async discardGlobalFooter(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    return this.siteService.discardGlobalResource(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      'footer',
+    );
   }
 
   @Get(':siteId/design-system')

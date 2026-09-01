@@ -72,7 +72,9 @@ function baselinePayload(title = canonical.pageName) {
 
 async function json<T>(response: APIResponse): Promise<T> {
   if (!response.ok()) {
-    throw new Error(`API ${response.url()} failed with ${response.status()}`);
+    throw new Error(
+      `API ${response.url()} failed with ${response.status()}: ${await response.text()}`,
+    );
   }
   return (await response.json()) as T;
 }
@@ -251,16 +253,25 @@ export async function resetCanonicalEnvironment(
     }
   }
 
-  const globals = await json<{ draft: unknown }>(
-    await request.get(
+  // Mark both resources removed in one deterministic fixture reset, then use
+  // the resource-scoped publish commands below to clear their live snapshots.
+  await json(
+    await request.patch(
       `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals`,
+      { data: { version: 1, header: null, footer: null } },
     ),
   );
-  if (JSON.stringify(globals.draft) !== JSON.stringify({ version: 1 })) {
+  for (const resource of ['header', 'footer'] as const) {
     await json(
-      await request.patch(
-        `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals`,
-        { data: { version: 1 } },
+      await request.post(
+        `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals/${resource}/publish`,
+        { data: {} },
+      ),
+    );
+    await json(
+      await request.post(
+        `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals/${resource}/discard`,
+        { data: {} },
       ),
     );
   }

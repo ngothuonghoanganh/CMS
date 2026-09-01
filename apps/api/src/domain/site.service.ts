@@ -27,7 +27,14 @@ import {
   PagePayloadSchema,
   SiteGlobalsSchema,
   SiteGlobalsResponseSchema,
+  SiteGlobalPayloadV1Schema,
+  cloneSiteGlobals,
+  deriveSiteGlobalsState,
+  mergeSiteGlobals,
+  resolveEffectiveGlobalsDraft,
   type SiteGlobals,
+  type SiteGlobalPayloadV1,
+  type SiteGlobalResourceKind,
   type SiteGlobalsResponse,
   SiteDesignSystemSchema,
   SiteDesignSystemResponseSchema,
@@ -219,8 +226,15 @@ export class SiteService {
     // Navigation structure is a site-level snapshot. Its page targets remain
     // dynamically available based on each target page's published version.
     const navigationPublish = await this.navigation.publishForSite(siteId, workspaceId);
-    const draftGlobals = this.readGlobals(record.globalsDraft);
-    record.publishedGlobals = draftGlobals;
+    const draftGlobals = record.globalsDraft
+      ? this.readGlobals(record.globalsDraft)
+      : undefined;
+    const publishedGlobals = record.publishedGlobals
+      ? this.readGlobals(record.publishedGlobals)
+      : undefined;
+    record.publishedGlobals = cloneSiteGlobals(
+      resolveEffectiveGlobalsDraft(draftGlobals, publishedGlobals),
+    );
     record.publishedDesignSystem = designSystem;
     record.status = 'published';
     await record.save();
@@ -238,13 +252,17 @@ export class SiteService {
         message: `Site ${siteId} was not found in workspace ${workspaceId}`,
       });
     }
-    const draft = this.readGlobals(record.globalsDraft);
+    const persistedDraft = record.globalsDraft
+      ? this.readGlobals(record.globalsDraft)
+      : undefined;
     const published = record.publishedGlobals
       ? this.readGlobals(record.publishedGlobals)
       : undefined;
+    const draft = resolveEffectiveGlobalsDraft(persistedDraft, published);
     return SiteGlobalsResponseSchema.parse({
       draft,
       ...(published ? { published } : {}),
+      state: deriveSiteGlobalsState(persistedDraft, published),
     });
   }
 
@@ -261,8 +279,114 @@ export class SiteService {
       });
     }
     const globals = SiteGlobalsSchema.parse(input);
-    record.globalsDraft = globals;
+    // Keep the aggregate endpoint backward compatible for existing clients and
+    // cleanup tooling. Builder resource editors use the scoped endpoints below,
+    // which merge one resource without overwriting its sibling.
+    record.globalsDraft = cloneSiteGlobals(globals);
     await record.save();
+    return this.getGlobals(workspaceId, siteId);
+  }
+
+  async updateGlobalResource(
+    workspaceId: string,
+    siteId: string,
+    resource: SiteGlobalResourceKind,
+    input: SiteGlobalPayloadV1 | null,
+  ): Promise<SiteGlobalsResponse> {
+    const record = await this.requireSiteRecord(workspaceId, siteId);
+    const nextResource =
+      input === null ? null : this.parseGlobalResource(resource, input);
+    const currentDraft = record.globalsDraft
+      ? this.readGlobals(record.globalsDraft)
+      : undefined;
+    const nextDraft = mergeSiteGlobals(
+      currentDraft,
+      SiteGlobalsSchema.parse({ version: 1, [resource]: nextResource }),
+    );
+    record.globalsDraft = nextDraft;
+    await record.save();
+    return this.getGlobals(workspaceId, siteId);
+  }
+
+  async publishGlobalResource(
+    workspaceId: string,
+    siteId: string,
+    resource: SiteGlobalResourceKind,
+  ): Promise<SiteGlobalsResponse> {
+    const record = await this.requireSiteRecord(workspaceId, siteId);
+    if (record.status === 'archived') {
+      throw new ConflictException({
+        code: 'SITE_ARCHIVED',
+        message: 'An archived site cannot publish global resources',
+      });
+    }
+    const persistedDraft = record.globalsDraft
+      ? this.readGlobals(record.globalsDraft)
+      : undefined;
+    const published = record.publishedGlobals
+      ? this.readGlobals(record.publishedGlobals)
+      : undefined;
+    const effectiveDraft = resolveEffectiveGlobalsDraft(persistedDraft, published);
+    const globalResource = effectiveDraft[resource];
+    if (globalResource) {
+      const publishedDesignSystem = record.publishedDesignSystem
+        ? this.readDesignSystem(record.publishedDesignSystem)
+        : createDefaultSiteDesignSystem();
+      try {
+        await this.reusables.assertDesignTokenDependenciesAvailableForValues(
+          publishedDesignSystem,
+          [globalResource],
+        );
+      } catch (error) {
+        if (isDesignTokenDependencyError(error)) {
+          throw new ConflictException({
+            code: 'GLOBAL_DESIGN_TOKEN_DEPENDENCY_UNAVAILABLE',
+            message: `Publish the Design System or Site before publishing this ${resource}`,
+            details: error.getResponse(),
+          });
+        }
+        throw error;
+      }
+    }
+    const nextPublished = published
+      ? cloneSiteGlobals(published)
+      : { version: 1 as const };
+    if (globalResource === undefined) {
+      delete nextPublished[resource];
+    } else if (globalResource === null) {
+      // Keep an explicit live removal marker when replacing an existing
+      // published resource. An already-empty marker is normalized away so
+      // canonical fixture resets remain a truly unconfigured site.
+      if (published?.[resource] === undefined || published[resource] === null) {
+        delete nextPublished[resource];
+      } else {
+        nextPublished[resource] = null;
+      }
+    } else {
+      nextPublished[resource] = cloneSiteGlobals({
+        version: 1,
+        [resource]: globalResource,
+      })[resource];
+    }
+    record.publishedGlobals = cloneSiteGlobals(nextPublished);
+    await record.save();
+    return this.getGlobals(workspaceId, siteId);
+  }
+
+  async discardGlobalResource(
+    workspaceId: string,
+    siteId: string,
+    resource: SiteGlobalResourceKind,
+  ): Promise<SiteGlobalsResponse> {
+    const record = await this.requireSiteRecord(workspaceId, siteId);
+    if (record.globalsDraft) {
+      const currentDraft = this.readGlobals(record.globalsDraft);
+      const nextDraft = { ...currentDraft };
+      delete nextDraft[resource];
+      if (Object.keys(nextDraft).length === 1) record.set('globalsDraft', undefined);
+      else record.globalsDraft = cloneSiteGlobals(nextDraft);
+      await record.save();
+    }
     return this.getGlobals(workspaceId, siteId);
   }
 
@@ -540,6 +664,35 @@ export class SiteService {
     }
   }
 
+  private async requireSiteRecord(
+    workspaceId: string,
+    siteId: string,
+  ): Promise<SiteDocument> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+    return record;
+  }
+
+  private parseGlobalResource(
+    resource: SiteGlobalResourceKind,
+    input: SiteGlobalPayloadV1,
+  ): SiteGlobalPayloadV1 {
+    const parsed = SiteGlobalPayloadV1Schema.parse(input);
+    const expectedKind = resource === 'header' ? 'site-header' : 'site-footer';
+    if (parsed.documentKind !== expectedKind) {
+      throw new ConflictException({
+        code: 'INVALID_GLOBAL_RESOURCE',
+        message: `A ${resource} update must contain a ${expectedKind} document`,
+      });
+    }
+    return parsed;
+  }
+
   private async toContract(record: SiteDocument): Promise<Site> {
     try {
       const home = await this.resolveHomePage(record);
@@ -610,6 +763,17 @@ function isDuplicateKeyError(error: unknown): boolean {
     error !== null &&
     'code' in error &&
     (error as { code?: unknown }).code === 11000
+  );
+}
+
+function isDesignTokenDependencyError(error: unknown): error is ConflictException {
+  if (!(error instanceof ConflictException)) return false;
+  const response = error.getResponse();
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'code' in response &&
+    response.code === 'DESIGN_TOKEN_DEPENDENCY_UNAVAILABLE'
   );
 }
 

@@ -17,7 +17,10 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   app.useLogger(new PlatformLogger());
-  app.use(json({ limit: '64kb' }));
+  // Global resource removal is represented by a JSON `null` snapshot. Express
+  // defaults to strict JSON parsing, which rejects scalar JSON bodies before
+  // the route's Zod schema can validate that nullable contract.
+  app.use(json({ limit: '64kb', strict: false }));
   app.use(
     pinoHttp({
       genReqId: (request) => {

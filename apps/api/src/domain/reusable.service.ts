@@ -228,6 +228,35 @@ export class ReusableService {
     }
   }
 
+  /** Validate only the values being promoted by a resource-scoped publish. */
+  async assertDesignTokenDependenciesAvailableForValues(
+    designSystem: SiteDesignSystem,
+    values: readonly unknown[],
+  ): Promise<void> {
+    const knownTokenIds = new Set<string>(
+      [
+        ...designSystem.colors,
+        ...designSystem.typography,
+        ...designSystem.spacing,
+        ...designSystem.radii,
+        ...designSystem.shadows,
+        ...designSystem.containerWidths,
+      ].map((token) => token.id),
+    );
+    const referencedTokenIds = new Set<string>();
+    values.forEach((value) => collectTokenIds(value, referencedTokenIds));
+    const missing = [...referencedTokenIds].filter(
+      (tokenId) => !knownTokenIds.has(tokenId),
+    );
+    if (missing.length > 0) {
+      throw new ConflictException({
+        code: 'DESIGN_TOKEN_DEPENDENCY_UNAVAILABLE',
+        message: 'The global resource references an unpublished design token',
+        details: { tokenIds: missing },
+      });
+    }
+  }
+
   async assertDesignTokenRemovalSafe(
     workspaceId: string,
     siteId: string,

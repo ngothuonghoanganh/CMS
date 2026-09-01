@@ -3531,8 +3531,10 @@ export type SocialLink = z.infer<typeof SocialLinkSchema>;
 export const SiteGlobalsSchema = z
   .object({
     version: z.literal(1),
-    header: SiteGlobalPayloadV1Schema.optional(),
-    footer: SiteGlobalPayloadV1Schema.optional(),
+    // An omitted resource inherits its published snapshot for authoring.
+    // `null` is an explicit draft removal and must never fall back.
+    header: SiteGlobalPayloadV1Schema.nullable().optional(),
+    footer: SiteGlobalPayloadV1Schema.nullable().optional(),
     socialLinks: z.array(SocialLinkSchema).max(20).optional(),
   })
   .strict()
@@ -3560,10 +3562,158 @@ export const SiteGlobalsSchema = z
   });
 export type SiteGlobals = z.infer<typeof SiteGlobalsSchema>;
 
+export const SiteGlobalResourceKindSchema = z.enum(['header', 'footer']);
+export type SiteGlobalResourceKind = z.infer<typeof SiteGlobalResourceKindSchema>;
+export const SiteGlobalResourceSnapshotSchema = SiteGlobalPayloadV1Schema.nullable();
+export type SiteGlobalResourceSnapshot = z.infer<typeof SiteGlobalResourceSnapshotSchema>;
+
+export const SiteGlobalResourceStateSchema = z
+  .object({
+    hasPublishedSnapshot: z.boolean(),
+    hasUnpublishedChanges: z.boolean(),
+  })
+  .strict();
+export type SiteGlobalResourceState = z.infer<typeof SiteGlobalResourceStateSchema>;
+
+export const SiteGlobalsStateSchema = z
+  .object({
+    header: SiteGlobalResourceStateSchema,
+    footer: SiteGlobalResourceStateSchema,
+  })
+  .strict();
+export type SiteGlobalsState = z.infer<typeof SiteGlobalsStateSchema>;
+
+function cloneSiteGlobalValue<T>(value: T): T {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/** Return a validated deep clone so draft edits can never mutate a published snapshot. */
+export function cloneSiteGlobals(value: SiteGlobals): SiteGlobals {
+  return SiteGlobalsSchema.parse(cloneSiteGlobalValue(value));
+}
+
+function hasOwnProperty<T extends object>(
+  value: T | undefined,
+  key: PropertyKey,
+): boolean {
+  return value !== undefined && Object.prototype.hasOwnProperty.call(value, key);
+}
+
+/**
+ * Resolve the editor-facing globals snapshot without persisting a lazy fork.
+ * Omitted resources inherit independently; null is an intentional removal.
+ */
+export function resolveEffectiveGlobalsDraft(
+  globalsDraft: SiteGlobals | null | undefined,
+  publishedGlobals: SiteGlobals | null | undefined,
+): SiteGlobals {
+  const draft = globalsDraft ? SiteGlobalsSchema.parse(globalsDraft) : undefined;
+  const published = publishedGlobals
+    ? SiteGlobalsSchema.parse(publishedGlobals)
+    : undefined;
+  const effective: SiteGlobals = { version: 1 };
+  for (const resource of ['header', 'footer', 'socialLinks'] as const) {
+    if (!copySiteGlobalResource(effective, draft, resource)) {
+      copySiteGlobalResource(effective, published, resource);
+    }
+  }
+  return SiteGlobalsSchema.parse(effective);
+}
+
+function copySiteGlobalResource(
+  target: SiteGlobals,
+  source: SiteGlobals | undefined,
+  resource: 'header' | 'footer' | 'socialLinks',
+): boolean {
+  if (!source || !hasOwnProperty(source, resource)) return false;
+  if (resource === 'header') {
+    target.header =
+      source.header === undefined ? undefined : cloneSiteGlobalValue(source.header);
+  } else if (resource === 'footer') {
+    target.footer =
+      source.footer === undefined ? undefined : cloneSiteGlobalValue(source.footer);
+  } else {
+    target.socialLinks =
+      source.socialLinks === undefined
+        ? undefined
+        : cloneSiteGlobalValue(source.socialLinks);
+  }
+  return true;
+}
+
+/** Merge only fields present in a globals patch, preserving sibling resources. */
+export function mergeSiteGlobals(
+  current: SiteGlobals | null | undefined,
+  patch: SiteGlobals,
+): SiteGlobals {
+  const base = current ? cloneSiteGlobals(current) : { version: 1 as const };
+  const parsedPatch = SiteGlobalsSchema.parse(patch);
+  const merged: SiteGlobals = { ...base, version: 1 };
+  if (hasOwnProperty(parsedPatch, 'header') && parsedPatch.header !== undefined) {
+    merged.header = cloneSiteGlobalValue(parsedPatch.header);
+  }
+  if (hasOwnProperty(parsedPatch, 'footer') && parsedPatch.footer !== undefined) {
+    merged.footer = cloneSiteGlobalValue(parsedPatch.footer);
+  }
+  if (
+    hasOwnProperty(parsedPatch, 'socialLinks') &&
+    parsedPatch.socialLinks !== undefined
+  ) {
+    merged.socialLinks = cloneSiteGlobalValue(parsedPatch.socialLinks);
+  }
+  return SiteGlobalsSchema.parse(merged);
+}
+
+function stableSerialize(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  return `{${Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map(
+      (key) =>
+        `${JSON.stringify(key)}:${stableSerialize((value as Record<string, unknown>)[key])}`,
+    )
+    .join(',')}}`;
+}
+
+function equalGlobalResource(
+  left: SiteGlobalPayloadV1 | null | undefined,
+  right: SiteGlobalPayloadV1 | null | undefined,
+): boolean {
+  return stableSerialize(left) === stableSerialize(right);
+}
+
+export function deriveSiteGlobalsState(
+  globalsDraft: SiteGlobals | null | undefined,
+  publishedGlobals: SiteGlobals | null | undefined,
+): SiteGlobalsState {
+  const draft = globalsDraft ? SiteGlobalsSchema.parse(globalsDraft) : undefined;
+  const published = publishedGlobals
+    ? SiteGlobalsSchema.parse(publishedGlobals)
+    : undefined;
+  const stateFor = (resource: 'header' | 'footer'): SiteGlobalResourceState => {
+    const publishedValue = published?.[resource];
+    const hasExplicitDraft = hasOwnProperty(draft, resource);
+    const draftValue = hasExplicitDraft && draft ? draft[resource] : publishedValue;
+    return {
+      hasPublishedSnapshot: publishedValue !== undefined && publishedValue !== null,
+      hasUnpublishedChanges:
+        hasExplicitDraft && !equalGlobalResource(draftValue, publishedValue),
+    };
+  };
+  return SiteGlobalsStateSchema.parse({
+    header: stateFor('header'),
+    footer: stateFor('footer'),
+  });
+}
+
 export const SiteGlobalsResponseSchema = z
   .object({
     draft: SiteGlobalsSchema,
     published: SiteGlobalsSchema.optional(),
+    state: SiteGlobalsStateSchema,
   })
   .strict();
 export type SiteGlobalsResponse = z.infer<typeof SiteGlobalsResponseSchema>;

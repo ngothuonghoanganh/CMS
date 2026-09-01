@@ -12,6 +12,8 @@ import {
   PagePayloadSchema,
   SiteGlobalsResponseSchema,
   SiteGlobalsSchema,
+  cloneSiteGlobals,
+  resolveEffectiveGlobalsDraft,
   SiteSchema,
   SiteGlobalPayloadV1Schema,
   PublicPageSchema,
@@ -30,6 +32,7 @@ import {
   type PageExtensionInstance,
   type PageCapabilityGraph,
   type SiteGlobals,
+  type SiteGlobalsState,
   type SiteGlobalPayloadV1,
   type BuilderDocumentKind,
   ReusableListResponseSchema,
@@ -275,6 +278,35 @@ function createDefaultGlobalDocument(
   });
 }
 
+function globalResourceLabel(resource: 'header' | 'footer'): string {
+  return resource === 'header' ? 'Header' : 'Footer';
+}
+
+function globalSaveStatusLabel(
+  status: SaveStatus,
+  resource: 'header' | 'footer',
+  state: SiteGlobalsState['header'],
+): string {
+  const label = globalResourceLabel(resource);
+  if (status === 'unsaved') {
+    return state.hasPublishedSnapshot
+      ? 'Live · Unsaved changes'
+      : 'Draft · Unsaved changes';
+  }
+  if (status === 'saved') {
+    if (!state.hasPublishedSnapshot) return 'Draft · Not published';
+    return state.hasUnpublishedChanges
+      ? `Live · Draft saved · Not published`
+      : 'Live · Up to date';
+  }
+  if (status === 'saving') return 'Saving…';
+  if (status === 'initializing') return 'Initializing editor…';
+  if (status === 'conflict') return 'Conflict';
+  if (status === 'validation') return 'Needs attention';
+  if (status === 'error') return 'Save failed';
+  return `${label} · Unsaved changes`;
+}
+
 function isUsableImageSource(value: string): boolean {
   return value.startsWith('/assets/') || /^https?:\/\//i.test(value);
 }
@@ -449,7 +481,13 @@ export default function BuilderShell({
   const [headerDocument, setHeaderDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [footerDocument, setFooterDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [globalsDraft, setGlobalsDraft] = useState<SiteGlobals>({ version: 1 });
-  const [globalsPublished, setGlobalsPublished] = useState(false);
+  const [publishedGlobalsSnapshot, setPublishedGlobalsSnapshot] = useState<
+    SiteGlobals | undefined
+  >(undefined);
+  const [globalsState, setGlobalsState] = useState<SiteGlobalsState>({
+    header: { hasPublishedSnapshot: false, hasUnpublishedChanges: false },
+    footer: { hasPublishedSnapshot: false, hasUnpublishedChanges: false },
+  });
   const [reusables, setReusables] = useState<ReusableComponent[]>([]);
   const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
     createDefaultSiteDesignSystem,
@@ -571,6 +609,9 @@ export default function BuilderShell({
 
   const activeGlobalDocument =
     documentKind === 'site-header' ? headerDocument : footerDocument;
+  const activeGlobalResource = documentKind === 'site-footer' ? 'footer' : 'header';
+  const activeGlobalState = globalsState[activeGlobalResource];
+  const activePublishedGlobal = publishedGlobalsSnapshot?.[activeGlobalResource];
   const editingReusable = editingReusableId
     ? reusables.find((reusable) => reusable.id === editingReusableId)
     : undefined;
@@ -1052,9 +1093,22 @@ export default function BuilderShell({
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
         const globalsResponse = globalsResponseRaw
           ? SiteGlobalsResponseSchema.parse(globalsResponseRaw)
-          : { draft: { version: 1 as const } };
+          : {
+              draft: { version: 1 as const },
+              state: {
+                header: {
+                  hasPublishedSnapshot: false,
+                  hasUnpublishedChanges: false,
+                },
+                footer: {
+                  hasPublishedSnapshot: false,
+                  hasUnpublishedChanges: false,
+                },
+              },
+            };
         setGlobalsDraft(globalsResponse.draft);
-        setGlobalsPublished(Boolean(globalsResponse.published));
+        setPublishedGlobalsSnapshot(globalsResponse.published);
+        setGlobalsState(globalsResponse.state);
         const nextReusables = reusablesResponseRaw
           ? ReusableListResponseSchema.parse(reusablesResponseRaw).items
           : [];
@@ -1092,12 +1146,16 @@ export default function BuilderShell({
             : createDefaultSiteDesignSystem(),
         );
         setHeaderDocument(
-          globalsResponse.draft.header ??
-            createDefaultGlobalDocument('site-header', nextPage.name),
+          globalsResponse.draft.header === undefined
+            ? (globalsResponse.published?.header ??
+                createDefaultGlobalDocument('site-header', nextPage.name))
+            : globalsResponse.draft.header,
         );
         setFooterDocument(
-          globalsResponse.draft.footer ??
-            createDefaultGlobalDocument('site-footer', nextPage.name),
+          globalsResponse.draft.footer === undefined
+            ? (globalsResponse.published?.footer ??
+                createDefaultGlobalDocument('site-footer', nextPage.name))
+            : globalsResponse.draft.footer,
         );
         try {
           const [extensionResult, pageExtensionResult, capabilityResult] =
@@ -1169,7 +1227,6 @@ export default function BuilderShell({
 
   function markDirty() {
     localMutationSequenceRef.current += 1;
-    if (documentKind !== 'page' && !isEditingReusable) setGlobalsPublished(false);
     setNotice(null);
     setSaveStatus('unsaved');
   }
@@ -1270,7 +1327,11 @@ export default function BuilderShell({
   }, []);
 
   async function saveDraft(): Promise<SaveDraftResult> {
-    if (!editorRef.current || saveInFlightRef.current) return false;
+    const isGlobalDocument = documentKind !== 'page' && !isEditingReusable;
+    const canSaveRemovedGlobal = isGlobalDocument && activeGlobalDocument === null;
+    if ((!editorRef.current && !canSaveRemovedGlobal) || saveInFlightRef.current) {
+      return false;
+    }
     const blockingIssue = validationIssuesRef.current.find(
       (issue) => issue.severity === 'error',
     );
@@ -1287,8 +1348,9 @@ export default function BuilderShell({
     setError(null);
     setNotice(null);
     try {
-      const nextDocument = editorRef.current.getDocument();
+      const nextDocument = editorRef.current?.getDocument();
       if (isEditingReusable) {
+        if (!nextDocument) throw new Error('Reusable editor document is unavailable');
         if (!('schemaVersion' in nextDocument)) {
           throw new Error('Invalid reusable editor document');
         }
@@ -1313,7 +1375,7 @@ export default function BuilderShell({
         setReusableRuntime(nextReusableRuntime);
         postPreviewSnapshot({ reusables: nextReusableRuntime });
         setReusableEditorDocument(nextDocument);
-        editorRef.current.acknowledgeSaved(nextDocument.payload);
+        editorRef.current?.acknowledgeSaved(nextDocument.payload);
         validationCoordinatorRef.current?.clearResolvedIssues();
         setSaveStatus('saved');
         setNotice(
@@ -1322,40 +1384,40 @@ export default function BuilderShell({
         return true;
       }
       if (documentKind !== 'page') {
-        if ('schemaVersion' in nextDocument)
-          throw new Error('Invalid global editor document');
-        const nextGlobal = SiteGlobalPayloadV1Schema.parse(nextDocument);
-        const nextGlobals = SiteGlobalsSchema.parse({
-          ...globalsDraft,
-          [documentKind === 'site-header' ? 'header' : 'footer']: nextGlobal,
-        });
+        if (activeGlobalDocument && !nextDocument) {
+          throw new Error('Global editor document is unavailable');
+        }
+        const nextGlobal = activeGlobalDocument
+          ? SiteGlobalPayloadV1Schema.parse(nextDocument)
+          : null;
+        const resource = documentKind === 'site-header' ? 'header' : 'footer';
         const savedGlobals = SiteGlobalsResponseSchema.parse(
           await api.patch(
-            `/workspaces/${workspaceId}/sites/${siteId}/globals`,
-            nextGlobals,
+            `/workspaces/${workspaceId}/sites/${siteId}/globals/${resource}`,
+            nextGlobal,
           ),
         );
-        const acknowledgedGlobal =
-          documentKind === 'site-header'
-            ? savedGlobals.draft.header
-            : savedGlobals.draft.footer;
-        if (!acknowledgedGlobal) {
-          throw new Error(
-            `Global save response did not include the acknowledged ${documentKind} snapshot.`,
-          );
-        }
         setGlobalsDraft(savedGlobals.draft);
-        setGlobalsPublished(false);
-        if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal);
-        else setFooterDocument(acknowledgedGlobal);
+        setPublishedGlobalsSnapshot(savedGlobals.published);
+        setGlobalsState(savedGlobals.state);
+        const acknowledgedGlobal = savedGlobals.draft[resource];
+        if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal ?? null);
+        else setFooterDocument(acknowledgedGlobal ?? null);
         postPreviewSnapshot({ globals: savedGlobals.draft });
-        editorRef.current.acknowledgeSaved(acknowledgedGlobal);
+        if (acknowledgedGlobal) editorRef.current?.acknowledgeSaved(acknowledgedGlobal);
         validationCoordinatorRef.current?.clearResolvedIssues();
         setSaveStatus('saved');
-        setNotice('Saved global draft. Publish the site to make it public.');
+        setNotice(
+          acknowledgedGlobal
+            ? savedGlobals.state[resource].hasPublishedSnapshot
+              ? `Saved ${documentKind === 'site-header' ? 'Header' : 'Footer'} draft. The live version is unchanged.`
+              : `Saved ${documentKind === 'site-header' ? 'Header' : 'Footer'} draft. Publish ${documentKind === 'site-header' ? 'Header' : 'Footer'} to make it live.`
+            : `Saved ${documentKind === 'site-header' ? 'Header' : 'Footer'} removal to draft. The live version is unchanged.`,
+        );
         return true;
       }
       if (!version) return false;
+      if (!nextDocument) throw new Error('Page editor document is unavailable');
       if (!('schemaVersion' in nextDocument))
         throw new Error('Invalid page editor document');
       const nextPayload = PagePayloadSchema.parse(nextDocument.payload);
@@ -1370,7 +1432,8 @@ export default function BuilderShell({
           payload: nextPayload,
         }),
       );
-      const currentDocument = editorRef.current.getDocument();
+      const currentDocument = editorRef.current?.getDocument();
+      if (!currentDocument) throw new Error('Page editor document is unavailable');
       const currentPayloadResult = PagePayloadSchema.safeParse(
         'schemaVersion' in currentDocument ? currentDocument.payload : undefined,
       );
@@ -1378,7 +1441,7 @@ export default function BuilderShell({
         !currentPayloadResult.success ||
         JSON.stringify(currentPayloadResult.data) !== JSON.stringify(nextPayload);
       setVersion(nextVersion);
-      editorRef.current.acknowledgeSaved(nextPayload);
+      editorRef.current?.acknowledgeSaved(nextPayload);
       validationCoordinatorRef.current?.clearResolvedIssues();
       const nextPageExtensions = PageExtensionListResponseSchema.parse(
         await api.get(`/pages/${pageId}/extensions`),
@@ -1472,10 +1535,25 @@ export default function BuilderShell({
         return;
       }
       if (documentKind !== 'page') {
-        await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
-        setGlobalsPublished(true);
+        const resource = documentKind === 'site-header' ? 'header' : 'footer';
+        const publishedGlobals = SiteGlobalsResponseSchema.parse(
+          await api.post(
+            `/workspaces/${workspaceId}/sites/${siteId}/globals/${resource}/publish`,
+            {},
+          ),
+        );
+        setGlobalsDraft(publishedGlobals.draft);
+        setPublishedGlobalsSnapshot(publishedGlobals.published);
+        setGlobalsState(publishedGlobals.state);
+        const acknowledgedGlobal = publishedGlobals.draft[resource];
+        if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal ?? null);
+        else setFooterDocument(acknowledgedGlobal ?? null);
+        postPreviewSnapshot({ globals: publishedGlobals.draft });
+        if (acknowledgedGlobal) editorRef.current?.acknowledgeSaved(acknowledgedGlobal);
         validationCoordinatorRef.current?.clearResolvedIssues();
-        setNotice('Site published. The public site now uses the published globals.');
+        setNotice(
+          `${documentKind === 'site-header' ? 'Header' : 'Footer'} published. Only the live ${documentKind === 'site-header' ? 'Header' : 'Footer'} changed; other site drafts were not published.`,
+        );
         return;
       }
       const updated = PageSchema.parse(await api.post(`/pages/${pageId}/publish`, {}));
@@ -1526,6 +1604,135 @@ export default function BuilderShell({
 
   function reloadLatestDraft() {
     window.location.reload();
+  }
+
+  function removeActiveGlobalFromDraft() {
+    if (documentKind === 'page' || isEditingReusable) return;
+    const label = globalResourceLabel(activeGlobalResource);
+    if (
+      !window.confirm(
+        `Remove the ${label} from the draft? The live site will keep the published ${label} until you publish this change.`,
+      )
+    ) {
+      return;
+    }
+    const nextGlobals = SiteGlobalsSchema.parse({
+      ...globalsDraft,
+      [activeGlobalResource]: null,
+    });
+    if (activeGlobalResource === 'header') setHeaderDocument(null);
+    else setFooterDocument(null);
+    setGlobalsDraft(nextGlobals);
+    markDirty();
+    postPreviewSnapshot({ globals: nextGlobals });
+    setNotice(
+      `${label} removed from draft. The live site still uses the published ${label} until you publish this change.`,
+    );
+  }
+
+  function restoreActiveGlobalDraft() {
+    if (documentKind === 'page' || isEditingReusable) return;
+    const fallback = resolveEffectiveGlobalsDraft(undefined, publishedGlobalsSnapshot)[
+      activeGlobalResource
+    ];
+    const restored =
+      fallback ??
+      createDefaultGlobalDocument(
+        documentKind,
+        siteContext?.name ?? page?.name ?? 'Site',
+      );
+    const nextGlobals = SiteGlobalsSchema.parse({
+      ...globalsDraft,
+      [activeGlobalResource]: restored,
+    });
+    if (activeGlobalResource === 'header') setHeaderDocument(restored);
+    else setFooterDocument(restored);
+    setGlobalsDraft(nextGlobals);
+    markDirty();
+    postPreviewSnapshot({ globals: nextGlobals });
+    setNotice(`Restored the ${globalResourceLabel(activeGlobalResource)} in the draft.`);
+  }
+
+  function startActiveGlobalDraftFromLive() {
+    if (documentKind === 'page' || isEditingReusable) return;
+    const label = globalResourceLabel(activeGlobalResource);
+    if (!activePublishedGlobal) {
+      setNotice(`There is no live ${label} available to clone.`);
+      return;
+    }
+    if (
+      (isDirty || activeGlobalState.hasUnpublishedChanges) &&
+      !window.confirm(
+        `Replace the ${label} draft with a fresh copy of the live ${label}? The copy is only saved when you save the draft.`,
+      )
+    ) {
+      return;
+    }
+    const nextDocument = cloneSiteGlobals({
+      version: 1,
+      [activeGlobalResource]: activePublishedGlobal,
+    })[activeGlobalResource];
+    if (!nextDocument) return;
+    const nextGlobals = SiteGlobalsSchema.parse({
+      ...globalsDraft,
+      [activeGlobalResource]: nextDocument,
+    });
+    if (activeGlobalResource === 'header') setHeaderDocument(nextDocument);
+    else setFooterDocument(nextDocument);
+    setGlobalsDraft(nextGlobals);
+    markDirty();
+    postPreviewSnapshot({ globals: nextGlobals });
+    setNotice(`Editing a new ${label} draft copied from live. Save draft to persist it.`);
+  }
+
+  async function discardActiveGlobalDraft() {
+    if (documentKind === 'page' || isEditingReusable) return;
+    const label = globalResourceLabel(activeGlobalResource);
+    if (!window.confirm(`Revert the ${label} draft to the live version?`)) return;
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setSaveInFlight(true);
+    setSaveStatus('saving');
+    setError(null);
+    setNotice(null);
+    try {
+      const response = SiteGlobalsResponseSchema.parse(
+        await api.post(
+          `/workspaces/${workspaceId}/sites/${siteId}/globals/${activeGlobalResource}/discard`,
+          {},
+        ),
+      );
+      setPublishedGlobalsSnapshot(response.published);
+      setGlobalsState(response.state);
+      const hasPublishedSnapshot =
+        response.state[activeGlobalResource].hasPublishedSnapshot;
+      const restored = hasPublishedSnapshot
+        ? (response.draft[activeGlobalResource] ?? null)
+        : createDefaultGlobalDocument(
+            documentKind,
+            siteContext?.name ?? page?.name ?? 'Site',
+          );
+      const nextDraft = hasPublishedSnapshot
+        ? response.draft
+        : SiteGlobalsSchema.parse({
+            ...response.draft,
+            [activeGlobalResource]: restored,
+          });
+      setGlobalsDraft(nextDraft);
+      if (activeGlobalResource === 'header') setHeaderDocument(restored ?? null);
+      else setFooterDocument(restored ?? null);
+      postPreviewSnapshot({ globals: nextDraft });
+      if (hasPublishedSnapshot && restored) editorRef.current?.acknowledgeSaved(restored);
+      validationCoordinatorRef.current?.clearResolvedIssues();
+      setSaveStatus(hasPublishedSnapshot ? 'saved' : 'unsaved');
+      setNotice(`Reverted ${label} draft to the live version.`);
+    } catch (caughtError) {
+      setSaveStatus('error');
+      setError(toErrorMessage(caughtError));
+    } finally {
+      saveInFlightRef.current = false;
+      setSaveInFlight(false);
+    }
   }
 
   async function switchDocumentKind(next: BuilderDocumentKind): Promise<void> {
@@ -1855,7 +2062,7 @@ export default function BuilderShell({
     setOpenInspectorSections((current) => ({ ...current, [section]: open }));
   }
 
-  if (loadState === 'loading' || !pageDocument || !page || !version || !activePayload) {
+  if (loadState === 'loading' || !pageDocument || !page || !version) {
     return (
       <main className="builder-loading" aria-busy="true">
         <span className="eyebrow">Visual builder</span>
@@ -1880,6 +2087,85 @@ export default function BuilderShell({
         >
           Try again
         </button>
+      </main>
+    );
+  }
+
+  if (!activePayload && !isEditingReusable && documentKind !== 'page') {
+    const label = globalResourceLabel(activeGlobalResource);
+    return (
+      <main className="builder-loading">
+        <span className="eyebrow">Visual builder</span>
+        <h1>{label} removed from draft</h1>
+        <p className="muted">
+          Preview has no {label.toLowerCase()}. The live site still uses the published{' '}
+          {label.toLowerCase()} until this removal is published.
+        </p>
+        <span className={`builder-save-status status-${saveStatus}`} role="status">
+          {globalSaveStatusLabel(saveStatus, activeGlobalResource, activeGlobalState)}
+        </span>
+        <div className="builder-actions">
+          <button className="button button-ghost" onClick={leaveBuilder} type="button">
+            ← Pages
+          </button>
+          <button
+            className="button button-ghost"
+            onClick={restoreActiveGlobalDraft}
+            type="button"
+          >
+            Restore {label}
+          </button>
+          <button
+            className="button button-ghost"
+            disabled={saveInFlight || !activeGlobalState.hasPublishedSnapshot}
+            onClick={() => void discardActiveGlobalDraft()}
+            type="button"
+          >
+            Revert {label} to live version
+          </button>
+          <button
+            className="button button-primary"
+            disabled={saveInFlight}
+            onClick={() => void saveDraft()}
+            type="button"
+          >
+            Save draft
+          </button>
+          <button
+            className="button button-success"
+            disabled={
+              saveInFlight ||
+              saveStatus === 'initializing' ||
+              saveStatus === 'unsaved' ||
+              saveStatus === 'saving' ||
+              saveStatus === 'validation' ||
+              saveStatus === 'conflict'
+            }
+            onClick={() => void publishPage()}
+            type="button"
+          >
+            Publish {label}
+          </button>
+        </div>
+        {error ? (
+          <div className="builder-alert alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="builder-alert alert-success" role="status">
+            {notice}
+          </div>
+        ) : null}
+      </main>
+    );
+  }
+
+  if (!activePayload) {
+    return (
+      <main className="builder-loading" aria-busy="true">
+        <span className="eyebrow">Visual builder</span>
+        <h1>Loading draft…</h1>
       </main>
     );
   }
@@ -1961,14 +2247,24 @@ export default function BuilderShell({
                     ? `Saved · reusable draft · ${editingReusable?.published ? 'published' : 'not published'}`
                     : documentKind === 'page'
                       ? `Saved · v${version.versionNumber} · not published`
-                      : `Saved · global draft · ${globalsPublished ? 'published' : 'not published'}`
+                      : globalSaveStatusLabel(
+                          saveStatus,
+                          activeGlobalResource,
+                          activeGlobalState,
+                        )
                   : saveStatus === 'conflict'
                     ? 'Conflict'
                     : saveStatus === 'validation'
                       ? 'Needs attention'
                       : saveStatus === 'error'
                         ? 'Save failed'
-                        : 'Unsaved changes'}
+                        : !isEditingReusable && documentKind !== 'page'
+                          ? globalSaveStatusLabel(
+                              saveStatus,
+                              activeGlobalResource,
+                              activeGlobalState,
+                            )
+                          : 'Unsaved changes'}
           </span>
           {saveStatus === 'conflict' ? (
             <button
@@ -2012,6 +2308,46 @@ export default function BuilderShell({
           >
             Save draft
           </button>
+          {!isEditingReusable && documentKind !== 'page' ? (
+            <>
+              {activePublishedGlobal ? (
+                <button
+                  className="button button-ghost"
+                  disabled={saveInFlight}
+                  onClick={startActiveGlobalDraftFromLive}
+                  type="button"
+                >
+                  Start {globalResourceLabel(activeGlobalResource)} draft from live
+                </button>
+              ) : null}
+              {activeGlobalDocument ? (
+                <button
+                  className="button button-ghost"
+                  onClick={removeActiveGlobalFromDraft}
+                  type="button"
+                >
+                  Remove {globalResourceLabel(activeGlobalResource)} from draft
+                </button>
+              ) : (
+                <button
+                  className="button button-ghost"
+                  onClick={restoreActiveGlobalDraft}
+                  type="button"
+                >
+                  Restore {globalResourceLabel(activeGlobalResource)}
+                </button>
+              )}
+              {activeGlobalState.hasPublishedSnapshot ? (
+                <button
+                  className="button button-ghost"
+                  onClick={() => void discardActiveGlobalDraft()}
+                  type="button"
+                >
+                  Revert {globalResourceLabel(activeGlobalResource)} to live version
+                </button>
+              ) : null}
+            </>
+          ) : null}
           <button
             className="button button-success"
             disabled={
@@ -2025,7 +2361,13 @@ export default function BuilderShell({
             onClick={() => void publishPage()}
             type="button"
           >
-            {isEditingReusable || documentKind !== 'page' ? 'Publish site' : 'Publish'}
+            {isEditingReusable
+              ? 'Publish site'
+              : documentKind === 'site-header'
+                ? 'Publish Header'
+                : documentKind === 'site-footer'
+                  ? 'Publish Footer'
+                  : 'Publish'}
           </button>
         </div>
       </header>

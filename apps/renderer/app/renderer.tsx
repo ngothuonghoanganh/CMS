@@ -934,19 +934,22 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
     return <RendererFallback />;
   }
 
+  const hasHeaderSnapshot =
+    context.globals !== undefined &&
+    Object.prototype.hasOwnProperty.call(context.globals, 'header');
+  const hasFooterSnapshot =
+    context.globals !== undefined &&
+    Object.prototype.hasOwnProperty.call(context.globals, 'footer');
+
   return (
     <div className="payload-page">
       {context.runtimeIds?.length ? (
         <ExtensionRuntimeBootstrap runtimeIds={context.runtimeIds} />
       ) : null}
-      {context.globals?.header
-        ? (renderSiteGlobalDocument(context.globals.header, context) ??
-          renderGlobalNavigation(
-            context.navigation?.main,
-            context,
-            'Main navigation',
-            'header',
-          ))
+      {hasHeaderSnapshot
+        ? context.globals?.header
+          ? renderSiteGlobalDocument(context.globals.header, context)
+          : null
         : renderGlobalNavigation(
             context.navigation?.main,
             context,
@@ -955,14 +958,10 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
           )}
       {renderResponsiveStyles(parsed.data, context)}
       {renderNode(parsed.data.root, context)}
-      {context.globals?.footer
-        ? (renderSiteGlobalDocument(context.globals.footer, context) ??
-          renderGlobalNavigation(
-            context.navigation?.footer,
-            context,
-            'Footer navigation',
-            'footer',
-          ))
+      {hasFooterSnapshot
+        ? context.globals?.footer
+          ? renderSiteGlobalDocument(context.globals.footer, context)
+          : null
         : renderGlobalNavigation(
             context.navigation?.footer,
             context,

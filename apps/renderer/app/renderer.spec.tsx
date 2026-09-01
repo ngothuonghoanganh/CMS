@@ -315,6 +315,7 @@ describe('PagePayloadV1 renderer', () => {
     );
 
     expect(markup).toContain('data-site-global="header"');
+    expect(markup.match(/data-site-global="header"/g)).toHaveLength(1);
     expect(markup).toContain('data-navigation-mobile-behavior="collapse"');
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('Acme');
@@ -325,6 +326,25 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('padding:8px!important');
     expect(markup).toContain('margin:4px!important');
     expect(markup).not.toContain('data-site-global="footer"');
+  });
+
+  it('honors explicit global removals without falling back to navigation', () => {
+    const markup = renderToStaticMarkup(
+      renderPage(createPayload(), {
+        globals: { version: 1, header: null, footer: null },
+        navigation: {
+          main: [{ id: 'home', label: 'Home', type: 'page', href: '/' }],
+          footer: [
+            { id: 'contact', label: 'Contact', type: 'external', href: '/contact' },
+          ],
+        },
+      }),
+    );
+
+    expect(markup).not.toContain('data-site-global="header"');
+    expect(markup).not.toContain('data-site-global="footer"');
+    expect(markup).not.toContain('data-navigation-region="main"');
+    expect(markup).not.toContain('data-navigation-region="footer"');
   });
 
   it('applies the global footer content part base style to its live child', () => {
