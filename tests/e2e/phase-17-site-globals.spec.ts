@@ -1,7 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
+import { expect } from '@playwright/test';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
 
 type BuilderNode = {
@@ -10,36 +8,6 @@ type BuilderNode = {
   props: Record<string, unknown>;
   children: BuilderNode[];
 };
-
-async function openBuilder(page: Page): Promise<{
-  siteSlug: string;
-  workspaceId: string;
-  siteId: string;
-}> {
-  const suffix = Date.now().toString();
-  const siteSlug = `phase-17-${suffix}`;
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`Phase 17 Site ${suffix}`);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Phase 17 Page ${suffix}`);
-  await page.getByLabel('Slug').fill(`phase-17-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
-  const [, , workspaceId, , siteId] = new URL(page.url()).pathname.split('/');
-  if (!workspaceId || !siteId) throw new Error('Builder URL did not include site scope');
-  return { siteSlug, workspaceId, siteId };
-}
 
 async function scopedApiRequest(
   page: Page,
@@ -80,9 +48,16 @@ async function readEditorDocument(page: Page): Promise<{
 
 test('Phase 17 switches isolated global documents, applies presets, and persists drafts', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  const { siteSlug, siteId, workspaceId } = await openBuilder(page);
+  const { siteSlug, siteId, workspaceId } = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-17-globals',
+  );
 
   const documentSelector = page.getByLabel('Editing document');
   await expect(documentSelector).toHaveValue('page');
@@ -120,7 +95,7 @@ test('Phase 17 switches isolated global documents, applies presets, and persists
   });
   await expect(
     previewPage.locator('[data-payload-node-type="site-brand"]'),
-  ).toContainText(/Phase 17 Site/);
+  ).toContainText(/E2E Builder Site/);
   await previewPage.close();
 
   await documentSelector.selectOption('site-footer');
@@ -170,6 +145,6 @@ test('Phase 17 switches isolated global documents, applies presets, and persists
   await page.goto(`http://127.0.0.1:3002/${siteSlug}`);
   await expect(page.locator('[data-site-global="header"]')).toBeVisible();
   await expect(page.locator('[data-payload-node-type="site-brand"]')).toContainText(
-    /Phase 17 Site/,
+    /E2E Builder Site/,
   );
 });

@@ -144,7 +144,7 @@ test('tenant RBAC exposes effective permissions and audits role changes', async 
   expect([200, 204]).toContain(deleteRoleResponse.status());
 });
 
-test('tenant extensions are registry-backed, tenant-scoped and auditable', async ({
+test('@tenancy tenant extensions are registry-backed, tenant-scoped and auditable', async ({
   request,
 }) => {
   const baseUrl = 'http://127.0.0.1:3001/api/v1';
@@ -341,7 +341,7 @@ test('tenant extensions are registry-backed, tenant-scoped and auditable', async
   );
 });
 
-test('extension disable contract distinguishes draft-only and published page usage', async ({
+test('@tenancy extension disable contract distinguishes draft-only and published page usage', async ({
   request,
 }) => {
   const baseUrl = 'http://127.0.0.1:3001/api/v1';

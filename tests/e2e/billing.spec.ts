@@ -1,6 +1,6 @@
 import { expect, request, test } from '@playwright/test';
 
-test('provisions a default plan and enforces a tenant-scoped workspace quota', async ({
+test('@tenancy provisions a default plan and enforces a tenant-scoped workspace quota', async ({
   page,
 }) => {
   test.setTimeout(60_000);

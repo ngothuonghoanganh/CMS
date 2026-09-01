@@ -30,6 +30,7 @@ import {
   IntegrationRecord,
   type IntegrationDocument,
 } from '../persistence/schemas/integration.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { IntegrationSecretVault } from './integration-secret-vault';
 import { resolveSafeWebhookTarget } from './integrations/webhook-security';
@@ -41,6 +42,8 @@ export class IntegrationService {
     private readonly integrationModel: Model<IntegrationRecord>,
     @InjectModel(FormIntegrationBindingRecord.name)
     private readonly bindingModel: Model<FormIntegrationBindingRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(QuotaService) private readonly quotas: QuotaService,
@@ -126,16 +129,34 @@ export class IntegrationService {
 
   async remove(workspaceId: string, integrationId: string): Promise<void> {
     await this.findRecord(workspaceId, integrationId);
-    const used = await this.bindingModel.exists({
-      workspaceId,
-      integrationIds: integrationId,
-    });
-    if (used) {
+    const bindings = await this.bindingModel
+      .find({
+        workspaceId,
+        integrationIds: integrationId,
+      })
+      .select('_id landingPageId')
+      .exec();
+    if (bindings.length === 0) {
+      await this.integrationModel.deleteOne({ _id: integrationId, workspaceId }).exec();
+      return;
+    }
+    const livePageIds = await this.pageModel
+      .find({
+        _id: { $in: bindings.map((binding) => binding.landingPageId) },
+        workspaceId,
+      })
+      .distinct('_id');
+    if (livePageIds.length > 0) {
       throw new ConflictException({
         code: 'INTEGRATION_IN_USE',
         message: 'Remove this integration from form notifications before deleting it',
       });
     }
+    // Page deletion should normally remove its binding. Clean up legacy
+    // orphans here so a test-owned integration cannot become undeletable.
+    await this.bindingModel
+      .deleteMany({ _id: { $in: bindings.map((binding) => binding._id) } })
+      .exec();
     await this.integrationModel.deleteOne({ _id: integrationId, workspaceId }).exec();
   }
 

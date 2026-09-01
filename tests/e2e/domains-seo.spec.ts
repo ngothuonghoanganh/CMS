@@ -1,41 +1,35 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
-
-async function login(page: Page) {
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-}
+import { expect } from '@playwright/test';
+import {
+  canonicalEnvironmentNames,
+  createTemporaryPage,
+  loginToCanonicalBuilder,
+  switchCanonicalBrowserContext,
+  test,
+} from './fixtures/canonical-environment';
 
 test('configures SEO, verifies a custom domain and renders its public metadata', async ({
   browser,
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  const suffix = Date.now().toString();
-  const siteName = `SEO Site ${suffix}`;
-  const siteSlug = `seo-site-${suffix}`;
-  const pageName = `SEO Page ${suffix}`;
-  const pageSlug = `seo-page-${suffix}`;
-  const hostname = `seo-${suffix}.example.com`;
+  const hostname = 'e2e-seo.example.com';
+  const temporaryPage = await createTemporaryPage(
+    request,
+    canonicalEnvironment,
+    'phase-seo',
+  );
+  const siteSlug = canonicalEnvironment.siteSlug;
+  const pageName = temporaryPage.name;
+  const pageSlug = temporaryPage.slug;
 
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(siteName);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-
+  await loginToCanonicalBuilder(page);
+  await switchCanonicalBrowserContext(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site').selectOption({ label: siteName });
-  await page.getByLabel('Page name').fill(pageName);
-  await page.getByLabel('Slug').fill(pageSlug);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
+  await page
+    .getByLabel('Site')
+    .selectOption({ label: canonicalEnvironmentNames.siteName });
+  await page.getByRole('button', { name: /__e2e__ phase-seo/ }).click();
 
   await page.getByRole('button', { name: 'SEO', exact: true }).click();
   await page.getByRole('combobox', { name: 'Page', exact: true }).selectOption({
@@ -69,7 +63,9 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await expect(domainRow.getByText('active', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site').selectOption({ label: siteName });
+  await page
+    .getByLabel('Site')
+    .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');

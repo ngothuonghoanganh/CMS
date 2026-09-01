@@ -1,16 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
-
-async function login(page: Page) {
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-}
+import { expect, type Page } from '@playwright/test';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 
 async function apiRequest(
   page: Page,
@@ -54,34 +43,26 @@ function reusableDocument(text: string) {
 
 test('linked reusables propagate published source updates and survive archive', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  const suffix = Date.now().toString();
-  const siteSlug = `phase18-site-${suffix}`;
-  const pageSlug = `phase18-page-${suffix}`;
-  const siteName = `Phase 18 Site ${suffix}`;
-
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(siteName);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Phase 18 Page ${suffix}`);
-  await page.getByLabel('Slug').fill(pageSlug);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('iframe.gjs-frame')).toBeVisible({ timeout: 15_000 });
-
-  const match = page
-    .url()
-    .match(/\/workspaces\/([^/]+)\/sites\/([^/]+)\/pages\/([^/]+)\/builder$/);
-  expect(match).not.toBeNull();
-  const [, workspaceId, siteId, pageId] = match!;
+  const {
+    siteSlug,
+    slug: pageSlug,
+    id: pageId,
+    siteId,
+    workspaceId,
+    name: pageName,
+  } = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-18-reusables',
+  );
   const source = reusableDocument('Shared heading v1');
   const reusableResponse = await apiRequest(page, {
     body: {
-      name: 'Phase 18 shared heading',
+      name: '__e2e__ phase 18 shared heading',
       kind: 'section',
       document: source,
     },
@@ -93,13 +74,18 @@ test('linked reusables propagate published source updates and survive archive', 
   await page.reload();
   await expect(page.locator('iframe.gjs-frame')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('tab', { name: 'Saved' }).click();
-  await expect(page.getByText('Phase 18 shared heading', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('__e2e__ phase 18 shared heading', { exact: true }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Edit source' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Phase 18 shared heading', exact: true }),
+    page.getByRole('heading', {
+      name: '__e2e__ phase 18 shared heading',
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Back to page document' }).click();
-  await expect(page.getByRole('heading', { name: /Phase 18 Page/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: pageName, exact: true })).toBeVisible();
   const sitePages = await apiRequest(page, {
     path: `/sites/${siteId}/pages?limit=100`,
   });

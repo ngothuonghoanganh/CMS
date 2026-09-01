@@ -1,16 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
-
-async function login(page: Page) {
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-}
+import { expect, type Page } from '@playwright/test';
+import {
+  canonicalEnvironmentNames,
+  openCanonicalBuilder,
+  test,
+} from './fixtures/canonical-environment';
 
 async function openPages(page: Page, siteName?: string) {
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
@@ -20,26 +13,19 @@ async function openPages(page: Page, siteName?: string) {
 test('builds, publishes, submits and manages a form with published-schema isolation', async ({
   browser,
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  const suffix = Date.now().toString();
-  const siteName = `Forms Site ${suffix}`;
-  const siteSlug = `forms-site-${suffix}`;
-  const pageName = `Forms Page ${suffix}`;
-  const pageSlug = `forms-page-${suffix}`;
-
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(siteName);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-
-  await openPages(page);
-  await page.getByLabel('Page name').fill(pageName);
-  await page.getByLabel('Slug').fill(pageSlug);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  const temporaryPage = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-forms',
+  );
+  const siteName = canonicalEnvironmentNames.siteName;
+  const siteSlug = temporaryPage.siteSlug;
+  const pageName = temporaryPage.name;
+  const pageSlug = temporaryPage.slug;
 
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Form/ }).click();

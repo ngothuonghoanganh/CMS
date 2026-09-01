@@ -1,35 +1,11 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
+import { expect } from '@playwright/test';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 
 type BuilderNode = {
   id: string;
   type: string;
   children: BuilderNode[];
 };
-
-async function openBuilder(page: Page): Promise<void> {
-  const suffix = Date.now().toString();
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`Phase 17.1 Site ${suffix}`);
-  await page.getByLabel('Slug').fill(`phase-17-1-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Phase 17.1 Page ${suffix}`);
-  await page.getByLabel('Slug').fill(`phase-17-1-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
-}
 
 async function readRoot(page: Page): Promise<BuilderNode> {
   const payload = await page.evaluate(() => {
@@ -48,9 +24,11 @@ function collectIds(node: BuilderNode): string[] {
 
 test('Phase 17.1 keeps compound duplicate identity and global preset roots canonical', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page);
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-17-1-identity');
 
   await expect(
     page.getByRole('img', { name: 'Button preview', exact: true }),
@@ -123,9 +101,11 @@ test('Phase 17.1 keeps compound duplicate identity and global preset roots canon
 
 test('Phase 17.1 V2 catalog previews expose real shapes and full-name tooltips', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page);
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-17-1-catalog');
 
   const previews = page.locator(
     '.builder-block-preview[data-preview-kind="composition"]',
@@ -165,9 +145,11 @@ test('Phase 17.1 V2 catalog previews expose real shapes and full-name tooltips',
 
 test('Phase 17.1 desktop builder panels resize, restore, persist, and fall back responsively', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page);
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-17-1-panels');
   await page.setViewportSize({ width: 1280, height: 900 });
 
   const workspace = page.locator('.builder-workspace');

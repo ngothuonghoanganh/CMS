@@ -1,6 +1,12 @@
 import { createServer, type Server } from 'node:http';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
+import {
+  canonicalEnvironmentNames,
+  openCanonicalBuilder,
+  switchCanonicalBrowserContext,
+  test,
+} from './fixtures/canonical-environment';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
@@ -44,16 +50,15 @@ async function login(page: Page) {
 test('configures integrations, binds them to a form and records deliveries', async ({
   browser,
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   const suffix = Date.now().toString();
-  const siteName = `Integrations Site ${suffix}`;
-  const pageName = `Integrations Page ${suffix}`;
-  const siteSlug = `integrations-site-${suffix}`;
-  const pageSlug = `integrations-page-${suffix}`;
-  const emailIntegrationName = `Sales email ${suffix}`;
-  const webhookIntegrationName = `CRM webhook ${suffix}`;
+  const emailIntegrationName = `__e2e__ Sales email ${suffix}`;
+  const webhookIntegrationName = `__e2e__ CRM webhook ${suffix}`;
 
   await login(page);
+  await switchCanonicalBrowserContext(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Integrations', exact: true }).click();
   await page.getByRole('button', { name: 'Add integration', exact: true }).click();
   await page.getByLabel('Name').fill(emailIntegrationName);
@@ -69,18 +74,16 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await page.getByRole('button', { name: 'Create integration' }).click();
   await expect(page.getByRole('status')).toContainText('Integration created');
 
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(siteName);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(pageName);
-  await page.getByLabel('Slug').fill(pageSlug);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  const temporaryPage = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-integrations',
+  );
+  const siteName = canonicalEnvironmentNames.siteName;
+  const pageName = temporaryPage.name;
+  const siteSlug = temporaryPage.siteSlug;
+  const pageSlug = temporaryPage.slug;
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Form/ }).click();
   await page.getByRole('button', { name: 'Save draft' }).click();

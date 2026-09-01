@@ -4,7 +4,7 @@ const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
 const apiBase = 'http://127.0.0.1:3001/api/v1';
 
-test('creates organizations and keeps workspace resources isolated after context switching', async ({
+test('creates organizations and keeps workspace resources isolated after context switching @tenancy', async ({
   request,
 }) => {
   const suffix = Date.now().toString();

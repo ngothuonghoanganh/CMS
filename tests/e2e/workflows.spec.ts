@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import {
+  canonicalEnvironmentNames,
+  createTemporaryPage,
+  loginToCanonicalBuilder,
+  switchCanonicalBrowserContext,
+  test,
+} from './fixtures/canonical-environment';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
@@ -103,26 +110,22 @@ test('renders the workflow builder without horizontal overflow across viewports'
 
 test('attaches a page workflow and configures trigger, condition and action nodes', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   const suffix = Date.now().toString();
-  await page.goto('http://127.0.0.1:3000/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`Workflow Site ${suffix}`);
-  await page.getByLabel('Slug').fill(`workflow-site-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
+  const temporaryPage = await createTemporaryPage(
+    request,
+    canonicalEnvironment,
+    'phase-workflows',
+  );
+  await loginToCanonicalBuilder(page);
+  await switchCanonicalBrowserContext(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Workflow Page ${suffix}`);
-  await page.getByLabel('Slug').fill(`workflow-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: `Workflow Page ${suffix}` }).click();
+  await page
+    .getByLabel('Site')
+    .selectOption({ label: canonicalEnvironmentNames.siteName });
+  await page.getByRole('button', { name: /__e2e__ phase-workflows/ }).click();
   await page.getByRole('button', { name: 'Manage workflows' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Workflows' })).toBeVisible();
 
@@ -158,7 +161,7 @@ test('attaches a page workflow and configures trigger, condition and action node
   await page.getByRole('button', { name: 'Enable' }).click();
   await expect(page.getByText('Workflow enabled.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByRole('button', { name: `Workflow Page ${suffix}` }).click();
+  await page.getByRole('button', { name: /__e2e__ phase-workflows/ }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Page published' }),

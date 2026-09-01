@@ -2,6 +2,7 @@
 
 import type { BlockProperties, Component, ComponentDefinition, Editor } from 'grapesjs';
 import {
+  BuilderAdapterError,
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
@@ -84,6 +85,11 @@ import {
 } from './component-editor-codecs';
 import { canInsertLiveChild } from './builder-structural-domain';
 import { collectPersistedNodeIds, remapSubtreeNodeIds } from './builder-node-identity';
+import {
+  scopeForDocumentKind,
+  validationIssueFromError,
+  type BuilderValidationIssue,
+} from './builder-validation';
 
 export type SelectedBuilderNode = ComponentSelectionSnapshot;
 
@@ -174,6 +180,8 @@ type GrapesEditorProps = {
   onCanvasStateChange: (state: BuilderCanvasState) => void;
   onInteractionModeChange: (mode: InteractionMode) => void;
   onError: (message: string) => void;
+  onValidationIssue?: (issue: BuilderValidationIssue) => void;
+  validationIssues?: readonly BuilderValidationIssue[];
 };
 
 const allViewports: BuilderViewport[] = ['desktop', 'tablet', 'mobile'];
@@ -267,6 +275,31 @@ function syncRuntimePreviewClasses(root: Component): void {
       element.classList.add(PAGE_RUNTIME_CLASS_NAMES.formOptions);
     }
   });
+}
+
+function syncValidationIndicators(
+  root: Component,
+  issues: readonly BuilderValidationIssue[],
+): void {
+  const invalidNodeIds = new Set(
+    issues
+      .filter((issue) => issue.severity === 'error' && issue.nodeId)
+      .map((issue) => issue.nodeId),
+  );
+  const paint = (component: Component) => {
+    const nodeId = payloadNodeId(component);
+    const element = component.getEl();
+    if (!element || !nodeId) return;
+    const invalid = invalidNodeIds.has(nodeId);
+    element.classList.toggle('builder-validation-node-invalid', invalid);
+    if (invalid) {
+      element.setAttribute('data-builder-validation-node', 'true');
+    } else {
+      element.removeAttribute('data-builder-validation-node');
+    }
+  };
+  paint(root);
+  root.onAll(paint);
 }
 
 function componentForCanvasElement(root: Component, element: Element): Component | null {
@@ -1048,6 +1081,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onCanvasStateChange,
     onInteractionModeChange,
     onError,
+    onValidationIssue,
+    validationIssues = [],
   }: GrapesEditorProps,
   ref: Ref<GrapesEditorHandle>,
 ) {
@@ -1076,7 +1111,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onCanvasStateChange,
     onInteractionModeChange,
     onError,
+    onValidationIssue,
   });
+  const validationIssuesRef = useRef(validationIssues);
   const payloadRef = useRef(initialPayload);
   const reusableRuntimeRef = useRef(reusableRuntime);
   const designSystemRef = useRef(designSystem);
@@ -1100,7 +1137,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onCanvasStateChange,
     onInteractionModeChange,
     onError,
+    onValidationIssue,
   };
+  validationIssuesRef.current = validationIssues;
   payloadRef.current = initialPayload;
   reusableRuntimeRef.current = reusableRuntime;
   designSystemRef.current = designSystem;
@@ -1268,9 +1307,40 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       result =
         commandBusRef.current?.dispatch(command) ?? executeEditorCommand(editor, command);
     } catch (caughtError) {
-      callbacksRef.current.onError(
-        caughtError instanceof Error ? caughtError.message : 'Editor command failed',
-      );
+      const expectedInputError =
+        command.kind === 'set-property' ||
+        command.kind === 'set-responsive-style' ||
+        command.kind === 'set-part-responsive-style';
+      if (expectedInputError || caughtError instanceof BuilderAdapterError) {
+        callbacksRef.current.onValidationIssue?.(
+          validationIssueFromError(caughtError, {
+            scope: scopeForDocumentKind(documentKind),
+            ...('nodeId' in command && command.nodeId ? { nodeId: command.nodeId } : {}),
+            tab:
+              command.kind === 'set-responsive-style' ||
+              command.kind === 'set-part-responsive-style'
+                ? 'style'
+                : 'content',
+            section:
+              command.kind === 'set-part-responsive-style'
+                ? 'component-part'
+                : command.kind === 'set-responsive-style'
+                  ? 'effects'
+                  : 'content',
+            ...('property' in command && command.property
+              ? { field: command.property }
+              : {}),
+            ...('partName' in command && command.partName
+              ? { partName: command.partName }
+              : {}),
+            viewport: viewportRef.current,
+          }),
+        );
+      } else {
+        callbacksRef.current.onError(
+          caughtError instanceof Error ? caughtError.message : 'Editor command failed',
+        );
+      }
       result = { changed: false };
     }
     queueMicrotask(() => {
@@ -1288,13 +1358,20 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         ) {
           return;
         }
-        pendingProgrammaticSelectionRef.current = null;
         if (editor.getSelected() !== result.selection) {
           selectingComponentRef.current = true;
           selectionRef.current.select(editor, result.selection);
           selectingComponentRef.current = false;
         }
         notifySelection(editor);
+        window.setTimeout(() => {
+          if (
+            editorRef.current === editor &&
+            pendingProgrammaticSelectionRef.current === expectedSelectionId
+          ) {
+            pendingProgrammaticSelectionRef.current = null;
+          }
+        }, 500);
       }, 0);
       if (command.kind === 'remove') {
         // GrapesJS may emit its deselection event after the command returns.
@@ -1656,8 +1733,16 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         }
         viewportRef.current = viewport;
         callbacksRef.current.onSelectionChange(selectedSnapshot);
+        const selectedId = selected ? payloadNodeId(selected) : undefined;
         const restoreSelection = () => {
-          if (selected && editorRef.current === editor) {
+          // Viewport reflow can emit a delayed canvas:update. Do not restore
+          // the selection captured before the viewport switch after the user
+          // has selected another node through Layers, Minimap, or Canvas.
+          if (
+            selected &&
+            editorRef.current === editor &&
+            selectedId === selectionRef.current.id
+          ) {
             selectionRef.current.select(editor, selected);
             notifySelection(editor);
           }
@@ -1830,7 +1915,18 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           }
           notifySelection(editor);
           if (editor.getSelected() === component || attempt >= 5) {
-            pendingProgrammaticSelectionRef.current = null;
+            // GrapesJS may emit a queued deselect/select pair from the prior
+            // canvas selection after this callback. Keep the requested ID
+            // guarded briefly so that stale events cannot replace a valid
+            // Layers/Minimap selection in React.
+            window.setTimeout(() => {
+              if (
+                editorRef.current === editor &&
+                pendingProgrammaticSelectionRef.current === id
+              ) {
+                pendingProgrammaticSelectionRef.current = null;
+              }
+            }, 500);
             return;
           }
           const delays = [0, 16, 64, 150, 300];
@@ -2157,6 +2253,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   }, []);
 
   useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    syncValidationIndicators(getRoot(editor), validationIssues);
+  }, [validationIssues]);
+
+  useEffect(() => {
     let disposed = false;
     let editor: Editor | null = null;
     let unbindCanvasComponentDrag: (() => void) | undefined;
@@ -2307,6 +2409,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
               outline: 2px solid #4d78ff;
               outline-offset: 2px;
             }
+            [data-builder-validation-node="true"] {
+              outline: 2px solid #df627c !important;
+              outline-offset: 3px;
+            }
             [data-payload-node-type].builder-drag-source {
               opacity: 0.28;
             }
@@ -2411,6 +2517,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           );
         ensureAllFormPreviews(getRoot(editor));
         syncRuntimePreviewClasses(getRoot(editor));
+        syncValidationIndicators(getRoot(editor), validationIssuesRef.current);
         window.setTimeout(() => syncRuntimePreviewClasses(getRoot(editor as Editor)), 0);
         // The persisted root is an explicit <main> component. Keep GrapesJS'
         // implicit body wrapper out of the editable PagePayloadV1 tree.
@@ -2419,6 +2526,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           unbindCanvasComponentDrag?.();
           unbindRuntimePreviewClasses?.();
           syncRuntimePreviewClasses(getRoot(editor as Editor));
+          syncValidationIndicators(
+            getRoot(editor as Editor),
+            validationIssuesRef.current,
+          );
           applyAllViewportStyles(
             getRoot(editor as Editor),
             viewportRef.current,
@@ -2433,6 +2544,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
             const observer = new MutationObserver(() => {
               if (editorRef.current === editor) {
                 syncRuntimePreviewClasses(getRoot(editor as Editor));
+                syncValidationIndicators(
+                  getRoot(editor as Editor),
+                  validationIssuesRef.current,
+                );
                 applyAllViewportStyles(
                   getRoot(editor as Editor),
                   viewportRef.current,
@@ -2516,6 +2631,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           window.setTimeout(() => {
             if (editorRef.current === editor) {
               syncRuntimePreviewClasses(getRoot(editor as Editor));
+              syncValidationIndicators(
+                getRoot(editor as Editor),
+                validationIssuesRef.current,
+              );
               applyAllViewportStyles(
                 getRoot(editor as Editor),
                 viewportRef.current,
@@ -2550,7 +2669,6 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           if (pendingSelectionId) {
             if (!selected) return;
             if (payloadNodeId(selected) !== pendingSelectionId) return;
-            pendingProgrammaticSelectionRef.current = null;
           }
           if (!selected) {
             if (selectingComponentRef.current) return;

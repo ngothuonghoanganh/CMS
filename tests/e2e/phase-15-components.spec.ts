@@ -1,7 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
+import { expect, type Page } from '@playwright/test';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 
 type BuilderNode = {
   id: string;
@@ -10,32 +8,6 @@ type BuilderNode = {
   style?: Record<string, unknown>;
   children: BuilderNode[];
 };
-
-async function openBuilder(page: Page, prefix: string): Promise<void> {
-  const suffix = Date.now().toString();
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`${prefix} Site ${suffix}`);
-  await page
-    .getByLabel('Slug')
-    .fill(`${prefix.toLowerCase().replaceAll(' ', '-')}-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`${prefix} Page ${suffix}`);
-  await page
-    .getByLabel('Slug')
-    .fill(`${prefix.toLowerCase().replaceAll(' ', '-')}-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
-}
 
 async function readBuilderModel(page: Page): Promise<BuilderNode> {
   const payload = await page.evaluate(() => {
@@ -63,9 +35,11 @@ function collectIds(root: BuilderNode): string[] {
 
 test('Phase 15 preset and semantic components stay synchronized through save/reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 15 Components');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-15-components');
   const canvas = page.frameLocator('iframe.gjs-frame');
 
   await page.getByRole('button', { name: 'Hero add' }).click();
@@ -77,7 +51,16 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
   expect(findNode(initialRoot, 'text')?.type).toBe('text');
   expect(findNode(initialRoot, 'button')?.type).toBe('button');
 
-  await canvas.locator('h2[data-payload-node-type="heading"]').click();
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  const headingLayer = page.getByRole('treeitem', {
+    name: 'Select Heading',
+    exact: true,
+  });
+  await headingLayer.click();
+  await expect(headingLayer).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.builder-properties-panel strong').first()).toHaveText(
+    'Heading',
+  );
   await page.getByLabel('Text content').fill('A platform heading');
   await page.getByLabel('Heading level').selectOption('1');
   await expect(canvas.locator('h1[data-payload-node-type="heading"]')).toHaveText(
@@ -98,14 +81,25 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
   await page.getByRole('button', { name: 'Redo' }).click();
   await expect(page.getByLabel('Font size', { exact: true })).toHaveValue('28');
 
+  await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
   await page.getByRole('button', { name: 'Link add' }).click();
   const link = canvas.locator('a[data-payload-node-type="link"]');
-  await link.click();
+  // Select through Layers so the inspector remains attached while the canvas
+  // rerenders after the component is inserted.
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  const linkLayer = page.getByRole('treeitem', { name: 'Select Link', exact: true });
+  await linkLayer.click();
+  await expect(linkLayer).toHaveAttribute('aria-selected', 'true');
+  const selectedInspectorNode = page.locator('.builder-properties-panel strong').first();
+  await expect(selectedInspectorNode).toHaveText('Link', { timeout: 5_000 });
   await page.getByRole('tab', { name: 'Content', exact: true }).click();
+  await expect(selectedInspectorNode).toHaveText('Link', { timeout: 5_000 });
   await page.getByLabel('Text', { exact: true }).fill('Read the docs');
   await page.getByLabel('Link', { exact: true }).fill('/docs');
+  await page.getByLabel('Link', { exact: true }).press('Enter');
   await expect(link).toHaveAttribute('href', '/docs');
 
+  await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
   await page.getByRole('button', { name: 'Divider add' }).click();
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByLabel('Width', { exact: true }).fill('80');
@@ -164,9 +158,11 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
 
 test('Phase 15 list editor supports stable item operations with undo/redo and reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 15 List');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-15-list');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Hero add' }).click();
   await page.getByRole('button', { name: 'List add' }).click();

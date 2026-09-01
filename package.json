@@ -19,9 +19,12 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert @tenancy",
+    "test:e2e:tenancy": "playwright test --grep @tenancy",
+    "test:e2e:full": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
+    "test:data:cleanup": "node scripts/test-data-cleanup.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"

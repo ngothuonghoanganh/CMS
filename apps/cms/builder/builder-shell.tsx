@@ -71,6 +71,7 @@ import {
   type BuilderCanvasState,
 } from './builder-minimap';
 import {
+  BuilderAdapterError,
   reusableDocumentToEditorDefinition,
   reusableDocumentToEditorPageDocument,
   editorPageDocumentToReusableDocument,
@@ -108,6 +109,18 @@ import {
   type InspectorSectionKey,
   type InspectorTab,
 } from './inspector/builder-inspector';
+import { BuilderValidationNavigator } from './builder-validation-navigator';
+import {
+  createBuilderValidationCoordinator,
+  createBuilderValidationIssue,
+  dedupeBuilderValidationIssues,
+  scopeForDocumentKind,
+  sortBuilderValidationIssues,
+  validationIssueFromError,
+  type BuilderValidationCoordinator,
+  type BuilderValidationIssue,
+  type BuilderValidationScope,
+} from './builder-validation';
 
 type BuilderShellProps = {
   workspaceId: string;
@@ -117,7 +130,8 @@ type BuilderShellProps = {
 };
 
 type LoadState = 'loading' | 'ready' | 'error';
-type SaveStatus = 'initializing' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
+type SaveStatus =
+  'initializing' | 'saved' | 'unsaved' | 'saving' | 'validation' | 'error' | 'conflict';
 type SaveDraftResult = boolean;
 type BuilderPreviewNavigation = {
   main?: ResolvedNavigationItem[];
@@ -285,6 +299,7 @@ function renderLayerNodes(
   draggingId: string | null,
   dropIntent: MoveNodeIntent | null,
   dropInvalid: boolean,
+  invalidNodeIds: ReadonlySet<string>,
   focusableId: string | undefined,
 ): ReactNode {
   return (childrenByParent.get(parentId) ?? [])
@@ -309,6 +324,7 @@ function renderLayerNodes(
               draggingId,
               dropIntent,
               dropInvalid,
+              invalidNodeIds,
               focusableId,
             )
           : null;
@@ -316,9 +332,10 @@ function renderLayerNodes(
         dropIntent?.targetNodeId === node.id
           ? ` drop-${dropIntent.position}${dropInvalid ? ' drop-invalid' : ''}`
           : '';
+      const hasValidationIssue = invalidNodeIds.has(node.id);
       return (
         <div
-          className={`builder-layer-node${draggingId === node.id ? ' dragging' : ''}${dropClass}`}
+          className={`builder-layer-node${draggingId === node.id ? ' dragging' : ''}${hasValidationIssue ? ' has-validation-issue' : ''}${dropClass}`}
           data-builder-layer-row-id={node.id}
           key={node.id}
         >
@@ -362,6 +379,15 @@ function renderLayerNodes(
                 {node.type === 'root' ? '▣' : node.type === 'section' ? '▤' : '▪'}
               </span>
               <span className="builder-layer-label">{node.label}</span>
+              {hasValidationIssue ? (
+                <span
+                  aria-label="Needs attention"
+                  className="builder-layer-validation-marker"
+                  title="Needs attention"
+                >
+                  !
+                </span>
+              ) : null}
             </button>
           </div>
           {children ? <div className="builder-layer-children">{children}</div> : null}
@@ -406,6 +432,7 @@ export default function BuilderShell({
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('initializing');
   const [saveInFlight, setSaveInFlight] = useState(false);
+  const [validationIssues, setValidationIssues] = useState<BuilderValidationIssue[]>([]);
   const [page, setPage] = useState<Page | null>(null);
   const [version, setVersion] = useState<PageVersion | null>(null);
   // Model A: GrapesJS owns the live editable document. This is only the last
@@ -444,6 +471,7 @@ export default function BuilderShell({
   );
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [focusPartName, setFocusPartName] = useState<string | undefined>(undefined);
   const [canvasState, setCanvasState] = useState<BuilderCanvasState | null>(null);
   const [viewport, setViewport] = useState<BuilderViewport>('desktop');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('content');
@@ -499,6 +527,13 @@ export default function BuilderShell({
   const [navigation, setNavigation] = useState<BuilderPreviewNavigation>({});
   const [siteContext, setSiteContext] = useState<BuilderSiteContext | null>(null);
   const [previewExtensions, setPreviewExtensions] = useState<PageRuntimeExtension[]>([]);
+  const validationIssuesRef = useRef<BuilderValidationIssue[]>([]);
+  const validationCoordinatorRef = useRef<BuilderValidationCoordinator | null>(null);
+  const documentKindRef = useRef<BuilderDocumentKind>('page');
+  const editingReusableIdRef = useRef<string | null>(initialReusableId ?? null);
+  documentKindRef.current = documentKind;
+  editingReusableIdRef.current = editingReusableId;
+  validationIssuesRef.current = validationIssues;
   const layerTreeRef = useRef<HTMLDivElement>(null);
   const layerPointerCleanupRef = useRef<(() => void) | null>(null);
   const layerHoverExpandTimerRef = useRef<number | null>(null);
@@ -549,6 +584,7 @@ export default function BuilderShell({
   const isDirty =
     saveStatus === 'unsaved' ||
     saveStatus === 'saving' ||
+    saveStatus === 'validation' ||
     saveStatus === 'error' ||
     saveStatus === 'conflict';
   const pageExtensionState = new Map(
@@ -1235,6 +1271,16 @@ export default function BuilderShell({
 
   async function saveDraft(): Promise<SaveDraftResult> {
     if (!editorRef.current || saveInFlightRef.current) return false;
+    const blockingIssue = validationIssuesRef.current.find(
+      (issue) => issue.severity === 'error',
+    );
+    if (blockingIssue) {
+      setSaveStatus('validation');
+      setError(null);
+      setNotice(null);
+      await validationCoordinatorRef.current?.focusIssue(blockingIssue);
+      return false;
+    }
     saveInFlightRef.current = true;
     setSaveInFlight(true);
     setSaveStatus('saving');
@@ -1268,6 +1314,7 @@ export default function BuilderShell({
         postPreviewSnapshot({ reusables: nextReusableRuntime });
         setReusableEditorDocument(nextDocument);
         editorRef.current.acknowledgeSaved(nextDocument.payload);
+        validationCoordinatorRef.current?.clearResolvedIssues();
         setSaveStatus('saved');
         setNotice(
           `Saved reusable source “${updated.name}”. Publish the site to make it public.`,
@@ -1303,6 +1350,7 @@ export default function BuilderShell({
         else setFooterDocument(acknowledgedGlobal);
         postPreviewSnapshot({ globals: savedGlobals.draft });
         editorRef.current.acknowledgeSaved(acknowledgedGlobal);
+        validationCoordinatorRef.current?.clearResolvedIssues();
         setSaveStatus('saved');
         setNotice('Saved global draft. Publish the site to make it public.');
         return true;
@@ -1331,6 +1379,7 @@ export default function BuilderShell({
         JSON.stringify(currentPayloadResult.data) !== JSON.stringify(nextPayload);
       setVersion(nextVersion);
       editorRef.current.acknowledgeSaved(nextPayload);
+      validationCoordinatorRef.current?.clearResolvedIssues();
       const nextPageExtensions = PageExtensionListResponseSchema.parse(
         await api.get(`/pages/${pageId}/extensions`),
       );
@@ -1354,6 +1403,39 @@ export default function BuilderShell({
         setSaveStatus('conflict');
         setError(
           'This draft was changed elsewhere. Reload the latest draft before saving again.',
+        );
+        return false;
+      }
+      if (
+        caughtError instanceof BuilderAdapterError ||
+        (caughtError &&
+          typeof caughtError === 'object' &&
+          Array.isArray((caughtError as { issues?: unknown }).issues))
+      ) {
+        showValidationIssue(
+          validationIssueFromError(caughtError, {
+            scope: scopeForDocumentKind(
+              documentKindRef.current,
+              Boolean(editingReusableIdRef.current),
+            ),
+            tab: 'content',
+          }),
+          true,
+        );
+        return false;
+      }
+      if (caughtError instanceof ApiClientError && caughtError.status < 500) {
+        showValidationIssue(
+          createBuilderValidationIssue({
+            scope: scopeForDocumentKind(
+              documentKindRef.current,
+              Boolean(editingReusableIdRef.current),
+            ),
+            code: caughtError.code,
+            message: caughtError.message,
+            tab: 'content',
+          }),
+          false,
         );
         return false;
       }
@@ -1383,6 +1465,7 @@ export default function BuilderShell({
               : reusable,
           ),
         );
+        validationCoordinatorRef.current?.clearResolvedIssues();
         setNotice(
           'Site published. The public site now uses the published reusable source.',
         );
@@ -1391,13 +1474,30 @@ export default function BuilderShell({
       if (documentKind !== 'page') {
         await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
         setGlobalsPublished(true);
+        validationCoordinatorRef.current?.clearResolvedIssues();
         setNotice('Site published. The public site now uses the published globals.');
         return;
       }
       const updated = PageSchema.parse(await api.post(`/pages/${pageId}/publish`, {}));
       setPage(updated);
+      validationCoordinatorRef.current?.clearResolvedIssues();
       setNotice('Page published. The public site now uses the published snapshot.');
     } catch (caughtError) {
+      if (caughtError instanceof ApiClientError && caughtError.status < 500) {
+        showValidationIssue(
+          createBuilderValidationIssue({
+            scope: scopeForDocumentKind(
+              documentKindRef.current,
+              Boolean(editingReusableIdRef.current),
+            ),
+            code: caughtError.code,
+            message: caughtError.message,
+            tab: 'content',
+          }),
+          true,
+        );
+        return;
+      }
       setError(toErrorMessage(caughtError));
     }
   }
@@ -1486,6 +1586,121 @@ export default function BuilderShell({
     window.setTimeout(() => {
       viewportChangingRef.current = false;
     }, 1_000);
+  }
+
+  function switchValidationDocument(scope: BuilderValidationScope): Promise<void> | void {
+    if (scope === 'reusable') return;
+    const nextKind: BuilderDocumentKind =
+      scope === 'header' ? 'site-header' : scope === 'footer' ? 'site-footer' : 'page';
+    if (documentKindRef.current === nextKind && !editingReusableIdRef.current) return;
+    setSelected(null);
+    setSelectedNodeId(null);
+    setFocusPartName(undefined);
+    setCanvasState(null);
+    setHistory({ canUndo: false, canRedo: false });
+    setEditingReusableId(null);
+    setReusableEditorDocument(null);
+    setSaveStatus('initializing');
+    setDocumentKind(nextKind);
+    return new Promise((resolve) => {
+      let attempts = 0;
+      const waitForEditor = () => {
+        if (
+          documentKindRef.current === nextKind &&
+          !editingReusableIdRef.current &&
+          editorRef.current
+        ) {
+          resolve();
+          return;
+        }
+        attempts += 1;
+        if (attempts >= 120) {
+          resolve();
+          return;
+        }
+        window.setTimeout(waitForEditor, 16);
+      };
+      waitForEditor();
+    });
+  }
+
+  function openValidationInspector(
+    tab?: InspectorTab,
+    section?: string,
+    partName?: string,
+  ): void {
+    if (tab) setInspectorTab(tab);
+    if (partName) setFocusPartName(partName);
+    const sections: readonly InspectorSectionKey[] = [
+      'content',
+      'layout',
+      'size',
+      'spacing',
+      'typography',
+      'background',
+      'border',
+      'effects',
+      'advanced',
+    ];
+    if (section && sections.includes(section as InspectorSectionKey)) {
+      setOpenInspectorSections((current) => ({
+        ...current,
+        [section]: true,
+      }));
+    }
+  }
+
+  if (!validationCoordinatorRef.current) {
+    validationCoordinatorRef.current = createBuilderValidationCoordinator({
+      getIssues: () => validationIssuesRef.current,
+      setIssues: (nextIssues) => {
+        validationIssuesRef.current = nextIssues;
+        setValidationIssues(nextIssues);
+      },
+      navigation: {
+        openInspector: openValidationInspector,
+        selectNode: (nodeId) => editorRef.current?.selectNode(nodeId),
+        switchDocument: switchValidationDocument,
+        switchViewport: changeViewport,
+      },
+    });
+  }
+
+  function updateValidationIssue(issue: BuilderValidationIssue | null, issueId?: string) {
+    const current = validationIssuesRef.current;
+    const next = issue
+      ? dedupeBuilderValidationIssues([
+          ...current.filter((candidate) => candidate.id !== issue.id),
+          issue,
+        ])
+      : current.filter((candidate) => candidate.id !== issueId);
+    const sorted = sortBuilderValidationIssues(next, {
+      nodeId: selectedNodeId,
+      scope: scopeForDocumentKind(
+        documentKindRef.current,
+        Boolean(editingReusableIdRef.current),
+      ),
+      viewport,
+    });
+    validationIssuesRef.current = sorted;
+    setValidationIssues(sorted);
+    if (issue?.severity === 'error') {
+      setSaveStatus('validation');
+    }
+    if (!issue && sorted.length === 0) {
+      setSaveStatus((current) => (current === 'validation' ? 'unsaved' : current));
+    }
+  }
+
+  function showValidationIssue(issue: BuilderValidationIssue, focus = false): void {
+    updateValidationIssue(issue);
+    setSaveStatus('validation');
+    setError(null);
+    if (focus) window.setTimeout(() => focusValidationIssue(issue), 0);
+  }
+
+  function focusValidationIssue(issue: BuilderValidationIssue): void {
+    void validationCoordinatorRef.current?.focusIssue(issue);
   }
 
   function openQuickAdd() {
@@ -1749,9 +1964,11 @@ export default function BuilderShell({
                       : `Saved · global draft · ${globalsPublished ? 'published' : 'not published'}`
                   : saveStatus === 'conflict'
                     ? 'Conflict'
-                    : saveStatus === 'error'
-                      ? 'Save failed'
-                      : 'Unsaved changes'}
+                    : saveStatus === 'validation'
+                      ? 'Needs attention'
+                      : saveStatus === 'error'
+                        ? 'Save failed'
+                        : 'Unsaved changes'}
           </span>
           {saveStatus === 'conflict' ? (
             <button
@@ -1802,6 +2019,7 @@ export default function BuilderShell({
               saveStatus === 'initializing' ||
               saveStatus === 'unsaved' ||
               saveStatus === 'saving' ||
+              saveStatus === 'validation' ||
               saveStatus === 'conflict'
             }
             onClick={() => void publishPage()}
@@ -1824,6 +2042,13 @@ export default function BuilderShell({
           </div>
         ) : null}
       </div>
+      <BuilderValidationNavigator
+        issues={validationIssues}
+        nodeLabels={
+          new Map((canvasState?.nodes ?? []).map((node) => [node.id, node.label]))
+        }
+        onFocusIssue={focusValidationIssue}
+      />
 
       <div
         className={`builder-workspace${leftPanelCollapsed ? ' is-left-collapsed' : ''}${rightPanelCollapsed ? ' is-right-collapsed' : ''}`}
@@ -2225,6 +2450,11 @@ export default function BuilderShell({
                         layerDraggingId,
                         layerDropIntent,
                         layerDropValidation?.valid === false,
+                        new Set(
+                          validationIssues
+                            .filter((issue) => issue.severity === 'error' && issue.nodeId)
+                            .map((issue) => issue.nodeId as string),
+                        ),
                         focusableLayerId,
                       )
                     ) : (
@@ -2355,6 +2585,7 @@ export default function BuilderShell({
               {...(siteContext ? { siteName: siteContext.name } : {})}
               {...(siteContext?.logo ? { siteLogo: siteContext.logo } : {})}
               navigation={navigation}
+              validationIssues={validationIssues}
               key={`${editingReusableId ?? documentKind}-${activePayload.root.id}`}
               onDirty={markDirty}
               onDocumentChange={handleDocumentChange}
@@ -2362,6 +2593,7 @@ export default function BuilderShell({
                 setSaveStatus('error');
                 setError(`Editor error: ${message}`);
               }}
+              onValidationIssue={(issue) => updateValidationIssue(issue)}
               onHistoryChange={setHistory}
               onCanvasStateChange={setCanvasState}
               onInteractionModeChange={setInteractionMode}
@@ -2486,6 +2718,7 @@ export default function BuilderShell({
                 onSelectNode={(nodeId) => editorRef.current?.selectNode(nodeId)}
                 onToggleSection={toggleInspectorSection}
                 openSections={openInspectorSections}
+                onValidationIssue={updateValidationIssue}
                 resetSelectedStyle={resetSelectedStyle}
                 selected={selected}
                 updateSelectedProperty={(property, value) =>
@@ -2494,6 +2727,12 @@ export default function BuilderShell({
                 updateSelectedStyle={updateSelectedStyle}
                 updateSelectedPartStyle={updateSelectedPartStyle}
                 resetSelectedPartStyle={resetSelectedPartStyle}
+                validationIssues={validationIssues}
+                validationScope={scopeForDocumentKind(
+                  documentKind,
+                  Boolean(editingReusableId),
+                )}
+                focusPartName={focusPartName}
                 usableAssets={usableAssets}
                 designSystem={designSystem}
                 navigationItemCount={navigation.main?.length ?? 0}

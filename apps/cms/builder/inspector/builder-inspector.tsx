@@ -16,6 +16,10 @@ import { resolveInspectorStyleValue } from './inspector-value';
 import { CUSTOM_PROPERTY_EDITORS } from './custom-property-editors';
 import { PropertyControlRenderer } from './property-control-renderer';
 import { StructureEditor } from './structure-editor/structure-editor';
+import {
+  type BuilderValidationIssue,
+  type BuilderValidationScope,
+} from '../builder-validation';
 
 export type InspectorTab = 'content' | 'style' | 'settings';
 
@@ -66,6 +70,11 @@ type BuilderInspectorProps = {
   designSystem?: SiteDesignSystem;
   navigationItemCount?: number;
   onEditNavigation?: () => void;
+  validationIssues?: readonly BuilderValidationIssue[];
+  validationScope?: BuilderValidationScope;
+  onValidationIssue?:
+    ((issue: BuilderValidationIssue | null, issueId?: string) => void) | undefined;
+  focusPartName?: string | undefined;
 };
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
@@ -198,6 +207,10 @@ export function BuilderInspector({
   designSystem,
   navigationItemCount = 0,
   onEditNavigation,
+  validationIssues = [],
+  validationScope = 'page',
+  onValidationIssue,
+  focusPartName,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
@@ -212,12 +225,24 @@ export function BuilderInspector({
       ),
     [selected.type],
   );
+  useEffect(() => {
+    if (focusPartName && partNames.includes(focusPartName))
+      setSelectedPart(focusPartName);
+  }, [focusPartName, partNames]);
 
   const contentProperties = definition.propertiesSchema.filter(
     (property) => property.group === 'content',
   );
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {
+    const issue = validationIssues.find(
+      (candidate) =>
+        candidate.nodeId === selected.id &&
+        candidate.field === property.key &&
+        candidate.tab === 'content' &&
+        candidate.scope === validationScope &&
+        candidate.viewport === viewport,
+    );
     if (property.control === 'custom' && property.customEditor) {
       const Editor = CUSTOM_PROPERTY_EDITORS[property.customEditor];
       return (
@@ -236,7 +261,14 @@ export function BuilderInspector({
         definition={property}
         key={property.key}
         onChange={(nextValue) => updateSelectedProperty(property.key, nextValue)}
+        issue={issue}
+        nodeId={selected.id}
+        onValidationIssue={onValidationIssue}
+        scope={validationScope}
+        section="content"
+        tab="content"
         value={value}
+        viewport={viewport}
       />
     );
   }
@@ -283,7 +315,22 @@ export function BuilderInspector({
                   onChange={(nextValue) =>
                     updateSelectedStyle(field.key, String(nextValue ?? ''))
                   }
+                  issue={validationIssues.find(
+                    (candidate) =>
+                      candidate.nodeId === selected.id &&
+                      candidate.field === field.key &&
+                      candidate.tab === 'style' &&
+                      candidate.scope === validationScope &&
+                      candidate.viewport === viewport &&
+                      candidate.section === section.key,
+                  )}
+                  nodeId={selected.id}
+                  onValidationIssue={onValidationIssue}
+                  scope={validationScope}
+                  section={section.key}
+                  tab="style"
                   value={resolved.effectiveValue ?? ''}
+                  viewport={viewport}
                 />
                 {hasOverride ? (
                   <button
@@ -358,7 +405,24 @@ export function BuilderInspector({
                       String(nextValue ?? ''),
                     )
                   }
+                  issue={validationIssues.find(
+                    (candidate) =>
+                      candidate.nodeId === selected.id &&
+                      candidate.field === field.key &&
+                      candidate.tab === 'style' &&
+                      candidate.scope === validationScope &&
+                      candidate.viewport === viewport &&
+                      candidate.section === 'component-part' &&
+                      candidate.partName === selectedPart,
+                  )}
+                  nodeId={selected.id}
+                  onValidationIssue={onValidationIssue}
+                  partName={selectedPart}
+                  scope={validationScope}
+                  section="component-part"
+                  tab="style"
                   value={resolved.effectiveValue ?? ''}
+                  viewport={viewport}
                 />
                 {hasOverride ? (
                   <button

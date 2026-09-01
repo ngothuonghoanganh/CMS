@@ -1,7 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
+import { expect } from '@playwright/test';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 
 type BuilderNode = {
   id: string;
@@ -10,32 +8,6 @@ type BuilderNode = {
   style?: Record<string, Record<string, string>>;
   children: BuilderNode[];
 };
-
-async function openBuilder(page: Page, prefix: string): Promise<void> {
-  const suffix = Date.now().toString();
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`${prefix} Site ${suffix}`);
-  await page
-    .getByLabel('Slug')
-    .fill(`${prefix.toLowerCase().replaceAll(' ', '-')}-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`${prefix} Page ${suffix}`);
-  await page
-    .getByLabel('Slug')
-    .fill(`${prefix.toLowerCase().replaceAll(' ', '-')}-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
-}
 
 async function readBuilderModel(page: Page): Promise<BuilderNode> {
   const payload = await page.evaluate(() => {
@@ -66,9 +38,11 @@ function findNodes(root: BuilderNode, type: string): BuilderNode[] {
 
 test('Phase 16 compound structures edit through Layers, Inspector, commands, and reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 16 Accordion');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-16-accordion');
   const canvas = page.frameLocator('iframe.gjs-frame');
 
   await page.getByRole('button', { name: 'Accordion add', exact: true }).click();
@@ -139,9 +113,11 @@ test('Phase 16 compound structures edit through Layers, Inspector, commands, and
 
 test('Phase 16 tabs expose ARIA runtime semantics and keyboard activation', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 16 Tabs');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-16-tabs');
   await page.getByRole('button', { name: 'Tabs add', exact: true }).click();
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page
@@ -183,9 +159,11 @@ test('Phase 16 tabs expose ARIA runtime semantics and keyboard activation', asyn
 
 test('Phase 18.2 paints responsive component-part styles before save and after reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 18.2 Parts');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-18-2-parts');
   const canvas = page.frameLocator('iframe.gjs-frame');
 
   await page.getByRole('button', { name: 'Accordion add', exact: true }).click();
@@ -239,9 +217,11 @@ test('Phase 18.2 paints responsive component-part styles before save and after r
 
 test('Phase 16 gallery enforces image-only structure and responsive authored styles', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 16 Gallery');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-16-gallery');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Gallery add', exact: true }).click();
   await expect(canvas.locator('[data-payload-node-type="gallery"]')).toHaveCount(1);
@@ -264,6 +244,11 @@ test('Phase 16 gallery enforces image-only structure and responsive authored sty
   await page.getByRole('button', { name: '+ Add Image', exact: true }).click();
   const gallery = findNode(await readBuilderModel(page), 'gallery');
   expect(gallery?.children).toHaveLength(4);
+  // The structural command selects the inserted child. Return to the parent
+  // through Layers before continuing to exercise its slot controls.
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  await page.getByRole('treeitem', { name: 'Select Gallery', exact: true }).click();
+  await page.getByRole('tab', { name: 'Content', exact: true }).click();
   await expect(
     page.getByRole('button', { name: '+ Add Image', exact: true }),
   ).toBeVisible();
@@ -290,9 +275,13 @@ test('Phase 16 gallery enforces image-only structure and responsive authored sty
   expect(canvas.locator('img[data-payload-node-type="image"]')).toHaveCount(4);
 });
 
-test('Phase 16 quote uses the generic content and style inspector', async ({ page }) => {
+test('Phase 16 quote uses the generic content and style inspector', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
   test.setTimeout(120_000);
-  await openBuilder(page, 'Phase 16 Quote');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-16-quote');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Quote add', exact: true }).click();
   await canvas.locator('blockquote[data-payload-node-type="quote"]').click();

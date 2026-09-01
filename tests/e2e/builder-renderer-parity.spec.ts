@@ -1,13 +1,12 @@
-import { expect, test, type Locator, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type TestInfo } from '@playwright/test';
 import {
   ExtensionIds,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PagePayload,
 } from '@payload/contracts';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
 const rendererOrigin = 'http://127.0.0.1:3002';
 
 const computedProperties = [
@@ -249,15 +248,6 @@ function assertFixtureStyleCoverage(payload: PagePayload): void {
   expect([...used].sort()).toEqual(
     PAGE_STYLE_PROPERTY_DEFINITIONS.map((property) => property.payloadKey).sort(),
   );
-}
-
-async function login(page: Parameters<typeof test>[0]['page']) {
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
 }
 
 async function waitForPageSurface(surface: Locator): Promise<void> {
@@ -693,32 +683,23 @@ async function isolateRendererChrome(page: import('@playwright/test').Page) {
 test('Builder, draft review, and published renderer retain visual parity', async ({
   browser,
   page,
+  request,
+  canonicalEnvironment,
 }, testInfo) => {
   test.setTimeout(180_000);
   const fixture = parityFixture();
   assertFixtureStyleCoverage(fixture);
-  const suffix = Date.now().toString();
-  const siteName = `Parity Site ${suffix}`;
-  const siteSlug = `parity-site-${suffix}`;
-  const pageName = `Parity Page ${suffix}`;
-  const pageSlug = `parity-page-${suffix}`;
-
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(siteName);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(pageName);
-  await page.getByLabel('Slug').fill(pageSlug);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('iframe.gjs-frame')).toBeVisible({ timeout: 15_000 });
-
-  const pageId = page.url().match(/\/pages\/([^/]+)\/builder$/)?.[1];
-  expect(pageId).toBeTruthy();
+  const {
+    id: pageId,
+    siteSlug,
+    slug: pageSlug,
+  } = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-18-2-parity',
+    fixture,
+  );
   const enabledExtension = await page.evaluate(
     async ({ id, extensionId }) => {
       const tenantResponse = await fetch(

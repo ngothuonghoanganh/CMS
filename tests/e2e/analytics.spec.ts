@@ -1,40 +1,27 @@
-import { expect, test, type Page } from '@playwright/test';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
-
-async function login(page: Page) {
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
-}
+import { expect } from '@playwright/test';
+import {
+  canonicalEnvironmentNames,
+  openCanonicalBuilder,
+  test,
+} from './fixtures/canonical-environment';
 
 test('tracks a public page view, CTA click and form conversion in CMS Analytics', async ({
   browser,
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   const suffix = Date.now().toString();
-  const siteSlug = `analytics-e2e-site-${suffix}`;
-  const pageSlug = `analytics-e2e-page-${suffix}`;
-  const pageName = `Analytics E2E Page ${suffix}`;
-
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`Analytics E2E Site ${suffix}`);
-  await page.getByLabel('Slug').fill(siteSlug);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(pageName);
-  await page.getByLabel('Slug').fill(pageSlug);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  const temporaryPage = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-analytics',
+  );
+  const siteName = canonicalEnvironmentNames.siteName;
+  const siteSlug = temporaryPage.siteSlug;
+  const pageName = temporaryPage.name;
+  const pageSlug = temporaryPage.slug;
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Button/ }).click();
   await page.getByRole('button', { name: /^Form/ }).click();
@@ -42,7 +29,9 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: '← Pages' }).click();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site').selectOption({ label: `Analytics E2E Site ${suffix}` });
+  await page
+    .getByLabel('Site')
+    .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');

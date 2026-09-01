@@ -164,9 +164,12 @@ export function SelectField({
 type NumberControlProps = {
   ariaLabel: string;
   disabled?: boolean | undefined;
+  draftValue?: string | undefined;
   id?: string | undefined;
   max?: number | undefined;
   min?: number | undefined;
+  onDraftChange?: ((value: string) => void) | undefined;
+  onDraftCommit?: ((value: string) => void) | undefined;
   onValueChange: (value: number | undefined) => void;
   step?: number | undefined;
   value: number | undefined;
@@ -175,14 +178,21 @@ type NumberControlProps = {
 function NumberControl({
   ariaLabel,
   disabled = false,
+  draftValue,
   id,
   max,
   min,
+  onDraftChange,
+  onDraftCommit,
   onValueChange,
   step = 1,
   value,
 }: NumberControlProps) {
   function update(raw: string) {
+    if (onDraftChange) {
+      onDraftChange(raw);
+      return;
+    }
     if (raw.trim() === '') {
       onValueChange(undefined);
       return;
@@ -190,6 +200,8 @@ function NumberControl({
     const next = Number(raw);
     if (Number.isFinite(next)) onValueChange(clampNumber(next, min, max));
   }
+
+  const displayedValue = draftValue ?? value ?? '';
 
   function stepValue(direction: -1 | 1) {
     const next = clampNumber((value ?? min ?? 0) + direction * step, min, max);
@@ -215,10 +227,14 @@ function NumberControl({
         inputMode="decimal"
         max={max}
         min={min}
+        onBlur={() => onDraftCommit?.(String(displayedValue))}
         onChange={(event) => update(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onDraftCommit?.(String(event.currentTarget.value));
+        }}
         step={step}
         type="number"
-        value={value ?? ''}
+        value={displayedValue}
       />
       <button
         aria-label="Increase"
@@ -235,9 +251,12 @@ function NumberControl({
 
 export type NumberFieldProps = Omit<FieldProps, 'children' | 'htmlFor'> & {
   disabled?: boolean | undefined;
+  draftValue?: string | undefined;
   id?: string | undefined;
   max?: number | undefined;
   min?: number | undefined;
+  onDraftChange?: ((value: string) => void) | undefined;
+  onDraftCommit?: ((value: string) => void) | undefined;
   onValueChange: (value: number | undefined) => void;
   step?: number | undefined;
   suffix?: string | undefined;
@@ -249,11 +268,14 @@ export function NumberField({
   compact,
   description,
   disabled,
+  draftValue,
   error,
   id,
   label,
   max,
   min,
+  onDraftChange,
+  onDraftCommit,
   onValueChange,
   step,
   suffix,
@@ -274,9 +296,12 @@ export function NumberField({
         <NumberControl
           ariaLabel={label ?? 'Number value'}
           disabled={disabled}
+          draftValue={draftValue}
           id={inputId}
           max={max}
           min={min}
+          onDraftChange={onDraftChange}
+          onDraftCommit={onDraftCommit}
           onValueChange={onValueChange}
           step={step}
           value={value}
@@ -290,9 +315,12 @@ export function NumberField({
 export type UnitFieldProps = Omit<FieldProps, 'children' | 'htmlFor'> & {
   allowAuto?: boolean | undefined;
   disabled?: boolean | undefined;
+  draftValue?: string | undefined;
   id?: string | undefined;
   max?: number | undefined;
   min?: number | undefined;
+  onDraftChange?: ((value: string) => void) | undefined;
+  onDraftCommit?: ((value: string) => void) | undefined;
   onValueChange: (value: string) => void;
   step?: number | undefined;
   units?: readonly CssDimensionUnit[] | undefined;
@@ -305,11 +333,14 @@ export function UnitField({
   compact,
   description,
   disabled,
+  draftValue,
   error,
   id,
   label,
   max,
   min,
+  onDraftChange,
+  onDraftCommit,
   onValueChange,
   step,
   units = CSS_DIMENSION_UNITS,
@@ -320,6 +351,9 @@ export function UnitField({
   const parsed = parseCssDimension(value);
   const selectedUnit: UnitSelection =
     parsed.unit === 'auto' && !allowAuto ? 'px' : parsed.unit;
+  const [draftRaw, setDraftRaw] = useState<string | undefined>(undefined);
+
+  useEffect(() => setDraftRaw(undefined), [value]);
 
   function update(nextValue: number | undefined, nextUnit = selectedUnit) {
     onValueChange(formatCssDimension(nextValue, nextUnit));
@@ -338,10 +372,44 @@ export function UnitField({
         <NumberControl
           ariaLabel={label ?? 'Dimension'}
           disabled={disabled || selectedUnit === 'auto'}
+          draftValue={
+            draftRaw ??
+            (draftValue ? parseCssDimension(draftValue).value?.toString() : undefined)
+          }
           id={inputId}
           max={max}
           min={min}
-          onValueChange={(nextValue) => update(nextValue)}
+          onDraftChange={(raw) => {
+            setDraftRaw(raw);
+            onDraftChange?.(raw);
+            const numeric = Number(raw);
+            if (
+              raw.trim() !== '' &&
+              Number.isFinite(numeric) &&
+              (min === undefined || numeric >= min) &&
+              (max === undefined || numeric <= max)
+            ) {
+              setDraftRaw(undefined);
+              update(numeric);
+            }
+          }}
+          onDraftCommit={(raw) => {
+            const next =
+              raw.trim() === ''
+                ? ''
+                : Number.isFinite(Number(raw))
+                  ? formatCssDimension(Number(raw), selectedUnit)
+                  : raw;
+            onDraftCommit?.(next);
+            if (!onDraftCommit) {
+              if (next === '') update(undefined);
+              else if (next !== raw || Number.isFinite(Number(raw))) update(Number(raw));
+            }
+          }}
+          onValueChange={(nextValue) => {
+            setDraftRaw(undefined);
+            update(nextValue);
+          }}
           step={step}
           value={parsed.value}
         />
@@ -350,7 +418,10 @@ export function UnitField({
           className="ui-control ui-unit-select"
           disabled={disabled}
           id={`${inputId}-unit`}
-          onChange={(event) => update(parsed.value, event.target.value as UnitSelection)}
+          onChange={(event) => {
+            setDraftRaw(undefined);
+            update(parsed.value, event.target.value as UnitSelection);
+          }}
           value={selectedUnit}
         >
           {allowAuto ? <option value="auto">Auto</option> : null}
@@ -375,6 +446,8 @@ export type ColorFieldProps = Omit<FieldProps, 'children' | 'htmlFor'> & {
   disabled?: boolean | undefined;
   id?: string | undefined;
   onValueChange: (value: string) => void;
+  onDraftChange?: ((value: string) => void) | undefined;
+  onDraftCommit?: ((value: string) => void) | undefined;
   value: string | undefined;
 };
 
@@ -386,6 +459,8 @@ export function ColorField({
   error,
   id,
   label,
+  onDraftChange,
+  onDraftCommit,
   onValueChange,
   value,
 }: ColorFieldProps) {
@@ -430,6 +505,7 @@ export function ColorField({
           maxLength={7}
           onBlur={(event) => {
             commit(event.target.value);
+            onDraftCommit?.(event.target.value);
             if (
               !normalizeHexColor(event.target.value) &&
               event.target.value.trim() !== ''
@@ -438,8 +514,10 @@ export function ColorField({
             }
           }}
           onChange={(event) => {
-            setDraft(event.target.value);
-            if (normalizeHexColor(event.target.value)) commit(event.target.value);
+            const next = event.target.value;
+            setDraft(next);
+            onDraftChange?.(next);
+            if (normalizeHexColor(next)) commit(next);
           }}
           placeholder="#000000"
           spellCheck={false}

@@ -1,4 +1,10 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import {
+  expect,
+  type Locator,
+  type Page,
+  type APIRequestContext,
+} from '@playwright/test';
+import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
@@ -13,26 +19,16 @@ async function login(page: Page) {
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
 }
 
-async function openBuilder(page: Page, prefix: string): Promise<string> {
-  const suffix = Date.now().toString();
-  const pageName = `${prefix} ${suffix}`;
-  const slugPrefix = prefix.toLowerCase().replaceAll(' ', '-');
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`${prefix} Site ${suffix}`);
-  await page.getByLabel('Slug').fill(`${slugPrefix}-site-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(pageName);
-  await page.getByLabel('Slug').fill(`${slugPrefix}-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
+async function openBuilder(
+  page: Page,
+  request: APIRequestContext,
+  environment: Parameters<typeof openCanonicalBuilder>[2],
+  prefix: string,
+): Promise<string> {
+  const temporaryPage = await openCanonicalBuilder(page, request, environment, prefix);
   await expect(page).toHaveURL(/\/builder$/);
-  await expect(page.getByRole('heading', { name: pageName })).toBeVisible();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
-  return pageName;
+  await expect(page.getByRole('heading', { name: temporaryPage.name })).toBeVisible();
+  return temporaryPage.name;
 }
 
 type BuilderDebugNode = {
@@ -263,7 +259,7 @@ test('extension management settles without a request loop and stays responsive',
   }
 });
 
-test('uses the enabled Countdown extension through builder save and public payload delivery', async ({
+test('@tenancy uses the enabled Countdown extension through builder save and public payload delivery', async ({
   page,
 }) => {
   const suffix = Date.now().toString();
@@ -438,7 +434,7 @@ test('refreshes an active session when the access cookie is no longer present', 
   await expect(page.getByLabel('Current company')).toBeVisible();
 });
 
-test('creates and edits a site', async ({ page }) => {
+test('@tenancy creates and edits a site', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
@@ -455,7 +451,7 @@ test('creates and edits a site', async ({ page }) => {
   await expect(page.getByText(`Edited E2E Site ${suffix}`)).toBeVisible();
 });
 
-test('creates a page and edits its metadata', async ({ page }) => {
+test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
@@ -484,27 +480,19 @@ test('creates a page and edits its metadata', async ({ page }) => {
 
 test('opens the visual builder, saves a draft, and restores it after reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  const suffix = Date.now().toString();
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`Builder Site ${suffix}`);
-  await page.getByLabel('Slug').fill(`builder-site-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Builder Page ${suffix}`);
-  await page.getByLabel('Slug').fill(`builder-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-
-  await page.getByRole('button', { name: 'Open Builder' }).click();
+  const temporaryPage = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'cms-builder',
+  );
   await expect(page).toHaveURL(/\/builder$/);
   await expect(
-    page.getByRole('heading', { name: `Builder Page ${suffix}` }),
+    page.getByRole('heading', { name: temporaryPage.name, exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
@@ -514,7 +502,7 @@ test('opens the visual builder, saves a draft, and restores it after reload', as
 
   await page.reload();
   await expect(
-    page.getByRole('heading', { name: `Builder Page ${suffix}` }),
+    page.getByRole('heading', { name: temporaryPage.name, exact: true }),
   ).toBeVisible();
   await expect(
     page
@@ -526,8 +514,10 @@ test('opens the visual builder, saves a draft, and restores it after reload', as
 
 test('Builder visual QA stays readable without horizontal overflow across viewports', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Viewport QA');
+  await openBuilder(page, request, canonicalEnvironment, 'Viewport QA');
   await page.getByRole('button', { name: 'Text add' }).click();
   await expect(page.getByLabel('Text content')).toBeVisible();
 
@@ -549,8 +539,10 @@ test('Builder visual QA stays readable without horizontal overflow across viewpo
 
 test('supports true block drag and a second edit after save and reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Drag Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Drag Builder');
 
   const dragHandle = page.getByRole('button', { name: 'Drag Text block' });
   const canvasRoot = page.frameLocator('iframe.gjs-frame').locator('main');
@@ -620,8 +612,12 @@ test('supports true block drag and a second edit after save and reload', async (
   ).toBeVisible({ timeout: 15_000 });
 });
 
-test('diagnoses Playwright dragTo against the real GrapesJS model', async ({ page }) => {
-  await openBuilder(page, 'DragTo Builder');
+test('diagnoses Playwright dragTo against the real GrapesJS model', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'DragTo Builder');
   const source = page.getByRole('button', { name: 'Drag Text block' });
   const target = page.frameLocator('iframe.gjs-frame').locator('main');
   const targetBox = await target.boundingBox();
@@ -645,8 +641,10 @@ test('diagnoses Playwright dragTo against the real GrapesJS model', async ({ pag
 
 test('reorders existing components with canvas drag and persists the order', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Reorder Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Reorder Builder');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Text content').fill('First component');
@@ -693,8 +691,10 @@ test('reorders existing components with canvas drag and persists the order', asy
 
 test('moves between valid containers, inserts a block, and rejects invalid drops', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Nested Drag Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Nested Drag Builder');
   const canvas = page.frameLocator('iframe.gjs-frame');
   const containerAdd = page.getByRole('button', { name: 'Container add' });
   const textAdd = page.getByRole('button', { name: 'Text add' });
@@ -758,8 +758,12 @@ test('moves between valid containers, inserts a block, and rejects invalid drops
   expect(await readBuilderModel(page)).toEqual(beforeInvalidDrop);
 });
 
-test('supports Space hand-pan without changing the GrapesJS tree', async ({ page }) => {
-  await openBuilder(page, 'Pan Builder');
+test('supports Space hand-pan without changing the GrapesJS tree', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Pan Builder');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   const beforePan = await readBuilderModel(page);
@@ -787,8 +791,10 @@ test('supports Space hand-pan without changing the GrapesJS tree', async ({ page
 
 test('auto-scrolls the Canvas while a real pointer drag reaches the viewport edge', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Auto Scroll Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Auto Scroll Builder');
   await page.getByRole('button', { name: 'Section add' }).click();
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByLabel('Min height').fill('1600');
@@ -825,8 +831,10 @@ test('auto-scrolls the Canvas while a real pointer drag reaches the viewport edg
 
 test('moves a node from Layers with the same operation and persists the reparent', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Layers Drag Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Layers Drag Builder');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Container add' }).click();
   await page.getByRole('button', { name: 'Text add' }).click();
@@ -898,8 +906,12 @@ test('moves a node from Layers with the same operation and persists the reparent
   ).toEqual(['Layer text B', 'Layer text A']);
 });
 
-test('rejects a circular Canvas move into a descendant', async ({ page }) => {
-  await openBuilder(page, 'Circular Drag Builder');
+test('rejects a circular Canvas move into a descendant', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Circular Drag Builder');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Section add' }).click();
   await page.getByRole('button', { name: 'Container add' }).click();
@@ -911,8 +923,12 @@ test('rejects a circular Canvas move into a descendant', async ({ page }) => {
   expect(await readBuilderModel(page)).toEqual(before);
 });
 
-test('edits responsive styles and changes the real canvas viewport', async ({ page }) => {
-  await openBuilder(page, 'Responsive Builder');
+test('edits responsive styles and changes the real canvas viewport', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Responsive Builder');
   await page.getByLabel('Search components').fill('text');
   await expect(page.getByRole('button', { name: 'Text add' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Section add' })).toHaveCount(0);
@@ -959,8 +975,10 @@ test('edits responsive styles and changes the real canvas viewport', async ({ pa
 
 test('keeps viewport changes presentational and groups one style edit into one undo', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Editor Core Hardening');
+  await openBuilder(page, request, canonicalEnvironment, 'Editor Core Hardening');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
@@ -983,8 +1001,12 @@ test('keeps viewport changes presentational and groups one style edit into one u
   await expect(page.getByLabel('Width', { exact: true })).toHaveValue('320');
 });
 
-test('streams unsaved builder changes to the live preview window', async ({ page }) => {
-  await openBuilder(page, 'Live Preview Builder');
+test('streams unsaved builder changes to the live preview window', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Live Preview Builder');
   await page.getByRole('button', { name: 'Text add' }).click();
 
   const popupPromise = page.waitForEvent('popup');
@@ -1000,8 +1022,12 @@ test('streams unsaved builder changes to the live preview window', async ({ page
   await preview.close();
 });
 
-test('reflects Canvas inline text edits in the Content Inspector', async ({ page }) => {
-  await openBuilder(page, 'Inline Sync Builder');
+test('reflects Canvas inline text edits in the Content Inspector', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Inline Sync Builder');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
 
@@ -1018,8 +1044,10 @@ test('reflects Canvas inline text edits in the Content Inspector', async ({ page
 
 test('applies multiple inspector properties immediately and persists them after reload', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Inspector Persistence Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Inspector Persistence Builder');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
 
@@ -1158,6 +1186,8 @@ test('applies multiple inspector properties immediately and persists them after 
 
 test('supports duplicate, delete, undo and redo for a selected component', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   const duplicateKeyWarnings: string[] = [];
   page.on('console', (message) => {
@@ -1165,7 +1195,7 @@ test('supports duplicate, delete, undo and redo for a selected component', async
       duplicateKeyWarnings.push(message.text());
     }
   });
-  await openBuilder(page, 'Component Actions');
+  await openBuilder(page, request, canonicalEnvironment, 'Component Actions');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Text content').fill('Action component');
@@ -1216,8 +1246,10 @@ test('supports duplicate, delete, undo and redo for a selected component', async
 
 test('offers a context toolbar and quick add at the selected insertion point', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Context Actions');
+  await openBuilder(page, request, canonicalEnvironment, 'Context Actions');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
 
@@ -1240,6 +1272,8 @@ test('offers a context toolbar and quick add at the selected insertion point', a
 
 test('duplicates a button with a fresh identity and no React key warning', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   const duplicateKeyWarnings: string[] = [];
   page.on('console', (message) => {
@@ -1247,7 +1281,7 @@ test('duplicates a button with a fresh identity and no React key warning', async
       duplicateKeyWarnings.push(message.text());
     }
   });
-  await openBuilder(page, 'Button Actions');
+  await openBuilder(page, request, canonicalEnvironment, 'Button Actions');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: 'Drag Button block', exact: true }).click();
 
@@ -1263,6 +1297,8 @@ test('duplicates a button with a fresh identity and no React key warning', async
 
 test('native copy and paste assigns fresh identities to cloned elements', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
   const duplicateKeyWarnings: string[] = [];
   page.on('console', (message) => {
@@ -1270,7 +1306,7 @@ test('native copy and paste assigns fresh identities to cloned elements', async 
       duplicateKeyWarnings.push(message.text());
     }
   });
-  await openBuilder(page, 'Native Copy Paste');
+  await openBuilder(page, request, canonicalEnvironment, 'Native Copy Paste');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: 'Drag Button block', exact: true }).click();
 
@@ -1294,8 +1330,10 @@ test('native copy and paste assigns fresh identities to cloned elements', async 
 
 test('supports keyboard delete from Layers without intercepting text fields', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Keyboard Editing');
+  await openBuilder(page, request, canonicalEnvironment, 'Keyboard Editing');
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Text content').fill('Keyboard removal');
@@ -1317,22 +1355,12 @@ test('supports keyboard delete from Layers without intercepting text fields', as
   await expect(canvasText).toHaveCount(1);
 });
 
-test('shows a conflict when another draft is saved first', async ({ page }) => {
-  const suffix = Date.now().toString();
-  await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
-  await page.getByLabel('Site name').fill(`Conflict Site ${suffix}`);
-  await page.getByLabel('Slug').fill(`conflict-site-${suffix}`);
-  await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
-
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Page name').fill(`Conflict Page ${suffix}`);
-  await page.getByLabel('Slug').fill(`conflict-page-${suffix}`);
-  await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
-  await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+test('shows a conflict when another draft is saved first', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Conflict Builder');
 
   await page.getByRole('button', { name: /^Section/ }).click();
   const pageId = page.url().match(/\/pages\/([^/]+)\/builder$/)?.[1];
@@ -1364,8 +1392,10 @@ test('shows a conflict when another draft is saved first', async ({ page }) => {
 
 test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Minimap Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Minimap Builder');
 
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
@@ -1427,8 +1457,10 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
 
 test('navigates the Layers tree with keyboard and keeps Canvas selection in sync', async ({
   page,
+  request,
+  canonicalEnvironment,
 }) => {
-  await openBuilder(page, 'Keyboard Layers Builder');
+  await openBuilder(page, request, canonicalEnvironment, 'Keyboard Layers Builder');
 
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
