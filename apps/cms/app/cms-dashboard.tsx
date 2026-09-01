@@ -18,6 +18,7 @@ import {
   PageSeoSettingsSchema,
   PageVersionListResponseSchema,
   SiteListResponseSchema,
+  SitePublishResponseSchema,
   TemplateListResponseSchema,
   RoleListResponseSchema,
   TenantUserDetailResponseSchema,
@@ -912,14 +913,20 @@ export default function CmsDashboard() {
   async function publishSite(site: Site) {
     if (!session) return;
     await runBusy(async () => {
-      const updated = await api.post<Site>(
-        `/workspaces/${session.workspace.id}/sites/${site.id}/publish`,
-        {},
+      const updated = SitePublishResponseSchema.parse(
+        await api.post(
+          `/workspaces/${session.workspace.id}/sites/${site.id}/publish`,
+          {},
+        ),
       );
       setSites((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
-      setNotice('Site published.');
+      setNotice(
+        updated.navigationWarnings.length
+          ? `Site published. ${updated.navigationWarnings.length} navigation item${updated.navigationWarnings.length === 1 ? '' : 's'} will stay hidden until its target page is published.`
+          : 'Site published.',
+      );
     });
   }
 

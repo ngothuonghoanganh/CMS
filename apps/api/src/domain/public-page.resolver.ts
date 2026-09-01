@@ -210,6 +210,7 @@ export class PublicPageResolver {
       const navigation = await this.navigation.resolveForSite(
         site._id.toString(),
         site.workspaceId,
+        { mode: 'published' },
       );
       const globals = site.publishedGlobals
         ? SiteGlobalsSchema.parse(site.publishedGlobals)

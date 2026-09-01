@@ -4,6 +4,8 @@ import type { Model } from 'mongoose';
 import {
   CreateNavigationRequestSchema,
   NavigationListResponseSchema,
+  NavigationItemsSchema,
+  NavigationPublishWarningSchema,
   NavigationSchema,
   type NavigationActionType,
   PagePayloadSchema,
@@ -14,6 +16,7 @@ import {
   type Navigation,
   type NavigationItem,
   type NavigationListResponse,
+  type NavigationPublishWarning,
   type ResolvedNavigationItem,
   type UpdateNavigationRequest,
 } from '@payload/contracts';
@@ -78,7 +81,7 @@ export class NavigationService {
         siteId,
         name: parsed.name,
         key: parsed.key,
-        items: parsed.items,
+        draftItems: parsed.items,
       });
       if (parsed.key === 'main' || parsed.key === 'footer') {
         await this.siteModel
@@ -119,7 +122,7 @@ export class NavigationService {
     if (parsed.name !== undefined) record.name = parsed.name;
     if (parsed.items !== undefined) {
       await this.validateItems(siteId, workspaceId, parsed.items);
-      record.items = parsed.items;
+      record.draftItems = parsed.items;
     }
     await record.save();
     return this.toContract(record);
@@ -138,7 +141,7 @@ export class NavigationService {
     workspaceId: string,
   ): Promise<void> {
     const records = await this.navigationModel.find({ siteId, workspaceId }).exec();
-    if (records.some((record) => containsPage(record.items, pageId))) {
+    if (records.some((record) => containsPage(record, pageId))) {
       throw new ConflictException({
         code: 'PAGE_REFERENCED_BY_NAVIGATION',
         message: 'Remove this page from site navigation before deleting it',
@@ -146,23 +149,40 @@ export class NavigationService {
     }
   }
 
-  async validateBeforePagePublish(
-    siteId: string,
-    publishingPageId: string,
-    workspaceId: string,
-  ): Promise<void> {
-    await this.validateSiteBeforePublish(siteId, workspaceId, publishingPageId);
+  async validateBeforeSitePublish(siteId: string, workspaceId: string): Promise<void> {
+    await this.validateSiteBeforePublish(siteId, workspaceId);
   }
 
-  async validateBeforeSitePublish(siteId: string, workspaceId: string): Promise<void> {
-    await this.validateSiteBeforePublish(siteId, workspaceId, undefined, true);
+  /**
+   * Promote the editable navigation structures with the other site-level
+   * resources. Page publication is deliberately not part of this operation:
+   * a published structure may reference pages that are currently unavailable.
+   */
+  async publishForSite(
+    siteId: string,
+    workspaceId: string,
+  ): Promise<{ warnings: NavigationPublishWarning[] }> {
+    await this.validateBeforeSitePublish(siteId, workspaceId);
+    const pages = await this.pageModel.find({ siteId, workspaceId }).exec();
+    const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
+    const records = await this.navigationModel.find({ siteId, workspaceId }).exec();
+    const warnings: NavigationPublishWarning[] = [];
+    const publishedAt = new Date();
+    for (const record of records) {
+      const draftItems = this.readItems(record, 'draft');
+      warnings.push(
+        ...draftTargetWarnings(record._id.toString(), record.key, draftItems, pageById),
+      );
+      record.publishedItems = draftItems;
+      record.publishedAt = publishedAt;
+      await record.save();
+    }
+    return { warnings };
   }
 
   private async validateSiteBeforePublish(
     siteId: string,
     workspaceId: string,
-    publishingPageId?: string,
-    requirePublishedHome = false,
   ): Promise<void> {
     const site = await this.requireSite(siteId, workspaceId);
     const pages = await this.pageModel.find({ siteId, workspaceId }).exec();
@@ -184,7 +204,7 @@ export class NavigationService {
         message: 'The site must have a homepage before it can be published',
       });
     }
-    if (requirePublishedHome && !pageById.get(site.homePageId)?.publishedVersionId) {
+    if (!pageById.get(site.homePageId)?.publishedVersionId) {
       throw new ConflictException({
         code: 'SITE_HOMEPAGE_NOT_PUBLISHED',
         message: 'Publish the site homepage before publishing the site',
@@ -193,30 +213,23 @@ export class NavigationService {
 
     const records = await this.navigationModel.find({ siteId, workspaceId }).exec();
     for (const record of records) {
-      await this.validateItems(siteId, workspaceId, this.parseItems(record), pageById);
-      for (const item of flattenItems(this.parseItems(record))) {
-        if (item.type !== 'page' && item.type !== 'section') continue;
-        if (!item.pageId) throw this.invalidTarget();
-        const target = pageById.get(item.pageId);
-        if (!target) continue;
-        if (target._id.toString() !== publishingPageId && !target.publishedVersionId) {
-          throw new ConflictException({
-            code: 'NAVIGATION_PAGE_NOT_PUBLISHED',
-            message: `Navigation references unpublished page ${target.name}`,
-          });
-        }
-      }
+      await this.validateItems(
+        siteId,
+        workspaceId,
+        this.readItems(record, 'draft'),
+        pageById,
+      );
     }
   }
 
   async resolveForSite(
     siteId: string,
     workspaceId: string,
-    options: { published?: boolean } = {},
+    options: { mode?: 'draft' | 'published'; published?: boolean } = {},
   ): Promise<
     { main?: ResolvedNavigationItem[]; footer?: ResolvedNavigationItem[] } | undefined
   > {
-    const published = options.published ?? true;
+    const mode = options.mode ?? (options.published === false ? 'draft' : 'published');
     const site = await this.requireSite(siteId, workspaceId);
     const records = await this.navigationModel
       .find({ siteId, workspaceId, key: { $in: ['main', 'footer'] } })
@@ -229,9 +242,9 @@ export class NavigationService {
       const items = await this.resolveItems(
         siteId,
         workspaceId,
-        this.parseItems(record),
+        this.readItems(record, mode),
         site.homePageId,
-        published,
+        mode,
       );
       if (record.key === 'main' && !result.main) result.main = items;
       if (record.key === 'footer' && !result.footer) result.footer = items;
@@ -244,8 +257,9 @@ export class NavigationService {
     workspaceId: string,
     items: NavigationItem[],
     homePageId?: string,
-    published = true,
+    mode: 'draft' | 'published' = 'published',
   ): Promise<ResolvedNavigationItem[]> {
+    const strict = mode === 'draft';
     const resolvedItems = await Promise.all(
       items.map(async (item) => {
         let href: string;
@@ -260,10 +274,14 @@ export class NavigationService {
           const page = await this.pageModel
             .findOne({ _id: item.pageId, siteId, workspaceId })
             .exec();
-          if (!page) throw this.invalidTarget();
-          const versionId = published
-            ? page.publishedVersionId
-            : page.currentDraftVersionId;
+          if (!page) {
+            if (!strict) return null;
+            throw this.invalidTarget();
+          }
+          const versionId =
+            mode === 'published'
+              ? page.publishedVersionId
+              : (page.currentDraftVersionId ?? page.publishedVersionId);
           if (!versionId) return null;
           const path =
             page._id.toString() === homePageId
@@ -272,29 +290,29 @@ export class NavigationService {
           if (!path) throw this.invalidTarget();
           if (item.type === 'section') {
             if (!item.anchorId) throw this.invalidTarget();
-            await this.assertAnchor(page, item.anchorId, versionId);
+            try {
+              await this.assertAnchor(page, item.anchorId, versionId);
+            } catch (error) {
+              if (!strict && isNavigationError(error, 'NAVIGATION_ANCHOR_NOT_FOUND')) {
+                return null;
+              }
+              throw error;
+            }
             href = `${path}#${item.anchorId}`;
           } else {
             href = path;
           }
         }
+        const children = item.children?.length
+          ? await this.resolveItems(siteId, workspaceId, item.children, homePageId, mode)
+          : undefined;
         const resolved = ResolvedNavigationItemSchema.parse({
           id: item.id,
           label: item.label,
           type: item.type,
           href,
           ...(item.openInNewTab !== undefined ? { openInNewTab: item.openInNewTab } : {}),
-          ...(item.children?.length
-            ? {
-                children: await this.resolveItems(
-                  siteId,
-                  workspaceId,
-                  item.children,
-                  homePageId,
-                  published,
-                ),
-              }
-            : {}),
+          ...(children?.length ? { children } : {}),
         });
         return resolved;
       }),
@@ -335,7 +353,12 @@ export class NavigationService {
     anchorId: string,
     versionId = page.currentDraftVersionId ?? page.publishedVersionId,
   ): Promise<void> {
-    if (page.anchors?.includes(anchorId)) return;
+    // `page.anchors` is draft metadata. It is safe as a shortcut only while
+    // validating the draft version; public resolution must inspect the
+    // published payload so a removed draft anchor cannot create a broken link.
+    if (versionId === page.currentDraftVersionId && page.anchors?.includes(anchorId)) {
+      return;
+    }
     const version = versionId
       ? await this.versionModel
           .findOne({ _id: versionId, landingPageId: page._id })
@@ -343,15 +366,26 @@ export class NavigationService {
       : null;
     const payload = version ? PagePayloadSchema.safeParse(version.payload) : null;
     if (payload?.success && hasNodeId(payload.data.root, anchorId)) return;
+    if (!versionId && page.anchors?.includes(anchorId)) return;
     throw new ConflictException({
       code: 'NAVIGATION_ANCHOR_NOT_FOUND',
       message: `Anchor ${anchorId} was not found on page ${page.name}`,
     });
   }
 
-  private parseItems(record: NavigationDocument): NavigationItem[] {
-    const parsed = NavigationSchema.shape.items.safeParse(record.items);
-    return parsed.success ? parsed.data : [];
+  private readItems(
+    record: NavigationDocument,
+    mode: 'draft' | 'published',
+  ): NavigationItem[] {
+    const value =
+      mode === 'draft'
+        ? (record.draftItems ?? record.items ?? [])
+        : (record.publishedItems ??
+          (record.draftItems === undefined ? record.items : undefined) ??
+          []);
+    const parsed = NavigationItemsSchema.safeParse(value);
+    if (!parsed.success) throw this.invalidStructure();
+    return parsed.data;
   }
 
   private async requireSite(siteId: string, workspaceId: string): Promise<SiteDocument> {
@@ -366,12 +400,23 @@ export class NavigationService {
   }
 
   private toContract(record: NavigationDocument): Navigation {
+    const draftItems = this.readItems(record, 'draft');
+    const hasPublishedStructure =
+      record.publishedItems !== undefined ||
+      (record.draftItems === undefined && record.items !== undefined);
+    const publishedItems = this.readItems(record, 'published');
     return NavigationSchema.parse({
       id: record._id.toString(),
       siteId: record.siteId,
       name: record.name,
       key: record.key,
-      items: this.parseItems(record),
+      items: draftItems,
+      draftItems,
+      ...(hasPublishedStructure ? { publishedItems } : {}),
+      ...(record.publishedAt ? { publishedAt: record.publishedAt.toISOString() } : {}),
+      hasUnpublishedChanges:
+        !hasPublishedStructure ||
+        JSON.stringify(draftItems) !== JSON.stringify(publishedItems),
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     });
@@ -390,6 +435,13 @@ export class NavigationService {
       message: 'Navigation contains an invalid internal target',
     });
   }
+
+  private invalidStructure(): ConflictException {
+    return new ConflictException({
+      code: 'INVALID_NAVIGATION_STRUCTURE',
+      message: 'Navigation contains invalid persisted items',
+    });
+  }
 }
 
 function flattenItems(items: NavigationItem[]): NavigationItem[] {
@@ -399,14 +451,57 @@ function flattenItems(items: NavigationItem[]): NavigationItem[] {
   ]);
 }
 
-function containsPage(items: unknown, pageId: string): boolean {
-  const parsed = NavigationSchema.shape.items.safeParse(items);
-  return parsed.success
-    ? flattenItems(parsed.data).some(
+function containsPage(record: NavigationDocument, pageId: string): boolean {
+  for (const items of [record.draftItems, record.publishedItems, record.items]) {
+    if (items === undefined) continue;
+    const parsed = NavigationItemsSchema.safeParse(items);
+    if (!parsed.success) return true;
+    if (
+      flattenItems(parsed.data).some(
         (item) =>
           (item.type === 'page' || item.type === 'section') && item.pageId === pageId,
       )
-    : true;
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function draftTargetWarnings(
+  navigationId: string,
+  navigationKey: string,
+  items: NavigationItem[],
+  pageById: Map<string, PageRecord>,
+): NavigationPublishWarning[] {
+  return flattenItems(items).flatMap((item) => {
+    if (item.type !== 'page' && item.type !== 'section') return [];
+    if (!item.pageId) return [];
+    const page = pageById.get(item.pageId);
+    if (!page || page.publishedVersionId) return [];
+    return [
+      NavigationPublishWarningSchema.parse({
+        code: 'NAVIGATION_TARGET_DRAFT',
+        navigationId,
+        navigationKey,
+        itemId: item.id,
+        label: item.label,
+        pageId: item.pageId,
+        pageName: page.name,
+      }),
+    ];
+  });
+}
+
+function isNavigationError(error: unknown, code: string): boolean {
+  if (!(error instanceof ConflictException)) return false;
+  const response = error.getResponse();
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    'code' in response &&
+    response.code === code
+  );
 }
 
 function hasNodeId(node: { id: string; children: unknown[] }, target: string): boolean {

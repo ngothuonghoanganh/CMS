@@ -4244,18 +4244,43 @@ export const NavigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
   ]),
 );
 
+export const NavigationItemsSchema = z.array(NavigationItemSchema).max(100);
+
 export const NavigationSchema = z
   .object({
     id: EntityIdSchema,
     siteId: EntityIdSchema,
     name: nonEmptyText.max(200),
     key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-    items: z.array(NavigationItemSchema).max(100),
+    /** Compatibility alias for clients that still read the draft structure as `items`. */
+    items: NavigationItemsSchema,
+    draftItems: NavigationItemsSchema.optional(),
+    publishedItems: NavigationItemsSchema.optional(),
+    publishedAt: timestampSchema.optional(),
+    hasUnpublishedChanges: z.boolean().optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
   .strict();
 export type Navigation = z.infer<typeof NavigationSchema>;
+
+export const NavigationPublishWarningSchema = z
+  .object({
+    code: z.literal('NAVIGATION_TARGET_DRAFT'),
+    navigationId: EntityIdSchema,
+    navigationKey: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    itemId: EntityIdSchema,
+    label: nonEmptyText.max(200),
+    pageId: EntityIdSchema,
+    pageName: nonEmptyText.max(200),
+  })
+  .strict();
+export type NavigationPublishWarning = z.infer<typeof NavigationPublishWarningSchema>;
+
+export const SitePublishResponseSchema = SiteSchema.extend({
+  navigationWarnings: z.array(NavigationPublishWarningSchema).max(200),
+});
+export type SitePublishResponse = z.infer<typeof SitePublishResponseSchema>;
 
 export type ResolvedNavigationItem = {
   id: string;

@@ -1328,6 +1328,16 @@ describe('foundation contracts', () => {
     });
     expect(navigation.items).toHaveLength(2);
     expect(navigation.items[0]?.children).toHaveLength(1);
+    const lifecycleNavigation = NavigationSchema.parse({
+      ...navigation,
+      draftItems: navigation.items,
+      publishedItems: navigation.items,
+      publishedAt: '2026-08-26T00:00:00.000Z',
+      hasUnpublishedChanges: false,
+    });
+    expect(lifecycleNavigation.draftItems).toEqual(navigation.items);
+    expect(lifecycleNavigation.publishedItems).toEqual(navigation.items);
+    expect(lifecycleNavigation.hasUnpublishedChanges).toBe(false);
     expect(
       NavigationSchema.safeParse({
         ...navigation,

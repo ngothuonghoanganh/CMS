@@ -912,6 +912,31 @@ summary:focus-visible {
 .muted {
   color: #8c98b3;
 }
+.notice {
+  margin: 0 0 1rem;
+  border: 1px solid #354565;
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  line-height: 1.45;
+}
+.notice-warning {
+  border-color: #80642e;
+  color: #f4d38a;
+  background: #2d2818;
+}
+.navigation-target-status {
+  font-size: 0.72rem;
+  white-space: normal;
+}
+.navigation-target-status.is-success {
+  color: #8cf0c5;
+}
+.navigation-target-status.is-warning {
+  color: #f4d38a;
+}
+.navigation-target-status.is-error {
+  color: #ff8fa3;
+}
 .small {
   font-size: 0.8rem;
 }

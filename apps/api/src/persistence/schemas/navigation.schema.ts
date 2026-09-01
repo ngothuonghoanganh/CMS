@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { HydratedDocument } from 'mongoose';
-import { NavigationSchema } from '@payload/contracts';
+import { NavigationItemsSchema } from '@payload/contracts';
 
 export type NavigationDocument = HydratedDocument<NavigationRecord>;
 
@@ -26,17 +26,37 @@ export class NavigationRecord {
   @Prop({ type: String, required: true, trim: true, lowercase: true })
   key!: string;
 
+  /**
+   * Legacy compatibility field. New writes use draftItems and
+   * publishedItems; old records are normalized by NavigationService.
+   */
+  @Prop({ type: [Object], required: false, default: undefined })
+  items?: unknown[];
+
   @Prop({
     type: [Object],
-    required: true,
-    default: [],
+    required: false,
+    default: undefined,
     validate: {
-      validator: (value: unknown) =>
-        NavigationSchema.shape.items.safeParse(value).success,
-      message: 'items must be valid navigation items',
+      validator: (value: unknown) => NavigationItemsSchema.safeParse(value).success,
+      message: 'draftItems must be valid navigation items',
     },
   })
-  items!: unknown[];
+  draftItems?: unknown[];
+
+  @Prop({
+    type: [Object],
+    required: false,
+    default: undefined,
+    validate: {
+      validator: (value: unknown) => NavigationItemsSchema.safeParse(value).success,
+      message: 'publishedItems must be valid navigation items',
+    },
+  })
+  publishedItems?: unknown[];
+
+  @Prop({ type: Date, required: false })
+  publishedAt?: Date;
 
   createdAt!: Date;
   updatedAt!: Date;

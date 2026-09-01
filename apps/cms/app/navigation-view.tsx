@@ -66,7 +66,7 @@ export function NavigationView({
       current?.name ??
         (selectedKey === 'footer' ? 'Footer navigation' : 'Main navigation'),
     );
-    setItems(current?.items ?? []);
+    setItems(current?.draftItems ?? current?.items ?? []);
     setEditingItemId(null);
     setParentItemId(null);
   }, [current, selectedKey]);
@@ -181,6 +181,9 @@ export function NavigationView({
             {item.type === 'page' || item.type === 'section'
               ? ` · ${pages.find((page) => page.id === item.pageId)?.path ?? 'missing page'}`
               : ''}
+            {item.type === 'page' || item.type === 'section' ? (
+              <NavigationTargetStatus item={item} pages={pages} />
+            ) : null}
             {item.children?.length
               ? ` · ${item.children.length} child${item.children.length === 1 ? '' : 'ren'}`
               : ''}
@@ -504,6 +507,12 @@ export function NavigationView({
         </section>
         <section className="panel">
           <PanelTitle title="Menu items" count={flattenNavigationItems(items).length} />
+          {current?.hasUnpublishedChanges ? (
+            <p className="notice notice-warning">
+              Unpublished navigation changes. Save updates Preview; Publish Site updates
+              the live structure.
+            </p>
+          ) : null}
           {items.length ? (
             <div aria-label="Navigation item tree" className="list" role="tree">
               {renderItems(items)}
@@ -527,6 +536,40 @@ export function NavigationView({
       </div>
     </>
   );
+}
+
+function NavigationTargetStatus({
+  item,
+  pages,
+}: {
+  item: NavigationItem;
+  pages: Page[];
+}) {
+  if (item.type !== 'page' && item.type !== 'section') return null;
+  const page = pages.find((candidate) => candidate.id === item.pageId);
+  if (!page) {
+    return <span className="navigation-target-status is-error"> · ⚠ Missing target</span>;
+  }
+  if (!page.publishedVersionId) {
+    return (
+      <span className="navigation-target-status is-warning">
+        {' · ○ Draft — hidden from live site until published'}
+      </span>
+    );
+  }
+  if (
+    item.type === 'section' &&
+    item.anchorId &&
+    page.anchors &&
+    !page.anchors.includes(item.anchorId)
+  ) {
+    return (
+      <span className="navigation-target-status is-error">
+        {' · ⚠ Anchor missing in current draft'}
+      </span>
+    );
+  }
+  return <span className="navigation-target-status is-success"> · ● Live</span>;
 }
 
 function PageHeading({

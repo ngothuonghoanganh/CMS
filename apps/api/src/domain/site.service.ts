@@ -13,9 +13,11 @@ import {
   PaginationQuerySchema,
   SiteListResponseSchema,
   SiteSchema,
+  SitePublishResponseSchema,
   type CreateSiteRequest,
   type PaginationQuery,
   type Site,
+  type SitePublishResponse,
   type SiteListResponse,
   SiteManifestSchema,
   normalizePagePath,
@@ -191,7 +193,7 @@ export class SiteService {
     return this.toContract(record);
   }
 
-  async publish(workspaceId: string, siteId: string): Promise<Site> {
+  async publish(workspaceId: string, siteId: string): Promise<SitePublishResponse> {
     const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
 
     if (!record) {
@@ -207,7 +209,6 @@ export class SiteService {
       });
     }
 
-    await this.navigation.validateBeforeSitePublish(siteId, workspaceId);
     const designSystem = this.readDesignSystem(record.designSystemDraft);
     await this.reusables.assertDesignTokenDependenciesAvailable(
       workspaceId,
@@ -215,12 +216,18 @@ export class SiteService {
       designSystem,
     );
     await this.reusables.publishReferencedForSite(workspaceId, siteId);
+    // Navigation structure is a site-level snapshot. Its page targets remain
+    // dynamically available based on each target page's published version.
+    const navigationPublish = await this.navigation.publishForSite(siteId, workspaceId);
     const draftGlobals = this.readGlobals(record.globalsDraft);
     record.publishedGlobals = draftGlobals;
     record.publishedDesignSystem = designSystem;
     record.status = 'published';
     await record.save();
-    return this.toContract(record);
+    return SitePublishResponseSchema.parse({
+      ...(await this.toContract(record)),
+      navigationWarnings: navigationPublish.warnings,
+    });
   }
 
   async getGlobals(workspaceId: string, siteId: string): Promise<SiteGlobalsResponse> {

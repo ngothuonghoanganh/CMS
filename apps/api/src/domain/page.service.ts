@@ -404,7 +404,6 @@ export class PageService {
       [payload],
     );
     await this.workflows.validatePagePublishDependencies(pageId, workspaceId);
-    await this.navigation.validateBeforePagePublish(page.siteId, pageId, workspaceId);
     await this.pageExtensions.validateBeforePublish(pageId, workspaceId, payload);
     const publishedBundle = await this.pageExtensions.compilePublishedBundle(
       pageId,
@@ -770,7 +769,7 @@ export class PageService {
       const navigation = await this.navigation.resolveForSite(
         page.siteId,
         page.workspaceId,
-        { published: !preview },
+        { mode: preview ? 'draft' : 'published' },
       );
       const designSystem = (preview ? site.designSystemDraft : site.publishedDesignSystem)
         ? SiteDesignSystemSchema.parse(
