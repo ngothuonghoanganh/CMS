@@ -1,8 +1,7 @@
-# Navigation
+# Navigation (Menu data)
 
-Navigation is a Site-owned aggregate, not Page content. A Navigation stores
-structured nested items and each internal item stores a `pageId`, never a copied
-URL string.
+Navigation is pure menu data owned by a Site. It stores structured nested items;
+each internal item stores a `pageId`, never a copied URL string.
 
 Supported targets are:
 
@@ -14,9 +13,11 @@ Supported targets are:
 
 The API validates that internal pages belong to the requested Site and that
 section anchors exist in the page's declared anchors or payload node ids. Page
-deletion is blocked when a navigation still references the page, preventing
-dangling links. Nested children use the same target contract.
+deletion is blocked when a menu still references the page. Nested children use
+the same target contract.
 
-Published public page responses may contain resolved main/footer navigation. The
-renderer treats these as global site chrome and keeps them outside the page
-payload, so a shared header/footer is not duplicated in every Page document.
+Menus have **no** draft/published lifecycle and are **never** rendered
+automatically. They render only through the data-bound `navigation-view`
+component, which the user places inside a Header/Footer layout extension (or any
+document that accepts it). `resolveForSite` turns internal targets into hrefs,
+selecting the draft or published page version for preview versus live delivery.

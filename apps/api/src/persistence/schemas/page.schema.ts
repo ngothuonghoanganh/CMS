@@ -57,6 +57,14 @@ export class PageRecord {
   @Prop({ type: String, required: false })
   publishedVersionId?: string;
 
+  /** Explicit Header/Footer layout attachments. Never part of PagePayload. */
+  @Prop({ type: [Object], required: false, default: undefined })
+  layoutAttachments?: unknown[];
+
+  /** Audit-only provenance metadata when a page was created from a template. */
+  @Prop({ type: Object, required: false, default: undefined })
+  appliedTemplate?: Record<string, unknown>;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

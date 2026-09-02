@@ -46,6 +46,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         reusables={page.reusables}
         designSystem={page.designSystem}
         globals={page.globals}
+        layout={page.layout}
         navigation={page.navigation}
       />
     </div>

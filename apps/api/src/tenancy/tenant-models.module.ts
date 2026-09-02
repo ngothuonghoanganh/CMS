@@ -27,6 +27,8 @@ import {
   SiteSchema,
   TemplateRecord,
   TemplateSchema,
+  TemplateVersionRecord,
+  TemplateVersionSchema,
   WorkspaceRecord,
   WorkspaceSchema,
   RoleRecord,
@@ -53,6 +55,10 @@ import {
   NavigationSchema,
   ReusableRecord,
   ReusableSchema,
+  LayoutExtensionRecord,
+  LayoutExtensionSchema,
+  LayoutExtensionVersionRecord,
+  LayoutExtensionVersionSchema,
 } from '../persistence/schemas';
 import { TenantUserRecord, TenantUserSchema } from './schemas/tenant-user.schema';
 import {
@@ -77,6 +83,7 @@ const models = [
   [PageVersionRecord, PageVersionSchema],
   [SiteRecord, SiteSchema],
   [TemplateRecord, TemplateSchema],
+  [TemplateVersionRecord, TemplateVersionSchema],
   [WorkspaceRecord, WorkspaceSchema],
   [TenantUserRecord, TenantUserSchema],
   [TenantMembershipRecord, TenantMembershipSchema],
@@ -92,6 +99,8 @@ const models = [
   [WorkflowStepExecutionRecord, WorkflowStepExecutionSchema],
   [NavigationRecord, NavigationSchema],
   [ReusableRecord, ReusableSchema],
+  [LayoutExtensionRecord, LayoutExtensionSchema],
+  [LayoutExtensionVersionRecord, LayoutExtensionVersionSchema],
 ] as const;
 
 const providers = models.map(([record, schema]) =>

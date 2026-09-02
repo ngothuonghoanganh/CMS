@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -13,11 +14,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApplyTemplateRequestSchema,
   CreateTemplateRequestSchema,
   PaginationQuerySchema,
+  PublishTemplateRequestSchema,
   UpdateTemplateRequestSchema,
+  type ApplyTemplateRequest,
   type CreateTemplateRequest,
   type PaginationQuery,
+  type PublishTemplateRequest,
   type UpdateTemplateRequest,
 } from '@payload/contracts';
 
@@ -144,5 +149,72 @@ export class TemplateController {
         result: 'success',
       })
       .catch(() => undefined);
+  }
+
+  @Get(':templateId/versions')
+  async listVersions(
+    @Param('workspaceId') workspaceId: string,
+    @Param('templateId') templateId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'template.read', workspaceId);
+    return this.templateService.listVersions(
+      requireRequestedWorkspace(principal, workspaceId),
+      templateId,
+    );
+  }
+
+  @Get(':templateId/versions/:versionNumber')
+  async getVersion(
+    @Param('workspaceId') workspaceId: string,
+    @Param('templateId') templateId: string,
+    @Param('versionNumber') versionNumber: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'template.read', workspaceId);
+    return this.templateService.getVersion(
+      requireRequestedWorkspace(principal, workspaceId),
+      templateId,
+      Number(versionNumber),
+    );
+  }
+
+  @Post(':templateId/publish')
+  async publish(
+    @Param('workspaceId') workspaceId: string,
+    @Param('templateId') templateId: string,
+    @Body(new ZodValidationPipe(PublishTemplateRequestSchema))
+    input: PublishTemplateRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'template.update', workspaceId);
+    return this.templateService.publish(
+      requireRequestedWorkspace(principal, workspaceId),
+      templateId,
+      input,
+    );
+  }
+
+  @Post(':templateId/apply')
+  async apply(
+    @Param('workspaceId') workspaceId: string,
+    @Param('templateId') templateId: string,
+    @Body(new ZodValidationPipe(ApplyTemplateRequestSchema))
+    input: ApplyTemplateRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.create', workspaceId);
+    if (!input.siteId) {
+      throw new BadRequestException({
+        code: 'SITE_ID_REQUIRED',
+        message: 'A siteId is required to apply a template',
+      });
+    }
+    return this.templateService.apply(
+      requireRequestedWorkspace(principal, workspaceId),
+      input.siteId,
+      templateId,
+      input,
+    );
   }
 }

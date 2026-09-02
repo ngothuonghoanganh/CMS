@@ -53,7 +53,9 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await expect(publicPage.getByText('Published content A')).toBeVisible();
 
   await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
   await page.getByRole('button', { name: /^Section/ }).click();
   await page.getByRole('button', { name: /^Text/ }).click();
   await page.getByLabel('Text content').fill('Draft content B');

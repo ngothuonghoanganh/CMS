@@ -5,7 +5,18 @@ export { PageRecord, PageSchema } from './page.schema';
 export { PageVersionRecord, PageVersionSchema } from './page-version.schema';
 export { SiteRecord, SiteSchema } from './site.schema';
 export { ReusableRecord, ReusableSchema } from './reusable.schema';
-export { TemplateRecord, TemplateSchema } from './template.schema';
+export {
+  TemplateRecord,
+  TemplateSchema,
+  TemplateVersionRecord,
+  TemplateVersionSchema,
+} from './template.schema';
+export {
+  LayoutExtensionRecord,
+  LayoutExtensionSchema,
+  LayoutExtensionVersionRecord,
+  LayoutExtensionVersionSchema,
+} from './layout-extension.schema';
 export { WorkspaceRecord, WorkspaceSchema } from './workspace.schema';
 export { RoleRecord, RoleSchema } from './role.schema';
 export { RoleAssignmentRecord, RoleAssignmentSchema } from './role-assignment.schema';

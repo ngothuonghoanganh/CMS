@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { AnalyticsTracker } from '../analytics-client';
-import { renderPage } from '../renderer';
+import { renderLayoutExtension, renderPage } from '../renderer';
 import { getPublicPageByPath, getPublicPageForHostnamePath } from '../lib/page-api';
 import { getRequestHostname, isPlatformHostname } from '../lib/host';
 import { publicPageMetadata } from '../lib/seo';
@@ -77,6 +77,27 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
         siteSlug={siteSlug}
         {...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {})}
       />
+      {resolved.page.layout?.header
+        ? renderLayoutExtension(resolved.page.layout.header.document, {
+            pagePath: resolved.pagePath,
+            siteSlug,
+            siteName: resolved.page.site.name,
+            ...(resolved.page.site.logo ? { siteLogo: resolved.page.site.logo } : {}),
+            customDomain: resolved.customDomain,
+            navigation: resolved.page.navigation,
+            reusables: resolved.page.reusables,
+            designSystem: resolved.page.designSystem,
+            ...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {}),
+            ...(resolved.page.extensions
+              ? {
+                  runtimeIds: resolved.page.extensions.flatMap(
+                    (extension) => extension.runtimeIds,
+                  ),
+                  extensions: resolved.page.extensions,
+                }
+              : {}),
+          })
+        : null}
       {renderPage(resolved.page.payload, {
         pagePath: resolved.pagePath,
         siteSlug,
@@ -97,6 +118,27 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
             }
           : {}),
       })}
+      {resolved.page.layout?.footer
+        ? renderLayoutExtension(resolved.page.layout.footer.document, {
+            pagePath: resolved.pagePath,
+            siteSlug,
+            siteName: resolved.page.site.name,
+            ...(resolved.page.site.logo ? { siteLogo: resolved.page.site.logo } : {}),
+            customDomain: resolved.customDomain,
+            navigation: resolved.page.navigation,
+            reusables: resolved.page.reusables,
+            designSystem: resolved.page.designSystem,
+            ...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {}),
+            ...(resolved.page.extensions
+              ? {
+                  runtimeIds: resolved.page.extensions.flatMap(
+                    (extension) => extension.runtimeIds,
+                  ),
+                  extensions: resolved.page.extensions,
+                }
+              : {}),
+          })
+        : null}
     </div>
   );
 }

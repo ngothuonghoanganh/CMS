@@ -3,20 +3,18 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
   CreateNavigationRequestSchema,
-  NavigationListResponseSchema,
   NavigationItemsSchema,
-  NavigationPublishWarningSchema,
+  NavigationListResponseSchema,
   NavigationSchema,
-  type NavigationActionType,
   PagePayloadSchema,
   ResolvedNavigationItemSchema,
   UpdateNavigationRequestSchema,
   normalizePagePath,
   type CreateNavigationRequest,
   type Navigation,
+  type NavigationActionType,
   type NavigationItem,
   type NavigationListResponse,
-  type NavigationPublishWarning,
   type ResolvedNavigationItem,
   type UpdateNavigationRequest,
 } from '@payload/contracts';
@@ -30,6 +28,11 @@ import {
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 
+/**
+ * Navigation is pure menu data. There is no draft/published lifecycle, no
+ * layout and no renderer here; `resolveForSite` only turns internal targets
+ * into resolved hrefs for the data-bound `navigation-view` component.
+ */
 @Injectable()
 export class NavigationService {
   constructor(
@@ -81,21 +84,8 @@ export class NavigationService {
         siteId,
         name: parsed.name,
         key: parsed.key,
-        draftItems: parsed.items,
+        items: parsed.items,
       });
-      if (parsed.key === 'main' || parsed.key === 'footer') {
-        await this.siteModel
-          .updateOne(
-            { _id: siteId, workspaceId },
-            {
-              $set:
-                parsed.key === 'main'
-                  ? { primaryNavigationId: record._id.toString() }
-                  : { footerNavigationId: record._id.toString() },
-            },
-          )
-          .exec();
-      }
       return this.toContract(record);
     } catch (error) {
       if (isDuplicateKeyError(error)) {
@@ -122,7 +112,7 @@ export class NavigationService {
     if (parsed.name !== undefined) record.name = parsed.name;
     if (parsed.items !== undefined) {
       await this.validateItems(siteId, workspaceId, parsed.items);
-      record.draftItems = parsed.items;
+      record.items = parsed.items;
     }
     await record.save();
     return this.toContract(record);
@@ -149,87 +139,19 @@ export class NavigationService {
     }
   }
 
-  async validateBeforeSitePublish(siteId: string, workspaceId: string): Promise<void> {
-    await this.validateSiteBeforePublish(siteId, workspaceId);
-  }
-
   /**
-   * Promote the editable navigation structures with the other site-level
-   * resources. Page publication is deliberately not part of this operation:
-   * a published structure may reference pages that are currently unavailable.
+   * Resolve menu items to hrefs. `mode` only selects which page version each
+   * target resolves against (published for live, draft for preview); the menu
+   * data itself has no publishing lifecycle.
    */
-  async publishForSite(
-    siteId: string,
-    workspaceId: string,
-  ): Promise<{ warnings: NavigationPublishWarning[] }> {
-    await this.validateBeforeSitePublish(siteId, workspaceId);
-    const pages = await this.pageModel.find({ siteId, workspaceId }).exec();
-    const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
-    const records = await this.navigationModel.find({ siteId, workspaceId }).exec();
-    const warnings: NavigationPublishWarning[] = [];
-    const publishedAt = new Date();
-    for (const record of records) {
-      const draftItems = this.readItems(record, 'draft');
-      warnings.push(
-        ...draftTargetWarnings(record._id.toString(), record.key, draftItems, pageById),
-      );
-      record.publishedItems = draftItems;
-      record.publishedAt = publishedAt;
-      await record.save();
-    }
-    return { warnings };
-  }
-
-  private async validateSiteBeforePublish(
-    siteId: string,
-    workspaceId: string,
-  ): Promise<void> {
-    const site = await this.requireSite(siteId, workspaceId);
-    const pages = await this.pageModel.find({ siteId, workspaceId }).exec();
-    const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
-    const paths = new Set<string>();
-    for (const page of pages) {
-      const path = normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : '/'));
-      if (!path || paths.has(path)) {
-        throw new ConflictException({
-          code: 'DUPLICATE_PAGE_PATH',
-          message: 'The site contains duplicate or invalid page paths',
-        });
-      }
-      paths.add(path);
-    }
-    if (!site.homePageId || !pageById.has(site.homePageId)) {
-      throw new ConflictException({
-        code: 'SITE_HOMEPAGE_REQUIRED',
-        message: 'The site must have a homepage before it can be published',
-      });
-    }
-    if (!pageById.get(site.homePageId)?.publishedVersionId) {
-      throw new ConflictException({
-        code: 'SITE_HOMEPAGE_NOT_PUBLISHED',
-        message: 'Publish the site homepage before publishing the site',
-      });
-    }
-
-    const records = await this.navigationModel.find({ siteId, workspaceId }).exec();
-    for (const record of records) {
-      await this.validateItems(
-        siteId,
-        workspaceId,
-        this.readItems(record, 'draft'),
-        pageById,
-      );
-    }
-  }
-
   async resolveForSite(
     siteId: string,
     workspaceId: string,
-    options: { mode?: 'draft' | 'published'; published?: boolean } = {},
+    options: { mode?: 'draft' | 'published' } = {},
   ): Promise<
     { main?: ResolvedNavigationItem[]; footer?: ResolvedNavigationItem[] } | undefined
   > {
-    const mode = options.mode ?? (options.published === false ? 'draft' : 'published');
+    const mode = options.mode ?? 'published';
     const site = await this.requireSite(siteId, workspaceId);
     const records = await this.navigationModel
       .find({ siteId, workspaceId, key: { $in: ['main', 'footer'] } })
@@ -242,7 +164,7 @@ export class NavigationService {
       const items = await this.resolveItems(
         siteId,
         workspaceId,
-        this.readItems(record, mode),
+        this.readItems(record),
         site.homePageId,
         mode,
       );
@@ -306,7 +228,7 @@ export class NavigationService {
         const children = item.children?.length
           ? await this.resolveItems(siteId, workspaceId, item.children, homePageId, mode)
           : undefined;
-        const resolved = ResolvedNavigationItemSchema.parse({
+        return ResolvedNavigationItemSchema.parse({
           id: item.id,
           label: item.label,
           type: item.type,
@@ -314,7 +236,6 @@ export class NavigationService {
           ...(item.openInNewTab !== undefined ? { openInNewTab: item.openInNewTab } : {}),
           ...(children?.length ? { children } : {}),
         });
-        return resolved;
       }),
     );
     return resolvedItems.filter((item): item is ResolvedNavigationItem => item !== null);
@@ -353,9 +274,6 @@ export class NavigationService {
     anchorId: string,
     versionId = page.currentDraftVersionId ?? page.publishedVersionId,
   ): Promise<void> {
-    // `page.anchors` is draft metadata. It is safe as a shortcut only while
-    // validating the draft version; public resolution must inspect the
-    // published payload so a removed draft anchor cannot create a broken link.
     if (versionId === page.currentDraftVersionId && page.anchors?.includes(anchorId)) {
       return;
     }
@@ -373,17 +291,8 @@ export class NavigationService {
     });
   }
 
-  private readItems(
-    record: NavigationDocument,
-    mode: 'draft' | 'published',
-  ): NavigationItem[] {
-    const value =
-      mode === 'draft'
-        ? (record.draftItems ?? record.items ?? [])
-        : (record.publishedItems ??
-          (record.draftItems === undefined ? record.items : undefined) ??
-          []);
-    const parsed = NavigationItemsSchema.safeParse(value);
+  private readItems(record: NavigationDocument): NavigationItem[] {
+    const parsed = NavigationItemsSchema.safeParse(record.items ?? []);
     if (!parsed.success) throw this.invalidStructure();
     return parsed.data;
   }
@@ -400,23 +309,12 @@ export class NavigationService {
   }
 
   private toContract(record: NavigationDocument): Navigation {
-    const draftItems = this.readItems(record, 'draft');
-    const hasPublishedStructure =
-      record.publishedItems !== undefined ||
-      (record.draftItems === undefined && record.items !== undefined);
-    const publishedItems = this.readItems(record, 'published');
     return NavigationSchema.parse({
       id: record._id.toString(),
       siteId: record.siteId,
       name: record.name,
       key: record.key,
-      items: draftItems,
-      draftItems,
-      ...(hasPublishedStructure ? { publishedItems } : {}),
-      ...(record.publishedAt ? { publishedAt: record.publishedAt.toISOString() } : {}),
-      hasUnpublishedChanges:
-        !hasPublishedStructure ||
-        JSON.stringify(draftItems) !== JSON.stringify(publishedItems),
+      items: this.readItems(record),
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     });
@@ -452,45 +350,11 @@ function flattenItems(items: NavigationItem[]): NavigationItem[] {
 }
 
 function containsPage(record: NavigationDocument, pageId: string): boolean {
-  for (const items of [record.draftItems, record.publishedItems, record.items]) {
-    if (items === undefined) continue;
-    const parsed = NavigationItemsSchema.safeParse(items);
-    if (!parsed.success) return true;
-    if (
-      flattenItems(parsed.data).some(
-        (item) =>
-          (item.type === 'page' || item.type === 'section') && item.pageId === pageId,
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function draftTargetWarnings(
-  navigationId: string,
-  navigationKey: string,
-  items: NavigationItem[],
-  pageById: Map<string, PageRecord>,
-): NavigationPublishWarning[] {
-  return flattenItems(items).flatMap((item) => {
-    if (item.type !== 'page' && item.type !== 'section') return [];
-    if (!item.pageId) return [];
-    const page = pageById.get(item.pageId);
-    if (!page || page.publishedVersionId) return [];
-    return [
-      NavigationPublishWarningSchema.parse({
-        code: 'NAVIGATION_TARGET_DRAFT',
-        navigationId,
-        navigationKey,
-        itemId: item.id,
-        label: item.label,
-        pageId: item.pageId,
-        pageName: page.name,
-      }),
-    ];
-  });
+  const parsed = NavigationItemsSchema.safeParse(record.items ?? []);
+  if (!parsed.success) return true;
+  return flattenItems(parsed.data).some(
+    (item) => (item.type === 'page' || item.type === 'section') && item.pageId === pageId,
+  );
 }
 
 function isNavigationError(error: unknown, code: string): boolean {

@@ -7,6 +7,7 @@ import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_PAYLOAD_VERSION_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   type BuilderNodeType,
@@ -25,6 +26,7 @@ import {
   serializeGrapesComponent,
   serializeReusableSubtree,
   snapshotFromGrapesComponent,
+  siteGlobalDocumentToEditorDefinition,
 } from './builder-adapter';
 import {
   findPayloadComponent,
@@ -107,7 +109,9 @@ declare global {
 export type GrapesEditorHandle = {
   addBlock: (type: BuilderInsertable) => void;
   addExtensionBlock: (extensionId: string) => void;
+  addLayoutExtension: (document: SiteGlobalPayloadV1) => void;
   startBlockDrag: (type: BuilderInsertable, event: Event) => void;
+  startLayoutExtensionDrag: (document: SiteGlobalPayloadV1, event: Event) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
   undo: () => void;
@@ -760,9 +764,9 @@ function insertableNodeType(
     : undefined;
 }
 
-function dropBlockAtPoint(
+function dropDefinitionAtPoint(
   editor: Editor,
-  type: BuilderInsertable,
+  definition: ComponentDefinition,
   clientX: number,
   clientY: number,
   commit: (command: EditorCommand) => EditorCommandResult,
@@ -772,7 +776,6 @@ function dropBlockAtPoint(
 
   const root = editor.getComponents().models[0];
   if (!root) return undefined;
-  const definition = createInsertableDefinition(type);
   const childType = insertableNodeType(definition);
   if (!childType) return undefined;
   const rootAcceptsDirectly =
@@ -818,6 +821,13 @@ function dropBlockAtPoint(
     target = root;
   }
   if (!target) return undefined;
+
+  // A page that started on an older payload version must be promoted before a
+  // global Header/Footer node is persisted. V7 is the first page envelope
+  // that explicitly permits copied global nodes.
+  if (childType === 'global-header' || childType === 'global-footer') {
+    root.addAttributes({ [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: '7' });
+  }
 
   if (target === root && !rootAcceptsDirectly && canWrapInSection) {
     const sectionResult = commit({
@@ -1459,6 +1469,69 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       return result.changed;
     };
 
+    const startDefinitionDrag = (definition: ComponentDefinition, event: Event): void => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const mouseEvent = event as MouseEvent;
+      if (mouseEvent.button !== 0) return;
+
+      const frameDocument = editor.Canvas.getFrameEl()?.contentDocument;
+      blockDragCleanupRef.current?.();
+      const state = {
+        startX: mouseEvent.clientX,
+        startY: mouseEvent.clientY,
+        dragging: false,
+      };
+      const cleanup = () => {
+        window.removeEventListener('mousemove', handleMove, true);
+        window.removeEventListener('mouseup', handleUp, true);
+        frameDocument?.removeEventListener('mousemove', handleFrameMove, true);
+        frameDocument?.removeEventListener('mouseup', handleFrameUp, true);
+        document.body.classList.remove('builder-block-dragging');
+        if (blockDragCleanupRef.current === cleanup) {
+          blockDragCleanupRef.current = null;
+        }
+      };
+      const handleMove = (moveEvent: MouseEvent) => {
+        const distance = Math.hypot(
+          moveEvent.clientX - state.startX,
+          moveEvent.clientY - state.startY,
+        );
+        if (!state.dragging && distance < 4) return;
+        state.dragging = true;
+        document.body.classList.add('builder-block-dragging');
+        moveEvent.preventDefault();
+      };
+      const handleUp = (
+        upEvent: MouseEvent,
+        clientX = upEvent.clientX,
+        clientY = upEvent.clientY,
+      ) => {
+        cleanup();
+        if (!state.dragging) return;
+        dropDefinitionAtPoint(editor, definition, clientX, clientY, (command) =>
+          commitEditorCommandResult(editor, command),
+        );
+      };
+      const handleFrameMove = (moveEvent: MouseEvent) => handleMove(moveEvent);
+      const handleFrameUp = (upEvent: MouseEvent) => {
+        const frameRect = editor.Canvas.getFrameEl()?.getBoundingClientRect();
+        handleUp(
+          upEvent,
+          (frameRect?.left ?? 0) + upEvent.clientX,
+          (frameRect?.top ?? 0) + upEvent.clientY,
+        );
+      };
+
+      blockDragCleanupRef.current = cleanup;
+      window.addEventListener('mousemove', handleMove, true);
+      window.addEventListener('mouseup', handleUp, true);
+      frameDocument?.addEventListener('mousemove', handleFrameMove, true);
+      frameDocument?.addEventListener('mouseup', handleFrameUp, true);
+      mouseEvent.preventDefault();
+      mouseEvent.stopPropagation();
+    };
+
     return {
       addBlock(type) {
         const editor = editorRef.current;
@@ -1550,67 +1623,45 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           if (added) selectionRef.current.select(editor, added);
         }
       },
-      startBlockDrag(type, event) {
+      addLayoutExtension(document) {
         const editor = editorRef.current;
-        if (!editor) return;
-        const mouseEvent = event as MouseEvent;
-        if (mouseEvent.button !== 0) return;
-
-        const frameDocument = editor.Canvas.getFrameEl()?.contentDocument;
-        blockDragCleanupRef.current?.();
-        const state = {
-          startX: mouseEvent.clientX,
-          startY: mouseEvent.clientY,
-          dragging: false,
-        };
-        const cleanup = () => {
-          window.removeEventListener('mousemove', handleMove, true);
-          window.removeEventListener('mouseup', handleUp, true);
-          frameDocument?.removeEventListener('mousemove', handleFrameMove, true);
-          frameDocument?.removeEventListener('mouseup', handleFrameUp, true);
-          document.body.classList.remove('builder-block-dragging');
-          if (blockDragCleanupRef.current === cleanup) {
-            blockDragCleanupRef.current = null;
-          }
-        };
-        const handleMove = (moveEvent: MouseEvent) => {
-          const distance = Math.hypot(
-            moveEvent.clientX - state.startX,
-            moveEvent.clientY - state.startY,
-          );
-          if (!state.dragging && distance < 4) return;
-          state.dragging = true;
-          document.body.classList.add('builder-block-dragging');
-          moveEvent.preventDefault();
-        };
-        const handleUp = (
-          upEvent: MouseEvent,
-          clientX = upEvent.clientX,
-          clientY = upEvent.clientY,
-        ) => {
-          cleanup();
-          if (!state.dragging) return;
-          dropBlockAtPoint(editor, type, clientX, clientY, (command) =>
-            commitEditorCommandResult(editor, command),
-          );
-        };
-        const handleFrameMove = (moveEvent: MouseEvent) => handleMove(moveEvent);
-        const handleFrameUp = (upEvent: MouseEvent) => {
-          const frameRect = editor.Canvas.getFrameEl()?.getBoundingClientRect();
-          handleUp(
-            upEvent,
-            (frameRect?.left ?? 0) + upEvent.clientX,
-            (frameRect?.top ?? 0) + upEvent.clientY,
-          );
-        };
-
-        blockDragCleanupRef.current = cleanup;
-        window.addEventListener('mousemove', handleMove, true);
-        window.addEventListener('mouseup', handleUp, true);
-        frameDocument?.addEventListener('mousemove', handleFrameMove, true);
-        frameDocument?.addEventListener('mouseup', handleFrameUp, true);
-        mouseEvent.preventDefault();
-        mouseEvent.stopPropagation();
+        if (!editor || documentKind !== 'page') return;
+        const definition = siteGlobalDocumentToEditorDefinition(document, {
+          ...(designSystemRef.current ? { designSystem: designSystemRef.current } : {}),
+          projectionContext: projectionContextRef.current,
+        });
+        const childType = insertableNodeType(definition);
+        if (childType !== 'global-header' && childType !== 'global-footer') return;
+        getRoot(editor).addAttributes({ [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: '7' });
+        const selected = editor.getSelected();
+        const selectedType = selected?.getAttributes({ noStyle: true })[
+          BUILDER_NODE_TYPE_ATTRIBUTE
+        ];
+        const target =
+          selected &&
+          isPayloadNodeType(selectedType) &&
+          canInsertIntoComponent(selected, childType)
+            ? selected
+            : getRoot(editor);
+        const result = commitEditorCommandResult(editor, {
+          kind: 'insert',
+          definition,
+          parentId: payloadNodeId(target),
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+      },
+      startBlockDrag(type, event) {
+        startDefinitionDrag(createInsertableDefinition(type), event);
+      },
+      startLayoutExtensionDrag(document, event) {
+        if (documentKind !== 'page') return;
+        startDefinitionDrag(
+          siteGlobalDocumentToEditorDefinition(document, {
+            ...(designSystemRef.current ? { designSystem: designSystemRef.current } : {}),
+            projectionContext: projectionContextRef.current,
+          }),
+          event,
+        );
       },
       duplicateSelected() {
         const editor = editorRef.current;

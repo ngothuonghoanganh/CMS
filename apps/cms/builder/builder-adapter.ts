@@ -1201,6 +1201,39 @@ export function payloadToEditorComponent(
   };
 }
 
+/**
+ * Converts a saved Header/Footer extension into an editor component definition.
+ * The returned definition is intentionally detached from the source document;
+ * GrapesJS freshens every persisted node id when it is inserted into a page.
+ */
+export function siteGlobalDocumentToEditorDefinition(
+  document: SiteGlobalPayloadV1,
+  options: {
+    designSystem?: SiteDesignSystem;
+    projectionContext?: BuilderProjectionContext;
+  } = {},
+): ComponentDefinition {
+  const safeDocument = SiteGlobalPayloadV1Schema.parse(document);
+  const globalNode = safeDocument.root.children[0];
+  if (
+    !globalNode ||
+    (globalNode.type !== 'global-header' && globalNode.type !== 'global-footer')
+  ) {
+    throw new BuilderAdapterError(
+      'A Header/Footer extension must contain one global root component',
+      ['root', 'children'],
+    );
+  }
+  return componentDefinitionForNode(
+    globalNode,
+    undefined,
+    6,
+    [],
+    options.designSystem,
+    options.projectionContext,
+  );
+}
+
 export function reusableDocumentToEditorDefinition(
   document: ReusableComponentDocument,
   designSystem?: SiteDesignSystem,

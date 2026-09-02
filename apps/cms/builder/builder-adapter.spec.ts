@@ -39,6 +39,7 @@ import {
   serializeReusableSubtree,
   reusableDocumentToEditorPageDocument,
   reusableDocumentToEditorDefinition,
+  siteGlobalDocumentToEditorDefinition,
   updateEditorPartViewportStyle,
   updateEditorViewportStyle,
   sanitizeInlineText,
@@ -864,6 +865,30 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshotFromEditorDefinition(definition))).toEqual(
       payload,
     );
+  });
+
+  it('projects a saved Header extension as a page-ready definition', () => {
+    const global: SiteGlobalPayloadV1 = {
+      version: 1,
+      documentKind: 'site-header',
+      metadata: { documentTitle: 'Site header' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'header-source',
+            type: 'global-header',
+            props: { position: 'static' },
+            children: [],
+          },
+        ],
+      },
+    };
+    const definition = siteGlobalDocumentToEditorDefinition(global);
+    expect(definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('global-header');
+    expect(definition.attributes?.[BUILDER_NODE_ID_ATTRIBUTE]).toBe('header-source');
   });
 
   it('round-trips a site header document through the same live editor adapter', () => {

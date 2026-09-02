@@ -13,8 +13,10 @@ import {
   PublicSeoSettingsSchema,
   SiteGlobalsSchema,
   SiteDesignSystemSchema,
+  PageLayoutAttachmentsSchema,
   normalizeHostname,
   type PublicPage,
+  type PageLayoutAttachment,
   normalizePagePath,
 } from '@payload/contracts';
 
@@ -31,6 +33,7 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { SiteUrlService } from './site-url.service';
 import { NavigationService } from './navigation.service';
+import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
 
 @Injectable()
@@ -51,6 +54,8 @@ export class PublicPageResolver {
     private readonly pageExtensions: PageExtensionService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(LayoutExtensionService)
+    private readonly layoutExtensions: LayoutExtensionService,
     @Inject(ReusableService) private readonly reusables: ReusableService,
   ) {}
 
@@ -212,6 +217,10 @@ export class PublicPageResolver {
         site.workspaceId,
         { mode: 'published' },
       );
+      const layout = await this.layoutExtensions.resolveComposition(
+        readLayoutAttachments(page),
+        'published',
+      );
       const globals = site.publishedGlobals
         ? SiteGlobalsSchema.parse(site.publishedGlobals)
         : undefined;
@@ -248,6 +257,7 @@ export class PublicPageResolver {
         ...(seo ? { seo } : {}),
         ...(canonicalUrl ? { canonicalUrl } : {}),
         ...(navigation ? { navigation } : {}),
+        ...(layout.header || layout.footer ? { layout } : {}),
         ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),
         ...(designSystem ? { designSystem } : {}),
@@ -312,4 +322,10 @@ export class PublicPageResolver {
       message: 'The published page data is invalid',
     });
   }
+}
+
+function readLayoutAttachments(page: PageDocument): PageLayoutAttachment[] {
+  const value = page.layoutAttachments ?? [];
+  const parsed = PageLayoutAttachmentsSchema.safeParse(value);
+  return parsed.success ? parsed.data : [];
 }

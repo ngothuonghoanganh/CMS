@@ -17,12 +17,14 @@ import {
   CreatePageRequestSchema,
   CreatePageVersionRequestSchema,
   DuplicatePageRequestSchema,
+  PageLayoutUpdateRequestSchema,
   UpdatePageRequestSchema,
   PaginationQuerySchema,
   PublishPageRequestSchema,
   type CreatePageRequest,
   type CreatePageVersionRequest,
   type DuplicatePageRequest,
+  type PageLayoutUpdateRequest,
   type PaginationQuery,
   type PublishPageRequest,
   type UpdatePageRequest,
@@ -167,6 +169,53 @@ export class PageController {
   ) {
     await this.authorization.assertCan(principal, 'site.update');
     return this.pageService.setHomepage(pageId, requireWorkspaceId(principal));
+  }
+
+  /**
+   * Header and Footer are an explicit page composition concern. Keeping this
+   * endpoint beside page metadata makes it possible for the CMS to attach a
+   * layout resource without serialising it into the page payload.
+   */
+  @Get(':pageId/layout')
+  async getLayout(
+    @Param('pageId') pageId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.read');
+    return {
+      attachments: await this.pageService.getLayout(
+        pageId,
+        requireWorkspaceId(principal),
+      ),
+    };
+  }
+
+  @Patch(':pageId/layout')
+  async updateLayout(
+    @Param('pageId') pageId: string,
+    @Body(new ZodValidationPipe(PageLayoutUpdateRequestSchema))
+    input: PageLayoutUpdateRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.update');
+    const attachments = await this.pageService.updateLayout(
+      pageId,
+      input.attachments,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.layout.update',
+        resourceType: 'page',
+        resourceId: pageId,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: { attachmentCount: attachments.length },
+      })
+      .catch(() => undefined);
+    return { attachments };
   }
 
   @Post(':pageId/versions')

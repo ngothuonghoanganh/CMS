@@ -12,7 +12,7 @@ import {
   type PagePayloadV1,
 } from '@payload/contracts';
 
-import { PAGE_RENDERER_REGISTRY, renderPage } from './renderer';
+import { PAGE_RENDERER_REGISTRY, renderLayoutExtension, renderPage } from './renderer';
 
 function createPayload(): PagePayloadV1 {
   return {
@@ -214,7 +214,7 @@ describe('PagePayloadV1 renderer', () => {
     expect(canonicalMarkup).not.toContain('style="text-align:center"');
   });
 
-  it('renders resolved site navigation with platform and custom-domain URL rules', () => {
+  it('renders resolved site navigation through an explicit navigation-view component', () => {
     const navigation = {
       main: [
         {
@@ -235,75 +235,108 @@ describe('PagePayloadV1 renderer', () => {
         },
       ],
     };
+    const header: SiteGlobalPayloadV1 = {
+      version: 1,
+      documentKind: 'site-header',
+      metadata: { documentTitle: 'Header' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'header',
+            type: 'global-header',
+            props: { position: 'static' },
+            children: [
+              {
+                id: 'navigation',
+                type: 'navigation-view',
+                props: {
+                  source: 'main',
+                  orientation: 'horizontal',
+                  mobileBehavior: 'collapse',
+                  alignment: 'left',
+                  ariaLabel: 'Main navigation',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
     const platformMarkup = renderToStaticMarkup(
-      renderPage(createPayload(), { siteSlug: 'demo', pageSlug: '', navigation }),
+      renderLayoutExtension(header, {
+        siteSlug: 'demo',
+        pagePath: '/',
+        navigation,
+      }) ?? '',
     );
     expect(platformMarkup).toContain('href="/demo"');
     expect(platformMarkup).toContain('href="/demo/docs"');
     expect(platformMarkup).toContain('target="_blank"');
 
     const customDomainMarkup = renderToStaticMarkup(
-      renderPage(createPayload(), { customDomain: true, navigation }),
+      renderLayoutExtension(header, { customDomain: true, pagePath: '/', navigation }) ??
+        '',
     );
     expect(customDomainMarkup).toContain('href="/docs"');
     expect(customDomainMarkup).not.toContain('href="/demo/docs"');
   });
 
-  it('renders published global documents without duplicating navigation truth', () => {
-    const globals = {
+  it('does not render header, footer, or navigation automatically from globals', () => {
+    const header = {
       version: 1 as const,
-      header: {
-        version: 1 as const,
-        documentKind: 'site-header' as const,
-        metadata: { documentTitle: 'Global header' },
-        root: {
-          id: 'root',
-          type: 'root' as const,
-          props: {},
-          children: [
-            {
-              id: 'header',
-              type: 'global-header' as const,
-              props: { position: 'sticky' as const },
-              style: {
-                base: { padding: '16px' },
-                mobile: { padding: '8px' },
-              },
-              partsStyle: {
-                brand: {
-                  base: { backgroundColor: '#fee2e2' },
-                  mobile: { margin: '4px' },
-                },
-                navigation: { base: { backgroundColor: '#dbeafe' } },
-              },
-              children: [
-                {
-                  id: 'brand',
-                  type: 'site-brand' as const,
-                  props: { display: 'logo-text' as const, href: '/' },
-                  children: [],
-                },
-                {
-                  id: 'navigation',
-                  type: 'navigation-view' as const,
-                  props: {
-                    source: 'main' as const,
-                    orientation: 'horizontal' as const,
-                    mobileBehavior: 'collapse' as const,
-                    alignment: 'left' as const,
-                    ariaLabel: 'Main navigation',
-                  },
-                  children: [],
-                },
-              ],
+      documentKind: 'site-header' as const,
+      metadata: { documentTitle: 'Global header' },
+      root: {
+        id: 'root',
+        type: 'root' as const,
+        props: {},
+        children: [
+          {
+            id: 'header',
+            type: 'global-header' as const,
+            props: { position: 'sticky' as const },
+            style: {
+              base: { padding: '16px' },
+              mobile: { padding: '8px' },
             },
-          ],
-        },
+            partsStyle: {
+              brand: {
+                base: { backgroundColor: '#fee2e2' },
+                mobile: { margin: '4px' },
+              },
+              navigation: { base: { backgroundColor: '#dbeafe' } },
+            },
+            children: [
+              {
+                id: 'brand',
+                type: 'site-brand' as const,
+                props: { display: 'logo-text' as const, href: '/' },
+                children: [],
+              },
+              {
+                id: 'navigation',
+                type: 'navigation-view' as const,
+                props: {
+                  source: 'main' as const,
+                  orientation: 'horizontal' as const,
+                  mobileBehavior: 'collapse' as const,
+                  alignment: 'left' as const,
+                  ariaLabel: 'Main navigation',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
       },
     };
+
     const markup = renderToStaticMarkup(
       renderPage(createPayload(), {
-        globals,
         navigation: {
           main: [{ id: 'home', label: 'Home', type: 'page', href: '/' }],
         },
@@ -314,37 +347,37 @@ describe('PagePayloadV1 renderer', () => {
       }),
     );
 
-    expect(markup).toContain('data-site-global="header"');
-    expect(markup.match(/data-site-global="header"/g)).toHaveLength(1);
-    expect(markup).toContain('data-navigation-mobile-behavior="collapse"');
-    expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain('Acme');
-    expect(markup).toContain('src="/assets/logo.png"');
-    expect(markup).toContain('padding:16px');
-    expect(markup).toContain('background-color:#fee2e2');
-    expect(markup).toContain('background-color:#dbeafe');
-    expect(markup).toContain('padding:8px!important');
-    expect(markup).toContain('margin:4px!important');
-    expect(markup).not.toContain('data-site-global="footer"');
-  });
-
-  it('honors explicit global removals without falling back to navigation', () => {
-    const markup = renderToStaticMarkup(
-      renderPage(createPayload(), {
-        globals: { version: 1, header: null, footer: null },
-        navigation: {
-          main: [{ id: 'home', label: 'Home', type: 'page', href: '/' }],
-          footer: [
-            { id: 'contact', label: 'Contact', type: 'external', href: '/contact' },
-          ],
-        },
-      }),
-    );
-
     expect(markup).not.toContain('data-site-global="header"');
     expect(markup).not.toContain('data-site-global="footer"');
-    expect(markup).not.toContain('data-navigation-region="main"');
-    expect(markup).not.toContain('data-navigation-region="footer"');
+    expect(markup).not.toContain('data-navigation-mobile-behavior="collapse"');
+
+    const layoutMarkup = renderToStaticMarkup(
+      renderLayoutExtension(header, {
+        navigation: {
+          main: [{ id: 'home', label: 'Home', type: 'page', href: '/' }],
+        },
+        pagePath: '/',
+        siteLogo: '/assets/logo.png',
+        siteName: 'Acme',
+        siteSlug: 'acme',
+      }) ?? '',
+    );
+
+    expect(layoutMarkup).toContain('data-site-global="header"');
+    expect(layoutMarkup).toContain('data-navigation-mobile-behavior="collapse"');
+    expect(layoutMarkup).toContain('aria-current="page"');
+    expect(layoutMarkup).toContain('Acme');
+    expect(layoutMarkup).toContain('src="/assets/logo.png"');
+    expect(layoutMarkup).toContain('padding:16px');
+    expect(layoutMarkup).toContain('background-color:#fee2e2');
+    expect(layoutMarkup).toContain('background-color:#dbeafe');
+    expect(layoutMarkup).toContain('padding:8px!important');
+    expect(layoutMarkup).toContain('margin:4px!important');
+    expect(layoutMarkup).not.toContain('data-site-global="footer"');
+  });
+
+  it('skips an invalid optional layout extension instead of rendering broken content', () => {
+    expect(renderLayoutExtension({ version: 1, documentKind: 'site-header' })).toBeNull();
   });
 
   it('applies the global footer content part base style to its live child', () => {
@@ -375,9 +408,7 @@ describe('PagePayloadV1 renderer', () => {
       },
     };
 
-    const markup = renderToStaticMarkup(
-      renderPage(createPayload(), { globals: { version: 1, footer } }),
-    );
+    const markup = renderToStaticMarkup(renderLayoutExtension(footer) ?? '');
 
     expect(markup).toContain('data-site-global="footer"');
     expect(markup).toContain('data-payload-part="content"');

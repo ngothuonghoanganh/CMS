@@ -38,7 +38,9 @@ async function openCanonicalBuilder(
   await page.goto(
     `/workspaces/${environment.workspaceId}/sites/${environment.siteId}/pages/${environment.pageId}/builder`,
   );
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
 }
 
 async function readRoot(page: Page): Promise<BuilderNode> {

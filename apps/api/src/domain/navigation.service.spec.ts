@@ -23,7 +23,6 @@ type ServiceInternals = {
   pageModel: ModelStub;
   versionModel: ModelStub;
   validateItems: (...args: unknown[]) => Promise<void>;
-  validateBeforeSitePublish: (siteId: string, workspaceId: string) => Promise<void>;
   toContract: (record: NavigationDocument) => unknown;
 };
 
@@ -54,6 +53,7 @@ function navigationRecord(
     workspaceId: 'workspace-1',
     name: 'Main navigation',
     key: items.key ?? 'main',
+    items: [],
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     save: vi.fn().mockResolvedValue(undefined),
@@ -68,74 +68,13 @@ const draftTarget: NavigationItem = {
   pageId: campaignPageId,
 };
 
-describe('NavigationService publishing semantics', () => {
-  it('allows a draft navigation target during site validation', async () => {
-    const service = Object.create(NavigationService.prototype) as NavigationService;
-    const state = internals(service);
-    state.requireSite = vi.fn().mockResolvedValue({ homePageId: homePageId });
-    state.pageModel = {
-      find: vi
-        .fn()
-        .mockReturnValue(cursor([page(homePageId, true), page(campaignPageId, false)])),
-      findOne: vi.fn().mockReturnValue(cursor(null)),
-    };
-    state.navigationModel = {
-      find: vi
-        .fn()
-        .mockReturnValue(cursor([navigationRecord({ draftItems: [draftTarget] })])),
-      findOne: vi.fn(),
-    };
-    const validateItems = vi.fn().mockResolvedValue(undefined);
-    state.validateItems = validateItems;
-
-    await service.validateBeforeSitePublish('site-1', 'workspace-1');
-
-    expect(validateItems).toHaveBeenCalledOnce();
-    expect(validateItems.mock.calls[0]?.[2]).toEqual([draftTarget]);
-  });
-
-  it('still rejects a missing or cross-site target during site validation', async () => {
+describe('NavigationService menu data semantics', () => {
+  it('resolves menu items to hrefs using the selected page version', async () => {
     const service = Object.create(NavigationService.prototype) as NavigationService;
     const state = internals(service);
     state.requireSite = vi.fn().mockResolvedValue({ homePageId });
-    state.pageModel = {
-      find: vi.fn().mockReturnValue(cursor([page(homePageId, true)])),
-      findOne: vi.fn().mockReturnValue(cursor(null)),
-    };
     state.navigationModel = {
-      find: vi.fn().mockReturnValue(
-        cursor([
-          navigationRecord({
-            draftItems: [
-              {
-                ...draftTarget,
-                pageId: '00000000-0000-4000-8000-000000000099',
-              },
-            ],
-          }),
-        ]),
-      ),
-      findOne: vi.fn(),
-    };
-
-    await expect(
-      service.validateBeforeSitePublish('site-1', 'workspace-1'),
-    ).rejects.toThrow('Navigation contains an invalid internal target');
-  });
-
-  it('uses draft targets for preview and hides unavailable targets publicly', async () => {
-    const service = Object.create(NavigationService.prototype) as NavigationService;
-    const state = internals(service);
-    state.requireSite = vi.fn().mockResolvedValue({ homePageId: homePageId });
-    state.navigationModel = {
-      find: vi.fn().mockReturnValue(
-        cursor([
-          navigationRecord({
-            draftItems: [draftTarget],
-            publishedItems: [draftTarget],
-          }),
-        ]),
-      ),
+      find: vi.fn().mockReturnValue(cursor([navigationRecord({ items: [draftTarget] })])),
       findOne: vi.fn(),
     };
     state.pageModel = {
@@ -154,68 +93,6 @@ describe('NavigationService publishing semantics', () => {
     expect(publicNavigation?.main).toEqual([]);
   });
 
-  it('snapshots draft structure and reports draft target warnings', async () => {
-    const service = Object.create(NavigationService.prototype) as NavigationService;
-    const state = internals(service);
-    const record = navigationRecord({ draftItems: [draftTarget] });
-    state.validateItems = vi.fn().mockResolvedValue(undefined);
-    state.validateBeforeSitePublish = vi.fn().mockResolvedValue(undefined);
-    state.pageModel = {
-      find: vi
-        .fn()
-        .mockReturnValue(cursor([page(homePageId, true), page(campaignPageId, false)])),
-      findOne: vi.fn(),
-    };
-    state.navigationModel = {
-      find: vi.fn().mockReturnValue(cursor([record])),
-      findOne: vi.fn(),
-    };
-
-    const summary = await service.publishForSite('site-1', 'workspace-1');
-
-    expect(record.publishedItems).toEqual([draftTarget]);
-    expect(record.save).toHaveBeenCalledOnce();
-    expect(summary.warnings).toHaveLength(1);
-    expect(summary.warnings[0]).toMatchObject({
-      code: 'NAVIGATION_TARGET_DRAFT',
-      label: 'Campaign',
-      pageId: campaignPageId,
-    });
-  });
-
-  it('updates only the draft structure after a navigation has been published', async () => {
-    const service = Object.create(NavigationService.prototype) as NavigationService;
-    const state = internals(service);
-    const publishedItems: NavigationItem[] = [
-      {
-        id: '00000000-0000-4000-8000-000000000005',
-        label: 'Home',
-        type: 'page',
-        pageId: homePageId,
-      },
-    ];
-    const record = navigationRecord({
-      draftItems: publishedItems,
-      publishedItems,
-    });
-    state.navigationModel = {
-      find: vi.fn(),
-      findOne: vi.fn().mockReturnValue(cursor(record)),
-    };
-    state.pageModel = { find: vi.fn(), findOne: vi.fn() };
-    state.validateItems = vi.fn().mockResolvedValue(undefined);
-
-    await service.update(
-      'site-1',
-      '00000000-0000-4000-8000-000000000010',
-      { items: [draftTarget] },
-      'workspace-1',
-    );
-
-    expect(record.draftItems).toEqual([draftTarget]);
-    expect(record.publishedItems).toEqual(publishedItems);
-  });
-
   it('hides a section whose anchor is absent from the published payload', async () => {
     const service = Object.create(NavigationService.prototype) as NavigationService;
     const state = internals(service);
@@ -228,9 +105,7 @@ describe('NavigationService publishing semantics', () => {
     };
     state.requireSite = vi.fn().mockResolvedValue({ homePageId });
     state.navigationModel = {
-      find: vi
-        .fn()
-        .mockReturnValue(cursor([navigationRecord({ publishedItems: [section] })])),
+      find: vi.fn().mockReturnValue(cursor([navigationRecord({ items: [section] })])),
       findOne: vi.fn(),
     };
     state.pageModel = {
@@ -264,20 +139,30 @@ describe('NavigationService publishing semantics', () => {
     expect(publicNavigation?.main).toEqual([]);
   });
 
-  it('normalizes legacy items to both draft and published structures', () => {
+  it('exposes the canonical menu items contract without draft/published fields', () => {
     const service = Object.create(NavigationService.prototype) as NavigationService;
     const state = internals(service);
-    const legacyItems = [draftTarget];
-    const contract = state.toContract(navigationRecord({ items: legacyItems })) as {
+    const contract = state.toContract(navigationRecord({ items: [draftTarget] })) as {
       items: NavigationItem[];
-      draftItems?: NavigationItem[];
-      publishedItems?: NavigationItem[];
-      hasUnpublishedChanges?: boolean;
+      draftItems?: unknown;
+      publishedItems?: unknown;
     };
 
-    expect(contract.items).toEqual(legacyItems);
-    expect(contract.draftItems).toEqual(legacyItems);
-    expect(contract.publishedItems).toEqual(legacyItems);
-    expect(contract.hasUnpublishedChanges).toBe(false);
+    expect(contract.items).toEqual([draftTarget]);
+    expect('draftItems' in contract).toBe(false);
+    expect('publishedItems' in contract).toBe(false);
+  });
+
+  it('blocks deleting a page that a menu still references', async () => {
+    const service = Object.create(NavigationService.prototype) as NavigationService;
+    const state = internals(service);
+    state.navigationModel = {
+      find: vi.fn().mockReturnValue(cursor([navigationRecord({ items: [draftTarget] })])),
+      findOne: vi.fn(),
+    };
+
+    await expect(
+      service.assertPageCanBeDeleted('site-1', campaignPageId, 'workspace-1'),
+    ).rejects.toThrow('Remove this page from site navigation before deleting it');
   });
 });

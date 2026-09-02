@@ -7,6 +7,10 @@ import {
   ExtensionConnectionSchema,
   ExtensionConnectionListResponseSchema,
   ExtensionListResponseSchema,
+  LayoutExtensionListResponseSchema,
+  LayoutExtensionResourceSchema,
+  type LayoutExtensionKind,
+  type LayoutExtensionResource,
   UpdateCustomExtensionRequestSchema,
   UpdateExtensionConnectionRequestSchema,
   type ExtensionConfiguration,
@@ -57,7 +61,23 @@ const emptyConnectionDraft: ConnectionDraft = {
   secret: '',
 };
 
-export function ExtensionsView({ canManage }: { canManage: boolean }) {
+type ExtensionsViewProps = {
+  canManage: boolean;
+  canManageLayouts?: boolean;
+  workspaceId?: string;
+  siteId?: string;
+};
+
+function layoutSegment(kind: LayoutExtensionKind): 'headers' | 'footers' {
+  return kind === 'header' ? 'headers' : 'footers';
+}
+
+export function ExtensionsView({
+  canManage,
+  canManageLayouts = false,
+  workspaceId,
+  siteId,
+}: ExtensionsViewProps) {
   const [extensions, setExtensions] = useState<ExtensionDescriptor[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [configuration, setConfiguration] = useState<ExtensionConfiguration>({});
@@ -79,6 +99,8 @@ export function ExtensionsView({ canManage }: { canManage: boolean }) {
   const [connectionsFor, setConnectionsFor] = useState<string | null>(null);
   const [connectionDraft, setConnectionDraft] =
     useState<ConnectionDraft>(emptyConnectionDraft);
+  const [layoutExtensions, setLayoutExtensions] = useState<LayoutExtensionResource[]>([]);
+  const [layoutBusy, setLayoutBusy] = useState<LayoutExtensionKind | null>(null);
 
   const enabledCount = extensions.filter((extension) => extension.tenantEnabled).length;
   const runtimeCount = extensions.reduce(
@@ -131,6 +153,64 @@ export function ExtensionsView({ canManage }: { canManage: boolean }) {
       active = false;
     };
   }, [reloadKey]);
+
+  useEffect(() => {
+    let active = true;
+    if (!siteId) {
+      setLayoutExtensions([]);
+      return () => {
+        active = false;
+      };
+    }
+    setLayoutExtensions([]);
+    void Promise.all(
+      (['header', 'footer'] as const).map(async (kind) => {
+        try {
+          const response = await api.get(
+            `/sites/${siteId}/layouts/${layoutSegment(kind)}`,
+          );
+          return LayoutExtensionListResponseSchema.parse(response).items;
+        } catch {
+          return [];
+        }
+      }),
+    ).then((groups) => {
+      if (active) setLayoutExtensions(groups.flat());
+    });
+    return () => {
+      active = false;
+    };
+  }, [reloadKey, siteId]);
+
+  async function createLayoutExtension(kind: LayoutExtensionKind): Promise<void> {
+    if (!siteId || !canManageLayouts) return;
+    setLayoutBusy(kind);
+    setError(null);
+    try {
+      const resource = LayoutExtensionResourceSchema.parse(
+        await api.post(`/sites/${siteId}/layouts/${layoutSegment(kind)}`, {
+          kind,
+          name: kind === 'header' ? 'Header extension' : 'Footer extension',
+          description: `Reusable ${kind} block for page composition.`,
+        }),
+      );
+      setLayoutExtensions((current) => [...current, resource]);
+      openLayoutBuilder(resource);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : 'Layout creation failed',
+      );
+    } finally {
+      setLayoutBusy(null);
+    }
+  }
+
+  function openLayoutBuilder(resource: LayoutExtensionResource): void {
+    if (!workspaceId || !siteId) return;
+    window.location.assign(
+      `/workspaces/${workspaceId}/sites/${siteId}/layouts/${layoutSegment(resource.kind)}/${resource.id}/builder`,
+    );
+  }
 
   async function toggle(extension: ExtensionDescriptor): Promise<void> {
     if (!canManage) return;
@@ -445,6 +525,91 @@ export function ExtensionsView({ canManage }: { canManage: boolean }) {
                 <small>loaded on demand</small>
               </div>
             </div>
+          </section>
+          <section
+            className="panel layout-extension-panel"
+            aria-label="Header and footer extensions"
+          >
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Layout extensions</span>
+                <h2>Header &amp; Footer blocks</h2>
+                <p className="muted">
+                  Build these once, then drag a copy into any page from the builder’s
+                  Extensions &amp; advanced group. Editing the source never changes an
+                  existing page copy.
+                </p>
+              </div>
+            </div>
+            {!siteId ? (
+              <p className="muted">
+                Select a site to manage its Header and Footer extensions.
+              </p>
+            ) : (
+              <div className="extension-layout-grid">
+                {(['header', 'footer'] as const).map((kind) => {
+                  const resource = layoutExtensions.find((item) => item.kind === kind);
+                  const label = kind === 'header' ? 'Header' : 'Footer';
+                  return (
+                    <article className="extension-layout-card" key={kind}>
+                      <div>
+                        <span className="extension-mark" aria-hidden="true">
+                          {label.slice(0, 1)}
+                        </span>
+                        <h3>{resource?.name ?? `${label} extension`}</h3>
+                        <p className="muted small">
+                          {resource
+                            ? resource.draftVersionId
+                              ? 'Draft ready to use in the page builder.'
+                              : resource.publishedVersionId
+                                ? 'Published source ready to copy into pages.'
+                                : 'Created — open the builder to add blocks.'
+                            : `No ${kind} extension has been built for this site yet.`}
+                        </p>
+                      </div>
+                      <div className="form-actions">
+                        {resource ? (
+                          <>
+                            <StatusBadge
+                              label={
+                                resource.draftVersionId
+                                  ? 'Draft'
+                                  : resource.publishedVersionId
+                                    ? 'Published'
+                                    : 'Empty'
+                              }
+                              status={
+                                resource.draftVersionId
+                                  ? 'draft'
+                                  : resource.publishedVersionId
+                                    ? 'published'
+                                    : 'empty'
+                              }
+                            />
+                            <button
+                              className="button button-primary"
+                              onClick={() => openLayoutBuilder(resource)}
+                              type="button"
+                            >
+                              Edit {label}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="button button-primary"
+                            disabled={!canManageLayouts || layoutBusy === kind}
+                            onClick={() => void createLayoutExtension(kind)}
+                            type="button"
+                          >
+                            {layoutBusy === kind ? 'Creating…' : `Build ${label}`}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
           {canManage ? (
             <section className="panel custom-extension-create-panel">

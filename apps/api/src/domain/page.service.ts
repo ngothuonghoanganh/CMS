@@ -17,7 +17,8 @@ import {
   PagePayloadSchema,
   SiteDesignSystemSchema,
   SiteGlobalsSchema,
-  resolveEffectiveGlobalsDraft,
+  PageLayoutAttachmentsSchema,
+  PageLayoutUpdateRequestSchema,
   PageListResponseSchema,
   PublicPageSchema,
   PageVersionListResponseSchema,
@@ -32,6 +33,7 @@ import {
   type DuplicatePageRequest,
   type Page,
   type PagePayload,
+  type PageLayoutAttachment,
   type PageListResponse,
   type PublicPage,
   type PageVersionListResponse,
@@ -56,6 +58,7 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { WorkflowService } from '../workflows/workflow.service';
 import { SiteService } from './site.service';
 import { NavigationService } from './navigation.service';
+import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
 
 @Injectable()
@@ -77,6 +80,8 @@ export class PageService {
     @Inject(WorkflowService) private readonly workflows: WorkflowService,
     @Inject(SiteService) private readonly sites: SiteService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(LayoutExtensionService)
+    private readonly layoutExtensions: LayoutExtensionService,
     @Inject(ReusableService) private readonly reusables: ReusableService,
   ) {}
 
@@ -98,6 +103,13 @@ export class PageService {
       );
       const legacySlug = normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
       if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
+      if (input.layoutAttachments) {
+        await this.assertLayoutAttachmentsAvailable(
+          siteId,
+          workspaceId,
+          PageLayoutAttachmentsSchema.parse(input.layoutAttachments),
+        );
+      }
       const versionId = randomUUID();
       let page: PageDocument;
       try {
@@ -112,6 +124,10 @@ export class PageService {
           ...(input.parentId ? { parentId: input.parentId } : {}),
           ...(input.anchors ? { anchors: input.anchors } : {}),
           ...(legacySlug ? { slug: legacySlug } : {}),
+          ...(input.layoutAttachments
+            ? { layoutAttachments: input.layoutAttachments }
+            : {}),
+          ...(input.appliedTemplate ? { appliedTemplate: input.appliedTemplate } : {}),
         });
       } catch (error) {
         if (isDuplicateKeyError(error)) throw this.duplicatePath();
@@ -512,6 +528,26 @@ export class PageService {
     return this.toVersionContract(record);
   }
 
+  async getLayout(pageId: string, workspaceId: string): Promise<PageLayoutAttachment[]> {
+    const page = await this.requirePageDocument(pageId, workspaceId);
+    return parseLayoutAttachments(page);
+  }
+
+  async updateLayout(
+    pageId: string,
+    attachments: PageLayoutAttachment[],
+    workspaceId: string,
+  ): Promise<PageLayoutAttachment[]> {
+    const parsed = PageLayoutUpdateRequestSchema.parse({ attachments }).attachments;
+    const page = await this.requirePageDocument(pageId, workspaceId);
+    assertValidLayoutAttachments(parsed);
+    await this.assertLayoutAttachmentsAvailable(page.siteId, workspaceId, parsed);
+    if (parsed.length === 0) page.set('layoutAttachments', undefined);
+    else page.layoutAttachments = parsed;
+    await page.save();
+    return parseLayoutAttachments(page);
+  }
+
   private async persistVersion(
     page: PageDocument,
     payload: PagePayload,
@@ -566,6 +602,23 @@ export class PageService {
       payload,
     );
     return this.toVersionContract(record);
+  }
+
+  private async assertLayoutAttachmentsAvailable(
+    siteId: string,
+    workspaceId: string,
+    attachments: readonly PageLayoutAttachment[],
+  ): Promise<void> {
+    await Promise.all(
+      attachments.map((attachment) =>
+        this.layoutExtensions.get(
+          siteId,
+          workspaceId,
+          attachment.type,
+          attachment.resourceId,
+        ),
+      ),
+    );
   }
 
   private async findPublicationVersion(
@@ -737,6 +790,10 @@ export class PageService {
       ...(record.publishedVersionId
         ? { publishedVersionId: record.publishedVersionId }
         : {}),
+      ...(parseLayoutAttachments(record).length
+        ? { layoutAttachments: parseLayoutAttachments(record) }
+        : {}),
+      ...(record.appliedTemplate ? { appliedTemplate: record.appliedTemplate } : {}),
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     });
@@ -761,12 +818,9 @@ export class PageService {
         false,
       );
       const globals = preview
-        ? resolveEffectiveGlobalsDraft(
-            site.globalsDraft ? SiteGlobalsSchema.parse(site.globalsDraft) : undefined,
-            site.publishedGlobals
-              ? SiteGlobalsSchema.parse(site.publishedGlobals)
-              : undefined,
-          )
+        ? site.globalsDraft
+          ? SiteGlobalsSchema.parse(site.globalsDraft)
+          : undefined
         : site.publishedGlobals
           ? SiteGlobalsSchema.parse(site.publishedGlobals)
           : undefined;
@@ -774,6 +828,10 @@ export class PageService {
         page.siteId,
         page.workspaceId,
         { mode: preview ? 'draft' : 'published' },
+      );
+      const layout = await this.layoutExtensions.resolveComposition(
+        parseLayoutAttachments(page),
+        preview ? 'draft' : 'published',
       );
       const designSystem = (preview ? site.designSystemDraft : site.publishedDesignSystem)
         ? SiteDesignSystemSchema.parse(
@@ -794,6 +852,7 @@ export class PageService {
         payload: versionContract.payload,
         ...(extensions.length ? { extensions } : {}),
         ...(navigation ? { navigation } : {}),
+        ...(layout.header || layout.footer ? { layout } : {}),
         ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),
         ...(designSystem ? { designSystem } : {}),
@@ -851,4 +910,41 @@ function isDuplicateKeyError(error: unknown): boolean {
     'code' in error &&
     (error as { code?: unknown }).code === 11000
   );
+}
+
+function parseLayoutAttachments(page: PageDocument): PageLayoutAttachment[] {
+  const value = page.layoutAttachments ?? [];
+  const parsed = PageLayoutAttachmentsSchema.safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+function assertValidLayoutAttachments(attachments: PageLayoutAttachment[]): void {
+  const headerSlots = new Set([
+    'page.header.top',
+    'page.header.top-left',
+    'page.header.top-right',
+  ]);
+  const footerSlots = new Set(['page.footer.bottom']);
+  const headers = attachments.filter((attachment) => attachment.type === 'header');
+  const footers = attachments.filter((attachment) => attachment.type === 'footer');
+  if (headers.length > 1 || footers.length > 1) {
+    throw new BadRequestException({
+      code: 'INVALID_PAGE_LAYOUT',
+      message: 'A page can attach at most one header and one footer',
+    });
+  }
+  for (const attachment of attachments) {
+    if (attachment.type === 'header' && !headerSlots.has(attachment.slot)) {
+      throw new BadRequestException({
+        code: 'INVALID_PAGE_LAYOUT_SLOT',
+        message: `Slot ${attachment.slot} is not valid for a header attachment`,
+      });
+    }
+    if (attachment.type === 'footer' && !footerSlots.has(attachment.slot)) {
+      throw new BadRequestException({
+        code: 'INVALID_PAGE_LAYOUT_SLOT',
+        message: `Slot ${attachment.slot} is not valid for a footer attachment`,
+      });
+    }
+  }
 }

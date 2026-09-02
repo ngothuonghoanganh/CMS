@@ -253,27 +253,46 @@ export async function resetCanonicalEnvironment(
     }
   }
 
-  // Mark both resources removed in one deterministic fixture reset, then use
-  // the resource-scoped publish commands below to clear their live snapshots.
+  // Header/Footer are independent layout resources. Reset the canonical page
+  // to the no-layout baseline and remove only E2E-owned resources; explicit
+  // user layouts are never touched by a test fixture.
   await json(
-    await request.patch(
-      `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals`,
-      { data: { version: 1, header: null, footer: null } },
+    await request.patch(`${apiBase}/pages/${environment.pageId}/layout`, {
+      data: { attachments: [] },
+    }),
+  );
+  for (const kind of ['headers', 'footers'] as const) {
+    const response = await json<{ items: Array<{ id: string; name: string }> }>(
+      await request.get(`${apiBase}/sites/${environment.siteId}/layouts/${kind}`),
+    );
+    for (const resource of response.items) {
+      if (!resource.name.startsWith('__e2e__')) continue;
+      const deleted = await request.delete(
+        `${apiBase}/sites/${environment.siteId}/layouts/${kind}/${resource.id}`,
+      );
+      if (!deleted.ok() && deleted.status() !== 404) {
+        throw new Error(
+          `Could not remove temporary ${kind} resource ${resource.id}: ${deleted.status()}`,
+        );
+      }
+    }
+  }
+
+  const templates = await json<{ items: Array<{ id: string; name: string }> }>(
+    await request.get(
+      `${apiBase}/workspaces/${environment.workspaceId}/templates?limit=100&offset=0`,
     ),
   );
-  for (const resource of ['header', 'footer'] as const) {
-    await json(
-      await request.post(
-        `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals/${resource}/publish`,
-        { data: {} },
-      ),
+  for (const template of templates.items) {
+    if (!template.name.startsWith('__e2e__')) continue;
+    const deleted = await request.delete(
+      `${apiBase}/workspaces/${environment.workspaceId}/templates/${template.id}`,
     );
-    await json(
-      await request.post(
-        `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/globals/${resource}/discard`,
-        { data: {} },
-      ),
-    );
+    if (!deleted.ok() && deleted.status() !== 404) {
+      throw new Error(
+        `Could not remove temporary template ${template.id}: ${deleted.status()}`,
+      );
+    }
   }
 
   const designSystem = await json<{ draft: unknown }>(
@@ -472,7 +491,15 @@ export async function openCanonicalBuilder(
   await page.goto(
     `/workspaces/${environment.workspaceId}/sites/${environment.siteId}/pages/${temporaryPage.id}/builder`,
   );
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  // The builder owns the GrapesJS instance behind this stable host. GrapesJS
+  // briefly keeps the host collapsed while it mounts its iframe, so waiting
+  // for attachment plus the frame is more reliable than a visibility check on
+  // the internal editor root.
+  const editorHost = page.locator('.builder-editor-host');
+  await expect(editorHost).toBeAttached({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
   return {
     ...temporaryPage,
     siteId: environment.siteId,

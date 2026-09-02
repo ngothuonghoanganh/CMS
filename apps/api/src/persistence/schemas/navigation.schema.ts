@@ -4,6 +4,11 @@ import { NavigationItemsSchema } from '@payload/contracts';
 
 export type NavigationDocument = HydratedDocument<NavigationRecord>;
 
+/**
+ * A Navigation is pure menu data. It has no draft/published lifecycle, no
+ * layout and no renderer of its own; the `navigation-view` component binds a
+ * menu by key and renders it wherever the user places that component.
+ */
 @Schema({
   collection: 'navigations',
   timestamps: true,
@@ -26,37 +31,16 @@ export class NavigationRecord {
   @Prop({ type: String, required: true, trim: true, lowercase: true })
   key!: string;
 
-  /**
-   * Legacy compatibility field. New writes use draftItems and
-   * publishedItems; old records are normalized by NavigationService.
-   */
-  @Prop({ type: [Object], required: false, default: undefined })
-  items?: unknown[];
-
   @Prop({
     type: [Object],
-    required: false,
-    default: undefined,
+    required: true,
+    default: [],
     validate: {
       validator: (value: unknown) => NavigationItemsSchema.safeParse(value).success,
-      message: 'draftItems must be valid navigation items',
+      message: 'items must be valid navigation items',
     },
   })
-  draftItems?: unknown[];
-
-  @Prop({
-    type: [Object],
-    required: false,
-    default: undefined,
-    validate: {
-      validator: (value: unknown) => NavigationItemsSchema.safeParse(value).success,
-      message: 'publishedItems must be valid navigation items',
-    },
-  })
-  publishedItems?: unknown[];
-
-  @Prop({ type: Date, required: false })
-  publishedAt?: Date;
+  items!: unknown[];
 
   createdAt!: Date;
   updatedAt!: Date;

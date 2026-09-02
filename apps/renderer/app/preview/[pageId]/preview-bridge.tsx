@@ -11,11 +11,12 @@ import {
   type SiteDesignSystem,
   type SiteGlobals,
   type PagePreviewSnapshot,
+  type PageLayoutComposition,
   type ResolvedNavigationItem,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactElement } from 'react';
 
-import { renderPage } from '../../renderer';
+import { renderLayoutExtension, renderPage } from '../../renderer';
 
 type PreviewBridgeProps = {
   initialPayload: PagePayload;
@@ -28,6 +29,7 @@ type PreviewBridgeProps = {
   reusables?: readonly ReusableRuntime[] | undefined;
   designSystem?: SiteDesignSystem | undefined;
   globals?: SiteGlobals | undefined;
+  layout?: PageLayoutComposition | undefined;
   navigation?:
     | {
         main?: readonly ResolvedNavigationItem[] | undefined;
@@ -84,6 +86,7 @@ export function PreviewBridge({
   reusables,
   designSystem,
   globals,
+  layout,
   navigation,
 }: PreviewBridgeProps) {
   const [snapshot, setSnapshot] = useState(() =>
@@ -93,6 +96,7 @@ export function PreviewBridge({
       ...(reusables ? { reusables } : {}),
       ...(designSystem ? { designSystem } : {}),
       ...(globals ? { globals } : {}),
+      ...(layout ? { layout } : {}),
       ...(navigation ? { navigation } : {}),
     }),
   );
@@ -116,9 +120,23 @@ export function PreviewBridge({
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  return renderPage(
-    snapshot.page.payload,
-    rendererContext(snapshot, { siteSlug, siteName, siteLogo, pageSlug, tenantSlug }),
+  const context = rendererContext(snapshot, {
+    siteSlug,
+    siteName,
+    siteLogo,
+    pageSlug,
+    tenantSlug,
+  });
+  return (
+    <>
+      {snapshot.layout?.header
+        ? renderLayoutExtension(snapshot.layout.header.document, context)
+        : null}
+      {renderPage(snapshot.page.payload, context)}
+      {snapshot.layout?.footer
+        ? renderLayoutExtension(snapshot.layout.footer.document, context)
+        : null}
+    </>
   ) as ReactElement;
 }
 

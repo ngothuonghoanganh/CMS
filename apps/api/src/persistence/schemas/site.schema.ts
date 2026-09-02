@@ -43,15 +43,9 @@ export class SiteRecord {
   status!: 'draft' | 'published' | 'archived';
 
   @Prop({ type: String, required: false })
-  primaryNavigationId?: string;
-
-  @Prop({ type: String, required: false })
-  footerNavigationId?: string;
-
-  @Prop({ type: String, required: false })
   logo?: string;
 
-  /** Versioned builder-owned global documents. Omitted resources inherit; null means removed. */
+  /** Site-level global data (social links, metadata). Never Header/Footer. */
   @Prop({ type: Object, required: false, minimize: false })
   globalsDraft?: Record<string, unknown>;
 

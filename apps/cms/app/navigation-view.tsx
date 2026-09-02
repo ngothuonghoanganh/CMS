@@ -66,7 +66,7 @@ export function NavigationView({
       current?.name ??
         (selectedKey === 'footer' ? 'Footer navigation' : 'Main navigation'),
     );
-    setItems(current?.draftItems ?? current?.items ?? []);
+    setItems(current?.items ?? []);
     setEditingItemId(null);
     setParentItemId(null);
   }, [current, selectedKey]);
@@ -507,12 +507,6 @@ export function NavigationView({
         </section>
         <section className="panel">
           <PanelTitle title="Menu items" count={flattenNavigationItems(items).length} />
-          {current?.hasUnpublishedChanges ? (
-            <p className="notice notice-warning">
-              Unpublished navigation changes. Save updates Preview; Publish Site updates
-              the live structure.
-            </p>
-          ) : null}
           {items.length ? (
             <div aria-label="Navigation item tree" className="list" role="tree">
               {renderItems(items)}

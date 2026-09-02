@@ -3084,7 +3084,10 @@ export const PagePayloadV7Schema = z
   .superRefine((payload, context) => {
     validatePageNodeV7Tree(payload.root, context, {
       requirePageRoot: true,
-      allowGlobals: false,
+      // Header/footer extensions are copied into a page as regular, immutable
+      // global nodes. They must be valid page payload children so editing the
+      // source extension cannot mutate the page snapshot.
+      allowGlobals: true,
       allowReusable: true,
     });
     const serializedSize = new TextEncoder().encode(JSON.stringify(payload)).length;
@@ -3528,60 +3531,19 @@ export const SocialLinkSchema = z
   .strict();
 export type SocialLink = z.infer<typeof SocialLinkSchema>;
 
+/**
+ * Site globals hold only genuinely site-wide data: identity, branding, social
+ * links and global metadata. Header and Footer are independent layout extension
+ * resources (see LayoutExtensionResourceSchema); they must never be persisted
+ * here as production ownership.
+ */
 export const SiteGlobalsSchema = z
   .object({
     version: z.literal(1),
-    // An omitted resource inherits its published snapshot for authoring.
-    // `null` is an explicit draft removal and must never fall back.
-    header: SiteGlobalPayloadV1Schema.nullable().optional(),
-    footer: SiteGlobalPayloadV1Schema.nullable().optional(),
     socialLinks: z.array(SocialLinkSchema).max(20).optional(),
   })
-  .strict()
-  .superRefine((globals, context) => {
-    if (
-      globals.header?.documentKind !== undefined &&
-      globals.header.documentKind !== 'site-header'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Site globals.header must be a site-header document',
-        path: ['header', 'documentKind'],
-      });
-    }
-    if (
-      globals.footer?.documentKind !== undefined &&
-      globals.footer.documentKind !== 'site-footer'
-    ) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Site globals.footer must be a site-footer document',
-        path: ['footer', 'documentKind'],
-      });
-    }
-  });
+  .strict();
 export type SiteGlobals = z.infer<typeof SiteGlobalsSchema>;
-
-export const SiteGlobalResourceKindSchema = z.enum(['header', 'footer']);
-export type SiteGlobalResourceKind = z.infer<typeof SiteGlobalResourceKindSchema>;
-export const SiteGlobalResourceSnapshotSchema = SiteGlobalPayloadV1Schema.nullable();
-export type SiteGlobalResourceSnapshot = z.infer<typeof SiteGlobalResourceSnapshotSchema>;
-
-export const SiteGlobalResourceStateSchema = z
-  .object({
-    hasPublishedSnapshot: z.boolean(),
-    hasUnpublishedChanges: z.boolean(),
-  })
-  .strict();
-export type SiteGlobalResourceState = z.infer<typeof SiteGlobalResourceStateSchema>;
-
-export const SiteGlobalsStateSchema = z
-  .object({
-    header: SiteGlobalResourceStateSchema,
-    footer: SiteGlobalResourceStateSchema,
-  })
-  .strict();
-export type SiteGlobalsState = z.infer<typeof SiteGlobalsStateSchema>;
 
 function cloneSiteGlobalValue<T>(value: T): T {
   if (typeof structuredClone === 'function') return structuredClone(value);
@@ -3593,127 +3555,10 @@ export function cloneSiteGlobals(value: SiteGlobals): SiteGlobals {
   return SiteGlobalsSchema.parse(cloneSiteGlobalValue(value));
 }
 
-function hasOwnProperty<T extends object>(
-  value: T | undefined,
-  key: PropertyKey,
-): boolean {
-  return value !== undefined && Object.prototype.hasOwnProperty.call(value, key);
-}
-
-/**
- * Resolve the editor-facing globals snapshot without persisting a lazy fork.
- * Omitted resources inherit independently; null is an intentional removal.
- */
-export function resolveEffectiveGlobalsDraft(
-  globalsDraft: SiteGlobals | null | undefined,
-  publishedGlobals: SiteGlobals | null | undefined,
-): SiteGlobals {
-  const draft = globalsDraft ? SiteGlobalsSchema.parse(globalsDraft) : undefined;
-  const published = publishedGlobals
-    ? SiteGlobalsSchema.parse(publishedGlobals)
-    : undefined;
-  const effective: SiteGlobals = { version: 1 };
-  for (const resource of ['header', 'footer', 'socialLinks'] as const) {
-    if (!copySiteGlobalResource(effective, draft, resource)) {
-      copySiteGlobalResource(effective, published, resource);
-    }
-  }
-  return SiteGlobalsSchema.parse(effective);
-}
-
-function copySiteGlobalResource(
-  target: SiteGlobals,
-  source: SiteGlobals | undefined,
-  resource: 'header' | 'footer' | 'socialLinks',
-): boolean {
-  if (!source || !hasOwnProperty(source, resource)) return false;
-  if (resource === 'header') {
-    target.header =
-      source.header === undefined ? undefined : cloneSiteGlobalValue(source.header);
-  } else if (resource === 'footer') {
-    target.footer =
-      source.footer === undefined ? undefined : cloneSiteGlobalValue(source.footer);
-  } else {
-    target.socialLinks =
-      source.socialLinks === undefined
-        ? undefined
-        : cloneSiteGlobalValue(source.socialLinks);
-  }
-  return true;
-}
-
-/** Merge only fields present in a globals patch, preserving sibling resources. */
-export function mergeSiteGlobals(
-  current: SiteGlobals | null | undefined,
-  patch: SiteGlobals,
-): SiteGlobals {
-  const base = current ? cloneSiteGlobals(current) : { version: 1 as const };
-  const parsedPatch = SiteGlobalsSchema.parse(patch);
-  const merged: SiteGlobals = { ...base, version: 1 };
-  if (hasOwnProperty(parsedPatch, 'header') && parsedPatch.header !== undefined) {
-    merged.header = cloneSiteGlobalValue(parsedPatch.header);
-  }
-  if (hasOwnProperty(parsedPatch, 'footer') && parsedPatch.footer !== undefined) {
-    merged.footer = cloneSiteGlobalValue(parsedPatch.footer);
-  }
-  if (
-    hasOwnProperty(parsedPatch, 'socialLinks') &&
-    parsedPatch.socialLinks !== undefined
-  ) {
-    merged.socialLinks = cloneSiteGlobalValue(parsedPatch.socialLinks);
-  }
-  return SiteGlobalsSchema.parse(merged);
-}
-
-function stableSerialize(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
-  return `{${Object.keys(value as Record<string, unknown>)
-    .sort()
-    .map(
-      (key) =>
-        `${JSON.stringify(key)}:${stableSerialize((value as Record<string, unknown>)[key])}`,
-    )
-    .join(',')}}`;
-}
-
-function equalGlobalResource(
-  left: SiteGlobalPayloadV1 | null | undefined,
-  right: SiteGlobalPayloadV1 | null | undefined,
-): boolean {
-  return stableSerialize(left) === stableSerialize(right);
-}
-
-export function deriveSiteGlobalsState(
-  globalsDraft: SiteGlobals | null | undefined,
-  publishedGlobals: SiteGlobals | null | undefined,
-): SiteGlobalsState {
-  const draft = globalsDraft ? SiteGlobalsSchema.parse(globalsDraft) : undefined;
-  const published = publishedGlobals
-    ? SiteGlobalsSchema.parse(publishedGlobals)
-    : undefined;
-  const stateFor = (resource: 'header' | 'footer'): SiteGlobalResourceState => {
-    const publishedValue = published?.[resource];
-    const hasExplicitDraft = hasOwnProperty(draft, resource);
-    const draftValue = hasExplicitDraft && draft ? draft[resource] : publishedValue;
-    return {
-      hasPublishedSnapshot: publishedValue !== undefined && publishedValue !== null,
-      hasUnpublishedChanges:
-        hasExplicitDraft && !equalGlobalResource(draftValue, publishedValue),
-    };
-  };
-  return SiteGlobalsStateSchema.parse({
-    header: stateFor('header'),
-    footer: stateFor('footer'),
-  });
-}
-
 export const SiteGlobalsResponseSchema = z
   .object({
     draft: SiteGlobalsSchema,
     published: SiteGlobalsSchema.optional(),
-    state: SiteGlobalsStateSchema,
   })
   .strict();
 export type SiteGlobalsResponse = z.infer<typeof SiteGlobalsResponseSchema>;
@@ -3725,6 +3570,177 @@ export const SiteDesignSystemResponseSchema = z
   })
   .strict();
 export type SiteDesignSystemResponse = z.infer<typeof SiteDesignSystemResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// Layout extensions (Header / Footer)
+//
+// Header and Footer are independent, buildable layout extension resources.
+// They share the Page Builder engine but own their own draft/published
+// lifecycle. Pages attach them explicitly via PageLayoutAttachment; the
+// renderer never auto-renders them from SiteGlobals.
+// ---------------------------------------------------------------------------
+
+export const LayoutExtensionKindSchema = z.enum(['header', 'footer']);
+export type LayoutExtensionKind = z.infer<typeof LayoutExtensionKindSchema>;
+
+export const LayoutExtensionVersionStatusSchema = z.enum([
+  'draft',
+  'published',
+  'archived',
+]);
+export type LayoutExtensionVersionStatus = z.infer<
+  typeof LayoutExtensionVersionStatusSchema
+>;
+
+export const LayoutExtensionResourceSchema = z
+  .object({
+    id: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    siteId: EntityIdSchema,
+    kind: LayoutExtensionKindSchema,
+    name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    draftVersionId: EntityIdSchema.optional(),
+    publishedVersionId: EntityIdSchema.optional(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type LayoutExtensionResource = z.infer<typeof LayoutExtensionResourceSchema>;
+
+export const LayoutExtensionVersionSchema = z
+  .object({
+    id: EntityIdSchema,
+    resourceId: EntityIdSchema,
+    versionNumber: z.number().int().positive(),
+    document: SiteGlobalPayloadV1Schema,
+    status: LayoutExtensionVersionStatusSchema,
+    createdAt: timestampSchema,
+    createdBy: z.string().trim().min(1).max(320).optional(),
+  })
+  .strict();
+export type LayoutExtensionVersion = z.infer<typeof LayoutExtensionVersionSchema>;
+
+export const LayoutExtensionListResponseSchema = z
+  .object({ items: z.array(LayoutExtensionResourceSchema) })
+  .strict();
+export type LayoutExtensionListResponse = z.infer<
+  typeof LayoutExtensionListResponseSchema
+>;
+
+export const LayoutExtensionVersionsResponseSchema = z
+  .object({ items: z.array(LayoutExtensionVersionSchema) })
+  .strict();
+export type LayoutExtensionVersionsResponse = z.infer<
+  typeof LayoutExtensionVersionsResponseSchema
+>;
+
+export const CreateLayoutExtensionRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200),
+    description: z.string().trim().max(500).optional(),
+    kind: LayoutExtensionKindSchema,
+    document: SiteGlobalPayloadV1Schema.optional(),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      input.document &&
+      input.document.documentKind !== layoutKindDocument(input.kind)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: `A ${input.kind} document must use documentKind ${layoutKindDocument(input.kind)}`,
+        path: ['document', 'documentKind'],
+      });
+    }
+  });
+export type CreateLayoutExtensionRequest = z.infer<
+  typeof CreateLayoutExtensionRequestSchema
+>;
+
+function layoutKindDocument(kind: LayoutExtensionKind): 'site-header' | 'site-footer' {
+  return kind === 'header' ? 'site-header' : 'site-footer';
+}
+
+export const UpdateLayoutExtensionRequestSchema = z
+  .object({
+    name: nonEmptyText.max(200).optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+    document: SiteGlobalPayloadV1Schema.optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export type UpdateLayoutExtensionRequest = z.infer<
+  typeof UpdateLayoutExtensionRequestSchema
+>;
+
+export const PublishLayoutExtensionRequestSchema = z
+  .object({ versionNumber: z.number().int().positive().optional() })
+  .strict();
+export type PublishLayoutExtensionRequest = z.infer<
+  typeof PublishLayoutExtensionRequestSchema
+>;
+
+// ---------------------------------------------------------------------------
+// Page layout attachments
+// ---------------------------------------------------------------------------
+
+export const PageLayoutSlotSchema = z.enum([
+  'page.header.top',
+  'page.header.top-left',
+  'page.header.top-right',
+  'page.footer.bottom',
+]);
+export type PageLayoutSlot = z.infer<typeof PageLayoutSlotSchema>;
+
+export const PageLayoutAttachmentSchema = z
+  .object({
+    id: EntityIdSchema,
+    type: z.enum(['header', 'footer']),
+    resourceId: EntityIdSchema,
+    slot: PageLayoutSlotSchema,
+    enabled: z.boolean(),
+  })
+  .strict();
+export type PageLayoutAttachment = z.infer<typeof PageLayoutAttachmentSchema>;
+
+export const PageLayoutAttachmentsSchema = z.array(PageLayoutAttachmentSchema).max(10);
+
+export const PageLayoutUpdateRequestSchema = z
+  .object({ attachments: PageLayoutAttachmentsSchema })
+  .strict();
+export type PageLayoutUpdateRequest = z.infer<typeof PageLayoutUpdateRequestSchema>;
+
+export const AppliedTemplateMetadataSchema = z
+  .object({
+    templateId: EntityIdSchema,
+    templateVersionId: EntityIdSchema,
+    appliedAt: timestampSchema,
+  })
+  .strict();
+export type AppliedTemplateMetadata = z.infer<typeof AppliedTemplateMetadataSchema>;
+
+/** Resolved layout attachments delivered to the public renderer/preview. */
+export const PageLayoutCompositionSchema = z
+  .object({
+    header: z
+      .object({
+        slot: PageLayoutSlotSchema,
+        document: SiteGlobalPayloadV1Schema,
+      })
+      .strict()
+      .optional(),
+    footer: z
+      .object({
+        slot: PageLayoutSlotSchema,
+        document: SiteGlobalPayloadV1Schema,
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type PageLayoutComposition = z.infer<typeof PageLayoutCompositionSchema>;
 
 /**
  * Editor-facing document envelope. The persisted/public payload remains the
@@ -4118,8 +4134,6 @@ export const SiteSchema = z
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     homePageId: EntityIdSchema,
     status: z.enum(['draft', 'published', 'archived']),
-    primaryNavigationId: EntityIdSchema.optional(),
-    footerNavigationId: EntityIdSchema.optional(),
     logo: safeImageSource.optional(),
     officialUrl: z.string().url().optional(),
     createdAt: timestampSchema,
@@ -4158,6 +4172,8 @@ export const PageSchema = z
       .optional(),
     currentDraftVersionId: EntityIdSchema.optional(),
     publishedVersionId: EntityIdSchema.optional(),
+    layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    appliedTemplate: AppliedTemplateMetadataSchema.optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
@@ -4396,40 +4412,26 @@ export const NavigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
 
 export const NavigationItemsSchema = z.array(NavigationItemSchema).max(100);
 
+/**
+ * A Navigation is pure menu data: a named, keyed, ordered set of menu items.
+ * It has no layout, no renderer and no publishing lifecycle of its own. The
+ * `navigation-view` component binds a menu by `key` and renders it wherever
+ * the user places that component.
+ */
 export const NavigationSchema = z
   .object({
     id: EntityIdSchema,
     siteId: EntityIdSchema,
     name: nonEmptyText.max(200),
     key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-    /** Compatibility alias for clients that still read the draft structure as `items`. */
     items: NavigationItemsSchema,
-    draftItems: NavigationItemsSchema.optional(),
-    publishedItems: NavigationItemsSchema.optional(),
-    publishedAt: timestampSchema.optional(),
-    hasUnpublishedChanges: z.boolean().optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
   .strict();
 export type Navigation = z.infer<typeof NavigationSchema>;
 
-export const NavigationPublishWarningSchema = z
-  .object({
-    code: z.literal('NAVIGATION_TARGET_DRAFT'),
-    navigationId: EntityIdSchema,
-    navigationKey: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-    itemId: EntityIdSchema,
-    label: nonEmptyText.max(200),
-    pageId: EntityIdSchema,
-    pageName: nonEmptyText.max(200),
-  })
-  .strict();
-export type NavigationPublishWarning = z.infer<typeof NavigationPublishWarningSchema>;
-
-export const SitePublishResponseSchema = SiteSchema.extend({
-  navigationWarnings: z.array(NavigationPublishWarningSchema).max(200),
-});
+export const SitePublishResponseSchema = SiteSchema;
 export type SitePublishResponse = z.infer<typeof SitePublishResponseSchema>;
 
 export type ResolvedNavigationItem = {
@@ -4475,6 +4477,7 @@ export const PagePreviewSnapshotSchema = z
     page: PageDocumentSchema,
     globals: SiteGlobalsSchema.optional(),
     navigation: PagePreviewNavigationSchema.optional(),
+    layout: PageLayoutCompositionSchema.optional(),
     extensions: z.array(PageRuntimeExtensionSchema).max(100).optional(),
     reusables: z.array(ReusableRuntimeSchema).max(200).optional(),
     designSystem: SiteDesignSystemSchema.optional(),
@@ -4585,6 +4588,7 @@ export const PublicPageSchema = z
       })
       .strict()
       .optional(),
+    layout: PageLayoutCompositionSchema.optional(),
     globals: SiteGlobalsSchema.optional(),
     reusables: z.array(ReusableRuntimeSchema).max(200).optional(),
     designSystem: SiteDesignSystemSchema.optional(),
@@ -4616,17 +4620,68 @@ export const AssetSchema = z
   })
   .strict();
 
+/**
+ * A Design Template is a versioned starter snapshot. `payload` and
+ * `layoutAttachments` are denormalized projections of the latest draft version
+ * for listing convenience; the authoritative immutable data lives in
+ * TemplateVersion records. Applying a template clones the payload and
+ * attachment configuration into an independent Page — there is never a live
+ * link back to the template.
+ */
 export const TemplateSchema = z
   .object({
     id: EntityIdSchema,
     workspaceId: EntityIdSchema,
+    siteId: EntityIdSchema.optional(),
     name: nonEmptyText.max(200),
     description: z.string().trim().max(500).optional(),
     payload: PagePayloadSchema,
+    layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    latestVersionId: EntityIdSchema,
+    publishedVersionId: EntityIdSchema.optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
   .strict();
+
+export const TemplateVersionSchema = z
+  .object({
+    id: EntityIdSchema,
+    templateId: EntityIdSchema,
+    versionNumber: z.number().int().positive(),
+    payload: PagePayloadSchema,
+    layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    createdAt: timestampSchema,
+    createdBy: z.string().trim().min(1).max(320).optional(),
+  })
+  .strict();
+export type TemplateVersion = z.infer<typeof TemplateVersionSchema>;
+
+export const TemplateVersionsResponseSchema = z
+  .object({ items: z.array(TemplateVersionSchema) })
+  .strict();
+export type TemplateVersionsResponse = z.infer<typeof TemplateVersionsResponseSchema>;
+
+export const ApplyTemplateRequestSchema = z
+  .object({
+    templateVersionId: EntityIdSchema.optional(),
+    siteId: EntityIdSchema.optional(),
+    name: nonEmptyText.max(200).optional(),
+    description: z.string().trim().max(500).optional(),
+    path: PagePathSchema.optional(),
+    slug: z
+      .string()
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    kind: PageKindSchema.optional(),
+  })
+  .strict();
+export type ApplyTemplateRequest = z.infer<typeof ApplyTemplateRequestSchema>;
+
+export const PublishTemplateRequestSchema = z
+  .object({ versionNumber: z.number().int().positive().optional() })
+  .strict();
+export type PublishTemplateRequest = z.infer<typeof PublishTemplateRequestSchema>;
 
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 export type Site = z.infer<typeof SiteSchema>;
@@ -4757,6 +4812,8 @@ export const CreatePageRequestSchema = z
       .max(200)
       .optional(),
     payload: PagePayloadSchema,
+    layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    appliedTemplate: AppliedTemplateMetadataSchema.optional(),
   })
   .strict();
 export const UpdatePageRequestSchema = z
@@ -4834,7 +4891,9 @@ export const CreateTemplateRequestSchema = z
   .object({
     name: nonEmptyText.max(200),
     description: z.string().trim().max(500).optional(),
+    siteId: EntityIdSchema.optional(),
     payload: PagePayloadSchema,
+    layoutAttachments: PageLayoutAttachmentsSchema.optional(),
   })
   .strict();
 
@@ -4842,6 +4901,8 @@ export const UpdateTemplateRequestSchema = z
   .object({
     name: nonEmptyText.max(200).optional(),
     description: z.string().trim().max(500).nullable().optional(),
+    payload: PagePayloadSchema.optional(),
+    layoutAttachments: PageLayoutAttachmentsSchema.optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');

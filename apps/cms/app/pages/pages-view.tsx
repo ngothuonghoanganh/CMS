@@ -28,7 +28,6 @@ type PageNodeWithChildren = {
 };
 
 export type PagesViewProps = {
-  workspaceId: string;
   sites: Site[];
   pages: Page[];
   selectedSiteId: string;
@@ -395,7 +394,6 @@ export function PagesView({
   const [pageStatus, setPageStatus] = useState('');
   const [creationStep, setCreationStep] = useState<'source' | 'details'>('details');
   const [deleteCandidate, setDeleteCandidate] = useState<Page | null>(null);
-
   const visiblePages = useMemo(() => {
     const query = pageSearch.trim().toLowerCase();
     return pages.filter((page) => {

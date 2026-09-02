@@ -20,6 +20,7 @@ import {
   SiteListResponseSchema,
   SitePublishResponseSchema,
   TemplateListResponseSchema,
+  TemplateVersionsResponseSchema,
   RoleListResponseSchema,
   TenantUserDetailResponseSchema,
   TenantUserListResponseSchema,
@@ -35,7 +36,6 @@ import {
   type Integration,
   type Navigation,
   type NavigationItem,
-  type PagePayload,
   type Page,
   type PageVersion,
   type PageSeoSettings,
@@ -46,6 +46,7 @@ import {
   type TenantUserStatus,
   type Site,
   type Template,
+  type TemplateVersion,
   type TenantPermission,
   normalizeUrlSlug,
 } from '@payload/contracts';
@@ -218,9 +219,8 @@ export default function CmsDashboard() {
   const [versions, setVersions] = useState<PageVersion[]>([]);
   const [siteForm, setSiteForm] = useState<SiteForm>(blankSite);
   const [pageForm, setPageForm] = useState<PageForm>(blankPage);
-  const [pageTemplatePayload, setPageTemplatePayload] = useState<PagePayload | null>(
-    null,
-  );
+  const [pageTemplateId, setPageTemplateId] = useState<string | null>(null);
+  const [pageTemplateVersionId, setPageTemplateVersionId] = useState<string | null>(null);
   const [assetForm, setAssetForm] = useState<AssetForm>(blankAsset);
   const [templateForm, setTemplateForm] = useState<TemplateForm>(blankTemplate);
   const [domainForm, setDomainForm] = useState<DomainForm>(blankDomain);
@@ -264,14 +264,21 @@ export default function CmsDashboard() {
     if (loading) return;
     const searchParams = new URLSearchParams(window.location.search);
     const requestedView = searchParams.get('view');
-    if (requestedView && requestedView in viewLabels) {
+    if (requestedView === 'layouts') {
+      // Keep old deep links useful while the layout editor now lives in Extensions.
+      setView('extensions');
+    } else if (requestedView && requestedView in viewLabels) {
       setView(requestedView as View);
     }
     const requestedSiteId = searchParams.get('siteId');
     if (requestedSiteId && sites.some((site) => site.id === requestedSiteId)) {
       setSelectedSiteId(requestedSiteId);
     }
-  }, [loading, sites]);
+    const requestedPageId = searchParams.get('pageId');
+    if (requestedPageId && pages.some((page) => page.id === requestedPageId)) {
+      setSelectedPageId(requestedPageId);
+    }
+  }, [loading, pages, sites]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem('cms.sidebar.collapsed');
@@ -922,11 +929,7 @@ export default function CmsDashboard() {
       setSites((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
-      setNotice(
-        updated.navigationWarnings.length
-          ? `Site published. ${updated.navigationWarnings.length} navigation item${updated.navigationWarnings.length === 1 ? '' : 's'} will stay hidden until its target page is published.`
-          : 'Site published.',
-      );
+      setNotice('Site published.');
     });
   }
 
@@ -954,7 +957,8 @@ export default function CmsDashboard() {
         path: duplicated.path,
       });
       setPageDrawerOpen(true);
-      setPageTemplatePayload(null);
+      setPageTemplateId(null);
+      setPageTemplateVersionId(null);
       setNotice('Page duplicated as a draft.');
     });
   }
@@ -1047,21 +1051,41 @@ export default function CmsDashboard() {
         setNotice('Page metadata updated.');
       } else {
         const normalizedPath = normalizeUrlSlug(pageForm.path.replace(/^\/+/, ''));
-        const created = await api.post<Page>(`/sites/${selectedSiteId}/pages`, {
-          name: pageForm.name,
-          ...(pageForm.description.trim()
-            ? { description: pageForm.description.trim() }
-            : {}),
-          ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
-          payload: pageTemplatePayload ?? defaultPayload(pageForm.name),
-        });
+        const created = pageTemplateId
+          ? await api.post<Page>(
+              `/workspaces/${session.workspace.id}/templates/${pageTemplateId}/apply`,
+              {
+                siteId: selectedSiteId,
+                name: pageForm.name,
+                ...(pageTemplateVersionId
+                  ? { templateVersionId: pageTemplateVersionId }
+                  : {}),
+                ...(pageForm.description.trim()
+                  ? { description: pageForm.description.trim() }
+                  : {}),
+                ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
+              },
+            )
+          : await api.post<Page>(`/sites/${selectedSiteId}/pages`, {
+              name: pageForm.name,
+              ...(pageForm.description.trim()
+                ? { description: pageForm.description.trim() }
+                : {}),
+              ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
+              payload: defaultPayload(pageForm.name),
+            });
         pagesRequestId.current += 1;
         setPages((current) => [created, ...current]);
         setSelectedPageId(created.id);
-        setNotice('Page and draft version 1 created.');
+        setNotice(
+          pageTemplateId
+            ? 'Page created from an independent template snapshot.'
+            : 'Page and draft version 1 created.',
+        );
       }
       setPageForm(blankPage);
-      setPageTemplatePayload(null);
+      setPageTemplateId(null);
+      setPageTemplateVersionId(null);
       setPageDrawerOpen(false);
     });
   }
@@ -1126,6 +1150,73 @@ export default function CmsDashboard() {
       setTemplates((current) => current.filter((template) => template.id !== templateId));
       setNotice('Template removed.');
     });
+  }
+
+  async function publishTemplate(template: Template, versionNumber?: number) {
+    if (!session) return;
+    await runBusy(async () => {
+      const updated = await api.post<Template>(
+        `/workspaces/${session.workspace.id}/templates/${template.id}/publish`,
+        versionNumber ? { versionNumber } : {},
+      );
+      setTemplates((current) =>
+        current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+      );
+      setNotice(`Published ${template.name} version ${versionNumber ?? 'latest'}.`);
+    });
+  }
+
+  async function duplicateTemplate(template: Template) {
+    if (!session) return;
+    await runBusy(async () => {
+      const created = await api.post<Template>(
+        `/workspaces/${session.workspace.id}/templates`,
+        {
+          name: `${template.name} copy`,
+          ...(template.description ? { description: template.description } : {}),
+          ...(template.siteId ? { siteId: template.siteId } : {}),
+          payload: template.payload,
+          ...(template.layoutAttachments
+            ? { layoutAttachments: template.layoutAttachments }
+            : {}),
+        },
+      );
+      setTemplates((current) => [created, ...current]);
+      setNotice(`Created an independent copy of ${template.name}.`);
+    });
+  }
+
+  async function restoreTemplateVersion(template: Template, version: TemplateVersion) {
+    if (!session) return;
+    await runBusy(async () => {
+      const updated = await api.patch<Template>(
+        `/workspaces/${session.workspace.id}/templates/${template.id}`,
+        {
+          payload: version.payload,
+          layoutAttachments: version.layoutAttachments ?? [],
+        },
+      );
+      setTemplates((current) =>
+        current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+      );
+      setNotice(
+        `Created a new draft from ${template.name} version ${version.versionNumber}.`,
+      );
+    });
+  }
+
+  function beginPageFromTemplate(templateId: string, templateVersionId?: string) {
+    if (!selectedSiteId) {
+      setView('pages');
+      setNotice('Select a site, then choose this template while creating a page.');
+      return;
+    }
+    setSelectedPageId('');
+    setPageForm(blankPage);
+    setPageTemplateId(templateId);
+    setPageTemplateVersionId(templateVersionId ?? null);
+    setPageDrawerOpen(true);
+    setView('pages');
   }
 
   async function handleDomainSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1598,7 +1689,6 @@ export default function CmsDashboard() {
           ) : null}
           {view === 'pages' ? (
             <SiteMapPagesView
-              workspaceId={session.workspace.id}
               busy={busy}
               canCreatePage={can('page.create')}
               canUpdatePage={can('page.update')}
@@ -1609,7 +1699,8 @@ export default function CmsDashboard() {
                 if (!selectedSiteId || !can('page.create')) return;
                 setSelectedPageId('');
                 setPageForm(blankPage);
-                setPageTemplatePayload(null);
+                setPageTemplateId(null);
+                setPageTemplateVersionId(null);
                 setPageDrawerOpen(true);
               }}
               onOpenBuilder={(page) =>
@@ -1641,7 +1732,8 @@ export default function CmsDashboard() {
               onPublish={(page) => void publishPage(page)}
               onSelectPage={(page) => {
                 setSelectedPageId(page.id);
-                setPageTemplatePayload(null);
+                setPageTemplateId(null);
+                setPageTemplateVersionId(null);
                 setPageForm({
                   name: page.name,
                   description: page.description ?? '',
@@ -1657,7 +1749,10 @@ export default function CmsDashboard() {
               onPageFormChange={setPageForm}
               onPageSubmit={handlePageSubmit}
               onClosePageDrawer={() => setPageDrawerOpen(false)}
-              onChooseTemplate={(template) => setPageTemplatePayload(template.payload)}
+              onChooseTemplate={(template) => {
+                setPageTemplateId(template.id);
+                setPageTemplateVersionId(null);
+              }}
               selectedPage={selectedPage}
               selectedSite={selectedSite}
               selectedSiteId={selectedSiteId}
@@ -1726,7 +1821,16 @@ export default function CmsDashboard() {
                 });
               }}
               onRemove={(id) => void removeTemplate(id)}
+              onDuplicate={(template) => void duplicateTemplate(template)}
+              onPublish={(template, versionNumber) =>
+                void publishTemplate(template, versionNumber)
+              }
+              onRestore={(template, version) =>
+                void restoreTemplateVersion(template, version)
+              }
               onSubmit={handleTemplateSubmit}
+              onUseForPage={beginPageFromTemplate}
+              workspaceId={session.workspace.id}
               templates={templates}
             />
           ) : null}
@@ -1868,7 +1972,12 @@ export default function CmsDashboard() {
             />
           ) : null}
           {view === 'extensions' ? (
-            <ExtensionsView canManage={can('extensions.manage')} />
+            <ExtensionsView
+              canManage={can('extensions.manage')}
+              canManageLayouts={can('site.update')}
+              workspaceId={session.workspace.id}
+              {...(selectedSiteId ? { siteId: selectedSiteId } : {})}
+            />
           ) : null}
           {view === 'workflows' ? (
             <WorkflowsView
@@ -2406,7 +2515,12 @@ function TemplatesView({
   onSubmit,
   onEdit,
   onRemove,
+  onDuplicate,
+  onPublish,
+  onRestore,
   onCancel,
+  onUseForPage,
+  workspaceId,
 }: {
   templates: Template[];
   form: TemplateForm;
@@ -2416,7 +2530,12 @@ function TemplatesView({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onEdit: (template: Template) => void;
   onRemove: (templateId: string) => void;
+  onDuplicate: (template: Template) => void;
+  onPublish: (template: Template, versionNumber?: number) => void;
+  onRestore: (template: Template, version: TemplateVersion) => void;
   onCancel: () => void;
+  onUseForPage: (templateId: string, templateVersionId?: string) => void;
+  workspaceId: string;
 }) {
   return (
     <>
@@ -2476,14 +2595,48 @@ function TemplatesView({
                     <span className="muted">
                       {template.description || 'No description'}
                     </span>
+                    <span className="muted small">
+                      {template.publishedVersionId ? 'Published' : 'Draft only'}
+                    </span>
+                    <TemplateVersions
+                      busy={busy}
+                      onPublish={onPublish}
+                      onRestore={onRestore}
+                      onUseForPage={onUseForPage}
+                      template={template}
+                      workspaceId={workspaceId}
+                    />
                   </div>
                   <div className="row-actions">
+                    <button
+                      className="button button-small button-primary"
+                      onClick={() => onUseForPage(template.id)}
+                      type="button"
+                    >
+                      Use for page
+                    </button>
+                    <button
+                      className="button button-small button-success"
+                      disabled={busy}
+                      onClick={() => onPublish(template)}
+                      type="button"
+                    >
+                      Publish
+                    </button>
                     <button
                       className="button button-small"
                       onClick={() => onEdit(template)}
                       type="button"
                     >
                       Edit
+                    </button>
+                    <button
+                      className="button button-small"
+                      disabled={busy}
+                      onClick={() => onDuplicate(template)}
+                      type="button"
+                    >
+                      Duplicate
                     </button>
                     <button
                       className="button button-small button-danger"
@@ -2505,6 +2658,83 @@ function TemplatesView({
         </section>
       </div>
     </>
+  );
+}
+
+function TemplateVersions({
+  busy,
+  onPublish,
+  onRestore,
+  onUseForPage,
+  template,
+  workspaceId,
+}: {
+  busy: boolean;
+  onPublish: (template: Template, versionNumber?: number) => void;
+  onRestore: (template: Template, version: TemplateVersion) => void;
+  onUseForPage: (templateId: string, templateVersionId?: string) => void;
+  template: Template;
+  workspaceId: string;
+}) {
+  const [versions, setVersions] = useState<TemplateVersion[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(): Promise<void> {
+    if (versions) {
+      setVersions(null);
+      return;
+    }
+    setError(null);
+    try {
+      const response = await api.get(
+        `/workspaces/${workspaceId}/templates/${template.id}/versions`,
+      );
+      setVersions(TemplateVersionsResponseSchema.parse(response).items);
+    } catch (caughtError) {
+      setError(toErrorMessage(caughtError));
+    }
+  }
+
+  return (
+    <div className="stack compact-stack">
+      <button className="text-link" onClick={() => void toggle()} type="button">
+        {versions ? 'Hide version history' : 'Version history'}
+      </button>
+      {error ? <span className="alert alert-error">{error}</span> : null}
+      {versions?.map((version) => (
+        <div className="row-actions" key={version.id}>
+          <span className="muted small">
+            v{version.versionNumber}
+            {version.id === template.latestVersionId ? ' · latest' : ''}
+            {version.id === template.publishedVersionId ? ' · live' : ''}
+          </span>
+          <button
+            className="button button-small"
+            disabled={busy}
+            onClick={() => onUseForPage(template.id, version.id)}
+            type="button"
+          >
+            Use
+          </button>
+          <button
+            className="button button-small"
+            disabled={busy || version.id === template.latestVersionId}
+            onClick={() => onRestore(template, version)}
+            type="button"
+          >
+            Restore as draft
+          </button>
+          <button
+            className="button button-small button-success"
+            disabled={busy || version.id === template.publishedVersionId}
+            onClick={() => onPublish(template, version.versionNumber)}
+            type="button"
+          >
+            Publish v{version.versionNumber}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 

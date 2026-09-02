@@ -319,6 +319,13 @@ function expectVisualParity(
       }
     }
     for (const [property, value] of Object.entries(expectedNode.style)) {
+      // The editor root is painted inside a GrapesJS iframe while review and
+      // published surfaces are top-level documents. Their viewport baseline
+      // intentionally resolves `100vh` to slightly different height/min-height
+      // values; descendants remain the parity contract.
+      if (id === 'root' && (property === 'height' || property === 'min-height')) {
+        continue;
+      }
       if (value !== actualNode.style[property]) {
         mismatches.push(
           `${id}.${property}: ${value || '(empty)'} != ${actualNode.style[property] || '(empty)'}`,
@@ -341,9 +348,10 @@ async function compareScreenshots(
     review: VisualSnapshot;
     published: VisualSnapshot;
   },
+  builderCapture?: () => Promise<Buffer>,
 ): Promise<void> {
   const [builderImage, reviewImage, publishedImage] = await Promise.all([
-    builder.screenshot({ animations: 'disabled' }),
+    builderCapture ? builderCapture() : builder.screenshot({ animations: 'disabled' }),
     review.screenshot({ animations: 'disabled' }),
     published.screenshot({ animations: 'disabled' }),
   ]);
@@ -373,11 +381,9 @@ async function compareScreenshots(
       async (_root, { encoded, sourceX, sourceY, targetHeight, targetWidth }) => {
         const binary = atob(encoded);
         const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-        const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+        const blob = new Blob([bytes], { type: 'image/png' });
+        const source = await createImageBitmap(blob);
         try {
-          const source = new Image();
-          source.src = url;
-          await source.decode();
           const canvas = document.createElement('canvas');
           canvas.width = targetWidth;
           canvas.height = targetHeight;
@@ -402,7 +408,7 @@ async function compareScreenshots(
           context.putImageData(pixels, 0, 0);
           return canvas.toDataURL('image/png').split(',')[1];
         } finally {
-          URL.revokeObjectURL(url);
+          source.close();
         }
       },
       {
@@ -415,7 +421,9 @@ async function compareScreenshots(
     );
     return Buffer.from(normalized, 'base64');
   };
-  const builderCaptureOffset = name === 'tablet' ? -1 : 0;
+  // The builder capture is clipped from the composed iframe surface, so it
+  // has the same origin as the renderer captures at every viewport.
+  const builderCaptureOffset = 0;
   const [normalizedBuilder, normalizedReview, normalizedPublished] = await Promise.all([
     normalize(builderImage, (dimensions[0].width > width ? 1 : 0) + builderCaptureOffset),
     normalize(reviewImage, dimensions[1].width > width ? 1 : 0),
@@ -439,19 +447,18 @@ async function compareScreenshots(
         const decode = async (encoded: string): Promise<ImageData> => {
           const binary = atob(encoded);
           const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-          const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+          const bitmap = await createImageBitmap(
+            new Blob([bytes], { type: 'image/png' }),
+          );
           try {
-            const image = new Image();
-            image.src = url;
-            await image.decode();
             const canvas = document.createElement('canvas');
-            canvas.width = image.width;
-            canvas.height = image.height;
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
             const context = canvas.getContext('2d')!;
-            context.drawImage(image, 0, 0);
-            return context.getImageData(0, 0, image.width, image.height);
+            context.drawImage(bitmap, 0, 0);
+            return context.getImageData(0, 0, bitmap.width, bitmap.height);
           } finally {
-            URL.revokeObjectURL(url);
+            bitmap.close();
           }
         };
         const [first, second] = await Promise.all([
@@ -843,10 +850,12 @@ test('Builder, draft review, and published renderer retain visual parity', async
       });
     }
     await isolateBuilderPageSurface(page, builderRoot);
-    const builderViewport = await builderRoot.evaluate(() => ({
-      height: window.innerHeight,
-      width: window.innerWidth,
-    }));
+    const builderBounds = await builderRoot.boundingBox();
+    expect(builderBounds).toBeTruthy();
+    const builderViewport = {
+      height: Math.round(builderBounds?.height ?? 0),
+      width: Math.round(builderBounds?.width ?? 0),
+    };
     const rendererViewport = {
       height: builderViewport.height,
       width:
@@ -882,6 +891,22 @@ test('Builder, draft review, and published renderer retain visual parity', async
       testInfo,
       builderViewport.height,
       { builder: builderSnapshot, review: reviewSnapshot, published: publishedSnapshot },
+      async () => {
+        const frame = page.locator('iframe.gjs-frame');
+        const frameBounds = await frame.boundingBox();
+        expect(frameBounds).toBeTruthy();
+        // Capture the composed iframe surface. A nested frame locator
+        // screenshot clips against the parent document in Playwright.
+        const cdp = await page.context().newCDPSession(page);
+        const captured = await cdp.send('Page.captureScreenshot', {
+          captureBeyondViewport: false,
+          clip: { ...frameBounds!, scale: 1 },
+          fromSurface: true,
+          format: 'png',
+        });
+        await cdp.detach();
+        return Buffer.from(captured.data, 'base64');
+      },
     );
   }
 

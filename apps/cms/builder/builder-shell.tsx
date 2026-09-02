@@ -3,6 +3,9 @@
 import {
   AssetListResponseSchema,
   ExtensionListResponseSchema,
+  LayoutExtensionListResponseSchema,
+  LayoutExtensionVersionsResponseSchema,
+  SiteGlobalPayloadV1Schema,
   PageCapabilityGraphSchema,
   PageExtensionInstanceSchema,
   PageExtensionListResponseSchema,
@@ -10,12 +13,7 @@ import {
   PAGE_PREVIEW_MESSAGE_TYPE,
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
   PagePayloadSchema,
-  SiteGlobalsResponseSchema,
-  SiteGlobalsSchema,
-  cloneSiteGlobals,
-  resolveEffectiveGlobalsDraft,
   SiteSchema,
-  SiteGlobalPayloadV1Schema,
   PublicPageSchema,
   createPageDocument,
   PageVersionListResponseSchema,
@@ -29,11 +27,10 @@ import {
   type PageDocument,
   type PageVersion,
   type ExtensionDescriptor,
+  type LayoutExtensionResource,
+  type SiteGlobalPayloadV1,
   type PageExtensionInstance,
   type PageCapabilityGraph,
-  type SiteGlobals,
-  type SiteGlobalsState,
-  type SiteGlobalPayloadV1,
   type BuilderDocumentKind,
   ReusableListResponseSchema,
   ReusableComponentSchema,
@@ -90,7 +87,6 @@ import {
   type BuilderPanelWidths,
 } from './builder-panel-size';
 import { BuilderPanelResizer } from './builder-panel-resizer';
-import { generateFreshNodeId } from './builder-node-identity';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
   GLOBAL_HEADER_PRESET_REGISTRY,
@@ -155,6 +151,10 @@ type AvailableBlockOption = {
   label: string;
   category: 'layout' | 'content' | 'extension' | 'preset';
   extensionId?: string;
+  layoutExtension?: {
+    resource: LayoutExtensionResource;
+    document: SiteGlobalPayloadV1;
+  };
   keywords?: readonly string[];
   description: string;
   preview: ComponentBuilderPreview;
@@ -242,69 +242,6 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return error instanceof Error ? error.message : 'The builder could not load this page.';
-}
-
-function createDefaultGlobalDocument(
-  documentKind: Exclude<BuilderDocumentKind, 'page'>,
-  siteName: string,
-): SiteGlobalPayloadV1 {
-  const globalType = documentKind === 'site-header' ? 'global-header' : 'global-footer';
-  return SiteGlobalPayloadV1Schema.parse({
-    version: 1,
-    documentKind,
-    metadata: {
-      documentTitle: `${siteName} ${documentKind === 'site-header' ? 'header' : 'footer'}`,
-    },
-    root: {
-      id: 'root',
-      type: 'root',
-      props: {},
-      children: [
-        documentKind === 'site-header'
-          ? {
-              id: generateFreshNodeId(globalType, new Set(['root'])),
-              type: 'global-header',
-              props: { position: 'static' },
-              children: [],
-            }
-          : {
-              id: generateFreshNodeId(globalType, new Set(['root'])),
-              type: 'global-footer',
-              props: {},
-              children: [],
-            },
-      ],
-    },
-  });
-}
-
-function globalResourceLabel(resource: 'header' | 'footer'): string {
-  return resource === 'header' ? 'Header' : 'Footer';
-}
-
-function globalSaveStatusLabel(
-  status: SaveStatus,
-  resource: 'header' | 'footer',
-  state: SiteGlobalsState['header'],
-): string {
-  const label = globalResourceLabel(resource);
-  if (status === 'unsaved') {
-    return state.hasPublishedSnapshot
-      ? 'Live · Unsaved changes'
-      : 'Draft · Unsaved changes';
-  }
-  if (status === 'saved') {
-    if (!state.hasPublishedSnapshot) return 'Draft · Not published';
-    return state.hasUnpublishedChanges
-      ? `Live · Draft saved · Not published`
-      : 'Live · Up to date';
-  }
-  if (status === 'saving') return 'Saving…';
-  if (status === 'initializing') return 'Initializing editor…';
-  if (status === 'conflict') return 'Conflict';
-  if (status === 'validation') return 'Needs attention';
-  if (status === 'error') return 'Save failed';
-  return `${label} · Unsaved changes`;
 }
 
 function isUsableImageSource(value: string): boolean {
@@ -477,17 +414,7 @@ export default function BuilderShell({
   const [reusableEditorDocument, setReusableEditorDocument] =
     useState<PageDocument | null>(null);
   const [reusableEditorWrappedSource, setReusableEditorWrappedSource] = useState(false);
-  const [documentKind, setDocumentKind] = useState<BuilderDocumentKind>('page');
-  const [headerDocument, setHeaderDocument] = useState<SiteGlobalPayloadV1 | null>(null);
-  const [footerDocument, setFooterDocument] = useState<SiteGlobalPayloadV1 | null>(null);
-  const [globalsDraft, setGlobalsDraft] = useState<SiteGlobals>({ version: 1 });
-  const [publishedGlobalsSnapshot, setPublishedGlobalsSnapshot] = useState<
-    SiteGlobals | undefined
-  >(undefined);
-  const [globalsState, setGlobalsState] = useState<SiteGlobalsState>({
-    header: { hasPublishedSnapshot: false, hasUnpublishedChanges: false },
-    footer: { hasPublishedSnapshot: false, hasUnpublishedChanges: false },
-  });
+  const documentKind: BuilderDocumentKind = 'page';
   const [reusables, setReusables] = useState<ReusableComponent[]>([]);
   const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
     createDefaultSiteDesignSystem,
@@ -503,6 +430,12 @@ export default function BuilderShell({
     () => new Set(),
   );
   const [customExtensions, setCustomExtensions] = useState<ExtensionDescriptor[]>([]);
+  const [layoutExtensions, setLayoutExtensions] = useState<
+    Array<{
+      resource: LayoutExtensionResource;
+      document: SiteGlobalPayloadV1;
+    }>
+  >([]);
   const [pageExtensions, setPageExtensions] = useState<PageExtensionInstance[]>([]);
   const [pageCapabilities, setPageCapabilities] = useState<PageCapabilityGraph | null>(
     null,
@@ -607,20 +540,13 @@ export default function BuilderShell({
     );
   }
 
-  const activeGlobalDocument =
-    documentKind === 'site-header' ? headerDocument : footerDocument;
-  const activeGlobalResource = documentKind === 'site-footer' ? 'footer' : 'header';
-  const activeGlobalState = globalsState[activeGlobalResource];
-  const activePublishedGlobal = publishedGlobalsSnapshot?.[activeGlobalResource];
   const editingReusable = editingReusableId
     ? reusables.find((reusable) => reusable.id === editingReusableId)
     : undefined;
   const isEditingReusable = editingReusable !== undefined;
   const activePayload = isEditingReusable
     ? reusableEditorDocument?.payload
-    : documentKind === 'page'
-      ? pageDocument?.payload
-      : activeGlobalDocument;
+    : pageDocument?.payload;
 
   const isDirty =
     saveStatus === 'unsaved' ||
@@ -664,6 +590,31 @@ export default function BuilderShell({
         preview: builderPreviewForComponent('extension'),
         documentKinds: ['page'] as const,
       })),
+    ...layoutExtensions
+      .filter(() => documentKind === 'page' && !isEditingReusable)
+      .map((source) => ({
+        kind: 'component' as const,
+        type:
+          source.resource.kind === 'header'
+            ? ('global-header' as const)
+            : ('global-footer' as const),
+        label: source.resource.name,
+        category: 'extension' as const,
+        group: 'advanced' as const,
+        keywords: [
+          source.resource.name,
+          source.resource.kind,
+          'header',
+          'footer',
+          'layout extension',
+        ],
+        description: `Copy this ${source.resource.kind} extension into the page. Editing the source later will not change this page.`,
+        preview: builderPreviewForComponent(
+          source.resource.kind === 'header' ? 'global-header' : 'global-footer',
+        ),
+        documentKinds: ['page'] as const,
+        layoutExtension: source,
+      })),
   ];
   const visibleBlockOptions = availableBlockOptions.filter((block) => {
     const query = blockQuery.trim().toLowerCase();
@@ -676,7 +627,8 @@ export default function BuilderShell({
       block.description.toLowerCase().includes(query) ||
       block.group.toLowerCase().includes(query) ||
       block.keywords?.some((keyword) => keyword.toLowerCase().includes(query)) ||
-      block.extensionId?.toLowerCase().includes(query)
+      block.extensionId?.toLowerCase().includes(query) ||
+      block.layoutExtension?.resource.kind.includes(query)
     );
   });
   // Keep the initial Add surface discoverable for existing keyboard/palette
@@ -1030,26 +982,16 @@ export default function BuilderShell({
           versionsResponse,
           assetsResponse,
           siteResponse,
-          globalsResponseRaw,
           reusablesResponseRaw,
           designSystemResponseRaw,
           previewResponseRaw,
+          headerLayoutsResponseRaw,
+          footerLayoutsResponseRaw,
         ] = await Promise.all([
           api.get(`/pages/${pageId}`),
           api.get(`/pages/${pageId}/versions?limit=100`),
           api.get(`/workspaces/${workspaceId}/assets?limit=100`),
           api.get(`/workspaces/${workspaceId}/sites/${siteId}`),
-          api
-            .get(`/workspaces/${workspaceId}/sites/${siteId}/globals`)
-            .catch((caughtError: unknown) => {
-              // Older sites may not have a globals endpoint/document yet;
-              // a missing globals record is the safe empty default. Other
-              // errors (including invalid persisted data) remain visible.
-              if (caughtError instanceof ApiClientError && caughtError.status === 404) {
-                return null;
-              }
-              throw caughtError;
-            }),
           api
             .get(`/workspaces/${workspaceId}/sites/${siteId}/reusables?limit=100`)
             .catch((caughtError: unknown) => {
@@ -1067,6 +1009,8 @@ export default function BuilderShell({
               throw caughtError;
             }),
           api.get(`/preview/pages/${pageId}`).catch(() => null),
+          api.get(`/sites/${siteId}/layouts/headers`).catch(() => null),
+          api.get(`/sites/${siteId}/layouts/footers`).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -1091,24 +1035,6 @@ export default function BuilderShell({
         setVersion(PageVersionSchema.parse(nextVersion));
         setPageDocument(createPageDocument(nextPayload));
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
-        const globalsResponse = globalsResponseRaw
-          ? SiteGlobalsResponseSchema.parse(globalsResponseRaw)
-          : {
-              draft: { version: 1 as const },
-              state: {
-                header: {
-                  hasPublishedSnapshot: false,
-                  hasUnpublishedChanges: false,
-                },
-                footer: {
-                  hasPublishedSnapshot: false,
-                  hasUnpublishedChanges: false,
-                },
-              },
-            };
-        setGlobalsDraft(globalsResponse.draft);
-        setPublishedGlobalsSnapshot(globalsResponse.published);
-        setGlobalsState(globalsResponse.state);
         const nextReusables = reusablesResponseRaw
           ? ReusableListResponseSchema.parse(reusablesResponseRaw).items
           : [];
@@ -1145,17 +1071,46 @@ export default function BuilderShell({
             ? SiteDesignSystemResponseSchema.parse(designSystemResponseRaw).draft
             : createDefaultSiteDesignSystem(),
         );
-        setHeaderDocument(
-          globalsResponse.draft.header === undefined
-            ? (globalsResponse.published?.header ??
-                createDefaultGlobalDocument('site-header', nextPage.name))
-            : globalsResponse.draft.header,
+        const layoutResources = [
+          ...(headerLayoutsResponseRaw
+            ? LayoutExtensionListResponseSchema.parse(headerLayoutsResponseRaw).items
+            : []),
+          ...(footerLayoutsResponseRaw
+            ? LayoutExtensionListResponseSchema.parse(footerLayoutsResponseRaw).items
+            : []),
+        ];
+        const loadedLayoutExtensions = await Promise.all(
+          layoutResources.map(async (resource) => {
+            try {
+              const versionsResponse = LayoutExtensionVersionsResponseSchema.parse(
+                await api.get(
+                  `/sites/${siteId}/layouts/${resource.kind === 'header' ? 'headers' : 'footers'}/${resource.id}/versions`,
+                ),
+              );
+              const versionId = resource.draftVersionId ?? resource.publishedVersionId;
+              const version = versionId
+                ? versionsResponse.items.find((candidate) => candidate.id === versionId)
+                : versionsResponse.items[0];
+              if (!version) return null;
+              return {
+                resource,
+                document: SiteGlobalPayloadV1Schema.parse(version.document),
+              };
+            } catch {
+              return null;
+            }
+          }),
         );
-        setFooterDocument(
-          globalsResponse.draft.footer === undefined
-            ? (globalsResponse.published?.footer ??
-                createDefaultGlobalDocument('site-footer', nextPage.name))
-            : globalsResponse.draft.footer,
+        if (cancelled) return;
+        setLayoutExtensions(
+          loadedLayoutExtensions.filter(
+            (
+              item,
+            ): item is {
+              resource: LayoutExtensionResource;
+              document: SiteGlobalPayloadV1;
+            } => item !== null,
+          ),
         );
         try {
           const [extensionResult, pageExtensionResult, capabilityResult] =
@@ -1245,7 +1200,6 @@ export default function BuilderShell({
       if (!candidate) return;
       nextSnapshot = {
         page: candidate,
-        globals: overrides.globals ?? globalsDraft,
         navigation: overrides.navigation ?? navigation,
         extensions: overrides.extensions ?? previewExtensions,
         reusables: overrides.reusables ?? reusableRuntime,
@@ -1276,23 +1230,16 @@ export default function BuilderShell({
     });
   }
 
-  function handleDocumentChange(document: PageDocument | SiteGlobalPayloadV1): void {
-    if ('schemaVersion' in document) {
-      if (isEditingReusable) setReusableEditorDocument(document);
-      else {
-        setPageDocument(document);
-        postPreviewSnapshot({ page: document });
-      }
+  function handleDocumentChange(document: unknown): void {
+    if (!document || typeof document !== 'object' || !('schemaVersion' in document)) {
       return;
     }
-    const nextGlobals = SiteGlobalsSchema.parse({
-      ...globalsDraft,
-      [document.documentKind === 'site-header' ? 'header' : 'footer']: document,
-    });
-    if (document.documentKind === 'site-header') setHeaderDocument(document);
-    else setFooterDocument(document);
-    setGlobalsDraft(nextGlobals);
-    postPreviewSnapshot({ globals: nextGlobals });
+    const pageDocument = document as PageDocument;
+    if (isEditingReusable) setReusableEditorDocument(pageDocument);
+    else {
+      setPageDocument(pageDocument);
+      postPreviewSnapshot({ page: pageDocument });
+    }
   }
 
   function openLivePreview() {
@@ -1327,9 +1274,7 @@ export default function BuilderShell({
   }, []);
 
   async function saveDraft(): Promise<SaveDraftResult> {
-    const isGlobalDocument = documentKind !== 'page' && !isEditingReusable;
-    const canSaveRemovedGlobal = isGlobalDocument && activeGlobalDocument === null;
-    if ((!editorRef.current && !canSaveRemovedGlobal) || saveInFlightRef.current) {
+    if (!editorRef.current || saveInFlightRef.current) {
       return false;
     }
     const blockingIssue = validationIssuesRef.current.find(
@@ -1380,39 +1325,6 @@ export default function BuilderShell({
         setSaveStatus('saved');
         setNotice(
           `Saved reusable source “${updated.name}”. Publish the site to make it public.`,
-        );
-        return true;
-      }
-      if (documentKind !== 'page') {
-        if (activeGlobalDocument && !nextDocument) {
-          throw new Error('Global editor document is unavailable');
-        }
-        const nextGlobal = activeGlobalDocument
-          ? SiteGlobalPayloadV1Schema.parse(nextDocument)
-          : null;
-        const resource = documentKind === 'site-header' ? 'header' : 'footer';
-        const savedGlobals = SiteGlobalsResponseSchema.parse(
-          await api.patch(
-            `/workspaces/${workspaceId}/sites/${siteId}/globals/${resource}`,
-            nextGlobal,
-          ),
-        );
-        setGlobalsDraft(savedGlobals.draft);
-        setPublishedGlobalsSnapshot(savedGlobals.published);
-        setGlobalsState(savedGlobals.state);
-        const acknowledgedGlobal = savedGlobals.draft[resource];
-        if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal ?? null);
-        else setFooterDocument(acknowledgedGlobal ?? null);
-        postPreviewSnapshot({ globals: savedGlobals.draft });
-        if (acknowledgedGlobal) editorRef.current?.acknowledgeSaved(acknowledgedGlobal);
-        validationCoordinatorRef.current?.clearResolvedIssues();
-        setSaveStatus('saved');
-        setNotice(
-          acknowledgedGlobal
-            ? savedGlobals.state[resource].hasPublishedSnapshot
-              ? `Saved ${documentKind === 'site-header' ? 'Header' : 'Footer'} draft. The live version is unchanged.`
-              : `Saved ${documentKind === 'site-header' ? 'Header' : 'Footer'} draft. Publish ${documentKind === 'site-header' ? 'Header' : 'Footer'} to make it live.`
-            : `Saved ${documentKind === 'site-header' ? 'Header' : 'Footer'} removal to draft. The live version is unchanged.`,
         );
         return true;
       }
@@ -1534,28 +1446,6 @@ export default function BuilderShell({
         );
         return;
       }
-      if (documentKind !== 'page') {
-        const resource = documentKind === 'site-header' ? 'header' : 'footer';
-        const publishedGlobals = SiteGlobalsResponseSchema.parse(
-          await api.post(
-            `/workspaces/${workspaceId}/sites/${siteId}/globals/${resource}/publish`,
-            {},
-          ),
-        );
-        setGlobalsDraft(publishedGlobals.draft);
-        setPublishedGlobalsSnapshot(publishedGlobals.published);
-        setGlobalsState(publishedGlobals.state);
-        const acknowledgedGlobal = publishedGlobals.draft[resource];
-        if (documentKind === 'site-header') setHeaderDocument(acknowledgedGlobal ?? null);
-        else setFooterDocument(acknowledgedGlobal ?? null);
-        postPreviewSnapshot({ globals: publishedGlobals.draft });
-        if (acknowledgedGlobal) editorRef.current?.acknowledgeSaved(acknowledgedGlobal);
-        validationCoordinatorRef.current?.clearResolvedIssues();
-        setNotice(
-          `${documentKind === 'site-header' ? 'Header' : 'Footer'} published. Only the live ${documentKind === 'site-header' ? 'Header' : 'Footer'} changed; other site drafts were not published.`,
-        );
-        return;
-      }
       const updated = PageSchema.parse(await api.post(`/pages/${pageId}/publish`, {}));
       setPage(updated);
       validationCoordinatorRef.current?.clearResolvedIssues();
@@ -1606,149 +1496,6 @@ export default function BuilderShell({
     window.location.reload();
   }
 
-  function removeActiveGlobalFromDraft() {
-    if (documentKind === 'page' || isEditingReusable) return;
-    const label = globalResourceLabel(activeGlobalResource);
-    if (
-      !window.confirm(
-        `Remove the ${label} from the draft? The live site will keep the published ${label} until you publish this change.`,
-      )
-    ) {
-      return;
-    }
-    const nextGlobals = SiteGlobalsSchema.parse({
-      ...globalsDraft,
-      [activeGlobalResource]: null,
-    });
-    if (activeGlobalResource === 'header') setHeaderDocument(null);
-    else setFooterDocument(null);
-    setGlobalsDraft(nextGlobals);
-    markDirty();
-    postPreviewSnapshot({ globals: nextGlobals });
-    setNotice(
-      `${label} removed from draft. The live site still uses the published ${label} until you publish this change.`,
-    );
-  }
-
-  function restoreActiveGlobalDraft() {
-    if (documentKind === 'page' || isEditingReusable) return;
-    const fallback = resolveEffectiveGlobalsDraft(undefined, publishedGlobalsSnapshot)[
-      activeGlobalResource
-    ];
-    const restored =
-      fallback ??
-      createDefaultGlobalDocument(
-        documentKind,
-        siteContext?.name ?? page?.name ?? 'Site',
-      );
-    const nextGlobals = SiteGlobalsSchema.parse({
-      ...globalsDraft,
-      [activeGlobalResource]: restored,
-    });
-    if (activeGlobalResource === 'header') setHeaderDocument(restored);
-    else setFooterDocument(restored);
-    setGlobalsDraft(nextGlobals);
-    markDirty();
-    postPreviewSnapshot({ globals: nextGlobals });
-    setNotice(`Restored the ${globalResourceLabel(activeGlobalResource)} in the draft.`);
-  }
-
-  function startActiveGlobalDraftFromLive() {
-    if (documentKind === 'page' || isEditingReusable) return;
-    const label = globalResourceLabel(activeGlobalResource);
-    if (!activePublishedGlobal) {
-      setNotice(`There is no live ${label} available to clone.`);
-      return;
-    }
-    if (
-      (isDirty || activeGlobalState.hasUnpublishedChanges) &&
-      !window.confirm(
-        `Replace the ${label} draft with a fresh copy of the live ${label}? The copy is only saved when you save the draft.`,
-      )
-    ) {
-      return;
-    }
-    const nextDocument = cloneSiteGlobals({
-      version: 1,
-      [activeGlobalResource]: activePublishedGlobal,
-    })[activeGlobalResource];
-    if (!nextDocument) return;
-    const nextGlobals = SiteGlobalsSchema.parse({
-      ...globalsDraft,
-      [activeGlobalResource]: nextDocument,
-    });
-    if (activeGlobalResource === 'header') setHeaderDocument(nextDocument);
-    else setFooterDocument(nextDocument);
-    setGlobalsDraft(nextGlobals);
-    markDirty();
-    postPreviewSnapshot({ globals: nextGlobals });
-    setNotice(`Editing a new ${label} draft copied from live. Save draft to persist it.`);
-  }
-
-  async function discardActiveGlobalDraft() {
-    if (documentKind === 'page' || isEditingReusable) return;
-    const label = globalResourceLabel(activeGlobalResource);
-    if (!window.confirm(`Revert the ${label} draft to the live version?`)) return;
-    if (saveInFlightRef.current) return;
-    saveInFlightRef.current = true;
-    setSaveInFlight(true);
-    setSaveStatus('saving');
-    setError(null);
-    setNotice(null);
-    try {
-      const response = SiteGlobalsResponseSchema.parse(
-        await api.post(
-          `/workspaces/${workspaceId}/sites/${siteId}/globals/${activeGlobalResource}/discard`,
-          {},
-        ),
-      );
-      setPublishedGlobalsSnapshot(response.published);
-      setGlobalsState(response.state);
-      const hasPublishedSnapshot =
-        response.state[activeGlobalResource].hasPublishedSnapshot;
-      const restored = hasPublishedSnapshot
-        ? (response.draft[activeGlobalResource] ?? null)
-        : createDefaultGlobalDocument(
-            documentKind,
-            siteContext?.name ?? page?.name ?? 'Site',
-          );
-      const nextDraft = hasPublishedSnapshot
-        ? response.draft
-        : SiteGlobalsSchema.parse({
-            ...response.draft,
-            [activeGlobalResource]: restored,
-          });
-      setGlobalsDraft(nextDraft);
-      if (activeGlobalResource === 'header') setHeaderDocument(restored ?? null);
-      else setFooterDocument(restored ?? null);
-      postPreviewSnapshot({ globals: nextDraft });
-      if (hasPublishedSnapshot && restored) editorRef.current?.acknowledgeSaved(restored);
-      validationCoordinatorRef.current?.clearResolvedIssues();
-      setSaveStatus(hasPublishedSnapshot ? 'saved' : 'unsaved');
-      setNotice(`Reverted ${label} draft to the live version.`);
-    } catch (caughtError) {
-      setSaveStatus('error');
-      setError(toErrorMessage(caughtError));
-    } finally {
-      saveInFlightRef.current = false;
-      setSaveInFlight(false);
-    }
-  }
-
-  async function switchDocumentKind(next: BuilderDocumentKind): Promise<void> {
-    if (next === documentKind) return;
-    if (isDirty && !window.confirm('Save this document before switching?')) return;
-    if (isDirty && !(await saveDraft())) return;
-    setSelected(null);
-    setSelectedNodeId(null);
-    setCanvasState(null);
-    setHistory({ canUndo: false, canRedo: false });
-    setSaveStatus('initializing');
-    setEditingReusableId(null);
-    setReusableEditorDocument(null);
-    setDocumentKind(next);
-  }
-
   async function editReusableSource(reusableId: string): Promise<void> {
     if (reusableId === editingReusableId) return;
     if (isDirty && !window.confirm('Save this document before switching?')) return;
@@ -1796,39 +1543,9 @@ export default function BuilderShell({
   }
 
   function switchValidationDocument(scope: BuilderValidationScope): Promise<void> | void {
-    if (scope === 'reusable') return;
-    const nextKind: BuilderDocumentKind =
-      scope === 'header' ? 'site-header' : scope === 'footer' ? 'site-footer' : 'page';
-    if (documentKindRef.current === nextKind && !editingReusableIdRef.current) return;
-    setSelected(null);
-    setSelectedNodeId(null);
-    setFocusPartName(undefined);
-    setCanvasState(null);
-    setHistory({ canUndo: false, canRedo: false });
-    setEditingReusableId(null);
-    setReusableEditorDocument(null);
-    setSaveStatus('initializing');
-    setDocumentKind(nextKind);
-    return new Promise((resolve) => {
-      let attempts = 0;
-      const waitForEditor = () => {
-        if (
-          documentKindRef.current === nextKind &&
-          !editingReusableIdRef.current &&
-          editorRef.current
-        ) {
-          resolve();
-          return;
-        }
-        attempts += 1;
-        if (attempts >= 120) {
-          resolve();
-          return;
-        }
-        window.setTimeout(waitForEditor, 16);
-      };
-      waitForEditor();
-    });
+    // Header and Footer validation belongs to their dedicated resource builder.
+    // This page-only shell can only focus page-level validation issues.
+    if (scope !== 'page') return;
   }
 
   function openValidationInspector(
@@ -1940,10 +1657,6 @@ export default function BuilderShell({
   }
 
   function openSaveSelectedAsReusable() {
-    if (documentKind !== 'page') {
-      setNotice('Reusable sections can only be saved from a page document.');
-      return;
-    }
     const document = editorRef.current?.getSelectedReusableDocument();
     if (!document) {
       setNotice('Select a normal section or component before saving it as reusable.');
@@ -2091,76 +1804,6 @@ export default function BuilderShell({
     );
   }
 
-  if (!activePayload && !isEditingReusable && documentKind !== 'page') {
-    const label = globalResourceLabel(activeGlobalResource);
-    return (
-      <main className="builder-loading">
-        <span className="eyebrow">Visual builder</span>
-        <h1>{label} removed from draft</h1>
-        <p className="muted">
-          Preview has no {label.toLowerCase()}. The live site still uses the published{' '}
-          {label.toLowerCase()} until this removal is published.
-        </p>
-        <span className={`builder-save-status status-${saveStatus}`} role="status">
-          {globalSaveStatusLabel(saveStatus, activeGlobalResource, activeGlobalState)}
-        </span>
-        <div className="builder-actions">
-          <button className="button button-ghost" onClick={leaveBuilder} type="button">
-            ← Pages
-          </button>
-          <button
-            className="button button-ghost"
-            onClick={restoreActiveGlobalDraft}
-            type="button"
-          >
-            Restore {label}
-          </button>
-          <button
-            className="button button-ghost"
-            disabled={saveInFlight || !activeGlobalState.hasPublishedSnapshot}
-            onClick={() => void discardActiveGlobalDraft()}
-            type="button"
-          >
-            Revert {label} to live version
-          </button>
-          <button
-            className="button button-primary"
-            disabled={saveInFlight}
-            onClick={() => void saveDraft()}
-            type="button"
-          >
-            Save draft
-          </button>
-          <button
-            className="button button-success"
-            disabled={
-              saveInFlight ||
-              saveStatus === 'initializing' ||
-              saveStatus === 'unsaved' ||
-              saveStatus === 'saving' ||
-              saveStatus === 'validation' ||
-              saveStatus === 'conflict'
-            }
-            onClick={() => void publishPage()}
-            type="button"
-          >
-            Publish {label}
-          </button>
-        </div>
-        {error ? (
-          <div className="builder-alert alert-error" role="alert">
-            {error}
-          </div>
-        ) : null}
-        {notice ? (
-          <div className="builder-alert alert-success" role="status">
-            {notice}
-          </div>
-        ) : null}
-      </main>
-    );
-  }
-
   if (!activePayload) {
     return (
       <main className="builder-loading" aria-busy="true">
@@ -2179,21 +1822,9 @@ export default function BuilderShell({
           </button>
           <div>
             <span className="eyebrow">Visual builder</span>
-            <h1>
-              {isEditingReusable
-                ? editingReusable.name
-                : documentKind === 'page'
-                  ? page.name
-                  : documentKind === 'site-header'
-                    ? 'Global Header'
-                    : 'Global Footer'}
-            </h1>
+            <h1>{isEditingReusable ? editingReusable.name : page.name}</h1>
             <code className="builder-page-path">
-              {isEditingReusable
-                ? `Reusable source · ${siteId}`
-                : documentKind === 'page'
-                  ? page.path
-                  : `Site · ${siteId}`}
+              {isEditingReusable ? `Reusable source · ${siteId}` : page.path}
             </code>
           </div>
         </div>
@@ -2207,22 +1838,7 @@ export default function BuilderShell({
             >
               ← Page
             </button>
-          ) : (
-            <label className="builder-document-selector">
-              <span className="sr-only">Editing document</span>
-              <select
-                aria-label="Editing document"
-                onChange={(event) =>
-                  void switchDocumentKind(event.target.value as BuilderDocumentKind)
-                }
-                value={documentKind}
-              >
-                <option value="page">Page</option>
-                <option value="site-header">Global Header</option>
-                <option value="site-footer">Global Footer</option>
-              </select>
-            </label>
-          )}
+          ) : null}
           <div className="builder-topbar-viewport" aria-label="Viewport">
             {BUILDER_VIEWPORTS.map((item) => (
               <button
@@ -2245,26 +1861,14 @@ export default function BuilderShell({
                 : saveStatus === 'saved'
                   ? isEditingReusable
                     ? `Saved · reusable draft · ${editingReusable?.published ? 'published' : 'not published'}`
-                    : documentKind === 'page'
-                      ? `Saved · v${version.versionNumber} · not published`
-                      : globalSaveStatusLabel(
-                          saveStatus,
-                          activeGlobalResource,
-                          activeGlobalState,
-                        )
+                    : `Saved · v${version.versionNumber} · not published`
                   : saveStatus === 'conflict'
                     ? 'Conflict'
                     : saveStatus === 'validation'
                       ? 'Needs attention'
                       : saveStatus === 'error'
                         ? 'Save failed'
-                        : !isEditingReusable && documentKind !== 'page'
-                          ? globalSaveStatusLabel(
-                              saveStatus,
-                              activeGlobalResource,
-                              activeGlobalState,
-                            )
-                          : 'Unsaved changes'}
+                        : 'Unsaved changes'}
           </span>
           {saveStatus === 'conflict' ? (
             <button
@@ -2308,46 +1912,6 @@ export default function BuilderShell({
           >
             Save draft
           </button>
-          {!isEditingReusable && documentKind !== 'page' ? (
-            <>
-              {activePublishedGlobal ? (
-                <button
-                  className="button button-ghost"
-                  disabled={saveInFlight}
-                  onClick={startActiveGlobalDraftFromLive}
-                  type="button"
-                >
-                  Start {globalResourceLabel(activeGlobalResource)} draft from live
-                </button>
-              ) : null}
-              {activeGlobalDocument ? (
-                <button
-                  className="button button-ghost"
-                  onClick={removeActiveGlobalFromDraft}
-                  type="button"
-                >
-                  Remove {globalResourceLabel(activeGlobalResource)} from draft
-                </button>
-              ) : (
-                <button
-                  className="button button-ghost"
-                  onClick={restoreActiveGlobalDraft}
-                  type="button"
-                >
-                  Restore {globalResourceLabel(activeGlobalResource)}
-                </button>
-              )}
-              {activeGlobalState.hasPublishedSnapshot ? (
-                <button
-                  className="button button-ghost"
-                  onClick={() => void discardActiveGlobalDraft()}
-                  type="button"
-                >
-                  Revert {globalResourceLabel(activeGlobalResource)} to live version
-                </button>
-              ) : null}
-            </>
-          ) : null}
           <button
             className="button button-success"
             disabled={
@@ -2361,13 +1925,7 @@ export default function BuilderShell({
             onClick={() => void publishPage()}
             type="button"
           >
-            {isEditingReusable
-              ? 'Publish site'
-              : documentKind === 'site-header'
-                ? 'Publish Header'
-                : documentKind === 'site-footer'
-                  ? 'Publish Footer'
-                  : 'Publish'}
+            {isEditingReusable ? 'Publish site' : 'Publish'}
           </button>
         </div>
       </header>
@@ -2393,7 +1951,7 @@ export default function BuilderShell({
       />
 
       <div
-        className={`builder-workspace${leftPanelCollapsed ? ' is-left-collapsed' : ''}${rightPanelCollapsed ? ' is-right-collapsed' : ''}`}
+        className={`builder-workspace builder-workspace-v2${leftPanelCollapsed ? ' is-left-collapsed' : ''}${rightPanelCollapsed ? ' is-right-collapsed' : ''}`}
         data-left-panel-width={panelWidths.left}
         data-right-panel-width={panelWidths.right}
         style={
@@ -2587,7 +2145,10 @@ export default function BuilderShell({
                         {group.options.map((block) => {
                           const insertable =
                             block.globalPresetId ?? block.presetId ?? block.type;
-                          if (!insertable && !block.extensionId) return null;
+                          if (!insertable && !block.extensionId && !block.layoutExtension)
+                            return null;
+                          const dataBlockType =
+                            block.layoutExtension?.resource.id ?? insertable;
                           return (
                             <BuilderBlockCard
                               addLabel={`${block.label}${
@@ -2596,30 +2157,40 @@ export default function BuilderShell({
                                   : ''
                               } add`}
                               category={block.category}
-                              dataBlockType={insertable}
+                              dataBlockType={dataBlockType}
                               description={block.description}
                               dragLabel={`${block.extensionId ? 'Add' : 'Drag'} ${block.label} block`}
-                              key={`${insertable ?? 'extension'}:${block.extensionId ?? ''}`}
+                              key={`${dataBlockType ?? 'extension'}:${block.extensionId ?? ''}`}
                               label={block.label}
                               onAdd={() =>
-                                block.extensionId
-                                  ? editorRef.current?.addExtensionBlock(
-                                      block.extensionId,
+                                block.layoutExtension
+                                  ? editorRef.current?.addLayoutExtension(
+                                      block.layoutExtension.document,
                                     )
-                                  : insertable
-                                    ? editorRef.current?.addBlock(
-                                        insertable as BuilderInsertable,
+                                  : block.extensionId
+                                    ? editorRef.current?.addExtensionBlock(
+                                        block.extensionId,
                                       )
-                                    : undefined
+                                    : insertable
+                                      ? editorRef.current?.addBlock(
+                                          insertable as BuilderInsertable,
+                                        )
+                                      : undefined
                               }
                               onDragStart={
-                                block.extensionId || !insertable
-                                  ? undefined
-                                  : (event) =>
-                                      editorRef.current?.startBlockDrag(
-                                        insertable as BuilderInsertable,
+                                block.layoutExtension
+                                  ? (event) =>
+                                      editorRef.current?.startLayoutExtensionDrag(
+                                        block.layoutExtension!.document,
                                         event.nativeEvent,
                                       )
+                                  : block.extensionId || !insertable
+                                    ? undefined
+                                    : (event) =>
+                                        editorRef.current?.startBlockDrag(
+                                          insertable as BuilderInsertable,
+                                          event.nativeEvent,
+                                        )
                               }
                               preview={block.preview}
                             />
@@ -2636,7 +2207,8 @@ export default function BuilderShell({
                 ) : null}
                 <p className="muted small builder-help">
                   Components are versioned PagePayload nodes and keep their canvas order
-                  when published.
+                  when published. Header/Footer extensions are copied into this page, so
+                  later source edits do not change the page snapshot.
                 </p>
               </>
             ) : null}
@@ -2854,32 +2426,6 @@ export default function BuilderShell({
               <span className="muted small">V/H · Space + drag · middle drag</span>
             </div>
           </div>
-          {!isEditingReusable ? (
-            <div aria-label="Site global content" className="builder-global-chrome">
-              <div className="builder-global-chrome-row">
-                <span className="eyebrow">Site header</span>
-                <span className="builder-global-lock">Locked preview · Header</span>
-                <button
-                  className="button button-small button-ghost"
-                  onClick={() => void switchDocumentKind('site-header')}
-                  type="button"
-                >
-                  Edit header
-                </button>
-              </div>
-              <div className="builder-global-chrome-row is-footer">
-                <span className="eyebrow">Site footer</span>
-                <span className="builder-global-lock">Locked preview · Footer</span>
-                <button
-                  className="button button-small button-ghost"
-                  onClick={() => void switchDocumentKind('site-footer')}
-                  type="button"
-                >
-                  Edit footer
-                </button>
-              </div>
-            </div>
-          ) : null}
           <div className="builder-editor-shell">
             <BuilderContextToolbar
               onDelete={() => editorRef.current?.deleteSelected()}

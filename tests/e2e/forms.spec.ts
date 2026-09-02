@@ -83,7 +83,9 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await openPages(page, siteName);
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
   const reloadedCanvas = page.frameLocator('.gjs-frame');
   await expect(
     reloadedCanvas.locator('form[data-payload-node-type="form"]'),
@@ -104,7 +106,9 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await expect(publicPage.getByRole('status')).toContainText('Thanks');
 
   await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page.locator('.builder-layer-button[aria-label^="Select Form"]').click();
   await page.getByLabel('Form field type email').selectOption('phone');

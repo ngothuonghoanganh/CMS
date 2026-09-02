@@ -670,33 +670,6 @@ function renderGlobalFooter(
   );
 }
 
-function renderGlobalNavigation(
-  items: readonly ResolvedNavigationItem[] | undefined,
-  context: RenderContext,
-  label: string,
-  element: 'header' | 'footer',
-): ReactElement | null {
-  if (!items?.length) return null;
-  const content = (
-    <NavigationViewRuntime
-      alignment="left"
-      ariaLabel={label}
-      customDomain={context.customDomain}
-      id={`global-navigation-${element}`}
-      items={items}
-      mobileBehavior="collapse"
-      orientation="horizontal"
-      pagePath={context.pagePath}
-      siteSlug={context.siteSlug}
-    />
-  );
-  return element === 'header' ? (
-    <header data-site-global="header">{content}</header>
-  ) : (
-    <footer data-site-global="footer">{content}</footer>
-  );
-}
-
 function renderReusableInstance(
   node: Extract<PageNodeV7, { type: 'reusable-instance' }>,
   context: RenderContext,
@@ -934,40 +907,26 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
     return <RendererFallback />;
   }
 
-  const hasHeaderSnapshot =
-    context.globals !== undefined &&
-    Object.prototype.hasOwnProperty.call(context.globals, 'header');
-  const hasFooterSnapshot =
-    context.globals !== undefined &&
-    Object.prototype.hasOwnProperty.call(context.globals, 'footer');
-
   return (
     <div className="payload-page">
       {context.runtimeIds?.length ? (
         <ExtensionRuntimeBootstrap runtimeIds={context.runtimeIds} />
       ) : null}
-      {hasHeaderSnapshot
-        ? context.globals?.header
-          ? renderSiteGlobalDocument(context.globals.header, context)
-          : null
-        : renderGlobalNavigation(
-            context.navigation?.main,
-            context,
-            'Main navigation',
-            'header',
-          )}
       {renderResponsiveStyles(parsed.data, context)}
       {renderNode(parsed.data.root, context)}
-      {hasFooterSnapshot
-        ? context.globals?.footer
-          ? renderSiteGlobalDocument(context.globals.footer, context)
-          : null
-        : renderGlobalNavigation(
-            context.navigation?.footer,
-            context,
-            'Footer navigation',
-            'footer',
-          )}
     </div>
   );
+}
+
+/**
+ * Render a resolved Header/Footer layout extension document around the page
+ * payload. Placement is handled by the shell; this only renders the document
+ * body (its global-header / global-footer node). Source layout extensions are
+ * never auto-rendered — pages render their own copied global nodes directly.
+ */
+export function renderLayoutExtension(
+  payload: unknown,
+  context: RenderContext = {},
+): ReactElement | null {
+  return renderSiteGlobalDocument(payload, context);
 }

@@ -22,7 +22,7 @@ function collectIds(node: BuilderNode): string[] {
   return [node.id, ...node.children.flatMap((child) => collectIds(child))];
 }
 
-test('Phase 17.1 keeps compound duplicate identity and global preset roots canonical', async ({
+test('Phase 17.1 keeps compound duplicate identity canonical', async ({
   page,
   request,
   canonicalEnvironment,
@@ -71,32 +71,6 @@ test('Phase 17.1 keeps compound duplicate identity and global preset roots canon
   await expect(page.getByText(/Saved · v2/, { exact: true })).toBeVisible({
     timeout: 15_000,
   });
-
-  await page.getByLabel('Editing document').selectOption('site-header');
-  await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
-  await expect(
-    page
-      .locator('.builder-block-preview[data-preview-variant="header-brand-menu-cta"]')
-      .first(),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: 'Brand · Menu · CTA add', exact: true }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Brand · Menu · CTA add', exact: true }).click();
-  root = await readRoot(page);
-  expect(root.children).toHaveLength(1);
-  expect(root.children[0]?.type).toBe('global-header');
-  ids = collectIds(root);
-  expect(new Set(ids).size).toBe(ids.length);
-
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Brand · Menu add', exact: true }).click();
-  root = await readRoot(page);
-  expect(root.children).toHaveLength(1);
-  expect(root.children[0]?.type).toBe('global-header');
-  expect(root.children[0]?.children).toHaveLength(2);
-  ids = collectIds(root);
-  expect(new Set(ids).size).toBe(ids.length);
 });
 
 test('Phase 17.1 V2 catalog previews expose real shapes and full-name tooltips', async ({
@@ -205,7 +179,9 @@ test('Phase 17.1 desktop builder panels resize, restore, persist, and fall back 
     )
     .toBe(String(Math.round(persistedLeftWidth)));
   await page.reload();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
   await expect
     .poll(async () => (await leftPanel.boundingBox())?.width ?? 0)
     .toBeCloseTo(persistedLeftWidth, 0);

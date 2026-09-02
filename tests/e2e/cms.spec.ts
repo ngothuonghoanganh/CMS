@@ -131,6 +131,7 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
   await expect(navigation.getByText('Workspace', { exact: true })).toBeVisible();
   await expect(navigation.getByText('Operations', { exact: true })).toBeVisible();
   await expect(navigation.getByText('Management', { exact: true })).toBeVisible();
+  await expect(navigation.getByText('Headers & Footers', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Current workspace')).toBeVisible();
   await expect(page.locator('.topbar-page-context')).toHaveCount(0);
   await expect(page.getByText('Authenticated', { exact: true })).toHaveCount(0);
@@ -243,6 +244,9 @@ test('extension management settles without a request loop and stays responsive',
   await login(page);
   await page.getByRole('button', { name: 'Extensions', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Extensions' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('Countdown Builder Element')).toBeVisible();
   await expect(page.getByText('Demo Analytics Subscriber')).toBeVisible();
   await expect(page.getByText('Demo Webhook Integration')).toBeVisible();
@@ -307,7 +311,9 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   await page.getByRole('button', { name: 'Create page' }).click();
   await expect(page.getByRole('status')).toContainText('draft version 1 created');
   await page.getByRole('button', { name: 'Open Builder' }).click();
-  await expect(page.locator('.gjs-editor')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
   const builderPageId = page.url().match(/pages\/([^/]+)\/builder/)?.[1];
   expect(builderPageId).toBeTruthy();
 
@@ -476,6 +482,24 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   await expect(page.getByText('Version 1')).toBeVisible();
   await page.getByRole('button', { name: `Edited Page ${suffix}` }).click();
   await expect(page.getByLabel('Description')).toHaveValue(`Information page ${suffix}`);
+  await page.locator('.ui-drawer-layer').getByRole('button', { name: 'Cancel' }).click();
+  await expect(
+    page.getByRole('tab', { name: 'Header & Footer', exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Extensions', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Build Header', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Build Footer', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Version history', exact: true }),
+  ).toBeVisible();
 });
 
 test('opens the visual builder, saves a draft, and restores it after reload', async ({

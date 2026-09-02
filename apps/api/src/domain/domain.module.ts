@@ -60,6 +60,8 @@ import { ExtensionModule } from '../extensions/extension.module';
 import { WorkflowModule } from '../workflows/workflow.module';
 import { NavigationController } from './navigation.controller';
 import { NavigationService } from './navigation.service';
+import { LayoutExtensionController } from './layout-extension.controller';
+import { LayoutExtensionService } from './layout-extension.service';
 import { SiteUrlService } from './site-url.service';
 import { ReusableController } from './reusable.controller';
 import { ReusableService } from './reusable.service';
@@ -95,6 +97,7 @@ import { ReusableService } from './reusable.service';
     SeoController,
     OrganizationController,
     NavigationController,
+    LayoutExtensionController,
     ReusableController,
   ],
   providers: [
@@ -112,6 +115,7 @@ import { ReusableService } from './reusable.service';
     AnalyticsService,
     OrganizationService,
     NavigationService,
+    LayoutExtensionService,
     SiteUrlService,
     AnalyticsQueryService,
     CustomDomainService,
