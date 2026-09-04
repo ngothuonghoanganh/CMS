@@ -18,6 +18,7 @@ import {
   createPageDocument,
   PageVersionListResponseSchema,
   PageVersionSchema,
+  PageCompositionFieldsSchema,
   PAGE_COMPONENT_REGISTRY,
   builderPreviewForComponent,
   type Asset,
@@ -44,6 +45,7 @@ import {
   type ResolvedNavigationItem,
   type PagePreviewSnapshot,
   type PageRuntimeExtension,
+  type PageCompositionFields,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -103,11 +105,13 @@ import { QuickAddOverlay } from './canvas/quick-add-overlay';
 import { BuilderBlockCard, BuilderBlockPreview } from './builder-block-catalog';
 import { BUILT_IN_TEMPLATE_REGISTRY } from './template-registry';
 import { resolveBuilderPreview } from './builder-preview-model';
+import { pageDocumentSignature } from './page-composition';
 import {
   BuilderInspector,
   type InspectorSectionKey,
   type InspectorTab,
 } from './inspector/builder-inspector';
+
 import { BuilderValidationNavigator } from './builder-validation-navigator';
 import {
   createBuilderValidationCoordinator,
@@ -120,6 +124,19 @@ import {
   type BuilderValidationIssue,
   type BuilderValidationScope,
 } from './builder-validation';
+
+function compositionFieldsFromVersion(
+  version: PageVersion,
+): PageCompositionFields | undefined {
+  if (!version.composition) return undefined;
+  return PageCompositionFieldsSchema.parse({
+    attachments: version.composition.attachments,
+    layoutAttachments: version.composition.layoutAttachments,
+    bindings: version.composition.bindings,
+    actions: version.composition.actions,
+    resources: version.composition.resources,
+  });
+}
 
 type BuilderShellProps = {
   workspaceId: string;
@@ -1032,8 +1049,11 @@ export default function BuilderShell({
           name: nextSite.name,
           ...(nextSite.logo ? { logo: nextSite.logo } : {}),
         });
-        setVersion(PageVersionSchema.parse(nextVersion));
-        setPageDocument(createPageDocument(nextPayload));
+        const parsedVersion = PageVersionSchema.parse(nextVersion);
+        setVersion(parsedVersion);
+        setPageDocument(
+          createPageDocument(nextPayload, compositionFieldsFromVersion(parsedVersion)),
+        );
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
         const nextReusables = reusablesResponseRaw
           ? ReusableListResponseSchema.parse(reusablesResponseRaw).items
@@ -1333,6 +1353,17 @@ export default function BuilderShell({
       if (!('schemaVersion' in nextDocument))
         throw new Error('Invalid page editor document');
       const nextPayload = PagePayloadSchema.parse(nextDocument.payload);
+      const nextComposition = nextDocument.composition
+        ? {
+            pageId,
+            payload: nextPayload,
+            attachments: nextDocument.composition.attachments,
+            layoutAttachments: nextDocument.composition.layoutAttachments,
+            bindings: nextDocument.composition.bindings,
+            actions: nextDocument.composition.actions,
+            resources: nextDocument.composition.resources,
+          }
+        : { pageId, payload: nextPayload };
       // GrapesJS can emit the final component:update asynchronously after an
       // inspector input event. Capture the acknowledgement point after the
       // payload snapshot so that event is included in this save, while edits
@@ -1342,6 +1373,7 @@ export default function BuilderShell({
         await api.post(`/pages/${pageId}/versions`, {
           expectedVersionNumber: version.versionNumber,
           payload: nextPayload,
+          composition: nextComposition,
         }),
       );
       const currentDocument = editorRef.current?.getDocument();
@@ -1349,11 +1381,28 @@ export default function BuilderShell({
       const currentPayloadResult = PagePayloadSchema.safeParse(
         'schemaVersion' in currentDocument ? currentDocument.payload : undefined,
       );
-      const hasNewerPayloadChanges =
+      const currentComposition =
+        'schemaVersion' in currentDocument ? currentDocument.composition : undefined;
+      const hasNewerCompositionChanges =
         !currentPayloadResult.success ||
-        JSON.stringify(currentPayloadResult.data) !== JSON.stringify(nextPayload);
+        pageDocumentSignature({
+          payload: currentPayloadResult.data,
+          composition: currentComposition,
+        }) !==
+          pageDocumentSignature({
+            payload: nextPayload,
+            composition: nextDocument.composition,
+          });
       setVersion(nextVersion);
-      editorRef.current?.acknowledgeSaved(nextPayload);
+      editorRef.current?.acknowledgeSaved(
+        nextPayload,
+        compositionFieldsFromVersion(nextVersion),
+      );
+      if (!hasNewerCompositionChanges) {
+        setPageDocument(
+          createPageDocument(nextPayload, compositionFieldsFromVersion(nextVersion)),
+        );
+      }
       validationCoordinatorRef.current?.clearResolvedIssues();
       const nextPageExtensions = PageExtensionListResponseSchema.parse(
         await api.get(`/pages/${pageId}/extensions`),
@@ -1362,7 +1411,7 @@ export default function BuilderShell({
       if (
         saveStatusAfterAcknowledgement(saveSequence, localMutationSequenceRef.current) ===
           'saved' &&
-        !hasNewerPayloadChanges
+        !hasNewerCompositionChanges
       ) {
         setSaveStatus('saved');
         setNotice(`Saved draft version ${nextVersion.versionNumber}.`);
@@ -1486,6 +1535,42 @@ export default function BuilderShell({
         );
       });
       setPageCapabilities(capabilityGraph);
+      if (!isEditingReusable && pageDocument) {
+        const currentComposition = PageCompositionFieldsSchema.parse(
+          pageDocument.composition ?? {},
+        );
+        const existingAttachment = currentComposition.attachments.find(
+          (attachment) => attachment.extensionId === extensionId,
+        );
+        const nextAttachment = {
+          id: existingAttachment?.id ?? result.id,
+          pageId,
+          extensionId,
+          enabled,
+          configuration: result.configuration,
+          resourceIds: existingAttachment?.resourceIds ?? [],
+          ...(result.connectionId
+            ? { connectionId: result.connectionId }
+            : existingAttachment?.connectionId
+              ? { connectionId: existingAttachment.connectionId }
+              : {}),
+        };
+        const nextComposition = PageCompositionFieldsSchema.parse({
+          ...currentComposition,
+          attachments: [
+            ...currentComposition.attachments.filter(
+              (attachment) => attachment.extensionId !== extensionId,
+            ),
+            nextAttachment,
+          ],
+        });
+        setPageDocument(createPageDocument(pageDocument.payload, nextComposition));
+        editorRef.current?.setWorkingComposition(nextComposition);
+        markDirty();
+        postPreviewSnapshot({
+          page: createPageDocument(pageDocument.payload, nextComposition),
+        });
+      }
       setNotice(`${extensionId} is ${enabled ? 'enabled' : 'disabled'} for this page.`);
     } catch (caughtError) {
       setError(toErrorMessage(caughtError));
@@ -2467,7 +2552,11 @@ export default function BuilderShell({
             />
             <GrapesEditor
               documentKind={documentKind}
+              {...(!isEditingReusable ? { pageId } : {})}
               initialPayload={activePayload}
+              {...(!isEditingReusable && version?.composition
+                ? { initialComposition: compositionFieldsFromVersion(version)! }
+                : {})}
               reusableRuntime={reusableRuntime}
               designSystem={designSystem}
               {...(siteContext ? { siteName: siteContext.name } : {})}

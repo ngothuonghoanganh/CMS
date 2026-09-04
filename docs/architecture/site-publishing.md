@@ -1,9 +1,17 @@
 # Site Publishing
 
 Each Page selects one immutable published `PageVersion`; public reads never fall
-back to draft. Publishing a Page validates reusable dependencies, design-token
-references, workflow dependencies and page-extension publish constraints before
-atomically moving the `publishedVersionId` pointer.
+back to draft. Publishing reads the saved draft composition, validates reusable
+dependencies, design-token references, workflow dependencies, attachment/node
+matching, tenant enablement, configuration, connections and page-extension
+publish constraints, then compiles the complete immutable `PublishedPageBundle`
+before moving the `publishedVersionId` pointer.
+
+The published bundle includes the version payload, extension/layout attachments,
+bindings, actions, resources, resolved runtimes, capability identifiers and
+extension versions. Public resolution uses that bundle (or an empty extension
+set for an old version without a bundle); it never falls back to the mutable
+page-extension projection.
 
 Header, Footer and Template are published independently through their own
 resource endpoints; `Publish Site` no longer snapshots navigation structure.

@@ -23,6 +23,7 @@ import {
   PublicPageSchema,
   PageVersionListResponseSchema,
   PageVersionSchema,
+  PageCompositionSchema,
   PaginationQuerySchema,
   PublishPageRequestSchema,
   UpdatePageRequestSchema,
@@ -37,6 +38,8 @@ import {
   type PageListResponse,
   type PublicPage,
   type PageVersionListResponse,
+  type PageComposition,
+  type PageCompositionInput,
   type PageVersion,
   type PaginationQuery,
   type PublishPageRequest,
@@ -60,6 +63,11 @@ import { SiteService } from './site.service';
 import { NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
+import {
+  PageCompositionError,
+  clonePageCompositionForPage,
+  normalizePageComposition,
+} from './page-composition';
 
 @Injectable()
 export class PageService {
@@ -95,6 +103,13 @@ export class PageService {
       await this.sites.ensureHomePage(site);
       const payload = this.parsePayload(input.payload);
       const pageId = randomUUID();
+      const composition = this.normalizeComposition(
+        pageId,
+        payload,
+        input.composition,
+        undefined,
+        input.composition?.layoutAttachments ?? input.layoutAttachments,
+      );
       const path = this.requirePath(
         input.path ??
           (input.slug
@@ -103,11 +118,13 @@ export class PageService {
       );
       const legacySlug = normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
       if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
-      if (input.layoutAttachments) {
+      const requestedLayoutAttachments =
+        input.composition?.layoutAttachments ?? input.layoutAttachments;
+      if (requestedLayoutAttachments) {
         await this.assertLayoutAttachmentsAvailable(
           siteId,
           workspaceId,
-          PageLayoutAttachmentsSchema.parse(input.layoutAttachments),
+          PageLayoutAttachmentsSchema.parse(requestedLayoutAttachments),
         );
       }
       const versionId = randomUUID();
@@ -124,8 +141,8 @@ export class PageService {
           ...(input.parentId ? { parentId: input.parentId } : {}),
           ...(input.anchors ? { anchors: input.anchors } : {}),
           ...(legacySlug ? { slug: legacySlug } : {}),
-          ...(input.layoutAttachments
-            ? { layoutAttachments: input.layoutAttachments }
+          ...(requestedLayoutAttachments?.length
+            ? { layoutAttachments: requestedLayoutAttachments }
             : {}),
           ...(input.appliedTemplate ? { appliedTemplate: input.appliedTemplate } : {}),
         });
@@ -141,10 +158,15 @@ export class PageService {
           landingPageId: pageId,
           versionNumber: 1,
           payload,
+          composition,
         });
         page.currentDraftVersionId = versionId;
         await page.save();
-        await this.pageExtensions.synchronizePayload(pageId, site.workspaceId, payload);
+        await this.pageExtensions.synchronizeComposition(
+          pageId,
+          site.workspaceId,
+          composition,
+        );
 
         await this.events.publish('page.created', {
           tenantId: this.tenantContext.require().id,
@@ -154,6 +176,9 @@ export class PageService {
           occurredAt: new Date().toISOString(),
         });
       } catch (error) {
+        await this.pageExtensions
+          .removeAllForPage(pageId, site.workspaceId)
+          .catch(() => undefined);
         await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
         await page.deleteOne().exec();
         throw error;
@@ -255,12 +280,14 @@ export class PageService {
     if (parsedInput.anchors !== undefined) {
       page.anchors = parsedInput.anchors;
     }
-    if (parsedInput.payload !== undefined) {
+    const draftPayload = parsedInput.payload ?? parsedInput.composition?.payload;
+    if (draftPayload !== undefined) {
       await this.persistVersion(
         page,
-        this.parsePayload(parsedInput.payload),
+        this.parsePayload(draftPayload),
         latestVersion?.versionNumber,
         latestVersion?._id.toString(),
+        parsedInput.composition,
       );
     }
     try {
@@ -274,7 +301,7 @@ export class PageService {
       tenantId: this.tenantContext.require().id,
       pageId,
       workspaceId,
-      ...(parsedInput.payload !== undefined && latestVersion
+      ...(draftPayload !== undefined && latestVersion
         ? { versionNumber: latestVersion.versionNumber + 1 }
         : {}),
       occurredAt: new Date().toISOString(),
@@ -333,23 +360,46 @@ export class PageService {
         ...(source.anchors ? { anchors: [...source.anchors] } : {}),
       });
       try {
+        const sourcePayload = this.parsePayload(latest.payload);
+        const sourceComposition = this.compositionForVersion(
+          source,
+          latest,
+          sourcePayload,
+        );
+        if (!sourceComposition) {
+          throw new InternalServerErrorException({
+            code: 'PAGE_COMPOSITION_INVALID',
+            message: 'The source page composition could not be normalized',
+          });
+        }
+        const composition = clonePageCompositionForPage(
+          sourceComposition,
+          duplicated._id.toString(),
+        );
         const version = await this.versionModel.create({
           _id: randomUUID(),
           workspaceId,
           siteId: source.siteId,
           landingPageId: duplicated._id.toString(),
           versionNumber: 1,
-          payload: latest.payload,
+          payload: composition.payload,
+          composition,
         });
         duplicated.currentDraftVersionId = version._id.toString();
+        if (composition.layoutAttachments.length > 0) {
+          duplicated.layoutAttachments = composition.layoutAttachments;
+        }
         await duplicated.save();
-        await this.pageExtensions.synchronizePayload(
+        await this.pageExtensions.synchronizeComposition(
           duplicated._id.toString(),
           workspaceId,
-          this.parsePayload(latest.payload),
+          composition,
         );
         return this.toPageContract(duplicated);
       } catch (error) {
+        await this.pageExtensions
+          .removeAllForPage(duplicated._id.toString(), workspaceId)
+          .catch(() => undefined);
         await this.versionModel.deleteMany({ landingPageId: duplicated._id }).exec();
         await duplicated.deleteOne().exec();
         throw error;
@@ -385,9 +435,10 @@ export class PageService {
 
     return this.persistVersion(
       page,
-      this.parsePayload(parsedInput.payload),
+      this.parsePayload(parsedInput.payload ?? parsedInput.composition?.payload),
       latestVersion?.versionNumber,
       latestVersion?._id.toString(),
+      parsedInput.composition,
     );
   }
 
@@ -407,7 +458,11 @@ export class PageService {
       });
     }
 
-    const payload = PagePayloadSchema.parse(version.payload);
+    const storedComposition = PageCompositionSchema.safeParse(version.composition);
+    const payload = PagePayloadSchema.parse(
+      storedComposition.success ? storedComposition.data.payload : version.payload,
+    );
+    const composition = this.compositionForVersion(page, version, payload, false);
     await this.reusables.assertDependenciesAvailable(
       page.workspaceId,
       page.siteId,
@@ -421,12 +476,19 @@ export class PageService {
       [payload],
     );
     await this.workflows.validatePagePublishDependencies(pageId, workspaceId);
-    await this.pageExtensions.validateBeforePublish(pageId, workspaceId, payload);
+    await this.pageExtensions.validateBeforePublish(
+      pageId,
+      workspaceId,
+      payload,
+      composition,
+    );
     const publishedBundle = await this.pageExtensions.compilePublishedBundle(
       pageId,
       workspaceId,
       version.versionNumber,
       payload,
+      composition,
+      parseLayoutAttachments(page),
     );
     version.set('publishedBundle', publishedBundle);
     await version.save();
@@ -542,6 +604,39 @@ export class PageService {
     const page = await this.requirePageDocument(pageId, workspaceId);
     assertValidLayoutAttachments(parsed);
     await this.assertLayoutAttachmentsAvailable(page.siteId, workspaceId, parsed);
+    const latestVersion = await this.findLatestVersion(pageId, workspaceId);
+    if (latestVersion) {
+      const storedComposition = PageCompositionSchema.safeParse(
+        latestVersion.composition,
+      );
+      const payload = PagePayloadSchema.parse(
+        storedComposition.success
+          ? storedComposition.data.payload
+          : latestVersion.payload,
+      );
+      const previous = this.compositionForVersion(page, latestVersion, payload);
+      if (!previous) {
+        throw new InternalServerErrorException({
+          code: 'PAGE_COMPOSITION_INVALID',
+          message: 'The current page composition could not be normalized',
+        });
+      }
+      await this.persistVersion(
+        page,
+        payload,
+        latestVersion.versionNumber,
+        latestVersion._id.toString(),
+        {
+          pageId,
+          payload,
+          attachments: previous.attachments,
+          layoutAttachments: parsed,
+          bindings: previous.bindings,
+          actions: previous.actions,
+          resources: previous.resources,
+        },
+      );
+    }
     if (parsed.length === 0) page.set('layoutAttachments', undefined);
     else page.layoutAttachments = parsed;
     await page.save();
@@ -553,8 +648,28 @@ export class PageService {
     payload: PagePayload,
     currentVersionNumber: number | undefined,
     expectedDraftVersionId: string | undefined,
+    compositionInput?: PageCompositionInput,
   ): Promise<PageVersion> {
     const versionNumber = nextVersionNumber(currentVersionNumber);
+    const latest = currentVersionNumber
+      ? await this.versionModel
+          .findOne({
+            landingPageId: page._id.toString(),
+            workspaceId: page.workspaceId,
+            versionNumber: currentVersionNumber,
+          })
+          .exec()
+      : null;
+    const composition = this.normalizeComposition(
+      page._id.toString(),
+      payload,
+      compositionInput,
+      latest
+        ? this.compositionForVersion(page, latest, this.parsePayload(latest.payload))
+        : undefined,
+      parseLayoutAttachments(page),
+    );
+    const previousLayoutAttachments = parseLayoutAttachments(page);
     let record: PageVersionDocument;
     try {
       record = await this.versionModel.create({
@@ -564,6 +679,7 @@ export class PageService {
         landingPageId: page._id.toString(),
         versionNumber,
         payload,
+        composition,
       });
     } catch (caughtError) {
       if (isDuplicateKeyError(caughtError)) {
@@ -584,7 +700,17 @@ export class PageService {
           workspaceId: page.workspaceId,
           ...currentDraftFilter,
         },
-        { $set: { currentDraftVersionId: record._id.toString() } },
+        {
+          $set: {
+            currentDraftVersionId: record._id.toString(),
+            ...(composition.layoutAttachments.length
+              ? { layoutAttachments: composition.layoutAttachments }
+              : {}),
+          },
+          ...(composition.layoutAttachments.length
+            ? {}
+            : { $unset: { layoutAttachments: 1 } }),
+        },
         { new: true },
       )
       .exec();
@@ -596,11 +722,51 @@ export class PageService {
       });
     }
     page.currentDraftVersionId = record._id.toString();
-    await this.pageExtensions.synchronizePayload(
-      page._id.toString(),
-      page.workspaceId,
-      payload,
-    );
+    if (composition.layoutAttachments.length > 0) {
+      page.layoutAttachments = composition.layoutAttachments;
+    } else {
+      page.set('layoutAttachments', undefined);
+    }
+    try {
+      await this.pageExtensions.synchronizeComposition(
+        page._id.toString(),
+        page.workspaceId,
+        composition,
+      );
+    } catch (error) {
+      await this.versionModel
+        .deleteOne({ _id: record._id })
+        .exec()
+        .catch(() => undefined);
+      const rollbackSet = {
+        ...(expectedDraftVersionId
+          ? { currentDraftVersionId: expectedDraftVersionId }
+          : {}),
+        ...(previousLayoutAttachments.length
+          ? { layoutAttachments: previousLayoutAttachments }
+          : {}),
+      };
+      const rollbackUnset = {
+        ...(expectedDraftVersionId ? {} : { currentDraftVersionId: 1 }),
+        ...(previousLayoutAttachments.length ? {} : { layoutAttachments: 1 }),
+      };
+      const rollbackUpdate = {
+        ...(Object.keys(rollbackSet).length ? { $set: rollbackSet } : {}),
+        ...(Object.keys(rollbackUnset).length ? { $unset: rollbackUnset } : {}),
+      };
+      await this.pageModel
+        .findOneAndUpdate(
+          {
+            _id: page._id.toString(),
+            workspaceId: page.workspaceId,
+            currentDraftVersionId: record._id.toString(),
+          },
+          rollbackUpdate,
+        )
+        .exec()
+        .catch(() => undefined);
+      throw error;
+    }
     return this.toVersionContract(record);
   }
 
@@ -807,9 +973,19 @@ export class PageService {
   ): Promise<PublicPage> {
     try {
       const versionContract = this.toVersionContract(version);
-      const extensions = await this.pageExtensions.resolveRuntime(
+      const storedComposition = PageCompositionSchema.safeParse(version.composition);
+      const payload = PagePayloadSchema.parse(
+        storedComposition.success ? storedComposition.data.payload : version.payload,
+      );
+      // Review is draft-scoped. New versions use their immutable composition;
+      // legacy payload-only versions are normalized from that saved payload
+      // instead of consulting the mutable page-instance projection.
+      const composition = this.compositionForVersion(page, version, payload);
+      if (!composition) throw new Error('The draft page composition is unavailable');
+      const extensions = await this.pageExtensions.resolveRuntimeForComposition(
         page._id.toString(),
         page.workspaceId,
+        composition,
       );
       const reusables = await this.reusables.resolveForPayload(
         page.workspaceId,
@@ -830,7 +1006,7 @@ export class PageService {
         { mode: preview ? 'draft' : 'published' },
       );
       const layout = await this.layoutExtensions.resolveComposition(
-        parseLayoutAttachments(page),
+        composition?.layoutAttachments ?? parseLayoutAttachments(page),
         preview ? 'draft' : 'published',
       );
       const designSystem = (preview ? site.designSystemDraft : site.publishedDesignSystem)
@@ -863,6 +1039,7 @@ export class PageService {
   }
 
   private toVersionContract(record: PageVersionDocument): PageVersion {
+    const composition = PageCompositionSchema.safeParse(record.composition);
     return PageVersionSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
@@ -870,8 +1047,56 @@ export class PageService {
       landingPageId: record.landingPageId,
       versionNumber: record.versionNumber,
       payload: record.payload,
+      ...(composition.success ? { composition: composition.data } : {}),
       createdAt: record.createdAt.toISOString(),
     });
+  }
+
+  private normalizeComposition(
+    pageId: string,
+    payload: PagePayload,
+    compositionInput?: PageCompositionInput,
+    previous?: PageComposition,
+    legacyLayoutAttachments?: readonly PageLayoutAttachment[],
+  ): PageComposition {
+    try {
+      return normalizePageComposition({
+        pageId,
+        payload,
+        ...(compositionInput ? { composition: compositionInput } : {}),
+        ...(previous ? { previous } : {}),
+        ...(legacyLayoutAttachments ? { legacyLayoutAttachments } : {}),
+      });
+    } catch (error) {
+      if (error instanceof PageCompositionError) {
+        throw new BadRequestException({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  }
+
+  private compositionForVersion(
+    page: PageDocument,
+    version: PageVersionDocument,
+    payload: PagePayload,
+    normalizeLegacy = true,
+  ): PageComposition | undefined {
+    const parsed = PageCompositionSchema.safeParse(version.composition);
+    if (
+      parsed.success &&
+      parsed.data.pageId === page._id.toString() &&
+      JSON.stringify(parsed.data.payload) === JSON.stringify(payload)
+    ) {
+      return parsed.data;
+    }
+    if (!normalizeLegacy) return undefined;
+    return this.normalizeComposition(
+      page._id.toString(),
+      payload,
+      undefined,
+      undefined,
+      parseLayoutAttachments(page),
+    );
   }
 
   private pageNotFound(pageId: string): NotFoundException {

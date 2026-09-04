@@ -21,6 +21,7 @@ import {
   type PageExtensionListResponse,
   type PageExtensionMutationRequest,
   type PageCapabilityGraph,
+  type PageComposition,
   type PagePayload,
   type ExtensionSlot,
   type PublishedPageBundle,
@@ -39,6 +40,7 @@ import { ExtensionConnectionRecord } from '../persistence/schemas/extension-conn
 import { TenantExtensionRecord } from '../persistence/schemas/tenant-extension.schema';
 import { ExtensionRegistry } from './extension-registry';
 import { customExtensionManifest } from './custom-extension';
+import { collectExtensionPlacements } from '../domain/page-composition';
 
 @Injectable()
 export class PageExtensionService {
@@ -182,11 +184,87 @@ export class PageExtensionService {
     }
   }
 
+  /**
+   * Projects the saved composition into the page-instance collection. The
+   * composition remains authoritative; this collection is only the existing
+   * page-settings/capability projection used by older CMS surfaces.
+   */
+  async synchronizeComposition(
+    pageId: string,
+    workspaceId: string,
+    composition: PageComposition,
+  ): Promise<void> {
+    await this.requirePage(pageId, workspaceId);
+    const attachmentByExtension = new Map<
+      string,
+      PageComposition['attachments'][number]
+    >();
+    for (const attachment of composition.attachments) {
+      if (attachment.pageId !== pageId) {
+        throw new BadRequestException({
+          code: 'EXTENSION_ATTACHMENT_INVALID',
+          message: `Extension attachment ${attachment.id} belongs to another page`,
+        });
+      }
+      if (!attachmentByExtension.has(attachment.extensionId)) {
+        attachmentByExtension.set(attachment.extensionId, attachment);
+      }
+      await this.resolveManifest(attachment.extensionId);
+    }
+
+    const existing = await this.instanceModel.find({ pageId, workspaceId }).exec();
+    for (const instance of existing) {
+      if (!attachmentByExtension.has(instance.extensionId)) {
+        await this.instanceModel
+          .deleteOne({ pageId, workspaceId, extensionId: instance.extensionId })
+          .exec();
+      }
+    }
+
+    for (const [extensionId, attachment] of attachmentByExtension) {
+      const tenantEnabled = await this.tenantExtensionModel.exists({
+        extensionId,
+        enabled: true,
+      });
+      if (!tenantEnabled) continue;
+      const manifest = await this.resolveManifest(extensionId);
+      await this.instanceModel
+        .findOneAndUpdate(
+          { pageId, workspaceId, extensionId },
+          {
+            $set: {
+              enabled: attachment.enabled,
+              configuration: attachment.configuration,
+              capabilities: manifest.capabilities,
+              runtimeIds: this.runtimeIds(extensionId),
+              ...(attachment.connectionId
+                ? { connectionId: attachment.connectionId }
+                : {}),
+            },
+            ...(attachment.connectionId ? {} : { $unset: { connectionId: 1 } }),
+            $setOnInsert: { _id: randomUUID() },
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true },
+        )
+        .exec();
+    }
+  }
+
   async validateBeforePublish(
     pageId: string,
     workspaceId: string,
     payload: PagePayload,
+    composition?: PageComposition,
   ): Promise<void> {
+    if (composition) {
+      await this.validateCompositionBeforePublish(
+        pageId,
+        workspaceId,
+        payload,
+        composition,
+      );
+      return;
+    }
     const pageExtensions = await this.instanceModel
       .find({ pageId, workspaceId, enabled: true })
       .exec();
@@ -247,29 +325,34 @@ export class PageExtensionService {
 
   async resolveRuntime(pageId: string, workspaceId: string) {
     const instances = await this.activeInstances(pageId, workspaceId);
-    return Promise.all(
-      instances.map(async (instance) => {
-        if (this.registry.has(instance.extensionId)) {
-          return this.registry.runtime(instance.extensionId);
-        }
-        const custom = await this.customDefinition(instance.extensionId);
-        if (custom) {
-          return {
-            extensionId: instance.extensionId,
-            runtimeIds: [],
-            styleAssetIds: [],
-            slots: [],
-            custom,
-          };
-        }
-        return {
-          extensionId: instance.extensionId,
-          runtimeIds: [],
-          styleAssetIds: [],
-          slots: [],
-        };
-      }),
+    return this.resolveRuntimeForExtensionIds(
+      instances.map((instance) => instance.extensionId),
     );
+  }
+
+  async resolveRuntimeForComposition(
+    pageId: string,
+    workspaceId: string,
+    composition: PageComposition,
+  ) {
+    await this.requirePage(pageId, workspaceId);
+    const enabledTenantExtensions = new Set(
+      (
+        await this.tenantExtensionModel
+          .find({ enabled: true })
+          .select({ extensionId: 1 })
+          .exec()
+      ).map((record) => record.extensionId),
+    );
+    const extensionIds = [
+      ...new Set(
+        composition.attachments
+          .filter((attachment) => attachment.enabled)
+          .map((attachment) => attachment.extensionId)
+          .filter((extensionId) => enabledTenantExtensions.has(extensionId)),
+      ),
+    ];
+    return this.resolveRuntimeForExtensionIds(extensionIds);
   }
 
   async compilePublishedBundle(
@@ -277,7 +360,50 @@ export class PageExtensionService {
     workspaceId: string,
     versionNumber: number,
     payload: PagePayload,
+    composition?: PageComposition,
+    legacyLayoutAttachments: PageComposition['layoutAttachments'] = [],
   ): Promise<PublishedPageBundle> {
+    if (composition) {
+      const extensions = await this.resolveRuntimeForComposition(
+        pageId,
+        workspaceId,
+        composition,
+      );
+      const graph = await this.resolveCapabilitiesForComposition(
+        pageId,
+        workspaceId,
+        composition,
+      );
+      const extensionVersions = Object.fromEntries(
+        await Promise.all(
+          [
+            ...new Set(
+              composition.attachments.map((attachment) => attachment.extensionId),
+            ),
+          ].map(async (extensionId) => {
+            const manifest = await this.resolveManifest(extensionId);
+            return [extensionId, manifest.version] as const;
+          }),
+        ),
+      );
+      return PublishedPageBundleSchema.parse({
+        bundleVersion: 1,
+        pageId,
+        versionNumber,
+        payload,
+        attachments: composition.attachments,
+        layoutAttachments: composition.layoutAttachments,
+        bindings: composition.bindings,
+        actions: composition.actions,
+        resources: composition.resources,
+        extensions,
+        extensionVersions,
+        capabilities: graph.capabilities,
+        runtimeIds: graph.runtimeIds,
+        styleAssetIds: extensions.flatMap((extension) => extension.styleAssetIds),
+        compiledAt: new Date().toISOString(),
+      });
+    }
     const active = await this.activeInstances(pageId, workspaceId);
     const extensions = await this.resolveRuntime(pageId, workspaceId);
     const graph = await this.resolveCapabilities(pageId, workspaceId);
@@ -307,6 +433,7 @@ export class PageExtensionService {
       versionNumber,
       payload,
       attachments,
+      layoutAttachments: legacyLayoutAttachments,
       bindings: [],
       actions: [],
       resources: [],
@@ -348,6 +475,189 @@ export class PageExtensionService {
       dataBindings: [...dataBindings].sort(),
       slots: [...slots].sort(),
     });
+  }
+
+  async resolveCapabilitiesForComposition(
+    pageId: string,
+    workspaceId: string,
+    composition: PageComposition,
+  ): Promise<PageCapabilityGraph> {
+    await this.requirePage(pageId, workspaceId);
+    const extensionIds = [
+      ...new Set(
+        composition.attachments
+          .filter((attachment) => attachment.enabled)
+          .map((attachment) => attachment.extensionId),
+      ),
+    ];
+    const capabilities = new Set<string>();
+    const runtimeIds = new Set<string>();
+    const dataBindings = new Set<string>();
+    const slots = new Set<ExtensionSlot>();
+    for (const extensionId of extensionIds) {
+      const manifest = await this.resolveManifest(extensionId);
+      manifest.capabilities.forEach((capability) => capabilities.add(capability));
+      this.runtimeIds(extensionId).forEach((runtimeId) => runtimeIds.add(runtimeId));
+      manifest.contributions?.builder?.dataBindings.forEach((binding) =>
+        dataBindings.add(binding.id),
+      );
+      manifest.contributions?.page?.slots.forEach((slot) => slots.add(slot));
+      manifest.contributions?.renderer?.slots.forEach((slot) => slots.add(slot));
+    }
+    return PageCapabilityGraphSchema.parse({
+      pageId,
+      extensionIds,
+      capabilities: [...capabilities].sort(),
+      runtimeIds: [...runtimeIds].sort(),
+      dataBindings: [...dataBindings].sort(),
+      slots: [...slots].sort(),
+    });
+  }
+
+  private async validateCompositionBeforePublish(
+    pageId: string,
+    workspaceId: string,
+    payload: PagePayload,
+    composition: PageComposition,
+  ): Promise<void> {
+    if (composition.pageId !== pageId) {
+      throw new BadRequestException({
+        code: 'EXTENSION_ATTACHMENT_INVALID',
+        message: 'The page composition belongs to another page',
+      });
+    }
+    const attachmentById = new Map<string, PageComposition['attachments'][number]>();
+    for (const attachment of composition.attachments) {
+      if (attachment.pageId !== pageId) {
+        throw new BadRequestException({
+          code: 'EXTENSION_ATTACHMENT_INVALID',
+          message: `Extension attachment ${attachment.id} belongs to another page`,
+        });
+      }
+      if (attachmentById.has(attachment.id)) {
+        throw new BadRequestException({
+          code: 'EXTENSION_ATTACHMENT_INVALID',
+          message: `Extension attachment ${attachment.id} is duplicated`,
+        });
+      }
+      attachmentById.set(attachment.id, attachment);
+      await this.resolveManifest(attachment.extensionId);
+      for (const resourceId of attachment.resourceIds) {
+        if (!composition.resources.some((resource) => resource.id === resourceId)) {
+          throw new BadRequestException({
+            code: 'EXTENSION_RESOURCE_MISSING',
+            message: `Extension attachment ${attachment.id} references missing resource ${resourceId}`,
+          });
+        }
+      }
+      if (attachment.connectionId) {
+        if (!this.connectionModel) {
+          throw new ConflictException({
+            code: 'EXTENSION_CONNECTION_UNAVAILABLE',
+            message: 'Extension connections are not configured',
+          });
+        }
+        const connection = await this.connectionModel
+          .findOne({ _id: attachment.connectionId, extensionId: attachment.extensionId })
+          .exec();
+        if (!connection) {
+          throw new BadRequestException({
+            code: 'EXTENSION_CONNECTION_NOT_FOUND',
+            message: `Connection ${attachment.connectionId} does not belong to ${attachment.extensionId}`,
+          });
+        }
+      }
+    }
+
+    const usedAttachments = new Set<string>();
+    const usedExtensions = new Set<string>();
+    for (const placement of collectExtensionPlacements(payload.root)) {
+      const attachment = placement.attachmentId
+        ? attachmentById.get(placement.attachmentId)
+        : composition.attachments.find(
+            (candidate) =>
+              !usedAttachments.has(candidate.id) &&
+              candidate.extensionId === placement.extensionId,
+          );
+      if (!attachment || attachment.extensionId !== placement.extensionId) {
+        throw new BadRequestException({
+          code: 'EXTENSION_NODE_ATTACHMENT_MISMATCH',
+          message: `Visual extension node ${placement.extensionId} has no matching attachment`,
+        });
+      }
+      if (usedAttachments.has(attachment.id)) {
+        throw new BadRequestException({
+          code: 'EXTENSION_NODE_ATTACHMENT_MISMATCH',
+          message: `Attachment ${attachment.id} is shared by multiple visual nodes`,
+        });
+      }
+      usedAttachments.add(attachment.id);
+      if (!attachment.enabled) {
+        throw new BadRequestException({
+          code: 'EXTENSION_ATTACHMENT_INVALID',
+          message: `Extension ${attachment.extensionId} is disabled for this page`,
+        });
+      }
+      usedExtensions.add(attachment.extensionId);
+      if (this.registry.has(attachment.extensionId)) {
+        const runtime = this.registry.runtime(attachment.extensionId);
+        if (
+          runtime.runtimeIds.length === 0 &&
+          runtime.styleAssetIds.length === 0 &&
+          runtime.slots.length === 0
+        ) {
+          throw new BadRequestException({
+            code: 'EXTENSION_RUNTIME_UNAVAILABLE',
+            message: `Extension ${attachment.extensionId} has no renderer runtime contribution`,
+          });
+        }
+      }
+      await this.requireTenantExtensionEnabled(attachment.extensionId);
+      this.validatePageConfiguration(attachment.extensionId, attachment.configuration);
+    }
+
+    for (const attachment of composition.attachments) {
+      if (!attachment.enabled || usedExtensions.has(attachment.extensionId)) continue;
+      await this.requireTenantExtensionEnabled(attachment.extensionId);
+      this.validatePageConfiguration(attachment.extensionId, attachment.configuration);
+    }
+
+    for (const extensionId of usedExtensions) {
+      if (!this.registry.has(extensionId)) continue;
+      const attachment = composition.attachments.find(
+        (candidate) => candidate.extensionId === extensionId && candidate.enabled,
+      );
+      if (!attachment) continue;
+      await this.registry.beforePublish({
+        extensionId,
+        pageId,
+        workspaceId,
+        payload,
+        configuration: this.validatePageConfiguration(
+          extensionId,
+          attachment.configuration,
+        ),
+      });
+    }
+  }
+
+  private async resolveRuntimeForExtensionIds(extensionIds: readonly string[]) {
+    return Promise.all(
+      [...new Set(extensionIds)].sort().map(async (extensionId) => {
+        if (this.registry.has(extensionId)) return this.registry.runtime(extensionId);
+        const custom = await this.customDefinition(extensionId);
+        if (custom) {
+          return {
+            extensionId,
+            runtimeIds: [],
+            styleAssetIds: [],
+            slots: [],
+            custom,
+          };
+        }
+        return { extensionId, runtimeIds: [], styleAssetIds: [], slots: [] };
+      }),
+    );
   }
 
   private async activeInstances(

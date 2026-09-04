@@ -1279,6 +1279,8 @@ export const CountdownPropsSchema = z
   .object({
     targetAt: z.string().datetime({ offset: true }),
     label: nonEmptyText.max(200),
+    /** Stable relation to the page composition attachment. */
+    attachmentId: EntityIdSchema.optional(),
   })
   .strict();
 export type CountdownProps = z.infer<typeof CountdownPropsSchema>;
@@ -3753,14 +3755,29 @@ export const PageDocumentSchema = z
   .object({
     schemaVersion: z.literal(PAGE_DOCUMENT_SCHEMA_VERSION),
     payload: PagePayloadSchema,
+    /** Page-scoped state outside the visual payload tree. */
+    composition: z
+      .object({
+        attachments: z.array(PageExtensionAttachmentSchema).max(100).default([]),
+        layoutAttachments: PageLayoutAttachmentsSchema.default([]),
+        bindings: z.array(PageBindingSchema).max(200).default([]),
+        actions: z.array(PageActionSchema).max(200).default([]),
+        resources: z.array(PageResourceSchema).max(200).default([]),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type PageDocument = z.infer<typeof PageDocumentSchema>;
 
-export function createPageDocument(payload: PagePayload): PageDocument {
+export function createPageDocument(
+  payload: PagePayload,
+  composition?: PageDocument['composition'],
+): PageDocument {
   return PageDocumentSchema.parse({
     schemaVersion: PAGE_DOCUMENT_SCHEMA_VERSION,
     payload,
+    ...(composition ? { composition } : {}),
   });
 }
 
@@ -3790,14 +3807,33 @@ export * from './component-registry';
 export * from './page-runtime';
 export * from './style-registry';
 
+export const PageCompositionFieldsSchema = z
+  .object({
+    attachments: z.array(PageExtensionAttachmentSchema).max(100).default([]),
+    layoutAttachments: PageLayoutAttachmentsSchema.default([]),
+    bindings: z.array(PageBindingSchema).max(200).default([]),
+    actions: z.array(PageActionSchema).max(200).default([]),
+    resources: z.array(PageResourceSchema).max(200).default([]),
+  })
+  .strict();
+export type PageCompositionFields = z.infer<typeof PageCompositionFieldsSchema>;
+
+/** Input accepted by draft saves. `pageId` is optional because the route owns it. */
+export const PageCompositionInputSchema = PageCompositionFieldsSchema.extend({
+  pageId: EntityIdSchema.optional(),
+  payload: PagePayloadSchema,
+}).strict();
+export type PageCompositionInput = z.infer<typeof PageCompositionInputSchema>;
+
 export const PageCompositionSchema = z
   .object({
     pageId: EntityIdSchema,
     payload: PagePayloadSchema,
-    attachments: z.array(PageExtensionAttachmentSchema).max(100),
-    bindings: z.array(PageBindingSchema).max(200),
-    actions: z.array(PageActionSchema).max(200),
-    resources: z.array(PageResourceSchema).max(200),
+    attachments: z.array(PageExtensionAttachmentSchema).max(100).default([]),
+    layoutAttachments: PageLayoutAttachmentsSchema.default([]),
+    bindings: z.array(PageBindingSchema).max(200).default([]),
+    actions: z.array(PageActionSchema).max(200).default([]),
+    resources: z.array(PageResourceSchema).max(200).default([]),
   })
   .strict();
 export type PageComposition = z.infer<typeof PageCompositionSchema>;
@@ -3809,6 +3845,7 @@ export const PublishedPageBundleSchema = z
     versionNumber: z.number().int().positive(),
     payload: PagePayloadSchema,
     attachments: z.array(PageExtensionAttachmentSchema).max(100),
+    layoutAttachments: PageLayoutAttachmentsSchema.default([]),
     bindings: z.array(PageBindingSchema).max(200),
     actions: z.array(PageActionSchema).max(200),
     resources: z.array(PageResourceSchema).max(200),
@@ -4603,6 +4640,8 @@ export const PageVersionSchema = z
     landingPageId: EntityIdSchema,
     versionNumber: z.number().int().positive(),
     payload: PagePayloadSchema,
+    /** Immutable composition snapshot for new versions; absent on legacy rows. */
+    composition: PageCompositionSchema.optional(),
     createdAt: timestampSchema,
   })
   .strict();
@@ -4812,6 +4851,7 @@ export const CreatePageRequestSchema = z
       .max(200)
       .optional(),
     payload: PagePayloadSchema,
+    composition: PageCompositionInputSchema.optional(),
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
     appliedTemplate: AppliedTemplateMetadataSchema.optional(),
   })
@@ -4827,6 +4867,7 @@ export const UpdatePageRequestSchema = z
       .nullable()
       .optional(),
     payload: PagePayloadSchema.optional(),
+    composition: PageCompositionInputSchema.optional(),
     parentId: EntityIdSchema.nullable().optional(),
     kind: PageKindSchema.optional(),
     anchors: z
@@ -4839,10 +4880,14 @@ export const UpdatePageRequestSchema = z
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
 export const CreatePageVersionRequestSchema = z
   .object({
-    payload: PagePayloadSchema,
+    payload: PagePayloadSchema.optional(),
+    composition: PageCompositionInputSchema.optional(),
     expectedVersionNumber: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .refine((request) => Boolean(request.payload || request.composition), {
+    message: 'A page version requires a payload or composition',
+  });
 
 export const PublishPageRequestSchema = z
   .object({

@@ -19,6 +19,10 @@ const REFERENCE_KEYS = new Set([
   'targetId',
   'targetNodeId',
 ]);
+const EXTENSION_PROPS_ATTRIBUTES = new Set([
+  'data-payload-countdown-props',
+  'data-payload-extension-props',
+]);
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -212,11 +216,28 @@ function replaceReference(value: string, idMap: ReadonlyMap<string, string>): st
     .join('');
 }
 
+function freshAttachmentId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return uuid;
+  fallbackSequence += 1;
+  return `00000000-0000-4000-8000-${fallbackSequence.toString().padStart(12, '0')}`;
+}
+
 function remapReferences(
   value: unknown,
   key: string,
   idMap: ReadonlyMap<string, string>,
 ): unknown {
+  if (typeof value === 'string' && EXTENSION_PROPS_ATTRIBUTES.has(key)) {
+    try {
+      const parsed = JSON.parse(value) as UnknownRecord;
+      if (typeof parsed.attachmentId === 'string') {
+        return JSON.stringify({ ...parsed, attachmentId: freshAttachmentId() });
+      }
+    } catch {
+      // The adapter will report malformed extension properties later.
+    }
+  }
   if (typeof value === 'string' && REFERENCE_KEYS.has(key)) {
     return replaceReference(value, idMap);
   }

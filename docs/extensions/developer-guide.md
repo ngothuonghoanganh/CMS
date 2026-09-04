@@ -154,9 +154,12 @@ HTTP(S)/relative CTA and a hex accent color:
 }
 ```
 
-Enable the definition for the tenant, then insert it from the Builder's Blocks panel. Saving the
-page creates its `PageExtensionInstance`; publishing validates tenant enablement and public
-delivery includes the custom definition alongside the page runtime metadata. Deleting a custom
+Enable the definition for the tenant, then insert it from the Builder's Blocks panel. The visual
+node is saved with an `attachmentId`; the draft `PageComposition.attachments` entry owns the
+page configuration and lifecycle state. Saving the page persists both the payload and complete
+composition, and projects the attachment to the compatibility `PageExtensionInstance`. Publishing
+validates tenant enablement and public delivery includes the custom definition alongside the page
+runtime metadata. Deleting a custom
 extension is rejected while a page instance still references it. Custom definitions never execute
 JavaScript, load modules, inject HTML or register arbitrary runtime code.
 

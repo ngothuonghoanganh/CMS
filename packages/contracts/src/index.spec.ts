@@ -42,6 +42,7 @@ import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   isSafePageStyleValue,
   PageDocumentSchema,
+  PageCompositionSchema,
   PagePreviewMessageSchema,
   PagePreviewSnapshotSchema,
   canContainPageComponent,
@@ -435,6 +436,32 @@ describe('foundation contracts', () => {
     expect(PageDocumentSchema.parse(document)).toEqual(document);
     expect(migratePageDocument(payload)).toEqual(document);
     expect(migratePageDocument(document)).toEqual(document);
+  });
+
+  it('round-trips composition state alongside the visual document', () => {
+    const payload = createPayload();
+    const pageId = randomUUID();
+    const document = createPageDocument(payload, {
+      attachments: [
+        {
+          id: randomUUID(),
+          pageId,
+          extensionId: 'custom-launch',
+          enabled: true,
+          configuration: {},
+          resourceIds: [],
+        },
+      ],
+      layoutAttachments: [],
+      bindings: [],
+      actions: [],
+      resources: [],
+    });
+
+    expect(PageDocumentSchema.parse(document)).toEqual(document);
+    expect(
+      PageCompositionSchema.parse({ pageId, payload, ...document.composition }),
+    ).toMatchObject({ pageId, payload, attachments: document.composition?.attachments });
   });
 
   it('validates live preview messages as versioned PageDocument snapshots', () => {

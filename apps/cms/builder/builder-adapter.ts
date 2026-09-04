@@ -1360,10 +1360,28 @@ export function snapshotFromEditorDefinition(
 }
 
 const generatedDefinitionIds = new Set<string>();
+const generatedDefinitionAttachmentIds = new Set<string>();
 
 function newNodeId(prefix: string): string {
   const id = generateFreshNodeId(prefix, generatedDefinitionIds);
   generatedDefinitionIds.add(id);
+  return id;
+}
+
+function newAttachmentId(): string {
+  let id = globalThis.crypto?.randomUUID?.();
+  if (!id) {
+    let sequence = generatedDefinitionAttachmentIds.size + 1;
+    do {
+      id = `00000000-0000-4000-8000-${sequence.toString().padStart(12, '0')}`;
+      sequence += 1;
+    } while (generatedDefinitionAttachmentIds.has(id));
+  } else {
+    while (generatedDefinitionAttachmentIds.has(id)) {
+      id = globalThis.crypto?.randomUUID() ?? id;
+    }
+  }
+  generatedDefinitionAttachmentIds.add(id);
   return id;
 }
 
@@ -1439,7 +1457,7 @@ export function createBlockDefinition(
         {
           ...baseNode,
           type: 'countdown',
-          props: extension.defaultProps,
+          props: { ...extension.defaultProps, attachmentId: newAttachmentId() },
         },
         undefined,
         3,
@@ -1449,7 +1467,11 @@ export function createBlockDefinition(
       if (!extensionId) {
         throw new BuilderAdapterError('Custom extension id is required');
       }
-      const props: CustomExtensionNodeProps = { extensionId, values: {} };
+      const props: CustomExtensionNodeProps = {
+        extensionId,
+        attachmentId: newAttachmentId(),
+        values: {},
+      };
       return componentDefinitionForNode(
         {
           ...baseNode,

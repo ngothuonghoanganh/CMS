@@ -122,6 +122,8 @@ const customExtensionValue = z.union([
 export const CustomExtensionNodePropsSchema = z
   .object({
     extensionId: extensionKey,
+    /** Stable relation to the page composition attachment. */
+    attachmentId: z.string().uuid().optional(),
     values: z.record(z.string().trim().min(1).max(80), customExtensionValue).default({}),
   })
   .strict();

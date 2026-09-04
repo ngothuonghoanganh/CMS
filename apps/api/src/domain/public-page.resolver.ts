@@ -8,15 +8,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
   PagePayloadSchema,
+  PageCompositionSchema,
   PublishedPageBundleSchema,
   PublicPageSchema,
   PublicSeoSettingsSchema,
   SiteGlobalsSchema,
   SiteDesignSystemSchema,
-  PageLayoutAttachmentsSchema,
   normalizeHostname,
   type PublicPage,
-  type PageLayoutAttachment,
   normalizePagePath,
 } from '@payload/contracts';
 
@@ -30,7 +29,6 @@ import {
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 import { TenantContext } from '../tenancy/tenant-context';
-import { PageExtensionService } from '../extensions/page-extension.service';
 import { SiteUrlService } from './site-url.service';
 import { NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
@@ -50,8 +48,6 @@ export class PublicPageResolver {
     @InjectModel(PageSeoSettingsRecord.name)
     private readonly seoModel: Model<PageSeoSettingsRecord>,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-    @Inject(PageExtensionService)
-    private readonly pageExtensions: PageExtensionService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
     @Inject(LayoutExtensionService)
@@ -206,7 +202,16 @@ export class PublicPageResolver {
     version: PageVersionDocument,
   ): Promise<PublicPage> {
     try {
-      const payload = PagePayloadSchema.parse(version.payload);
+      const publishedBundle = version.publishedBundle
+        ? PublishedPageBundleSchema.parse(version.publishedBundle)
+        : undefined;
+      const versionComposition = PageCompositionSchema.safeParse(version.composition);
+      const payload = PagePayloadSchema.parse(
+        publishedBundle?.payload ??
+          (versionComposition.success
+            ? versionComposition.data.payload
+            : version.payload),
+      );
       const seoRecord = await this.seoModel
         .findOne({ workspaceId: page.workspaceId, landingPageId: page._id.toString() })
         .exec();
@@ -218,7 +223,8 @@ export class PublicPageResolver {
         { mode: 'published' },
       );
       const layout = await this.layoutExtensions.resolveComposition(
-        readLayoutAttachments(page),
+        publishedBundle?.layoutAttachments ??
+          (versionComposition.success ? versionComposition.data.layoutAttachments : []),
         'published',
       );
       const globals = site.publishedGlobals
@@ -233,12 +239,10 @@ export class PublicPageResolver {
       const designSystem = site.publishedDesignSystem
         ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
         : undefined;
-      const publishedBundle = version.publishedBundle
-        ? PublishedPageBundleSchema.parse(version.publishedBundle)
-        : undefined;
-      const extensions =
-        publishedBundle?.extensions ??
-        (await this.pageExtensions.resolveRuntime(page._id.toString(), page.workspaceId));
+      // Public rendering is intentionally snapshot-only. In particular, a
+      // legacy version without a compiled bundle must not fall through to the
+      // mutable page extension projection from the draft.
+      const extensions = publishedBundle?.extensions ?? [];
 
       return PublicPageSchema.parse({
         tenantSlug: this.tenantContext.require().slug,
@@ -322,10 +326,4 @@ export class PublicPageResolver {
       message: 'The published page data is invalid',
     });
   }
-}
-
-function readLayoutAttachments(page: PageDocument): PageLayoutAttachment[] {
-  const value = page.layoutAttachments ?? [];
-  const parsed = PageLayoutAttachmentsSchema.safeParse(value);
-  return parsed.success ? parsed.data : [];
 }

@@ -59,6 +59,27 @@ describe('builder node identity service', () => {
     assertUniquePersistedNodeIds(remapped);
   });
 
+  it('gives cloned extension visual nodes independent attachment identities', () => {
+    const value = {
+      id: 'extension-source',
+      type: 'extension',
+      attributes: {
+        'data-payload-extension-props': JSON.stringify({
+          extensionId: 'custom-launch',
+          attachmentId: '44444444-4444-4444-8444-444444444444',
+          values: {},
+        }),
+      },
+      children: [],
+    };
+    const remapped = remapSubtreeNodeIds(value, new Set(['extension-source']));
+    const props = JSON.parse(remapped.attributes['data-payload-extension-props']) as {
+      attachmentId: string;
+    };
+
+    expect(props.attachmentId).not.toBe('44444444-4444-4444-8444-444444444444');
+  });
+
   it('repairs duplicate hydrated IDs while preserving the first node and references', () => {
     const value = {
       id: 'root',

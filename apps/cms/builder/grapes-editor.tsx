@@ -71,6 +71,7 @@ import {
   resolveSlotsForChild,
   type FormProps,
   type PageDocument,
+  type PageCompositionFields,
   type PagePayload,
   type SiteGlobalPayloadV1,
   type BuilderDocumentKind,
@@ -92,6 +93,7 @@ import {
   validationIssueFromError,
   type BuilderValidationIssue,
 } from './builder-validation';
+import { compositionFieldsFromPayload, pageDocumentSignature } from './page-composition';
 
 export type SelectedBuilderNode = ComponentSelectionSnapshot;
 
@@ -118,7 +120,11 @@ export type GrapesEditorHandle = {
   redo: () => void;
   getDocument: () => PageDocument | SiteGlobalPayloadV1;
   serialize: () => PagePayload | SiteGlobalPayloadV1;
-  acknowledgeSaved: (payload: PagePayload | SiteGlobalPayloadV1) => void;
+  acknowledgeSaved: (
+    payload: PagePayload | SiteGlobalPayloadV1,
+    composition?: PageCompositionFields,
+  ) => void;
+  setWorkingComposition: (composition: PageCompositionFields) => void;
   setViewport: (viewport: BuilderViewport) => void;
   updateSelectedText: (value: string) => void;
   updateSelectedProperty: (property: string, value: unknown) => void;
@@ -167,7 +173,9 @@ export type InteractionMode = 'select' | 'hand';
 
 type GrapesEditorProps = {
   documentKind: BuilderDocumentKind;
+  pageId?: string;
   initialPayload: PagePayload | SiteGlobalPayloadV1;
+  initialComposition?: PageCompositionFields;
   reusableRuntime?: readonly ReusableRuntime[];
   designSystem?: SiteDesignSystem;
   siteName?: string;
@@ -1077,7 +1085,9 @@ function scrollCanvasToPoint(editor: Editor, x: number, y: number): void {
 export const GrapesEditor = forwardRef(function GrapesEditor(
   {
     documentKind,
+    pageId,
     initialPayload,
+    initialComposition,
     reusableRuntime = [],
     designSystem,
     siteName,
@@ -1125,6 +1135,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   });
   const validationIssuesRef = useRef(validationIssues);
   const payloadRef = useRef(initialPayload);
+  const compositionRef = useRef<PageCompositionFields | undefined>(initialComposition);
   const reusableRuntimeRef = useRef(reusableRuntime);
   const designSystemRef = useRef(designSystem);
   const projectionContextRef = useRef<{
@@ -1251,7 +1262,15 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   function createDocumentSnapshot(editor: Editor): PageDocument | SiteGlobalPayloadV1 {
     const root = getRoot(editor);
     if (documentKind === 'page') {
-      return createPageDocument(serializeGrapesComponent(root, 'page') as PagePayload);
+      const payload = serializeGrapesComponent(root, 'page') as PagePayload;
+      if (!pageId) return createPageDocument(payload);
+      const composition = compositionFieldsFromPayload(
+        payload,
+        pageId,
+        compositionRef.current,
+      );
+      compositionRef.current = composition;
+      return createPageDocument(payload, composition);
     }
     return serializeGrapesComponent(root, documentKind) as SiteGlobalPayloadV1;
   }
@@ -1724,12 +1743,33 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           if (type !== 'countdown') return;
           const parsed = CountdownPropsSchema.safeParse(props);
           if (!parsed.success) return;
+          let currentPropsInput: unknown;
+          try {
+            currentPropsInput = JSON.parse(
+              String(
+                selected.getAttributes({ noStyle: true })[
+                  BUILDER_COUNTDOWN_PROPS_ATTRIBUTE
+                ] ?? '{}',
+              ),
+            ) as unknown;
+          } catch {
+            currentPropsInput = undefined;
+          }
+          const currentProps = CountdownPropsSchema.safeParse(currentPropsInput);
+          const nextProps = currentProps.success
+            ? {
+                ...parsed.data,
+                ...(currentProps.data.attachmentId
+                  ? { attachmentId: currentProps.data.attachmentId }
+                  : {}),
+              }
+            : parsed.data;
           commitEditorCommand(editor, {
             kind: 'update-props',
             nodeId: payloadNodeId(selected) ?? '',
-            components: countdownPreviewComponents(parsed.data),
+            components: countdownPreviewComponents(nextProps),
             attributes: {
-              [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: JSON.stringify(parsed.data),
+              [BUILDER_COUNTDOWN_PROPS_ATTRIBUTE]: JSON.stringify(nextProps),
             },
           });
         });
@@ -1738,8 +1778,37 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const document = serializeDocument();
         return 'schemaVersion' in document ? document.payload : document;
       },
-      acknowledgeSaved(payload) {
-        initialPersistedSignatureRef.current = JSON.stringify(payload);
+      acknowledgeSaved(payload, composition) {
+        const savedDocument =
+          documentKind === 'page' && pageId
+            ? createPageDocument(
+                payload as PagePayload,
+                composition ??
+                  compositionFieldsFromPayload(
+                    payload as PagePayload,
+                    pageId,
+                    compositionRef.current,
+                  ),
+              )
+            : payload;
+        const savedSignature = pageDocumentSignature(savedDocument);
+        if (documentKind === 'page' && composition) {
+          try {
+            // A save response may race with a newer local edit. Only advance
+            // the working composition when the live editor is still exactly
+            // the document that was acknowledged by the server.
+            if (pageDocumentSignature(serializeDocument()) === savedSignature) {
+              compositionRef.current = composition;
+            }
+          } catch {
+            // The editor can be tearing down during navigation; retain the
+            // current working composition in that case.
+          }
+        }
+        initialPersistedSignatureRef.current = savedSignature;
+      },
+      setWorkingComposition(composition) {
+        if (documentKind === 'page') compositionRef.current = composition;
       },
       setViewport(viewport) {
         const editor = editorRef.current;
@@ -2554,8 +2623,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
             projectionContext: projectionContextRef.current,
           }),
         );
-        initialPersistedSignatureRef.current = JSON.stringify(
-          serializeGrapesComponent(getRoot(editor), documentKind),
+        initialPersistedSignatureRef.current = pageDocumentSignature(
+          createDocumentSnapshot(editor),
         );
         editor
           .getModel()
@@ -2696,9 +2765,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           let persistedDocumentChanged = true;
           try {
             persistedDocumentChanged =
-              JSON.stringify(
-                serializeGrapesComponent(getRoot(editor as Editor), documentKind),
-              ) !== initialPersistedSignatureRef.current;
+              pageDocumentSignature(createDocumentSnapshot(editor as Editor)) !==
+              initialPersistedSignatureRef.current;
           } catch {
             persistedDocumentChanged = true;
           }

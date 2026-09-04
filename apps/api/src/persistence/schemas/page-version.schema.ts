@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { HydratedDocument } from 'mongoose';
-import { PagePayloadSchema, PublishedPageBundleSchema } from '@payload/contracts';
+import {
+  PageCompositionSchema,
+  PagePayloadSchema,
+  PublishedPageBundleSchema,
+} from '@payload/contracts';
 
 export type PageVersionDocument = HydratedDocument<PageVersionRecord>;
 
@@ -36,6 +40,17 @@ export class PageVersionRecord {
     },
   })
   payload!: unknown;
+
+  @Prop({
+    type: Object,
+    required: false,
+    immutable: true,
+    validate: {
+      validator: (value: unknown) => PageCompositionSchema.safeParse(value).success,
+      message: 'composition must be a valid PageComposition',
+    },
+  })
+  composition?: unknown;
 
   @Prop({
     type: Object,

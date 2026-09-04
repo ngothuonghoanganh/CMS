@@ -1,19 +1,25 @@
 # Data and Request Flows
 
-## Phase 2 page save
+## Page composition save and versioning
 
 ```text
-PagePayload JSON
-  -> Zod PagePayloadV1 validation
+Builder working PageDocument
+  -> canonical PageComposition { payload, attachments, layoutAttachments,
+     bindings, actions, resources }
+  -> Zod composition/payload validation
   -> PageController
   -> PageService ownership/version checks
-  -> PageVersion snapshot + Page draft pointer
+  -> immutable PageVersion snapshot + currentDraftVersionId
+  -> page-extension instance projection (compatibility/settings only)
   -> explicit API contract mapping
   -> MongoDB
 ```
 
-PageVersion is a separate snapshot document. The API does not return Mongoose documents
-directly, and the contracts package remains independent of Mongoose and editor engines.
+PageVersion is a separate snapshot document. New versions persist the complete
+composition, not just `payload`. The version pointer is advanced conditionally;
+if projection synchronization fails, the new version is removed and the pointer
+is restored. The API does not return Mongoose documents directly, and the
+contracts package remains independent of Mongoose and editor engines.
 
 ## CMS and renderer shell
 
@@ -77,18 +83,19 @@ controller/service exception
 ```text
 CMS page management
   -> protected builder route
-  -> current PageVersion payload
+  -> current PageVersion composition
   -> GrapesJS through Builder Adapter
   -> supported visual edits
-  -> Builder Adapter serialization
-  -> PagePayloadV1 validation
-  -> POST /pages/:pageId/versions with expectedVersionNumber
+  -> Builder Adapter serialization + attachment reconciliation
+  -> PageComposition validation
+  -> POST /pages/:pageId/versions with expectedVersionNumber and composition
   -> immutable PageVersion + currentDraftVersionId
 ```
 
 Raw GrapesJS project JSON is transient editor state only. The API receives only the
-validated PagePayloadV1 snapshot, and a stale expected version becomes a visible
-conflict instead of an overwrite.
+validated canonical composition, and a stale expected version becomes a visible
+conflict instead of an overwrite. `GET /preview/pages/:pageId` reads that persisted
+draft composition and is the Review boundary.
 
 ## Website platform flow
 

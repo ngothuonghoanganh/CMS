@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Model } from 'mongoose';
-import { PagePayloadV3Schema } from '@payload/contracts';
+import {
+  ExtensionIds,
+  PageCompositionSchema,
+  PagePayloadV3Schema,
+} from '@payload/contracts';
 
 import type { PageRecord } from '../persistence/schemas/page.schema';
 import type { PageExtensionInstanceRecord } from '../persistence/schemas/page-extension-instance.schema';
@@ -317,5 +321,59 @@ describe('PageExtensionService', () => {
         custom: expect.objectContaining({ id: 'custom-launch' }),
       }),
     ]);
+  });
+
+  it('projects saved composition attachments and removes orphaned projections', async () => {
+    const tenantContext = new TenantContext();
+    const registry = new ExtensionRegistry(
+      [demoBuilderExtension],
+      new CapabilityRegistry(),
+      new EventBus(tenantContext),
+    );
+    await registry.onModuleInit();
+    const instances = new PageExtensionStore();
+    const service = new PageExtensionService(
+      instances as unknown as Model<PageExtensionInstanceRecord>,
+      new PageStore() as unknown as Model<PageRecord>,
+      new TenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
+      registry,
+    );
+    const composition = PageCompositionSchema.parse({
+      pageId,
+      payload: PagePayloadV3Schema.parse({
+        version: 3,
+        metadata: { documentTitle: 'Composition' },
+        root: { id: 'root', type: 'root', props: {}, children: [] },
+      }),
+      attachments: [
+        {
+          id: '44444444-4444-4444-8444-444444444444',
+          pageId,
+          extensionId: ExtensionIds.DemoBuilder,
+          enabled: false,
+          configuration: {},
+          resourceIds: [],
+        },
+      ],
+      layoutAttachments: [],
+      bindings: [],
+      actions: [],
+      resources: [],
+    });
+
+    await service.synchronizeComposition(pageId, workspaceId, composition);
+    expect(instances.records.get(`${pageId}:${ExtensionIds.DemoBuilder}`)).toMatchObject({
+      enabled: false,
+    });
+
+    await service.synchronizeComposition(
+      pageId,
+      workspaceId,
+      PageCompositionSchema.parse({
+        ...composition,
+        attachments: [],
+      }),
+    );
+    expect(instances.records.has(`${pageId}:${ExtensionIds.DemoBuilder}`)).toBe(false);
   });
 });
