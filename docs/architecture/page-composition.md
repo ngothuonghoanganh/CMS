@@ -86,3 +86,8 @@ type PageLayoutComposition = {
   preview and the **published** document in live mode.
 - Copied page globals render from the page draft/published payload and are not
   affected by later edits to their source extension.
+
+The CMS Page Layout Editor writes attachments through `GET/PATCH
+/pages/:pageId/layout`. It is the explicit place to choose a Header or Footer,
+remove it, and choose its page slot (`top`, `top-left`, `top-right`, or
+`bottom`). The renderer emits no global chrome for pages with no attachment.

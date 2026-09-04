@@ -97,6 +97,23 @@ validated canonical composition, and a stale expected version becomes a visible
 conflict instead of an overwrite. `GET /preview/pages/:pageId` reads that persisted
 draft composition and is the Review boundary.
 
+## Phase 19 layout/template flow
+
+```text
+Header/Footer Builder or Template Builder
+  -> shared GrapesJS adapter with documentKind context
+  -> canonical SiteGlobalPayloadV1 / PagePayload + layoutAttachments
+  -> immutable resource version with expectedVersionNumber check
+  -> independent publish pointer
+  -> page explicit layout attachment or template clone-on-apply
+  -> preview reads draft; public renderer reads published snapshots
+```
+
+Layout resources are resolved in the page's site/workspace scope. A published
+layout update therefore propagates to attached pages without changing the page
+version, while a template apply creates an independent page snapshot and records
+only provenance metadata.
+
 ## Website platform flow
 
 ```text

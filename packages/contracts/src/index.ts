@@ -87,12 +87,18 @@ export const TenantPermissions = {
   SiteRead: 'site.read',
   SiteCreate: 'site.create',
   SiteUpdate: 'site.update',
+  LayoutRead: 'layout.read',
+  LayoutCreate: 'layout.create',
+  LayoutUpdate: 'layout.update',
+  LayoutPublish: 'layout.publish',
+  LayoutDelete: 'layout.delete',
   AssetRead: 'asset.read',
   AssetCreate: 'asset.create',
   AssetDelete: 'asset.delete',
   TemplateRead: 'template.read',
   TemplateCreate: 'template.create',
   TemplateUpdate: 'template.update',
+  TemplatePublish: 'template.publish',
   TemplateDelete: 'template.delete',
   ReusableRead: 'reusable.read',
   ReusableCreate: 'reusable.create',
@@ -3670,6 +3676,8 @@ export const UpdateLayoutExtensionRequestSchema = z
     name: nonEmptyText.max(200).optional(),
     description: z.string().trim().max(500).nullable().optional(),
     document: SiteGlobalPayloadV1Schema.optional(),
+    /** Prevents a stale builder from silently replacing a newer draft. */
+    expectedVersionNumber: z.number().int().positive().optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
@@ -3682,6 +3690,13 @@ export const PublishLayoutExtensionRequestSchema = z
   .strict();
 export type PublishLayoutExtensionRequest = z.infer<
   typeof PublishLayoutExtensionRequestSchema
+>;
+
+export const DuplicateLayoutExtensionRequestSchema = z
+  .object({ name: nonEmptyText.max(200).optional() })
+  .strict();
+export type DuplicateLayoutExtensionRequest = z.infer<
+  typeof DuplicateLayoutExtensionRequestSchema
 >;
 
 // ---------------------------------------------------------------------------
@@ -4948,6 +4963,8 @@ export const UpdateTemplateRequestSchema = z
     description: z.string().trim().max(500).nullable().optional(),
     payload: PagePayloadSchema.optional(),
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    /** Prevents a stale template builder from silently replacing a newer draft. */
+    expectedVersionNumber: z.number().int().positive().optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');

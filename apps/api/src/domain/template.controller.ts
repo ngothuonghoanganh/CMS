@@ -187,12 +187,25 @@ export class TemplateController {
     input: PublishTemplateRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'template.update', workspaceId);
-    return this.templateService.publish(
+    await this.authorization.assertCan(principal, 'template.publish', workspaceId);
+    const result = await this.templateService.publish(
       requireRequestedWorkspace(principal, workspaceId),
       templateId,
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'template.publish',
+        resourceType: 'template',
+        resourceId: templateId,
+        workspaceId,
+        result: 'success',
+        metadata: { versionNumber: input.versionNumber },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Post(':templateId/apply')
@@ -210,11 +223,24 @@ export class TemplateController {
         message: 'A siteId is required to apply a template',
       });
     }
-    return this.templateService.apply(
+    const result = await this.templateService.apply(
       requireRequestedWorkspace(principal, workspaceId),
       input.siteId,
       templateId,
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'template.apply',
+        resourceType: 'template',
+        resourceId: templateId,
+        workspaceId,
+        result: 'success',
+        metadata: { pageId: result.id, templateVersionId: input.templateVersionId },
+      })
+      .catch(() => undefined);
+    return result;
   }
 }

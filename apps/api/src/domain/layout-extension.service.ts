@@ -14,6 +14,7 @@ import {
   UpdateLayoutExtensionRequestSchema,
   createDefaultSiteDesignSystem,
   type CreateLayoutExtensionRequest,
+  type DuplicateLayoutExtensionRequest,
   type LayoutExtensionKind,
   type LayoutExtensionResource,
   type LayoutExtensionVersion,
@@ -33,6 +34,7 @@ import {
 import { NavigationRecord } from '../persistence/schemas/navigation.schema';
 import { PageRecord } from '../persistence/schemas/page.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
+import { PageExtensionService } from '../extensions/page-extension.service';
 import { ReusableService } from './reusable.service';
 
 /**
@@ -54,6 +56,8 @@ export class LayoutExtensionService {
     private readonly navigationModel: Model<NavigationRecord>,
     @InjectModel(PageRecord.name)
     private readonly pageModel: Model<PageRecord>,
+    @Inject(PageExtensionService)
+    private readonly pageExtensions: PageExtensionService,
     @Inject(ReusableService)
     private readonly reusables: ReusableService,
   ) {}
@@ -118,6 +122,12 @@ export class LayoutExtensionService {
   ): Promise<LayoutExtensionResource> {
     const parsed = UpdateLayoutExtensionRequestSchema.parse(input);
     const resource = await this.requireResource(siteId, workspaceId, kind, resourceId);
+    if (parsed.document !== undefined && parsed.expectedVersionNumber !== undefined) {
+      const latest = await this.latestVersion(resourceId);
+      if (!latest || latest.versionNumber !== parsed.expectedVersionNumber) {
+        throw this.staleDraft(resource.name);
+      }
+    }
     if (parsed.name !== undefined) resource.name = parsed.name;
     if (parsed.description !== undefined) {
       if (parsed.description === null) resource.set('description', undefined);
@@ -132,7 +142,14 @@ export class LayoutExtensionService {
       const version = await this.createVersion(resource, document, 'draft');
       resource.draftVersionId = version.id;
       if (previousDraftId) {
-        await this.versionModel.deleteOne({ _id: previousDraftId, resourceId }).exec();
+        // Keep old snapshots immutable and visible in history. Only the
+        // resource pointer changes; the former draft is no longer publishable.
+        await this.versionModel
+          .updateOne(
+            { _id: previousDraftId, resourceId, status: 'draft' },
+            { $set: { status: 'archived' } },
+          )
+          .exec();
       }
     }
     await resource.save();
@@ -146,7 +163,7 @@ export class LayoutExtensionService {
     resourceId: string,
     input: PublishLayoutExtensionRequest,
   ): Promise<LayoutExtensionResource> {
-    void input;
+    const parsedInput = input;
     const resource = await this.requireResource(siteId, workspaceId, kind, resourceId);
     if (!resource.draftVersionId) {
       throw new ConflictException({
@@ -157,7 +174,13 @@ export class LayoutExtensionService {
     if (resource.draftVersionId === resource.publishedVersionId)
       return this.toResource(resource);
     const draft = await this.versionModel
-      .findOne({ _id: resource.draftVersionId, resourceId })
+      .findOne({
+        _id: resource.draftVersionId,
+        resourceId,
+        ...(parsedInput.versionNumber !== undefined
+          ? { versionNumber: parsedInput.versionNumber }
+          : {}),
+      })
       .exec();
     if (!draft) {
       throw new NotFoundException({
@@ -167,12 +190,43 @@ export class LayoutExtensionService {
     }
     const document = SiteGlobalPayloadV1Schema.parse(draft.document);
     await this.assertPublishDependencies(siteId, workspaceId, document);
+    const promoted = await this.resourceModel
+      .findOneAndUpdate(
+        {
+          _id: resourceId,
+          siteId,
+          workspaceId,
+          kind,
+          draftVersionId: draft._id.toString(),
+        },
+        {
+          $set: { publishedVersionId: draft._id.toString() },
+          $unset: { draftVersionId: 1 },
+        },
+        { new: true },
+      )
+      .exec();
+    if (!promoted) throw this.staleDraft(resource.name);
     draft.status = 'published';
     await draft.save();
-    resource.publishedVersionId = draft._id.toString();
-    resource.set('draftVersionId', undefined);
-    await resource.save();
-    return this.toResource(resource);
+    return this.toResource(promoted);
+  }
+
+  async duplicate(
+    siteId: string,
+    workspaceId: string,
+    kind: LayoutExtensionKind,
+    resourceId: string,
+    input: DuplicateLayoutExtensionRequest,
+  ): Promise<LayoutExtensionResource> {
+    const source = await this.requireResource(siteId, workspaceId, kind, resourceId);
+    const document = await this.resolveDocument(resourceId, 'draft');
+    return this.create(siteId, workspaceId, kind, {
+      kind,
+      name: input.name ?? `${source.name} copy`,
+      ...(source.description ? { description: source.description } : {}),
+      ...(document ? { document } : {}),
+    });
   }
 
   async discard(
@@ -184,7 +238,10 @@ export class LayoutExtensionService {
     const resource = await this.requireResource(siteId, workspaceId, kind, resourceId);
     if (resource.draftVersionId) {
       await this.versionModel
-        .deleteOne({ _id: resource.draftVersionId, resourceId })
+        .updateOne(
+          { _id: resource.draftVersionId, resourceId, status: 'draft' },
+          { $set: { status: 'archived' } },
+        )
         .exec();
       resource.set('draftVersionId', undefined);
       await resource.save();
@@ -262,6 +319,7 @@ export class LayoutExtensionService {
       enabled: boolean;
     }[],
     mode: 'draft' | 'published',
+    scope?: { siteId: string; workspaceId: string },
   ): Promise<{
     header?: { slot: string; document: SiteGlobalPayloadV1 };
     footer?: { slot: string; document: SiteGlobalPayloadV1 };
@@ -273,7 +331,12 @@ export class LayoutExtensionService {
       (id): id is string => typeof id === 'string',
     );
     if (resourceIds.length === 0) return {};
-    const resources = await this.resourceModel.find({ _id: { $in: resourceIds } }).exec();
+    const resources = await this.resourceModel
+      .find({
+        _id: { $in: resourceIds },
+        ...(scope ? { siteId: scope.siteId, workspaceId: scope.workspaceId } : {}),
+      })
+      .exec();
     const byId = new Map(
       resources.map((resource) => [resource._id.toString(), resource]),
     );
@@ -335,6 +398,22 @@ export class LayoutExtensionService {
     return this.toVersion(record);
   }
 
+  private async latestVersion(
+    resourceId: string,
+  ): Promise<LayoutExtensionVersionDocument | null> {
+    return this.versionModel
+      .findOne({ resourceId })
+      .sort({ versionNumber: -1, _id: -1 })
+      .exec();
+  }
+
+  private staleDraft(resourceName: string): ConflictException {
+    return new ConflictException({
+      code: 'LAYOUT_EXTENSION_VERSION_CONFLICT',
+      message: `This ${resourceName} was updated elsewhere. Reload the latest draft before saving again.`,
+    });
+  }
+
   private async assertPublishDependencies(
     siteId: string,
     workspaceId: string,
@@ -348,6 +427,7 @@ export class LayoutExtensionService {
       document,
     ]);
     await this.assertMenuReferencesAvailable(siteId, workspaceId, document);
+    await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, document);
   }
 
   private async assertMenuReferencesAvailable(

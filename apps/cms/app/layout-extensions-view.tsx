@@ -47,11 +47,17 @@ function errorMessage(error: unknown): string {
 
 export function LayoutExtensionsView({
   siteId,
+  canCreate,
+  canDelete,
+  canRead,
   canPublish,
   canUpdate,
   onOpenBuilder,
 }: {
   siteId: string;
+  canCreate: boolean;
+  canDelete: boolean;
+  canRead: boolean;
   canPublish: boolean;
   canUpdate: boolean;
   onOpenBuilder: (resource: LayoutExtensionResource) => void;
@@ -90,7 +96,7 @@ export function LayoutExtensionsView({
 
   async function create(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!canUpdate || !form.name.trim()) return;
+    if (!canCreate || !form.name.trim()) return;
     setBusyId('create');
     setError(null);
     setNotice(null);
@@ -174,6 +180,26 @@ export function LayoutExtensionsView({
       );
       setResources((current) => current.filter((item) => item.id !== resource.id));
       setNotice(`${kindLabel(resource.kind)} “${resource.name}” deleted.`);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function duplicate(resource: LayoutExtensionResource): Promise<void> {
+    setBusyId(resource.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const created = LayoutExtensionResourceSchema.parse(
+        await api.post(
+          `/sites/${siteId}/layouts/${kindSegment(resource.kind)}/${resource.id}/duplicate`,
+          {},
+        ),
+      );
+      setResources((current) => [...current, created]);
+      setNotice(`${kindLabel(resource.kind)} “${resource.name}” duplicated.`);
     } catch (caughtError) {
       setError(errorMessage(caughtError));
     } finally {
@@ -284,7 +310,7 @@ export function LayoutExtensionsView({
             </label>
             <button
               className="button button-primary"
-              disabled={!canUpdate || busyId === 'create'}
+              disabled={!canCreate || busyId === 'create'}
               type="submit"
             >
               {busyId === 'create' ? 'Creating…' : 'Create layout'}
@@ -306,6 +332,9 @@ export function LayoutExtensionsView({
         <LayoutList
           busyId={busyId}
           canPublish={canPublish}
+          canCreate={canCreate}
+          canDelete={canDelete}
+          canRead={canRead}
           canUpdate={canUpdate}
           items={headers}
           kind="header"
@@ -313,12 +342,16 @@ export function LayoutExtensionsView({
           onOpenBuilder={onOpenBuilder}
           onPublish={publish}
           onRemove={remove}
+          onDuplicate={duplicate}
           onToggleVersions={toggleVersions}
           versions={versions}
         />
         <LayoutList
           busyId={busyId}
           canPublish={canPublish}
+          canCreate={canCreate}
+          canDelete={canDelete}
+          canRead={canRead}
           canUpdate={canUpdate}
           items={footers}
           kind="footer"
@@ -326,6 +359,7 @@ export function LayoutExtensionsView({
           onOpenBuilder={onOpenBuilder}
           onPublish={publish}
           onRemove={remove}
+          onDuplicate={duplicate}
           onToggleVersions={toggleVersions}
           versions={versions}
         />
@@ -341,6 +375,9 @@ export function LayoutExtensionsView({
 
 function LayoutList({
   busyId,
+  canCreate,
+  canDelete,
+  canRead,
   canPublish,
   canUpdate,
   items,
@@ -349,10 +386,14 @@ function LayoutList({
   onOpenBuilder,
   onPublish,
   onRemove,
+  onDuplicate,
   onToggleVersions,
   versions,
 }: {
   busyId: string | null;
+  canCreate: boolean;
+  canDelete: boolean;
+  canRead: boolean;
   canPublish: boolean;
   canUpdate: boolean;
   items: LayoutExtensionResource[];
@@ -361,6 +402,7 @@ function LayoutList({
   onOpenBuilder: (resource: LayoutExtensionResource) => void;
   onPublish: (resource: LayoutExtensionResource) => Promise<void>;
   onRemove: (resource: LayoutExtensionResource) => Promise<void>;
+  onDuplicate: (resource: LayoutExtensionResource) => Promise<void>;
   onToggleVersions: (resource: LayoutExtensionResource) => Promise<void>;
   versions: Record<string, LayoutExtensionVersion[]>;
 }) {
@@ -397,11 +439,11 @@ function LayoutList({
               <div className="row-actions">
                 <button
                   className="button button-small button-primary"
-                  disabled={!canUpdate}
+                  disabled={!canUpdate && !canRead}
                   onClick={() => onOpenBuilder(resource)}
                   type="button"
                 >
-                  Edit
+                  {canUpdate ? 'Edit' : 'Review'}
                 </button>
                 <button
                   className="button button-small"
@@ -432,8 +474,16 @@ function LayoutList({
                   </button>
                 ) : null}
                 <button
+                  className="button button-small"
+                  disabled={!canCreate || busyId === resource.id}
+                  onClick={() => void onDuplicate(resource)}
+                  type="button"
+                >
+                  Duplicate
+                </button>
+                <button
                   className="button button-small button-danger"
-                  disabled={!canUpdate || busyId === resource.id}
+                  disabled={!canDelete || busyId === resource.id}
                   onClick={() => void onRemove(resource)}
                   type="button"
                 >

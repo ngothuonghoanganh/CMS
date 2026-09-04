@@ -13,9 +13,11 @@ import {
 } from '@nestjs/common';
 import {
   CreateLayoutExtensionRequestSchema,
+  DuplicateLayoutExtensionRequestSchema,
   PublishLayoutExtensionRequestSchema,
   UpdateLayoutExtensionRequestSchema,
   type CreateLayoutExtensionRequest,
+  type DuplicateLayoutExtensionRequest,
   type LayoutExtensionKind,
   type PublishLayoutExtensionRequest,
   type UpdateLayoutExtensionRequest,
@@ -52,7 +54,7 @@ export class LayoutExtensionController {
     @Param('kind') kind: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'site.read');
+    await this.authorization.assertCan(principal, 'layout.read');
     return this.layout.list(siteId, requireWorkspaceId(principal), kindParam(kind));
   }
 
@@ -64,7 +66,7 @@ export class LayoutExtensionController {
     input: CreateLayoutExtensionRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'site.update');
+    await this.authorization.assertCan(principal, 'layout.create');
     const result = await this.layout.create(
       siteId,
       requireWorkspaceId(principal),
@@ -92,7 +94,7 @@ export class LayoutExtensionController {
     @Param('resourceId') resourceId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'site.read');
+    await this.authorization.assertCan(principal, 'layout.read');
     return this.layout.get(
       siteId,
       requireWorkspaceId(principal),
@@ -110,14 +112,27 @@ export class LayoutExtensionController {
     input: UpdateLayoutExtensionRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'site.update');
-    return this.layout.update(
+    await this.authorization.assertCan(principal, 'layout.update');
+    const result = await this.layout.update(
       siteId,
       requireWorkspaceId(principal),
       kindParam(kind),
       resourceId,
       input,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: `site.layout.${kindParam(kind)}.update`,
+        resourceType: 'layout-extension',
+        resourceId,
+        workspaceId: requireWorkspaceId(principal),
+        result: 'success',
+        metadata: { changedFields: Object.keys(input) },
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Post(':kind/:resourceId/publish')
@@ -129,7 +144,7 @@ export class LayoutExtensionController {
     input: PublishLayoutExtensionRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'page.publish');
+    await this.authorization.assertCan(principal, 'layout.publish');
     const result = await this.layout.publish(
       siteId,
       requireWorkspaceId(principal),
@@ -151,6 +166,37 @@ export class LayoutExtensionController {
     return result;
   }
 
+  @Post(':kind/:resourceId/duplicate')
+  async duplicate(
+    @Param('siteId') siteId: string,
+    @Param('kind') kind: string,
+    @Param('resourceId') resourceId: string,
+    @Body(new ZodValidationPipe(DuplicateLayoutExtensionRequestSchema))
+    input: DuplicateLayoutExtensionRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'layout.create');
+    const result = await this.layout.duplicate(
+      siteId,
+      requireWorkspaceId(principal),
+      kindParam(kind),
+      resourceId,
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: `site.layout.${kindParam(kind)}.duplicate`,
+        resourceType: 'layout-extension',
+        resourceId: result.id,
+        workspaceId: requireWorkspaceId(principal),
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
   @Post(':kind/:resourceId/discard')
   async discard(
     @Param('siteId') siteId: string,
@@ -158,13 +204,25 @@ export class LayoutExtensionController {
     @Param('resourceId') resourceId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'site.update');
-    return this.layout.discard(
+    await this.authorization.assertCan(principal, 'layout.update');
+    const result = await this.layout.discard(
       siteId,
       requireWorkspaceId(principal),
       kindParam(kind),
       resourceId,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: `site.layout.${kindParam(kind)}.discard`,
+        resourceType: 'layout-extension',
+        resourceId,
+        workspaceId: requireWorkspaceId(principal),
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   @Delete(':kind/:resourceId')
@@ -175,13 +233,24 @@ export class LayoutExtensionController {
     @Param('resourceId') resourceId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ): Promise<void> {
-    await this.authorization.assertCan(principal, 'site.update');
+    await this.authorization.assertCan(principal, 'layout.delete');
     await this.layout.remove(
       siteId,
       requireWorkspaceId(principal),
       kindParam(kind),
       resourceId,
     );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: `site.layout.${kindParam(kind)}.delete`,
+        resourceType: 'layout-extension',
+        resourceId,
+        workspaceId: requireWorkspaceId(principal),
+        result: 'success',
+      })
+      .catch(() => undefined);
   }
 
   @Get(':kind/:resourceId/versions')
@@ -191,7 +260,7 @@ export class LayoutExtensionController {
     @Param('resourceId') resourceId: string,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'site.read');
+    await this.authorization.assertCan(principal, 'layout.read');
     return this.layout.listVersions(
       siteId,
       requireWorkspaceId(principal),

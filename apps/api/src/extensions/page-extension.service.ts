@@ -23,9 +23,11 @@ import {
   type PageCapabilityGraph,
   type PageComposition,
   type PagePayload,
+  type PageRuntimeExtension,
   type ExtensionSlot,
   type PublishedPageBundle,
   PublishedPageBundleSchema,
+  type SiteGlobalPayloadV1,
 } from '@payload/contracts';
 import { randomUUID } from 'node:crypto';
 
@@ -353,6 +355,57 @@ export class PageExtensionService {
       ),
     ];
     return this.resolveRuntimeForExtensionIds(extensionIds);
+  }
+
+  /**
+   * Layout resources can contain the same visual extension nodes as pages, but
+   * their runtime dependencies are not part of a page composition attachment.
+   * Resolve those dependencies separately so public and draft layout renders
+   * receive the correct custom extension definitions/runtime ids.
+   */
+  async resolveRuntimeForLayoutDocuments(
+    _workspaceId: string,
+    documents: readonly SiteGlobalPayloadV1[],
+  ): Promise<PageRuntimeExtension[]> {
+    if (documents.length === 0) return [];
+    const enabledTenantExtensions = new Set(
+      (
+        await this.tenantExtensionModel
+          .find({ enabled: true })
+          .select({ extensionId: 1 })
+          .exec()
+      ).map((record) => record.extensionId),
+    );
+    const extensionIds = new Set<string>();
+    for (const document of documents) {
+      for (const extensionId of this.extensionIdsForRoot(document.root)) {
+        if (enabledTenantExtensions.has(extensionId)) extensionIds.add(extensionId);
+      }
+    }
+    return this.resolveRuntimeForExtensionIds([...extensionIds]);
+  }
+
+  /** Validate visual extension nodes embedded in a template or layout. */
+  async validateVisualDocumentDependencies(
+    _workspaceId: string,
+    document: { root: ExtensionScanNode },
+  ): Promise<void> {
+    for (const extensionId of this.extensionIdsForRoot(document.root)) {
+      await this.requireTenantExtensionEnabled(extensionId);
+      await this.validateTenantDependencies(extensionId);
+      if (!this.registry.has(extensionId)) continue;
+      const runtime = this.registry.runtime(extensionId);
+      if (
+        runtime.runtimeIds.length === 0 &&
+        runtime.styleAssetIds.length === 0 &&
+        runtime.slots.length === 0
+      ) {
+        throw new ConflictException({
+          code: 'EXTENSION_RUNTIME_UNAVAILABLE',
+          message: `Extension ${extensionId} has no renderer runtime contribution`,
+        });
+      }
+    }
   }
 
   async compilePublishedBundle(
@@ -683,7 +736,16 @@ export class PageExtensionService {
   }
 
   private async usedExtensionIds(payload: PagePayload): Promise<Set<string>> {
-    const nodeTypes = collectNodeTypes(payload.root);
+    const ids = this.extensionIdsForRoot(payload.root);
+    const customIds = collectCustomExtensionIds(payload.root);
+    for (const extensionId of customIds) {
+      if (!(await this.customDefinition(extensionId))) ids.delete(extensionId);
+    }
+    return ids;
+  }
+
+  private extensionIdsForRoot(root: ExtensionScanNode): Set<string> {
+    const nodeTypes = collectNodeTypes(root);
     const ids = new Set(
       this.registry
         .list()
@@ -694,9 +756,7 @@ export class PageExtensionService {
         )
         .map((state) => state.extension.manifest.id),
     );
-    for (const extensionId of collectCustomExtensionIds(payload.root)) {
-      if (await this.customDefinition(extensionId)) ids.add(extensionId);
-    }
+    for (const extensionId of collectCustomExtensionIds(root)) ids.add(extensionId);
     return ids;
   }
 

@@ -41,6 +41,7 @@ import {
   type PageComposition,
   type PageCompositionInput,
   type PageVersion,
+  type PageRuntimeExtension,
   type PaginationQuery,
   type PublishPageRequest,
   type UpdatePageRequest,
@@ -982,11 +983,6 @@ export class PageService {
       // instead of consulting the mutable page-instance projection.
       const composition = this.compositionForVersion(page, version, payload);
       if (!composition) throw new Error('The draft page composition is unavailable');
-      const extensions = await this.pageExtensions.resolveRuntimeForComposition(
-        page._id.toString(),
-        page.workspaceId,
-        composition,
-      );
       const reusables = await this.reusables.resolveForPayload(
         page.workspaceId,
         page.siteId,
@@ -1008,6 +1004,18 @@ export class PageService {
       const layout = await this.layoutExtensions.resolveComposition(
         composition?.layoutAttachments ?? parseLayoutAttachments(page),
         preview ? 'draft' : 'published',
+        { siteId: page.siteId, workspaceId: page.workspaceId },
+      );
+      const extensions = mergeRuntimeExtensions(
+        await this.pageExtensions.resolveRuntimeForComposition(
+          page._id.toString(),
+          page.workspaceId,
+          composition,
+        ),
+        await this.pageExtensions.resolveRuntimeForLayoutDocuments(page.workspaceId, [
+          ...(layout.header ? [layout.header.document] : []),
+          ...(layout.footer ? [layout.footer.document] : []),
+        ]),
       );
       const designSystem = (preview ? site.designSystemDraft : site.publishedDesignSystem)
         ? SiteDesignSystemSchema.parse(
@@ -1126,6 +1134,17 @@ export class PageService {
       message: 'A page with this path already exists in the site',
     });
   }
+}
+
+function mergeRuntimeExtensions(
+  base: readonly PageRuntimeExtension[],
+  additional: readonly PageRuntimeExtension[],
+): PageRuntimeExtension[] {
+  const byId = new Map(base.map((extension) => [extension.extensionId, extension]));
+  for (const extension of additional) {
+    if (!byId.has(extension.extensionId)) byId.set(extension.extensionId, extension);
+  }
+  return [...byId.values()];
 }
 
 function isDuplicateKeyError(error: unknown): boolean {

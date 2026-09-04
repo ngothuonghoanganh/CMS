@@ -1,4 +1,9 @@
-# Phase 19 — Navigation/Menu, Header/Footer, Template refactor (handoff)
+# Phase 19 — Navigation/Menu, Header/Footer, Template refactor (completed handoff)
+
+This file began as the implementation handoff. The remaining UI, migration and
+end-to-end work listed below has now been completed; see
+[`phase-19-final-handoff.md`](phase-19-final-handoff.md) for the final delivery
+record.
 
 ## What was wrong
 
@@ -51,24 +56,15 @@
 - `pnpm test` — pass (54 API + 39 contracts + 20 renderer + 105 CMS)
 - `pnpm build` — pass
 
-## Remaining risks / next phase
+## Historical follow-ups (completed in the final delivery)
 
-- **Dedicated Header/Footer builder UI**: the backend + renderer + shared
-  GrapesJS engine support `site-header`/`site-footer` documents, but the
-  builder shell still points its header/footer editor at the removed globals
-  endpoints. Wire it to `POST/PATCH /sites/:siteId/layouts/:kind/:id` and add a
-  `/layouts/:kind/:id/builder` route.
-- **Template UI**: version picker, publish, duplicate, restore, and the
-  create-page-from-template flow (apply endpoint exists but the CMS create-page
-  drawer should call `/templates/:id/apply`).
-- **Migration**: a script to convert legacy `Site.globalsDraft.header/footer`
-  into `LayoutExtensionResource`/`Version` and backfill page attachments is
-  documented but not yet wired (no runtime legacy fallback remains, so old
-  header/footer globals no longer render).
-- **Playwright E2E flows A–F**: obsolete `navigation-publishing` and
-  `global-resource-lifecycle` specs were removed; new layout-extension,
-  attachment-placement and template-clone flows should be added against the
-  running stack.
+- Dedicated Header/Footer and Template Builder routes now use the shared editor
+  and canonical document APIs.
+- Template version history, duplicate/restore-as-new-version, publish, and the
+  create-page-from-template flow are wired in the CMS.
+- The idempotent legacy migration script and helper tests are present.
+- The Phase 19 Playwright suite covers layout lifecycle, preview/live parity,
+  explicit placement, custom extensions and template authoring/apply flows.
 
 ## Key files
 

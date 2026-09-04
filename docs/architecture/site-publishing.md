@@ -18,6 +18,10 @@ resource endpoints; `Publish Site` no longer snapshots navigation structure.
 Publishing a referenced Header/Footer propagates through page layout
 attachments without republishing any page.
 
+The public route emits a Header/Footer only when the published page composition
+contains an enabled explicit attachment. Preview resolves the persisted draft
+layout version, so a saved layout draft is reviewable without becoming live.
+
 The site manifest endpoint exposes the published route map without changing the
 existing Page Payload contract. A future atomic Site Release can replace those
 pointers as one release; the current infrastructure does not yet provide a

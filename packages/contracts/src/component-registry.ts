@@ -906,6 +906,12 @@ const rawPageComponentRegistry = {
     category: 'extension',
     editorTagName: 'div',
     defaultProps: {},
+    builder: {
+      group: 'advanced',
+      documentKinds: ['page', 'site-header', 'site-footer'],
+      keywords: ['extension', 'custom', 'layout extension'],
+      description: 'Add an enabled custom extension to this document.',
+    },
     propertiesSchema: [],
   }),
   heading: definition({
@@ -1400,7 +1406,7 @@ const rawPageComponentRegistry = {
       {
         name: 'actions',
         label: 'Actions',
-        accepts: ['button', 'link'],
+        accepts: ['button', 'link', 'extension'],
         maxChildren: 3,
         structural: true,
       },
@@ -1457,7 +1463,15 @@ const rawPageComponentRegistry = {
       {
         name: 'content',
         label: 'Footer content',
-        accepts: ['site-brand', 'navigation-view', 'text', 'heading', 'button', 'link'],
+        accepts: [
+          'site-brand',
+          'navigation-view',
+          'text',
+          'heading',
+          'button',
+          'link',
+          'extension',
+        ],
         structural: true,
       },
     ],

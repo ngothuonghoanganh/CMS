@@ -37,7 +37,8 @@ in `TemplateVersion` records.
 - Creating a template creates version 1 (draft).
 - Saving a new payload creates a new version (never overwrites an existing
   version).
-- `publish` moves `publishedVersionId` to the latest version.
+- `publish` validates dependencies and moves `publishedVersionId` to the selected
+  version (latest by default).
 - Old versions are immutable.
 
 ## Apply = clone
@@ -65,3 +66,14 @@ GET    /templates/:id/versions/:versionNumber
 POST   /templates/:id/publish
 POST   /templates/:id/apply
 ```
+
+The CMS Template Builder uses the same GrapesJS adapter, Layers, Inspector,
+responsive viewport controls, asset/design-token catalogs, undo/redo and
+conflict-aware save flow as the Page Builder. It persists the canonical
+`PagePayload` plus the template's Header/Footer attachment snapshot; browser-only
+editor state is never stored.
+
+`Review draft` reloads the persisted current version before remounting the
+editor. Version history can open any saved version for review through the
+`?version=` builder query; restoring it creates a new version rather than
+overwriting history.

@@ -79,6 +79,7 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
       />
       {resolved.page.layout?.header
         ? renderLayoutExtension(resolved.page.layout.header.document, {
+            layoutSlot: resolved.page.layout.header.slot,
             pagePath: resolved.pagePath,
             siteSlug,
             siteName: resolved.page.site.name,
@@ -120,6 +121,7 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
       })}
       {resolved.page.layout?.footer
         ? renderLayoutExtension(resolved.page.layout.footer.document, {
+            layoutSlot: resolved.page.layout.footer.slot,
             pagePath: resolved.pagePath,
             siteSlug,
             siteName: resolved.page.site.name,

@@ -31,6 +31,7 @@ import {
   type TabItemNodeV5,
   type GalleryNodeV5,
   type PageRuntimeExtension,
+  type PageLayoutSlot,
   type ResolvedNavigationItem,
   SiteGlobalPayloadV1Schema,
   type SiteGlobals,
@@ -111,6 +112,8 @@ export type RenderContext = {
   siteLogo?: string;
   /** Base style supplied by a containing site-global component part. */
   globalPartStyle?: CSSProperties;
+  /** The page-owned placement for the currently rendered layout resource. */
+  layoutSlot?: PageLayoutSlot;
   runtimeIds?: readonly string[];
   extensions?: readonly PageRuntimeExtension[];
   customDomain?: boolean;
@@ -634,6 +637,7 @@ function renderGlobalHeader(
       {...nodeAttributes(node)}
       data-site-global="header"
       data-site-global-position={node.props.position}
+      data-site-global-slot={context.layoutSlot}
       style={{
         ...nodeStyle(node, context),
         ...nodePartStyle(node, 'root', context),
@@ -659,6 +663,7 @@ function renderGlobalFooter(
     <footer
       {...nodeAttributes(node)}
       data-site-global="footer"
+      data-site-global-slot={context.layoutSlot}
       style={{ ...nodeStyle(node, context), ...nodePartStyle(node, 'root', context) }}
     >
       {node.children.map((child) => (

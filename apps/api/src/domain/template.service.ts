@@ -12,6 +12,9 @@ import {
   TemplateVersionSchema,
   TemplateVersionsResponseSchema,
   UpdateTemplateRequestSchema,
+  PagePayloadSchema,
+  SiteDesignSystemSchema,
+  createDefaultSiteDesignSystem,
   type ApplyTemplateRequest,
   type CreateTemplateRequest,
   type PageLayoutAttachment,
@@ -31,7 +34,12 @@ import {
   type TemplateDocument,
   type TemplateVersionDocument,
 } from '../persistence/schemas/template.schema';
+import { PageRecord } from '../persistence/schemas/page.schema';
+import { SiteRecord } from '../persistence/schemas/site.schema';
+import { LayoutExtensionService } from './layout-extension.service';
 import { PageService } from './page.service';
+import { ReusableService } from './reusable.service';
+import { PageExtensionService } from '../extensions/page-extension.service';
 
 /**
  * Design Templates are immutable, versioned starter snapshots. Applying a
@@ -46,12 +54,36 @@ export class TemplateService {
     private readonly templateModel: Model<TemplateRecord>,
     @InjectModel(TemplateVersionRecord.name)
     private readonly versionModel: Model<TemplateVersionRecord>,
+    @InjectModel(PageRecord.name)
+    private readonly pageModel: Model<PageRecord>,
+    @InjectModel(SiteRecord.name)
+    private readonly siteModel: Model<SiteRecord>,
     @Inject(PageService)
     private readonly pages: PageService,
+    @Inject(PageExtensionService)
+    private readonly pageExtensions: PageExtensionService,
+    @Inject(LayoutExtensionService)
+    private readonly layoutExtensions: LayoutExtensionService,
+    @Inject(ReusableService)
+    private readonly reusables: ReusableService,
   ) {}
 
   async create(workspaceId: string, input: CreateTemplateRequest): Promise<Template> {
     const parsedInput = CreateTemplateRequestSchema.parse(input);
+    if (!parsedInput.siteId && parsedInput.layoutAttachments?.length) {
+      throw new ConflictException({
+        code: 'TEMPLATE_SITE_REQUIRED',
+        message: 'Select a site before adding Header/Footer attachments to a template',
+      });
+    }
+    if (parsedInput.siteId) await this.requireSite(workspaceId, parsedInput.siteId);
+    if (parsedInput.siteId && parsedInput.layoutAttachments) {
+      await this.assertLayoutAttachments(
+        workspaceId,
+        parsedInput.siteId,
+        parsedInput.layoutAttachments,
+      );
+    }
     const versionId = randomUUID();
     const record = await this.templateModel.create({
       _id: randomUUID(),
@@ -106,6 +138,7 @@ export class TemplateService {
       .findOne({ _id: templateId, workspaceId })
       .exec();
     if (!record) throw this.notFound(templateId);
+
     return (await this.resolveRecords([record]))[0]!;
   }
 
@@ -120,6 +153,16 @@ export class TemplateService {
       .exec();
     if (!record) throw this.notFound(templateId);
 
+    const latest = await this.versionModel
+      .findOne({ _id: record.latestVersionId, templateId })
+      .exec();
+    if (
+      parsedInput.expectedVersionNumber !== undefined &&
+      (!latest || latest.versionNumber !== parsedInput.expectedVersionNumber)
+    ) {
+      throw this.staleTemplate(record.name);
+    }
+
     if (parsedInput.name !== undefined) record.name = parsedInput.name;
     if (parsedInput.description !== undefined) {
       if (parsedInput.description === null) record.set('description', undefined);
@@ -129,9 +172,6 @@ export class TemplateService {
       parsedInput.payload !== undefined ||
       parsedInput.layoutAttachments !== undefined
     ) {
-      const latest = await this.versionModel
-        .findOne({ _id: record.latestVersionId, templateId })
-        .exec();
       const payload = parsedInput.payload ?? (latest?.payload as PagePayload | undefined);
       const layoutAttachments =
         parsedInput.layoutAttachments ??
@@ -141,6 +181,14 @@ export class TemplateService {
         throw new ConflictException({
           code: 'TEMPLATE_PAYLOAD_REQUIRED',
           message: 'The template does not have a payload to version',
+        });
+      }
+      if (record.siteId && layoutAttachments) {
+        await this.assertLayoutAttachments(workspaceId, record.siteId, layoutAttachments);
+      } else if (!record.siteId && layoutAttachments?.length) {
+        throw new ConflictException({
+          code: 'TEMPLATE_SITE_REQUIRED',
+          message: 'Select a site before adding Header/Footer attachments to a template',
         });
       }
       const version = await this.createVersion(record, payload, layoutAttachments);
@@ -155,6 +203,17 @@ export class TemplateService {
       .findOne({ _id: templateId, workspaceId })
       .exec();
     if (!record) throw this.notFound(templateId);
+    if (
+      await this.pageModel.exists({
+        workspaceId,
+        'appliedTemplate.templateId': templateId,
+      })
+    ) {
+      throw new ConflictException({
+        code: 'TEMPLATE_IN_USE',
+        message: 'This template is used by pages and cannot be deleted',
+      });
+    }
     await this.versionModel.deleteMany({ templateId }).exec();
     await record.deleteOne();
   }
@@ -209,6 +268,7 @@ export class TemplateService {
     if (!version) {
       throw this.versionNotFound(templateId, input.versionNumber ?? 0);
     }
+    await this.assertPublishable(workspaceId, record, version);
     record.publishedVersionId = version._id.toString();
     await record.save();
     return (await this.resolveRecords([record]))[0]!;
@@ -225,6 +285,12 @@ export class TemplateService {
       .findOne({ _id: templateId, workspaceId })
       .exec();
     if (!record) throw this.notFound(templateId);
+    if (record.siteId && record.siteId !== siteId) {
+      throw new ConflictException({
+        code: 'TEMPLATE_SITE_MISMATCH',
+        message: 'This template belongs to another site',
+      });
+    }
 
     const version = parsedInput.templateVersionId
       ? await this.versionModel
@@ -247,6 +313,10 @@ export class TemplateService {
     const attachments = version.layoutAttachments
       ? cloneAttachments(version.layoutAttachments as PageLayoutAttachment[])
       : undefined;
+    await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, payload);
+    if (attachments?.length) {
+      await this.assertLayoutAttachments(workspaceId, siteId, attachments);
+    }
     const name = parsedInput.name ?? `${record.name} page`;
 
     return this.pages.create(
@@ -288,6 +358,83 @@ export class TemplateService {
       ...(layoutAttachments ? { layoutAttachments } : {}),
     });
     return this.toVersion(created);
+  }
+
+  private async assertPublishable(
+    workspaceId: string,
+    record: TemplateDocument,
+    version: TemplateVersionDocument,
+  ): Promise<void> {
+    const payload = PagePayloadSchema.parse(version.payload);
+    await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, payload);
+    if (!record.siteId) {
+      if (version.layoutAttachments?.length) {
+        throw new ConflictException({
+          code: 'TEMPLATE_SITE_REQUIRED',
+          message: 'Select a site before publishing a template with layout attachments',
+        });
+      }
+      return;
+    }
+    const site = await this.requireSite(workspaceId, record.siteId);
+    const designSystem = site.publishedDesignSystem
+      ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
+      : createDefaultSiteDesignSystem();
+    await this.reusables.assertDesignTokenDependenciesAvailableForValues(designSystem, [
+      payload,
+    ]);
+    await this.reusables.assertDependenciesAvailable(workspaceId, record.siteId, payload);
+    if (version.layoutAttachments?.length) {
+      await this.assertLayoutAttachments(
+        workspaceId,
+        record.siteId,
+        version.layoutAttachments as PageLayoutAttachment[],
+        true,
+      );
+    }
+  }
+
+  private async assertLayoutAttachments(
+    workspaceId: string,
+    siteId: string,
+    attachments: readonly PageLayoutAttachment[],
+    requirePublished = false,
+  ): Promise<void> {
+    await Promise.all(
+      attachments.map(async (attachment) => {
+        const resource = await this.layoutExtensions.get(
+          siteId,
+          workspaceId,
+          attachment.type,
+          attachment.resourceId,
+        );
+        if (requirePublished && !resource.publishedVersionId) {
+          throw new ConflictException({
+            code: 'TEMPLATE_LAYOUT_UNPUBLISHED',
+            message: `The ${attachment.type} layout must be published before the template can be published`,
+            details: { resourceId: attachment.resourceId },
+          });
+        }
+      }),
+    );
+  }
+
+  private async requireSite(workspaceId: string, siteId: string): Promise<SiteRecord> {
+    const site = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!site) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found`,
+      });
+    }
+    return site;
+  }
+
+  private staleTemplate(name: string): ConflictException {
+    return new ConflictException({
+      code: 'TEMPLATE_VERSION_CONFLICT',
+      message: `This template “${name}” was updated elsewhere. Reload the latest version before saving again.`,
+    });
   }
 
   private async resolveRecords(records: TemplateDocument[]): Promise<Template[]> {

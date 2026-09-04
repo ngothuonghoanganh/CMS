@@ -2,6 +2,7 @@
 
 import {
   AssetListResponseSchema,
+  ExtensionListResponseSchema,
   LayoutExtensionResourceSchema,
   LayoutExtensionVersionsResponseSchema,
   PAGE_COMPONENT_REGISTRY,
@@ -11,11 +12,13 @@ import {
   createDefaultSiteDesignSystem,
   type Asset,
   type BuilderDocumentKind,
+  type ExtensionDescriptor,
   type LayoutExtensionResource,
   type LayoutExtensionVersion,
   type SiteDesignSystem,
   type SiteGlobalPayloadV1,
   type StyleTokenReference,
+  builderPreviewForComponent,
 } from '@payload/contracts';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -66,12 +69,13 @@ import {
 } from './inspector/builder-inspector';
 
 type LayoutKindSegment = 'headers' | 'footers';
-type SaveStatus = 'loading' | 'saved' | 'unsaved' | 'saving' | 'error';
+type SaveStatus = 'loading' | 'saved' | 'unsaved' | 'saving' | 'error' | 'conflict';
 type BuilderTool = 'add' | 'layers' | 'assets' | 'settings';
 type AddPanelTab = 'layouts' | 'elements' | 'saved' | 'templates';
 
 type LayoutBlockOption = {
   id: BuilderInsertable;
+  extensionId?: string;
   label: string;
   description: string;
   preview: ComponentProps<typeof BuilderBlockCard>['preview'];
@@ -205,6 +209,7 @@ export default function LayoutBuilderShell({
   const [siteName, setSiteName] = useState('');
   const [siteLogo, setSiteLogo] = useState<string | undefined>();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [customExtensions, setCustomExtensions] = useState<ExtensionDescriptor[]>([]);
   const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
     createDefaultSiteDesignSystem(),
   );
@@ -232,6 +237,7 @@ export default function LayoutBuilderShell({
   const [panelResizeActive, setPanelResizeActive] = useState<BuilderPanelSide | null>(
     null,
   );
+  const [editorRevision, setEditorRevision] = useState(0);
   const [builderViewportWidth, setBuilderViewportWidth] = useState(1440);
   const [panelPreferencesReady, setPanelPreferencesReady] = useState(false);
   const [quickAddTarget, setQuickAddTarget] = useState<{
@@ -273,6 +279,12 @@ export default function LayoutBuilderShell({
     layoutKind === 'headers'
       ? GLOBAL_HEADER_PRESET_REGISTRY
       : GLOBAL_FOOTER_PRESET_REGISTRY;
+  const currentVersion = resource
+    ? versions.find(
+        (version) =>
+          version.id === (resource.draftVersionId ?? resource.publishedVersionId),
+      )
+    : undefined;
 
   useEffect(() => {
     const restorePanelPreferences = () => {
@@ -307,8 +319,18 @@ export default function LayoutBuilderShell({
         ...block,
         id: block.type,
       })),
+      ...customExtensions
+        .filter((extension) => extension.custom && extension.tenantEnabled)
+        .map((extension) => ({
+          id: 'extension' as BuilderInsertable,
+          extensionId: extension.manifest.id,
+          label: extension.manifest.name,
+          description: `Add the ${extension.manifest.name} extension to this ${label.toLowerCase()}.`,
+          preview: builderPreviewForComponent('extension'),
+          category: 'content' as const,
+        })),
     ],
-    [blocks, presets],
+    [blocks, customExtensions, label, presets],
   );
   const visibleBlockOptions = useMemo(() => {
     const query = blockQuery.trim().toLowerCase();
@@ -362,7 +384,7 @@ export default function LayoutBuilderShell({
     return { left: Math.max(160, x), top: Math.max(8, top), placement: 'below' as const };
   }, [canvasState, selectedNodeId]);
 
-  async function load(): Promise<void> {
+  async function load(resetEditor = false): Promise<boolean> {
     setStatus('loading');
     setError(null);
     try {
@@ -372,6 +394,7 @@ export default function LayoutBuilderShell({
         siteResponse,
         assetsResponse,
         designResponse,
+        extensionsResponse,
       ] = await Promise.all([
         api.get(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}`),
         api.get(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}/versions`),
@@ -384,6 +407,7 @@ export default function LayoutBuilderShell({
               return null;
             throw caughtError;
           }),
+        api.get('/extensions').catch(() => null),
       ]);
       const nextResource = LayoutExtensionResourceSchema.parse(resourceResponse);
       const nextVersions =
@@ -395,18 +419,28 @@ export default function LayoutBuilderShell({
       setResource(nextResource);
       setVersions(nextVersions);
       setDocument(nextDocument);
+      if (resetEditor) setEditorRevision((current) => current + 1);
       setSiteName(site.name);
       setSiteLogo(site.logo);
       setAssets(AssetListResponseSchema.parse(assetsResponse).items);
+      setCustomExtensions(
+        extensionsResponse
+          ? ExtensionListResponseSchema.parse(extensionsResponse).items.filter(
+              (extension) => extension.custom && extension.tenantEnabled,
+            )
+          : [],
+      );
       setDesignSystem(
         designResponse
           ? SiteDesignSystemResponseSchema.parse(designResponse).draft
           : createDefaultSiteDesignSystem(),
       );
       setStatus('saved');
+      return true;
     } catch (caughtError) {
       setStatus('error');
       setError(toErrorMessage(caughtError));
+      return false;
     }
   }
 
@@ -418,6 +452,18 @@ export default function LayoutBuilderShell({
     setError(null);
     setNotice(null);
     setStatus('unsaved');
+  }
+
+  async function reviewDraft(): Promise<void> {
+    if (
+      status === 'unsaved' &&
+      !window.confirm(
+        'Review loads the last saved draft and discards unsaved canvas changes.',
+      )
+    ) {
+      return;
+    }
+    if (await load(true)) setNotice('Review loaded the persisted draft version.');
   }
 
   async function saveDraft(): Promise<void> {
@@ -432,6 +478,9 @@ export default function LayoutBuilderShell({
       const updated = LayoutExtensionResourceSchema.parse(
         await api.patch(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}`, {
           document: nextDocument,
+          ...(currentVersion
+            ? { expectedVersionNumber: currentVersion.versionNumber }
+            : {}),
         }),
       );
       setResource(updated);
@@ -444,8 +493,16 @@ export default function LayoutBuilderShell({
       );
       setVersions(LayoutExtensionVersionsResponseSchema.parse(versionResponse).items);
     } catch (caughtError) {
-      setStatus('error');
-      setError(toErrorMessage(caughtError));
+      setStatus(
+        caughtError instanceof ApiClientError && caughtError.status === 409
+          ? 'conflict'
+          : 'error',
+      );
+      setError(
+        caughtError instanceof ApiClientError && caughtError.status === 409
+          ? `This ${label} was updated elsewhere. Reload the latest draft before saving again.`
+          : toErrorMessage(caughtError),
+      );
     } finally {
       setBusy(false);
     }
@@ -472,6 +529,11 @@ export default function LayoutBuilderShell({
       );
       setVersions(LayoutExtensionVersionsResponseSchema.parse(versionResponse).items);
     } catch (caughtError) {
+      setStatus(
+        caughtError instanceof ApiClientError && caughtError.status === 409
+          ? 'conflict'
+          : 'error',
+      );
       setError(toErrorMessage(caughtError));
     } finally {
       setBusy(false);
@@ -501,6 +563,11 @@ export default function LayoutBuilderShell({
       setStatus('saved');
       setNotice('Unpublished draft discarded. The editor now shows the live version.');
     } catch (caughtError) {
+      setStatus(
+        caughtError instanceof ApiClientError && caughtError.status === 409
+          ? 'conflict'
+          : 'error',
+      );
       setError(toErrorMessage(caughtError));
     } finally {
       setBusy(false);
@@ -620,15 +687,19 @@ export default function LayoutBuilderShell({
           <span className={`builder-save-status status-${status}`} role="status">
             {status === 'saving'
               ? 'Saving…'
-              : status === 'unsaved'
-                ? resource.publishedVersionId
-                  ? 'Live · Unsaved changes'
-                  : 'Draft · Unsaved changes'
-                : resource.draftVersionId
-                  ? resource.publishedVersionId
-                    ? 'Live · Draft saved'
-                    : 'Draft · Not published'
-                  : 'Live · Up to date'}
+              : status === 'error'
+                ? 'Validation error'
+                : status === 'conflict'
+                  ? 'Conflict · Reload required'
+                  : status === 'unsaved'
+                    ? resource.publishedVersionId
+                      ? 'Live · Unsaved changes'
+                      : 'Draft · Unsaved changes'
+                    : resource.draftVersionId
+                      ? resource.publishedVersionId
+                        ? 'Live · Draft saved'
+                        : 'Draft · Not published'
+                      : 'Live · Up to date'}
           </span>
           <button
             aria-label="Undo"
@@ -654,6 +725,14 @@ export default function LayoutBuilderShell({
             type="button"
           >
             Live preview
+          </button>
+          <button
+            className="button button-ghost"
+            disabled={busy}
+            onClick={() => void reviewDraft()}
+            type="button"
+          >
+            Review draft
           </button>
           <button
             className="button button-primary"
@@ -801,12 +880,16 @@ export default function LayoutBuilderShell({
                         <BuilderBlockCard
                           addLabel={`${block.label} add`}
                           category={block.category}
-                          dataBlockType={block.id}
+                          dataBlockType={block.extensionId ?? block.id}
                           description={block.description}
                           dragLabel={`Drag ${block.label} block`}
-                          key={block.id}
+                          key={`${block.id}:${block.extensionId ?? ''}`}
                           label={block.label}
-                          onAdd={() => editorRef.current?.addBlock(block.id)}
+                          onAdd={() =>
+                            block.extensionId
+                              ? editorRef.current?.addExtensionBlock(block.extensionId)
+                              : editorRef.current?.addBlock(block.id)
+                          }
                           onDragStart={undefined}
                           preview={block.preview}
                         />
@@ -957,10 +1040,12 @@ export default function LayoutBuilderShell({
               onClose={() => setQuickAddTarget(null)}
               onInsert={insertQuickAdd}
               open={quickAddTarget !== null}
-              options={visibleBlockOptions.map((block) => ({
-                type: block.id,
-                label: block.label,
-              }))}
+              options={visibleBlockOptions
+                .filter((block) => !block.extensionId)
+                .map((block) => ({
+                  type: block.id,
+                  label: block.label,
+                }))}
               targetLabel={selected?.type}
             />
             <GrapesEditor
@@ -986,6 +1071,7 @@ export default function LayoutBuilderShell({
                 setSelectedNodeId(nextSelection?.id ?? null);
                 setSelected(nextSelection);
               }}
+              key={editorRevision}
               ref={editorRef}
               {...(siteLogo ? { siteLogo } : {})}
               siteName={siteName}

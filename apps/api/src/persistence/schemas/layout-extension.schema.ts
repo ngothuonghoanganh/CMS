@@ -8,8 +8,8 @@ export type LayoutExtensionVersionDocument =
 
 /**
  * A Header or Footer layout extension resource. It owns its own draft and
- * published version pointers and shares the Page Builder engine, but is not
- * persisted inside SiteGlobals and is never auto-rendered by the renderer.
+ * published version pointers and shares the Page Builder engine. Pages attach
+ * the resource explicitly; it is never auto-rendered by the renderer.
  */
 @Schema({
   collection: 'layoutExtensions',

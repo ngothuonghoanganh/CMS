@@ -130,11 +130,17 @@ export function PreviewBridge({
   return (
     <>
       {snapshot.layout?.header
-        ? renderLayoutExtension(snapshot.layout.header.document, context)
+        ? renderLayoutExtension(snapshot.layout.header.document, {
+            ...context,
+            layoutSlot: snapshot.layout.header.slot,
+          })
         : null}
       {renderPage(snapshot.page.payload, context)}
       {snapshot.layout?.footer
-        ? renderLayoutExtension(snapshot.layout.footer.document, context)
+        ? renderLayoutExtension(snapshot.layout.footer.document, {
+            ...context,
+            layoutSlot: snapshot.layout.footer.slot,
+          })
         : null}
     </>
   ) as ReactElement;

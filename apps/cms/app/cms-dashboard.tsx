@@ -68,6 +68,7 @@ import { ExtensionsView } from './extensions-view';
 import { WorkflowsView } from './workflows-view';
 import { NavigationView } from './navigation-view';
 import { DesignSystemView } from './design-system-view';
+import { LayoutExtensionsView } from './layout-extensions-view';
 import { PagesView as SiteMapPagesView } from './pages/pages-view';
 import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
 
@@ -89,6 +90,7 @@ type View =
   | 'audit'
   | 'users'
   | 'extensions'
+  | 'layouts'
   | 'workflows'
   | 'organization';
 type SiteForm = { name: string; slug: string };
@@ -128,6 +130,7 @@ const viewLabels: Record<View, string> = {
   dashboard: 'Overview',
   domains: 'Domains',
   integrations: 'Integrations',
+  layouts: 'Headers & Footers',
   organization: 'Organization',
   pages: 'Pages',
   navigation: 'Navigation',
@@ -1124,6 +1127,7 @@ export default function CmsDashboard() {
       } else {
         const created = await api.post<Template>(basePath, {
           ...templateForm,
+          ...(selectedSiteId ? { siteId: selectedSiteId } : {}),
           payload: defaultPayload(templateForm.name),
         });
         setTemplates((current) => [created, ...current]);
@@ -1404,6 +1408,9 @@ export default function CmsDashboard() {
           : []),
         ...(can('site.read')
           ? [{ icon: '≡', key: 'navigation' as const, label: 'Navigation' }]
+          : []),
+        ...(can('layout.read')
+          ? [{ icon: '▰', key: 'layouts' as const, label: 'Headers & Footers' }]
           : []),
         ...(can('design-system.read')
           ? [{ icon: '✦', key: 'design-system' as const, label: 'Design system' }]
@@ -1780,6 +1787,27 @@ export default function CmsDashboard() {
               sites={sites}
             />
           ) : null}
+          {view === 'layouts' ? (
+            selectedSiteId ? (
+              <LayoutExtensionsView
+                canCreate={can('layout.create')}
+                canDelete={can('layout.delete')}
+                canRead={can('layout.read')}
+                canPublish={can('layout.publish')}
+                canUpdate={can('layout.update')}
+                onOpenBuilder={(resource) =>
+                  router.push(
+                    `/workspaces/${session.workspace.id}/sites/${resource.siteId}/layouts/${resource.kind === 'header' ? 'headers' : 'footers'}/${resource.id}/builder`,
+                  )
+                }
+                siteId={selectedSiteId}
+              />
+            ) : (
+              <section className="panel">
+                <p>Select a site to manage Headers and Footers.</p>
+              </section>
+            )
+          ) : null}
           {view === 'design-system' ? (
             selectedSiteId ? (
               <DesignSystemView
@@ -1806,6 +1834,10 @@ export default function CmsDashboard() {
           {view === 'templates' ? (
             <TemplatesView
               busy={busy}
+              canCreate={can('template.create')}
+              canDelete={can('template.delete')}
+              canPublish={can('template.publish')}
+              canUpdate={can('template.update')}
               editingTemplateId={editingTemplateId}
               form={templateForm}
               onCancel={() => {
@@ -1830,6 +1862,19 @@ export default function CmsDashboard() {
               }
               onSubmit={handleTemplateSubmit}
               onUseForPage={beginPageFromTemplate}
+              onOpenBuilder={(template, versionNumber) => {
+                if (!selectedSiteId) {
+                  setNotice('Select a site before opening the Template builder.');
+                  return;
+                }
+                const versionQuery = versionNumber
+                  ? `?version=${encodeURIComponent(String(versionNumber))}`
+                  : '';
+                router.push(
+                  `/workspaces/${session.workspace.id}/sites/${selectedSiteId}/templates/${template.id}/builder${versionQuery}`,
+                );
+              }}
+              siteId={selectedSiteId}
               workspaceId={session.workspace.id}
               templates={templates}
             />
@@ -1974,7 +2019,7 @@ export default function CmsDashboard() {
           {view === 'extensions' ? (
             <ExtensionsView
               canManage={can('extensions.manage')}
-              canManageLayouts={can('site.update')}
+              canManageLayouts={can('layout.create')}
               workspaceId={session.workspace.id}
               {...(selectedSiteId ? { siteId: selectedSiteId } : {})}
             />
@@ -2510,6 +2555,10 @@ function TemplatesView({
   templates,
   form,
   busy,
+  canCreate,
+  canDelete,
+  canPublish,
+  canUpdate,
   editingTemplateId,
   onChange,
   onSubmit,
@@ -2520,11 +2569,17 @@ function TemplatesView({
   onRestore,
   onCancel,
   onUseForPage,
+  onOpenBuilder,
+  siteId,
   workspaceId,
 }: {
   templates: Template[];
   form: TemplateForm;
   busy: boolean;
+  canCreate: boolean;
+  canDelete: boolean;
+  canPublish: boolean;
+  canUpdate: boolean;
   editingTemplateId: string;
   onChange: (form: TemplateForm) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -2535,6 +2590,8 @@ function TemplatesView({
   onRestore: (template: Template, version: TemplateVersion) => void;
   onCancel: () => void;
   onUseForPage: (templateId: string, templateVersionId?: string) => void;
+  onOpenBuilder: (template: Template, versionNumber?: number) => void;
+  siteId: string;
   workspaceId: string;
 }) {
   return (
@@ -2569,7 +2626,11 @@ function TemplatesView({
               />
             </label>
             <div className="form-actions">
-              <button className="button button-primary" disabled={busy} type="submit">
+              <button
+                className="button button-primary"
+                disabled={busy || (editingTemplateId ? !canUpdate : !canCreate)}
+                type="submit"
+              >
                 {busy
                   ? 'Saving…'
                   : editingTemplateId
@@ -2600,6 +2661,9 @@ function TemplatesView({
                     </span>
                     <TemplateVersions
                       busy={busy}
+                      canPublish={canPublish}
+                      canUpdate={canUpdate}
+                      onReview={onOpenBuilder}
                       onPublish={onPublish}
                       onRestore={onRestore}
                       onUseForPage={onUseForPage}
@@ -2616,8 +2680,19 @@ function TemplatesView({
                       Use for page
                     </button>
                     <button
+                      className="button button-small button-secondary"
+                      disabled={!siteId || !canUpdate}
+                      onClick={() => onOpenBuilder(template)}
+                      title={
+                        siteId ? 'Open visual template builder' : 'Select a site first'
+                      }
+                      type="button"
+                    >
+                      Open builder
+                    </button>
+                    <button
                       className="button button-small button-success"
-                      disabled={busy}
+                      disabled={busy || !canPublish}
                       onClick={() => onPublish(template)}
                       type="button"
                     >
@@ -2625,6 +2700,7 @@ function TemplatesView({
                     </button>
                     <button
                       className="button button-small"
+                      disabled={!canUpdate}
                       onClick={() => onEdit(template)}
                       type="button"
                     >
@@ -2632,7 +2708,7 @@ function TemplatesView({
                     </button>
                     <button
                       className="button button-small"
-                      disabled={busy}
+                      disabled={busy || !canCreate}
                       onClick={() => onDuplicate(template)}
                       type="button"
                     >
@@ -2640,6 +2716,7 @@ function TemplatesView({
                     </button>
                     <button
                       className="button button-small button-danger"
+                      disabled={!canDelete}
                       onClick={() => onRemove(template.id)}
                       type="button"
                     >
@@ -2663,6 +2740,9 @@ function TemplatesView({
 
 function TemplateVersions({
   busy,
+  canPublish,
+  canUpdate,
+  onReview,
   onPublish,
   onRestore,
   onUseForPage,
@@ -2670,6 +2750,9 @@ function TemplateVersions({
   workspaceId,
 }: {
   busy: boolean;
+  canPublish: boolean;
+  canUpdate: boolean;
+  onReview: (template: Template, versionNumber?: number) => void;
   onPublish: (template: Template, versionNumber?: number) => void;
   onRestore: (template: Template, version: TemplateVersion) => void;
   onUseForPage: (templateId: string, templateVersionId?: string) => void;
@@ -2711,6 +2794,14 @@ function TemplateVersions({
           <button
             className="button button-small"
             disabled={busy}
+            onClick={() => onReview(template, version.versionNumber)}
+            type="button"
+          >
+            Review
+          </button>
+          <button
+            className="button button-small"
+            disabled={busy}
             onClick={() => onUseForPage(template.id, version.id)}
             type="button"
           >
@@ -2718,7 +2809,7 @@ function TemplateVersions({
           </button>
           <button
             className="button button-small"
-            disabled={busy || version.id === template.latestVersionId}
+            disabled={busy || !canUpdate || version.id === template.latestVersionId}
             onClick={() => onRestore(template, version)}
             type="button"
           >
@@ -2726,7 +2817,7 @@ function TemplateVersions({
           </button>
           <button
             className="button button-small button-success"
-            disabled={busy || version.id === template.publishedVersionId}
+            disabled={busy || !canPublish || version.id === template.publishedVersionId}
             onClick={() => onPublish(template, version.versionNumber)}
             type="button"
           >

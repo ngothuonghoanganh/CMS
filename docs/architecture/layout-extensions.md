@@ -52,12 +52,20 @@ composes `site-brand`, `navigation-view`, `button`, `link`, `text`, `heading`.
 
 ## Draft + publish
 
-- Saving a draft updates the current `draftVersionId` in place (draft versions
-  are mutable).
-- Publishing validates design-token and menu references, marks the draft version
-  `published`, moves `publishedVersionId` to it, and clears `draftVersionId`.
-- Discarding deletes the draft version, reverting to the published version.
+- Saving a draft creates a new immutable version, advances `draftVersionId`, and
+  archives the previous draft snapshot.
+- Publishing validates design-token, reusable, menu and extension references,
+  marks the selected draft version `published`, moves `publishedVersionId` to it,
+  and clears `draftVersionId`.
+- Discarding archives the current draft version and clears `draftVersionId`,
+  reverting preview to the published version.
 - Published versions are immutable.
+
+The dedicated builder's `Review draft` action reloads the persisted draft version
+from the API and remounts the editor from that snapshot. Unsaved canvas state is
+never presented as Review. `Live preview` uses the page preview boundary when the
+layout is opened from a page; public delivery still resolves the published
+version only.
 
 ## API
 
@@ -67,6 +75,7 @@ POST   /sites/:siteId/layouts/:kind
 GET    /sites/:siteId/layouts/:kind/:resourceId
 PATCH  /sites/:siteId/layouts/:kind/:resourceId
 POST   /sites/:siteId/layouts/:kind/:resourceId/publish
+POST   /sites/:siteId/layouts/:kind/:resourceId/duplicate
 POST   /sites/:siteId/layouts/:kind/:resourceId/discard
 GET    /sites/:siteId/layouts/:kind/:resourceId/versions
 DELETE /sites/:siteId/layouts/:kind/:resourceId

@@ -13,6 +13,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 import { StatusBadge } from '../status-badge';
 import { Drawer, Modal, PageHeader, ResourceToolbar } from '../ui/surfaces';
+import { PageLayoutEditor } from './page-layout-editor';
 
 export type PageForm = { name: string; description: string; path: string };
 
@@ -696,6 +697,10 @@ export function PagesView({
             />
           )}
         </section>
+      ) : null}
+
+      {selectedPage ? (
+        <PageLayoutEditor canUpdate={canUpdatePage} page={selectedPage} />
       ) : null}
 
       {selectedPage ? (

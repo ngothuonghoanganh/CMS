@@ -364,6 +364,11 @@ describe('PagePayloadV1 renderer', () => {
     );
 
     expect(layoutMarkup).toContain('data-site-global="header"');
+    expect(
+      renderToStaticMarkup(
+        renderLayoutExtension(header, { layoutSlot: 'page.header.top-right' }) ?? '',
+      ),
+    ).toContain('data-site-global-slot="page.header.top-right"');
     expect(layoutMarkup).toContain('data-navigation-mobile-behavior="collapse"');
     expect(layoutMarkup).toContain('aria-current="page"');
     expect(layoutMarkup).toContain('Acme');

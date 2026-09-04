@@ -16,6 +16,7 @@ import {
   SiteDesignSystemSchema,
   normalizeHostname,
   type PublicPage,
+  type PageRuntimeExtension,
   normalizePagePath,
 } from '@payload/contracts';
 
@@ -33,6 +34,7 @@ import { SiteUrlService } from './site-url.service';
 import { NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
+import { PageExtensionService } from '../extensions/page-extension.service';
 
 @Injectable()
 export class PublicPageResolver {
@@ -52,6 +54,8 @@ export class PublicPageResolver {
     @Inject(NavigationService) private readonly navigation: NavigationService,
     @Inject(LayoutExtensionService)
     private readonly layoutExtensions: LayoutExtensionService,
+    @Inject(PageExtensionService)
+    private readonly pageExtensions: PageExtensionService,
     @Inject(ReusableService) private readonly reusables: ReusableService,
   ) {}
 
@@ -226,6 +230,7 @@ export class PublicPageResolver {
         publishedBundle?.layoutAttachments ??
           (versionComposition.success ? versionComposition.data.layoutAttachments : []),
         'published',
+        { siteId: site._id.toString(), workspaceId: site.workspaceId },
       );
       const globals = site.publishedGlobals
         ? SiteGlobalsSchema.parse(site.publishedGlobals)
@@ -242,7 +247,13 @@ export class PublicPageResolver {
       // Public rendering is intentionally snapshot-only. In particular, a
       // legacy version without a compiled bundle must not fall through to the
       // mutable page extension projection from the draft.
-      const extensions = publishedBundle?.extensions ?? [];
+      const extensions = mergeRuntimeExtensions(
+        publishedBundle?.extensions ?? [],
+        await this.pageExtensions.resolveRuntimeForLayoutDocuments(page.workspaceId, [
+          ...(layout.header ? [layout.header.document] : []),
+          ...(layout.footer ? [layout.footer.document] : []),
+        ]),
+      );
 
       return PublicPageSchema.parse({
         tenantSlug: this.tenantContext.require().slug,
@@ -326,4 +337,15 @@ export class PublicPageResolver {
       message: 'The published page data is invalid',
     });
   }
+}
+
+function mergeRuntimeExtensions(
+  base: readonly PageRuntimeExtension[],
+  additional: readonly PageRuntimeExtension[],
+): PageRuntimeExtension[] {
+  const byId = new Map(base.map((extension) => [extension.extensionId, extension]));
+  for (const extension of additional) {
+    if (!byId.has(extension.extensionId)) byId.set(extension.extensionId, extension);
+  }
+  return [...byId.values()];
 }

@@ -1,7 +1,11 @@
-import { createHash } from 'node:crypto';
 import process from 'node:process';
 
-import { MongoClient } from 'mongodb';
+import {
+  layoutSlot,
+  legacyDocument,
+  legacyGlobal,
+  uuidFor,
+} from './legacy-layout-migration-utils.mjs';
 
 const args = new Set(process.argv.slice(2));
 const readOption = (name) => {
@@ -12,15 +16,8 @@ const apply = args.has('--apply');
 const dryRun = !apply || args.has('--dry-run');
 const selectedDatabase = readOption('--database');
 const selectedTenantId = readOption('--tenant');
-const mongoUri = process.env.MONGODB_URI;
 const masterDatabaseName =
   process.env.MONGODB_MASTER_DATABASE_NAME ?? 'payload_platform_master';
-
-if (!mongoUri) {
-  throw new Error(
-    'MONGODB_URI is required. Load the project .env file before running this script.',
-  );
-}
 
 if (args.has('--help')) {
   process.stdout.write(`
@@ -38,39 +35,14 @@ attachments are preserved; only missing legacy Header/Footer attachments are add
   process.exit(0);
 }
 
-function uuidFor(seed) {
-  const hex = createHash('sha256').update(seed).digest('hex');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+const mongoUri = process.env.MONGODB_URI;
+if (!mongoUri) {
+  throw new Error(
+    'MONGODB_URI is required. Load the project .env file before running this script.',
+  );
 }
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function legacyDocument(value, kind) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const document = clone(value);
-  const expectedDocumentKind = kind === 'header' ? 'site-header' : 'site-footer';
-  if (
-    document.version !== 1 ||
-    document.documentKind !== expectedDocumentKind ||
-    !document.root ||
-    typeof document.root !== 'object' ||
-    !Array.isArray(document.root.children)
-  ) {
-    return null;
-  }
-  return document;
-}
-
-function legacyGlobal(site, source, kind) {
-  const globals = source === 'draft' ? site.globalsDraft : site.publishedGlobals;
-  return legacyDocument(globals?.[kind], kind);
-}
-
-function layoutSlot(kind) {
-  return kind === 'header' ? 'page.header.top' : 'page.footer.bottom';
-}
+const { MongoClient } = await import('mongodb');
 
 async function tenantDatabases(client) {
   if (selectedDatabase) return [selectedDatabase];
@@ -105,10 +77,16 @@ async function migrateSite(database, site) {
   const pages = database.collection('landingPages');
   const now = new Date();
   const migrated = [];
+  let conflicts = 0;
+  let skipped = 0;
 
   for (const kind of ['header', 'footer']) {
+    const rawDraft = site.globalsDraft?.[kind];
+    const rawPublished = site.publishedGlobals?.[kind];
     const draft = legacyGlobal(site, 'draft', kind);
     const published = legacyGlobal(site, 'published', kind);
+    if (rawDraft !== undefined && !draft) skipped += 1;
+    if (rawPublished !== undefined && !published) skipped += 1;
     if (!draft && !published) continue;
     // Older globals commonly copied the published snapshot into the draft
     // field. Do not manufacture an unnecessary unpublished version for it.
@@ -124,6 +102,19 @@ async function migrateSite(database, site) {
     const draftVersionId = draftForMigration
       ? uuidFor(`legacy-layout:${site._id}:${kind}:draft`)
       : undefined;
+    const existingResource = await resources
+      .findOne({ _id: resourceId })
+      .project({ workspaceId: 1, siteId: 1, kind: 1 })
+      .next();
+    if (
+      existingResource &&
+      (existingResource.workspaceId !== site.workspaceId ||
+        existingResource.siteId !== site._id ||
+        existingResource.kind !== kind)
+    ) {
+      conflicts += 1;
+      continue;
+    }
     const resource = {
       _id: resourceId,
       workspaceId: site.workspaceId,
@@ -158,6 +149,19 @@ async function migrateSite(database, site) {
       });
     }
 
+    const pagesForSite = await pages
+      .find({ siteId: site._id, workspaceId: site.workspaceId })
+      .project({ _id: 1, layoutAttachments: 1 })
+      .toArray();
+    const pagesToBackfill = pagesForSite.filter((page) => {
+      const attachments = Array.isArray(page.layoutAttachments)
+        ? page.layoutAttachments.filter(
+            (attachment) => attachment && typeof attachment === 'object',
+          )
+        : [];
+      return !attachments.some((attachment) => attachment.type === kind);
+    });
+
     if (!dryRun) {
       await resources.updateOne(
         { _id: resourceId },
@@ -171,10 +175,6 @@ async function migrateSite(database, site) {
           { upsert: true },
         );
       }
-      const pagesForSite = await pages
-        .find({ siteId: site._id, workspaceId: site.workspaceId })
-        .project({ _id: 1, layoutAttachments: 1 })
-        .toArray();
       for (const page of pagesForSite) {
         const attachments = Array.isArray(page.layoutAttachments)
           ? page.layoutAttachments.filter(
@@ -199,9 +199,10 @@ async function migrateSite(database, site) {
       kind,
       resourceId,
       attachmentMode: dryRun ? 'would attach' : 'attached',
+      pagesToBackfill: pagesToBackfill.length,
     });
   }
-  return migrated;
+  return { items: migrated, conflicts, skipped };
 }
 
 const client = new MongoClient(mongoUri);
@@ -225,17 +226,26 @@ try {
       })
       .toArray();
     let migratedCount = 0;
+    let pagesToBackfill = 0;
+    let conflicts = 0;
+    let skipped = 0;
     for (const site of sites) {
-      const migrated = await migrateSite(database, site);
-      if (migrated.length > 0) {
-        migratedCount += migrated.length;
+      const result = await migrateSite(database, site);
+      conflicts += result.conflicts;
+      skipped += result.skipped;
+      if (result.items.length > 0) {
+        migratedCount += result.items.length;
+        pagesToBackfill += result.items.reduce(
+          (total, item) => total + item.pagesToBackfill,
+          0,
+        );
         process.stdout.write(
-          `${dryRun ? '[dry-run] ' : ''}${databaseName}: ${site._id} → ${migrated.map((item) => item.kind).join(', ')}\n`,
+          `${dryRun ? '[dry-run] ' : ''}${databaseName}: ${site._id} → ${result.items.map((item) => `${item.kind} (${item.pagesToBackfill} page attachment(s))`).join(', ')}\n`,
         );
       }
     }
     process.stdout.write(
-      `${dryRun ? '[dry-run] ' : ''}${databaseName}: ${migratedCount} legacy layout resource(s) ${dryRun ? 'would be migrated' : 'migrated'}.\n`,
+      `${dryRun ? '[dry-run] ' : ''}${databaseName}: sites scanned ${sites.length}; ${migratedCount} legacy layout resource(s) ${dryRun ? 'would be migrated' : 'migrated'}; ${pagesToBackfill} page attachment(s) ${dryRun ? 'would be backfilled' : 'backfilled'}; conflicts ${conflicts}; skipped ${skipped}.\n`,
     );
   }
 } finally {

@@ -4,6 +4,7 @@ import {
   ExtensionIds,
   PageCompositionSchema,
   PagePayloadV3Schema,
+  type SiteGlobalPayloadV1,
 } from '@payload/contracts';
 
 import type { PageRecord } from '../persistence/schemas/page.schema';
@@ -316,6 +317,59 @@ describe('PageExtensionService', () => {
     expect(instance.capabilities).toEqual(['custom.banner']);
 
     await expect(service.resolveRuntime(pageId, workspaceId)).resolves.toEqual([
+      expect.objectContaining({
+        extensionId: 'custom-launch',
+        custom: expect.objectContaining({ id: 'custom-launch' }),
+      }),
+    ]);
+  });
+
+  it('validates and resolves custom extensions embedded in layout documents', async () => {
+    const tenantContext = new TenantContext();
+    const registry = new ExtensionRegistry(
+      [demoBuilderExtension],
+      new CapabilityRegistry(),
+      new EventBus(tenantContext),
+    );
+    await registry.onModuleInit();
+    const service = new PageExtensionService(
+      new PageExtensionStore() as unknown as Model<PageExtensionInstanceRecord>,
+      new PageStore() as unknown as Model<PageRecord>,
+      new CustomTenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
+      registry,
+    );
+    const document = {
+      version: 1,
+      documentKind: 'site-header',
+      metadata: { documentTitle: 'Header' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'header',
+            type: 'global-header',
+            props: { position: 'static' },
+            children: [
+              {
+                id: 'extension',
+                type: 'extension',
+                props: { extensionId: 'custom-launch', values: {} },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    } as unknown as SiteGlobalPayloadV1;
+
+    await expect(
+      service.validateVisualDocumentDependencies(workspaceId, document),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.resolveRuntimeForLayoutDocuments(workspaceId, [document]),
+    ).resolves.toEqual([
       expect.objectContaining({
         extensionId: 'custom-launch',
         custom: expect.objectContaining({ id: 'custom-launch' }),

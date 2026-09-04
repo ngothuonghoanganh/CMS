@@ -42,6 +42,7 @@ export type CanonicalEnvironment = {
   organizationId: string;
   workspaceId: string;
   siteId: string;
+  siteName: string;
   pageId: string;
   organizationSlug: string;
   siteSlug: string;
@@ -401,6 +402,7 @@ export async function ensureCanonicalEnvironment(
     organizationId: organization.id,
     workspaceId: workspace.id,
     siteId: site.id,
+    siteName: site.name,
     pageId: page.id,
     organizationSlug: canonical.organizationSlug,
     siteSlug: canonical.siteSlug,
