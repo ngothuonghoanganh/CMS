@@ -68,7 +68,6 @@ import { ExtensionsView } from './extensions-view';
 import { WorkflowsView } from './workflows-view';
 import { NavigationView } from './navigation-view';
 import { DesignSystemView } from './design-system-view';
-import { LayoutExtensionsView } from './layout-extensions-view';
 import { PagesView as SiteMapPagesView } from './pages/pages-view';
 import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
 
@@ -90,7 +89,6 @@ type View =
   | 'audit'
   | 'users'
   | 'extensions'
-  | 'layouts'
   | 'workflows'
   | 'organization';
 type SiteForm = { name: string; slug: string };
@@ -130,7 +128,6 @@ const viewLabels: Record<View, string> = {
   dashboard: 'Overview',
   domains: 'Domains',
   integrations: 'Integrations',
-  layouts: 'Headers & Footers',
   organization: 'Organization',
   pages: 'Pages',
   navigation: 'Navigation',
@@ -1409,9 +1406,6 @@ export default function CmsDashboard() {
         ...(can('site.read')
           ? [{ icon: '≡', key: 'navigation' as const, label: 'Navigation' }]
           : []),
-        ...(can('layout.read')
-          ? [{ icon: '▰', key: 'layouts' as const, label: 'Headers & Footers' }]
-          : []),
         ...(can('design-system.read')
           ? [{ icon: '✦', key: 'design-system' as const, label: 'Design system' }]
           : []),
@@ -1459,7 +1453,7 @@ export default function CmsDashboard() {
         ...(can('audit.read')
           ? [{ icon: '≡', key: 'audit' as const, label: 'Audit Log' }]
           : []),
-        ...(can('extensions.read')
+        ...(can('extensions.read') || can('layout.read')
           ? [{ icon: '⊞', key: 'extensions' as const, label: 'Extensions' }]
           : []),
       ],
@@ -1787,27 +1781,6 @@ export default function CmsDashboard() {
               sites={sites}
             />
           ) : null}
-          {view === 'layouts' ? (
-            selectedSiteId ? (
-              <LayoutExtensionsView
-                canCreate={can('layout.create')}
-                canDelete={can('layout.delete')}
-                canRead={can('layout.read')}
-                canPublish={can('layout.publish')}
-                canUpdate={can('layout.update')}
-                onOpenBuilder={(resource) =>
-                  router.push(
-                    `/workspaces/${session.workspace.id}/sites/${resource.siteId}/layouts/${resource.kind === 'header' ? 'headers' : 'footers'}/${resource.id}/builder`,
-                  )
-                }
-                siteId={selectedSiteId}
-              />
-            ) : (
-              <section className="panel">
-                <p>Select a site to manage Headers and Footers.</p>
-              </section>
-            )
-          ) : null}
           {view === 'design-system' ? (
             selectedSiteId ? (
               <DesignSystemView
@@ -2020,6 +1993,7 @@ export default function CmsDashboard() {
             <ExtensionsView
               canManage={can('extensions.manage')}
               canManageLayouts={can('layout.create')}
+              canDeleteLayouts={can('layout.delete')}
               workspaceId={session.workspace.id}
               {...(selectedSiteId ? { siteId: selectedSiteId } : {})}
             />

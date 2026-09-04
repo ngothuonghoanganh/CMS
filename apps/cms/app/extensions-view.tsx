@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { api, ApiClientError } from './lib/api';
 import { StatusBadge } from './status-badge';
+import { Drawer } from './ui/surfaces';
 
 type CustomExtensionDraft = {
   id: string;
@@ -42,6 +43,11 @@ type ConnectionDraft = {
   secret: string;
 };
 
+type LayoutCreateDraft = {
+  name: string;
+  description: string;
+};
+
 const emptyCustomExtensionDraft: CustomExtensionDraft = {
   id: 'custom-',
   name: '',
@@ -61,9 +67,15 @@ const emptyConnectionDraft: ConnectionDraft = {
   secret: '',
 };
 
+const emptyLayoutCreateDraft: LayoutCreateDraft = {
+  name: '',
+  description: '',
+};
+
 type ExtensionsViewProps = {
   canManage: boolean;
   canManageLayouts?: boolean;
+  canDeleteLayouts?: boolean;
   workspaceId?: string;
   siteId?: string;
 };
@@ -75,6 +87,7 @@ function layoutSegment(kind: LayoutExtensionKind): 'headers' | 'footers' {
 export function ExtensionsView({
   canManage,
   canManageLayouts = false,
+  canDeleteLayouts = false,
   workspaceId,
   siteId,
 }: ExtensionsViewProps) {
@@ -101,6 +114,13 @@ export function ExtensionsView({
     useState<ConnectionDraft>(emptyConnectionDraft);
   const [layoutExtensions, setLayoutExtensions] = useState<LayoutExtensionResource[]>([]);
   const [layoutBusy, setLayoutBusy] = useState<LayoutExtensionKind | null>(null);
+  const [layoutDeletingId, setLayoutDeletingId] = useState<string | null>(null);
+  const [layoutCreateDraft, setLayoutCreateDraft] =
+    useState<LayoutCreateDraft>(emptyLayoutCreateDraft);
+  const [layoutCreateOpen, setLayoutCreateOpen] = useState(false);
+  const [editingLayoutKind, setEditingLayoutKind] = useState<LayoutExtensionKind | null>(
+    null,
+  );
 
   const enabledCount = extensions.filter((extension) => extension.tenantEnabled).length;
   const runtimeCount = extensions.reduce(
@@ -182,20 +202,32 @@ export function ExtensionsView({
     };
   }, [reloadKey, siteId]);
 
+  function startCreateLayout(kind: LayoutExtensionKind): void {
+    if (!workspaceId || !siteId || !canManageLayouts) return;
+    setError(null);
+    setLayoutCreateDraft(emptyLayoutCreateDraft);
+    setEditingLayoutKind(kind);
+    setLayoutCreateOpen(true);
+  }
+
   async function createLayoutExtension(kind: LayoutExtensionKind): Promise<void> {
-    if (!siteId || !canManageLayouts) return;
+    if (!siteId || !canManageLayouts || !layoutCreateDraft.name.trim()) return;
     setLayoutBusy(kind);
     setError(null);
     try {
       const resource = LayoutExtensionResourceSchema.parse(
         await api.post(`/sites/${siteId}/layouts/${layoutSegment(kind)}`, {
           kind,
-          name: kind === 'header' ? 'Header extension' : 'Footer extension',
-          description: `Reusable ${kind} block for page composition.`,
+          name: layoutCreateDraft.name.trim(),
+          ...(layoutCreateDraft.description.trim()
+            ? { description: layoutCreateDraft.description.trim() }
+            : {}),
         }),
       );
       setLayoutExtensions((current) => [...current, resource]);
-      openLayoutBuilder(resource);
+      setLayoutCreateDraft(emptyLayoutCreateDraft);
+      setLayoutCreateOpen(false);
+      setEditingLayoutKind(resource.kind);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : 'Layout creation failed',
@@ -205,11 +237,42 @@ export function ExtensionsView({
     }
   }
 
+  function openLayoutMenu(kind: LayoutExtensionKind): void {
+    if (!workspaceId || !siteId) return;
+    setLayoutCreateOpen(false);
+    setEditingLayoutKind(kind);
+  }
+
   function openLayoutBuilder(resource: LayoutExtensionResource): void {
     if (!workspaceId || !siteId) return;
     window.location.assign(
       `/workspaces/${workspaceId}/sites/${siteId}/layouts/${layoutSegment(resource.kind)}/${resource.id}/builder`,
     );
+  }
+
+  async function removeLayoutExtension(resource: LayoutExtensionResource): Promise<void> {
+    if (!siteId || !canDeleteLayouts) return;
+    if (
+      !window.confirm(
+        `Delete ${resource.name}? Existing page blocks must be removed first.`,
+      )
+    ) {
+      return;
+    }
+    setLayoutDeletingId(resource.id);
+    setError(null);
+    try {
+      await api.delete(
+        `/sites/${siteId}/layouts/${layoutSegment(resource.kind)}/${resource.id}`,
+      );
+      setLayoutExtensions((current) => current.filter((item) => item.id !== resource.id));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : 'Layout delete failed',
+      );
+    } finally {
+      setLayoutDeletingId(null);
+    }
   }
 
   async function toggle(extension: ExtensionDescriptor): Promise<void> {
@@ -548,7 +611,7 @@ export function ExtensionsView({
             ) : (
               <div className="extension-layout-grid">
                 {(['header', 'footer'] as const).map((kind) => {
-                  const resource = layoutExtensions.find((item) => item.kind === kind);
+                  const resources = layoutExtensions.filter((item) => item.kind === kind);
                   const label = kind === 'header' ? 'Header' : 'Footer';
                   return (
                     <article className="extension-layout-card" key={kind}>
@@ -556,52 +619,30 @@ export function ExtensionsView({
                         <span className="extension-mark" aria-hidden="true">
                           {label.slice(0, 1)}
                         </span>
-                        <h3>{resource?.name ?? `${label} extension`}</h3>
+                        <h3>{label} extensions</h3>
                         <p className="muted small">
-                          {resource
-                            ? resource.draftVersionId
-                              ? 'Draft ready to use in the page builder.'
-                              : resource.publishedVersionId
-                                ? 'Published source ready to copy into pages.'
-                                : 'Created — open the builder to add blocks.'
+                          {resources.length
+                            ? `${resources.length} reusable ${label.toLowerCase()} resource${resources.length === 1 ? '' : 's'} for this site.`
                             : `No ${kind} extension has been built for this site yet.`}
                         </p>
                       </div>
                       <div className="form-actions">
-                        {resource ? (
-                          <>
-                            <StatusBadge
-                              label={
-                                resource.draftVersionId
-                                  ? 'Draft'
-                                  : resource.publishedVersionId
-                                    ? 'Published'
-                                    : 'Empty'
-                              }
-                              status={
-                                resource.draftVersionId
-                                  ? 'draft'
-                                  : resource.publishedVersionId
-                                    ? 'published'
-                                    : 'empty'
-                              }
-                            />
-                            <button
-                              className="button button-primary"
-                              onClick={() => openLayoutBuilder(resource)}
-                              type="button"
-                            >
-                              Edit {label}
-                            </button>
-                          </>
+                        {resources.length ? (
+                          <button
+                            className="button button-primary"
+                            onClick={() => openLayoutMenu(kind)}
+                            type="button"
+                          >
+                            Edit {label}
+                          </button>
                         ) : (
                           <button
                             className="button button-primary"
-                            disabled={!canManageLayouts || layoutBusy === kind}
-                            onClick={() => void createLayoutExtension(kind)}
+                            disabled={!canManageLayouts}
+                            onClick={() => startCreateLayout(kind)}
                             type="button"
                           >
-                            {layoutBusy === kind ? 'Creating…' : `Build ${label}`}
+                            Build {label}
                           </button>
                         )}
                       </div>
@@ -1078,6 +1119,144 @@ export function ExtensionsView({
           </section>
         </>
       )}
+      {editingLayoutKind && workspaceId && siteId ? (
+        <Drawer
+          description={`Choose a ${editingLayoutKind} menu, then open its builder to edit the layout.`}
+          eyebrow="Layout extension"
+          headerActions={
+            <button
+              className="button button-small button-primary"
+              disabled={!canManageLayouts || layoutCreateOpen}
+              onClick={() => startCreateLayout(editingLayoutKind)}
+              type="button"
+            >
+              Add {editingLayoutKind === 'header' ? 'Header' : 'Footer'}
+            </button>
+          }
+          onClose={() => {
+            setLayoutCreateOpen(false);
+            setEditingLayoutKind(null);
+          }}
+          open
+          size="lg"
+          title={`${editingLayoutKind === 'header' ? 'Header' : 'Footer'} menus`}
+        >
+          <div className="stack">
+            {error ? (
+              <div className="alert alert-error" role="alert">
+                {error}
+              </div>
+            ) : null}
+            <p className="muted small">
+              Select the {editingLayoutKind} menu you want to work on. The full visual
+              builder opens in its own workspace after you choose Open builder.
+            </p>
+            {layoutCreateOpen ? (
+              <form
+                aria-label={`Add ${editingLayoutKind} menu`}
+                className="inset-panel stack"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void createLayoutExtension(editingLayoutKind);
+                }}
+              >
+                <div>
+                  <strong>
+                    Add {editingLayoutKind === 'header' ? 'Header' : 'Footer'} menu
+                  </strong>
+                  <p className="muted small">
+                    Enter the details for this reusable layout before opening its builder.
+                  </p>
+                </div>
+                <label>
+                  Name
+                  <input
+                    aria-label="Menu name"
+                    autoFocus
+                    maxLength={120}
+                    onChange={(event) =>
+                      setLayoutCreateDraft((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    required
+                    value={layoutCreateDraft.name}
+                  />
+                </label>
+                <label>
+                  Description <span className="muted">Optional</span>
+                  <textarea
+                    aria-label="Menu description"
+                    maxLength={500}
+                    onChange={(event) =>
+                      setLayoutCreateDraft((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    value={layoutCreateDraft.description}
+                  />
+                </label>
+                <div className="form-actions">
+                  <button
+                    className="button button-ghost"
+                    onClick={() => setLayoutCreateOpen(false)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="button button-primary"
+                    disabled={layoutBusy === editingLayoutKind}
+                    type="submit"
+                  >
+                    {layoutBusy === editingLayoutKind ? 'Creating…' : 'Create menu'}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+            <div className="list" aria-label={`${editingLayoutKind} menus`}>
+              {layoutExtensions
+                .filter((resource) => resource.kind === editingLayoutKind)
+                .map((resource) => (
+                  <div className="list-row" key={resource.id}>
+                    <div>
+                      <strong>{resource.name}</strong>
+                      <span className="muted small">
+                        {resource.draftVersionId
+                          ? resource.publishedVersionId
+                            ? 'Draft changes ready to review.'
+                            : 'Draft ready to use in the builder.'
+                          : resource.publishedVersionId
+                            ? 'Published source.'
+                            : 'No saved version yet.'}
+                      </span>
+                    </div>
+                    <div className="row-actions">
+                      <button
+                        className="button button-small button-primary"
+                        onClick={() => openLayoutBuilder(resource)}
+                        type="button"
+                      >
+                        Open builder
+                      </button>
+                      <button
+                        className="button button-small button-danger"
+                        disabled={!canDeleteLayouts || layoutDeletingId === resource.id}
+                        onClick={() => void removeLayoutExtension(resource)}
+                        type="button"
+                      >
+                        {layoutDeletingId === resource.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </Drawer>
+      ) : null}
     </>
   );
 }

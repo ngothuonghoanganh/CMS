@@ -243,7 +243,9 @@ test('extension management settles without a request loop and stays responsive',
   });
   await login(page);
   await page.getByRole('button', { name: 'Extensions', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Extensions' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Extensions', exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
   ).toBeVisible();
@@ -256,10 +258,83 @@ test('extension management settles without a request loop and stays responsive',
 
   for (const width of [1440, 1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect(page.getByRole('heading', { name: 'Extensions' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Extensions', exact: true }),
+    ).toBeVisible();
     expect(
       await page.locator('body').evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);
+  }
+});
+
+test('opens a Header extension in the Extensions drawer', async ({ page }) => {
+  const apiBase = 'http://127.0.0.1:3001/api/v1';
+  let layoutId: string | undefined;
+  let siteId: string | undefined;
+  await login(page);
+
+  try {
+    const sessionResponse = await page.request.get(`${apiBase}/auth/me`);
+    expect(sessionResponse.ok()).toBeTruthy();
+    const session = (await sessionResponse.json()) as { workspace: { id: string } };
+    const sitesResponse = await page.request.get(
+      `${apiBase}/workspaces/${session.workspace.id}/sites?limit=1&offset=0`,
+    );
+    expect(sitesResponse.ok()).toBeTruthy();
+    const sites = (await sitesResponse.json()) as { items: Array<{ id: string }> };
+    siteId = sites.items[0]?.id;
+    expect(siteId).toBeTruthy();
+
+    const name = `Drawer Header ${Date.now()}`;
+    const createResponse = await page.request.post(
+      `${apiBase}/sites/${siteId}/layouts/headers`,
+      { data: { kind: 'header', name } },
+    );
+    expect(createResponse.status()).toBe(201);
+    const resource = (await createResponse.json()) as { id: string };
+    layoutId = resource.id;
+
+    await page.goto(`/?view=extensions&siteId=${siteId}`);
+    await expect(
+      page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Edit Header', exact: true }).click();
+
+    const drawer = page.getByRole('dialog', { name: 'Header menus', exact: true });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText(name, { exact: true })).toBeVisible();
+
+    const initialMenuCount = await drawer.locator('.list-row').count();
+    await drawer.getByRole('button', { name: 'Add Header', exact: true }).click();
+    await drawer.getByLabel('Menu name').fill(`Added Header ${Date.now()}`);
+    await drawer.getByLabel('Menu description').fill('Created from the drawer.');
+    const addMenuResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url() === `${apiBase}/sites/${siteId}/layouts/headers` &&
+        response.request().method() === 'POST',
+    );
+    await drawer.getByRole('button', { name: 'Create menu', exact: true }).click();
+    const addMenuResponse = await addMenuResponsePromise;
+    expect(addMenuResponse.status()).toBe(201);
+    await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount + 1);
+
+    page.once('dialog', (dialog) => void dialog.accept());
+    await drawer
+      .locator('.list-row')
+      .last()
+      .getByRole('button', { name: 'Delete', exact: true })
+      .click();
+    await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount);
+
+    await drawer.getByRole('button', { name: 'Open builder', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/layouts/headers/${resource.id}/builder$`));
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+  } finally {
+    if (layoutId && siteId) {
+      await page.request.delete(`${apiBase}/sites/${siteId}/layouts/headers/${layoutId}`);
+    }
   }
 });
 
