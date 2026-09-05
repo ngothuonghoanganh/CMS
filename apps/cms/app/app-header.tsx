@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Icon } from './ui/icons';
+import { ThemeSwitcher } from './ui/theme-provider';
+
 type WorkspaceOption = { id: string; name: string };
 
 export function AppHeader({
@@ -37,7 +40,7 @@ export function AppHeader({
         onClick={onOpenSidebar}
         type="button"
       >
-        <span aria-hidden="true">☰</span>
+        <Icon name="menu" />
       </button>
       <div className="context-cluster">
         <CurrentCompany name={companyName} />
@@ -48,6 +51,7 @@ export function AppHeader({
         />
       </div>
       <div className="header-account">
+        <ThemeSwitcher />
         <div className="header-user-summary">
           <span aria-hidden="true" className="user-avatar">
             {userEmail.slice(0, 1).toUpperCase()}
@@ -150,7 +154,7 @@ function WorkspaceSwitcher({
       >
         <span className="context-value">{currentWorkspace.name}</span>
         <span aria-hidden="true" className="workspace-chevron">
-          ▾
+          <Icon name="chevronDown" size={14} />
         </span>
       </button>
       {open ? (

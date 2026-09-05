@@ -32,6 +32,7 @@ import {
 } from 'react';
 
 import { ApiClientError, api } from '../app/lib/api';
+import { Icon } from '../app/ui/icons';
 import {
   GLOBAL_FOOTER_PRESET_REGISTRY,
   GLOBAL_HEADER_PRESET_REGISTRY,
@@ -150,7 +151,11 @@ function renderLayoutLayers(
               onClick={() => onToggle(node.id)}
               type="button"
             >
-              {hasChildren ? (collapsedIds.has(node.id) ? '▸' : '▾') : '·'}
+              {hasChildren ? (
+                <Icon name={collapsedIds.has(node.id) ? 'chevronRight' : 'chevronDown'} />
+              ) : (
+                <Icon name="grip" size={12} />
+              )}
             </button>
             <button
               aria-label={`Select ${node.label}`}

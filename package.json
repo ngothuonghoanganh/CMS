@@ -25,9 +25,10 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:data:cleanup": "node scripts/test-data-cleanup.mjs",
+    "check:cms-design-system": "node scripts/check-cms-design-system.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:cms-design-system && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@playwright/test": "1.55.0",

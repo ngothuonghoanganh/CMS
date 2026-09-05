@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { api, ApiClientError } from '../lib/api';
 import { StatusBadge } from '../status-badge';
+import { Icon } from '../ui/icons';
 import { Drawer } from '../ui/surfaces';
 
 type CustomExtensionDraft = {
@@ -1107,7 +1108,7 @@ export function ExtensionsView({
               {filteredExtensions.length === 0 ? (
                 <div className="extension-empty-state">
                   <span className="extension-empty-icon" aria-hidden="true">
-                    ⌕
+                    <Icon name="search" />
                   </span>
                   <strong>No matching extensions</strong>
                   <span className="muted small">

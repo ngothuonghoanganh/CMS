@@ -70,6 +70,15 @@ Sidebar:
 
 Create or consolidate a shared UI package/library.
 
+For this repository, the CMS Admin Design System is independent from
+`SiteDesignSystem`. `SiteDesignSystem` belongs to customer-facing website
+rendering and tenant content. Never use it as the source of truth for CMS
+chrome, and never move CMS Admin tokens into public renderer data.
+
+The Collection screen is the visual baseline for admin density, panel
+hierarchy, table treatment, selected states, and spacing. Migrations should
+preserve its behavior while making its visual language reusable.
+
 Core primitives should include:
 
 - Button;
@@ -101,7 +110,20 @@ Core primitives should include:
 - Toast;
 - Breadcrumbs.
 
-Features should not implement new variants from scratch unless the shared primitive cannot satisfy a documented requirement.
+Features should not implement new variants from scratch unless the shared
+primitive cannot satisfy a documented requirement. Prefer the primitives in
+`apps/cms/app/ui` for new work; do not write raw CMS UI HTML/CSS when a shared
+primitive already exists.
+
+CMS Admin UI must use semantic `--cms-*` tokens. Do not add literal hex, rgb,
+hsl, or legacy palette values to feature CSS or components. Data-driven colors
+are allowed only in the token/data files covered by the repository guardrail.
+Run `pnpm check:cms-design-system` after UI changes.
+
+The builder shell uses the same CMS Admin tokens and interaction language. Its
+canvas may have editor-specific preview data and a stricter minimum width, but
+builder chrome must not create a separate admin theme. Vendor editor styles
+remain isolated from CMS Admin primitives.
 
 ## 6. Input behavior rules
 

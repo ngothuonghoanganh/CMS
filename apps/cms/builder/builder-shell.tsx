@@ -64,6 +64,7 @@ import {
 } from 'react';
 
 import { ApiClientError, api } from '../app/lib/api';
+import { Icon } from '../app/ui/icons';
 import {
   BUILDER_VIEWPORTS,
   GrapesEditor,
@@ -349,7 +350,11 @@ function renderLayerNodes(
               onClick={() => onToggle(node.id)}
               type="button"
             >
-              {hasChildren ? (collapsedIds.has(node.id) ? '▸' : '▾') : '·'}
+              {hasChildren ? (
+                <Icon name={collapsedIds.has(node.id) ? 'chevronRight' : 'chevronDown'} />
+              ) : (
+                <Icon name="grip" size={12} />
+              )}
             </button>
             <button
               aria-label={`Drag ${node.label} layer`}
@@ -357,7 +362,7 @@ function renderLayerNodes(
               onPointerDown={(event) => onDragStart(node, event)}
               type="button"
             >
-              ⠿
+              <Icon name="grip" />
             </button>
             <button
               aria-label={`Select ${node.label}`}

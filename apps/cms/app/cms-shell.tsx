@@ -26,6 +26,7 @@ import {
 import { AppHeader } from './app-header';
 import { cmsViewPath, type CmsView } from './cms-routes';
 import { ApiClientError, api } from './lib/api';
+import { Icon, type CmsIconName } from './ui/icons';
 
 type CmsShellContextValue = {
   organizations: Organization[];
@@ -61,7 +62,7 @@ const viewLabels: Record<CmsView, string> = {
   'design-system': 'Design system',
 };
 
-type NavigationItem = { key: CmsView; label: string; icon: string };
+type NavigationItem = { key: CmsView; label: string; icon: CmsIconName };
 
 function viewFromPathname(pathname: string): CmsView {
   const segments = pathname.split('/').filter(Boolean);
@@ -83,49 +84,53 @@ function viewFromPathname(pathname: string): CmsView {
 
 function navigationSections(can: (permission: TenantPermission) => boolean) {
   const workspace: NavigationItem[] = [
-    { icon: '⌂', key: 'dashboard', label: 'Dashboard' },
+    { icon: 'dashboard', key: 'dashboard', label: 'Dashboard' },
     ...(can('workspace.read')
-      ? [{ icon: '▦', key: 'organization', label: 'Organization' }]
+      ? [{ icon: 'organization', key: 'organization', label: 'Organization' }]
       : []),
-    ...(can('site.read') ? [{ icon: '◫', key: 'sites', label: 'Sites' }] : []),
-    ...(can('page.read') ? [{ icon: '▤', key: 'pages', label: 'Pages' }] : []),
+    ...(can('site.read') ? [{ icon: 'sites', key: 'sites', label: 'Sites' }] : []),
+    ...(can('page.read') ? [{ icon: 'pages', key: 'pages', label: 'Pages' }] : []),
     ...(can('collection.read')
-      ? [{ icon: '▥', key: 'collections', label: 'Collections' }]
+      ? [{ icon: 'collections', key: 'collections', label: 'Collections' }]
       : []),
-    ...(can('site.read') ? [{ icon: '≡', key: 'navigation', label: 'Navigation' }] : []),
+    ...(can('site.read')
+      ? [{ icon: 'navigation', key: 'navigation', label: 'Navigation' }]
+      : []),
     ...(can('design-system.read')
-      ? [{ icon: '✦', key: 'design-system', label: 'Design system' }]
+      ? [{ icon: 'designSystem', key: 'design-system', label: 'Design system' }]
       : []),
-    ...(can('asset.read') ? [{ icon: '◈', key: 'assets', label: 'Assets' }] : []),
+    ...(can('asset.read') ? [{ icon: 'assets', key: 'assets', label: 'Assets' }] : []),
     ...(can('template.read')
-      ? [{ icon: '◇', key: 'templates', label: 'Templates' }]
+      ? [{ icon: 'templates', key: 'templates', label: 'Templates' }]
       : []),
     ...(can('lead.read')
-      ? [{ icon: '✉', key: 'submissions', label: 'Submissions' }]
+      ? [{ icon: 'submissions', key: 'submissions', label: 'Submissions' }]
       : []),
   ] as NavigationItem[];
   const operations: NavigationItem[] = [
     ...(can('workflow.read')
-      ? [{ icon: '⤢', key: 'workflows', label: 'Workflows' }]
+      ? [{ icon: 'workflows', key: 'workflows', label: 'Workflows' }]
       : []),
     ...(can('integration.read')
-      ? [{ icon: '↔', key: 'integrations', label: 'Integrations' }]
+      ? [{ icon: 'integrations', key: 'integrations', label: 'Integrations' }]
       : []),
     ...(can('analytics.read')
-      ? [{ icon: '◒', key: 'analytics', label: 'Analytics' }]
+      ? [{ icon: 'analytics', key: 'analytics', label: 'Analytics' }]
       : []),
-    ...(can('domain.read') ? [{ icon: '⌁', key: 'domains', label: 'Domains' }] : []),
-    ...(can('seo.read') ? [{ icon: '⌕', key: 'seo', label: 'SEO' }] : []),
+    ...(can('domain.read')
+      ? [{ icon: 'domains', key: 'domains', label: 'Domains' }]
+      : []),
+    ...(can('seo.read') ? [{ icon: 'seo', key: 'seo', label: 'SEO' }] : []),
   ] as NavigationItem[];
   const management: NavigationItem[] = [
     ...(can('billing.read')
-      ? [{ icon: '$', key: 'billing', label: 'Billing & Usage' }]
+      ? [{ icon: 'billing', key: 'billing', label: 'Billing & Usage' }]
       : []),
-    ...(can('user.read') ? [{ icon: '●', key: 'users', label: 'Users' }] : []),
-    ...(can('role.read') ? [{ icon: '◆', key: 'roles', label: 'Roles' }] : []),
-    ...(can('audit.read') ? [{ icon: '≡', key: 'audit', label: 'Audit Log' }] : []),
+    ...(can('user.read') ? [{ icon: 'users', key: 'users', label: 'Users' }] : []),
+    ...(can('role.read') ? [{ icon: 'roles', key: 'roles', label: 'Roles' }] : []),
+    ...(can('audit.read') ? [{ icon: 'audit', key: 'audit', label: 'Audit Log' }] : []),
     ...(can('extensions.read') || can('layout.read')
-      ? [{ icon: '⊞', key: 'extensions', label: 'Extensions' }]
+      ? [{ icon: 'extensions', key: 'extensions', label: 'Extensions' }]
       : []),
   ] as NavigationItem[];
   return [
@@ -377,8 +382,8 @@ export default function CmsShell({
                       role="button"
                       title={sidebarCollapsed ? item.label : undefined}
                     >
-                      <span aria-hidden="true" className="nav-icon">
-                        {item.icon}
+                      <span className="nav-icon">
+                        <Icon name={item.icon} />
                       </span>
                       <span className="nav-label">{item.label}</span>
                     </Link>

@@ -250,6 +250,11 @@ export function Drawer({
   );
 }
 
+/* Semantic names for new screens. Modal/Drawer remain exported for backwards
+ * compatibility with existing feature routes. */
+export const Dialog = Modal;
+export const Sheet = Drawer;
+
 export function DataTable({
   children,
   className,

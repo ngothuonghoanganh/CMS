@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import { ApiClientError, api } from '../lib/api';
 import { Drawer, Modal, PageHeader } from '../ui/surfaces';
+import { Panel, SearchField } from '../ui/primitives';
 import { StatusBadge } from '../status-badge';
 
 type FieldDraft = Collection['fields'][number];
@@ -683,7 +684,7 @@ export function CollectionsView({
             </article>
           </section>
           <div className="collection-workspace">
-            <section className="panel collection-library-panel">
+            <Panel as="section" className="collection-library-panel">
               <div className="collection-section-heading">
                 <div>
                   <span className="eyebrow">Content models</span>
@@ -756,8 +757,8 @@ export function CollectionsView({
                   ))}
                 </div>
               )}
-            </section>
-            <section className="panel collection-detail-panel">
+            </Panel>
+            <Panel as="section" className="collection-detail-panel">
               {selectedCollection ? (
                 <>
                   <div className="collection-detail-header">
@@ -864,20 +865,16 @@ export function CollectionsView({
                       </button>
                     </div>
                     <div className="collection-entry-toolbar">
-                      <label className="collection-search-field">
-                        <span className="sr-only">Search entries</span>
-                        <span className="collection-search-icon" aria-hidden="true">
-                          ⌕
-                        </span>
-                        <input
-                          onChange={(event) => {
-                            setEntrySearch(event.target.value);
-                            setEntryOffset(0);
-                          }}
-                          placeholder={`Search ${selectedCollection.singularName.toLowerCase()} entries`}
-                          value={entrySearch}
-                        />
-                      </label>
+                      <SearchField
+                        className="collection-search-field"
+                        label="Search entries"
+                        onChange={(event) => {
+                          setEntrySearch(event.target.value);
+                          setEntryOffset(0);
+                        }}
+                        placeholder={`Search ${selectedCollection.singularName.toLowerCase()} entries`}
+                        value={entrySearch}
+                      />
                       <label className="inline-field">
                         Status
                         <select
@@ -1074,7 +1071,7 @@ export function CollectionsView({
                   </p>
                 </div>
               )}
-            </section>
+            </Panel>
           </div>
         </>
       ) : null}

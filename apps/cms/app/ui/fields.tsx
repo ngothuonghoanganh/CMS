@@ -64,6 +64,8 @@ export function Field({
   );
 }
 
+export { Field as FormField };
+
 type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'className'> &
   Omit<FieldProps, 'children' | 'htmlFor'>;
 
@@ -155,6 +157,197 @@ export function SelectField({
       label={label}
     >
       <select className="ui-control ui-select-field" id={inputId} {...selectProps}>
+        {children}
+      </select>
+    </Field>
+  );
+}
+
+export type ChoiceOption = { label: string; value: string };
+
+export function CheckboxField({
+  className,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  onChange,
+  checked,
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'type'> &
+  Omit<FieldProps, 'children' | 'htmlFor'>) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  return (
+    <div className={`ui-choice-field${className ? ` ${className}` : ''}`}>
+      <label className="ui-choice" htmlFor={inputId}>
+        <input
+          checked={checked}
+          disabled={disabled}
+          id={inputId}
+          onChange={onChange}
+          type="checkbox"
+        />
+        <span>{label}</span>
+      </label>
+      {description ? <p className="ui-field-description">{description}</p> : null}
+      {error ? (
+        <p className="ui-field-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function SwitchField({
+  className,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  onChange,
+  checked,
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'type'> &
+  Omit<FieldProps, 'children' | 'htmlFor'>) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  return (
+    <div className={`ui-choice-field${className ? ` ${className}` : ''}`}>
+      <label className="ui-switch" htmlFor={inputId}>
+        <input
+          checked={checked}
+          disabled={disabled}
+          id={inputId}
+          onChange={onChange}
+          type="checkbox"
+        />
+        <span aria-hidden="true" className="ui-switch-track">
+          <span className="ui-switch-thumb" />
+        </span>
+        <span>{label}</span>
+      </label>
+      {description ? <p className="ui-field-description">{description}</p> : null}
+      {error ? (
+        <p className="ui-field-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function RadioGroupField({
+  className,
+  description,
+  disabled,
+  error,
+  label,
+  name,
+  onValueChange,
+  options,
+  value,
+}: {
+  className?: string | undefined;
+  description?: string | undefined;
+  disabled?: boolean | undefined;
+  error?: string | undefined;
+  label: string;
+  name: string;
+  onValueChange: (value: string) => void;
+  options: readonly ChoiceOption[];
+  value: string | undefined;
+}) {
+  return (
+    <fieldset
+      className={`ui-choice-field ui-radio-group${className ? ` ${className}` : ''}`}
+    >
+      <legend className="ui-field-label">{label}</legend>
+      <div className="ui-radio-options">
+        {options.map((option) => (
+          <label className="ui-choice" key={option.value}>
+            <input
+              checked={value === option.value}
+              disabled={disabled}
+              name={name}
+              onChange={() => onValueChange(option.value)}
+              type="radio"
+              value={option.value}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+      {description ? <p className="ui-field-description">{description}</p> : null}
+      {error ? (
+        <p className="ui-field-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </fieldset>
+  );
+}
+
+export function ComboboxField({
+  className,
+  description,
+  error,
+  id,
+  label,
+  options,
+  ...props
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'list'> &
+  Omit<FieldProps, 'children' | 'htmlFor'> & { options: readonly ChoiceOption[] }) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  const listId = `${inputId}-options`;
+  return (
+    <Field
+      className={className}
+      description={description}
+      error={error}
+      htmlFor={inputId}
+      label={label}
+    >
+      <input className="ui-control" id={inputId} list={listId} {...props} />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option.value} label={option.label} value={option.value} />
+        ))}
+      </datalist>
+    </Field>
+  );
+}
+
+export function MultiSelectField({
+  children,
+  className,
+  compact,
+  description,
+  error,
+  id,
+  label,
+  ...props
+}: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'> &
+  Omit<FieldProps, 'children' | 'htmlFor'>) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  return (
+    <Field
+      className={className}
+      compact={compact}
+      description={description}
+      error={error}
+      htmlFor={inputId}
+      label={label}
+    >
+      <select
+        className="ui-control ui-multi-select-field"
+        id={inputId}
+        multiple
+        {...props}
+      >
         {children}
       </select>
     </Field>
@@ -581,6 +774,84 @@ export function DateTimeField({
   );
 }
 
+export function DateField({
+  className,
+  compact,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  onValueChange,
+  value,
+}: Omit<FieldProps, 'children' | 'htmlFor'> & {
+  disabled?: boolean | undefined;
+  id?: string | undefined;
+  onValueChange: (value: string | undefined) => void;
+  value: string | undefined;
+}) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  return (
+    <Field
+      className={className}
+      compact={compact}
+      description={description}
+      error={error}
+      htmlFor={inputId}
+      label={label}
+    >
+      <input
+        className="ui-control ui-date-field"
+        disabled={disabled}
+        id={inputId}
+        onChange={(event) => onValueChange(event.target.value || undefined)}
+        type="date"
+        value={value ?? ''}
+      />
+    </Field>
+  );
+}
+
+export function TimeField({
+  className,
+  compact,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  onValueChange,
+  value,
+}: Omit<FieldProps, 'children' | 'htmlFor'> & {
+  disabled?: boolean | undefined;
+  id?: string | undefined;
+  onValueChange: (value: string | undefined) => void;
+  value: string | undefined;
+}) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  return (
+    <Field
+      className={className}
+      compact={compact}
+      description={description}
+      error={error}
+      htmlFor={inputId}
+      label={label}
+    >
+      <input
+        className="ui-control ui-time-field"
+        disabled={disabled}
+        id={inputId}
+        onChange={(event) => onValueChange(event.target.value || undefined)}
+        type="time"
+        value={value ?? ''}
+      />
+    </Field>
+  );
+}
+
 export type SegmentedOption<T extends string> = { label: string; value: T };
 
 export function SegmentedControl<T extends string>({
@@ -699,3 +970,13 @@ export function SpacingControl({
     </Field>
   );
 }
+
+export const Input = TextField;
+export const Textarea = TextAreaField;
+export const NumberInput = NumberField;
+export const Select = SelectField;
+export const Combobox = ComboboxField;
+export const MultiSelect = MultiSelectField;
+export const DatePicker = DateField;
+export const TimePicker = TimeField;
+export const ColorPicker = ColorField;
