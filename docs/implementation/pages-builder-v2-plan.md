@@ -5,7 +5,8 @@
 - The domain remains `Workspace -> Site -> Page -> PageVersion -> PagePayload`.
 - `GrapesJS` owns the live editable document during a builder session.
 - `PagePayload` is the only persisted content contract; renderer and preview consume it.
-- Pages state, metadata CRUD, selection, versions, SEO and publication orchestration currently live in `apps/cms/app/cms-dashboard.tsx`.
+- Pages state, metadata CRUD, selection, versions, SEO and publication orchestration live in
+  `apps/cms/app/pages/pages-page.tsx` and `pages-view.tsx`.
 - The dedicated builder route loads the current draft, adapts it to GrapesJS, saves immutable versions with optimistic conflict protection, and opens a renderer preview through `postMessage`.
 
 ## Current pain points
@@ -23,7 +24,7 @@
 - `packages/contracts/src/style-registry.ts`, `component-registry.ts`, `index.ts`
 - `apps/cms/builder/builder-adapter.ts`, `grapes-editor.tsx`, `builder-shell.tsx`
 - `apps/renderer/app/renderer.tsx`, preview bridge files
-- `apps/cms/app/pages/*`, `cms-dashboard.tsx`, `globals.css`
+- `apps/cms/app/pages/*`, `apps/cms/app/cms-shell.tsx`, `globals.css`
 - `docs/pages-builder-v2.md`, `docs/architecture/pages-builder-v2.md` and
   `docs/continuity/pages-builder-v2-handoff.md`
 
@@ -38,7 +39,8 @@
 ## B1 plan
 
 1. Extract Pages into a client `PagesView` module with a sitemap tree derived from canonical paths.
-2. Keep page selection and API ownership in the dashboard while reducing Pages-specific markup there.
+2. Keep page selection and API ownership in the Pages module while reducing Pages-specific
+   markup in shared surfaces.
 3. Add compact selected-page detail, action menu, homepage marker, route/status warnings and updated metadata.
 4. Replace the metadata-only create drawer with a blank/template/duplicate start flow while preserving existing API endpoints.
 5. Keep settings, SEO, versions and form integrations in focused secondary surfaces.

@@ -642,8 +642,8 @@ export default function LayoutBuilderShell({
 
   const returnPageId = searchParams.get('returnPageId');
   const backHref = returnPageId
-    ? `/?view=pages&siteId=${encodeURIComponent(siteId)}&pageId=${encodeURIComponent(returnPageId)}`
-    : `/?view=extensions&siteId=${encodeURIComponent(siteId)}`;
+    ? `/workspaces/${encodeURIComponent(workspaceId)}/sites/${encodeURIComponent(siteId)}/pages/${encodeURIComponent(returnPageId)}`
+    : `/workspaces/${encodeURIComponent(workspaceId)}/extensions`;
 
   return (
     <main className="builder-frame">

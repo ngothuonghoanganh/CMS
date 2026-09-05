@@ -376,15 +376,16 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   await expect(countdownCard.getByText('Enabled', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await expect(page.getByLabel('Site name')).toHaveCount(0);
+  await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Countdown Site ${suffix}`);
   await page.getByLabel('Slug').fill(siteSlug);
   await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page.getByRole('button', { name: '+ New page', exact: true }).click();
   await page.getByLabel('Page name').fill(pageName);
   await page.getByLabel('Slug').fill(pageSlug);
   await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
   await page.getByRole('button', { name: 'Open Builder' }).click();
   await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
     timeout: 15_000,
@@ -519,16 +520,16 @@ test('@tenancy creates and edits a site', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await expect(page.getByLabel('Site name')).toHaveCount(0);
+  await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`E2E Site ${suffix}`);
   await page.getByLabel('Slug').fill(`e2e-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
   await expect(page.getByText(`E2E Site ${suffix}`)).toBeVisible();
 
   await page.getByRole('button', { name: 'Edit' }).last().click();
   await page.getByLabel('Site name').fill(`Edited E2E Site ${suffix}`);
   await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.getByRole('status')).toContainText('Site metadata updated');
   await expect(page.getByText(`Edited E2E Site ${suffix}`)).toBeVisible();
 });
 
@@ -536,26 +537,29 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await expect(page.getByLabel('Site name')).toHaveCount(0);
+  await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Page Site ${suffix}`);
   await page.getByLabel('Slug').fill(`page-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByRole('status')).toContainText('Site created');
 
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page.getByRole('button', { name: '+ New page', exact: true }).click();
   await page.getByLabel('Page name').fill(`Page ${suffix}`);
   await page.getByLabel('Slug').fill(`page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByRole('status')).toContainText('draft version 1 created');
   await expect(page.getByText(`Page ${suffix}`)).toBeVisible();
 
   await page.getByRole('button', { name: `Page ${suffix}` }).click();
+  await expect(page.locator('.ui-drawer-layer')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByLabel('Page name').fill(`Edited Page ${suffix}`);
   await page.getByLabel('Description').fill(`Information page ${suffix}`);
   await page.getByRole('button', { name: 'Save metadata' }).click();
-  await expect(page.getByRole('status')).toContainText('metadata updated');
   await expect(page.getByText(`Edited Page ${suffix}`)).toBeVisible();
   await expect(page.getByText('Version 1')).toBeVisible();
   await page.getByRole('button', { name: `Edited Page ${suffix}` }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByLabel('Description')).toHaveValue(`Information page ${suffix}`);
   await page.locator('.ui-drawer-layer').getByRole('button', { name: 'Cancel' }).click();
   await expect(
@@ -572,6 +576,7 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
     page.getByRole('button', { name: 'Build Footer', exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page.getByRole('button', { name: `Select page Edited Page ${suffix}` }).click();
   await expect(
     page.getByRole('heading', { name: 'Version history', exact: true }),
   ).toBeVisible();

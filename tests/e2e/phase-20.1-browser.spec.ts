@@ -52,12 +52,38 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
   const products = collections.find((collection) => collection.key === 'products');
   expect(products, 'The canonical Products collection must be seeded').toBeTruthy();
 
-  await page.goto(`/?view=collections&siteId=${encodeURIComponent(productsSiteId!)}`);
+  await page.goto(
+    `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/collections`,
+  );
   await expect(page.locator('h1', { hasText: 'Collections' })).toBeVisible();
   const collectionCard = page
     .locator('.collection-library-item')
     .filter({ hasText: products!.name });
   await expect(collectionCard).toBeVisible();
+  await collectionCard.click();
+  await expect(page.getByText(/entries · page 1/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Edit schema', exact: true }).click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/collections/${products!.id}/schema$`,
+    ),
+  );
+  await expect(
+    page.getByRole('heading', { name: `${products!.name} schema` }),
+  ).toBeVisible();
+  await expect(page.locator('.ui-overlay-layer')).toHaveCount(0);
+  await expect(page.locator('.ui-inline-surface')).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: `${products!.name} schema` }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Back to collections' }).click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/collections/${products!.id}$`,
+    ),
+  );
   await collectionCard.click();
   await expect(page.getByText(/entries · page 1/)).toBeVisible();
 
@@ -69,6 +95,11 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
     .first()
     .getByRole('button', { name: 'Edit' })
     .click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/collections/${products!.id}/entries/[^/]+/edit$`,
+    ),
+  );
   const entryDrawer = page.getByRole('dialog', { name: 'Edit entry' });
   await expect(entryDrawer).toBeVisible();
   await expect(entryDrawer.getByText('Name', { exact: true })).toBeVisible();
@@ -143,11 +174,20 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
   await detailPopup.close();
   await catalogBrowserPage.close();
 
-  await page.goto(`/?view=pages&siteId=${encodeURIComponent(productsSiteId!)}`);
+  await page.goto(
+    `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/pages`,
+  );
   await expect(page.getByRole('heading', { name: 'Pages', exact: true })).toBeVisible();
   await page
     .getByRole('button', { name: new RegExp(`Select page ${dynamicPage!.name}`) })
     .click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/pages/${dynamicPage!.id}$`,
+    ),
+  );
+  await expect(page.locator('.ui-drawer-layer')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const pageDrawer = page.getByRole('dialog', { name: dynamicPage!.name });
   await expect(pageDrawer).toBeVisible();
   await expect(pageDrawer.getByLabel('Page type')).toHaveValue('dynamic');
@@ -159,6 +199,7 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
   const selectedEntryId = await previewEntry.inputValue();
   expect(selectedEntryId).toBeTruthy();
   await pageDrawer.getByRole('button', { name: 'Close dialog' }).click();
+  await expect(page.locator('.ui-drawer-layer')).toHaveCount(0);
   const liveDetailUrl = `${rendererBase}/${productsSiteSlug}${detailPath}`;
   await expect(page.getByRole('link', { name: liveDetailUrl })).toHaveAttribute(
     'href',

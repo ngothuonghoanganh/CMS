@@ -465,7 +465,7 @@ export default function TemplateBuilderShell({
   function leave() {
     if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?'))
       return;
-    const fallback = `/?view=templates&siteId=${encodeURIComponent(siteId)}`;
+    const fallback = `/workspaces/${encodeURIComponent(workspaceId)}/templates`;
     router.push(searchParams.get('return') || fallback);
   }
 

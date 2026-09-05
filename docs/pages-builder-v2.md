@@ -44,8 +44,8 @@ The builder may change substantially, but the public renderer remains the produc
 
 Relevant implementation areas:
 
-- `apps/cms/app/cms-dashboard.tsx`
-  - currently owns the Pages view together with many other CMS views;
+- `apps/cms/app/pages/pages-page.tsx` and `pages-view.tsx`
+  - own the Pages route data, metadata mutations, selection, and page-specific UI;
   - Pages is still primarily a filtered resource inventory;
   - page metadata is edited in a drawer;
   - Builder opens as a dedicated route.
@@ -980,7 +980,9 @@ Benefits:
 
 ## 20. Code organization target
 
-The current `cms-dashboard.tsx` is too broad to remain the long-term owner of Pages-specific behavior.
+The Pages feature now owns its route data and behavior under `apps/cms/app/pages`. The
+shared `CmsShell` owns only authentication, workspace context, permissions, and navigation;
+it must not become a replacement dashboard coordinator.
 
 Recommended extraction:
 

@@ -399,6 +399,18 @@
   background: var(--color-surface-muted);
 }
 
+.ui-inline-surface {
+  width: min(100%, 64rem);
+  max-height: none;
+  margin: 1.25rem auto 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.ui-inline-surface .ui-surface-body {
+  overflow: visible;
+}
+
 .ui-drawer-layer {
   place-items: stretch end;
   padding: 0;

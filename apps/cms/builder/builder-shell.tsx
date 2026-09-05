@@ -2854,7 +2854,9 @@ export default function BuilderShell({
                 designSystem={designSystem}
                 navigationItemCount={navigation.main?.length ?? 0}
                 onEditNavigation={() =>
-                  router.push(`/?view=navigation&siteId=${encodeURIComponent(siteId)}`)
+                  router.push(
+                    `/workspaces/${encodeURIComponent(workspaceId)}/sites/${encodeURIComponent(siteId)}/navigation`,
+                  )
                 }
                 collections={collections}
                 allowCurrentEntry={page?.kind === 'dynamic'}

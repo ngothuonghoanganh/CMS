@@ -41,18 +41,18 @@ The highest-value remaining work is consolidation rather than new page types:
 
 ## 02 — Current-state problem map
 
-| Problem class               | Evidence after the recovery pass                                                                | Upgrade/status                                                                           |
-| --------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Oversized CMS screens       | `cms-dashboard.tsx` is still a large coordinator                                                | Partial; resource view extraction is the next CMS UX slice.                              |
-| Dense inspector             | Shared property schema and grouped controls are used by Builder                                 | Improved; reset override action and schema-driven controls are now explicit.             |
-| Duplicate editor state      | GrapesJS is documented as Model A; React stores selection/session state only                    | Improved; save snapshots use the live editor document.                                   |
-| Drag/drop divergence        | Canvas and Layers call shared `moveNodeByIntent`                                                | Implemented; virtualized large trees and context actions remain.                         |
-| Builder/renderer drift      | Both consume `PAGE_COMPONENT_REGISTRY`; renderer dispatch remains a separate implementation map | Improved; registry-iterated parity coverage now fails on an unsupported registered type. |
-| API/refetch loops           | GET deduplication and request sequence guards exist; live preview uses events                   | Improved; every major view still needs explicit request-count assertions.                |
-| Responsive CMS              | Shell/media queries and local table overflow exist                                              | Partial; screenshot baselines and all route widths remain to be formalized.              |
-| Design-system fragmentation | `fields.tsx`, `surfaces.tsx` and shared CSS exist, but many resource forms are native           | Partial; migrate by resource, preserving business-flow behavior.                         |
-| Dead/duplicate code         | No safe broad deletion was proven                                                               | Open; continue with ownership-based extraction, not static-import deletion.              |
-| Validation/indexes          | Contracts, API validation, tenant indexes and page-version uniqueness exist                     | Partial; injected failure and migration-index checks remain.                             |
+| Problem class               | Evidence after the recovery pass                                                                          | Upgrade/status                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Oversized CMS screens       | Feature route modules now own their resource data and views; shared shell owns only cross-cutting context | Improved; route ownership is documented in `docs/cms-route-ownership.md`.                |
+| Dense inspector             | Shared property schema and grouped controls are used by Builder                                           | Improved; reset override action and schema-driven controls are now explicit.             |
+| Duplicate editor state      | GrapesJS is documented as Model A; React stores selection/session state only                              | Improved; save snapshots use the live editor document.                                   |
+| Drag/drop divergence        | Canvas and Layers call shared `moveNodeByIntent`                                                          | Implemented; virtualized large trees and context actions remain.                         |
+| Builder/renderer drift      | Both consume `PAGE_COMPONENT_REGISTRY`; renderer dispatch remains a separate implementation map           | Improved; registry-iterated parity coverage now fails on an unsupported registered type. |
+| API/refetch loops           | GET deduplication and request sequence guards exist; live preview uses events                             | Improved; every major view still needs explicit request-count assertions.                |
+| Responsive CMS              | Shell/media queries and local table overflow exist                                                        | Partial; screenshot baselines and all route widths remain to be formalized.              |
+| Design-system fragmentation | `fields.tsx`, `surfaces.tsx` and shared CSS exist, but many resource forms are native                     | Partial; migrate by resource, preserving business-flow behavior.                         |
+| Dead/duplicate code         | No safe broad deletion was proven                                                                         | Open; continue with ownership-based extraction, not static-import deletion.              |
+| Validation/indexes          | Contracts, API validation, tenant indexes and page-version uniqueness exist                               | Partial; injected failure and migration-index checks remain.                             |
 
 ## 03 — Target architecture
 

@@ -286,12 +286,7 @@ function PageActions({
   page,
   site,
   busy,
-  canPublishPage,
   canDeletePage,
-  onOpenBuilder,
-  onPreview,
-  onPublish,
-  onUnpublish,
   onDuplicate,
   onDelete,
   onSetHomepage,
@@ -300,12 +295,7 @@ function PageActions({
   page: Page;
   site: Site | undefined;
   busy: boolean;
-  canPublishPage: boolean;
   canDeletePage: boolean;
-  onOpenBuilder: (page: Page) => void;
-  onPreview: (page: Page) => void;
-  onPublish: (page: Page) => void;
-  onUnpublish: (page: Page) => void;
   onDuplicate: (page: Page) => void;
   onDelete: (page: Page) => void;
   onSetHomepage: (page: Page) => void;
@@ -316,25 +306,6 @@ function PageActions({
     <details className="page-actions-menu">
       <summary aria-label={`More actions for ${page.name}`}>⋯</summary>
       <div className="page-actions-menu-list">
-        <button onClick={() => onOpenBuilder(page)} type="button">
-          Edit page
-        </button>
-        <button onClick={() => onPreview(page)} type="button">
-          Preview
-        </button>
-        {canPublishPage ? (
-          <button
-            disabled={busy}
-            onClick={() =>
-              publicationStatus(page) === 'Published'
-                ? onUnpublish(page)
-                : onPublish(page)
-            }
-            type="button"
-          >
-            {publicationStatus(page) === 'Published' ? 'Unpublish' : 'Publish'}
-          </button>
-        ) : null}
         <button onClick={() => onOpenSeo(page)} type="button">
           SEO settings
         </button>
@@ -630,15 +601,10 @@ export function PagesView({
                   <PageActions
                     busy={busy}
                     canDeletePage={canDeletePage}
-                    canPublishPage={canPublishPage}
                     onDelete={setDeleteCandidate}
                     onDuplicate={onDuplicate}
-                    onOpenBuilder={onOpenBuilder}
                     onOpenSeo={onOpenSeo}
-                    onPreview={onPreview}
-                    onPublish={onPublish}
                     onSetHomepage={onSetHomepage}
-                    onUnpublish={onUnpublish}
                     page={selectedPage}
                     site={selectedSite}
                   />

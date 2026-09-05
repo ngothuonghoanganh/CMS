@@ -15,6 +15,7 @@ type OverlayProps = SurfaceHeaderProps & {
   children: ReactNode;
   footer?: ReactNode;
   headerActions?: ReactNode;
+  inline?: boolean;
   onClose: () => void;
   open: boolean;
   size?: SurfaceSize | undefined;
@@ -181,13 +182,39 @@ export function Drawer({
   eyebrow,
   footer,
   headerActions,
+  inline = false,
   onClose,
   open,
   size = 'lg',
   title,
 }: OverlayProps) {
-  const { mounted, surfaceRef } = useOverlay(open, onClose, allowBackgroundInteraction);
+  const { mounted, surfaceRef } = useOverlay(
+    open,
+    onClose,
+    allowBackgroundInteraction || inline,
+  );
   if (!mounted || !open) return null;
+
+  if (inline) {
+    return (
+      <section
+        aria-label={title}
+        className={`ui-surface ui-inline-surface ui-drawer-${size}`}
+        ref={surfaceRef}
+        role="region"
+      >
+        <SurfaceHeader
+          description={description}
+          eyebrow={eyebrow}
+          headerActions={headerActions}
+          onClose={onClose}
+          title={title}
+        />
+        <div className="ui-surface-body">{children}</div>
+        {footer ? <footer className="ui-surface-footer">{footer}</footer> : null}
+      </section>
+    );
+  }
 
   return (
     <div
