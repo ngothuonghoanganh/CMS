@@ -1,11 +1,6 @@
 'use client';
 
-import {
-  AssetListResponseSchema,
-  SiteListResponseSchema,
-  type Asset,
-  type Site,
-} from '@payload/contracts';
+import { SiteListResponseSchema, type Site } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -30,11 +25,8 @@ export default function CollectionsPage({
   const router = useRouter();
   const { workspaceId, can } = useCmsShell();
   const [sites, setSites] = useState<Site[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
   const [activeSiteId, setActiveSiteId] = useState(siteId ?? '');
   const [error, setError] = useState<string | null>(null);
-  const [assetError, setAssetError] = useState<string | null>(null);
-  const [assetsLoading, setAssetsLoading] = useState(false);
   useEffect(() => {
     let active = true;
     void api
@@ -53,25 +45,6 @@ export default function CollectionsPage({
               : 'Unable to load sites for collections.',
           );
       });
-    if (can('asset.read')) {
-      setAssetsLoading(true);
-      void api
-        .get(`/workspaces/${workspaceId}/assets?limit=100&offset=0`)
-        .then((assetResponse) => {
-          if (active) setAssets(AssetListResponseSchema.parse(assetResponse).items);
-        })
-        .catch((caughtError: unknown) => {
-          if (active)
-            setAssetError(
-              caughtError instanceof ApiClientError
-                ? caughtError.message
-                : 'Unable to load assets for collection fields.',
-            );
-        })
-        .finally(() => {
-          if (active) setAssetsLoading(false);
-        });
-    }
     return () => {
       active = false;
     };
@@ -102,9 +75,6 @@ export default function CollectionsPage({
         </div>
       ) : null}
       <CollectionsView
-        assets={assets}
-        assetError={assetError ?? undefined}
-        assetsLoading={assetsLoading}
         canCreateCollection={can('collection.create')}
         canCreateEntry={can('entry.create')}
         canDelete={can('collection.delete')}

@@ -1,8 +1,12 @@
 # Phase 20 completion audit
 
-## Starting HEAD
+## Closure provenance
 
-`aea1ac8` (working tree; no commit created)
+Starting HEAD: `b26886448750e24b385dad8365ae761147728c89`
+
+The closure pass was performed against the audited commit named above. The
+repository was already a working tree with user changes, so no commit was
+created by this pass; the ending HEAD remains the same SHA.
 
 ## Audit findings
 
@@ -33,6 +37,19 @@ The source audit found several gaps behind the previous `COMPLETE` handoff:
 
 The audit also confirmed that Phase 19 composition, layout, template, extension,
 tenant, and published-bundle invariants must remain unchanged.
+
+## Finding disposition
+
+| Finding                                                               | Disposition   | Evidence and closure action                                                                                                                   |
+| --------------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Builder routes were nested under `CmsShell`                           | CONFIRMED     | Added the explicit workspace route boundary and browser assertions for page, layout, and template builders.                                   |
+| Page Builder leave returned to `/`                                    | CONFIRMED     | Leave now returns to the canonical page detail route, with dirty-leave confirmation coverage.                                                 |
+| Layout/Template builder return paths were not canonical               | CONFIRMED     | Layout builders return to the page or Extensions owner; Template Builder returns to the template route.                                       |
+| Root and login were alternate CMS entry points                        | CONFIRMED     | `/` is bootstrap/legacy-bookmark redirect only; login uses the returned session workspace directly.                                           |
+| Collections preloaded a bounded asset slice                           | CONFIRMED     | AssetPicker owns debounced server search, media filtering, selected lookup, and pagination; CollectionsPage no longer preloads assets.        |
+| Entry state was one JSON string                                       | CONFIRMED     | Semantic controls now edit an `EntryDraft` object; array/group JSON is field-scoped.                                                          |
+| Reference selection needed large-collection and stale-target handling | CONFIRMED     | ReferencePicker uses server pagination/search and explicit unavailable/archived/missing-target states.                                        |
+| Phase 20 runtime, contract, and concurrency gaps                      | ALREADY FIXED | Existing Phase 20 implementation and focused contract/API/renderer suites cover these invariants; no regression was found in the closure run. |
 
 ## Architecture changes
 
@@ -144,6 +161,10 @@ tenant, and published-bundle invariants must remain unchanged.
   `tests/e2e/phase-20.1-browser.spec.ts` both pass, covering collection data,
   filtered list resolution, dynamic pages, CMS schema/entry routing, and
   draft/public separation.
+- `tests/e2e/phase-20-pickers.spec.ts` covers a real UI asset search outside the
+  first page, one and many reference selection, draft save, and reload.
+- `tests/e2e/cms-routing-root.spec.ts` covers authenticated root bootstrap,
+  legacy root bookmark conversion, and direct login-to-workspace navigation.
 
 ## Explicit Phase 20 checklist
 
@@ -200,9 +221,12 @@ tenant, and published-bundle invariants must remain unchanged.
 - [x] Phase 20 save/navigation journey
 - [x] Phase 20 collection list/dynamic route journey
 - [x] Phase 20 draft/public separation
+- [x] Page/layout/template builders bypass the CMS shell
+- [x] Builder leave returns to canonical resource routes
+- [x] Asset and reference picker browser journey, including first-page search regression
 - [x] CMS design-system guardrail
 - [x] Responsive builder/browser coverage at 1440, 1280, 1024, 768, and 390
-- [ ] Full repository Playwright suite is green
+- [x] Full repository Playwright suite is green
 
 ## Known remaining limitations
 
@@ -210,28 +234,31 @@ These are intentional Phase 20 boundaries:
 
 - Array/group fields use Advanced JSON rather than a complete nested field
   builder.
-- Asset browsing loads a bounded workspace result set (currently 100 in the CMS
-  entry flow) and has no bulk operation.
+- Asset and reference pickers use bounded server pages and have no bulk operation.
 - Sitemap enumeration, external providers, GraphQL/SQL data sources, formulas,
   large cache infrastructure, AI binding, collaboration, approval workflows,
   marketplace, A/B testing, and interactive public pagination remain out of
   scope.
 
-The repository-wide Playwright run is also not green. Its seven failures were:
+## Previously reported Playwright failures
 
-1. `billing.spec.ts`: control-plane admin login assertion.
-2. `builder-renderer-parity.spec.ts`: missing `parity-extension` fixture.
-3. `cms.spec.ts`: site-name locator sees both the detail heading and summary
-   label.
-4. `cms.spec.ts`: true block-drag payload assertion returned no children.
-5. `cms.spec.ts`: valid-container drag reorder assertion did not move the child.
-6. `domains-seo.spec.ts`: custom-domain verification did not produce `active`.
-7. `layout-extensions.spec.ts`: custom-extension builder debug payload was
-   unavailable.
+All seven failures from the prior audit were reproduced and closed without
+skipping or weakening assertions:
 
-The two Phase 20 browser tests pass independently; these failures block the
-repository-wide browser gate and therefore block a `COMPLETE` status under the
-requested Definition of Done.
+| Failure                                             | Classification | Root cause and fix                                                                                                                                                                     |
+| --------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `billing.spec.ts` admin login                       | FIXTURE        | The test supplied a hard-coded `demo` tenant slug instead of allowing the server-selected admin context; the request now uses the canonical admin login contract.                      |
+| `builder-renderer-parity.spec.ts` missing extension | FIXTURE        | The fixture referenced an unregistered extension ID; it now uses the enabled `DemoBuilder` registry ID.                                                                                |
+| `cms.spec.ts` site-name ambiguity                   | STALE TEST     | The new site flow lands on a detail route, so generic text matched both heading and summary; the assertion now targets the exact heading.                                              |
+| `cms.spec.ts` true block drag                       | ALREADY FIXED  | The Phase 19 drag-intent/editor mutation path was already present in the working tree; full browser coverage passes.                                                                   |
+| `cms.spec.ts` valid-container reorder               | ALREADY FIXED  | The real-pointer cross-container path and payload synchronization were already present; full browser coverage passes.                                                                  |
+| `domains-seo.spec.ts` verification                  | ENVIRONMENT    | A reused API process lacked the fake verification/trust-proxy settings; the Playwright server configuration was started fresh with the deterministic providers and the journey passes. |
+| `layout-extensions.spec.ts` debug payload           | ALREADY FIXED  | The current builder debug surface and layout fixture are available; the focused and full layout suites pass.                                                                           |
+
+The full run also exposed stale tenancy assertions after the canonical route
+change and a preview identity collision for repeated layout resources. Those
+were corrected in the test expectations and by including the preview variant
+in the fingerprint; they are now covered by the green full run.
 
 ## Validation results
 
@@ -241,24 +268,25 @@ pnpm lint                                 PASS
 pnpm typecheck                            PASS
 pnpm check:cms-design-system              PASS
 pnpm test                                 PASS (contracts 47, API 65 passed/12 skipped,
-                                             CMS 114, renderer 22)
+                                             CMS 118, renderer 22)
 pnpm build                                PASS
-pnpm exec playwright test                 FAIL (74 passed, 7 failed)
-pnpm exec playwright test tests/e2e/collections-dynamic-data.spec.ts \
-  tests/e2e/phase-20.1-browser.spec.ts    PASS (2 passed)
+pnpm exec playwright test                  PASS (87 passed)
+pnpm exec playwright test tests/e2e/phase-20-pickers.spec.ts PASS (1 passed)
 git diff --check                          PASS
 ```
 
+## CI
+
+`.github/workflows/ci.yml` now runs the CMS design-system guard and
+the full Playwright suite on Node 24 with the MongoDB service. No remote GitHub Actions
+run was inspected during this local closure pass, so this report makes no claim
+about a hosted run status; the local gates above are the observed evidence.
+
 ## Ending HEAD
 
-`aea1ac8` (same commit; implementation and documentation remain uncommitted in
-the working tree)
+`b26886448750e24b385dad8365ae761147728c89` (same commit; closure changes remain
+uncommitted in the working tree)
 
 ## Phase status
 
-`PHASE 20: NOT COMPLETE`
-
-Primary blocker: the required full `pnpm exec playwright test` gate remains
-red with seven failures listed above. The Phase 20 implementation and scoped
-journeys are complete, but the requested Definition of Done requires all gates
-to pass before the status can be upgraded.
+`PHASE 20: COMPLETE`

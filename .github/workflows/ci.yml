@@ -49,6 +49,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Check CMS design system
+        run: pnpm check:cms-design-system
+
       - name: Test
         run: pnpm test
 
@@ -58,5 +61,5 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Browser smoke tests
-        run: pnpm test:e2e
+      - name: Full browser tests
+        run: pnpm test:e2e:full

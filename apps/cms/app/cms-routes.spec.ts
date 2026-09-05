@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectionPath,
   cmsViewPath,
+  isStandaloneWorkspaceRoute,
   pagePath,
   pagesPath,
   sitePath,
@@ -34,5 +35,24 @@ describe('CMS route map', () => {
       '/workspaces/w/sites/s/collections/c/entries',
     );
     expect(templatePath('w', 't', 'edit')).toBe('/workspaces/w/templates/t/edit');
+  });
+
+  it('recognizes only explicit standalone builder routes', () => {
+    expect(isStandaloneWorkspaceRoute('/workspaces/w/sites/s/pages/p/builder')).toBe(
+      true,
+    );
+    expect(isStandaloneWorkspaceRoute('/workspaces/w/layouts/headers/l/builder')).toBe(
+      true,
+    );
+    expect(
+      isStandaloneWorkspaceRoute('/workspaces/w/sites/s/layouts/footers/l/builder'),
+    ).toBe(true);
+    expect(isStandaloneWorkspaceRoute('/workspaces/w/sites/s/templates/t/builder')).toBe(
+      true,
+    );
+    expect(isStandaloneWorkspaceRoute('/workspaces/w/sites/s/builder-settings')).toBe(
+      false,
+    );
+    expect(isStandaloneWorkspaceRoute('/workspaces/w/sites/s/pages/p')).toBe(false);
   });
 });

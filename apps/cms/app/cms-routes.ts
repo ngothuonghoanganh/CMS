@@ -46,6 +46,58 @@ export function workspacePath(workspaceId: string): string {
   return `/workspaces/${segment(workspaceId)}`;
 }
 
+/**
+ * Builder routes are full-screen editing workspaces. Keep this detector
+ * deliberately explicit so a future feature route containing "builder" does
+ * not accidentally bypass the CMS management shell.
+ */
+export function isStandaloneWorkspaceRoute(pathname: string): boolean {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments[0] !== 'workspaces' || !segments[1]) return false;
+
+  const isPageBuilder =
+    segments.length === 7 &&
+    segments[2] === 'sites' &&
+    Boolean(segments[3]) &&
+    segments[4] === 'pages' &&
+    Boolean(segments[5]) &&
+    segments[6] === 'builder';
+  const isWorkspaceLayoutBuilder =
+    segments.length === 6 &&
+    segments[2] === 'layouts' &&
+    (segments[3] === 'headers' || segments[3] === 'footers') &&
+    Boolean(segments[4]) &&
+    segments[5] === 'builder';
+  const isSiteLayoutBuilder =
+    segments.length === 8 &&
+    segments[2] === 'sites' &&
+    Boolean(segments[3]) &&
+    segments[4] === 'layouts' &&
+    (segments[5] === 'headers' || segments[5] === 'footers') &&
+    Boolean(segments[6]) &&
+    segments[7] === 'builder';
+  const isWorkspaceTemplateBuilder =
+    segments.length === 5 &&
+    segments[2] === 'templates' &&
+    Boolean(segments[3]) &&
+    segments[4] === 'builder';
+  const isSiteTemplateBuilder =
+    segments.length === 7 &&
+    segments[2] === 'sites' &&
+    Boolean(segments[3]) &&
+    segments[4] === 'templates' &&
+    Boolean(segments[5]) &&
+    segments[6] === 'builder';
+
+  return (
+    isPageBuilder ||
+    isWorkspaceLayoutBuilder ||
+    isSiteLayoutBuilder ||
+    isWorkspaceTemplateBuilder ||
+    isSiteTemplateBuilder
+  );
+}
+
 export function sitePath(workspaceId: string, siteId: string): string {
   return `${workspacePath(workspaceId)}/sites/${segment(siteId)}`;
 }

@@ -454,7 +454,7 @@ export async function loginToCanonicalBuilder(page: import('@playwright/test').P
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Sign in' }).click();
   }
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/workspaces\/[^/]+$/);
 }
 
 export async function switchCanonicalBrowserContext(

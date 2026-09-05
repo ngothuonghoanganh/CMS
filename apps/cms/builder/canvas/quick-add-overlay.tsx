@@ -47,7 +47,11 @@ export function QuickAddOverlay({
       </div>
       <div className="builder-quick-add-options">
         {options.map((option) => (
-          <button key={option.type} onClick={() => onInsert(option.type)} type="button">
+          <button
+            key={`${option.type}:${option.label}`}
+            onClick={() => onInsert(option.type)}
+            type="button"
+          >
             {option.label}
           </button>
         ))}

@@ -17,7 +17,6 @@ test('@tenancy provisions a default plan and enforces a tenant-scoped workspace 
       data: {
         email: process.env.AUTH_EMAIL ?? 'admin@example.com',
         password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
-        tenantSlug: process.env.AUTH_TENANT_SLUG ?? 'demo',
       },
     });
     expect(adminLogin.ok()).toBe(true);

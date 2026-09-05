@@ -79,8 +79,8 @@ export function PageLayoutEditor({
       try {
         const [layout, headerResponse, footerResponse] = await Promise.all([
           api.get(`/pages/${page.id}/layout`),
-          api.get(`/sites/${page.siteId}/layouts/headers`),
-          api.get(`/sites/${page.siteId}/layouts/footers`),
+          api.get(`/workspaces/${page.workspaceId}/layouts/headers`),
+          api.get(`/workspaces/${page.workspaceId}/layouts/footers`),
         ]);
         if (cancelled) return;
         setAttachments(PageLayoutUpdateRequestSchema.parse(layout).attachments);
@@ -96,7 +96,7 @@ export function PageLayoutEditor({
     return () => {
       cancelled = true;
     };
-  }, [page.id, page.siteId]);
+  }, [page.id, page.siteId, page.workspaceId]);
 
   function setResource(type: 'header' | 'footer', resourceId: string): void {
     setAttachments((current) => {
@@ -131,13 +131,16 @@ export function PageLayoutEditor({
     setNotice(null);
     try {
       const created = LayoutExtensionResourceSchema.parse(
-        await api.post(`/sites/${page.siteId}/layouts/${kindSegment(newLayout.kind)}`, {
-          kind: newLayout.kind,
-          name: newLayout.name.trim(),
-          ...(newLayout.description.trim()
-            ? { description: newLayout.description.trim() }
-            : {}),
-        }),
+        await api.post(
+          `/workspaces/${page.workspaceId}/layouts/${kindSegment(newLayout.kind)}`,
+          {
+            kind: newLayout.kind,
+            name: newLayout.name.trim(),
+            ...(newLayout.description.trim()
+              ? { description: newLayout.description.trim() }
+              : {}),
+          },
+        ),
       );
       if (created.kind === 'header') setHeaders((current) => [...current, created]);
       else setFooters((current) => [...current, created]);
@@ -153,7 +156,7 @@ export function PageLayoutEditor({
 
   function openBuilder(resource: LayoutExtensionResource): void {
     router.push(
-      `/workspaces/${page.workspaceId}/sites/${page.siteId}/layouts/${kindSegment(resource.kind)}/${resource.id}/builder?returnPageId=${encodeURIComponent(page.id)}`,
+      `/workspaces/${page.workspaceId}/layouts/${kindSegment(resource.kind)}/${resource.id}/builder?siteId=${encodeURIComponent(page.siteId)}&returnPageId=${encodeURIComponent(page.id)}`,
     );
   }
 

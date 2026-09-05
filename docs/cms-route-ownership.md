@@ -24,7 +24,10 @@ feature-independent data loaded by the shell.
 
 The old `cms-dashboard.tsx` and `workspaces/[workspaceId]/route-page.tsx` adapters were
 removed. The root `/?view=...` compatibility path is one-way: it resolves an old
-bookmark to a canonical route and no new UI creates that URL.
+bookmark to a canonical route and no new UI creates that URL. An explicit
+`isStandaloneWorkspaceRoute` boundary in the workspace layout leaves page,
+layout, and template builders outside `CmsShell`, so builders own their full
+viewport without a nested management shell.
 
 ## Route map
 
@@ -81,8 +84,9 @@ All routes are rooted at `/workspaces/:workspaceId`:
 └── workflows
 ```
 
-The page and layout builder shells remain a separate builder subsystem and are rendered
-directly by their builder routes.
+The page, layout, and template builder shells remain a separate builder subsystem and are
+rendered directly by their builder routes. Builder leave actions use canonical page,
+layout-owner, or template paths; they do not return to `/`.
 
 ## Feature ownership
 
@@ -146,6 +150,8 @@ selection state.
 
 `tests/e2e/cms-routing.spec.ts` covers direct loading of every major workspace module,
 canonical Pages/detail/edit routes, explicit create drawers, refresh, and browser history.
-Feature tests continue to exercise publishing, collections, workflows, integrations, SEO,
-domains, and builder flows. The ownership checklist records the module-by-module audit
-requirements.
+`tests/e2e/cms-routing-root.spec.ts` covers root/login canonical redirects, and the
+builder E2E suites assert that standalone builders do not render the CMS sidebar or
+header. Feature tests continue to exercise publishing, collections, workflows,
+integrations, SEO, domains, and builder flows. The ownership checklist records the
+module-by-module audit requirements.

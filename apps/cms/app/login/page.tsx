@@ -1,8 +1,10 @@
 'use client';
 
+import { AuthSessionResponseSchema } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
+import { workspacePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
 import { TextField } from '../ui/fields';
 
@@ -20,12 +22,14 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await api.post('/auth/login', {
-        email,
-        password,
-        ...(tenantSlug.trim() ? { tenantSlug: tenantSlug.trim() } : {}),
-      });
-      router.replace('/');
+      const session = AuthSessionResponseSchema.parse(
+        await api.post('/auth/login', {
+          email,
+          password,
+          ...(tenantSlug.trim() ? { tenantSlug: tenantSlug.trim() } : {}),
+        }),
+      );
+      router.replace(workspacePath(session.workspace.id));
     } catch (caughtError) {
       setError(
         caughtError instanceof ApiClientError

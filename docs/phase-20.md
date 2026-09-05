@@ -36,6 +36,9 @@ remain the source of truth for page composition.
 - Collection entry forms are generated from field metadata. Asset fields use a
   workspace-scoped asset picker and reference fields use a site-scoped entry
   picker; persisted values remain IDs, not embedded resource objects.
+- Page, layout, and template builder routes are explicit full-screen boundaries
+  and bypass the management shell. Their leave actions return to the owning
+  canonical resource route.
 
 ## Review/public semantics
 
@@ -68,7 +71,7 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm check:cms-design-system
-pnpm exec playwright test
+pnpm test:e2e:full
 ```
 
 The dedicated E2E journey should create Products, publish entries, build and
@@ -79,12 +82,14 @@ separation before and after entry publication.
 
 Array/group values retain an Advanced JSON editor because those structured
 shapes do not have a complete nested form builder in this phase. Asset browsing
-is intentionally bounded to the loaded workspace result set and has no bulk
-operation. Sitemap enumeration, external data providers, caching, formulas, and
+is intentionally bounded to server-backed pages and has no bulk operation.
+Sitemap enumeration, external data providers, caching, formulas, and
 interactive public pagination are intentionally outside this phase.
 
-The scoped Phase 20 browser journeys pass. The latest full Playwright run was
-executed and reported 74 passed / 7 failed; the failures are existing
-environment/fixture or drag-behavior failures outside the Phase 20 collection
-journey, so the repository-wide browser gate remains open until those are
-resolved.
+Closure browser coverage includes canonical root/login redirects, standalone
+builder boundaries, semantic entry editing, server-backed asset and reference
+pickers, pagination beyond the first asset page, and draft/public collection
+resolution. The full Playwright matrix is the required browser gate and is run
+as `pnpm exec playwright test` (also exposed in CI through
+`pnpm test:e2e:full`); the default `pnpm test:e2e` command remains the faster
+non-tenancy smoke subset.

@@ -31,6 +31,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { cmsViewPath, pagePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { Icon } from '../app/ui/icons';
 import {
@@ -201,12 +202,14 @@ export default function LayoutBuilderShell({
   layoutKind,
 }: {
   workspaceId: string;
-  siteId: string;
+  /** Optional site preview context. The layout source itself is workspace-scoped. */
+  siteId?: string;
   layoutId: string;
   layoutKind: LayoutKindSegment;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const previewSiteId = siteId ?? searchParams.get('siteId') ?? undefined;
   const editorRef = useRef<GrapesEditorHandle>(null);
   const [resource, setResource] = useState<LayoutExtensionResource | null>(null);
   const [versions, setVersions] = useState<LayoutExtensionVersion[]>([]);
@@ -253,6 +256,7 @@ export default function LayoutBuilderShell({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const isDirty = status === 'unsaved' || status === 'saving' || status === 'conflict';
 
   const documentKind = layoutDocumentKind(layoutKind);
   const label = layoutKindLabel(layoutKind);
@@ -401,17 +405,21 @@ export default function LayoutBuilderShell({
         designResponse,
         extensionsResponse,
       ] = await Promise.all([
-        api.get(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}`),
-        api.get(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}/versions`),
-        api.get(`/workspaces/${workspaceId}/sites/${siteId}`),
+        api.get(`/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}`),
+        api.get(`/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/versions`),
+        previewSiteId
+          ? api.get(`/workspaces/${workspaceId}/sites/${previewSiteId}`)
+          : Promise.resolve(null),
         api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-        api
-          .get(`/workspaces/${workspaceId}/sites/${siteId}/design-system`)
-          .catch((caughtError: unknown) => {
-            if (caughtError instanceof ApiClientError && caughtError.status === 404)
-              return null;
-            throw caughtError;
-          }),
+        previewSiteId
+          ? api
+              .get(`/workspaces/${workspaceId}/sites/${previewSiteId}/design-system`)
+              .catch((caughtError: unknown) => {
+                if (caughtError instanceof ApiClientError && caughtError.status === 404)
+                  return null;
+                throw caughtError;
+              })
+          : Promise.resolve(null),
         api.get('/extensions').catch(() => null),
       ]);
       const nextResource = LayoutExtensionResourceSchema.parse(resourceResponse);
@@ -420,13 +428,13 @@ export default function LayoutBuilderShell({
       const nextDocument = documentFor(nextResource, nextVersions);
       if (!nextDocument)
         throw new Error('This layout does not have an editable document.');
-      const site = SiteSchema.parse(siteResponse);
+      const site = siteResponse ? SiteSchema.parse(siteResponse) : undefined;
       setResource(nextResource);
       setVersions(nextVersions);
       setDocument(nextDocument);
       if (resetEditor) setEditorRevision((current) => current + 1);
-      setSiteName(site.name);
-      setSiteLogo(site.logo);
+      setSiteName(site?.name ?? 'All sites');
+      setSiteLogo(site?.logo);
       setAssets(AssetListResponseSchema.parse(assetsResponse).items);
       setCustomExtensions(
         extensionsResponse
@@ -451,7 +459,17 @@ export default function LayoutBuilderShell({
 
   useEffect(() => {
     void load();
-  }, [layoutId, layoutKind, siteId, workspaceId]);
+  }, [layoutId, layoutKind, previewSiteId, workspaceId]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   function markDirty(): void {
     setError(null);
@@ -481,7 +499,7 @@ export default function LayoutBuilderShell({
     try {
       const nextDocument = SiteGlobalPayloadV1Schema.parse(current);
       const updated = LayoutExtensionResourceSchema.parse(
-        await api.patch(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}`, {
+        await api.patch(`/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}`, {
           document: nextDocument,
           ...(currentVersion
             ? { expectedVersionNumber: currentVersion.versionNumber }
@@ -494,7 +512,7 @@ export default function LayoutBuilderShell({
       setStatus('saved');
       setNotice(`Saved ${label.toLowerCase()} draft.`);
       const versionResponse = await api.get(
-        `/sites/${siteId}/layouts/${layoutKind}/${layoutId}/versions`,
+        `/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/versions`,
       );
       setVersions(LayoutExtensionVersionsResponseSchema.parse(versionResponse).items);
     } catch (caughtError) {
@@ -524,13 +542,16 @@ export default function LayoutBuilderShell({
     setNotice(null);
     try {
       const updated = LayoutExtensionResourceSchema.parse(
-        await api.post(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}/publish`, {}),
+        await api.post(
+          `/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/publish`,
+          {},
+        ),
       );
       setResource(updated);
       setStatus('saved');
       setNotice(`${label} published. Attached public pages now use this version.`);
       const versionResponse = await api.get(
-        `/sites/${siteId}/layouts/${layoutKind}/${layoutId}/versions`,
+        `/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/versions`,
       );
       setVersions(LayoutExtensionVersionsResponseSchema.parse(versionResponse).items);
     } catch (caughtError) {
@@ -553,10 +574,13 @@ export default function LayoutBuilderShell({
     setNotice(null);
     try {
       const updated = LayoutExtensionResourceSchema.parse(
-        await api.post(`/sites/${siteId}/layouts/${layoutKind}/${layoutId}/discard`, {}),
+        await api.post(
+          `/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/discard`,
+          {},
+        ),
       );
       const versionResponse = await api.get(
-        `/sites/${siteId}/layouts/${layoutKind}/${layoutId}/versions`,
+        `/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/versions`,
       );
       const nextVersions =
         LayoutExtensionVersionsResponseSchema.parse(versionResponse).items;
@@ -646,26 +670,29 @@ export default function LayoutBuilderShell({
   }
 
   const returnPageId = searchParams.get('returnPageId');
-  const backHref = returnPageId
-    ? `/workspaces/${encodeURIComponent(workspaceId)}/sites/${encodeURIComponent(siteId)}/pages/${encodeURIComponent(returnPageId)}`
-    : `/workspaces/${encodeURIComponent(workspaceId)}/extensions`;
+  const backHref =
+    returnPageId && previewSiteId
+      ? pagePath(workspaceId, previewSiteId, returnPageId)
+      : cmsViewPath(workspaceId, 'extensions');
+
+  function leave(): void {
+    if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?'))
+      return;
+    router.push(backHref);
+  }
 
   return (
     <main className="builder-frame">
       <header className="builder-topbar">
         <div className="builder-title">
-          <button
-            className="button button-ghost"
-            onClick={() => router.push(backHref)}
-            type="button"
-          >
+          <button className="button button-ghost" onClick={leave} type="button">
             {returnPageId ? '← Pages' : '← Extensions'}
           </button>
           <div>
             <span className="eyebrow">Visual builder</span>
             <h1>{resource.name}</h1>
             <code className="builder-page-path">
-              {label} · Site {siteName}
+              {label} · {previewSiteId ? `Site ${siteName}` : siteName}
             </code>
           </div>
         </div>

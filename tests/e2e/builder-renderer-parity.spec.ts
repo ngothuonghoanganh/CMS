@@ -216,7 +216,7 @@ function parityFixture(): PagePayload {
                 {
                   id: 'parity-extension',
                   type: 'extension',
-                  props: { extensionId: 'parity-extension', values: {} },
+                  props: { extensionId: ExtensionIds.DemoBuilder, values: {} },
                   style: { base: { position: 'static' } },
                   children: [],
                 },

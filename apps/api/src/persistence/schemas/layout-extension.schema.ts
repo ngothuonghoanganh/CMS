@@ -24,8 +24,9 @@ export class LayoutExtensionRecord {
   @Prop({ type: String, required: true, index: true })
   workspaceId!: string;
 
-  @Prop({ type: String, required: true, index: true })
-  siteId!: string;
+  /** Optional legacy origin. Ownership is enforced by workspaceId. */
+  @Prop({ type: String, required: false, index: true })
+  siteId?: string;
 
   @Prop({ type: String, required: true, enum: ['header', 'footer'] })
   kind!: 'header' | 'footer';
@@ -49,6 +50,8 @@ export class LayoutExtensionRecord {
 export const LayoutExtensionSchema = SchemaFactory.createForClass(LayoutExtensionRecord);
 LayoutExtensionSchema.index({ workspaceId: 1, siteId: 1, kind: 1 });
 LayoutExtensionSchema.index({ workspaceId: 1, siteId: 1, updatedAt: -1 });
+LayoutExtensionSchema.index({ workspaceId: 1, kind: 1, createdAt: 1, _id: 1 });
+LayoutExtensionSchema.index({ workspaceId: 1, kind: 1, updatedAt: -1 });
 
 @Schema({
   collection: 'layoutExtensionVersions',

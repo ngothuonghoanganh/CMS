@@ -50,6 +50,10 @@ Covered modules:
 - [x] No `activeView`, `currentView`, `selectedModule`, or feature render switch remains.
 - [x] New UI does not generate `/?view=...` URLs.
 - [x] No feature save/cancel path redirects to a generic CMS root.
+- [x] Page Builder Leave returns to the canonical page detail route.
+- [x] Layout and Template Builder leave paths return to canonical owners.
+- [x] Root `/` and login redirect directly to canonical workspace routes.
+- [x] Page, Layout, and Template Builders bypass `CmsShell`.
 - [x] Route helpers only build URLs; they do not render or own state.
 
 ## Validation
@@ -62,8 +66,8 @@ Covered modules:
 - [x] Root `pnpm typecheck`
 - [x] Root `pnpm test`
 - [x] Root `pnpm build`
-- [x] Full Playwright suite executed: 74/81 passed; seven failures remain in
-      control-plane/fixture, locator, drag/debug, and custom-domain scenarios.
+- [x] Full Playwright suite executed: 87/87 passed, including tenancy and
+      picker coverage.
 
-The remaining full-suite failures are listed explicitly in
-`docs/phase-20-completion-audit.md`. The scoped Phase 20 browser journeys pass.
+The prior full-suite failure classifications and closure actions are listed in
+`docs/phase-20-completion-audit.md`.

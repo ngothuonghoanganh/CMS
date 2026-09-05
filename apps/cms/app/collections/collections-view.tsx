@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  type Asset,
   type Collection,
   type CollectionEntryResponse,
   type CollectionFieldType,
@@ -13,7 +12,13 @@ import { ApiClientError, api } from '../lib/api';
 import { Drawer, Modal, PageHeader } from '../ui/surfaces';
 import { Panel, SearchField } from '../ui/primitives';
 import { StatusBadge } from '../status-badge';
-import { CollectionEntryFields } from './collection-field-controls';
+import {
+  CollectionEntryFields,
+  parseStructuredValue,
+  serializeStructuredValue,
+  updateEntryDraft,
+  type EntryDraft,
+} from './collection-field-controls';
 
 type FieldDraft = Collection['fields'][number];
 
@@ -71,6 +76,18 @@ function defaultFieldValue(value: unknown): string {
   return String(value);
 }
 
+function structuredDrafts(
+  collection: Collection | undefined,
+  values: EntryDraft,
+): Record<string, string> {
+  if (!collection) return {};
+  return Object.fromEntries(
+    collection.fields
+      .filter((field) => field.type === 'array' || field.type === 'group')
+      .map((field) => [field.key, serializeStructuredValue(values[field.key])]),
+  );
+}
+
 function collectionErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ApiClientError)) return fallback;
   const references = error.details?.references;
@@ -88,9 +105,6 @@ function collectionErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function CollectionsView({
-  assets,
-  assetError,
-  assetsLoading,
   canCreateCollection,
   canCreateEntry,
   canDelete,
@@ -113,9 +127,6 @@ export function CollectionsView({
   sites,
   workspaceId,
 }: {
-  assets: Asset[];
-  assetError?: string | undefined;
-  assetsLoading: boolean;
   canCreateCollection: boolean;
   canCreateEntry: boolean;
   canDelete: boolean;
@@ -170,7 +181,13 @@ export function CollectionsView({
   });
   const [fieldDrafts, setFieldDrafts] = useState<FieldDraft[]>([newField()]);
   const [titleFieldKey, setTitleFieldKey] = useState('');
-  const [entryValues, setEntryValues] = useState('{}');
+  const [entryDraft, setEntryDraft] = useState<EntryDraft>({});
+  const [advancedJsonDrafts, setAdvancedJsonDrafts] = useState<Record<string, string>>(
+    {},
+  );
+  const [advancedJsonErrors, setAdvancedJsonErrors] = useState<
+    Record<string, string | undefined>
+  >({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -214,7 +231,9 @@ export function CollectionsView({
   useEffect(() => {
     if (routeEntryAction === 'create') {
       setEntryRecord(null);
-      setEntryValues('{}');
+      setEntryDraft({});
+      setAdvancedJsonDrafts(structuredDrafts(selectedCollection, {}));
+      setAdvancedJsonErrors({});
       setEntryDrawerOpen(true);
       return;
     }
@@ -233,7 +252,9 @@ export function CollectionsView({
       .then((entry) => {
         if (!active) return;
         setEntryRecord(entry);
-        setEntryValues(JSON.stringify(entry.values, null, 2));
+        setEntryDraft(entry.values);
+        setAdvancedJsonDrafts(structuredDrafts(selectedCollection, entry.values));
+        setAdvancedJsonErrors({});
       })
       .catch((caughtError: unknown) => {
         if (active)
@@ -371,16 +392,24 @@ export function CollectionsView({
       return;
     }
     setError(null);
-    let values: Record<string, unknown>;
-    try {
-      const parsed = JSON.parse(entryValues) as unknown;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('Entry values must be a JSON object.');
+    let values: EntryDraft = { ...entryDraft };
+    for (const field of selectedCollection.fields) {
+      if (field.type !== 'array' && field.type !== 'group') continue;
+      const raw = advancedJsonDrafts[field.key] ?? '';
+      if (!raw.trim()) {
+        values = updateEntryDraft(values, field, undefined);
+        continue;
       }
-      values = parsed as Record<string, unknown>;
-    } catch {
-      setError('Entry values must be a valid JSON object before saving.');
-      return;
+      const parsed = parseStructuredValue(raw);
+      if (!parsed.success) {
+        setAdvancedJsonErrors((current) => ({
+          ...current,
+          [field.key]: 'Enter valid JSON for this field before saving.',
+        }));
+        setError(`The ${field.label} field contains malformed JSON.`);
+        return;
+      }
+      values = updateEntryDraft(values, field, parsed.value);
     }
     const path = `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}/entries`;
     const saved = selectedEntry
@@ -395,6 +424,9 @@ export function CollectionsView({
         : [saved, ...current],
     );
     setEntryRecord(saved);
+    setEntryDraft(saved.values);
+    setAdvancedJsonDrafts(structuredDrafts(selectedCollection, saved.values));
+    setAdvancedJsonErrors({});
     setEntryDrawerOpen(false);
     onCloseEntry?.(saved.id);
     setMessage(selectedEntry ? 'Entry draft saved.' : 'Entry created as draft.');
@@ -430,7 +462,9 @@ export function CollectionsView({
       return;
     }
     setEntryRecord(entry);
-    setEntryValues(JSON.stringify(entry.values, null, 2));
+    setEntryDraft(entry.values);
+    setAdvancedJsonDrafts(structuredDrafts(selectedCollection, entry.values));
+    setAdvancedJsonErrors({});
     setEntryDrawerOpen(true);
   }
 
@@ -440,8 +474,28 @@ export function CollectionsView({
       return;
     }
     setEntryRecord(null);
-    setEntryValues('{}');
+    setEntryDraft({});
+    setAdvancedJsonDrafts(structuredDrafts(selectedCollection, {}));
+    setAdvancedJsonErrors({});
     setEntryDrawerOpen(true);
+  }
+
+  function updateAdvancedJson(fieldKey: string, rawValue: string): void {
+    setAdvancedJsonDrafts((current) => ({ ...current, [fieldKey]: rawValue }));
+    const field = selectedCollection?.fields.find(
+      (candidate) => candidate.key === fieldKey,
+    );
+    if (!field) return;
+    const parsed = parseStructuredValue(rawValue);
+    if (!parsed.success) {
+      setAdvancedJsonErrors((current) => ({
+        ...current,
+        [fieldKey]: 'Enter valid JSON for this field before saving.',
+      }));
+      return;
+    }
+    setAdvancedJsonErrors((current) => ({ ...current, [fieldKey]: undefined }));
+    setEntryDraft((current) => updateEntryDraft(current, field, parsed.value));
   }
 
   function editSchema() {
@@ -1743,10 +1797,7 @@ export function CollectionsView({
           onSubmit={(event) => {
             void saveEntry(event).catch((caughtError: unknown) =>
               setError(
-                collectionErrorMessage(
-                  caughtError,
-                  'Entry values must be valid JSON or failed validation.',
-                ),
+                collectionErrorMessage(caughtError, 'Entry values failed validation.'),
               ),
             );
           }}
@@ -1767,35 +1818,18 @@ export function CollectionsView({
                 {selectedEntry ? <StatusBadge status={selectedEntry.status} /> : null}
               </div>
               <CollectionEntryFields
-                assets={assets}
-                assetError={assetError}
-                assetsLoading={assetsLoading}
+                key={routeEntryId ?? 'new-entry'}
                 collection={selectedCollection}
                 collections={collections}
                 disabled={entryReadOnly}
-                entryValues={entryValues}
-                onChange={setEntryValues}
+                advancedJsonDrafts={advancedJsonDrafts}
+                advancedJsonErrors={advancedJsonErrors}
+                entryDraft={entryDraft}
+                onAdvancedJsonChange={updateAdvancedJson}
+                onChange={setEntryDraft}
                 siteId={siteId}
                 workspaceId={workspaceId}
               />
-              {selectedCollection.fields.some((field) =>
-                ['array', 'group'].includes(field.type),
-              ) ? (
-                <details className="collection-entry-advanced">
-                  <summary>Advanced JSON for structured fields</summary>
-                  <p className="muted small">
-                    Use this editor only for array and group values that need nested
-                    structure.
-                  </p>
-                  <textarea
-                    aria-label="Entry values"
-                    disabled={entryReadOnly}
-                    rows={12}
-                    value={entryValues}
-                    onChange={(event) => setEntryValues(event.target.value)}
-                  />
-                </details>
-              ) : null}
             </>
           ) : null}
         </form>

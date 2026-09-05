@@ -29,6 +29,7 @@ model as Pages.
 ## API surfaces
 
 ```text
+/workspaces/:workspaceId/layouts/headers|footers
 /sites/:siteId/layouts/headers|footers
 /sites/:siteId/pages/:pageId/layout
 /workspaces/:workspaceId/templates
@@ -36,10 +37,12 @@ model as Pages.
 ```
 
 Layout resources support create, update, duplicate, versions, publish,
-discard and delete. Templates support create, update, versions, publish,
-apply, restore-as-new-version and delete protection while referenced by pages.
-All management routes enforce existing site/page/template permissions and audit
-successful mutations.
+discard and delete. They are owned by the workspace and can be attached to
+pages from any site in that workspace. The site-scoped layout routes remain as
+backward-compatible aliases. Templates support create, update, versions,
+publish, apply, restore-as-new-version and delete protection while referenced
+by pages. All management routes enforce existing workspace/page/template
+permissions and audit successful mutations.
 
 ## Persistence and publishing rules
 
@@ -49,9 +52,10 @@ updates. Preview resolves the persisted draft; public delivery resolves only
 published page/layout snapshots. Publishing a referenced Header/Footer changes
 the resolved chrome for attached pages without republishing the page.
 
-Layout documents validate menu, reusable, design-token and enabled extension
-dependencies before publish. Templates validate the same dependencies and
-published layout references before publish/apply.
+Layout documents validate reusable and enabled extension dependencies before a
+workspace-wide publish. Site-specific navigation and design-token references
+are resolved in the target page/site context. Templates validate the same
+dependencies and published layout references before publish/apply.
 
 ## Migration
 

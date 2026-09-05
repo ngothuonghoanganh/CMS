@@ -175,7 +175,6 @@ export default function CmsShell({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isBuilderRoute = pathname.includes('/builder');
   const [session, setSession] = useState<AuthSessionResponse | null>(null);
   const [permissions, setPermissions] = useState<TenantPermission[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -401,11 +400,7 @@ export default function CmsShell({
             ))}
           </nav>
         </aside>
-        <main
-          className={
-            isBuilderRoute ? 'content-area content-area-builder' : 'content-area'
-          }
-        >
+        <main className="content-area">
           <AppHeader
             companyName={currentCompanyName}
             currentWorkspaceId={session.workspace.id}
@@ -418,11 +413,7 @@ export default function CmsShell({
             userEmail={session.user.email}
             workspaces={workspaces}
           />
-          <section
-            className={
-              isBuilderRoute ? 'content-inner content-inner-builder' : 'content-inner'
-            }
-          >
+          <section className="content-inner">
             {error ? (
               <div className="alert alert-error" role="alert">
                 <div>

@@ -206,7 +206,7 @@ function PreviewNode({ node }: { node: BuilderPreviewNode }): ReactElement {
 }
 
 function previewFingerprint(preview: ComponentBuilderPreview): string {
-  return JSON.stringify(preview.tree);
+  return JSON.stringify({ variant: preview.variant, tree: preview.tree });
 }
 
 export function BuilderBlockPreview({

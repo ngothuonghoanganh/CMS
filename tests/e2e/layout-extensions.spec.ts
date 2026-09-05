@@ -89,6 +89,62 @@ async function responseJson<T>(
   return (await response.json()) as T;
 }
 
+test('workspace layout library is available without a site scope', async ({
+  request,
+  canonicalEnvironment,
+}) => {
+  const name = `__e2e__ Workspace header ${Date.now()}`;
+  const created = await responseJson<{ id: string; siteId?: string }>(
+    await request.post(
+      `${apiBaseUrl}/workspaces/${canonicalEnvironment.workspaceId}/layouts/headers`,
+      { data: { kind: 'header', name } },
+    ),
+  );
+
+  try {
+    expect(created.siteId).toBeUndefined();
+
+    const workspaceLayouts = await responseJson<{
+      items: Array<{ id: string; name: string }>;
+    }>(
+      await request.get(
+        `${apiBaseUrl}/workspaces/${canonicalEnvironment.workspaceId}/layouts/headers`,
+      ),
+    );
+    expect(
+      workspaceLayouts.items.some((item) => item.id === created.id && item.name === name),
+    ).toBe(true);
+
+    const siteLayouts = await responseJson<{ items: Array<{ id: string }> }>(
+      await request.get(
+        `${apiBaseUrl}/sites/${canonicalEnvironment.siteId}/layouts/headers`,
+      ),
+    );
+    expect(siteLayouts.items.map((item) => item.id)).toContain(created.id);
+  } finally {
+    const deleted = await request.delete(
+      `${apiBaseUrl}/workspaces/${canonicalEnvironment.workspaceId}/layouts/headers/${created.id}`,
+    );
+    expect([204, 404]).toContain(deleted.status());
+  }
+});
+
+test('Extensions exposes the workspace layout library without selecting a site', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  await loginToCanonicalBuilder(page);
+  await switchCanonicalBrowserContext(page, canonicalEnvironment);
+  await page.goto(`/workspaces/${canonicalEnvironment.workspaceId}/extensions`);
+
+  const layoutSection = page.getByRole('region', {
+    name: 'Header and footer extensions',
+  });
+  await expect(layoutSection).toBeVisible();
+  await expect(layoutSection).toContainText('Layout extensions');
+  await expect(layoutSection).not.toContainText('Select a site');
+});
+
 test('layout resources publish independently and render only when explicitly attached', async ({
   page,
   request,

@@ -15,7 +15,7 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/workspaces\/[^/]+$/);
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
 }
 
@@ -300,20 +300,23 @@ test('opens a Header extension in the Extensions drawer', async ({ page }) => {
     ).toBeVisible();
     await page.getByRole('button', { name: 'Edit Header', exact: true }).click();
 
-    const drawer = page.getByRole('dialog', { name: 'Header menus', exact: true });
+    const drawer = page.getByRole('dialog', { name: 'Header layouts', exact: true });
     await expect(drawer).toBeVisible();
     await expect(drawer.getByText(name, { exact: true })).toBeVisible();
 
     const initialMenuCount = await drawer.locator('.list-row').count();
     await drawer.getByRole('button', { name: 'Add Header', exact: true }).click();
-    await drawer.getByLabel('Menu name').fill(`Added Header ${Date.now()}`);
-    await drawer.getByLabel('Menu description').fill('Created from the drawer.');
+    await drawer.getByLabel('Layout name').fill(`Added Header ${Date.now()}`);
+    await drawer
+      .getByLabel('Layout description')
+      .fill('Created from the layout library.');
     const addMenuResponsePromise = page.waitForResponse(
       (response) =>
-        response.url() === `${apiBase}/sites/${siteId}/layouts/headers` &&
+        response.url() ===
+          `${apiBase}/workspaces/${session.workspace.id}/layouts/headers` &&
         response.request().method() === 'POST',
     );
-    await drawer.getByRole('button', { name: 'Create menu', exact: true }).click();
+    await drawer.getByRole('button', { name: 'Create layout', exact: true }).click();
     const addMenuResponse = await addMenuResponsePromise;
     expect(addMenuResponse.status()).toBe(201);
     await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount + 1);
@@ -326,8 +329,14 @@ test('opens a Header extension in the Extensions drawer', async ({ page }) => {
       .click();
     await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount);
 
-    await drawer.getByRole('button', { name: 'Open builder', exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/layouts/headers/${resource.id}/builder$`));
+    await drawer
+      .locator('.list-row')
+      .filter({ hasText: name })
+      .getByRole('button', { name: 'Open builder', exact: true })
+      .click();
+    await expect(page).toHaveURL(
+      new RegExp(`/layouts/headers/${resource.id}/builder(?:\\?.*)?$`),
+    );
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible({
       timeout: 15_000,
     });
@@ -364,7 +373,7 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
     data: { organizationId: organization.id, workspaceId: workspace.id },
   });
   expect(contextResponse.status()).toBe(200);
-  await page.reload();
+  await page.goto(`/workspaces/${workspace.id}`);
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Extensions', exact: true }).click();
@@ -525,12 +534,16 @@ test('@tenancy creates and edits a site', async ({ page }) => {
   await page.getByLabel('Site name').fill(`E2E Site ${suffix}`);
   await page.getByLabel('Slug').fill(`e2e-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
-  await expect(page.getByText(`E2E Site ${suffix}`)).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: `E2E Site ${suffix}`, exact: true }),
+  ).toBeVisible();
 
   await page.getByRole('button', { name: 'Edit' }).last().click();
   await page.getByLabel('Site name').fill(`Edited E2E Site ${suffix}`);
   await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page.getByText(`Edited E2E Site ${suffix}`)).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: `Edited E2E Site ${suffix}`, exact: true }),
+  ).toBeVisible();
 });
 
 test('@tenancy creates a page and edits its metadata', async ({ page }) => {
@@ -548,7 +561,7 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   await page.getByLabel('Page name').fill(`Page ${suffix}`);
   await page.getByLabel('Slug').fill(`page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
-  await expect(page.getByText(`Page ${suffix}`)).toBeVisible();
+  await expect(page.getByRole('button', { name: `Page ${suffix}` })).toBeVisible();
 
   await page.getByRole('button', { name: `Page ${suffix}` }).click();
   await expect(page.locator('.ui-drawer-layer')).toHaveCount(0);
@@ -570,10 +583,10 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
     page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Build Header', exact: true }),
+    page.getByRole('button', { name: /^(Build|Edit) Header$/, exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Build Footer', exact: true }),
+    page.getByRole('button', { name: /^(Build|Edit) Footer$/, exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByRole('button', { name: `Select page Edited Page ${suffix}` }).click();
@@ -628,12 +641,12 @@ test('Builder visual QA stays readable without horizontal overflow across viewpo
   for (const width of [1440, 1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.locator('.builder-frame')).toBeVisible();
-    const contentBox = await page.locator('.content-inner-builder').boundingBox();
     const builderBox = await page.locator('.builder-frame').boundingBox();
-    expect(contentBox).not.toBeNull();
     expect(builderBox).not.toBeNull();
-    expect(builderBox!.width).toBeGreaterThanOrEqual(contentBox!.width - 1);
-    expect(builderBox!.height).toBeGreaterThanOrEqual(contentBox!.height - 1);
+    await expect(page.locator('#cms-sidebar')).toHaveCount(0);
+    await expect(page.locator('.topbar')).toHaveCount(0);
+    expect(builderBox!.width).toBeGreaterThan(0);
+    expect(builderBox!.height).toBeGreaterThan(0);
     expect(
       await page.locator('body').evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);

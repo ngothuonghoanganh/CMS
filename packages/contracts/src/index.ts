@@ -3652,7 +3652,12 @@ export const LayoutExtensionResourceSchema = z
   .object({
     id: EntityIdSchema,
     workspaceId: EntityIdSchema,
-    siteId: EntityIdSchema,
+    /**
+     * Legacy origin site, if the resource was created through the old
+     * site-scoped endpoint. Layout resources are workspace-scoped and can be
+     * attached to pages from any site in that workspace.
+     */
+    siteId: EntityIdSchema.optional(),
     kind: LayoutExtensionKindSchema,
     name: nonEmptyText.max(200),
     description: z.string().trim().max(500).optional(),

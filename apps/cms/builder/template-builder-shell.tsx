@@ -27,6 +27,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
+import { templatePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { type BuilderInsertable } from './block-presets';
 import { BUILT_IN_TEMPLATE_REGISTRY } from './template-registry';
@@ -281,8 +282,8 @@ export default function TemplateBuilderShell({
         api
           .get(`/workspaces/${workspaceId}/sites/${siteId}/design-system`)
           .catch(() => null),
-        api.get(`/sites/${siteId}/layouts/headers`),
-        api.get(`/sites/${siteId}/layouts/footers`),
+        api.get(`/workspaces/${workspaceId}/layouts/headers`),
+        api.get(`/workspaces/${workspaceId}/layouts/footers`),
         api.get('/extensions').catch(() => null),
       ]);
       const nextTemplate = TemplateSchema.parse(templateResponse);
@@ -465,8 +466,7 @@ export default function TemplateBuilderShell({
   function leave() {
     if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?'))
       return;
-    const fallback = `/workspaces/${encodeURIComponent(workspaceId)}/templates`;
-    router.push(searchParams.get('return') || fallback);
+    router.push(templatePath(workspaceId, templateId));
   }
 
   function updatePanelWidth(side: BuilderPanelSide, width: number) {

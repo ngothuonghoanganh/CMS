@@ -62,10 +62,10 @@ export class LayoutExtensionService {
     private readonly reusables: ReusableService,
   ) {}
 
-  async list(siteId: string, workspaceId: string, kind: LayoutExtensionKind) {
-    await this.requireSite(siteId, workspaceId);
+  async list(siteId: string | undefined, workspaceId: string, kind: LayoutExtensionKind) {
+    if (siteId) await this.requireSite(siteId, workspaceId);
     const records = await this.resourceModel
-      .find({ siteId, workspaceId, kind })
+      .find({ workspaceId, kind })
       .sort({ createdAt: 1, _id: 1 })
       .exec();
     return LayoutExtensionListResponseSchema.parse({
@@ -74,7 +74,7 @@ export class LayoutExtensionService {
   }
 
   async get(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
@@ -85,19 +85,19 @@ export class LayoutExtensionService {
   }
 
   async create(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     input: CreateLayoutExtensionRequest,
   ): Promise<LayoutExtensionResource> {
-    await this.requireSite(siteId, workspaceId);
+    if (siteId) await this.requireSite(siteId, workspaceId);
     const parsed = CreateLayoutExtensionRequestSchema.parse(input);
     const document = parsed.document ?? createDefaultLayoutDocument(kind, parsed.name);
     const versionId = randomUUID();
     const resource = await this.resourceModel.create({
       _id: randomUUID(),
       workspaceId,
-      siteId,
+      ...(siteId ? { siteId } : {}),
       kind,
       name: parsed.name,
       ...(parsed.description ? { description: parsed.description } : {}),
@@ -114,7 +114,7 @@ export class LayoutExtensionService {
   }
 
   async update(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
@@ -157,7 +157,7 @@ export class LayoutExtensionService {
   }
 
   async publish(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
@@ -194,7 +194,6 @@ export class LayoutExtensionService {
       .findOneAndUpdate(
         {
           _id: resourceId,
-          siteId,
           workspaceId,
           kind,
           draftVersionId: draft._id.toString(),
@@ -213,7 +212,7 @@ export class LayoutExtensionService {
   }
 
   async duplicate(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
@@ -230,7 +229,7 @@ export class LayoutExtensionService {
   }
 
   async discard(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
@@ -250,14 +249,13 @@ export class LayoutExtensionService {
   }
 
   async remove(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
   ): Promise<void> {
     await this.requireResource(siteId, workspaceId, kind, resourceId);
     const attached = await this.pageModel.exists({
-      siteId,
       workspaceId,
       'layoutAttachments.resourceId': resourceId,
     });
@@ -268,13 +266,11 @@ export class LayoutExtensionService {
       });
     }
     await this.versionModel.deleteMany({ resourceId }).exec();
-    await this.resourceModel
-      .deleteOne({ _id: resourceId, siteId, workspaceId, kind })
-      .exec();
+    await this.resourceModel.deleteOne({ _id: resourceId, workspaceId, kind }).exec();
   }
 
   async listVersions(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
@@ -319,7 +315,7 @@ export class LayoutExtensionService {
       enabled: boolean;
     }[],
     mode: 'draft' | 'published',
-    scope?: { siteId: string; workspaceId: string },
+    scope?: { workspaceId: string; siteId?: string },
   ): Promise<{
     header?: { slot: string; document: SiteGlobalPayloadV1 };
     footer?: { slot: string; document: SiteGlobalPayloadV1 };
@@ -334,7 +330,7 @@ export class LayoutExtensionService {
     const resources = await this.resourceModel
       .find({
         _id: { $in: resourceIds },
-        ...(scope ? { siteId: scope.siteId, workspaceId: scope.workspaceId } : {}),
+        ...(scope ? { workspaceId: scope.workspaceId } : {}),
       })
       .exec();
     const byId = new Map(
@@ -415,18 +411,23 @@ export class LayoutExtensionService {
   }
 
   private async assertPublishDependencies(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     document: SiteGlobalPayloadV1,
   ): Promise<void> {
-    const site = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
-    const designSystem: SiteDesignSystem = site?.publishedDesignSystem
-      ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
-      : createDefaultSiteDesignSystem();
-    await this.reusables.assertDesignTokenDependenciesAvailableForValues(designSystem, [
-      document,
-    ]);
-    await this.assertMenuReferencesAvailable(siteId, workspaceId, document);
+    // Layouts are reusable across every site in the workspace. Site-specific
+    // design tokens and navigation menus are therefore resolved in the page
+    // context, not rejected while publishing the shared source.
+    if (siteId) {
+      const site = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+      const designSystem: SiteDesignSystem = site?.publishedDesignSystem
+        ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
+        : createDefaultSiteDesignSystem();
+      await this.reusables.assertDesignTokenDependenciesAvailableForValues(designSystem, [
+        document,
+      ]);
+      await this.assertMenuReferencesAvailable(siteId, workspaceId, document);
+    }
     await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, document);
   }
 
@@ -477,18 +478,19 @@ export class LayoutExtensionService {
   }
 
   private async requireResource(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     kind: LayoutExtensionKind,
     resourceId: string,
   ): Promise<LayoutExtensionDocument> {
+    if (siteId) await this.requireSite(siteId, workspaceId);
     const record = await this.resourceModel
-      .findOne({ _id: resourceId, siteId, workspaceId, kind })
+      .findOne({ _id: resourceId, workspaceId, kind })
       .exec();
     if (!record) {
       throw new NotFoundException({
         code: 'LAYOUT_EXTENSION_NOT_FOUND',
-        message: `Layout extension ${resourceId} was not found in this site`,
+        message: `Layout extension ${resourceId} was not found in this workspace`,
       });
     }
     return record;
@@ -498,7 +500,7 @@ export class LayoutExtensionService {
     return LayoutExtensionResourceSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
-      siteId: record.siteId,
+      ...(record.siteId ? { siteId: record.siteId } : {}),
       kind: record.kind,
       name: record.name,
       ...(record.description ? { description: record.description } : {}),

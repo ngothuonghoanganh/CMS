@@ -63,6 +63,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { pagePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { Icon } from '../app/ui/icons';
 import {
@@ -655,9 +656,12 @@ export default function BuilderShell({
           'layout extension',
         ],
         description: `Copy this ${source.resource.kind} extension into the page. Editing the source later will not change this page.`,
-        preview: builderPreviewForComponent(
-          source.resource.kind === 'header' ? 'global-header' : 'global-footer',
-        ),
+        preview: {
+          ...builderPreviewForComponent(
+            source.resource.kind === 'header' ? 'global-header' : 'global-footer',
+          ),
+          variant: `layout-${source.resource.id}`,
+        },
         documentKinds: ['page'] as const,
         layoutExtension: source,
       })),
@@ -1060,8 +1064,8 @@ export default function BuilderShell({
               throw caughtError;
             }),
           api.get(`/preview/pages/${pageId}`).catch(() => null),
-          api.get(`/sites/${siteId}/layouts/headers`).catch(() => null),
-          api.get(`/sites/${siteId}/layouts/footers`).catch(() => null),
+          api.get(`/workspaces/${workspaceId}/layouts/headers`).catch(() => null),
+          api.get(`/workspaces/${workspaceId}/layouts/footers`).catch(() => null),
           api
             .get(`/workspaces/${workspaceId}/sites/${siteId}/collections?limit=100`)
             .catch((caughtError: unknown) => {
@@ -1189,7 +1193,7 @@ export default function BuilderShell({
             try {
               const versionsResponse = LayoutExtensionVersionsResponseSchema.parse(
                 await api.get(
-                  `/sites/${siteId}/layouts/${resource.kind === 'header' ? 'headers' : 'footers'}/${resource.id}/versions`,
+                  `/workspaces/${workspaceId}/layouts/${resource.kind === 'header' ? 'headers' : 'footers'}/${resource.id}/versions`,
                 ),
               );
               const versionId = resource.draftVersionId ?? resource.publishedVersionId;
@@ -1282,7 +1286,7 @@ export default function BuilderShell({
     if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?')) {
       return;
     }
-    router.push('/');
+    router.push(pagePath(workspaceId, siteId, pageId));
   }
 
   function markDirty() {
@@ -2464,10 +2468,10 @@ export default function BuilderShell({
                     </p>
                   ) : (
                     <div className="builder-capability-list">
-                      {pageExtensions.map((instance) => (
+                      {pageExtensions.map((instance, index) => (
                         <label
                           className={`builder-capability-row${instance.enabled ? '' : ' is-disabled'}`}
-                          key={instance.extensionId}
+                          key={`${instance.extensionId}-${index}`}
                         >
                           <span>
                             <strong>{instance.extensionId}</strong>

@@ -1,12 +1,12 @@
 # Phase 20 final handoff
 
-Status: IMPLEMENTED — FULL BROWSER GATE BLOCKED BY OUT-OF-SCOPE FAILURES
+Status: COMPLETE — ALL LOCAL QUALITY AND BROWSER GATES PASS
 
 Phase 20 adds tenant-scoped Collections, immutable entry versions, a finite
 query DSL, declarative PageBinding, Collection List rendering, and Dynamic Page
 routes while preserving the Phase 19 page/layout/template/published-bundle
-architecture. The scoped Phase 20 browser journeys pass, but the complete
-repository Playwright suite still has seven failures outside that journey.
+architecture. The closure pass also completes canonical routing, standalone
+builder boundaries, semantic entry editing, and server-backed resource pickers.
 
 ## Key implementation locations
 
@@ -19,6 +19,8 @@ repository Playwright suite still has seven failures outside that journey.
 - CMS: `apps/cms/app/collections/collections-page.tsx`,
   `collections-view.tsx`, `collection-field-controls.tsx`, workspace layout,
   and Builder Inspector query/binding controls.
+- Routing: `apps/cms/app/cms-routes.ts`, the workspace layout boundary, root
+  bootstrap, login redirect, and canonical builder leave paths.
 - Renderer: `apps/renderer/app/renderer.tsx`, preview data context, dynamic
   route resolution, and SSR-safe binding resolution.
 
@@ -40,7 +42,7 @@ repository Playwright suite still has seven failures outside that journey.
 ## Validation record
 
 The focused contracts, API, CMS, and renderer suites pass after rebuilding the
-shared contracts package. The Phase 20 browser journeys also pass:
+shared contracts package. The complete browser matrix and picker journey pass:
 
 ```text
 pnpm format:check                         PASS
@@ -48,23 +50,21 @@ pnpm lint                                 PASS
 pnpm typecheck                            PASS
 pnpm check:cms-design-system              PASS
 pnpm test                                 PASS (contracts 47, API 65 passed/12 skipped,
-                                             CMS 114, renderer 22)
+                                             CMS 118, renderer 22)
 pnpm build                                PASS
-pnpm exec playwright test                 FAIL (74 passed, 7 failed)
+pnpm exec playwright test                  PASS (87 passed)
+  tests/e2e/phase-20-pickers.spec.ts          PASS
   tests/e2e/collections-dynamic-data.spec.ts PASS
   tests/e2e/phase-20.1-browser.spec.ts       PASS
 ```
 
-The seven full-suite failures are recorded in
-`docs/phase-20-completion-audit.md`: control-plane admin login, the missing
-`parity-extension` fixture, a duplicate site-name locator, three existing
-GrapesJS drag/debug assertions, and custom-domain verification. They prevent a
-repository-wide browser PASS but do not fail the Phase 20 journeys.
+The seven failures recorded by the previous audit were classified and closed;
+their provenance and fixes are recorded in `docs/phase-20-completion-audit.md`.
 
 ## Follow-up
 
 Array/group values retain an Advanced JSON editor until a nested structured
-field editor exists. Asset browsing is bounded to the loaded workspace result
-set and has no bulk operation. Sitemap enumeration, external data providers,
-cache invalidation, formulas, and interactive public pagination are deliberately
-out of scope for this phase.
+field editor exists. Asset and reference browsing use bounded server pages and
+have no bulk operation. Sitemap enumeration, external data providers, cache
+invalidation, formulas, and interactive public pagination are deliberately out
+of scope for this phase.

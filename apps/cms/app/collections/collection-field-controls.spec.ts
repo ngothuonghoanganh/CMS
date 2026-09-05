@@ -4,8 +4,12 @@ import type { Asset } from '@payload/contracts';
 
 import {
   collectionFieldControl,
+  dateInputValue,
   filterAssets,
+  normalizeDateTimeInput,
+  parseStructuredValue,
   referenceIds,
+  updateEntryDraft,
 } from './collection-field-controls';
 
 const asset = (overrides: Partial<Asset> = {}): Asset =>
@@ -49,5 +53,42 @@ describe('collection field controls', () => {
     ]);
     expect(referenceIds(['a', 3, 'b'], 'many')).toEqual(['a', 'b']);
     expect(referenceIds('a,b', 'many')).toEqual([]);
+  });
+
+  it('updates one field in an entry draft without serializing the whole record', () => {
+    const field = {
+      id: 'title',
+      key: 'title',
+      label: 'Title',
+      type: 'text' as const,
+      required: false,
+      indexed: false,
+      unique: false,
+      status: 'active' as const,
+      manualSlugOverride: true,
+    };
+    expect(updateEntryDraft({ count: 3 }, field, 'Updated')).toEqual({
+      count: 3,
+      title: 'Updated',
+    });
+    expect(updateEntryDraft({ title: 'Updated', count: 3 }, field, '')).toEqual({
+      count: 3,
+    });
+  });
+
+  it('keeps malformed structured input out of the parsed draft', () => {
+    expect(parseStructuredValue('{"valid":true}')).toEqual({
+      success: true,
+      value: { valid: true },
+    });
+    expect(parseStructuredValue('{')).toEqual({ success: false });
+  });
+
+  it('normalizes date controls for browser inputs and API persistence', () => {
+    expect(dateInputValue('2026-01-02T03:04:05.000Z', 'date')).toBe('2026-01-02');
+    expect(dateInputValue('2026-01-02T03:04', 'datetime')).toBe('2026-01-02T03:04');
+    expect(normalizeDateTimeInput('2026-01-02T03:04')).toBe(
+      new Date('2026-01-02T03:04').toISOString(),
+    );
   });
 });

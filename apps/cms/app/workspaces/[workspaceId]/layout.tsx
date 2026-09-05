@@ -1,5 +1,4 @@
-import CmsShell from '../../cms-shell';
-import { CmsPageTransition } from '../../ui/page-transition';
+import WorkspaceLayoutBoundary from './workspace-layout-boundary';
 
 export default async function WorkspaceLayout({
   children,
@@ -11,8 +10,8 @@ export default async function WorkspaceLayout({
   const { workspaceId } = await params;
 
   return (
-    <CmsShell workspaceId={workspaceId}>
-      <CmsPageTransition>{children}</CmsPageTransition>
-    </CmsShell>
+    <WorkspaceLayoutBoundary workspaceId={workspaceId}>
+      {children}
+    </WorkspaceLayoutBoundary>
   );
 }

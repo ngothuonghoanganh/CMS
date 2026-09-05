@@ -124,10 +124,12 @@ Header/Footer Builder or Template Builder
   -> preview reads draft; public renderer reads published snapshots
 ```
 
-Layout resources are resolved in the page's site/workspace scope. A published
-layout update therefore propagates to attached pages without changing the page
-version, while a template apply creates an independent page snapshot and records
-only provenance metadata.
+Layout resources are owned by the workspace and resolved against the page's
+workspace when a page attachment is rendered. A published layout update
+therefore propagates to attached pages across every site in that workspace
+without changing page versions, while a template apply creates an independent
+page snapshot and records only provenance metadata. The legacy site-scoped
+layout API remains as a compatibility alias for existing clients.
 
 ## Website platform flow
 

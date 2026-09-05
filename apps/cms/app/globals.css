@@ -3235,43 +3235,6 @@ textarea {
   }
 }
 
-/* Builders use the full area below the global CMS header. */
-.content-area-builder {
-  display: flex;
-  height: 100dvh;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.content-area-builder .content-inner-builder {
-  display: flex;
-  width: 100%;
-  max-width: none;
-  min-height: 0;
-  flex: 1 1 auto;
-  margin: 0;
-  padding: 0;
-}
-
-.content-area-builder .content-inner-builder > .cms-page-transition {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-}
-
-.content-area-builder .builder-frame,
-.content-area-builder .builder-loading {
-  width: 100%;
-  min-height: 0;
-  flex: 1 1 auto;
-}
-
-.content-area-builder .builder-frame {
-  height: auto;
-}
-
 /* Phase 12.5 UI primitives and responsive hardening */
 .panel,
 .metric-card,
