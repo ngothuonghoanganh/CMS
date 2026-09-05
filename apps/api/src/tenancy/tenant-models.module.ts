@@ -59,6 +59,12 @@ import {
   LayoutExtensionSchema,
   LayoutExtensionVersionRecord,
   LayoutExtensionVersionSchema,
+  CollectionRecord,
+  CollectionSchema,
+  CollectionEntryRecord,
+  CollectionEntrySchema,
+  CollectionEntryVersionRecord,
+  CollectionEntryVersionSchema,
 } from '../persistence/schemas';
 import { TenantUserRecord, TenantUserSchema } from './schemas/tenant-user.schema';
 import {
@@ -101,6 +107,9 @@ const models = [
   [ReusableRecord, ReusableSchema],
   [LayoutExtensionRecord, LayoutExtensionSchema],
   [LayoutExtensionVersionRecord, LayoutExtensionVersionSchema],
+  [CollectionRecord, CollectionSchema],
+  [CollectionEntryRecord, CollectionEntrySchema],
+  [CollectionEntryVersionRecord, CollectionEntryVersionSchema],
 ] as const;
 
 const providers = models.map(([record, schema]) =>

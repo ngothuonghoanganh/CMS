@@ -42,6 +42,8 @@ export type ComponentPropertyDefinition = {
   options?: readonly ComponentPropertyOption[];
   customEditor?: 'form' | 'list';
   assetKind?: 'image' | 'video';
+  /** Allows the Phase 20 binding editor to offer this property as a target. */
+  bindable?: boolean;
 };
 
 export type BuilderPreviewAlign = 'start' | 'center' | 'end';
@@ -121,6 +123,11 @@ const BUILDER_COMPONENT_PREVIEW_NODES: Readonly<
   tabs: { kind: 'tabs', tabCount: 2 },
   'tab-item': { kind: 'box', role: 'panel', children: [{ kind: 'text', size: 'sm' }] },
   gallery: { kind: 'gallery', columns: 3 },
+  'collection-list': {
+    kind: 'list',
+    itemCount: 3,
+  },
+  'collection-item': { kind: 'box', role: 'panel', tone: 'muted' },
   'global-header': {
     kind: 'row',
     children: [
@@ -649,6 +656,26 @@ export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
     'opacity',
     'box-shadow',
   ],
+  'collection-list': [
+    'display',
+    'grid-template-columns',
+    'gap',
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+  ],
+  'collection-item': [
+    'width',
+    'max-width',
+    'margin',
+    'padding',
+    'background-color',
+    'border-width',
+    'border-style',
+    'border-color',
+    'border-radius',
+  ],
 };
 
 export const styleSchemaFor = (
@@ -738,6 +765,7 @@ const rawPageComponentRegistry = {
           'reusable-instance',
           'global-header',
           'global-footer',
+          'collection-list',
         ],
       },
     ],
@@ -771,6 +799,7 @@ const rawPageComponentRegistry = {
           'tabs',
           'gallery',
           'reusable-instance',
+          'collection-list',
         ],
       },
     ],
@@ -805,6 +834,7 @@ const rawPageComponentRegistry = {
           'tabs',
           'gallery',
           'reusable-instance',
+          'collection-list',
         ],
       },
     ],
@@ -820,7 +850,13 @@ const rawPageComponentRegistry = {
     defaultProps: { text: 'Edit this text' },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
-      { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
+      {
+        key: 'text',
+        label: 'Text content',
+        group: 'content',
+        control: 'textarea',
+        bindable: true,
+      },
     ]),
   }),
   image: definition({
@@ -838,8 +874,15 @@ const rawPageComponentRegistry = {
         group: 'content',
         control: 'asset',
         assetKind: 'image',
+        bindable: true,
       },
-      { key: 'alt', label: 'Alt text', group: 'content', control: 'text' },
+      {
+        key: 'alt',
+        label: 'Alt text',
+        group: 'content',
+        control: 'text',
+        bindable: true,
+      },
     ]),
   }),
   button: definition({
@@ -851,8 +894,8 @@ const rawPageComponentRegistry = {
     defaultProps: { label: 'Button', href: '#section', target: '_self' },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
-      { key: 'label', label: 'Label', group: 'content', control: 'text' },
-      { key: 'href', label: 'Link', group: 'content', control: 'url' },
+      { key: 'label', label: 'Label', group: 'content', control: 'text', bindable: true },
+      { key: 'href', label: 'Link', group: 'content', control: 'url', bindable: true },
       {
         key: 'target',
         label: 'Open link',
@@ -923,7 +966,13 @@ const rawPageComponentRegistry = {
     defaultProps: { text: 'Heading', level: 2 },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
-      { key: 'text', label: 'Text content', group: 'content', control: 'textarea' },
+      {
+        key: 'text',
+        label: 'Text content',
+        group: 'content',
+        control: 'textarea',
+        bindable: true,
+      },
       {
         key: 'level',
         label: 'Heading level',
@@ -945,8 +994,8 @@ const rawPageComponentRegistry = {
     defaultProps: { text: 'Learn more', href: '/', target: '_self' },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
     propertiesSchema: content([
-      { key: 'text', label: 'Text', group: 'content', control: 'text' },
-      { key: 'href', label: 'Link', group: 'content', control: 'url' },
+      { key: 'text', label: 'Text', group: 'content', control: 'text', bindable: true },
+      { key: 'href', label: 'Link', group: 'content', control: 'url', bindable: true },
       {
         key: 'target',
         label: 'Open link',
@@ -1038,8 +1087,20 @@ const rawPageComponentRegistry = {
     defaultProps: { text: 'A thoughtful quote', cite: '' },
     slots: [],
     propertiesSchema: content([
-      { key: 'text', label: 'Quote', group: 'content', control: 'textarea' },
-      { key: 'cite', label: 'Citation', group: 'content', control: 'text' },
+      {
+        key: 'text',
+        label: 'Quote',
+        group: 'content',
+        control: 'textarea',
+        bindable: true,
+      },
+      {
+        key: 'cite',
+        label: 'Citation',
+        group: 'content',
+        control: 'text',
+        bindable: true,
+      },
     ]),
   }),
   accordion: definition({
@@ -1372,6 +1433,71 @@ const rawPageComponentRegistry = {
         maxChildren: 50,
         addLabel: 'Add Image',
         structural: true,
+      },
+    ],
+  }),
+  'collection-list': definition({
+    type: 'collection-list',
+    version: 1,
+    label: 'Collection list',
+    category: 'content',
+    editorTagName: 'div',
+    defaultProps: {
+      queryId: '00000000-0000-4000-8000-000000000001',
+      emptyMessage: 'No items found',
+    },
+    builder: {
+      group: 'interactive',
+      keywords: ['collection', 'dynamic', 'repeater', 'list', 'query'],
+      description: 'Repeat one template over a published collection query.',
+    },
+    slots: [
+      {
+        name: 'template',
+        label: 'Collection item template',
+        accepts: ['collection-item'],
+        minChildren: 1,
+        maxChildren: 1,
+        structural: true,
+      },
+    ],
+    propertiesSchema: content([
+      { key: 'queryId', label: 'Query', group: 'content', control: 'select' },
+      { key: 'emptyMessage', label: 'Empty message', group: 'content', control: 'text' },
+    ]),
+  }),
+  'collection-item': definition({
+    type: 'collection-item',
+    version: 1,
+    label: 'Collection item template',
+    category: 'layout',
+    editorTagName: 'div',
+    defaultProps: {},
+    builder: {
+      insertable: false,
+      group: 'layout',
+      description: 'The single template repeated by a collection list.',
+    },
+    slots: [
+      {
+        name: 'content',
+        label: 'Item content',
+        accepts: [
+          'container',
+          'text',
+          'heading',
+          'image',
+          'button',
+          'link',
+          'divider',
+          'list',
+          'video',
+          'quote',
+          'accordion',
+          'tabs',
+          'gallery',
+          'collection-list',
+        ],
       },
     ],
   }),

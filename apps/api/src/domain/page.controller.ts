@@ -360,9 +360,14 @@ export class PreviewPageController {
   @Get(':pageId')
   async getPreviewPage(
     @Param('pageId') pageId: string,
+    @Query('entryId') entryId: string | undefined,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.read');
-    return this.pageService.resolvePreview(pageId, requireWorkspaceId(principal));
+    return this.pageService.resolvePreview(
+      pageId,
+      requireWorkspaceId(principal),
+      entryId,
+    );
   }
 }

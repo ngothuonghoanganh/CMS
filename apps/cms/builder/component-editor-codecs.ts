@@ -6,6 +6,7 @@ import {
   CountdownPropsSchema,
   FormPropsSchema,
   ListPropsSchema,
+  CollectionListPropsSchema,
   PAGE_COMPONENT_REGISTRY,
   QuotePropsSchema,
   TabItemPropsSchema,
@@ -34,6 +35,7 @@ import {
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_HEADING_LEVEL_ATTRIBUTE,
   BUILDER_LIST_PROPS_ATTRIBUTE,
+  BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE,
   BUILDER_QUOTE_PROPS_ATTRIBUTE,
   BUILDER_TEXT_ALIGN_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -120,6 +122,11 @@ const componentPropsReaders: Partial<Record<PageComponentType, ComponentPropsRea
   container: emptyPropsReader,
   divider: emptyPropsReader,
   gallery: emptyPropsReader,
+  'collection-item': emptyPropsReader,
+  'collection-list': jsonPropsReader(
+    'data-payload-collection-list-props',
+    CollectionListPropsSchema,
+  ),
   'reusable-instance': jsonPropsReader(
     'data-payload-reusable-props',
     ReusableInstancePropsSchema,
@@ -234,6 +241,21 @@ const listCodec: ComponentEditorCodec = {
   },
 };
 
+const collectionListCodec: ComponentEditorCodec = {
+  ...genericCodec,
+  resolvePropertyMutation: (type, property, value, component) => {
+    if (!component || (property !== 'queryId' && property !== 'emptyMessage')) {
+      return genericCodec.resolvePropertyMutation(type, property, value, component);
+    }
+    const current = parsedJson(
+      component.getAttributes({ noStyle: true })[BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE],
+      CollectionListPropsSchema,
+    );
+    if (!current) return null;
+    return resolveEditorPropertyUpdate(type, property, { ...current, [property]: value });
+  },
+};
+
 const countdownCodec: ComponentEditorCodec = {
   ...genericCodec,
   resolvePropertyMutation: (type, property, value, component) => {
@@ -301,6 +323,8 @@ export const COMPONENT_EDITOR_CODECS: Readonly<
   tabs: tabsCodec,
   'tab-item': tabItemCodec,
   gallery: genericCodec,
+  'collection-list': collectionListCodec,
+  'collection-item': genericCodec,
   'global-header': globalHeaderCodec,
   'global-footer': globalFooterCodec,
   'navigation-view': navigationViewCodec,

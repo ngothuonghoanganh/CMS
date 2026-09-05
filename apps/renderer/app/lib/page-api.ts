@@ -101,6 +101,7 @@ export const getPublicRoutesForHostname = cache(async function getPublicRoutesFo
 
 export const getPreviewPage = cache(async function getPreviewPage(
   pageId: string,
+  entryId?: string,
 ): Promise<PublicPage | null> {
   const cookieHeader = (await cookies()).toString();
   const requestInit: RequestInit = { cache: 'no-store' };
@@ -108,7 +109,9 @@ export const getPreviewPage = cache(async function getPreviewPage(
     requestInit.headers = { cookie: cookieHeader };
   }
   const response = await fetch(
-    uncachedApiUrl(`/preview/pages/${encodeURIComponent(pageId)}`),
+    uncachedApiUrl(
+      `/preview/pages/${encodeURIComponent(pageId)}${entryId ? `?entryId=${encodeURIComponent(entryId)}` : ''}`,
+    ),
     requestInit,
   );
   return readPageResponse(response);

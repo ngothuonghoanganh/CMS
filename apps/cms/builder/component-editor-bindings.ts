@@ -4,6 +4,7 @@ import {
   FormPropsSchema,
   CountdownPropsSchema,
   ListPropsSchema,
+  CollectionListPropsSchema,
   QuotePropsSchema,
   AccordionPropsSchema,
   AccordionPropsV6Schema,
@@ -28,6 +29,7 @@ import {
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   BUILDER_LIST_PROPS_ATTRIBUTE,
+  BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE,
   sanitizeInlineText,
 } from './builder-adapter';
 import type { EditorCommand } from './editor-commands';
@@ -221,6 +223,20 @@ export function resolveEditorPropertyUpdate(
       kind: 'attributes',
       attributes: { [BUILDER_LIST_PROPS_ATTRIBUTE]: JSON.stringify(parsed) },
       listProps: parsed,
+    };
+  }
+
+  if (
+    type === 'collection-list' &&
+    (property === 'queryId' || property === 'emptyMessage')
+  ) {
+    const parsed = CollectionListPropsSchema.safeParse(value);
+    if (!parsed.success) throw new Error('Collection list properties are invalid');
+    return {
+      kind: 'attributes',
+      attributes: {
+        [BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE]: JSON.stringify(parsed.data),
+      },
     };
   }
 

@@ -65,6 +65,8 @@ import { LayoutExtensionService } from './layout-extension.service';
 import { SiteUrlService } from './site-url.service';
 import { ReusableController } from './reusable.controller';
 import { ReusableService } from './reusable.service';
+import { CollectionController } from './collection.controller';
+import { CollectionService } from './collection.service';
 
 @Module({
   imports: [
@@ -99,6 +101,7 @@ import { ReusableService } from './reusable.service';
     NavigationController,
     LayoutExtensionController,
     ReusableController,
+    CollectionController,
   ],
   providers: [
     AssetService,
@@ -122,6 +125,7 @@ import { ReusableService } from './reusable.service';
     PublicPageResolver,
     SeoService,
     ReusableService,
+    CollectionService,
     {
       provide: DOMAIN_VERIFICATION_RESOLVER,
       useFactory: () =>

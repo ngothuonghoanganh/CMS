@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_RESPONSIVE_BREAKPOINTS,
-  PagePayloadV5Schema,
   PagePayloadV7Schema,
   createDefaultSiteDesignSystem,
   SITE_GLOBAL_COMPONENT_TYPES,
@@ -742,8 +741,8 @@ describe('PagePayloadV1 renderer', () => {
   });
 
   it('keeps every registered component type renderable', () => {
-    const payload = PagePayloadV5Schema.parse({
-      version: 5,
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
       metadata: { documentTitle: 'Registry coverage' },
       root: {
         id: 'root',
@@ -887,13 +886,44 @@ describe('PagePayloadV1 renderer', () => {
                   },
                 ],
               },
+              {
+                id: 'collection-list',
+                type: 'collection-list',
+                props: {
+                  queryId: '77777777-7777-4777-8777-777777777777',
+                  emptyMessage: 'No registry products',
+                },
+                children: [
+                  {
+                    id: 'collection-item',
+                    type: 'collection-item',
+                    props: {},
+                    children: [],
+                  },
+                ],
+              },
             ],
           },
         ],
       },
     });
 
-    const markup = renderToStaticMarkup(renderPage(payload));
+    const markup = renderToStaticMarkup(
+      renderPage(payload, {
+        dataContext: {
+          queryItems: {
+            ['77777777-7777-4777-8777-777777777777']: [
+              {
+                id: '88888888-8888-4888-8888-888888888888',
+                collectionId: '99999999-9999-4999-8999-999999999999',
+                values: {},
+              },
+            ],
+          },
+          variables: {},
+        },
+      }),
+    );
     for (const type of Object.keys(PAGE_COMPONENT_REGISTRY).filter(
       (candidate) =>
         !(SITE_GLOBAL_COMPONENT_TYPES as readonly string[]).includes(candidate) &&
@@ -961,5 +991,75 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('Launch your next campaign');
     expect(markup).toContain('href="/learn"');
     expect(markup).not.toContain('dangerouslySetInnerHTML');
+  });
+
+  it('repeats one collection template and applies a finite query-item binding', () => {
+    const queryId = '22222222-2222-4222-8222-222222222222';
+    const collectionId = '33333333-3333-4333-8333-333333333333';
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
+      metadata: { documentTitle: 'Products' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'products',
+            type: 'collection-list',
+            props: { queryId, emptyMessage: 'No products' },
+            children: [
+              {
+                id: 'item-template',
+                type: 'collection-item',
+                props: {},
+                children: [
+                  {
+                    id: 'item-title',
+                    type: 'text',
+                    props: { text: 'Fallback title' },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const markup = renderToStaticMarkup(
+      renderPage(payload, {
+        bindings: [
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            targetNodeId: 'item-title',
+            targetProperty: 'text',
+            source: { type: 'query-item', sourceId: queryId, path: 'title' },
+            fallback: 'Fallback title',
+          },
+        ],
+        dataContext: {
+          queryItems: {
+            [queryId]: [
+              {
+                id: '55555555-5555-4555-8555-555555555555',
+                collectionId,
+                values: { title: 'Product A' },
+              },
+              {
+                id: '66666666-6666-4666-8666-666666666666',
+                collectionId,
+                values: { title: 'Product B' },
+              },
+            ],
+          },
+          variables: {},
+        },
+      }),
+    );
+    expect(markup).toContain('Product A');
+    expect(markup).toContain('Product B');
+    expect(markup).toContain('data-payload-node-type="collection-list"');
+    expect(markup).not.toContain('No products');
   });
 });

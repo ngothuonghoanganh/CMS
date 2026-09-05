@@ -70,6 +70,7 @@ import { NavigationView } from './navigation-view';
 import { DesignSystemView } from './design-system-view';
 import { PagesView as SiteMapPagesView } from './pages/pages-view';
 import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
+import { CollectionsView } from './collections-view';
 
 type View =
   | 'dashboard'
@@ -79,6 +80,7 @@ type View =
   | 'design-system'
   | 'assets'
   | 'templates'
+  | 'collections'
   | 'submissions'
   | 'integrations'
   | 'analytics'
@@ -137,6 +139,7 @@ const viewLabels: Record<View, string> = {
   sites: 'Sites',
   submissions: 'Submissions',
   templates: 'Templates',
+  collections: 'Collections',
   users: 'Users',
   extensions: 'Extensions',
   workflows: 'Workflows',
@@ -1403,6 +1406,9 @@ export default function CmsDashboard() {
         ...(can('page.read')
           ? [{ icon: '▤', key: 'pages' as const, label: 'Pages' }]
           : []),
+        ...(can('collection.read')
+          ? [{ icon: '▥', key: 'collections' as const, label: 'Collections' }]
+          : []),
         ...(can('site.read')
           ? [{ icon: '≡', key: 'navigation' as const, label: 'Navigation' }]
           : []),
@@ -1766,6 +1772,17 @@ export default function CmsDashboard() {
               onSaveFormBinding={(formNodeId, integrationIds) =>
                 void saveFormBinding(formNodeId, integrationIds)
               }
+            />
+          ) : null}
+          {view === 'collections' ? (
+            <CollectionsView
+              canCreate={can('collection.create') && can('entry.create')}
+              canDelete={can('collection.delete')}
+              canPublish={can('entry.publish')}
+              canUpdate={can('collection.update') && can('entry.update')}
+              selectedSiteId={selectedSiteId}
+              sites={sites}
+              workspaceId={session.workspace.id}
             />
           ) : null}
           {view === 'navigation' ? (

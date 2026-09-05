@@ -13,6 +13,8 @@ import {
   type PagePreviewSnapshot,
   type PageLayoutComposition,
   type ResolvedNavigationItem,
+  type PageBinding,
+  type ResolvedDataContext,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactElement } from 'react';
 
@@ -36,6 +38,8 @@ type PreviewBridgeProps = {
         footer?: readonly ResolvedNavigationItem[] | undefined;
       }
     | undefined;
+  bindings?: readonly PageBinding[] | undefined;
+  dataContext?: ResolvedDataContext | undefined;
 };
 
 function rendererContext(
@@ -55,6 +59,8 @@ function rendererContext(
     ...(snapshot.globals ? { globals: snapshot.globals } : {}),
     ...(snapshot.reusables?.length ? { reusables: snapshot.reusables } : {}),
     ...(snapshot.designSystem ? { designSystem: snapshot.designSystem } : {}),
+    ...(snapshot.bindings?.length ? { bindings: snapshot.bindings } : {}),
+    ...(snapshot.dataContext ? { dataContext: snapshot.dataContext } : {}),
     ...(snapshot.extensions?.length
       ? {
           runtimeIds: snapshot.extensions.flatMap((extension) => extension.runtimeIds),
@@ -88,6 +94,8 @@ export function PreviewBridge({
   globals,
   layout,
   navigation,
+  bindings,
+  dataContext,
 }: PreviewBridgeProps) {
   const [snapshot, setSnapshot] = useState(() =>
     PagePreviewSnapshotSchema.parse({
@@ -98,6 +106,8 @@ export function PreviewBridge({
       ...(globals ? { globals } : {}),
       ...(layout ? { layout } : {}),
       ...(navigation ? { navigation } : {}),
+      ...(bindings ? { bindings } : {}),
+      ...(dataContext ? { dataContext } : {}),
     }),
   );
 

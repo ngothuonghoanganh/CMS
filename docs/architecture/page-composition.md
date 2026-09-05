@@ -10,6 +10,7 @@ PageComposition
   attachments       (PageExtensionAttachment — ownership/configuration)
   layoutAttachments (Header/Footer placement)
   bindings          (data sources)
+  queries           (finite collection query definitions)
   actions           (runtime actions)
   resources         (extension resources)
 ```
@@ -18,6 +19,11 @@ PageComposition
 `PageComposition` and each new `PageVersion` contain the complete snapshot.
 Legacy versions without this field remain readable and are normalized when a
 new draft is saved.
+
+Queries and bindings are part of the same snapshot boundary as the visual
+payload. A `collection-list` stores one `collection-item` template and a query
+ID; runtime data rows are resolved separately and are never duplicated into the
+page document.
 
 ## Visual extension nodes
 

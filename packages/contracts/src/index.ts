@@ -15,6 +15,7 @@ import {
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   isSafePageStyleValue,
 } from './style-registry';
+import { DynamicPageMetadataSchema, PageQuerySchema } from './collections';
 
 export const apiVersion = 'v1' as const;
 
@@ -116,6 +117,15 @@ export const TenantPermissions = {
   WorkflowDisable: 'workflow.disable',
   WorkflowExecutionRead: 'workflow.execution.read',
   WorkflowExecutionRetry: 'workflow.execution.retry',
+  CollectionRead: 'collection.read',
+  CollectionCreate: 'collection.create',
+  CollectionUpdate: 'collection.update',
+  CollectionDelete: 'collection.delete',
+  EntryRead: 'entry.read',
+  EntryCreate: 'entry.create',
+  EntryUpdate: 'entry.update',
+  EntryPublish: 'entry.publish',
+  EntryDelete: 'entry.delete',
 } as const;
 
 export const TenantPermissionSchema = z.enum(
@@ -127,6 +137,8 @@ export * from './extensions';
 export * from './extension-platform';
 export * from './page-extensions';
 export * from './workflows';
+export * from './collections';
+export * from './data-runtime';
 
 export const RoleTypeSchema = z.enum(['system', 'custom']);
 export type RoleType = z.infer<typeof RoleTypeSchema>;
@@ -1570,6 +1582,18 @@ export const ListPropsSchema = z
   });
 export type ListProps = z.infer<typeof ListPropsSchema>;
 
+/** A bounded, declarative repeater. Runtime data is supplied by the page
+ * composition; the child tree contains exactly one collection-item template. */
+export const CollectionListPropsSchema = z
+  .object({
+    queryId: EntityIdSchema,
+    emptyMessage: z.string().trim().max(200).default('No items found'),
+  })
+  .strict();
+export type CollectionListProps = z.infer<typeof CollectionListPropsSchema>;
+export const CollectionItemPropsSchema = z.object({}).strict();
+export type CollectionItemProps = z.infer<typeof CollectionItemPropsSchema>;
+
 export const VideoPropsSchema = z
   .object({
     src: safeVideoSource,
@@ -2794,6 +2818,14 @@ export type TabsNodeV7 = PageNodeV7Base & {
 };
 export type TabItemNodeV7 = PageNodeV7Base & { type: 'tab-item'; props: TabItemProps };
 export type GalleryNodeV7 = PageNodeV7Base & { type: 'gallery'; props: {} };
+export type CollectionListNodeV7 = PageNodeV7Base & {
+  type: 'collection-list';
+  props: CollectionListProps;
+};
+export type CollectionItemNodeV7 = PageNodeV7Base & {
+  type: 'collection-item';
+  props: CollectionItemProps;
+};
 export type GlobalHeaderNodeV7 = PageNodeV7Base & {
   type: 'global-header';
   props: GlobalHeaderProps;
@@ -2835,6 +2867,8 @@ export type PageNodeV7 =
   | TabsNodeV7
   | TabItemNodeV7
   | GalleryNodeV7
+  | CollectionListNodeV7
+  | CollectionItemNodeV7
   | GlobalHeaderNodeV7
   | GlobalFooterNodeV7
   | NavigationViewNodeV7
@@ -2924,6 +2958,16 @@ export const PageNodeV7Schema: z.ZodType<PageNodeV7> = z.lazy(() =>
     ),
     pageNodeV7Base(z.literal('tab-item'), TabItemPropsSchema, pageNodeV7Children()),
     pageNodeV7Base(z.literal('gallery'), z.object({}).strict(), pageNodeV7Children()),
+    pageNodeV7Base(
+      z.literal('collection-list'),
+      CollectionListPropsSchema,
+      z.array(PageNodeV7Schema).length(1),
+    ),
+    pageNodeV7Base(
+      z.literal('collection-item'),
+      CollectionItemPropsSchema,
+      pageNodeV7Children(),
+    ),
     pageNodeV7Base(
       z.literal('global-header'),
       GlobalHeaderPropsSchema,
@@ -3778,6 +3822,7 @@ export const PageDocumentSchema = z
         bindings: z.array(PageBindingSchema).max(200).default([]),
         actions: z.array(PageActionSchema).max(200).default([]),
         resources: z.array(PageResourceSchema).max(200).default([]),
+        queries: z.array(PageQuerySchema).max(100).default([]).optional(),
       })
       .strict()
       .optional(),
@@ -3829,9 +3874,18 @@ export const PageCompositionFieldsSchema = z
     bindings: z.array(PageBindingSchema).max(200).default([]),
     actions: z.array(PageActionSchema).max(200).default([]),
     resources: z.array(PageResourceSchema).max(200).default([]),
+    queries: z.array(PageQuerySchema).max(100).default([]),
   })
   .strict();
-export type PageCompositionFields = z.infer<typeof PageCompositionFieldsSchema>;
+// Input compatibility: older Phase 19 editor snapshots omit queries. The
+// parser always materializes an empty array, while callers may still pass the
+// legacy shape during a rolling upgrade.
+export type PageCompositionFields = Omit<
+  z.infer<typeof PageCompositionFieldsSchema>,
+  'queries'
+> & {
+  queries?: z.infer<typeof PageQuerySchema>[] | undefined;
+};
 
 /** Input accepted by draft saves. `pageId` is optional because the route owns it. */
 export const PageCompositionInputSchema = PageCompositionFieldsSchema.extend({
@@ -3849,9 +3903,19 @@ export const PageCompositionSchema = z
     bindings: z.array(PageBindingSchema).max(200).default([]),
     actions: z.array(PageActionSchema).max(200).default([]),
     resources: z.array(PageResourceSchema).max(200).default([]),
+    queries: z.array(PageQuerySchema).max(100).default([]),
   })
   .strict();
 export type PageComposition = z.infer<typeof PageCompositionSchema>;
+
+/** Page-independent composition carried by a reusable design template. */
+export const TemplateCompositionSchema = PageCompositionFieldsSchema.pick({
+  bindings: true,
+  actions: true,
+  resources: true,
+  queries: true,
+}).strict();
+export type TemplateComposition = z.infer<typeof TemplateCompositionSchema>;
 
 export const PublishedPageBundleSchema = z
   .object({
@@ -3864,6 +3928,7 @@ export const PublishedPageBundleSchema = z
     bindings: z.array(PageBindingSchema).max(200),
     actions: z.array(PageActionSchema).max(200),
     resources: z.array(PageResourceSchema).max(200),
+    queries: z.array(PageQuerySchema).max(100).default([]),
     extensions: z.array(PageRuntimeExtensionSchema).max(100),
     extensionVersions: z.record(
       z.string().trim().min(1).max(120),
@@ -4200,6 +4265,7 @@ export const PageKindSchema = z.enum([
   'landing',
   'system',
   'collection-template',
+  'dynamic',
 ]);
 export type PageKind = z.infer<typeof PageKindSchema>;
 
@@ -4212,6 +4278,9 @@ export const PageSchema = z
     description: z.string().trim().max(500).optional(),
     path: PagePathSchema,
     kind: PageKindSchema,
+    collectionId: EntityIdSchema.optional(),
+    pathPattern: DynamicPageMetadataSchema.shape.pathPattern.optional(),
+    lookupField: DynamicPageMetadataSchema.shape.lookupField.optional(),
     status: PageStatusSchema,
     parentId: EntityIdSchema.optional(),
     anchors: z
@@ -4229,7 +4298,40 @@ export const PageSchema = z
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((page, context) => {
+    const hasDynamicMetadata = Boolean(
+      page.collectionId || page.pathPattern || page.lookupField,
+    );
+    if (page.kind === 'dynamic' && !page.collectionId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['collectionId'],
+        message: 'Dynamic pages require a collection',
+      });
+    }
+    if (page.kind === 'dynamic' && !page.pathPattern) {
+      context.addIssue({
+        code: 'custom',
+        path: ['pathPattern'],
+        message: 'Dynamic pages require a path pattern',
+      });
+    }
+    if (page.kind === 'dynamic' && !page.lookupField) {
+      context.addIssue({
+        code: 'custom',
+        path: ['lookupField'],
+        message: 'Dynamic pages require a lookup field',
+      });
+    }
+    if (page.kind !== 'dynamic' && hasDynamicMetadata) {
+      context.addIssue({
+        code: 'custom',
+        path: ['kind'],
+        message: 'Only dynamic pages can define dynamic metadata',
+      });
+    }
+  });
 
 const PublicSiteSchema = z
   .object({
@@ -4247,6 +4349,7 @@ const PublicPageSummarySchema = z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       .optional(),
+    pathPattern: DynamicPageMetadataSchema.shape.pathPattern.optional(),
   })
   .strict();
 
@@ -4533,6 +4636,37 @@ export const PagePreviewSnapshotSchema = z
     extensions: z.array(PageRuntimeExtensionSchema).max(100).optional(),
     reusables: z.array(ReusableRuntimeSchema).max(200).optional(),
     designSystem: SiteDesignSystemSchema.optional(),
+    bindings: z.array(PageBindingSchema).max(200).optional(),
+    dataContext: z
+      .object({
+        currentEntry: z
+          .object({
+            id: EntityIdSchema,
+            collectionId: EntityIdSchema,
+            values: z.record(z.string(), z.unknown()),
+          })
+          .strict()
+          .optional(),
+        queryItems: z
+          .record(
+            z.string().uuid(),
+            z
+              .array(
+                z
+                  .object({
+                    id: EntityIdSchema,
+                    collectionId: EntityIdSchema,
+                    values: z.record(z.string(), z.unknown()),
+                  })
+                  .strict(),
+              )
+              .max(100),
+          )
+          .default({}),
+        variables: z.record(z.string(), z.unknown()).default({}),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type PagePreviewSnapshot = z.infer<typeof PagePreviewSnapshotSchema>;
@@ -4630,6 +4764,7 @@ export const PublicPageSchema = z
     site: PublicSiteSchema,
     page: PublicPageSummarySchema,
     payload: PagePayloadSchema,
+    bindings: z.array(PageBindingSchema).max(200).optional(),
     extensions: z.array(PageRuntimeExtensionSchema).optional(),
     seo: PublicSeoSettingsSchema.optional(),
     canonicalUrl: z.string().url().optional(),
@@ -4644,6 +4779,36 @@ export const PublicPageSchema = z
     globals: SiteGlobalsSchema.optional(),
     reusables: z.array(ReusableRuntimeSchema).max(200).optional(),
     designSystem: SiteDesignSystemSchema.optional(),
+    dataContext: z
+      .object({
+        currentEntry: z
+          .object({
+            id: EntityIdSchema,
+            collectionId: EntityIdSchema,
+            values: z.record(z.string(), z.unknown()),
+          })
+          .strict()
+          .optional(),
+        queryItems: z
+          .record(
+            z.string().uuid(),
+            z
+              .array(
+                z
+                  .object({
+                    id: EntityIdSchema,
+                    collectionId: EntityIdSchema,
+                    values: z.record(z.string(), z.unknown()),
+                  })
+                  .strict(),
+              )
+              .max(100),
+          )
+          .default({}),
+        variables: z.record(z.string(), z.unknown()).default({}),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -4691,6 +4856,7 @@ export const TemplateSchema = z
     description: z.string().trim().max(500).optional(),
     payload: PagePayloadSchema,
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    composition: TemplateCompositionSchema.optional(),
     latestVersionId: EntityIdSchema,
     publishedVersionId: EntityIdSchema.optional(),
     createdAt: timestampSchema,
@@ -4705,6 +4871,7 @@ export const TemplateVersionSchema = z
     versionNumber: z.number().int().positive(),
     payload: PagePayloadSchema,
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    composition: TemplateCompositionSchema.optional(),
     createdAt: timestampSchema,
     createdBy: z.string().trim().min(1).max(320).optional(),
   })
@@ -4861,6 +5028,9 @@ export const CreatePageRequestSchema = z
       .optional(),
     parentId: EntityIdSchema.optional(),
     kind: PageKindSchema.optional(),
+    collectionId: EntityIdSchema.optional(),
+    pathPattern: DynamicPageMetadataSchema.shape.pathPattern.optional(),
+    lookupField: DynamicPageMetadataSchema.shape.lookupField.optional(),
     anchors: z
       .array(z.string().regex(/^[a-z][a-z0-9_-]{0,127}$/))
       .max(200)
@@ -4870,7 +5040,29 @@ export const CreatePageRequestSchema = z
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
     appliedTemplate: AppliedTemplateMetadataSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((request, context) => {
+    if (request.kind === 'dynamic') {
+      if (!request.collectionId)
+        context.addIssue({
+          code: 'custom',
+          path: ['collectionId'],
+          message: 'Dynamic pages require a collection',
+        });
+      if (!request.pathPattern)
+        context.addIssue({
+          code: 'custom',
+          path: ['pathPattern'],
+          message: 'Dynamic pages require a path pattern',
+        });
+      if (!request.lookupField)
+        context.addIssue({
+          code: 'custom',
+          path: ['lookupField'],
+          message: 'Dynamic pages require a lookup field',
+        });
+    }
+  });
 export const UpdatePageRequestSchema = z
   .object({
     name: nonEmptyText.max(200).optional(),
@@ -4885,6 +5077,9 @@ export const UpdatePageRequestSchema = z
     composition: PageCompositionInputSchema.optional(),
     parentId: EntityIdSchema.nullable().optional(),
     kind: PageKindSchema.optional(),
+    collectionId: EntityIdSchema.nullable().optional(),
+    pathPattern: DynamicPageMetadataSchema.shape.pathPattern.nullable().optional(),
+    lookupField: DynamicPageMetadataSchema.shape.lookupField.nullable().optional(),
     anchors: z
       .array(z.string().regex(/^[a-z][a-z0-9_-]{0,127}$/))
       .max(200)
@@ -4954,6 +5149,7 @@ export const CreateTemplateRequestSchema = z
     siteId: EntityIdSchema.optional(),
     payload: PagePayloadSchema,
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    composition: TemplateCompositionSchema.optional(),
   })
   .strict();
 
@@ -4963,6 +5159,7 @@ export const UpdateTemplateRequestSchema = z
     description: z.string().trim().max(500).nullable().optional(),
     payload: PagePayloadSchema.optional(),
     layoutAttachments: PageLayoutAttachmentsSchema.optional(),
+    composition: TemplateCompositionSchema.optional(),
     /** Prevents a stale template builder from silently replacing a newer draft. */
     expectedVersionNumber: z.number().int().positive().optional(),
   })

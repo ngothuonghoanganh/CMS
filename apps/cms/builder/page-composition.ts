@@ -87,6 +87,7 @@ export function compositionFieldsFromPayload(
     bindings: source.bindings,
     actions: source.actions,
     resources: source.resources,
+    queries: source.queries ?? [],
   });
 }
 
@@ -96,9 +97,14 @@ export function pageDocumentSignature(value: unknown): string {
     if (Array.isArray(input)) {
       const normalized = input.map((entry) => normalize(entry, key));
       if (
-        ['attachments', 'layoutAttachments', 'bindings', 'actions', 'resources'].includes(
-          key,
-        ) &&
+        [
+          'attachments',
+          'layoutAttachments',
+          'bindings',
+          'actions',
+          'resources',
+          'queries',
+        ].includes(key) &&
         normalized.every(
           (entry) =>
             typeof entry === 'object' &&

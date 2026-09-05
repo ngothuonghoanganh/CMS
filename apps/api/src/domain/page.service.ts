@@ -24,6 +24,9 @@ import {
   PageVersionListResponseSchema,
   PageVersionSchema,
   PageCompositionSchema,
+  DynamicPageMetadataSchema,
+  dynamicPathBase,
+  matchDynamicPath,
   PaginationQuerySchema,
   PublishPageRequestSchema,
   UpdatePageRequestSchema,
@@ -41,6 +44,8 @@ import {
   type PageComposition,
   type PageCompositionInput,
   type PageVersion,
+  type ResolvedDataRecord,
+  ResolvedDataRecordSchema,
   type PageRuntimeExtension,
   type PaginationQuery,
   type PublishPageRequest,
@@ -64,6 +69,7 @@ import { SiteService } from './site.service';
 import { NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
+import { CollectionService } from './collection.service';
 import {
   PageCompositionError,
   clonePageCompositionForPage,
@@ -92,6 +98,7 @@ export class PageService {
     @Inject(LayoutExtensionService)
     private readonly layoutExtensions: LayoutExtensionService,
     @Inject(ReusableService) private readonly reusables: ReusableService,
+    @Inject(CollectionService) private readonly collections: CollectionService,
   ) {}
 
   async create(
@@ -104,6 +111,17 @@ export class PageService {
       await this.sites.ensureHomePage(site);
       const payload = this.parsePayload(input.payload);
       const pageId = randomUUID();
+      const kind = input.kind ?? 'standard';
+      const dynamicMetadata =
+        kind === 'dynamic'
+          ? await this.requireDynamicMetadata(
+              input.collectionId,
+              input.pathPattern,
+              input.lookupField,
+              site.workspaceId,
+              siteId,
+            )
+          : undefined;
       const composition = this.normalizeComposition(
         pageId,
         payload,
@@ -112,12 +130,19 @@ export class PageService {
         input.composition?.layoutAttachments ?? input.layoutAttachments,
       );
       const path = this.requirePath(
-        input.path ??
+        (dynamicMetadata ? dynamicPathBase(dynamicMetadata.pathPattern) : undefined) ??
+          input.path ??
           (input.slug
             ? `/${normalizeUrlSlug(input.slug)}`
             : `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`),
       );
-      const legacySlug = normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
+      if (!dynamicMetadata) {
+        await this.assertStaticPathDoesNotMatchDynamic(workspaceId, siteId, path);
+      }
+      const legacySlug =
+        kind === 'dynamic'
+          ? undefined
+          : normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
       if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
       const requestedLayoutAttachments =
         input.composition?.layoutAttachments ?? input.layoutAttachments;
@@ -138,7 +163,8 @@ export class PageService {
           name: input.name,
           ...(input.description ? { description: input.description } : {}),
           path,
-          kind: input.kind ?? 'standard',
+          kind,
+          ...(dynamicMetadata ? dynamicMetadata : {}),
           ...(input.parentId ? { parentId: input.parentId } : {}),
           ...(input.anchors ? { anchors: input.anchors } : {}),
           ...(legacySlug ? { slug: legacySlug } : {}),
@@ -252,7 +278,10 @@ export class PageService {
       }
     }
     if (parsedInput.path !== undefined && parsedInput.path !== null) {
-      page.path = this.requirePath(parsedInput.path);
+      page.path =
+        page.kind === 'dynamic' && page.pathPattern
+          ? dynamicPathBase(page.pathPattern)
+          : this.requirePath(parsedInput.path);
       const legacySlug = normalizeUrlSlug(page.path.replace(/^\/+/, ''));
       if (legacySlug) page.slug = legacySlug;
     }
@@ -277,6 +306,51 @@ export class PageService {
     }
     if (parsedInput.kind !== undefined) {
       page.kind = parsedInput.kind;
+    }
+    if (parsedInput.collectionId !== undefined) {
+      if (parsedInput.collectionId === null) page.set('collectionId', undefined);
+      else page.collectionId = parsedInput.collectionId;
+    }
+    if (parsedInput.pathPattern !== undefined) {
+      if (parsedInput.pathPattern === null) page.set('pathPattern', undefined);
+      else {
+        page.pathPattern = parsedInput.pathPattern;
+        page.path = dynamicPathBase(parsedInput.pathPattern);
+      }
+    }
+    if (parsedInput.lookupField !== undefined) {
+      if (parsedInput.lookupField === null) page.set('lookupField', undefined);
+      else page.lookupField = parsedInput.lookupField;
+    }
+    if (page.kind === 'dynamic') {
+      const dynamicMetadata = await this.requireDynamicMetadata(
+        page.collectionId,
+        page.pathPattern,
+        page.lookupField,
+        workspaceId,
+        page.siteId,
+        page._id.toString(),
+      );
+      page.path = dynamicPathBase(dynamicMetadata.pathPattern);
+      page.set(dynamicMetadata);
+      page.set('slug', undefined);
+    } else if (parsedInput.kind === 'dynamic') {
+      throw new BadRequestException({
+        code: 'DYNAMIC_PAGE_METADATA_REQUIRED',
+        message: 'Dynamic pages require collectionId, pathPattern, and lookupField',
+      });
+    } else {
+      // A page that leaves dynamic mode must not retain route metadata that
+      // would make the persisted contract ambiguous or collide at resolve time.
+      page.set('collectionId', undefined);
+      page.set('pathPattern', undefined);
+      page.set('lookupField', undefined);
+      await this.assertStaticPathDoesNotMatchDynamic(
+        workspaceId,
+        page.siteId,
+        page.path ?? '/',
+        page._id.toString(),
+      );
     }
     if (parsedInput.anchors !== undefined) {
       page.anchors = parsedInput.anchors;
@@ -357,6 +431,13 @@ export class PageService {
         ...(source.description ? { description: source.description } : {}),
         path,
         kind: source.kind ?? 'standard',
+        ...(source.kind === 'dynamic'
+          ? {
+              ...(source.collectionId ? { collectionId: source.collectionId } : {}),
+              ...(source.pathPattern ? { pathPattern: source.pathPattern } : {}),
+              ...(source.lookupField ? { lookupField: source.lookupField } : {}),
+            }
+          : {}),
         ...(source.parentId ? { parentId: source.parentId } : {}),
         ...(source.anchors ? { anchors: [...source.anchors] } : {}),
       });
@@ -464,6 +545,12 @@ export class PageService {
       storedComposition.success ? storedComposition.data.payload : version.payload,
     );
     const composition = this.compositionForVersion(page, version, payload, false);
+    if (!composition) {
+      throw new InternalServerErrorException({
+        code: 'PAGE_COMPOSITION_INVALID',
+        message: 'The selected page composition could not be normalized',
+      });
+    }
     await this.reusables.assertDependenciesAvailable(
       page.workspaceId,
       page.siteId,
@@ -481,6 +568,11 @@ export class PageService {
       pageId,
       workspaceId,
       payload,
+      composition,
+    );
+    await this.collections.validateComposition(
+      page.workspaceId,
+      page.siteId,
       composition,
     );
     const publishedBundle = await this.pageExtensions.compilePublishedBundle(
@@ -525,7 +617,11 @@ export class PageService {
     return this.publicPageResolver.resolveByPath(siteSlug, path);
   }
 
-  async resolvePreview(pageId: string, workspaceId: string): Promise<PublicPage> {
+  async resolvePreview(
+    pageId: string,
+    workspaceId: string,
+    entryId?: string,
+  ): Promise<PublicPage> {
     const page = await this.requirePageDocument(pageId, workspaceId);
     const site = await this.siteModel.findOne({ _id: page.siteId, workspaceId }).exec();
 
@@ -541,7 +637,28 @@ export class PageService {
       });
     }
 
-    return this.toPublicContract(site, page, version, true);
+    let currentEntry: ResolvedDataRecord | undefined;
+    if (page.kind === 'dynamic') {
+      if (!entryId) {
+        throw new BadRequestException({
+          code: 'DYNAMIC_PREVIEW_ENTRY_REQUIRED',
+          message: 'Reviewing a dynamic page requires an entryId',
+        });
+      }
+      const entry = await this.collections.getEntry(
+        workspaceId,
+        page.siteId,
+        page.collectionId!,
+        entryId,
+        'draft',
+      );
+      currentEntry = ResolvedDataRecordSchema.parse({
+        id: entry.id,
+        collectionId: entry.collectionId,
+        values: entry.values,
+      });
+    }
+    return this.toPublicContract(site, page, version, true, currentEntry);
   }
 
   async listVersions(
@@ -635,6 +752,7 @@ export class PageService {
           bindings: previous.bindings,
           actions: previous.actions,
           resources: previous.resources,
+          queries: previous.queries,
         },
       );
     }
@@ -858,6 +976,113 @@ export class PageService {
     return normalized;
   }
 
+  private async requireDynamicMetadata(
+    collectionId: string | null | undefined,
+    pathPattern: string | null | undefined,
+    lookupField: string | null | undefined,
+    workspaceId: string,
+    siteId: string,
+    exceptPageId?: string,
+  ): Promise<{ collectionId: string; pathPattern: string; lookupField: string }> {
+    const metadata = DynamicPageMetadataSchema.safeParse({
+      collectionId,
+      pathPattern,
+      lookupField,
+    });
+    if (!metadata.success) {
+      throw new BadRequestException({
+        code: 'DYNAMIC_PAGE_METADATA_REQUIRED',
+        message:
+          'Dynamic pages require a collection, one parameter path pattern, and a lookup field',
+      });
+    }
+    const collection = await this.collections.get(
+      workspaceId,
+      siteId,
+      metadata.data.collectionId,
+    );
+    if (
+      !collection.fields.some(
+        (field) => field.key === metadata.data.lookupField && field.status === 'active',
+      )
+    ) {
+      throw new BadRequestException({
+        code: 'DYNAMIC_LOOKUP_FIELD_NOT_FOUND',
+        message: 'The dynamic page lookup field is not active in the collection',
+      });
+    }
+    const dynamicBase = dynamicPathBase(metadata.data.pathPattern);
+    const existingDynamicPages = await this.pageModel
+      .find({
+        workspaceId,
+        siteId,
+        kind: 'dynamic',
+        ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
+      })
+      .select({ _id: 1, pathPattern: 1 })
+      .limit(10_000)
+      .exec();
+    if (
+      existingDynamicPages.some(
+        (page) => page.pathPattern && dynamicPathBase(page.pathPattern) === dynamicBase,
+      )
+    ) {
+      throw new ConflictException({
+        code: 'DYNAMIC_PATH_CONFLICT',
+        message: 'A dynamic page already owns this route base',
+      });
+    }
+    const staticPages = await this.pageModel
+      .find({
+        workspaceId,
+        siteId,
+        kind: { $ne: 'dynamic' },
+        ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
+      })
+      .select({ _id: 1, path: 1 })
+      .limit(10_000)
+      .exec();
+    if (
+      staticPages.some((page) =>
+        Boolean(page.path && matchDynamicPath(metadata.data.pathPattern, page.path)),
+      )
+    ) {
+      throw new ConflictException({
+        code: 'DYNAMIC_PATH_CONFLICT',
+        message: 'A static page already occupies a route matched by this dynamic page',
+      });
+    }
+    return metadata.data;
+  }
+
+  private async assertStaticPathDoesNotMatchDynamic(
+    workspaceId: string,
+    siteId: string,
+    path: string,
+    exceptPageId?: string,
+  ): Promise<void> {
+    const dynamicPages = await this.pageModel
+      .find({
+        workspaceId,
+        siteId,
+        kind: 'dynamic',
+        ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
+      })
+      .select({ pathPattern: 1 })
+      .limit(10_000)
+      .exec();
+    if (
+      dynamicPages.some(
+        (page) => page.pathPattern && matchDynamicPath(page.pathPattern, path),
+      )
+    ) {
+      throw new ConflictException({
+        code: 'DYNAMIC_PATH_CONFLICT',
+        message: 'The static page path is matched by a dynamic page',
+      });
+    }
+  }
+
   private async findAvailablePath(
     siteId: string,
     requestedPath: string,
@@ -940,6 +1165,9 @@ export class PageService {
       ...(record.description ? { description: record.description } : {}),
       path: this.requirePath(record.path ?? (record.slug ? `/${record.slug}` : '/')),
       kind: record.kind ?? 'standard',
+      ...(record.collectionId ? { collectionId: record.collectionId } : {}),
+      ...(record.pathPattern ? { pathPattern: record.pathPattern } : {}),
+      ...(record.lookupField ? { lookupField: record.lookupField } : {}),
       status:
         record.status === 'archived'
           ? 'archived'
@@ -971,6 +1199,7 @@ export class PageService {
     page: PageDocument,
     version: PageVersionDocument,
     preview = false,
+    currentEntry?: ResolvedDataRecord,
   ): Promise<PublicPage> {
     try {
       const versionContract = this.toVersionContract(version);
@@ -983,6 +1212,15 @@ export class PageService {
       // instead of consulting the mutable page-instance projection.
       const composition = this.compositionForVersion(page, version, payload);
       if (!composition) throw new Error('The draft page composition is unavailable');
+      const dataContext = await this.collections.resolveDataContext(
+        page.workspaceId,
+        page.siteId,
+        composition,
+        {
+          mode: preview ? 'draft' : 'published',
+          ...(currentEntry ? { currentEntry } : {}),
+        },
+      );
       const reusables = await this.reusables.resolveForPayload(
         page.workspaceId,
         page.siteId,
@@ -1040,6 +1278,8 @@ export class PageService {
         ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),
         ...(designSystem ? { designSystem } : {}),
+        ...(composition.bindings.length ? { bindings: composition.bindings } : {}),
+        dataContext,
       });
     } catch {
       throw this.invalidPublishedPage();

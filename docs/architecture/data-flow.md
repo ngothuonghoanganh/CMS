@@ -5,7 +5,7 @@
 ```text
 Builder working PageDocument
   -> canonical PageComposition { payload, attachments, layoutAttachments,
-     bindings, actions, resources }
+     bindings, queries, actions, resources }
   -> Zod composition/payload validation
   -> PageController
   -> PageService ownership/version checks
@@ -96,6 +96,21 @@ Raw GrapesJS project JSON is transient editor state only. The API receives only 
 validated canonical composition, and a stale expected version becomes a visible
 conflict instead of an overwrite. `GET /preview/pages/:pageId` reads that persisted
 draft composition and is the Review boundary.
+
+## Phase 20 data flow
+
+```text
+PageComposition queries
+  -> CollectionService finite query validation
+  -> draft or published EntryVersion pointers
+  -> ResolvedDataContext { currentEntry, queryItems, variables }
+  -> shared PageBinding resolver
+  -> CMS preview or server-side renderer
+```
+
+The data snapshot is selected by the boundary: Review uses draft entries and
+public delivery uses published entries. The page bundle contains query and
+binding configuration, not an unbounded copy of collection rows.
 
 ## Phase 19 layout/template flow
 

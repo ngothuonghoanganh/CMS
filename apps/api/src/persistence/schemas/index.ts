@@ -18,6 +18,14 @@ export {
   LayoutExtensionVersionSchema,
 } from './layout-extension.schema';
 export { WorkspaceRecord, WorkspaceSchema } from './workspace.schema';
+export {
+  CollectionRecord,
+  CollectionSchema,
+  CollectionEntryRecord,
+  CollectionEntrySchema,
+  CollectionEntryVersionRecord,
+  CollectionEntryVersionSchema,
+} from './collection.schema';
 export { RoleRecord, RoleSchema } from './role.schema';
 export { RoleAssignmentRecord, RoleAssignmentSchema } from './role-assignment.schema';
 export { AuditLogRecord, AuditLogSchema } from './audit-log.schema';

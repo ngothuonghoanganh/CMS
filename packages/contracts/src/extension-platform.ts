@@ -262,12 +262,33 @@ export const PageBindingSchema = z
     targetProperty: z.string().trim().min(1).max(120),
     source: z
       .object({
-        type: z.enum(['static', 'variable', 'query']),
+        type: z.enum(['static', 'variable', 'query', 'query-item', 'current-entry']),
+        sourceId: z.string().uuid().optional(),
         path: z.string().trim().min(1).max(200),
+        /** A finite URL template. The only substitution token is {value}. */
+        template: z
+          .string()
+          .trim()
+          .max(2_048)
+          .refine(
+            (value) => !/[{}]/.test(value.replaceAll('{value}', '')),
+            'Only {value} is allowed in a binding template',
+          )
+          .optional(),
       })
       .strict(),
+    fallback: z.unknown().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((binding, context) => {
+    if (binding.source.type === 'query-item' && !binding.source.sourceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['source', 'sourceId'],
+        message: 'Query bindings require sourceId',
+      });
+    }
+  });
 export type PageBinding = z.infer<typeof PageBindingSchema>;
 
 export const PageActionSchema = z

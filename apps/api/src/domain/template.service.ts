@@ -13,9 +13,12 @@ import {
   TemplateVersionsResponseSchema,
   UpdateTemplateRequestSchema,
   PagePayloadSchema,
+  PageCompositionSchema,
   SiteDesignSystemSchema,
+  TemplateCompositionSchema,
   createDefaultSiteDesignSystem,
   type ApplyTemplateRequest,
+  type AnyPageNode,
   type CreateTemplateRequest,
   type PageLayoutAttachment,
   type PagePayload,
@@ -24,6 +27,7 @@ import {
   type Template,
   type TemplateListResponse,
   type TemplateVersion,
+  type TemplateComposition,
   type TemplateVersionsResponse,
   type UpdateTemplateRequest,
 } from '@payload/contracts';
@@ -40,6 +44,7 @@ import { LayoutExtensionService } from './layout-extension.service';
 import { PageService } from './page.service';
 import { ReusableService } from './reusable.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
+import { CollectionService } from './collection.service';
 
 /**
  * Design Templates are immutable, versioned starter snapshots. Applying a
@@ -66,6 +71,8 @@ export class TemplateService {
     private readonly layoutExtensions: LayoutExtensionService,
     @Inject(ReusableService)
     private readonly reusables: ReusableService,
+    @Inject(CollectionService)
+    private readonly collections: CollectionService,
   ) {}
 
   async create(workspaceId: string, input: CreateTemplateRequest): Promise<Template> {
@@ -101,6 +108,7 @@ export class TemplateService {
       ...(parsedInput.layoutAttachments
         ? { layoutAttachments: parsedInput.layoutAttachments }
         : {}),
+      ...(parsedInput.composition ? { composition: parsedInput.composition } : {}),
     });
     return this.toContract(record, {
       id: versionId,
@@ -108,6 +116,7 @@ export class TemplateService {
       ...(parsedInput.layoutAttachments
         ? { layoutAttachments: parsedInput.layoutAttachments }
         : {}),
+      ...(parsedInput.composition ? { composition: parsedInput.composition } : {}),
     });
   }
 
@@ -170,13 +179,19 @@ export class TemplateService {
     }
     if (
       parsedInput.payload !== undefined ||
-      parsedInput.layoutAttachments !== undefined
+      parsedInput.layoutAttachments !== undefined ||
+      parsedInput.composition !== undefined
     ) {
       const payload = parsedInput.payload ?? (latest?.payload as PagePayload | undefined);
       const layoutAttachments =
         parsedInput.layoutAttachments ??
         (latest?.layoutAttachments as PageLayoutAttachment[] | undefined) ??
         (parsedInput.payload ? [] : undefined);
+      const composition = parsedInput.composition
+        ? TemplateCompositionSchema.parse(parsedInput.composition)
+        : latest?.composition
+          ? TemplateCompositionSchema.parse(latest.composition)
+          : undefined;
       if (payload === undefined) {
         throw new ConflictException({
           code: 'TEMPLATE_PAYLOAD_REQUIRED',
@@ -191,7 +206,12 @@ export class TemplateService {
           message: 'Select a site before adding Header/Footer attachments to a template',
         });
       }
-      const version = await this.createVersion(record, payload, layoutAttachments);
+      const version = await this.createVersion(
+        record,
+        payload,
+        layoutAttachments,
+        composition,
+      );
       record.latestVersionId = version.id;
     }
     await record.save();
@@ -309,15 +329,26 @@ export class TemplateService {
       });
     }
 
-    const payload = clonePayload(version.payload as PagePayload);
+    const sourcePayload = clonePayload(version.payload as PagePayload);
     const attachments = version.layoutAttachments
       ? cloneAttachments(version.layoutAttachments as PageLayoutAttachment[])
       : undefined;
-    await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, payload);
+    await this.pageExtensions.validateVisualDocumentDependencies(
+      workspaceId,
+      sourcePayload,
+    );
     if (attachments?.length) {
       await this.assertLayoutAttachments(workspaceId, siteId, attachments);
     }
     const name = parsedInput.name ?? `${record.name} page`;
+    const snapshot = version.composition
+      ? cloneTemplateSnapshot(
+          sourcePayload,
+          TemplateCompositionSchema.parse(version.composition),
+        )
+      : { payload: sourcePayload, composition: undefined };
+    const payload = snapshot.payload;
+    const composition = snapshot.composition;
 
     return this.pages.create(
       siteId,
@@ -329,6 +360,16 @@ export class TemplateService {
         ...(parsedInput.kind ? { kind: parsedInput.kind } : {}),
         payload,
         ...(attachments ? { layoutAttachments: attachments } : {}),
+        ...(composition
+          ? {
+              composition: {
+                payload,
+                attachments: [],
+                layoutAttachments: attachments ?? [],
+                ...composition,
+              },
+            }
+          : {}),
         appliedTemplate: {
           templateId,
           templateVersionId: version._id.toString(),
@@ -343,6 +384,7 @@ export class TemplateService {
     record: TemplateDocument,
     payload: PagePayload,
     layoutAttachments: unknown[] | undefined,
+    composition?: TemplateComposition,
   ): Promise<TemplateVersion> {
     const latest = await this.versionModel
       .findOne({ templateId: record._id.toString() })
@@ -356,6 +398,7 @@ export class TemplateService {
       versionNumber,
       payload,
       ...(layoutAttachments ? { layoutAttachments } : {}),
+      ...(composition ? { composition } : {}),
     });
     return this.toVersion(created);
   }
@@ -367,6 +410,19 @@ export class TemplateService {
   ): Promise<void> {
     const payload = PagePayloadSchema.parse(version.payload);
     await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, payload);
+    if (record.siteId && version.composition) {
+      await this.collections.validateComposition(
+        workspaceId,
+        record.siteId,
+        PageCompositionSchema.parse({
+          pageId: randomUUID(),
+          payload,
+          attachments: [],
+          layoutAttachments: [],
+          ...TemplateCompositionSchema.parse(version.composition),
+        }),
+      );
+    }
     if (!record.siteId) {
       if (version.layoutAttachments?.length) {
         throw new ConflictException({
@@ -458,6 +514,7 @@ export class TemplateService {
           id: string;
           payload: PagePayload;
           layoutAttachments?: PageLayoutAttachment[] | undefined;
+          composition?: TemplateComposition | undefined;
         }
       | undefined,
   ): Template {
@@ -477,6 +534,7 @@ export class TemplateService {
       ...(latest.layoutAttachments
         ? { layoutAttachments: latest.layoutAttachments }
         : {}),
+      ...(latest.composition ? { composition: latest.composition } : {}),
       latestVersionId: latest.id,
       ...(record.publishedVersionId
         ? { publishedVersionId: record.publishedVersionId }
@@ -494,6 +552,9 @@ export class TemplateService {
       payload: record.payload,
       ...(record.layoutAttachments
         ? { layoutAttachments: record.layoutAttachments }
+        : {}),
+      ...(record.composition
+        ? { composition: TemplateCompositionSchema.parse(record.composition) }
         : {}),
       createdAt: record.createdAt.toISOString(),
       ...(record.createdBy ? { createdBy: record.createdBy } : {}),
@@ -528,4 +589,47 @@ function clonePayload(payload: PagePayload): PagePayload {
 
 function cloneAttachments(attachments: PageLayoutAttachment[]): PageLayoutAttachment[] {
   return JSON.parse(JSON.stringify(attachments)) as PageLayoutAttachment[];
+}
+
+function cloneTemplateSnapshot(
+  payload: PagePayload,
+  composition: TemplateComposition,
+): { payload: PagePayload; composition: TemplateComposition } {
+  const queryIds = new Map(composition.queries.map((query) => [query.id, randomUUID()]));
+  const remapNode = (node: AnyPageNode): AnyPageNode =>
+    ({
+      ...node,
+      props:
+        node.type === 'collection-list'
+          ? {
+              ...node.props,
+              queryId: queryIds.get(node.props.queryId) ?? node.props.queryId,
+            }
+          : node.props,
+      children: node.children.map(remapNode),
+    }) as AnyPageNode;
+  const nextPayload = PagePayloadSchema.parse({
+    ...payload,
+    root: remapNode(payload.root),
+  });
+  return {
+    payload: nextPayload,
+    composition: TemplateCompositionSchema.parse({
+      ...composition,
+      queries: composition.queries.map((query) => ({
+        ...query,
+        id: queryIds.get(query.id) ?? randomUUID(),
+      })),
+      bindings: composition.bindings.map((binding) => ({
+        ...binding,
+        id: randomUUID(),
+        source: {
+          ...binding.source,
+          ...(binding.source.sourceId && queryIds.has(binding.source.sourceId)
+            ? { sourceId: queryIds.get(binding.source.sourceId) }
+            : {}),
+        },
+      })),
+    }),
+  };
 }

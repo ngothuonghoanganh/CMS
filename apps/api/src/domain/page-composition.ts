@@ -35,6 +35,7 @@ export function emptyPageCompositionFields(): PageCompositionFields {
     bindings: [],
     actions: [],
     resources: [],
+    queries: [],
   };
 }
 
@@ -136,6 +137,7 @@ export function normalizePageComposition(input: {
     bindings: supplied?.bindings ?? fields.bindings,
     actions: supplied?.actions ?? fields.actions,
     resources: supplied?.resources ?? fields.resources,
+    queries: supplied?.queries ?? fields.queries ?? [],
   });
 }
 
@@ -147,8 +149,9 @@ export function clonePageCompositionForPage(
   const attachmentIds = new Map(
     source.attachments.map((attachment) => [attachment.id, randomUUID()]),
   );
+  const queryIds = new Map(source.queries.map((query) => [query.id, randomUUID()]));
   const payload = PagePayloadSchema.parse(
-    remapPayloadAttachmentIds(source.payload, attachmentIds),
+    remapPayloadReferences(source.payload, attachmentIds, queryIds),
   );
   const layoutAttachments = source.layoutAttachments.map((attachment) => ({
     ...attachment,
@@ -164,6 +167,20 @@ export function clonePageCompositionForPage(
       pageId,
     })),
     layoutAttachments,
+    queries: source.queries.map((query) => ({
+      ...query,
+      id: queryIds.get(query.id) ?? randomUUID(),
+    })),
+    bindings: source.bindings.map((binding) => ({
+      ...binding,
+      id: randomUUID(),
+      source: {
+        ...binding.source,
+        ...(binding.source.sourceId && queryIds.has(binding.source.sourceId)
+          ? { sourceId: queryIds.get(binding.source.sourceId) }
+          : {}),
+      },
+    })),
   });
 }
 
@@ -191,9 +208,10 @@ export function collectExtensionPlacements(root: AnyPageNode): ExtensionPlacemen
   return result;
 }
 
-function remapPayloadAttachmentIds(
+function remapPayloadReferences(
   payload: PagePayload,
   attachmentIds: ReadonlyMap<string, string>,
+  queryIds: ReadonlyMap<string, string>,
 ): PagePayload {
   const remap = (node: AnyPageNode): AnyPageNode => {
     const nextProps =
@@ -204,7 +222,12 @@ function remapPayloadAttachmentIds(
               ? { attachmentId: attachmentIds.get(node.props.attachmentId) }
               : {}),
           }
-        : node.props;
+        : node.type === 'collection-list'
+          ? {
+              ...node.props,
+              queryId: queryIds.get(node.props.queryId) ?? node.props.queryId,
+            }
+          : node.props;
     return {
       ...node,
       props: nextProps,

@@ -8,10 +8,15 @@ publish constraints, then compiles the complete immutable `PublishedPageBundle`
 before moving the `publishedVersionId` pointer.
 
 The published bundle includes the version payload, extension/layout attachments,
-bindings, actions, resources, resolved runtimes, capability identifiers and
-extension versions. Public resolution uses that bundle (or an empty extension
-set for an old version without a bundle); it never falls back to the mutable
-page-extension projection.
+bindings, queries, actions, resources, resolved runtimes, capability identifiers
+and extension versions. Public resolution uses that bundle (or an empty
+extension set for an old version without a bundle); it never falls back to the
+mutable page-extension projection or draft page composition.
+
+Collection entry values remain separately versioned. A public query resolves
+only published entry pointers, so publishing an entry can update an already
+published page while editing an entry remains private. Query/filter/binding
+configuration changes are page composition changes and require page publish.
 
 Header, Footer and Template are published independently through their own
 resource endpoints; `Publish Site` no longer snapshots navigation structure.

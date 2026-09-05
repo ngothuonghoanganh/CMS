@@ -37,7 +37,11 @@ import {
   ReusableComponentSchema,
   SiteDesignSystemResponseSchema,
   createDefaultSiteDesignSystem,
+  CollectionDefinitionSchema,
+  CollectionEntryListResponseSchema,
+  ResolvedDataContextSchema,
   type ReusableComponent,
+  type Collection,
   type SiteDesignSystem,
   type StyleTokenReference,
   type ReusableComponentDocument,
@@ -135,7 +139,19 @@ function compositionFieldsFromVersion(
     bindings: version.composition.bindings,
     actions: version.composition.actions,
     resources: version.composition.resources,
+    queries: version.composition.queries,
   });
+}
+
+function previewDataContextFromResponse(
+  response: unknown,
+): PagePreviewSnapshot['dataContext'] {
+  const fallback = { queryItems: {}, variables: {} } as const;
+  if (!response || typeof response !== 'object') return fallback;
+
+  const candidate = (response as { dataContext?: unknown }).dataContext;
+  const parsed = ResolvedDataContextSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : fallback;
 }
 
 type BuilderShellProps = {
@@ -515,6 +531,11 @@ export default function BuilderShell({
   const [navigation, setNavigation] = useState<BuilderPreviewNavigation>({});
   const [siteContext, setSiteContext] = useState<BuilderSiteContext | null>(null);
   const [previewExtensions, setPreviewExtensions] = useState<PageRuntimeExtension[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [previewEntryId, setPreviewEntryId] = useState<string | undefined>();
+  const [previewDataContext, setPreviewDataContext] = useState<
+    PagePreviewSnapshot['dataContext']
+  >({ queryItems: {}, variables: {} });
   const validationIssuesRef = useRef<BuilderValidationIssue[]>([]);
   const validationCoordinatorRef = useRef<BuilderValidationCoordinator | null>(null);
   const documentKindRef = useRef<BuilderDocumentKind>('page');
@@ -529,6 +550,9 @@ export default function BuilderShell({
   const previewWindowRef = useRef<Window | null>(null);
   const previewSnapshotRef = useRef<PagePreviewSnapshot | null>(null);
   const previewFrameRef = useRef<number | null>(null);
+  const postPreviewSnapshotRef = useRef<
+    (overrides?: Partial<PagePreviewSnapshot>) => void
+  >(() => undefined);
 
   useEffect(() => {
     const restorePanelPreferences = () => {
@@ -1004,6 +1028,7 @@ export default function BuilderShell({
           previewResponseRaw,
           headerLayoutsResponseRaw,
           footerLayoutsResponseRaw,
+          collectionsResponseRaw,
         ] = await Promise.all([
           api.get(`/pages/${pageId}`),
           api.get(`/pages/${pageId}/versions?limit=100`),
@@ -1028,6 +1053,14 @@ export default function BuilderShell({
           api.get(`/preview/pages/${pageId}`).catch(() => null),
           api.get(`/sites/${siteId}/layouts/headers`).catch(() => null),
           api.get(`/sites/${siteId}/layouts/footers`).catch(() => null),
+          api
+            .get(`/workspaces/${workspaceId}/sites/${siteId}/collections?limit=100`)
+            .catch((caughtError: unknown) => {
+              if (caughtError instanceof ApiClientError && caughtError.status === 404) {
+                return null;
+              }
+              throw caughtError;
+            }),
         ]);
         if (cancelled) return;
 
@@ -1055,12 +1088,43 @@ export default function BuilderShell({
           createPageDocument(nextPayload, compositionFieldsFromVersion(parsedVersion)),
         );
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
+        const collectionItems = Array.isArray(collectionsResponseRaw)
+          ? collectionsResponseRaw.map((item) => CollectionDefinitionSchema.parse(item))
+          : collectionsResponseRaw &&
+              typeof collectionsResponseRaw === 'object' &&
+              Array.isArray((collectionsResponseRaw as { items?: unknown }).items)
+            ? (collectionsResponseRaw as { items: unknown[] }).items.map((item) =>
+                CollectionDefinitionSchema.parse(item),
+              )
+            : [];
+        setCollections(collectionItems);
+        let resolvedPreviewResponseRaw = previewResponseRaw;
+        if (nextPage.kind === 'dynamic' && nextPage.collectionId) {
+          try {
+            const entryResponse = CollectionEntryListResponseSchema.parse(
+              await api.get(
+                `/workspaces/${workspaceId}/sites/${siteId}/collections/${nextPage.collectionId}/entries?limit=100&offset=0`,
+              ),
+            );
+            const firstEntryId = entryResponse.items[0]?.id;
+            setPreviewEntryId(firstEntryId);
+            if (firstEntryId) {
+              resolvedPreviewResponseRaw = await api.get(
+                `/preview/pages/${pageId}?entryId=${encodeURIComponent(firstEntryId)}`,
+              );
+            }
+          } catch {
+            setPreviewEntryId(undefined);
+          }
+        } else {
+          setPreviewEntryId(undefined);
+        }
         const nextReusables = reusablesResponseRaw
           ? ReusableListResponseSchema.parse(reusablesResponseRaw).items
           : [];
         setReusables(nextReusables);
-        const preview = previewResponseRaw
-          ? PublicPageSchema.safeParse(previewResponseRaw)
+        const preview = resolvedPreviewResponseRaw
+          ? PublicPageSchema.safeParse(resolvedPreviewResponseRaw)
           : undefined;
         const previewNavigation = preview?.success ? preview.data.navigation : undefined;
         setNavigation({
@@ -1068,6 +1132,11 @@ export default function BuilderShell({
           ...(previewNavigation?.footer ? { footer: previewNavigation.footer } : {}),
         });
         setPreviewExtensions(preview?.success ? (preview.data.extensions ?? []) : []);
+        setPreviewDataContext(
+          preview?.success
+            ? (preview.data.dataContext ?? { queryItems: {}, variables: {} })
+            : previewDataContextFromResponse(resolvedPreviewResponseRaw),
+        );
         setReusableRuntime(
           preview?.success && preview.data.reusables?.length
             ? preview.data.reusables
@@ -1224,6 +1293,10 @@ export default function BuilderShell({
         extensions: overrides.extensions ?? previewExtensions,
         reusables: overrides.reusables ?? reusableRuntime,
         designSystem: overrides.designSystem ?? designSystem,
+        ...(candidate.composition?.bindings?.length || overrides.bindings?.length
+          ? { bindings: overrides.bindings ?? candidate.composition?.bindings }
+          : {}),
+        dataContext: overrides.dataContext ?? previewDataContext,
       };
       previewSnapshotRef.current = nextSnapshot;
     } catch {
@@ -1250,6 +1323,53 @@ export default function BuilderShell({
     });
   }
 
+  // The preview-ready listener intentionally has a stable subscription. Keep
+  // its callback pointed at the latest stateful snapshot builder so a ready
+  // event cannot replay the initial empty data context over a live preview.
+  postPreviewSnapshotRef.current = postPreviewSnapshot;
+
+  function updatePageComposition(
+    update: (current: PageCompositionFields) => PageCompositionFields,
+  ) {
+    if (isEditingReusable) return;
+    const currentDocument = editorRef.current?.getDocument();
+    if (!currentDocument || !('schemaVersion' in currentDocument)) return;
+    const current = PageCompositionFieldsSchema.parse(
+      currentDocument.composition ?? pageDocument?.composition ?? {},
+    );
+    const nextComposition = PageCompositionFieldsSchema.parse(update(current));
+    const nextDocument = createPageDocument(currentDocument.payload, nextComposition);
+    setPageDocument(nextDocument);
+    editorRef.current?.setWorkingComposition(nextComposition);
+    markDirty();
+    postPreviewSnapshot({ page: nextDocument, bindings: nextComposition.bindings });
+  }
+
+  function updatePageQuery(query: NonNullable<PageCompositionFields['queries']>[number]) {
+    updatePageComposition((current) => ({
+      ...current,
+      queries: [
+        ...(current.queries ?? []).filter((candidate) => candidate.id !== query.id),
+        query,
+      ],
+    }));
+  }
+
+  function updatePageBinding(binding: PageCompositionFields['bindings'][number] | null) {
+    updatePageComposition((current) => {
+      const withoutTarget = current.bindings.filter(
+        (candidate) =>
+          !binding ||
+          candidate.targetNodeId !== binding.targetNodeId ||
+          candidate.targetProperty !== binding.targetProperty,
+      );
+      return {
+        ...current,
+        bindings: binding ? [...withoutTarget, binding] : withoutTarget,
+      };
+    });
+  }
+
   function handleDocumentChange(document: unknown): void {
     if (!document || typeof document !== 'object' || !('schemaVersion' in document)) {
       return;
@@ -1263,8 +1383,11 @@ export default function BuilderShell({
   }
 
   function openLivePreview() {
+    const previewQuery = previewEntryId
+      ? `?entryId=${encodeURIComponent(previewEntryId)}`
+      : '';
     const previewWindow = window.open(
-      `${rendererBaseUrl}/preview/${encodeURIComponent(pageId)}`,
+      `${rendererBaseUrl}/preview/${encodeURIComponent(pageId)}${previewQuery}`,
       'payload-landing-page-preview',
     );
     if (!previewWindow) {
@@ -1287,7 +1410,7 @@ export default function BuilderShell({
       ) {
         return;
       }
-      postPreviewSnapshot();
+      postPreviewSnapshotRef.current();
     }
     window.addEventListener('message', handlePreviewMessage);
     return () => window.removeEventListener('message', handlePreviewMessage);
@@ -1362,6 +1485,7 @@ export default function BuilderShell({
             bindings: nextDocument.composition.bindings,
             actions: nextDocument.composition.actions,
             resources: nextDocument.composition.resources,
+            queries: nextDocument.composition.queries,
           }
         : { pageId, payload: nextPayload };
       // GrapesJS can emit the final component:update asynchronously after an
@@ -2716,6 +2840,12 @@ export default function BuilderShell({
                 onEditNavigation={() =>
                   router.push(`/?view=navigation&siteId=${encodeURIComponent(siteId)}`)
                 }
+                collections={collections}
+                {...(pageDocument?.composition
+                  ? { composition: pageDocument.composition }
+                  : {})}
+                onUpdateBinding={updatePageBinding}
+                onUpdateQuery={updatePageQuery}
                 viewport={viewport}
               />
             </div>

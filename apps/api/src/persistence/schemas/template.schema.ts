@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { HydratedDocument } from 'mongoose';
-import { PageLayoutAttachmentsSchema, PagePayloadSchema } from '@payload/contracts';
+import {
+  PageLayoutAttachmentsSchema,
+  PagePayloadSchema,
+  TemplateCompositionSchema,
+} from '@payload/contracts';
 
 export type TemplateDocument = HydratedDocument<TemplateRecord>;
 export type TemplateVersionDocument = HydratedDocument<TemplateVersionRecord>;
@@ -72,6 +76,17 @@ export class TemplateVersionRecord {
     },
   })
   layoutAttachments?: unknown[];
+
+  @Prop({
+    type: Object,
+    required: false,
+    immutable: true,
+    validate: {
+      validator: (value: unknown) => TemplateCompositionSchema.safeParse(value).success,
+      message: 'composition must be valid template composition',
+    },
+  })
+  composition?: unknown;
 
   @Prop({ type: String, required: false })
   createdBy?: string;

@@ -7,20 +7,29 @@ import { PreviewBridge } from './preview-bridge';
 
 type PreviewPageProps = {
   params: Promise<{ pageId: string }>;
+  searchParams?: Promise<{ entryId?: string }>;
 };
 
-async function resolvePage(params: PreviewPageProps['params']) {
+async function resolvePage(
+  params: PreviewPageProps['params'],
+  searchParams?: PreviewPageProps['searchParams'],
+) {
   const { pageId } = await params;
-  const page = await getPreviewPage(pageId);
+  const entryId = searchParams ? (await searchParams).entryId : undefined;
+  const page = await getPreviewPage(pageId, entryId);
   if (!page) {
     notFound();
   }
   return page;
 }
 
-export async function generateMetadata({ params }: PreviewPageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PreviewPageProps): Promise<Metadata> {
   const { pageId } = await params;
-  const page = await getPreviewPage(pageId);
+  const entryId = searchParams ? (await searchParams).entryId : undefined;
+  const page = await getPreviewPage(pageId, entryId);
   if (!page) {
     return { robots: { index: false, follow: false }, title: 'Preview unavailable' };
   }
@@ -30,8 +39,8 @@ export async function generateMetadata({ params }: PreviewPageProps): Promise<Me
   };
 }
 
-export default async function PreviewPage({ params }: PreviewPageProps) {
-  const page = await resolvePage(params);
+export default async function PreviewPage({ params, searchParams }: PreviewPageProps) {
+  const page = await resolvePage(params, searchParams);
   return (
     <div className="preview-page" data-page-slug={page.page.slug}>
       <div className="preview-banner">Draft preview</div>
@@ -48,6 +57,8 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         globals={page.globals}
         layout={page.layout}
         navigation={page.navigation}
+        bindings={page.bindings}
+        dataContext={page.dataContext}
       />
     </div>
   );

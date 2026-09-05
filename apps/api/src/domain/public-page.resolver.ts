@@ -15,12 +15,16 @@ import {
   SiteGlobalsSchema,
   SiteDesignSystemSchema,
   normalizeHostname,
+  matchDynamicPath,
   type PublicPage,
   type PageRuntimeExtension,
+  type PageComposition,
+  type ResolvedDataRecord,
   normalizePagePath,
 } from '@payload/contracts';
 
 import { env } from '../config/env';
+import { platformLogger } from '../common/logging/platform-logger';
 import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
@@ -35,6 +39,7 @@ import { NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
+import { CollectionService } from './collection.service';
 
 @Injectable()
 export class PublicPageResolver {
@@ -57,6 +62,7 @@ export class PublicPageResolver {
     @Inject(PageExtensionService)
     private readonly pageExtensions: PageExtensionService,
     @Inject(ReusableService) private readonly reusables: ReusableService,
+    @Inject(CollectionService) private readonly collections: CollectionService,
   ) {}
 
   async resolveByLegacySlug(siteSlug: string, pageSlug: string): Promise<PublicPage> {
@@ -108,10 +114,20 @@ export class PublicPageResolver {
               workspaceId: site.workspaceId,
             })
             .exec());
-    if (!legacyPage) throw this.publicNotFound();
-
-    const version = await this.findPublishedVersion(legacyPage, site);
-    return this.toPublicContract(site, legacyPage, version);
+    if (legacyPage) {
+      const version = await this.findPublishedVersion(legacyPage, site);
+      return this.toPublicContract(site, legacyPage, version, undefined, normalizedPath);
+    }
+    const dynamic = await this.resolveDynamicRoute(site, normalizedPath);
+    if (!dynamic) throw this.publicNotFound();
+    const version = await this.findPublishedVersion(dynamic.page, site);
+    return this.toPublicContract(
+      site,
+      dynamic.page,
+      version,
+      dynamic.entry,
+      normalizedPath,
+    );
   }
 
   async resolveByHostname(hostname: string, path = '/'): Promise<PublicPage> {
@@ -178,9 +194,20 @@ export class PublicPageResolver {
               slug: normalizedPath.slice(1),
             })
             .exec());
-    if (!legacyPage) throw this.publicNotFound();
-    const version = await this.findPublishedVersion(legacyPage, site);
-    return this.toPublicContract(site, legacyPage, version);
+    if (legacyPage) {
+      const version = await this.findPublishedVersion(legacyPage, site);
+      return this.toPublicContract(site, legacyPage, version, undefined, normalizedPath);
+    }
+    const dynamic = await this.resolveDynamicRoute(site, normalizedPath);
+    if (!dynamic) throw this.publicNotFound();
+    const version = await this.findPublishedVersion(dynamic.page, site);
+    return this.toPublicContract(
+      site,
+      dynamic.page,
+      version,
+      dynamic.entry,
+      normalizedPath,
+    );
   }
 
   private async findPublishedVersion(
@@ -204,6 +231,8 @@ export class PublicPageResolver {
     site: SiteDocument,
     page: PageDocument,
     version: PageVersionDocument,
+    currentEntry?: ResolvedDataRecord,
+    resolvedPath?: string,
   ): Promise<PublicPage> {
     try {
       const publishedBundle = version.publishedBundle
@@ -216,11 +245,29 @@ export class PublicPageResolver {
             ? versionComposition.data.payload
             : version.payload),
       );
+      const composition: PageComposition = publishedBundle
+        ? PageCompositionSchema.parse({
+            pageId: page._id.toString(),
+            payload,
+            attachments: publishedBundle.attachments,
+            layoutAttachments: publishedBundle.layoutAttachments,
+            bindings: publishedBundle.bindings,
+            actions: publishedBundle.actions,
+            resources: publishedBundle.resources,
+            queries: publishedBundle.queries,
+          })
+        : versionComposition.success
+          ? versionComposition.data
+          : PageCompositionSchema.parse({ pageId: page._id.toString(), payload });
       const seoRecord = await this.seoModel
         .findOne({ workspaceId: page.workspaceId, landingPageId: page._id.toString() })
         .exec();
       const seo = seoRecord ? this.toPublicSeo(seoRecord) : undefined;
-      const canonicalUrl = await this.resolveCanonicalUrl(page, seo?.canonicalUrl);
+      const canonicalUrl = await this.resolveCanonicalUrl(
+        page,
+        seo?.canonicalUrl,
+        resolvedPath,
+      );
       const navigation = await this.navigation.resolveForSite(
         site._id.toString(),
         site.workspaceId,
@@ -244,6 +291,12 @@ export class PublicPageResolver {
       const designSystem = site.publishedDesignSystem
         ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
         : undefined;
+      const dataContext = await this.collections.resolveDataContext(
+        page.workspaceId,
+        page.siteId,
+        composition,
+        { mode: 'published', ...(currentEntry ? { currentEntry } : {}) },
+      );
       // Public rendering is intentionally snapshot-only. In particular, a
       // legacy version without a compiled bundle must not fall through to the
       // mutable page extension projection from the draft.
@@ -266,8 +319,10 @@ export class PublicPageResolver {
           name: page.name,
           ...(page.description ? { description: page.description } : {}),
           ...(page.slug ? { slug: page.slug } : {}),
+          ...(page.pathPattern ? { pathPattern: page.pathPattern } : {}),
         },
         payload,
+        ...(composition.bindings.length ? { bindings: composition.bindings } : {}),
         ...(extensions.length ? { extensions } : {}),
         ...(seo ? { seo } : {}),
         ...(canonicalUrl ? { canonicalUrl } : {}),
@@ -276,6 +331,7 @@ export class PublicPageResolver {
         ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),
         ...(designSystem ? { designSystem } : {}),
+        dataContext,
       });
     } catch (error) {
       if (
@@ -284,6 +340,18 @@ export class PublicPageResolver {
       ) {
         throw error;
       }
+      platformLogger.error(
+        {
+          err: error,
+          pageId: page._id.toString(),
+          siteId: page.siteId,
+          validationIssues:
+            typeof error === 'object' && error !== null && 'issues' in error
+              ? (error as { issues?: unknown }).issues
+              : undefined,
+        },
+        'published page contract validation failed',
+      );
       throw this.invalidPublishedPage();
     }
   }
@@ -311,6 +379,7 @@ export class PublicPageResolver {
   private async resolveCanonicalUrl(
     page: PageDocument,
     explicitCanonicalUrl?: string,
+    resolvedPath?: string,
   ): Promise<string | undefined> {
     const origin = new URL(env.PUBLIC_PLATFORM_ORIGIN);
     if (explicitCanonicalUrl) {
@@ -321,7 +390,47 @@ export class PublicPageResolver {
       .findOne({ _id: page.siteId, workspaceId: page.workspaceId })
       .exec();
     if (!site) return undefined;
+    if (resolvedPath && page.kind === 'dynamic') {
+      const siteUrl = await this.siteUrls.getOfficialSiteUrl(site);
+      if (!siteUrl) return undefined;
+      const url = new URL(siteUrl);
+      url.pathname = `${url.pathname.replace(/\/$/, '')}${resolvedPath}`;
+      return url.toString();
+    }
     return this.siteUrls.getPageUrl(site, page);
+  }
+
+  private async resolveDynamicRoute(
+    site: SiteDocument,
+    path: string,
+  ): Promise<{ page: PageDocument; entry: ResolvedDataRecord } | null> {
+    const pages = await this.pageModel
+      .find({
+        siteId: site._id.toString(),
+        workspaceId: site.workspaceId,
+        kind: 'dynamic',
+        publishedVersionId: { $exists: true },
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(100)
+      .exec();
+    for (const page of pages) {
+      if (!page.pathPattern || !page.collectionId || !page.lookupField) continue;
+      const match = matchDynamicPath(page.pathPattern, path);
+      if (!match) continue;
+      const parameter = Object.keys(match)[0];
+      if (!parameter) continue;
+      const entry = await this.collections.resolvePublishedEntryByValue(
+        site.workspaceId,
+        site._id.toString(),
+        page.collectionId,
+        page.lookupField,
+        match[parameter]!,
+      );
+      if (!entry) throw this.publicNotFound();
+      return { page, entry };
+    }
+    return null;
   }
 
   private publicNotFound(): NotFoundException {

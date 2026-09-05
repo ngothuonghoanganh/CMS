@@ -11,6 +11,7 @@ import {
   PageNodeStyleV7Schema,
   CountdownPropsSchema,
   ListPropsSchema,
+  CollectionListPropsSchema,
   VideoPropsSchema,
   QuotePropsSchema,
   AccordionPropsSchema,
@@ -81,6 +82,8 @@ export const BUILDER_EXTENSION_PROPS_ATTRIBUTE = 'data-payload-extension-props';
 export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
 export const BUILDER_HEADING_LEVEL_ATTRIBUTE = 'data-payload-heading-level';
 export const BUILDER_LIST_PROPS_ATTRIBUTE = 'data-payload-list-props';
+export const BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE =
+  'data-payload-collection-list-props';
 export const BUILDER_LIST_PREVIEW_ATTRIBUTE = 'data-payload-list-preview';
 export const BUILDER_QUOTE_PROPS_ATTRIBUTE = 'data-payload-quote-props';
 export const BUILDER_QUOTE_PREVIEW_ATTRIBUTE = 'data-payload-quote-preview';
@@ -1073,6 +1076,40 @@ function componentDefinitionForNode(
           ),
         ),
       };
+    case 'collection-list':
+      return {
+        ...shared,
+        tagName: 'div',
+        attributes: {
+          ...attributes,
+          [BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
+        },
+        components: node.children.map((child) =>
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+            projectionContext,
+          ),
+        ),
+      };
+    case 'collection-item':
+      return {
+        ...shared,
+        tagName: 'div',
+        components: node.children.map((child) =>
+          componentDefinitionForNode(
+            child,
+            undefined,
+            payloadVersion,
+            reusableRuntime,
+            designSystem,
+            projectionContext,
+          ),
+        ),
+      };
     case 'global-header':
     case 'global-footer':
       return {
@@ -1385,6 +1422,11 @@ function newAttachmentId(): string {
   return id;
 }
 
+/** UUID for page-scoped query/binding records created by the builder. */
+export function newBuilderUuid(): string {
+  return newAttachmentId();
+}
+
 export function createBlockDefinition(
   type: BuilderBlockType,
   extensionId?: string,
@@ -1685,6 +1727,54 @@ export function createBlockDefinition(
         },
         undefined,
         5,
+      );
+    case 'collection-list': {
+      const queryId = newBuilderUuid();
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'collection-list',
+          props: {
+            queryId,
+            emptyMessage: 'No items found',
+          },
+          children: [
+            {
+              id: newNodeId('collection-item'),
+              type: 'collection-item',
+              props: {},
+              children: [
+                {
+                  id: newNodeId('text'),
+                  type: 'text',
+                  props: { text: 'Collection item' },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+        undefined,
+        7,
+      );
+    }
+    case 'collection-item':
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'collection-item',
+          props: {},
+          children: [
+            {
+              id: newNodeId('text'),
+              type: 'text',
+              props: { text: 'Collection item' },
+              children: [],
+            },
+          ],
+        },
+        undefined,
+        7,
       );
     case 'global-header':
       return componentDefinitionForNode(
@@ -2253,6 +2343,33 @@ function nodeFromSnapshotInternal(
     return { id, type, style, props: {}, children };
   }
 
+  if (type === 'collection-list') {
+    if (children.length !== 1 || children[0]?.type !== 'collection-item') {
+      throw new BuilderAdapterError(
+        'Collection lists must contain exactly one collection item template',
+        [...path, 'children'],
+      );
+    }
+    const props = CollectionListPropsSchema.safeParse(
+      readJsonAttribute(
+        snapshot.attributes,
+        BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE,
+        path,
+      ),
+    );
+    if (!props.success) {
+      throw new BuilderAdapterError(
+        props.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'props'],
+      );
+    }
+    return { id, type, style, props: props.data, children };
+  }
+
+  if (type === 'collection-item') {
+    return { id, type, style, props: {}, children };
+  }
+
   const common = {
     id,
     type,
@@ -2576,6 +2693,8 @@ function containsV6Node(node: Record<string, unknown>): boolean {
 function containsV7Node(node: Record<string, unknown>): boolean {
   if (
     node.type === 'reusable-instance' ||
+    node.type === 'collection-list' ||
+    node.type === 'collection-item' ||
     hasTokenReference(node.style) ||
     hasTokenReference(node.partsStyle)
   ) {

@@ -948,6 +948,8 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   'navigation-view': 'Navigation',
   'site-brand': 'Site Brand',
   'reusable-instance': 'Linked reusable',
+  'collection-list': 'Collection list',
+  'collection-item': 'Collection item template',
 };
 
 function canvasNodeLabel(component: Component, type: BuilderNodeType): string {

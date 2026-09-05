@@ -30,6 +30,11 @@ import {
   type TabsNodeV5,
   type TabItemNodeV5,
   type GalleryNodeV5,
+  type CollectionListNodeV7,
+  type CollectionItemNodeV7,
+  type PageBinding,
+  type ResolvedDataContext,
+  type ResolvedDataRecord,
   type PageRuntimeExtension,
   type PageLayoutSlot,
   type ResolvedNavigationItem,
@@ -37,6 +42,9 @@ import {
   type SiteGlobals,
   PAGE_RESPONSIVE_BREAKPOINTS,
   isSafePageStyleValue,
+  isSafePageImageSource,
+  isSafePageVideoSource,
+  resolveNodeProperty,
   pageStyleReactProperty,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   resolvePageStyleValue,
@@ -126,6 +134,9 @@ export type RenderContext = {
   globals?: SiteGlobals | undefined;
   reusables?: readonly ReusableRuntime[] | undefined;
   designSystem?: SiteDesignSystem | undefined;
+  bindings?: readonly PageBinding[] | undefined;
+  dataContext?: ResolvedDataContext | undefined;
+  currentItem?: ResolvedDataRecord | undefined;
   reusableStack?: readonly string[] | undefined;
 };
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
@@ -233,13 +244,16 @@ function renderText(node: TextNode, context: RenderContext): ReactElement {
 }
 
 function renderImage(node: ImageNode, context: RenderContext): ReactElement {
+  const src = isSafePageImageSource(node.props.src)
+    ? node.props.src
+    : '/assets/placeholder.png';
   return (
     <img
       {...nodeAttributes(node)}
       alt={node.props.alt}
       decoding="async"
       loading="lazy"
-      src={node.props.src}
+      src={src}
       style={nodeStyle(node, context)}
     />
   );
@@ -318,6 +332,9 @@ function renderList(node: ListNode, context: RenderContext): ReactElement {
 }
 
 function renderVideo(node: VideoNode, context: RenderContext): ReactElement {
+  const src = isSafePageVideoSource(node.props.src)
+    ? node.props.src
+    : '/assets/placeholder.mp4';
   return (
     <video
       {...nodeAttributes(node)}
@@ -327,7 +344,7 @@ function renderVideo(node: VideoNode, context: RenderContext): ReactElement {
       muted={node.props.muted}
       playsInline={node.props.playsInline}
       poster={node.props.poster}
-      src={node.props.src}
+      src={src}
       style={nodeStyle(node, context)}
     />
   );
@@ -437,6 +454,48 @@ function renderGallery(
       }}
     >
       {renderChildren(node, context)}
+    </div>
+  );
+}
+
+function renderCollectionItem(
+  node: CollectionItemNodeV7,
+  context: RenderContext,
+): ReactElement {
+  return (
+    <div {...nodeAttributes(node)} style={nodeStyle(node, context)}>
+      {renderChildren(node, context)}
+    </div>
+  );
+}
+
+function renderCollectionList(
+  node: CollectionListNodeV7,
+  context: RenderContext,
+): ReactElement {
+  const items = context.dataContext?.queryItems[node.props.queryId] ?? [];
+  const template = node.children[0];
+  return (
+    <div {...nodeAttributes(node)} style={nodeStyle(node, context)}>
+      {items.length > 0 && template ? (
+        items.map((item) => {
+          const nextDataContext: ResolvedDataContext = {
+            ...(context.dataContext ?? { queryItems: {}, variables: {} }),
+            currentEntry: item,
+          };
+          return (
+            <Fragment key={`${node.id}-${item.id}`}>
+              {renderNode(template, {
+                ...context,
+                currentItem: item,
+                dataContext: nextDataContext,
+              })}
+            </Fragment>
+          );
+        })
+      ) : (
+        <p>{node.props.emptyMessage}</p>
+      )}
     </div>
   );
 }
@@ -736,6 +795,10 @@ export const PAGE_RENDERER_REGISTRY = {
   tabs: (node, context) => renderTabs(node as TabsNodeV5, context),
   'tab-item': (node, context) => renderTabItem(node as TabItemNodeV5, context),
   gallery: (node, context) => renderGallery(node as GalleryNodeV5, context),
+  'collection-list': (node, context) =>
+    renderCollectionList(node as CollectionListNodeV7, context),
+  'collection-item': (node, context) =>
+    renderCollectionItem(node as CollectionItemNodeV7, context),
   'global-header': (node, context) =>
     renderGlobalHeader(node as GlobalHeaderRenderableNode, context),
   'global-footer': (node, context) =>
@@ -771,7 +834,33 @@ export function renderNode(
 ): ReactElement {
   const definition = PAGE_COMPONENT_REGISTRY[node.type];
   const Renderer = PAGE_RENDERER_REGISTRY[node.type];
-  return definition ? Renderer(node, context) : renderUnsupportedNode(node);
+  if (!definition) return renderUnsupportedNode(node);
+  return Renderer(resolveBoundNode(node, context), context);
+}
+
+function resolveBoundNode(node: RenderableNode, context: RenderContext): RenderableNode {
+  if (!context.bindings?.length) return node;
+  const props = { ...(node.props as Record<string, unknown>) };
+  for (const property of Object.keys(props)) {
+    const value = resolveNodeProperty(
+      context.bindings,
+      node.id,
+      property,
+      {
+        ...(context.dataContext ?? { queryItems: {}, variables: {} }),
+        ...(context.currentItem ? { currentItem: context.currentItem } : {}),
+      },
+      props[property],
+    );
+    if (
+      value !== undefined &&
+      value !== null &&
+      ['string', 'number', 'boolean'].includes(typeof value)
+    ) {
+      props[property] = value;
+    }
+  }
+  return { ...node, props } as RenderableNode;
 }
 
 export function renderSiteGlobalDocument(

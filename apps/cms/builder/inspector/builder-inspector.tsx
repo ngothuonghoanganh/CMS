@@ -4,13 +4,17 @@ import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_GROUPS,
   type Asset,
+  type Collection,
   type ComponentPropertyDefinition,
+  type PageBinding,
   type PageComponentType,
+  type PageCompositionFields,
+  type PageQuery,
   type SiteDesignSystem,
   type StyleTokenReference,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { BuilderViewport } from '../builder-adapter';
+import { newBuilderUuid, type BuilderViewport } from '../builder-adapter';
 import type { SelectedBuilderNode } from '../grapes-editor';
 import { resolveInspectorStyleValue } from './inspector-value';
 import { CUSTOM_PROPERTY_EDITORS } from './custom-property-editors';
@@ -75,6 +79,10 @@ type BuilderInspectorProps = {
   onValidationIssue?:
     ((issue: BuilderValidationIssue | null, issueId?: string) => void) | undefined;
   focusPartName?: string | undefined;
+  collections?: readonly Collection[];
+  composition?: PageCompositionFields;
+  onUpdateBinding?: (binding: PageBinding | null) => void;
+  onUpdateQuery?: (query: PageQuery) => void;
 };
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
@@ -185,6 +193,391 @@ function inheritedDescription(
   return definition.description;
 }
 
+const bindingSourceLabels = {
+  static: 'Static value',
+  'current-entry': 'Current entry',
+  'query-item': 'Collection item',
+} as const;
+
+function queryCollection(
+  query: PageQuery | undefined,
+  collections: readonly Collection[],
+): Collection | undefined {
+  if (!query) return undefined;
+  const source = query.source;
+  if (source.type !== 'collection') return undefined;
+  return collections.find((collection) => collection.id === source.collectionId);
+}
+
+function queryFilterInputValue(
+  fieldType: Collection['fields'][number]['type'] | undefined,
+  value: string,
+): string | number | boolean {
+  if (fieldType === 'number' && value.trim() !== '') {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : value;
+  }
+  if (fieldType === 'boolean' && (value === 'true' || value === 'false')) {
+    return value === 'true';
+  }
+  return value;
+}
+
+function CollectionQueryEditor({
+  selected,
+  collections,
+  query,
+  onChange,
+}: {
+  selected: SelectedBuilderNode;
+  collections: readonly Collection[];
+  query?: PageQuery | undefined;
+  onChange: (query: PageQuery) => void;
+}) {
+  const queryId =
+    typeof selected.props.queryId === 'string' ? selected.props.queryId : '';
+  const collection = queryCollection(query, collections);
+  const activeFields =
+    collection?.fields.filter((field) => field.status === 'active') ?? [];
+  const update = (patch: Partial<PageQuery>) => {
+    if (!query) return;
+    onChange({ ...query, ...patch });
+  };
+  const ensureQuery = (collectionId: string) => {
+    if (!collectionId || !queryId) return;
+    onChange({
+      id: queryId,
+      source: { type: 'collection', collectionId },
+      filters: query?.filters ?? [],
+      sort: query?.sort ?? [],
+      limit: query?.limit ?? 20,
+      offset: query?.offset ?? 0,
+    });
+  };
+  const addFilter = () => {
+    if (!query || !activeFields[0]) return;
+    const defaultValue =
+      activeFields[0].type === 'number'
+        ? 0
+        : activeFields[0].type === 'boolean'
+          ? false
+          : '';
+    update({
+      filters: [
+        ...query.filters,
+        { field: activeFields[0].key, operator: 'contains', value: defaultValue },
+      ],
+    });
+  };
+  const updateFilter = (index: number, patch: Partial<PageQuery['filters'][number]>) => {
+    if (!query) return;
+    update({
+      filters: query.filters.map((filter, filterIndex) =>
+        filterIndex === index ? { ...filter, ...patch } : filter,
+      ),
+    });
+  };
+
+  return (
+    <div className="builder-inspector-fields" data-builder-query-editor>
+      <label className="builder-inspector-field">
+        <span>Collection source</span>
+        <select
+          aria-label="Collection source"
+          onChange={(event) => ensureQuery(event.target.value)}
+          value={collection?.id ?? ''}
+        >
+          <option value="">Choose a collection</option>
+          {collections.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {query && collection ? (
+        <>
+          <div className="builder-inspector-field-stack">
+            <span className="muted small">Filters</span>
+            {query.filters.map((filter, index) => (
+              <div
+                className="builder-inspector-inline-row"
+                key={`${filter.field}-${index}`}
+              >
+                <select
+                  aria-label={`Filter ${index + 1} field`}
+                  onChange={(event) => updateFilter(index, { field: event.target.value })}
+                  value={filter.field}
+                >
+                  {activeFields.map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label={`Filter ${index + 1} operator`}
+                  onChange={(event) =>
+                    updateFilter(index, {
+                      operator: event.target
+                        .value as PageQuery['filters'][number]['operator'],
+                    })
+                  }
+                  value={filter.operator}
+                >
+                  {[
+                    'equals',
+                    'contains',
+                    'startsWith',
+                    'exists',
+                    'gt',
+                    'gte',
+                    'lt',
+                    'lte',
+                  ].map((operator) => (
+                    <option key={operator} value={operator}>
+                      {operator}
+                    </option>
+                  ))}
+                </select>
+                {filter.operator !== 'exists' ? (
+                  <input
+                    aria-label={`Filter ${index + 1} value`}
+                    onChange={(event) =>
+                      updateFilter(index, {
+                        value: queryFilterInputValue(
+                          activeFields.find((field) => field.key === filter.field)?.type,
+                          event.target.value,
+                        ),
+                      })
+                    }
+                    placeholder="Value"
+                    value={
+                      filter.value === undefined || Array.isArray(filter.value)
+                        ? ''
+                        : String(filter.value)
+                    }
+                  />
+                ) : null}
+                <button
+                  aria-label={`Remove filter ${index + 1}`}
+                  className="button button-small button-ghost"
+                  onClick={() =>
+                    update({ filters: query.filters.filter((_, i) => i !== index) })
+                  }
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              className="button button-small button-secondary"
+              onClick={addFilter}
+              type="button"
+            >
+              Add filter
+            </button>
+          </div>
+          <div className="builder-inspector-inline-row">
+            <label className="builder-inspector-field">
+              <span>Sort by</span>
+              <select
+                aria-label="Sort field"
+                onChange={(event) =>
+                  update({
+                    sort: event.target.value
+                      ? [
+                          {
+                            field: event.target.value,
+                            direction: query.sort[0]?.direction ?? 'asc',
+                          },
+                        ]
+                      : [],
+                  })
+                }
+                value={query.sort[0]?.field ?? ''}
+              >
+                <option value="">Default order</option>
+                {activeFields.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {query.sort[0] ? (
+              <label className="builder-inspector-field">
+                <span>Direction</span>
+                <select
+                  aria-label="Sort direction"
+                  onChange={(event) =>
+                    update({
+                      sort: [
+                        {
+                          ...query.sort[0]!,
+                          direction: event.target.value as 'asc' | 'desc',
+                        },
+                      ],
+                    })
+                  }
+                  value={query.sort[0].direction}
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </label>
+            ) : null}
+          </div>
+          <label className="builder-inspector-field">
+            <span>Maximum items</span>
+            <input
+              aria-label="Maximum items"
+              max={100}
+              min={1}
+              onChange={(event) => update({ limit: Number(event.target.value) || 1 })}
+              type="number"
+              value={query.limit}
+            />
+          </label>
+        </>
+      ) : null}
+      {!collections.length ? (
+        <p className="muted small">Create a collection first.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function BindingEditor({
+  selected,
+  property,
+  binding,
+  composition,
+  collections,
+  onChange,
+}: {
+  selected: SelectedBuilderNode;
+  property: ComponentPropertyDefinition;
+  binding?: PageBinding | undefined;
+  composition?: PageCompositionFields | undefined;
+  collections: readonly Collection[];
+  onChange: (binding: PageBinding | null) => void;
+}) {
+  const queries = composition?.queries ?? [];
+  const sourceType = binding?.source.type ?? 'static';
+  const selectedQuery = binding?.source.sourceId
+    ? queries.find((query) => query.id === binding.source.sourceId)
+    : undefined;
+  const collection = queryCollection(selectedQuery, collections);
+  const fields = collection?.fields.filter((field) => field.status === 'active') ?? [];
+  const setSource = (type: 'static' | 'current-entry' | 'query-item') => {
+    if (type === 'static') {
+      onChange(null);
+      return;
+    }
+    const query = queries.find((candidate) => candidate.source.type === 'collection');
+    const path = binding?.source.path ?? fields[0]?.key ?? 'title';
+    onChange({
+      id: binding?.id ?? newBuilderUuid(),
+      targetNodeId: selected.id,
+      targetProperty: property.key,
+      source:
+        type === 'query-item'
+          ? { type, sourceId: query?.id ?? newBuilderUuid(), path }
+          : { type, path },
+      ...(binding?.fallback !== undefined ? { fallback: binding.fallback } : {}),
+    });
+  };
+  const updateSource = (patch: Partial<PageBinding['source']>) => {
+    if (!binding) return;
+    onChange({ ...binding, source: { ...binding.source, ...patch } } as PageBinding);
+  };
+
+  return (
+    <div className="builder-binding-editor" data-builder-binding-property={property.key}>
+      <label className="builder-inspector-field">
+        <span>Data source for {property.label}</span>
+        <select
+          aria-label={`Data source for ${property.label}`}
+          onChange={(event) =>
+            setSource(event.target.value as 'static' | 'current-entry' | 'query-item')
+          }
+          value={sourceType}
+        >
+          {Object.entries(bindingSourceLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {binding ? (
+        <>
+          {binding.source.type === 'query-item' ? (
+            <label className="builder-inspector-field">
+              <span>Query</span>
+              <select
+                aria-label="Binding query"
+                onChange={(event) => updateSource({ sourceId: event.target.value })}
+                value={binding.source.sourceId ?? ''}
+              >
+                <option value="">Choose a query</option>
+                {queries
+                  .filter((query) => query.source.type === 'collection')
+                  .map((query) => (
+                    <option key={query.id} value={query.id}>
+                      {queryCollection(query, collections)?.name ?? query.id}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="builder-inspector-field">
+            <span>Field path</span>
+            {fields.length ? (
+              <select
+                aria-label="Binding field path"
+                onChange={(event) => updateSource({ path: event.target.value })}
+                value={binding.source.path}
+              >
+                {fields.map((field) => (
+                  <option key={field.key} value={field.key}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                aria-label="Binding field path"
+                onChange={(event) => updateSource({ path: event.target.value })}
+                pattern="[A-Za-z][A-Za-z0-9_-]*(\\.[A-Za-z][A-Za-z0-9_-]*)*"
+                value={binding.source.path}
+              />
+            )}
+          </label>
+          <label className="builder-inspector-field">
+            <span>Fallback</span>
+            <input
+              aria-label="Binding fallback"
+              onChange={(event) => onChange({ ...binding, fallback: event.target.value })}
+              placeholder={String(selected.props[property.key] ?? '')}
+              value={typeof binding.fallback === 'string' ? binding.fallback : ''}
+            />
+          </label>
+          <button
+            className="button button-small button-ghost"
+            onClick={() => onChange(null)}
+            type="button"
+          >
+            Remove binding
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function BuilderInspector({
   selected,
   viewport,
@@ -211,6 +604,10 @@ export function BuilderInspector({
   validationScope = 'page',
   onValidationIssue,
   focusPartName,
+  collections = [],
+  composition,
+  onUpdateBinding,
+  onUpdateQuery,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
@@ -231,7 +628,9 @@ export function BuilderInspector({
   }, [focusPartName, partNames]);
 
   const contentProperties = definition.propertiesSchema.filter(
-    (property) => property.group === 'content',
+    (property) =>
+      property.group === 'content' &&
+      !(selected.type === 'collection-list' && property.key === 'queryId'),
   );
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {
@@ -255,21 +654,36 @@ export function BuilderInspector({
       );
     }
     return (
-      <PropertyControlRenderer
-        assetKind={property.assetKind}
-        assets={usableAssets}
-        definition={property}
-        key={property.key}
-        onChange={(nextValue) => updateSelectedProperty(property.key, nextValue)}
-        issue={issue}
-        nodeId={selected.id}
-        onValidationIssue={onValidationIssue}
-        scope={validationScope}
-        section="content"
-        tab="content"
-        value={value}
-        viewport={viewport}
-      />
+      <div key={property.key} className="builder-inspector-property-stack">
+        <PropertyControlRenderer
+          assetKind={property.assetKind}
+          assets={usableAssets}
+          definition={property}
+          onChange={(nextValue) => updateSelectedProperty(property.key, nextValue)}
+          issue={issue}
+          nodeId={selected.id}
+          onValidationIssue={onValidationIssue}
+          scope={validationScope}
+          section="content"
+          tab="content"
+          value={value}
+          viewport={viewport}
+        />
+        {property.bindable && onUpdateBinding ? (
+          <BindingEditor
+            binding={composition?.bindings.find(
+              (binding) =>
+                binding.targetNodeId === selected.id &&
+                binding.targetProperty === property.key,
+            )}
+            collections={collections}
+            composition={composition}
+            onChange={onUpdateBinding}
+            property={property}
+            selected={selected}
+          />
+        ) : null}
+      </div>
     );
   }
 
@@ -473,6 +887,19 @@ export function BuilderInspector({
               renderProperty(property, selected.props[property.key]),
             )}
           </div>
+        </InspectorSection>
+      ) : null}
+
+      {inspectorTab === 'content' && selected.type === 'collection-list' ? (
+        <InspectorSection label="Collection query" onToggle={() => undefined} open>
+          <CollectionQueryEditor
+            collections={collections}
+            onChange={(query) => onUpdateQuery?.(query)}
+            query={composition?.queries?.find(
+              (query) => query.id === selected.props.queryId,
+            )}
+            selected={selected}
+          />
         </InspectorSection>
       ) : null}
 

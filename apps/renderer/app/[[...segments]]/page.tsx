@@ -109,6 +109,8 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
         globals: resolved.page.globals,
         reusables: resolved.page.reusables,
         designSystem: resolved.page.designSystem,
+        dataContext: resolved.page.dataContext,
+        bindings: resolved.page.bindings,
         ...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {}),
         ...(resolved.page.extensions
           ? {
@@ -130,6 +132,8 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
             navigation: resolved.page.navigation,
             reusables: resolved.page.reusables,
             designSystem: resolved.page.designSystem,
+            dataContext: resolved.page.dataContext,
+            bindings: resolved.page.bindings,
             ...(resolved.page.tenantSlug ? { tenantSlug: resolved.page.tenantSlug } : {}),
             ...(resolved.page.extensions
               ? {

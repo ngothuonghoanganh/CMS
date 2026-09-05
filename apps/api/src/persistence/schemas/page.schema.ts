@@ -25,13 +25,22 @@ export class PageRecord {
   @Prop({ type: String, required: false, trim: true, index: true })
   path?: string;
 
+  @Prop({ type: String, required: false, index: true })
+  pathPattern?: string;
+
+  @Prop({ type: String, required: false, index: true })
+  collectionId?: string;
+
+  @Prop({ type: String, required: false })
+  lookupField?: string;
+
   @Prop({
     type: String,
     required: true,
-    enum: ['standard', 'landing', 'system', 'collection-template'],
+    enum: ['standard', 'landing', 'system', 'collection-template', 'dynamic'],
     default: 'standard',
   })
-  kind!: 'standard' | 'landing' | 'system' | 'collection-template';
+  kind!: 'standard' | 'landing' | 'system' | 'collection-template' | 'dynamic';
 
   @Prop({ type: String, required: false, enum: ['draft', 'published', 'archived'] })
   status?: 'draft' | 'published' | 'archived';
@@ -80,4 +89,8 @@ PageSchema.index(
 PageSchema.index(
   { siteId: 1, slug: 1 },
   { unique: true, partialFilterExpression: { slug: { $type: 'string' } } },
+);
+PageSchema.index(
+  { siteId: 1, pathPattern: 1 },
+  { unique: true, partialFilterExpression: { pathPattern: { $type: 'string' } } },
 );
