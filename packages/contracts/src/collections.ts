@@ -8,6 +8,32 @@ const key = z
 const nonEmpty = z.string().trim().min(1);
 const timestamp = z.string().datetime({ offset: true });
 
+const unsafeValidationPattern =
+  /(?:\\[1-9]|\\k<|\\[pP]\{|\(\?[=!<:]|\([^)]*[+*][^)]*\)[+*{]|\[[^\]]*[+*][^\]]*\][+*{])/;
+
+/**
+ * Collection validation patterns are intentionally a small, portable subset
+ * of regular expressions. They are stored as tenant data and may execute on
+ * request paths, so constructs that are commonly used for backtracking or
+ * engine-specific behaviour are rejected at the contract boundary.
+ */
+export function isSafeCollectionValidationPattern(pattern: string): boolean {
+  return pattern.length <= 200 && !unsafeValidationPattern.test(pattern);
+}
+
+export function normalizeCollectionSlug(input: string, maxLength = 120): string {
+  return input
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, maxLength)
+    .replace(/-+$/, '');
+}
+
 export const CollectionFieldTypeSchema = z.enum([
   'text',
   'long-text',
@@ -41,7 +67,14 @@ export const CollectionFieldValidationSchema = z
   .object({
     minLength: z.number().int().nonnegative().optional(),
     maxLength: z.number().int().nonnegative().optional(),
-    pattern: z.string().trim().max(200).optional(),
+    pattern: z
+      .string()
+      .trim()
+      .max(200)
+      .refine(isSafeCollectionValidationPattern, {
+        message: 'Pattern contains unsupported or unsafe regex constructs',
+      })
+      .optional(),
     min: z.number().finite().optional(),
     max: z.number().finite().optional(),
     integer: z.boolean().optional(),
@@ -128,6 +161,26 @@ const validateCollectionFieldDefinition = (
       code: 'custom',
       path: ['targetCollectionId'],
       message: 'Only reference fields can define a target collection',
+    });
+  }
+  if (!['select', 'multi-select'].includes(field.type) && field.options) {
+    context.addIssue({
+      code: 'custom',
+      path: ['options'],
+      message: 'Only select fields can define options',
+    });
+  }
+  if (['select', 'multi-select'].includes(field.type) && field.options) {
+    const values = new Set<string>();
+    field.options.forEach((option, index) => {
+      if (values.has(option.value)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['options', index, 'value'],
+          message: 'Option values must be unique',
+        });
+      }
+      values.add(option.value);
     });
   }
   if (field.type !== 'slug' && field.slugFromFieldKey) {
@@ -272,6 +325,13 @@ export const CollectionEntryResponseSchema = CollectionEntrySchema.extend({
 }).strict();
 export type CollectionEntryResponse = z.infer<typeof CollectionEntryResponseSchema>;
 
+export const DiscardCollectionEntryResponseSchema = z
+  .object({ entryId: entityId, deleted: z.literal(true) })
+  .strict();
+export type DiscardCollectionEntryResponse = z.infer<
+  typeof DiscardCollectionEntryResponseSchema
+>;
+
 export const CreateCollectionEntryRequestSchema = z
   .object({ values: z.record(z.string().trim().min(1).max(100), z.unknown()) })
   .strict();
@@ -341,6 +401,49 @@ export const QueryFilterOperatorSchema = z.enum([
   'exists',
 ]);
 export type QueryFilterOperator = z.infer<typeof QueryFilterOperatorSchema>;
+
+const commonQueryOperators = ['equals', 'notEquals', 'exists'] as const;
+
+const queryOperatorsByFieldType: Record<
+  CollectionFieldType,
+  readonly QueryFilterOperator[]
+> = {
+  text: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  'long-text': [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  'rich-text': [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  number: [...commonQueryOperators, 'gt', 'gte', 'lt', 'lte', 'in', 'notIn'],
+  boolean: commonQueryOperators,
+  date: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  datetime: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  asset: [...commonQueryOperators, 'in', 'notIn'],
+  image: [...commonQueryOperators, 'in', 'notIn'],
+  url: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  email: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  slug: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  select: [...commonQueryOperators, 'in', 'notIn'],
+  'multi-select': [...commonQueryOperators, 'in', 'notIn'],
+  reference: [...commonQueryOperators, 'in', 'notIn'],
+  array: commonQueryOperators,
+  group: commonQueryOperators,
+};
+
+export function queryOperatorsForFieldType(
+  type: CollectionFieldType,
+): readonly QueryFilterOperator[] {
+  return queryOperatorsByFieldType[type];
+}
+
+export function isQueryValueCompatibleForFieldType(
+  type: CollectionFieldType,
+  value: unknown,
+): boolean {
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'array' || type === 'group') return true;
+  return (
+    typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+  );
+}
 
 const queryValue = z.union([
   z.string().max(2_000),
@@ -425,7 +528,11 @@ export function matchDynamicPath(
   if (!normalizedPath.startsWith(prefix)) return null;
   const value = normalizedPath.slice(prefix.length);
   if (!value || value.includes('/')) return null;
-  return { [parameter]: decodeURIComponent(value) };
+  try {
+    return { [parameter]: decodeURIComponent(value) };
+  } catch {
+    return null;
+  }
 }
 
 export const DynamicPageMetadataSchema = z
@@ -457,14 +564,21 @@ export const ResolvedDataContextSchema = z
   .strict();
 export type ResolvedDataContext = z.infer<typeof ResolvedDataContextSchema>;
 
+export const CollectionUsageReferenceSchema = z
+  .object({
+    type: z.string().min(1),
+    id: entityId,
+    label: z.string().min(1),
+    fieldId: entityId.optional(),
+    fieldKey: key.optional(),
+  })
+  .strict();
+export type CollectionUsageReference = z.infer<typeof CollectionUsageReferenceSchema>;
+
 export const CollectionUsageResponseSchema = z
   .object({
     collectionId: entityId,
-    references: z.array(
-      z
-        .object({ type: z.string().min(1), id: entityId, label: z.string().min(1) })
-        .strict(),
-    ),
+    references: z.array(CollectionUsageReferenceSchema),
   })
   .strict();
 export type CollectionUsageResponse = z.infer<typeof CollectionUsageResponseSchema>;

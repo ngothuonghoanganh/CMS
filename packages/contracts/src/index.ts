@@ -15,7 +15,11 @@ import {
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   isSafePageStyleValue,
 } from './style-registry';
-import { DynamicPageMetadataSchema, PageQuerySchema } from './collections';
+import {
+  DynamicPageMetadataSchema,
+  PageQuerySchema,
+  dynamicPathBase,
+} from './collections';
 
 export const apiVersion = 'v1' as const;
 
@@ -4276,10 +4280,12 @@ export const PageSchema = z
     siteId: EntityIdSchema,
     name: nonEmptyText.max(200),
     description: z.string().trim().max(500).optional(),
-    path: PagePathSchema,
+    /** Static pages own `path`; dynamic pages own `pathPattern` instead. */
+    path: PagePathSchema.optional(),
     kind: PageKindSchema,
     collectionId: EntityIdSchema.optional(),
     pathPattern: DynamicPageMetadataSchema.shape.pathPattern.optional(),
+    dynamicBasePath: PagePathSchema.optional(),
     lookupField: DynamicPageMetadataSchema.shape.lookupField.optional(),
     status: PageStatusSchema,
     parentId: EntityIdSchema.optional(),
@@ -4301,7 +4307,7 @@ export const PageSchema = z
   .strict()
   .superRefine((page, context) => {
     const hasDynamicMetadata = Boolean(
-      page.collectionId || page.pathPattern || page.lookupField,
+      page.collectionId || page.pathPattern || page.dynamicBasePath || page.lookupField,
     );
     if (page.kind === 'dynamic' && !page.collectionId) {
       context.addIssue({
@@ -4322,6 +4328,39 @@ export const PageSchema = z
         code: 'custom',
         path: ['lookupField'],
         message: 'Dynamic pages require a lookup field',
+      });
+    }
+    if (page.kind === 'dynamic' && page.path) {
+      context.addIssue({
+        code: 'custom',
+        path: ['path'],
+        message: 'Dynamic pages must not define a static path',
+      });
+    }
+    if (page.kind === 'dynamic' && !page.dynamicBasePath && page.pathPattern) {
+      context.addIssue({
+        code: 'custom',
+        path: ['dynamicBasePath'],
+        message: 'Dynamic pages require a derived route base',
+      });
+    }
+    if (
+      page.kind === 'dynamic' &&
+      page.dynamicBasePath &&
+      page.pathPattern &&
+      page.dynamicBasePath !== dynamicPathBase(page.pathPattern)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['dynamicBasePath'],
+        message: 'dynamicBasePath must match pathPattern',
+      });
+    }
+    if (page.kind !== 'dynamic' && !page.path) {
+      context.addIssue({
+        code: 'custom',
+        path: ['path'],
+        message: 'Standard pages require a static path',
       });
     }
     if (page.kind !== 'dynamic' && hasDynamicMetadata) {
@@ -4371,6 +4410,33 @@ const SafeMetadataUrlSchema = z
 
 const OptionalSeoText = (max: number) => z.string().trim().max(max).optional();
 const NullableSeoText = (max: number) => z.string().trim().max(max).nullable().optional();
+const seoDataPath = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)*$/;
+
+export const PageSeoBindingTargetSchema = z.enum([
+  'title',
+  'description',
+  'ogTitle',
+  'ogDescription',
+  'ogImage',
+  'twitterTitle',
+  'twitterDescription',
+  'twitterImage',
+]);
+export type PageSeoBindingTarget = z.infer<typeof PageSeoBindingTargetSchema>;
+
+export const PageSeoBindingSchema = z
+  .object({
+    source: z
+      .object({ type: z.literal('current-entry'), path: z.string().regex(seoDataPath) })
+      .strict(),
+    fallback: z.string().trim().max(2_048).optional(),
+  })
+  .strict();
+export type PageSeoBinding = z.infer<typeof PageSeoBindingSchema>;
+
+export const PageSeoBindingsSchema = z
+  .record(PageSeoBindingTargetSchema, PageSeoBindingSchema)
+  .refine((bindings) => Object.keys(bindings).length <= 20, 'Too many SEO bindings');
 
 export const CustomDomainSchema = z
   .object({
@@ -4441,6 +4507,7 @@ export const PageSeoSettingsSchema = z
     twitterDescription: OptionalSeoText(MAX_SEO_DESCRIPTION_LENGTH),
     twitterImage: SafeMetadataUrlSchema.optional(),
     favicon: SafeMetadataUrlSchema.optional(),
+    bindings: PageSeoBindingsSchema.optional(),
   })
   .strict();
 
@@ -4461,6 +4528,7 @@ export const UpdatePageSeoSettingsRequestSchema = z
     twitterDescription: NullableSeoText(MAX_SEO_DESCRIPTION_LENGTH),
     twitterImage: SafeMetadataUrlSchema.nullable().optional(),
     favicon: SafeMetadataUrlSchema.nullable().optional(),
+    bindings: PageSeoBindingsSchema.optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
@@ -5061,6 +5129,19 @@ export const CreatePageRequestSchema = z
           path: ['lookupField'],
           message: 'Dynamic pages require a lookup field',
         });
+      if (request.path) {
+        context.addIssue({
+          code: 'custom',
+          path: ['path'],
+          message: 'Dynamic pages use pathPattern instead of path',
+        });
+      }
+    } else if (request.collectionId || request.pathPattern || request.lookupField) {
+      context.addIssue({
+        code: 'custom',
+        path: ['kind'],
+        message: 'Only dynamic pages can define dynamic metadata',
+      });
     }
   });
 export const UpdatePageRequestSchema = z

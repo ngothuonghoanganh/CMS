@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type Asset,
   type Collection,
   type CollectionEntryResponse,
   type CollectionFieldType,
@@ -8,16 +9,11 @@ import {
 } from '@payload/contracts';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
-import { api } from './lib/api';
+import { ApiClientError, api } from './lib/api';
 import { Drawer, Modal, PageHeader } from './ui/surfaces';
 import { StatusBadge } from './status-badge';
 
-type FieldDraft = {
-  key: string;
-  label: string;
-  type: CollectionFieldType;
-  required: boolean;
-};
+type FieldDraft = Collection['fields'][number];
 
 const fieldTypes: CollectionFieldType[] = [
   'text',
@@ -35,15 +31,18 @@ const fieldTypes: CollectionFieldType[] = [
   'select',
   'multi-select',
   'reference',
-  'array',
-  'group',
 ];
 
 const newField = (): FieldDraft => ({
+  id: crypto.randomUUID(),
   key: '',
   label: '',
   type: 'text',
   required: false,
+  indexed: false,
+  unique: false,
+  status: 'active',
+  manualSlugOverride: true,
 });
 
 function parseEntryValues(value: string): Record<string, unknown> {
@@ -81,11 +80,34 @@ function inputTypeForField(type: CollectionFieldType): string {
   return 'text';
 }
 
+function fieldInputValue(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  return Array.isArray(value) ? value.join(', ') : String(value);
+}
+
+function collectionErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiClientError)) return fallback;
+  const references = error.details?.references;
+  if (Array.isArray(references)) {
+    const labels = references
+      .map((reference) =>
+        reference && typeof reference === 'object' && 'label' in reference
+          ? String(reference.label)
+          : '',
+      )
+      .filter(Boolean);
+    if (labels.length > 0) return `${error.message} Used by: ${labels.join(', ')}.`;
+  }
+  return error.message;
+}
+
 function CollectionEntryFields({
+  assets,
   collection,
   entryValues,
   onChange,
 }: {
+  assets: Asset[];
   collection: Collection;
   entryValues: string;
   onChange: (value: string) => void;
@@ -102,12 +124,7 @@ function CollectionEntryFields({
     <div className="collection-entry-fields">
       {collection.fields.map((field) => {
         const value = values[field.key];
-        const displayValue =
-          value === undefined || value === null
-            ? ''
-            : Array.isArray(value) || typeof value === 'object'
-              ? JSON.stringify(value, null, 2)
-              : String(value);
+        const displayValue = fieldInputValue(value);
 
         if (field.type === 'boolean') {
           return (
@@ -125,13 +142,75 @@ function CollectionEntryFields({
           );
         }
 
-        const multiline = [
-          'long-text',
-          'rich-text',
-          'array',
-          'group',
-          'multi-select',
-        ].includes(field.type);
+        if (field.type === 'select') {
+          return (
+            <label className="collection-entry-field" key={field.id}>
+              <span className="collection-entry-field-label">
+                <strong>{field.label}</strong>
+                <small>{field.key} · select</small>
+              </span>
+              <select
+                value={displayValue}
+                onChange={(event) => updateField(field, event.target.value)}
+              >
+                <option value="">Choose an option</option>
+                {(field.options ?? []).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        }
+        if (field.type === 'multi-select') {
+          const selected = Array.isArray(value) ? value.map(String) : [];
+          return (
+            <fieldset className="collection-entry-field" key={field.id}>
+              <legend className="collection-entry-field-label">
+                <strong>{field.label}</strong>
+                <small>{field.key} · multi-select</small>
+              </legend>
+              <div className="collection-option-list">
+                {(field.options ?? []).map((option) => (
+                  <label className="checkbox-field" key={option.value}>
+                    <input
+                      checked={selected.includes(option.value)}
+                      onChange={(event) =>
+                        updateField(
+                          field,
+                          event.target.checked
+                            ? [...selected, option.value]
+                            : selected.filter((item) => item !== option.value),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          );
+        }
+        if (field.type === 'array' || field.type === 'group') {
+          return (
+            <div
+              className="collection-entry-field collection-entry-structured-note"
+              key={field.id}
+            >
+              <strong>{field.label}</strong>
+              <small>
+                {field.key} · {field.type}
+              </small>
+              <span className="muted small">
+                Configure this structured value in Advanced JSON below.
+              </span>
+            </div>
+          );
+        }
+        const multiline = ['long-text', 'rich-text'].includes(field.type);
+        const assetField = field.type === 'asset' || field.type === 'image';
         return (
           <label className="collection-entry-field" key={field.id}>
             <span className="collection-entry-field-label">
@@ -144,27 +223,43 @@ function CollectionEntryFields({
             {multiline ? (
               <textarea
                 onChange={(event) => updateField(field, event.target.value)}
-                placeholder={
-                  field.type === 'array' ? 'Use JSON for structured values' : ''
-                }
-                rows={field.type === 'long-text' || field.type === 'rich-text' ? 4 : 3}
+                placeholder={field.ui?.placeholder ?? ''}
+                rows={4}
                 value={displayValue}
               />
             ) : (
               <input
+                list={assetField ? `collection-assets-${field.id}` : undefined}
                 onChange={(event) => {
                   const rawValue = event.target.value;
                   updateField(
                     field,
                     field.type === 'number' && rawValue !== ''
                       ? Number(rawValue)
-                      : rawValue,
+                      : field.type === 'reference' && field.cardinality === 'many'
+                        ? rawValue
+                            .split(',')
+                            .map((item) => item.trim())
+                            .filter(Boolean)
+                        : rawValue,
                   );
                 }}
                 type={inputTypeForField(field.type)}
                 value={displayValue}
               />
             )}
+            {assetField ? (
+              <datalist id={`collection-assets-${field.id}`}>
+                {assets.map((asset) => (
+                  <option key={asset.id} value={asset.storageKey}>
+                    {asset.filename}
+                  </option>
+                ))}
+              </datalist>
+            ) : null}
+            {field.ui?.helpText ? (
+              <small className="muted">{field.ui.helpText}</small>
+            ) : null}
           </label>
         );
       })}
@@ -173,6 +268,7 @@ function CollectionEntryFields({
 }
 
 export function CollectionsView({
+  assets,
   canCreate,
   canDelete,
   canPublish,
@@ -181,6 +277,7 @@ export function CollectionsView({
   sites,
   workspaceId,
 }: {
+  assets: Asset[];
   canCreate: boolean;
   canDelete: boolean;
   canPublish: boolean;
@@ -197,6 +294,18 @@ export function CollectionsView({
     null,
   );
   const [entrySearch, setEntrySearch] = useState('');
+  const [entryStatus, setEntryStatus] = useState<'' | 'draft' | 'published' | 'archived'>(
+    '',
+  );
+  const [entrySortField, setEntrySortField] = useState('');
+  const [entrySortDirection, setEntrySortDirection] = useState<'asc' | 'desc'>('desc');
+  const [entryOffset, setEntryOffset] = useState(0);
+  const [entryPagination, setEntryPagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasNextPage: false,
+  });
   const [collectionDrawerOpen, setCollectionDrawerOpen] = useState(false);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [entryDrawerOpen, setEntryDrawerOpen] = useState(false);
@@ -210,26 +319,16 @@ export function CollectionsView({
   const [entryValues, setEntryValues] = useState('{}');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const selectedCollection = useMemo(
     () => collections.find((collection) => collection.id === collectionId),
     [collectionId, collections],
   );
-  const filteredEntries = useMemo(() => {
-    const query = entrySearch.trim().toLowerCase();
-    if (!query) return entries;
-    return entries.filter((entry) => {
-      const title = selectedCollection ? entryTitle(entry, selectedCollection) : entry.id;
-      return [title, ...Object.values(entry.values)]
-        .join(' ')
-        .toLowerCase()
-        .includes(query);
-    });
-  }, [entries, entrySearch, selectedCollection]);
   const publishedEntryCount = entries.filter(
     (entry) => entry.status === 'published',
   ).length;
-  const draftEntryCount = entries.length - publishedEntryCount;
+  const draftEntryCount = entries.filter((entry) => entry.status !== 'published').length;
 
   useEffect(() => {
     if (selectedSiteId) setSiteId(selectedSiteId);
@@ -254,18 +353,52 @@ export function CollectionsView({
       setEntries([]);
       return;
     }
+    const params = new URLSearchParams({
+      limit: '20',
+      offset: String(entryOffset),
+      ...(entrySearch.trim() ? { search: entrySearch.trim() } : {}),
+      ...(entryStatus ? { status: entryStatus } : {}),
+      ...(entrySortField
+        ? { sortField: entrySortField, sortDirection: entrySortDirection }
+        : {}),
+    });
     void api
-      .get<{ items: CollectionEntryResponse[] }>(
-        `/workspaces/${workspaceId}/sites/${siteId}/collections/${collectionId}/entries?limit=100&offset=0`,
+      .get<{
+        items: CollectionEntryResponse[];
+        pagination: typeof entryPagination;
+      }>(
+        `/workspaces/${workspaceId}/sites/${siteId}/collections/${collectionId}/entries?${params.toString()}`,
       )
-      .then((result) => setEntries(result.items));
-  }, [collectionId, siteId, workspaceId]);
+      .then((result) => {
+        setEntries(result.items);
+        setEntryPagination(result.pagination);
+      })
+      .catch((caughtError: unknown) =>
+        setError(
+          collectionErrorMessage(caughtError, 'Unable to load collection entries.'),
+        ),
+      );
+  }, [
+    collectionId,
+    entryOffset,
+    entrySearch,
+    entrySortDirection,
+    entrySortField,
+    entryStatus,
+    siteId,
+    workspaceId,
+  ]);
 
   async function createCollection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setError(null);
     const fields = fieldDrafts
       .filter((field) => field.key.trim() && field.label.trim())
-      .map((field) => ({ ...field, key: field.key.trim(), label: field.label.trim() }));
+      .map(({ id: _id, ...field }) => ({
+        ...field,
+        key: field.key.trim(),
+        label: field.label.trim(),
+      }));
     const created = await api.post<Collection>(
       `/workspaces/${workspaceId}/sites/${siteId}/collections`,
       { ...collectionForm, fields },
@@ -281,18 +414,10 @@ export function CollectionsView({
   async function updateCollection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedCollection || !canUpdate) return;
+    setError(null);
     const fields = fieldDrafts
       .filter((field) => field.key.trim() && field.label.trim())
-      .map((field, index) => ({
-        ...field,
-        id: selectedCollection.fields[index]?.id ?? crypto.randomUUID(),
-        key: field.key.trim(),
-        label: field.label.trim(),
-        indexed: selectedCollection.fields[index]?.indexed ?? false,
-        unique: selectedCollection.fields[index]?.unique ?? false,
-        status: selectedCollection.fields[index]?.status ?? 'active',
-        manualSlugOverride: selectedCollection.fields[index]?.manualSlugOverride ?? true,
-      }));
+      .map((field) => ({ ...field, key: field.key.trim(), label: field.label.trim() }));
     const updated = await api.patch<Collection>(
       `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}`,
       { fields, expectedSchemaVersion: selectedCollection.schemaVersion },
@@ -308,7 +433,8 @@ export function CollectionsView({
   async function saveEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedCollection) return;
-    const values = JSON.parse(entryValues) as Record<string, unknown>;
+    setError(null);
+    const values = parseEntryValues(entryValues);
     const path = `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}/entries`;
     const saved = selectedEntry
       ? await api.patch<CollectionEntryResponse>(`${path}/${selectedEntry.id}`, {
@@ -328,6 +454,7 @@ export function CollectionsView({
 
   async function publishEntry(entry: CollectionEntryResponse) {
     if (!canPublish || !selectedCollection) return;
+    setError(null);
     const saved = await api.post<CollectionEntryResponse>(
       `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}/entries/${entry.id}/publish`,
     );
@@ -337,6 +464,7 @@ export function CollectionsView({
 
   async function archiveCollection() {
     if (!canDelete || !selectedCollection) return;
+    setError(null);
     await api.delete(
       `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}`,
     );
@@ -363,14 +491,7 @@ export function CollectionsView({
   function editSchema() {
     if (!selectedCollection) return;
     setEditingCollectionId(selectedCollection.id);
-    setFieldDrafts(
-      selectedCollection.fields.map(({ key, label, type, required }) => ({
-        key,
-        label,
-        type,
-        required,
-      })),
-    );
+    setFieldDrafts(selectedCollection.fields.map((field) => ({ ...field })));
   }
 
   return (
@@ -411,6 +532,11 @@ export function CollectionsView({
       {message ? (
         <div aria-live="polite" className="alert alert-success" role="status">
           {message}
+        </div>
+      ) : null}
+      {error ? (
+        <div aria-live="assertive" className="alert alert-error" role="alert">
+          {error}
         </div>
       ) : null}
       <section className="collection-summary-grid" aria-label="Collection summary">
@@ -510,6 +636,7 @@ export function CollectionsView({
                   onClick={() => {
                     setCollectionId(collection.id);
                     setEntrySearch('');
+                    setEntryOffset(0);
                   }}
                   type="button"
                 >
@@ -640,16 +767,73 @@ export function CollectionsView({
                       ⌕
                     </span>
                     <input
-                      onChange={(event) => setEntrySearch(event.target.value)}
+                      onChange={(event) => {
+                        setEntrySearch(event.target.value);
+                        setEntryOffset(0);
+                      }}
                       placeholder={`Search ${selectedCollection.singularName.toLowerCase()} entries`}
                       value={entrySearch}
                     />
                   </label>
+                  <label className="inline-field">
+                    Status
+                    <select
+                      aria-label="Filter entries by status"
+                      onChange={(event) => {
+                        setEntryStatus(event.target.value as typeof entryStatus);
+                        setEntryOffset(0);
+                      }}
+                      value={entryStatus}
+                    >
+                      <option value="">All</option>
+                      <option value="draft">Draft</option>
+                      <option value="published">Published</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                  </label>
+                  <label className="inline-field">
+                    Sort
+                    <select
+                      aria-label="Sort entries"
+                      onChange={(event) => {
+                        setEntrySortField(event.target.value);
+                        setEntryOffset(0);
+                      }}
+                      value={entrySortField}
+                    >
+                      <option value="">Newest</option>
+                      {selectedCollection.fields
+                        .filter(
+                          (field) =>
+                            !['array', 'group', 'multi-select'].includes(field.type),
+                        )
+                        .map((field) => (
+                          <option key={field.key} value={field.key}>
+                            {field.label}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  {entrySortField ? (
+                    <button
+                      className="button button-small button-ghost"
+                      onClick={() => {
+                        setEntrySortDirection((current) =>
+                          current === 'asc' ? 'desc' : 'asc',
+                        );
+                        setEntryOffset(0);
+                      }}
+                      type="button"
+                    >
+                      {entrySortDirection === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
+                    </button>
+                  ) : null}
                   <span className="muted small">
-                    {filteredEntries.length} of {entries.length} shown
+                    {entryPagination.total} entries · page{' '}
+                    {Math.floor(entryOffset / 20) + 1}
                   </span>
                 </div>
-                {entries.length === 0 ? (
+                {entries.length === 0 && entryPagination.total === 0 ? (
                   <div className="collection-empty-state collection-empty-state-wide">
                     <span className="collection-empty-icon" aria-hidden="true">
                       ◈
@@ -665,14 +849,14 @@ export function CollectionsView({
                       Add entry
                     </button>
                   </div>
-                ) : filteredEntries.length === 0 ? (
+                ) : entries.length === 0 ? (
                   <div className="collection-no-results">
                     <strong>No matching entries</strong>
                     <span className="muted">Try another search term.</span>
                   </div>
                 ) : (
                   <div className="collection-entry-list">
-                    {filteredEntries.map((entry) => {
+                    {entries.map((entry) => {
                       const previewFields = selectedCollection.fields
                         .filter((field) => field.key !== selectedCollection.titleFieldKey)
                         .slice(0, 2);
@@ -709,7 +893,16 @@ export function CollectionsView({
                               <button
                                 className="button button-small button-primary"
                                 disabled={!canPublish}
-                                onClick={() => void publishEntry(entry)}
+                                onClick={() =>
+                                  void publishEntry(entry).catch((caughtError: unknown) =>
+                                    setError(
+                                      collectionErrorMessage(
+                                        caughtError,
+                                        'Unable to publish this entry.',
+                                      ),
+                                    ),
+                                  )
+                                }
                                 type="button"
                               >
                                 Publish
@@ -729,6 +922,33 @@ export function CollectionsView({
                     })}
                   </div>
                 )}
+                {entryPagination.total > 0 ? (
+                  <div className="form-actions collection-pagination-actions">
+                    <button
+                      className="button button-small button-ghost"
+                      disabled={entryOffset === 0}
+                      onClick={() =>
+                        setEntryOffset((current) => Math.max(0, current - 20))
+                      }
+                      type="button"
+                    >
+                      Previous
+                    </button>
+                    <span className="muted small">
+                      {entryOffset + 1}–
+                      {Math.min(entryOffset + entries.length, entryPagination.total)} of{' '}
+                      {entryPagination.total}
+                    </span>
+                    <button
+                      className="button button-small button-ghost"
+                      disabled={!entryPagination.hasNextPage}
+                      onClick={() => setEntryOffset((current) => current + 20)}
+                      type="button"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </>
           ) : (
@@ -779,7 +999,13 @@ export function CollectionsView({
           className="stack"
           id="collection-form"
           onSubmit={(event) =>
-            void (editingCollectionId ? updateCollection(event) : createCollection(event))
+            void (
+              editingCollectionId ? updateCollection(event) : createCollection(event)
+            ).catch((caughtError: unknown) =>
+              setError(
+                collectionErrorMessage(caughtError, 'Unable to save the collection.'),
+              ),
+            )
           }
         >
           {!editingCollectionId ? (
@@ -902,13 +1128,26 @@ export function CollectionsView({
                       setFieldDrafts((current) =>
                         current.map((item, itemIndex) =>
                           itemIndex === index
-                            ? { ...item, type: event.target.value as CollectionFieldType }
+                            ? {
+                                ...item,
+                                type: event.target.value as CollectionFieldType,
+                                ...(event.target.value === 'select' ||
+                                event.target.value === 'multi-select'
+                                  ? { options: item.options ?? [] }
+                                  : { options: undefined }),
+                                ...(event.target.value === 'reference'
+                                  ? { cardinality: item.cardinality ?? 'one' }
+                                  : {
+                                      targetCollectionId: undefined,
+                                      cardinality: undefined,
+                                    }),
+                              }
                             : item,
                         ),
                       )
                     }
                   >
-                    {fieldTypes.map((type) => (
+                    {[...new Set([...fieldTypes, field.type])].map((type) => (
                       <option key={type} value={type}>
                         {type}
                       </option>
@@ -935,6 +1174,210 @@ export function CollectionsView({
                   </span>
                 </label>
               </div>
+              <div className="collection-drawer-field-grid">
+                <label>
+                  Description
+                  <input
+                    value={field.description ?? ''}
+                    onChange={(event) =>
+                      setFieldDrafts((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, description: event.target.value || undefined }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  Placeholder
+                  <input
+                    value={field.ui?.placeholder ?? ''}
+                    onChange={(event) =>
+                      setFieldDrafts((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? {
+                                ...item,
+                                ui: {
+                                  ...item.ui,
+                                  placeholder: event.target.value || undefined,
+                                },
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="collection-required-toggle">
+                  <span>Database behavior</span>
+                  <span>
+                    <input
+                      checked={field.indexed}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, indexed: event.target.checked }
+                              : item,
+                          ),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    Indexed
+                  </span>
+                  <span>
+                    <input
+                      checked={field.unique}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, unique: event.target.checked }
+                              : item,
+                          ),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    Unique
+                  </span>
+                </label>
+              </div>
+              {field.type === 'select' || field.type === 'multi-select' ? (
+                <label>
+                  Options
+                  <span className="muted small">One option per line: value | Label</span>
+                  <textarea
+                    rows={4}
+                    value={(field.options ?? [])
+                      .map((option) => `${option.value} | ${option.label}`)
+                      .join('\n')}
+                    onChange={(event) => {
+                      const options = event.target.value
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter(Boolean)
+                        .map((line) => {
+                          const [value, ...labelParts] = line.split('|');
+                          return {
+                            value: value?.trim() ?? '',
+                            label: labelParts.join('|').trim() || value?.trim() || '',
+                          };
+                        })
+                        .filter((option) => option.value && option.label);
+                      setFieldDrafts((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, options } : item,
+                        ),
+                      );
+                    }}
+                  />
+                </label>
+              ) : null}
+              {field.type === 'slug' ? (
+                <div className="collection-drawer-field-grid">
+                  <label>
+                    Auto slug source
+                    <select
+                      value={field.slugFromFieldKey ?? ''}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  slugFromFieldKey: event.target.value || undefined,
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">Manual slug</option>
+                      {fieldDrafts
+                        .filter((candidate) => candidate.id !== field.id)
+                        .map((candidate) => (
+                          <option key={candidate.id} value={candidate.key}>
+                            {candidate.label || candidate.key}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="collection-required-toggle">
+                    <span>Slug behavior</span>
+                    <span>
+                      <input
+                        checked={field.manualSlugOverride}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, manualSlugOverride: event.target.checked }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      Allow manual override
+                    </span>
+                  </label>
+                </div>
+              ) : null}
+              {field.type === 'reference' ? (
+                <div className="collection-drawer-field-grid">
+                  <label>
+                    Target collection
+                    <select
+                      required
+                      value={field.targetCollectionId ?? ''}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, targetCollectionId: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">Choose a collection</option>
+                      {collections
+                        .filter((candidate) => candidate.id !== selectedCollection?.id)
+                        .map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {candidate.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Cardinality
+                    <select
+                      value={field.cardinality ?? 'one'}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  cardinality: event.target.value as 'one' | 'many',
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="one">One entry</option>
+                      <option value="many">Many entries</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
             </div>
           ))}
         </form>
@@ -969,8 +1412,13 @@ export function CollectionsView({
           className="collection-entry-form"
           id="entry-form"
           onSubmit={(event) => {
-            void saveEntry(event).catch(() =>
-              setMessage('Entry values must be valid JSON or failed validation.'),
+            void saveEntry(event).catch((caughtError: unknown) =>
+              setError(
+                collectionErrorMessage(
+                  caughtError,
+                  'Entry values must be valid JSON or failed validation.',
+                ),
+              ),
             );
           }}
         >
@@ -990,6 +1438,7 @@ export function CollectionsView({
                 {selectedEntry ? <StatusBadge status={selectedEntry.status} /> : null}
               </div>
               <CollectionEntryFields
+                assets={assets}
                 collection={selectedCollection}
                 entryValues={entryValues}
                 onChange={setEntryValues}
@@ -1017,7 +1466,16 @@ export function CollectionsView({
           <div className="form-actions">
             <button
               className="button button-danger"
-              onClick={() => void archiveCollection()}
+              onClick={() =>
+                void archiveCollection().catch((caughtError: unknown) =>
+                  setError(
+                    collectionErrorMessage(
+                      caughtError,
+                      'Unable to archive this collection.',
+                    ),
+                  ),
+                )
+              }
               type="button"
             >
               Archive collection

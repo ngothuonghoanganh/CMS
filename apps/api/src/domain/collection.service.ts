@@ -12,6 +12,7 @@ import {
   CollectionEntryListQuerySchema,
   CollectionEntryListResponseSchema,
   CollectionEntryResponseSchema,
+  DiscardCollectionEntryResponseSchema,
   CollectionQueryRequestSchema,
   CollectionQueryResponseSchema,
   CreateCollectionEntryRequestSchema,
@@ -21,13 +22,19 @@ import {
   PageQuerySchema,
   ResolvedDataContextSchema,
   ResolvedDataRecordSchema,
+  TemplateCompositionSchema,
   UpdateCollectionEntryRequestSchema,
   UpdateCollectionRequestSchema,
+  isQueryValueCompatibleForFieldType,
+  normalizeCollectionSlug,
+  queryOperatorsForFieldType,
   type Collection,
   type CollectionDefinition,
   type CollectionEntryListQuery,
   type CollectionEntryListResponse,
   type CollectionEntryResponse,
+  type DiscardCollectionEntryResponse,
+  type CollectionUsageReference,
   type CollectionQueryRequest,
   type CollectionQueryResponse,
   type CreateCollectionEntryRequest,
@@ -50,6 +57,10 @@ import {
 import { AssetRecord } from '../persistence/schemas/asset.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import {
+  TemplateRecord,
+  TemplateVersionRecord,
+} from '../persistence/schemas/template.schema';
 
 const safeDataPath = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)*$/;
 const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,6 +80,10 @@ export class CollectionService {
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly pageVersionModel: Model<PageVersionRecord>,
+    @InjectModel(TemplateRecord.name)
+    private readonly templateModel: Model<TemplateRecord>,
+    @InjectModel(TemplateVersionRecord.name)
+    private readonly templateVersionModel: Model<TemplateVersionRecord>,
   ) {}
 
   async list(workspaceId: string, siteId: string): Promise<Collection[]> {
@@ -146,6 +161,36 @@ export class CollectionService {
       });
     }
     if (parsed.fields) {
+      const nextFields = parsed.fields;
+      const previousFields = this.toCollection(record).fields;
+      const nextFieldIds = new Set(nextFields.map((field) => field.id));
+      const changedFields = previousFields.filter((field) => {
+        const next = nextFields.find((candidate) => candidate.id === field.id);
+        return (
+          !nextFieldIds.has(field.id) ||
+          !next ||
+          next.key !== field.key ||
+          next.type !== field.type ||
+          next.status !== field.status
+        );
+      });
+      for (const field of changedFields) {
+        const usage = await this.getUsage(workspaceId, siteId, collectionId, {
+          fieldId: field.id,
+          fieldKey: field.key,
+        });
+        if (usage.length > 0) {
+          throw new ConflictException({
+            code: 'COLLECTION_FIELD_IN_USE',
+            message: `Field ${field.key} is used by published or draft page content`,
+            details: {
+              fieldId: field.id,
+              fieldKey: field.key,
+              references: usage,
+            },
+          });
+        }
+      }
       this.assertFieldKeys(
         parsed.fields,
         parsed.titleFieldKey === null
@@ -195,7 +240,7 @@ export class CollectionService {
         code: 'COLLECTION_IN_USE',
         message:
           'Remove collection bindings and dynamic pages before archiving this collection',
-        references: usage,
+        details: { references: usage },
       });
     }
     record.status = 'archived';
@@ -206,24 +251,35 @@ export class CollectionService {
     workspaceId: string,
     siteId: string,
     collectionId: string,
-  ): Promise<Array<{ type: string; id: string; label: string }>> {
-    const references: Array<{ type: string; id: string; label: string }> = [];
+    field?: { fieldId: string; fieldKey: string },
+  ): Promise<CollectionUsageReference[]> {
+    const references: CollectionUsageReference[] = [];
+    const withField = (
+      reference: Omit<CollectionUsageReference, 'fieldId' | 'fieldKey'>,
+    ) =>
+      field
+        ? { ...reference, fieldId: field.fieldId, fieldKey: field.fieldKey }
+        : reference;
     const dynamicPages = await this.pageModel
-      .find({ workspaceId, siteId, collectionId })
+      .find({
+        workspaceId,
+        siteId,
+        collectionId,
+        ...(field ? { lookupField: field.fieldKey } : {}),
+      })
       .select({ _id: 1, name: 1 })
-      .limit(2_000)
       .exec();
     references.push(
       ...dynamicPages.map((page) => ({
         type: 'dynamic-page',
         id: page._id.toString(),
         label: page.name,
+        ...(field ? { fieldId: field.fieldId, fieldKey: field.fieldKey } : {}),
       })),
     );
     const pages = await this.pageModel
       .find({ workspaceId, siteId })
       .select({ _id: 1, name: 1, currentDraftVersionId: 1, publishedVersionId: 1 })
-      .limit(2_000)
       .exec();
     const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
     const currentVersionIds = [
@@ -243,26 +299,116 @@ export class CollectionService {
     for (const version of versions) {
       const composition = PageCompositionSchema.safeParse(version.composition);
       if (!composition.success) continue;
-      if (
-        composition.data.queries.some(
-          (query) =>
-            query.source.type === 'collection' &&
-            query.source.collectionId === collectionId,
-        )
-      )
-        pageIds.add(version.landingPageId);
+      const collectionQueryIds = new Set(
+        composition.data.queries
+          .filter(
+            (query) =>
+              query.source.type === 'collection' &&
+              query.source.collectionId === collectionId,
+          )
+          .map((query) => query.id),
+      );
+      const queryIds = new Set(
+        composition.data.queries
+          .filter(
+            (query) =>
+              collectionQueryIds.has(query.id) &&
+              (!field ||
+                query.filters.some((filter) => filter.field === field.fieldKey) ||
+                query.sort.some((sort) => sort.field === field.fieldKey)),
+          )
+          .map((query) => query.id),
+      );
+      const usesFieldInBinding = field
+        ? composition.data.bindings.some(
+            (binding) =>
+              binding.source.path.split('.')[0] === field.fieldKey &&
+              ((binding.source.type === 'current-entry' &&
+                pages.find((page) => page._id.toString() === version.landingPageId)
+                  ?.collectionId === collectionId) ||
+                (binding.source.type === 'query-item' &&
+                  binding.source.sourceId &&
+                  collectionQueryIds.has(binding.source.sourceId))),
+          )
+        : false;
+      if (queryIds.size > 0 || usesFieldInBinding) pageIds.add(version.landingPageId);
     }
-    if (pageIds.size > 0) {
-      references.push(
-        ...[...pageIds]
-          .map((pageId) => pageById.get(pageId))
-          .filter((page): page is PageDocument => Boolean(page))
-          .map((page) => ({
+    references.push(
+      ...[...pageIds]
+        .map((pageId) => pageById.get(pageId))
+        .filter((page): page is PageDocument => Boolean(page))
+        .map((page) =>
+          withField({
             type: 'page-query',
             id: page._id.toString(),
             label: page.name,
-          })),
+          }),
+        ),
+    );
+
+    // Templates can be global to a workspace or scoped to this site. Only the
+    // latest draft and published template versions are relevant; older
+    // immutable snapshots cannot be selected by the editor.
+    const templates = await this.templateModel
+      .find({
+        workspaceId,
+        $or: [{ siteId }, { siteId: { $exists: false } }],
+      })
+      .select({ _id: 1, name: 1, latestVersionId: 1, publishedVersionId: 1 })
+      .exec();
+    const templateVersionIds = [
+      ...new Set(
+        templates.flatMap((template) =>
+          [template.latestVersionId, template.publishedVersionId].filter(
+            (versionId): versionId is string => Boolean(versionId),
+          ),
+        ),
+      ),
+    ];
+    if (templateVersionIds.length > 0) {
+      const templateVersions = await this.templateVersionModel
+        .find({ _id: { $in: templateVersionIds } })
+        .select({ templateId: 1, versionNumber: 1, composition: 1 })
+        .exec();
+      const templateById = new Map(
+        templates.map((template) => [template._id.toString(), template]),
       );
+      for (const version of templateVersions) {
+        const composition = TemplateCompositionSchema.safeParse(version.composition);
+        const template = templateById.get(version.templateId.toString());
+        if (!composition.success || !template) continue;
+        const usesCollection = composition.data.queries.some(
+          (query) =>
+            query.source.type === 'collection' &&
+            query.source.collectionId === collectionId &&
+            (!field ||
+              query.filters.some((filter) => filter.field === field.fieldKey) ||
+              query.sort.some((sort) => sort.field === field.fieldKey)),
+        );
+        const usesBinding = field
+          ? composition.data.bindings.some(
+              (binding) =>
+                binding.source.path.split('.')[0] === field.fieldKey &&
+                (binding.source.type === 'current-entry' ||
+                  (binding.source.type === 'query-item' &&
+                    composition.data.queries.some(
+                      (query) =>
+                        query.id === binding.source.sourceId &&
+                        query.source.type === 'collection' &&
+                        query.source.collectionId === collectionId,
+                    ))),
+            )
+          : false;
+        if (usesCollection || usesBinding) {
+          references.push(
+            withField({
+              type: 'template',
+              id: template._id.toString(),
+              label: `${template.name} · v${version.versionNumber}`,
+            }),
+          );
+        }
+      }
     }
     return references;
   }
@@ -275,36 +421,53 @@ export class CollectionService {
   ): Promise<CollectionEntryListResponse> {
     const collection = await this.requireCollection(workspaceId, siteId, collectionId);
     const query = CollectionEntryListQuerySchema.parse(input);
-    const entries = await this.entryModel
-      .find({
-        workspaceId,
-        siteId,
-        collectionId,
-        ...(query.status ? { status: query.status } : {}),
-      })
-      .sort({ createdAt: -1, _id: -1 })
-      .exec();
-    const versions = await this.loadVersions(entries, 'draft');
-    const filtered = entries.filter((entry) => {
-      if (!query.search) return true;
-      const version = versions.get(entry._id.toString());
-      const title = collection.titleFieldKey
-        ? version?.values[collection.titleFieldKey]
-        : undefined;
-      return String(title ?? '')
-        .toLowerCase()
-        .includes(query.search.toLowerCase());
-    });
-    const page = filtered.slice(query.offset, query.offset + query.limit);
+    if (query.sortField) {
+      const sortField = collection.fields.find(
+        (field) => field.key === query.sortField && field.status === 'active',
+      );
+      if (!sortField || ['array', 'group', 'multi-select'].includes(sortField.type)) {
+        throw new BadRequestException({
+          code: 'ENTRY_SORT_FIELD_INVALID',
+          message: `Sort field ${query.sortField} is not a sortable collection field`,
+        });
+      }
+    }
+    const filter: Record<string, unknown> = {
+      workspaceId,
+      siteId,
+      collectionId,
+      ...(query.status ? { status: query.status } : {}),
+    };
+    if (query.search) {
+      filter.draftSearchText = {
+        $regex: escapeRegex(query.search.trim().toLowerCase()),
+      };
+    }
+    const sort: Record<string, 1 | -1> = query.sortField
+      ? {
+          [`draftValues.${query.sortField}`]: query.sortDirection === 'asc' ? 1 : -1,
+          _id: 1,
+        }
+      : { createdAt: -1, _id: -1 };
+    const [entries, total] = await Promise.all([
+      this.entryModel
+        .find(filter)
+        .sort(sort)
+        .skip(query.offset)
+        .limit(query.limit)
+        .exec(),
+      this.entryModel.countDocuments(filter).exec(),
+    ]);
+    const versions = await this.loadVersions(entries, 'draft', workspaceId, siteId);
     return CollectionEntryListResponseSchema.parse({
-      items: page.map((entry) =>
+      items: entries.map((entry) =>
         this.toEntryResponse(entry, versions.get(entry._id.toString())),
       ),
       pagination: {
         limit: query.limit,
         offset: query.offset,
-        total: filtered.length,
-        hasNextPage: query.offset + page.length < filtered.length,
+        total,
+        hasNextPage: query.offset + entries.length < total,
       },
     });
   }
@@ -347,12 +510,14 @@ export class CollectionService {
   ): Promise<CollectionEntryResponse> {
     const collection = await this.requireCollection(workspaceId, siteId, collectionId);
     const parsed = CreateCollectionEntryRequestSchema.parse(input);
-    const values = await this.validateValues(
+    const validated = await this.validateValues(
       workspaceId,
       siteId,
       collection,
       parsed.values,
     );
+    const { values, autoSlugSourceValues } = validated;
+    const uniqueTokens = buildUniqueTokens(collection, values);
     const entryId = randomUUID();
     const versionId = randomUUID();
     const version = await this.entryVersionModel.create({
@@ -372,11 +537,21 @@ export class CollectionService {
         siteId,
         collectionId,
         draftVersionId: versionId,
+        draftValues: values,
+        draftSearchText: searchTextForValues(values),
+        ...(Object.keys(autoSlugSourceValues).length ? { autoSlugSourceValues } : {}),
+        ...(uniqueTokens.length ? { uniqueTokens } : {}),
         status: 'draft',
       });
       return this.toEntryResponse(entry, version);
     } catch (error) {
       await version.deleteOne().catch(() => undefined);
+      if (isDuplicateKeyError(error)) {
+        throw new ConflictException({
+          code: 'UNIQUE_COLLECTION_FIELD',
+          message: 'An entry already uses one of the unique field values',
+        });
+      }
       throw error;
     }
   }
@@ -399,7 +574,13 @@ export class CollectionService {
     );
     const current = entry.draftVersionId
       ? await this.entryVersionModel
-          .findOne({ _id: entry.draftVersionId, entryId })
+          .findOne({
+            _id: entry.draftVersionId,
+            entryId,
+            collectionId,
+            workspaceId,
+            siteId,
+          })
           .exec()
       : null;
     if (!current)
@@ -416,13 +597,16 @@ export class CollectionService {
         message: 'The entry changed while it was being edited',
       });
     }
-    const values = await this.validateValues(
+    const validated = await this.validateValues(
       workspaceId,
       siteId,
       collection,
       parsed.values,
       entryId,
+      entry.autoSlugSourceValues,
     );
+    const { values, autoSlugSourceValues } = validated;
+    const uniqueTokens = buildUniqueTokens(collection, values);
     const version = await this.entryVersionModel.create({
       _id: randomUUID(),
       workspaceId,
@@ -439,12 +623,36 @@ export class CollectionService {
         {
           $set: {
             draftVersionId: version._id.toString(),
+            draftValues: values,
+            draftSearchText: searchTextForValues(values),
+            ...(Object.keys(autoSlugSourceValues).length ? { autoSlugSourceValues } : {}),
+            ...(uniqueTokens.length ? { uniqueTokens } : {}),
             status: entry.publishedVersionId ? 'published' : 'draft',
           },
+          ...(!uniqueTokens.length || !Object.keys(autoSlugSourceValues).length
+            ? {
+                $unset: {
+                  ...(!uniqueTokens.length ? { uniqueTokens: 1 } : {}),
+                  ...(!Object.keys(autoSlugSourceValues).length
+                    ? { autoSlugSourceValues: 1 }
+                    : {}),
+                },
+              }
+            : {}),
         },
         { new: true },
       )
-      .exec();
+      .exec()
+      .catch(async (error) => {
+        await version.deleteOne().catch(() => undefined);
+        if (isDuplicateKeyError(error)) {
+          throw new ConflictException({
+            code: 'UNIQUE_COLLECTION_FIELD',
+            message: 'An entry already uses one of the unique field values',
+          });
+        }
+        throw error;
+      });
     if (!advanced) {
       await version.deleteOne().catch(() => undefined);
       throw new ConflictException({
@@ -461,7 +669,7 @@ export class CollectionService {
     collectionId: string,
     entryId: string,
   ): Promise<CollectionEntryResponse> {
-    await this.requireCollection(workspaceId, siteId, collectionId);
+    const collection = await this.requireCollection(workspaceId, siteId, collectionId);
     const entry = await this.requireEntryDocument(
       workspaceId,
       siteId,
@@ -473,22 +681,125 @@ export class CollectionService {
         code: 'ENTRY_VERSION_NOT_FOUND',
         message: 'The entry does not have a draft version',
       });
+    const draftVersion = await this.entryVersionModel
+      .findOne({
+        _id: entry.draftVersionId,
+        entryId,
+        collectionId,
+        workspaceId,
+        siteId,
+      })
+      .exec();
+    if (!draftVersion)
+      throw new NotFoundException({
+        code: 'ENTRY_VERSION_NOT_FOUND',
+        message: 'The entry draft version was not found',
+      });
+    const validated = await this.validateValues(
+      workspaceId,
+      siteId,
+      collection,
+      draftVersion.values,
+      entryId,
+      entry.autoSlugSourceValues,
+    );
+    const { values, autoSlugSourceValues } = validated;
+    const uniqueTokens = buildUniqueTokens(collection, values);
+    let publishVersion = draftVersion;
+    if (JSON.stringify(values) !== JSON.stringify(draftVersion.values)) {
+      try {
+        publishVersion = await this.entryVersionModel.create({
+          _id: randomUUID(),
+          workspaceId,
+          siteId,
+          entryId,
+          collectionId,
+          versionNumber: draftVersion.versionNumber + 1,
+          values,
+        });
+        const advancedDraft = await this.entryModel
+          .findOneAndUpdate(
+            {
+              _id: entryId,
+              workspaceId,
+              siteId,
+              draftVersionId: draftVersion._id.toString(),
+            },
+            {
+              $set: {
+                draftVersionId: publishVersion._id.toString(),
+                draftValues: values,
+                draftSearchText: searchTextForValues(values),
+                ...(Object.keys(autoSlugSourceValues).length
+                  ? { autoSlugSourceValues }
+                  : {}),
+              },
+              ...(!Object.keys(autoSlugSourceValues).length
+                ? { $unset: { autoSlugSourceValues: 1 } }
+                : {}),
+            },
+            { new: true },
+          )
+          .exec();
+        if (!advancedDraft) {
+          await publishVersion.deleteOne().catch(() => undefined);
+          throw new ConflictException({
+            code: 'ENTRY_VERSION_CONFLICT',
+            message: 'The entry changed while it was being prepared for publishing',
+          });
+        }
+      } catch (error) {
+        if (isDuplicateKeyError(error)) {
+          throw new ConflictException({
+            code: 'UNIQUE_COLLECTION_FIELD',
+            message: 'An entry already uses one of the unique field values',
+          });
+        }
+        throw error;
+      }
+    }
+    const draftVersionId = publishVersion._id.toString();
     const published = await this.entryModel
       .findOneAndUpdate(
-        { _id: entryId, workspaceId, siteId, draftVersionId: entry.draftVersionId },
-        { $set: { publishedVersionId: entry.draftVersionId, status: 'published' } },
+        { _id: entryId, workspaceId, siteId, draftVersionId },
+        {
+          $set: {
+            publishedVersionId: draftVersionId,
+            publishedValues: values,
+            publishedSearchText: searchTextForValues(values),
+            ...(Object.keys(autoSlugSourceValues).length ? { autoSlugSourceValues } : {}),
+            ...(uniqueTokens.length ? { uniqueTokens } : {}),
+            status: 'published',
+          },
+          ...(!uniqueTokens.length || !Object.keys(autoSlugSourceValues).length
+            ? {
+                $unset: {
+                  ...(!uniqueTokens.length ? { uniqueTokens: 1 } : {}),
+                  ...(!Object.keys(autoSlugSourceValues).length
+                    ? { autoSlugSourceValues: 1 }
+                    : {}),
+                },
+              }
+            : {}),
+        },
         { new: true },
       )
-      .exec();
+      .exec()
+      .catch((error) => {
+        if (isDuplicateKeyError(error)) {
+          throw new ConflictException({
+            code: 'UNIQUE_COLLECTION_FIELD',
+            message: 'An entry already uses one of the unique field values',
+          });
+        }
+        throw error;
+      });
     if (!published)
       throw new ConflictException({
         code: 'ENTRY_VERSION_CONFLICT',
         message: 'The entry changed while it was being published',
       });
-    const version = await this.entryVersionModel
-      .findOne({ _id: published.publishedVersionId, entryId })
-      .exec();
-    return this.toEntryResponse(published, version);
+    return this.toEntryResponse(published, publishVersion);
   }
 
   async discardDraft(
@@ -496,7 +807,7 @@ export class CollectionService {
     siteId: string,
     collectionId: string,
     entryId: string,
-  ): Promise<CollectionEntryResponse> {
+  ): Promise<CollectionEntryResponse | DiscardCollectionEntryResponse> {
     await this.requireCollection(workspaceId, siteId, collectionId);
     const entry = await this.requireEntryDocument(
       workspaceId,
@@ -504,9 +815,35 @@ export class CollectionService {
       collectionId,
       entryId,
     );
-    const update = entry.publishedVersionId
-      ? { $set: { draftVersionId: entry.publishedVersionId, status: 'published' } }
-      : { $unset: { draftVersionId: 1 }, $set: { status: 'draft' } };
+    if (!entry.publishedVersionId) {
+      await this.entryModel.deleteOne({ _id: entryId, workspaceId, siteId }).exec();
+      await this.entryVersionModel.deleteMany({ entryId, workspaceId, siteId }).exec();
+      return DiscardCollectionEntryResponseSchema.parse({ entryId, deleted: true });
+    }
+    const publishedVersion = await this.entryVersionModel
+      .findOne({
+        _id: entry.publishedVersionId,
+        entryId,
+        workspaceId,
+        siteId,
+      })
+      .exec();
+    if (!publishedVersion)
+      throw new NotFoundException({
+        code: 'ENTRY_VERSION_NOT_FOUND',
+        message: 'The published entry version was not found',
+      });
+    const update = {
+      $set: {
+        draftVersionId: entry.publishedVersionId,
+        draftValues: publishedVersion.values,
+        draftSearchText: searchTextForValues(publishedVersion.values),
+        ...(entry.autoSlugSourceValues
+          ? { autoSlugSourceValues: entry.autoSlugSourceValues }
+          : {}),
+        status: 'published',
+      },
+    };
     const next = await this.entryModel
       .findOneAndUpdate({ _id: entryId, workspaceId, siteId }, update, { new: true })
       .exec();
@@ -515,16 +852,7 @@ export class CollectionService {
         code: 'ENTRY_NOT_FOUND',
         message: 'The entry was not found',
       });
-    const versionId = next.draftVersionId ?? next.publishedVersionId;
-    const version = versionId
-      ? await this.entryVersionModel.findOne({ _id: versionId, entryId }).exec()
-      : null;
-    if (!version)
-      throw new NotFoundException({
-        code: 'ENTRY_VERSION_NOT_FOUND',
-        message: 'The entry does not have a version',
-      });
-    return this.toEntryResponse(next, version);
+    return this.toEntryResponse(next, publishedVersion);
   }
 
   async archiveEntry(
@@ -557,49 +885,48 @@ export class CollectionService {
     const collection = await this.requireCollection(workspaceId, siteId, collectionId);
     const request = CollectionQueryRequestSchema.parse(input);
     this.validateQuery(collection, request);
-    const entries = await this.entryModel
-      .find({
+    const projectionName = mode === 'published' ? 'publishedValues' : 'draftValues';
+    const conditions: Record<string, unknown>[] = [
+      {
         workspaceId,
         siteId,
         collectionId,
         ...(mode === 'published'
           ? { status: 'published', publishedVersionId: { $exists: true } }
-          : { status: { $ne: 'archived' } }),
-      })
-      .exec();
-    const versions = await this.loadVersions(entries, mode);
-    let rows = entries
-      .map((entry) => ({ entry, version: versions.get(entry._id.toString()) }))
-      .filter(
-        (
-          row,
-        ): row is {
-          entry: CollectionEntryDocument;
-          version: CollectionEntryVersionDocument;
-        } => Boolean(row.version),
-      );
-    rows = rows.filter(({ version }) =>
-      request.filters.every((filter) =>
-        this.matchesFilter(version.values[filter.field], filter.operator, filter.value),
-      ),
+          : { status: { $ne: 'archived' }, draftVersionId: { $exists: true } }),
+      },
+    ];
+    conditions.push(
+      ...request.filters.map((filter) => mongoFilterCondition(projectionName, filter)),
     );
-    for (const sort of [...request.sort].reverse())
-      rows.sort(
-        (left, right) =>
-          compareValues(
-            left.version.values[sort.field],
-            right.version.values[sort.field],
-          ) * (sort.direction === 'asc' ? 1 : -1),
-      );
-    const total = rows.length;
-    const page = rows.slice(request.offset, request.offset + request.limit);
+    const databaseFilter =
+      conditions.length === 1 ? conditions[0]! : { $and: conditions };
+    const sort = Object.fromEntries([
+      ...request.sort.map((item) => [
+        `${projectionName}.${item.field}`,
+        item.direction === 'asc' ? 1 : -1,
+      ]),
+      ['_id', 1],
+    ]) as Record<string, 1 | -1>;
+    const [entries, total] = await Promise.all([
+      this.entryModel
+        .find(databaseFilter)
+        .sort(sort)
+        .skip(request.offset)
+        .limit(request.limit)
+        .exec(),
+      this.entryModel.countDocuments(databaseFilter).exec(),
+    ]);
+    const versions = await this.loadVersions(entries, mode, workspaceId, siteId);
     return CollectionQueryResponseSchema.parse({
-      items: page.map(({ entry, version }) => this.toEntryResponse(entry, version)),
+      items: entries.map((entry) =>
+        this.toEntryResponse(entry, versions.get(entry._id.toString())),
+      ),
       pagination: {
         limit: request.limit,
         offset: request.offset,
         total,
-        hasNextPage: request.offset + page.length < total,
+        hasNextPage: request.offset + entries.length < total,
       },
     });
   }
@@ -618,7 +945,7 @@ export class CollectionService {
           message: `Query field ${filter.field} is not available`,
         });
       }
-      if (!queryOperatorsForField(field.type).has(filter.operator)) {
+      if (!queryOperatorsForFieldType(field.type).includes(filter.operator)) {
         throw new BadRequestException({
           code: 'QUERY_OPERATOR_INVALID',
           message: `Operator ${filter.operator} is not valid for ${field.type} fields`,
@@ -644,7 +971,10 @@ export class CollectionService {
           ? filter.value
           : null
         : [filter.value];
-      if (!values || values.some((value) => !isQueryValueCompatible(field.type, value))) {
+      if (
+        !values ||
+        values.some((value) => !isQueryValueCompatibleForFieldType(field.type, value))
+      ) {
         throw new BadRequestException({
           code: 'QUERY_VALUE_INVALID',
           message: `The query value is not valid for ${field.type} fields`,
@@ -694,35 +1024,42 @@ export class CollectionService {
     composition: PageComposition,
     options: { mode: 'draft' | 'published'; currentEntry?: ResolvedDataRecord },
   ): Promise<ResolvedDataContext> {
-    const queryItems: Record<string, ResolvedDataRecord[]> = {};
-    for (const query of composition.queries) {
-      const parsed = PageQuerySchema.parse(query);
-      if (parsed.source.type === 'collection') {
-        const result = await this.query(
-          workspaceId,
-          siteId,
-          parsed.source.collectionId,
-          {
-            filters: parsed.filters,
-            sort: parsed.sort,
-            limit: parsed.limit,
-            offset: parsed.offset,
-          },
-          options.mode,
-        );
-        queryItems[parsed.id] = result.items.map((item) =>
-          ResolvedDataRecordSchema.parse({
-            id: item.id,
-            collectionId: item.collectionId,
-            values: item.values,
-          }),
-        );
-      } else if (parsed.source.type === 'current-entry' && options.currentEntry) {
-        queryItems[parsed.id] = [options.currentEntry];
-      } else {
-        queryItems[parsed.id] = [];
-      }
-    }
+    const resolvedQueries = await Promise.all(
+      composition.queries.map(async (query) => {
+        const parsed = PageQuerySchema.parse(query);
+        if (parsed.source.type === 'collection') {
+          const result = await this.query(
+            workspaceId,
+            siteId,
+            parsed.source.collectionId,
+            {
+              filters: parsed.filters,
+              sort: parsed.sort,
+              limit: parsed.limit,
+              offset: parsed.offset,
+            },
+            options.mode,
+          );
+          return [
+            parsed.id,
+            result.items.map((item) =>
+              ResolvedDataRecordSchema.parse({
+                id: item.id,
+                collectionId: item.collectionId,
+                values: item.values,
+              }),
+            ),
+          ] as const;
+        }
+        return [
+          parsed.id,
+          parsed.source.type === 'current-entry' && options.currentEntry
+            ? [options.currentEntry]
+            : [],
+        ] as const;
+      }),
+    );
+    const queryItems = Object.fromEntries(resolvedQueries);
     return ResolvedDataContextSchema.parse({
       ...(options.currentEntry ? { currentEntry: options.currentEntry } : {}),
       queryItems,
@@ -734,40 +1071,54 @@ export class CollectionService {
     workspaceId: string,
     siteId: string,
     composition: PageComposition,
+    options: { currentEntryCollectionId?: string } = {},
   ): Promise<void> {
     const parsed = PageCompositionSchema.parse(composition);
-    const collectionIds = new Set<string>();
+    const queryCollections = new Map<string, CollectionDefinition>();
     for (const query of parsed.queries) {
       const source = DataSourceDescriptorSchema.parse(query.source);
       if (source.type === 'collection') {
-        collectionIds.add(source.collectionId);
         const collection = await this.requireCollection(
           workspaceId,
           siteId,
           source.collectionId,
         );
-        for (const filter of query.filters) {
-          if (
-            !collection.fields.some(
-              (field) => field.key === filter.field && field.status === 'active',
-            )
-          )
-            throw new BadRequestException({
-              code: 'QUERY_FIELD_NOT_FOUND',
-              message: `Query field ${filter.field} is not available`,
-            });
+        queryCollections.set(query.id, collection);
+        this.validateQuery(collection, {
+          filters: query.filters,
+          sort: query.sort,
+          limit: query.limit,
+          offset: query.offset,
+        });
+      } else if (source.type === 'current-entry') {
+        if (!options.currentEntryCollectionId) {
+          throw new BadRequestException({
+            code: 'CURRENT_ENTRY_CONTEXT_REQUIRED',
+            message: 'Current-entry queries are only valid on dynamic pages',
+          });
         }
-        for (const sort of query.sort) {
-          if (
-            !collection.fields.some(
-              (field) => field.key === sort.field && field.status === 'active',
-            )
-          )
-            throw new BadRequestException({
-              code: 'QUERY_FIELD_NOT_FOUND',
-              message: `Sort field ${sort.field} is not available`,
-            });
+        if (
+          source.collectionId &&
+          source.collectionId !== options.currentEntryCollectionId
+        ) {
+          throw new BadRequestException({
+            code: 'CURRENT_ENTRY_COLLECTION_INVALID',
+            message:
+              'The current-entry query collection does not match the page collection',
+          });
         }
+        const collection = await this.requireCollection(
+          workspaceId,
+          siteId,
+          source.collectionId ?? options.currentEntryCollectionId,
+        );
+        queryCollections.set(query.id, collection);
+        this.validateQuery(collection, {
+          filters: query.filters,
+          sort: query.sort,
+          limit: query.limit,
+          offset: query.offset,
+        });
       }
     }
     for (const binding of parsed.bindings) {
@@ -790,8 +1141,50 @@ export class CollectionService {
           code: 'INVALID_BINDING_SOURCE',
           message: 'Current-entry bindings cannot define sourceId',
         });
+      if (binding.source.type === 'current-entry') {
+        if (!options.currentEntryCollectionId) {
+          throw new BadRequestException({
+            code: 'CURRENT_ENTRY_CONTEXT_REQUIRED',
+            message: 'Current-entry bindings are only valid on dynamic pages',
+          });
+        }
+        const fieldKey = binding.source.path.split('.')[0];
+        const collection = await this.requireCollection(
+          workspaceId,
+          siteId,
+          options.currentEntryCollectionId,
+        );
+        if (
+          !collection.fields.some(
+            (field) => field.key === fieldKey && field.status === 'active',
+          )
+        ) {
+          throw new BadRequestException({
+            code: 'BINDING_FIELD_NOT_FOUND',
+            message: `Current-entry field ${fieldKey} is not available`,
+          });
+        }
+      }
+      if (binding.source.type === 'query-item') {
+        const query = parsed.queries.find(
+          (candidate) => candidate.id === binding.source.sourceId,
+        );
+        const collection = query ? queryCollections.get(query.id) : undefined;
+        if (collection) {
+          const fieldKey = binding.source.path.split('.')[0];
+          if (
+            !collection.fields.some(
+              (field) => field.key === fieldKey && field.status === 'active',
+            )
+          ) {
+            throw new BadRequestException({
+              code: 'BINDING_FIELD_NOT_FOUND',
+              message: `Binding field ${fieldKey} is not available`,
+            });
+          }
+        }
+      }
     }
-    void collectionIds;
   }
 
   private async validateValues(
@@ -800,7 +1193,11 @@ export class CollectionService {
     collection: CollectionDefinition,
     input: Record<string, unknown>,
     exceptEntryId?: string,
-  ): Promise<Record<string, unknown>> {
+    previousAutoSlugSourceValues?: Record<string, string>,
+  ): Promise<{
+    values: Record<string, unknown>;
+    autoSlugSourceValues: Record<string, string>;
+  }> {
     const knownKeys = new Set(collection.fields.map((field) => field.key));
     for (const key of Object.keys(input))
       if (!knownKeys.has(key))
@@ -809,6 +1206,31 @@ export class CollectionService {
           message: `Unknown collection field: ${key}`,
         });
     const values: Record<string, unknown> = { ...input };
+    const autoSlugSourceValues: Record<string, string> = {
+      ...(previousAutoSlugSourceValues ?? {}),
+    };
+    for (const field of collection.fields) {
+      if (field.status === 'archived' || field.type !== 'slug' || !field.slugFromFieldKey)
+        continue;
+      const sourceValue = values[field.slugFromFieldKey];
+      const source = typeof sourceValue === 'string' ? sourceValue : '';
+      const currentValue = values[field.key];
+      const previousSource = previousAutoSlugSourceValues?.[field.key];
+      const wasPreviouslyAutomatic =
+        previousSource !== undefined &&
+        currentValue === normalizeCollectionSlug(previousSource);
+      const shouldGenerate =
+        !field.manualSlugOverride || isEmptyValue(currentValue) || wasPreviouslyAutomatic;
+      if (shouldGenerate) {
+        const generated = normalizeCollectionSlug(source);
+        if (generated) values[field.key] = generated;
+        else delete values[field.key];
+        if (source) autoSlugSourceValues[field.key] = source;
+        else delete autoSlugSourceValues[field.key];
+      } else {
+        delete autoSlugSourceValues[field.key];
+      }
+    }
     for (const field of collection.fields) {
       if (field.status === 'archived') continue;
       if (values[field.key] === undefined && field.defaultValue !== undefined)
@@ -823,7 +1245,7 @@ export class CollectionService {
         await this.validateFieldValue(workspaceId, siteId, field, value);
     }
     await this.assertUniqueValues(workspaceId, siteId, collection, values, exceptEntryId);
-    return values;
+    return { values, autoSlugSourceValues };
   }
 
   private async validateFieldValue(
@@ -926,8 +1348,15 @@ export class CollectionService {
         throw this.invalidField(field.key, 'is shorter than the configured minimum');
       if (validation.maxLength !== undefined && value.length > validation.maxLength)
         throw this.invalidField(field.key, 'is longer than the configured maximum');
-      if (validation.pattern && !new RegExp(validation.pattern).test(value))
-        throw this.invalidField(field.key, 'does not match the configured pattern');
+      if (validation.pattern) {
+        try {
+          if (!new RegExp(validation.pattern).test(value))
+            throw this.invalidField(field.key, 'does not match the configured pattern');
+        } catch (error) {
+          if (error instanceof BadRequestException) throw error;
+          throw this.invalidField(field.key, 'uses an invalid or unsafe pattern');
+        }
+      }
     }
     if (validation && typeof value === 'number') {
       if (validation.min !== undefined && value < validation.min)
@@ -954,32 +1383,27 @@ export class CollectionService {
     exceptEntryId?: string,
   ): Promise<void> {
     const uniqueFields = collection.fields.filter(
-      (field) => field.unique && values[field.key] !== undefined,
+      (field) =>
+        field.unique && field.status === 'active' && !isEmptyValue(values[field.key]),
     );
     if (uniqueFields.length === 0) return;
-    const entries = await this.entryModel
-      .find({
-        workspaceId,
-        siteId,
-        collectionId: collection.id,
-        ...(exceptEntryId ? { _id: { $ne: exceptEntryId } } : {}),
-        status: { $ne: 'archived' },
-      })
-      .select({ _id: 1, draftVersionId: 1 })
-      .limit(10_000)
-      .exec();
-    const versions = await this.loadVersions(entries, 'draft');
-    for (const field of uniqueFields) {
-      if (
-        [...versions.values()].some(
-          (version) => compareValues(version.values[field.key], values[field.key]) === 0,
-        )
-      )
-        throw new ConflictException({
-          code: 'UNIQUE_COLLECTION_FIELD',
-          message: `${field.label} must be unique`,
+    await Promise.all(
+      uniqueFields.map(async (field) => {
+        const conflict = await this.entryModel.exists({
+          workspaceId,
+          siteId,
+          collectionId: collection.id,
+          status: { $ne: 'archived' },
+          uniqueTokens: uniqueTokenForField(field, values[field.key]),
+          ...(exceptEntryId ? { _id: { $ne: exceptEntryId } } : {}),
         });
-    }
+        if (conflict)
+          throw new ConflictException({
+            code: 'UNIQUE_COLLECTION_FIELD',
+            message: `${field.label} must be unique`,
+          });
+      }),
+    );
   }
 
   private normalizeNewFields(
@@ -1082,6 +1506,8 @@ export class CollectionService {
   private async loadVersions(
     entries: CollectionEntryDocument[],
     mode: 'draft' | 'published',
+    workspaceId?: string,
+    siteId?: string,
   ): Promise<Map<string, CollectionEntryVersionDocument>> {
     const ids = entries
       .map((entry) =>
@@ -1090,7 +1516,13 @@ export class CollectionService {
       .filter((id): id is string => Boolean(id));
     const records =
       ids.length > 0
-        ? await this.entryVersionModel.find({ _id: { $in: ids } }).exec()
+        ? await this.entryVersionModel
+            .find({
+              _id: { $in: ids },
+              ...(workspaceId ? { workspaceId } : {}),
+              ...(siteId ? { siteId } : {}),
+            })
+            .exec()
         : [];
     const byId = new Map(records.map((record) => [record._id.toString(), record]));
     return new Map(
@@ -1146,51 +1578,6 @@ export class CollectionService {
     });
   }
 
-  private matchesFilter(value: unknown, operator: string, expected: unknown): boolean {
-    switch (operator) {
-      case 'equals':
-        return compareValues(value, expected) === 0;
-      case 'notEquals':
-        return compareValues(value, expected) !== 0;
-      case 'contains':
-        return (
-          typeof value === 'string' &&
-          value.toLowerCase().includes(String(expected ?? '').toLowerCase())
-        );
-      case 'startsWith':
-        return (
-          typeof value === 'string' &&
-          value.toLowerCase().startsWith(String(expected ?? '').toLowerCase())
-        );
-      case 'gt':
-        return compareValues(value, expected) > 0;
-      case 'gte':
-        return compareValues(value, expected) >= 0;
-      case 'lt':
-        return compareValues(value, expected) < 0;
-      case 'lte':
-        return compareValues(value, expected) <= 0;
-      case 'in':
-        return (
-          Array.isArray(expected) &&
-          expected.some((item) => compareValues(value, item) === 0)
-        );
-      case 'notIn':
-        return (
-          Array.isArray(expected) &&
-          expected.every((item) => compareValues(value, item) !== 0)
-        );
-      case 'exists':
-        return expected === undefined
-          ? value !== undefined
-          : Boolean(expected)
-            ? value !== undefined
-            : value === undefined;
-      default:
-        return false;
-    }
-  }
-
   private invalidField(field: string, message: string): BadRequestException {
     return new BadRequestException({
       code: 'INVALID_COLLECTION_FIELD',
@@ -1217,57 +1604,68 @@ function isSafeUrl(value: string): boolean {
   }
 }
 
-function compareValues(left: unknown, right: unknown): number {
-  const a = Array.isArray(left) ? JSON.stringify(left) : left;
-  const b = Array.isArray(right) ? JSON.stringify(right) : right;
-  if (a === b) return 0;
-  if (a === undefined || a === null) return -1;
-  if (b === undefined || b === null) return 1;
-  const leftNumber = typeof a === 'number' ? a : Number.NaN;
-  const rightNumber = typeof b === 'number' ? b : Number.NaN;
-  if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber))
-    return leftNumber - rightNumber;
-  return String(a).localeCompare(String(b));
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function queryOperatorsForField(
-  type: CollectionDefinition['fields'][number]['type'],
-): Set<string> {
-  const common = ['equals', 'notEquals', 'exists'];
-  if (
-    [
-      'text',
-      'long-text',
-      'rich-text',
-      'url',
-      'email',
-      'slug',
-      'date',
-      'datetime',
-    ].includes(type)
-  ) {
-    return new Set([...common, 'contains', 'startsWith', 'in', 'notIn']);
-  }
-  if (type === 'number')
-    return new Set([...common, 'gt', 'gte', 'lt', 'lte', 'in', 'notIn']);
-  if (type === 'boolean') return new Set(common);
-  if (['select', 'multi-select', 'reference', 'asset', 'image'].includes(type)) {
-    return new Set([...common, 'in', 'notIn']);
-  }
-  return new Set(common);
+function searchTextForValues(values: Record<string, unknown>): string {
+  return JSON.stringify(values).toLowerCase().slice(0, 20_000);
 }
 
-function isQueryValueCompatible(
-  type: CollectionDefinition['fields'][number]['type'],
+function normalizeUniqueValue(value: unknown): string {
+  if (typeof value === 'string') return value.trim().toLowerCase();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function uniqueTokenForField(
+  field: CollectionDefinition['fields'][number],
   value: unknown,
-): boolean {
-  if (['number'].includes(type))
-    return typeof value === 'number' && Number.isFinite(value);
-  if (type === 'boolean') return typeof value === 'boolean';
-  if (['array', 'group'].includes(type)) return true;
-  return (
-    typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-  );
+): string {
+  return `${field.id}:${encodeURIComponent(normalizeUniqueValue(value))}`;
+}
+
+function buildUniqueTokens(
+  collection: CollectionDefinition,
+  values: Record<string, unknown>,
+): string[] {
+  return collection.fields
+    .filter(
+      (field) =>
+        field.unique && field.status === 'active' && !isEmptyValue(values[field.key]),
+    )
+    .map((field) => uniqueTokenForField(field, values[field.key]));
+}
+
+function mongoFilterCondition(
+  projectionName: 'draftValues' | 'publishedValues',
+  filter: CollectionQueryRequest['filters'][number],
+): Record<string, unknown> {
+  const path = `${projectionName}.${filter.field}`;
+  const value = filter.value;
+  switch (filter.operator) {
+    case 'equals':
+      return { [path]: value };
+    case 'notEquals':
+      return { [path]: { $ne: value } };
+    case 'contains':
+      return { [path]: { $regex: escapeRegex(String(value ?? '')), $options: 'i' } };
+    case 'startsWith':
+      return {
+        [path]: { $regex: `^${escapeRegex(String(value ?? ''))}`, $options: 'i' },
+      };
+    case 'gt':
+    case 'gte':
+    case 'lt':
+    case 'lte':
+      return { [path]: { [`$${filter.operator}`]: value } };
+    case 'in':
+      return { [path]: { $in: Array.isArray(value) ? value : [value] } };
+    case 'notIn':
+      return { [path]: { $nin: Array.isArray(value) ? value : [value] } };
+    case 'exists':
+      return { [path]: { $exists: value === undefined ? true : value === true } };
+  }
 }
 
 function isDuplicateKeyError(error: unknown): boolean {

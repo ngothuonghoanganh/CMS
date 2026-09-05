@@ -62,6 +62,18 @@ export class CollectionEntryRecord {
   collectionId!: string;
   @Prop({ type: String, required: false, index: true }) draftVersionId?: string;
   @Prop({ type: String, required: false, index: true }) publishedVersionId?: string;
+  /** Current draft projection, derived from draftVersionId for indexed queries. */
+  @Prop({ type: Object, required: false, minimize: false })
+  draftValues?: Record<string, unknown>;
+  /** Current published projection, derived from publishedVersionId for delivery queries. */
+  @Prop({ type: Object, required: false, minimize: false })
+  publishedValues?: Record<string, unknown>;
+  @Prop({ type: String, required: false, index: true }) draftSearchText?: string;
+  @Prop({ type: String, required: false, index: true }) publishedSearchText?: string;
+  /** Stable tokens for DB-enforced uniqueness of current values. */
+  @Prop({ type: [String], required: false, default: undefined }) uniqueTokens?: string[];
+  @Prop({ type: Object, required: false, minimize: false })
+  autoSlugSourceValues?: Record<string, string>;
   @Prop({
     type: String,
     required: true,
@@ -76,6 +88,33 @@ export class CollectionEntryRecord {
 export const CollectionEntrySchema = SchemaFactory.createForClass(CollectionEntryRecord);
 CollectionEntrySchema.index({ collectionId: 1, createdAt: -1 });
 CollectionEntrySchema.index({ siteId: 1, collectionId: 1, status: 1 });
+CollectionEntrySchema.index(
+  {
+    workspaceId: 1,
+    siteId: 1,
+    collectionId: 1,
+    uniqueTokens: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ['draft', 'published'] },
+      uniqueTokens: { $exists: true },
+    },
+  },
+);
+CollectionEntrySchema.index({
+  workspaceId: 1,
+  siteId: 1,
+  collectionId: 1,
+  draftSearchText: 1,
+});
+CollectionEntrySchema.index({
+  workspaceId: 1,
+  siteId: 1,
+  collectionId: 1,
+  publishedSearchText: 1,
+});
 
 @Schema({
   collection: 'collectionEntryVersions',

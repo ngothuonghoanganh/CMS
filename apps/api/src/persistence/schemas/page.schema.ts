@@ -28,6 +28,10 @@ export class PageRecord {
   @Prop({ type: String, required: false, index: true })
   pathPattern?: string;
 
+  /** Indexed projection of the static route prefix owned by a dynamic page. */
+  @Prop({ type: String, required: false })
+  dynamicBasePath?: string;
+
   @Prop({ type: String, required: false, index: true })
   collectionId?: string;
 
@@ -91,6 +95,16 @@ PageSchema.index(
   { unique: true, partialFilterExpression: { slug: { $type: 'string' } } },
 );
 PageSchema.index(
-  { siteId: 1, pathPattern: 1 },
+  { workspaceId: 1, siteId: 1, pathPattern: 1 },
   { unique: true, partialFilterExpression: { pathPattern: { $type: 'string' } } },
+);
+PageSchema.index(
+  { workspaceId: 1, siteId: 1, dynamicBasePath: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      kind: 'dynamic',
+      dynamicBasePath: { $type: 'string' },
+    },
+  },
 );

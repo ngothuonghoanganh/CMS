@@ -6,13 +6,21 @@ export class ApiClientError extends Error {
   readonly code: string;
   readonly status: number;
   readonly requestId: string | undefined;
+  readonly details: Record<string, unknown> | undefined;
 
-  constructor(status: number, code: string, message: string, requestId?: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId?: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'ApiClientError';
     this.code = code;
     this.status = status;
     this.requestId = requestId;
+    this.details = details;
   }
 }
 
@@ -29,6 +37,7 @@ async function readApiError(response: Response): Promise<ApiClientError> {
   let code = 'REQUEST_FAILED';
   let message = 'The request could not be completed';
   let requestId: string | undefined;
+  let details: Record<string, unknown> | undefined;
 
   try {
     const parsed = ErrorResponseSchema.safeParse(await response.json());
@@ -36,12 +45,13 @@ async function readApiError(response: Response): Promise<ApiClientError> {
       code = parsed.data.error.code;
       message = parsed.data.error.message;
       requestId = parsed.data.error.requestId;
+      details = parsed.data.error.details;
     }
   } catch {
     // Preserve a safe fallback for non-JSON proxy/network responses.
   }
 
-  return new ApiClientError(response.status, code, message, requestId);
+  return new ApiClientError(response.status, code, message, requestId, details);
 }
 
 async function refreshSession(): Promise<void> {

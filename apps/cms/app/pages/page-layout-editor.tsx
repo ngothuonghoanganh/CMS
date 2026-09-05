@@ -339,7 +339,7 @@ export function PageLayoutEditor({
             <label>
               Description <span className="muted">Optional</span>
               <textarea
-                aria-label="New layout description"
+                aria-label="Layout creation notes"
                 disabled={!canUpdate || creating}
                 onChange={(event) =>
                   setNewLayout((current) => ({

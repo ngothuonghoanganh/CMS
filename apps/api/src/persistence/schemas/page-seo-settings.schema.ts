@@ -53,6 +53,9 @@ export class PageSeoSettingsRecord {
   @Prop({ type: String, required: false, trim: true, maxlength: 2_048 })
   favicon?: string;
 
+  @Prop({ type: Object, required: false, minimize: false })
+  bindings?: Record<string, unknown>;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

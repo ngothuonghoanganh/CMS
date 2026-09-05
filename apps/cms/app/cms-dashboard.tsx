@@ -25,6 +25,8 @@ import {
   TenantUserDetailResponseSchema,
   TenantUserListResponseSchema,
   type Asset,
+  type Collection,
+  type CollectionEntryResponse,
   type AuthSessionResponse,
   type AuditLog,
   type Organization,
@@ -68,7 +70,7 @@ import { ExtensionsView } from './extensions-view';
 import { WorkflowsView } from './workflows-view';
 import { NavigationView } from './navigation-view';
 import { DesignSystemView } from './design-system-view';
-import { PagesView as SiteMapPagesView } from './pages/pages-view';
+import { PagesView as SiteMapPagesView, type PageForm } from './pages/pages-view';
 import { Drawer, PageHeader, PaginationControls, ResourceToolbar } from './ui/surfaces';
 import { CollectionsView } from './collections-view';
 
@@ -94,7 +96,6 @@ type View =
   | 'workflows'
   | 'organization';
 type SiteForm = { name: string; slug: string };
-type PageForm = { name: string; description: string; path: string };
 type AssetForm = { filename: string; mimeType: string; size: string; storageKey: string };
 type TemplateForm = { name: string; description: string };
 type DomainForm = {
@@ -105,7 +106,16 @@ type DomainForm = {
 };
 
 const blankSite: SiteForm = { name: '', slug: '' };
-const blankPage: PageForm = { name: '', description: '', path: '' };
+const blankPage: PageForm = {
+  name: '',
+  description: '',
+  path: '',
+  kind: 'standard',
+  collectionId: '',
+  pathPattern: '',
+  lookupField: '',
+  previewEntryId: '',
+};
 const blankAsset: AssetForm = {
   filename: '',
   mimeType: 'image/png',
@@ -121,6 +131,19 @@ const blankDomain: DomainForm = {
 };
 const rendererBaseUrl =
   process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
+
+function pageFormFromPage(page: Page): PageForm {
+  return {
+    name: page.name,
+    description: page.description ?? '',
+    path: page.path ?? '',
+    kind: page.kind,
+    collectionId: page.collectionId ?? '',
+    pathPattern: page.pathPattern ?? '',
+    lookupField: page.lookupField ?? '',
+    previewEntryId: '',
+  };
+}
 
 const viewLabels: Record<View, string> = {
   analytics: 'Analytics',
@@ -222,6 +245,10 @@ export default function CmsDashboard() {
   const [versions, setVersions] = useState<PageVersion[]>([]);
   const [siteForm, setSiteForm] = useState<SiteForm>(blankSite);
   const [pageForm, setPageForm] = useState<PageForm>(blankPage);
+  const [pageCollections, setPageCollections] = useState<Collection[]>([]);
+  const [pageCollectionEntries, setPageCollectionEntries] = useState<
+    CollectionEntryResponse[]
+  >([]);
   const [pageTemplateId, setPageTemplateId] = useState<string | null>(null);
   const [pageTemplateVersionId, setPageTemplateVersionId] = useState<string | null>(null);
   const [assetForm, setAssetForm] = useState<AssetForm>(blankAsset);
@@ -343,6 +370,51 @@ export default function CmsDashboard() {
       setSelectedPageId('');
     }
   }, [selectedSiteId]);
+
+  useEffect(() => {
+    if (!session || !selectedSiteId || pageForm.kind !== 'dynamic') {
+      setPageCollections([]);
+      setPageCollectionEntries([]);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .get<Collection[]>(
+        `/workspaces/${session.workspace.id}/sites/${selectedSiteId}/collections`,
+      )
+      .then((nextCollections) => {
+        if (cancelled) return;
+        setPageCollections(nextCollections);
+        const collectionId = pageForm.collectionId;
+        if (!collectionId) return;
+        return api.get<{ items: CollectionEntryResponse[] }>(
+          `/workspaces/${session.workspace.id}/sites/${selectedSiteId}/collections/${collectionId}/entries?limit=100&offset=0`,
+        );
+      })
+      .then((result) => {
+        if (!cancelled && result) {
+          setPageCollectionEntries(result.items);
+          const firstPreviewEntry =
+            result.items.find((entry) => Boolean(entry.publishedVersionId)) ??
+            result.items[0];
+          if (firstPreviewEntry && !pageForm.previewEntryId) {
+            setPageForm((current) =>
+              current.kind === 'dynamic' &&
+              current.collectionId === pageForm.collectionId &&
+              !current.previewEntryId
+                ? { ...current, previewEntryId: firstPreviewEntry.id }
+                : current,
+            );
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPageCollectionEntries([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageForm.collectionId, pageForm.kind, selectedSiteId, session]);
 
   useEffect(() => {
     if (view !== 'sites') {
@@ -954,11 +1026,7 @@ export default function CmsDashboard() {
       const duplicated = await api.post<Page>(`/pages/${page.id}/duplicate`, {});
       setPages((current) => [duplicated, ...current]);
       setSelectedPageId(duplicated.id);
-      setPageForm({
-        name: duplicated.name,
-        description: duplicated.description ?? '',
-        path: duplicated.path,
-      });
+      setPageForm(pageFormFromPage(duplicated));
       setPageDrawerOpen(true);
       setPageTemplateId(null);
       setPageTemplateVersionId(null);
@@ -990,11 +1058,60 @@ export default function CmsDashboard() {
     });
   }
 
-  function previewPage(page: Page) {
+  async function resolveDynamicEntryId(page: Page): Promise<string | undefined> {
+    if (page.kind !== 'dynamic') return undefined;
+
+    if (selectedPageId === page.id) {
+      const selectedEntry = pageCollectionEntries.find(
+        (entry) => entry.id === pageForm.previewEntryId,
+      );
+      const firstEntry =
+        selectedEntry ??
+        pageCollectionEntries.find((entry) => Boolean(entry.publishedVersionId)) ??
+        pageCollectionEntries[0];
+      if (firstEntry) return firstEntry.id;
+    }
+
+    if (!session || !page.collectionId) return undefined;
+    try {
+      const result = await api.get<{ items: CollectionEntryResponse[] }>(
+        `/workspaces/${session.workspace.id}/sites/${page.siteId}/collections/${page.collectionId}/entries?limit=100&offset=0`,
+      );
+      return (
+        result.items.find((entry) => Boolean(entry.publishedVersionId)) ?? result.items[0]
+      )?.id;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function previewPage(page: Page) {
+    const entryId = await resolveDynamicEntryId(page);
+    if (page.kind === 'dynamic' && !entryId) {
+      setNotice(
+        'Select or publish a collection entry before opening this detail preview.',
+      );
+      return;
+    }
+    if (page.kind === 'dynamic' && selectedPageId === page.id && entryId) {
+      setPageForm((current) =>
+        current.previewEntryId ? current : { ...current, previewEntryId: entryId },
+      );
+    }
+    const query = entryId ? `?entryId=${encodeURIComponent(entryId)}` : '';
     window.open(
-      `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}`,
+      `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}${query}`,
       '_blank',
       'noopener,noreferrer',
+    );
+  }
+
+  async function openBuilder(page: Page) {
+    const entryId = await resolveDynamicEntryId(page);
+    router.push(
+      `/workspaces/${session!.workspace.id}/sites/${page.siteId}/pages/${page.id}/builder${
+        entryId ? `?entryId=${encodeURIComponent(entryId)}` : ''
+      }`,
     );
   }
 
@@ -1040,20 +1157,31 @@ export default function CmsDashboard() {
     event.preventDefault();
     if (!session || !selectedSiteId) return;
     await runBusy(async () => {
+      const normalizedPath = normalizeUrlSlug(pageForm.path.replace(/^\/+/, ''));
+      const routeMetadata =
+        pageForm.kind === 'dynamic'
+          ? {
+              kind: 'dynamic' as const,
+              collectionId: pageForm.collectionId,
+              pathPattern: pageForm.pathPattern,
+              lookupField: pageForm.lookupField,
+            }
+          : {
+              kind: 'standard' as const,
+              ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
+            };
       if (selectedPageId) {
-        const normalizedPath = normalizeUrlSlug(pageForm.path.replace(/^\/+/, ''));
         const updated = await api.patch<Page>(`/pages/${selectedPageId}`, {
           expectedVersionNumber: versions[0]?.versionNumber,
           name: pageForm.name,
           description: pageForm.description.trim() || null,
-          ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
+          ...routeMetadata,
         });
         setPages((current) =>
           current.map((page) => (page.id === updated.id ? updated : page)),
         );
         setNotice('Page metadata updated.');
       } else {
-        const normalizedPath = normalizeUrlSlug(pageForm.path.replace(/^\/+/, ''));
         const created = pageTemplateId
           ? await api.post<Page>(
               `/workspaces/${session.workspace.id}/templates/${pageTemplateId}/apply`,
@@ -1066,7 +1194,7 @@ export default function CmsDashboard() {
                 ...(pageForm.description.trim()
                   ? { description: pageForm.description.trim() }
                   : {}),
-                ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
+                ...routeMetadata,
               },
             )
           : await api.post<Page>(`/sites/${selectedSiteId}/pages`, {
@@ -1074,7 +1202,7 @@ export default function CmsDashboard() {
               ...(pageForm.description.trim()
                 ? { description: pageForm.description.trim() }
                 : {}),
-              ...(normalizedPath ? { path: `/${normalizedPath}` } : {}),
+              ...routeMetadata,
               payload: defaultPayload(pageForm.name),
             });
         pagesRequestId.current += 1;
@@ -1338,6 +1466,27 @@ export default function CmsDashboard() {
         return typeof value === 'string' && value.trim() ? value.trim() : null;
       };
       const card = formData.get('twitterCard');
+      const selectedPage = pages.find((page) => page.id === selectedPageId);
+      const seoBindingTargets = [
+        'title',
+        'description',
+        'ogTitle',
+        'ogDescription',
+        'ogImage',
+      ] as const;
+      const bindings = Object.fromEntries(
+        seoBindingTargets.flatMap((target) => {
+          const path = formData.get(`binding.${target}`);
+          return typeof path === 'string' && path.trim()
+            ? [
+                [
+                  target,
+                  { source: { type: 'current-entry' as const, path: path.trim() } },
+                ],
+              ]
+            : [];
+        }),
+      );
       const saved = await api.patch<PageSeoSettings>(`/pages/${selectedPageId}/seo`, {
         title: text('title'),
         description: text('description'),
@@ -1353,6 +1502,7 @@ export default function CmsDashboard() {
         twitterDescription: text('twitterDescription'),
         twitterImage: text('twitterImage'),
         favicon: text('favicon'),
+        ...(selectedPage?.kind === 'dynamic' ? { bindings } : {}),
       });
       setSeoSettings(saved);
       setNotice('SEO settings saved.');
@@ -1702,6 +1852,8 @@ export default function CmsDashboard() {
               canPublishPage={can('page.publish')}
               canDeletePage={can('page.delete')}
               canReadWorkflows={can('workflow.read')}
+              collections={pageCollections}
+              collectionEntries={pageCollectionEntries}
               onCreatePage={() => {
                 if (!selectedSiteId || !can('page.create')) return;
                 setSelectedPageId('');
@@ -1710,18 +1862,10 @@ export default function CmsDashboard() {
                 setPageTemplateVersionId(null);
                 setPageDrawerOpen(true);
               }}
-              onOpenBuilder={(page) =>
-                router.push(
-                  `/workspaces/${session.workspace.id}/sites/${page.siteId}/pages/${page.id}/builder`,
-                )
-              }
+              onOpenBuilder={openBuilder}
               onEditPage={(page) => {
                 setSelectedPageId(page.id);
-                setPageForm({
-                  name: page.name,
-                  description: page.description ?? '',
-                  path: page.path,
-                });
+                setPageForm(pageFormFromPage(page));
                 setPageDrawerOpen(true);
               }}
               onOpenWorkflows={(page) => {
@@ -1741,11 +1885,7 @@ export default function CmsDashboard() {
                 setSelectedPageId(page.id);
                 setPageTemplateId(null);
                 setPageTemplateVersionId(null);
-                setPageForm({
-                  name: page.name,
-                  description: page.description ?? '',
-                  path: page.path,
-                });
+                setPageForm(pageFormFromPage(page));
                 setPageDrawerOpen(true);
               }}
               onSelectSite={setSelectedSiteId}
@@ -1776,6 +1916,7 @@ export default function CmsDashboard() {
           ) : null}
           {view === 'collections' ? (
             <CollectionsView
+              assets={assets}
               canCreate={can('collection.create') && can('entry.create')}
               canDelete={can('collection.delete')}
               canPublish={can('entry.publish')}
@@ -1923,16 +2064,12 @@ export default function CmsDashboard() {
               onSelectPage={(pageId) => {
                 setSelectedPageId(pageId);
                 const page = pages.find((candidate) => candidate.id === pageId);
-                if (page)
-                  setPageForm({
-                    name: page.name,
-                    description: page.description ?? '',
-                    path: page.path,
-                  });
+                if (page) setPageForm(pageFormFromPage(page));
               }}
               pages={pages}
               selectedPageId={selectedPageId}
               settings={seoSettings}
+              collections={pageCollections}
             />
           ) : null}
           {view === 'billing' ? <BillingView workspaceId={session.workspace.id} /> : null}

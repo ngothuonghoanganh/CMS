@@ -1062,4 +1062,73 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('data-payload-node-type="collection-list"');
     expect(markup).not.toContain('No products');
   });
+
+  it('prefixes bound internal links with the platform site slug', () => {
+    const queryId = '22222222-2222-4222-8222-222222222222';
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
+      metadata: { documentTitle: 'Products' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'button-section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'product-button',
+                type: 'button',
+                props: { label: 'View product', href: '/products', target: '_self' },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const bindings = [
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        targetNodeId: 'product-button',
+        targetProperty: 'href',
+        source: {
+          type: 'query-item' as const,
+          sourceId: queryId,
+          path: 'slug',
+          template: '/products/{value}',
+        },
+        fallback: '/products',
+      },
+    ];
+    const dataContext = {
+      queryItems: {
+        [queryId]: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            collectionId: '33333333-3333-4333-8333-333333333333',
+            values: { slug: 'product-d' },
+          },
+        ],
+      },
+      variables: {},
+    };
+
+    const platformMarkup = renderToStaticMarkup(
+      renderPage(payload, { bindings, dataContext, siteSlug: 'products-demo' }),
+    );
+    expect(platformMarkup).toContain('href="/products-demo/products/product-d"');
+
+    const customDomainMarkup = renderToStaticMarkup(
+      renderPage(payload, {
+        bindings,
+        customDomain: true,
+        dataContext,
+        siteSlug: 'products-demo',
+      }),
+    );
+    expect(customDomainMarkup).toContain('href="/products/product-d"');
+  });
 });

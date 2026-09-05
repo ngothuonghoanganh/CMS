@@ -277,8 +277,25 @@ function isSafeHref(value: string): boolean {
   }
 }
 
+function resolvePublicHref(value: string, context: RenderContext): string {
+  const href = isSafeHref(value) ? value : '#';
+  if (
+    href === '#' ||
+    context.customDomain ||
+    !context.siteSlug ||
+    !href.startsWith('/') ||
+    href.startsWith('//')
+  ) {
+    return href;
+  }
+
+  const sitePrefix = `/${context.siteSlug}`;
+  if (href === sitePrefix || href.startsWith(`${sitePrefix}/`)) return href;
+  return `${sitePrefix}${href === '/' ? '' : href}`;
+}
+
 function renderButton(node: ButtonNode, context: RenderContext): ReactElement {
-  const href = isSafeHref(node.props.href) ? node.props.href : '#';
+  const href = resolvePublicHref(node.props.href, context);
   return (
     <a
       {...nodeAttributes(node)}
@@ -302,7 +319,7 @@ function renderHeading(node: HeadingNode, context: RenderContext): ReactElement 
 }
 
 function renderLink(node: LinkNode, context: RenderContext): ReactElement {
-  const href = isSafeHref(node.props.href) ? node.props.href : '#';
+  const href = resolvePublicHref(node.props.href, context);
   return (
     <a
       {...nodeAttributes(node)}
@@ -541,7 +558,9 @@ function renderExtension(node: ExtensionNode, context: RenderContext): ReactElem
 
   const { render } = custom;
   const href =
-    render.buttonHref && isSafeHref(render.buttonHref) ? render.buttonHref : null;
+    render.buttonHref && isSafeHref(render.buttonHref)
+      ? resolvePublicHref(render.buttonHref, context)
+      : null;
   const style = nodeStyle(node, context);
   return (
     <section
@@ -619,7 +638,10 @@ function renderSiteBrand(
     <a
       {...nodeAttributes(node)}
       data-payload-part="root"
-      href={isSafeHref(node.props.href) ? node.props.href : '/'}
+      href={resolvePublicHref(
+        isSafeHref(node.props.href) ? node.props.href : '/',
+        context,
+      )}
       style={{
         ...nodeStyle(node, context),
         ...nodePartStyle(node, 'root', context),

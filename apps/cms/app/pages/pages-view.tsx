@@ -6,6 +6,8 @@ import {
   type Integration,
   type Page,
   type PageVersion,
+  type Collection,
+  type CollectionEntryResponse,
   type Site,
   type Template,
 } from '@payload/contracts';
@@ -15,7 +17,16 @@ import { StatusBadge } from '../status-badge';
 import { Drawer, Modal, PageHeader, ResourceToolbar } from '../ui/surfaces';
 import { PageLayoutEditor } from './page-layout-editor';
 
-export type PageForm = { name: string; description: string; path: string };
+export type PageForm = {
+  name: string;
+  description: string;
+  path: string;
+  kind: Page['kind'];
+  collectionId: string;
+  pathPattern: string;
+  lookupField: string;
+  previewEntryId: string;
+};
 
 type PageTreeItem = {
   page: Page;
@@ -39,6 +50,8 @@ export type PagesViewProps = {
   bindingSaving: boolean;
   integrations: Integration[];
   templates: Template[];
+  collections: Collection[];
+  collectionEntries: CollectionEntryResponse[];
   pageForm: PageForm;
   pageDrawerOpen: boolean;
   busy: boolean;
@@ -77,13 +90,59 @@ export function publicationStatus(
 }
 
 function pagePublicPath(page: Page, site: Site | undefined): string {
-  return site?.homePageId === page.id ? '/' : page.path;
+  if (site?.homePageId === page.id) return '/';
+  return page.path ?? page.pathPattern ?? page.dynamicBasePath ?? '/';
 }
 
-function pageUrl(page: Page, site: Site | undefined): string {
-  const path = pagePublicPath(page, site);
+function dynamicEntryPath(
+  page: Page,
+  entry: CollectionEntryResponse | undefined,
+): string | undefined {
+  if (page.kind !== 'dynamic' || !page.pathPattern || !page.lookupField || !entry) {
+    return undefined;
+  }
+  const parameter = page.pathPattern.match(/\{([a-z][a-z0-9_]*)\}$/)?.[1];
+  const rawValue = entry.values[page.lookupField];
+  if (!parameter || (typeof rawValue !== 'string' && typeof rawValue !== 'number')) {
+    return undefined;
+  }
+  const value = String(rawValue).trim();
+  return value
+    ? page.pathPattern.replace(`{${parameter}}`, encodeURIComponent(value))
+    : undefined;
+}
+
+function publishedDynamicEntry(
+  entries: CollectionEntryResponse[],
+  preferredEntryId?: string,
+): CollectionEntryResponse | undefined {
+  const preferred = preferredEntryId
+    ? entries.find(
+        (entry) => entry.id === preferredEntryId && Boolean(entry.publishedVersionId),
+      )
+    : undefined;
+  return preferred ?? entries.find((entry) => Boolean(entry.publishedVersionId));
+}
+
+function pageUrl(
+  page: Page,
+  site: Site | undefined,
+  entries: CollectionEntryResponse[] = [],
+  preferredEntryId?: string,
+): string {
+  const dynamicEntry = publishedDynamicEntry(entries, preferredEntryId);
+  const path = dynamicEntryPath(page, dynamicEntry) ?? pagePublicPath(page, site);
   const base = site?.officialUrl?.replace(/\/$/, '') ?? `/${site?.slug ?? 'site-slug'}`;
   return `${base}${path === '/' ? '' : path}`;
+}
+
+function entryTitle(entry: CollectionEntryResponse, collection: Collection): string {
+  const value = collection.titleFieldKey
+    ? entry.values[collection.titleFieldKey]
+    : undefined;
+  return value === undefined || value === null || String(value).trim() === ''
+    ? entry.id.slice(0, 8)
+    : String(value);
 }
 
 function findFormNodes(node: PageNodeWithChildren): Array<Pick<FormNode, 'id'>> {
@@ -364,6 +423,8 @@ export function PagesView({
   bindingSaving,
   integrations,
   templates,
+  collections,
+  collectionEntries,
   pageForm,
   pageDrawerOpen,
   busy,
@@ -401,7 +462,7 @@ export function PagesView({
       const matchesSearch =
         !query ||
         page.name.toLowerCase().includes(query) ||
-        page.path.toLowerCase().includes(query) ||
+        pagePublicPath(page, selectedSite).toLowerCase().includes(query) ||
         (page.slug ?? '').toLowerCase().includes(query);
       return matchesSearch && (!pageStatus || publicationStatus(page) === pageStatus);
     });
@@ -412,7 +473,9 @@ export function PagesView({
   );
   const routeConflicts = useMemo(() => {
     const counts = new Map<string, number>();
-    pages.forEach((page) => counts.set(page.path, (counts.get(page.path) ?? 0) + 1));
+    pages.forEach((page) => {
+      if (page.path) counts.set(page.path, (counts.get(page.path) ?? 0) + 1);
+    });
     return new Set([...counts].filter(([, count]) => count > 1).map(([path]) => path));
   }, [pages]);
   const draftVersion = selectedPage
@@ -423,6 +486,17 @@ export function PagesView({
       ? findFormNodes(draftVersion.payload.root as unknown as PageNodeWithChildren)
       : [];
   const isCreating = !selectedPage;
+  const dynamicCollection = collections.find(
+    (collection) => collection.id === pageForm.collectionId,
+  );
+  const selectedDynamicEntry =
+    selectedPage?.kind === 'dynamic'
+      ? publishedDynamicEntry(collectionEntries, pageForm.previewEntryId)
+      : undefined;
+  const selectedDynamicPath =
+    selectedPage?.kind === 'dynamic'
+      ? dynamicEntryPath(selectedPage, selectedDynamicEntry)
+      : undefined;
 
   function openCreateFlow() {
     setCreationStep('source');
@@ -571,7 +645,7 @@ export function PagesView({
                 </div>
                 <div className="page-detail-status-row">
                   <StatusBadge status={publicationStatus(selectedPage)} />
-                  {routeConflicts.has(selectedPage.path) ? (
+                  {selectedPage.path && routeConflicts.has(selectedPage.path) ? (
                     <span className="page-warning" role="status">
                       Route conflict
                     </span>
@@ -581,8 +655,36 @@ export function PagesView({
                   </span>
                 </div>
                 <p className="helper-text">
-                  Public URL: <code>{pageUrl(selectedPage, selectedSite)}</code>
+                  Public URL:{' '}
+                  {selectedPage.kind === 'dynamic' && !selectedDynamicPath ? (
+                    <code>{pageUrl(selectedPage, selectedSite, collectionEntries)}</code>
+                  ) : (
+                    <a
+                      href={pageUrl(
+                        selectedPage,
+                        selectedSite,
+                        collectionEntries,
+                        pageForm.previewEntryId,
+                      )}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {pageUrl(
+                        selectedPage,
+                        selectedSite,
+                        collectionEntries,
+                        pageForm.previewEntryId,
+                      )}
+                    </a>
+                  )}
                 </p>
+                {selectedPage.kind === 'dynamic' ? (
+                  <p className="helper-text">
+                    {selectedDynamicPath
+                      ? 'This link resolves the selected published entry. Choose a preview entry below to switch the detail URL.'
+                      : 'Publish at least one collection entry to open a live detail URL.'}
+                  </p>
+                ) : null}
                 {selectedPage.description ? <p>{selectedPage.description}</p> : null}
                 <div
                   aria-hidden={pageDrawerOpen || undefined}
@@ -904,30 +1006,163 @@ export function PagesView({
               />
             </label>
             <label>
-              URL path
-              <span className="muted">Use lowercase URL-safe segments.</span>
-              <input
-                aria-label="Slug"
+              Page type
+              <select
+                aria-label="Page type"
                 onChange={(event) =>
                   onPageFormChange({
                     ...pageForm,
-                    path: event.target.value.startsWith('/')
-                      ? event.target.value
-                      : `/${event.target.value}`,
+                    kind: event.target.value as PageForm['kind'],
                   })
                 }
-                placeholder="/about"
-                value={pageForm.path}
-              />
+                value={pageForm.kind}
+              >
+                <option value="standard">Standard page</option>
+                <option value="dynamic">Dynamic collection page</option>
+              </select>
             </label>
-            <p className="helper-text">
-              Canonical URL preview:{' '}
-              <code>
-                {pageForm.path === '/'
-                  ? `/${selectedSite.slug}`
-                  : `/${selectedSite.slug}${pageForm.path || '/page-path'}`}
-              </code>
-            </p>
+            {pageForm.kind === 'dynamic' ? (
+              <>
+                <div className="page-form-callout">
+                  <strong>One page, many entries</strong>
+                  <span className="muted small">
+                    The route base is derived from the pattern and resolved against
+                    published collection data.
+                  </span>
+                </div>
+                <label>
+                  Collection
+                  <select
+                    aria-label="Dynamic collection"
+                    onChange={(event) =>
+                      onPageFormChange({
+                        ...pageForm,
+                        collectionId: event.target.value,
+                        lookupField: '',
+                        previewEntryId: '',
+                      })
+                    }
+                    required
+                    value={pageForm.collectionId}
+                  >
+                    <option value="">Choose a collection</option>
+                    {collections.map((collection) => (
+                      <option key={collection.id} value={collection.id}>
+                        {collection.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Path pattern
+                  <span className="muted">Example: /products/{'{slug}'}</span>
+                  <input
+                    aria-label="Path pattern"
+                    onChange={(event) =>
+                      onPageFormChange({ ...pageForm, pathPattern: event.target.value })
+                    }
+                    placeholder="/products/{slug}"
+                    required
+                    value={pageForm.pathPattern}
+                  />
+                </label>
+                <label>
+                  Lookup field
+                  <select
+                    aria-label="Dynamic lookup field"
+                    onChange={(event) =>
+                      onPageFormChange({ ...pageForm, lookupField: event.target.value })
+                    }
+                    required
+                    value={pageForm.lookupField}
+                  >
+                    <option value="">Choose a field</option>
+                    {(dynamicCollection?.fields ?? [])
+                      .filter((field) => field.status === 'active')
+                      .map((field) => (
+                        <option key={field.id} value={field.key}>
+                          {field.label} · {field.key}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Preview entry
+                  <select
+                    aria-label="Preview entry"
+                    onChange={(event) =>
+                      onPageFormChange({
+                        ...pageForm,
+                        previewEntryId: event.target.value,
+                      })
+                    }
+                    value={pageForm.previewEntryId}
+                  >
+                    <option value="">Choose an entry when previewing</option>
+                    {collectionEntries.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entryTitle(entry, dynamicCollection ?? ({} as Collection))}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="helper-text">
+                  Canonical route base:{' '}
+                  <code>{pageForm.pathPattern.split('/{')[0] || '/products'}</code>
+                </p>
+                {selectedPage && selectedDynamicPath ? (
+                  <p className="helper-text">
+                    Live detail URL:{' '}
+                    <a
+                      href={pageUrl(
+                        selectedPage,
+                        selectedSite,
+                        collectionEntries,
+                        pageForm.previewEntryId,
+                      )}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {pageUrl(
+                        selectedPage,
+                        selectedSite,
+                        collectionEntries,
+                        pageForm.previewEntryId,
+                      )}
+                    </a>
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <label>
+                  URL path
+                  <span className="muted">Use lowercase URL-safe segments.</span>
+                  <input
+                    aria-label="Slug"
+                    onChange={(event) =>
+                      onPageFormChange({
+                        ...pageForm,
+                        path: event.target.value.startsWith('/')
+                          ? event.target.value
+                          : `/${event.target.value}`,
+                      })
+                    }
+                    placeholder="/about"
+                    required
+                    value={pageForm.path}
+                  />
+                </label>
+                <p className="helper-text">
+                  Canonical URL preview:{' '}
+                  <code>
+                    {pageForm.path === '/'
+                      ? `/${selectedSite.slug}`
+                      : `/${selectedSite.slug}${pageForm.path || '/page-path'}`}
+                  </code>
+                </p>
+              </>
+            )}
             <label>
               Description <span className="muted">Optional</span>
               <textarea

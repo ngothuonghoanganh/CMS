@@ -1,6 +1,6 @@
 'use client';
 
-import type { Page, PageSeoSettings } from '@payload/contracts';
+import type { Collection, Page, PageSeoSettings } from '@payload/contracts';
 import type { FormEvent } from 'react';
 
 export function SeoView({
@@ -10,6 +10,7 @@ export function SeoView({
   busy,
   onSelectPage,
   onSave,
+  collections = [],
 }: {
   pages: Page[];
   selectedPageId: string;
@@ -17,8 +18,12 @@ export function SeoView({
   busy: boolean;
   onSelectPage: (pageId: string) => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
+  collections?: Collection[];
 }) {
   const page = pages.find((candidate) => candidate.id === selectedPageId);
+  const collection = page?.collectionId
+    ? collections.find((candidate) => candidate.id === page.collectionId)
+    : undefined;
   const value = (key: keyof PageSeoSettings) => {
     const candidate = settings?.[key];
     return typeof candidate === 'string' ? candidate : '';
@@ -160,6 +165,37 @@ export function SeoView({
             Favicon URL
             <input name="favicon" defaultValue={value('favicon')} />
           </label>
+          {page.kind === 'dynamic' ? (
+            <details open>
+              <summary>Dynamic SEO bindings</summary>
+              <p className="muted small">
+                Bind metadata to the current published entry. Empty fields use the
+                fallback above.
+              </p>
+              <div className="stack compact-stack">
+                {(
+                  ['title', 'description', 'ogTitle', 'ogDescription', 'ogImage'] as const
+                ).map((target) => (
+                  <label key={target}>
+                    {target} field
+                    <select
+                      name={`binding.${target}`}
+                      defaultValue={settings?.bindings?.[target]?.source.path ?? ''}
+                    >
+                      <option value="">No binding</option>
+                      {(collection?.fields ?? [])
+                        .filter((field) => field.status === 'active')
+                        .map((field) => (
+                          <option key={field.id} value={field.key}>
+                            {field.label} · {field.key}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </details>
+          ) : null}
           <div className="panel seo-preview">
             <span className="muted small">Search preview</span>
             <strong>{value('title') || page.name}</strong>

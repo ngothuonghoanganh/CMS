@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
@@ -15,6 +20,7 @@ import {
   type PageSeoSettingsDocument,
 } from '../persistence/schemas/page-seo-settings.schema';
 import { PageRecord } from '../persistence/schemas/page.schema';
+import { CollectionService } from './collection.service';
 
 @Injectable()
 export class SeoService {
@@ -23,6 +29,8 @@ export class SeoService {
     private readonly seoModel: Model<PageSeoSettingsRecord>,
     @InjectModel(PageRecord.name)
     private readonly pageModel: Model<PageRecord>,
+    @Inject(CollectionService)
+    private readonly collections: CollectionService,
   ) {}
 
   async get(pageId: string, workspaceId: string): Promise<PageSeoSettings> {
@@ -38,7 +46,7 @@ export class SeoService {
     workspaceId: string,
     input: UpdatePageSeoSettingsRequest,
   ): Promise<PageSeoSettings> {
-    await this.requirePage(pageId, workspaceId);
+    const page = await this.requirePage(pageId, workspaceId);
     const parsedInput = UpdatePageSeoSettingsRequestSchema.parse(input);
     const set: Record<string, unknown> = {};
     const unset: Record<string, 1> = {};
@@ -66,6 +74,46 @@ export class SeoService {
     }
     if (parsedInput.noIndex !== undefined) set.noIndex = parsedInput.noIndex;
     if (parsedInput.noFollow !== undefined) set.noFollow = parsedInput.noFollow;
+    if (parsedInput.bindings !== undefined) {
+      if (page.kind !== 'dynamic' || !page.collectionId) {
+        throw new BadRequestException({
+          code: 'SEO_BINDINGS_REQUIRE_DYNAMIC_PAGE',
+          message: 'Collection SEO bindings are only available on dynamic pages',
+        });
+      }
+      const collection = await this.collections.get(
+        workspaceId,
+        page.siteId,
+        page.collectionId,
+      );
+      for (const [target, binding] of Object.entries(parsedInput.bindings)) {
+        const fieldKey = binding.source.path.split('.')[0];
+        if (
+          !collection.fields.some(
+            (field) => field.key === fieldKey && field.status === 'active',
+          )
+        ) {
+          throw new BadRequestException({
+            code: 'SEO_BINDING_FIELD_NOT_FOUND',
+            message: `SEO binding ${target} references an unavailable collection field`,
+            target,
+            fieldKey,
+          });
+        }
+        if (
+          target.toLowerCase().includes('image') &&
+          binding.fallback !== undefined &&
+          !isSafeMetadataUrl(binding.fallback)
+        ) {
+          throw new BadRequestException({
+            code: 'SEO_BINDING_FALLBACK_INVALID',
+            message: `${target} SEO fallbacks must use http(s) or a safe relative path`,
+          });
+        }
+      }
+      if (Object.keys(parsedInput.bindings).length === 0) unset.bindings = 1;
+      else set.bindings = parsedInput.bindings;
+    }
     const setOnInsert = {
       _id: randomUUID(),
       landingPageId: pageId,
@@ -89,13 +137,15 @@ export class SeoService {
     return this.toContract(pageId, workspaceId, record);
   }
 
-  private async requirePage(pageId: string, workspaceId: string): Promise<void> {
-    if (!(await this.pageModel.exists({ _id: pageId, workspaceId }))) {
+  private async requirePage(pageId: string, workspaceId: string): Promise<PageRecord> {
+    const page = await this.pageModel.findOne({ _id: pageId, workspaceId }).exec();
+    if (!page) {
       throw new NotFoundException({
         code: 'PAGE_NOT_FOUND',
         message: 'Page was not found in the requested workspace',
       });
     }
+    return page;
   }
 
   private toContract(
@@ -121,6 +171,16 @@ export class SeoService {
         : {}),
       ...(record?.twitterImage ? { twitterImage: record.twitterImage } : {}),
       ...(record?.favicon ? { favicon: record.favicon } : {}),
+      ...(record?.bindings ? { bindings: record.bindings } : {}),
     });
+  }
+}
+
+function isSafeMetadataUrl(value: string): boolean {
+  if (value.startsWith('/') && !value.startsWith('//')) return true;
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
   }
 }

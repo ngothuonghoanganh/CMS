@@ -125,7 +125,7 @@ const BUILDER_COMPONENT_PREVIEW_NODES: Readonly<
   gallery: { kind: 'gallery', columns: 3 },
   'collection-list': {
     kind: 'list',
-    itemCount: 3,
+    itemCount: 2,
   },
   'collection-item': { kind: 'box', role: 'panel', tone: 'muted' },
   'global-header': {

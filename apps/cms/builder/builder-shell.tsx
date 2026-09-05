@@ -1018,6 +1018,10 @@ export default function BuilderShell({
       setLoadState('loading');
       setError(null);
       try {
+        const requestedPreviewEntryId =
+          typeof window === 'undefined'
+            ? undefined
+            : (new URLSearchParams(window.location.search).get('entryId') ?? undefined);
         const [
           pageResponse,
           versionsResponse,
@@ -1106,7 +1110,14 @@ export default function BuilderShell({
                 `/workspaces/${workspaceId}/sites/${siteId}/collections/${nextPage.collectionId}/entries?limit=100&offset=0`,
               ),
             );
-            const firstEntryId = entryResponse.items[0]?.id;
+            const requestedEntry = requestedPreviewEntryId
+              ? entryResponse.items.find((entry) => entry.id === requestedPreviewEntryId)
+              : undefined;
+            const firstEntryId =
+              requestedEntry?.id ??
+              entryResponse.items.find((entry) => Boolean(entry.publishedVersionId))
+                ?.id ??
+              entryResponse.items[0]?.id;
             setPreviewEntryId(firstEntryId);
             if (firstEntryId) {
               resolvedPreviewResponseRaw = await api.get(
@@ -2360,11 +2371,16 @@ export default function BuilderShell({
                             block.layoutExtension?.resource.id ?? insertable;
                           return (
                             <BuilderBlockCard
-                              addLabel={`${block.label}${
-                                block.kind === 'preset' && block.label.endsWith('Section')
-                                  ? ' preset'
-                                  : ''
-                              } add`}
+                              addLabel={
+                                block.type === 'collection-list'
+                                  ? 'Dynamic collection add'
+                                  : `${block.label}${
+                                      block.kind === 'preset' &&
+                                      block.label.endsWith('Section')
+                                        ? ' preset'
+                                        : ''
+                                    } add`
+                              }
                               category={block.category}
                               dataBlockType={dataBlockType}
                               description={block.description}
@@ -2841,6 +2857,14 @@ export default function BuilderShell({
                   router.push(`/?view=navigation&siteId=${encodeURIComponent(siteId)}`)
                 }
                 collections={collections}
+                allowCurrentEntry={page?.kind === 'dynamic'}
+                currentEntryCollection={
+                  page?.kind === 'dynamic' && page.collectionId
+                    ? collections.find(
+                        (collection) => collection.id === page.collectionId,
+                      )
+                    : undefined
+                }
                 {...(pageDocument?.composition
                   ? { composition: pageDocument.composition }
                   : {})}

@@ -12,6 +12,7 @@ import {
   type PageQuery,
   type SiteDesignSystem,
   type StyleTokenReference,
+  queryOperatorsForFieldType,
 } from '@payload/contracts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { newBuilderUuid, type BuilderViewport } from '../builder-adapter';
@@ -83,6 +84,8 @@ type BuilderInspectorProps = {
   composition?: PageCompositionFields;
   onUpdateBinding?: (binding: PageBinding | null) => void;
   onUpdateQuery?: (query: PageQuery) => void;
+  currentEntryCollection?: Collection | undefined;
+  allowCurrentEntry?: boolean | undefined;
 };
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
@@ -256,6 +259,8 @@ function CollectionQueryEditor({
   };
   const addFilter = () => {
     if (!query || !activeFields[0]) return;
+    const operators = queryOperatorsForFieldType(activeFields[0].type);
+    const operator = operators[0] ?? 'equals';
     const defaultValue =
       activeFields[0].type === 'number'
         ? 0
@@ -265,7 +270,11 @@ function CollectionQueryEditor({
     update({
       filters: [
         ...query.filters,
-        { field: activeFields[0].key, operator: 'contains', value: defaultValue },
+        {
+          field: activeFields[0].key,
+          operator,
+          ...(operator === 'exists' ? {} : { value: defaultValue }),
+        },
       ],
     });
   };
@@ -306,7 +315,28 @@ function CollectionQueryEditor({
               >
                 <select
                   aria-label={`Filter ${index + 1} field`}
-                  onChange={(event) => updateFilter(index, { field: event.target.value })}
+                  onChange={(event) => {
+                    const field = activeFields.find(
+                      (candidate) => candidate.key === event.target.value,
+                    );
+                    const operator = field
+                      ? (queryOperatorsForFieldType(field.type)[0] ?? 'equals')
+                      : 'equals';
+                    updateFilter(index, {
+                      field: event.target.value,
+                      operator,
+                      ...(operator === 'exists'
+                        ? { value: undefined }
+                        : {
+                            value:
+                              field?.type === 'number'
+                                ? 0
+                                : field?.type === 'boolean'
+                                  ? false
+                                  : '',
+                          }),
+                    });
+                  }}
                   value={filter.field}
                 >
                   {activeFields.map((field) => (
@@ -325,39 +355,66 @@ function CollectionQueryEditor({
                   }
                   value={filter.operator}
                 >
-                  {[
-                    'equals',
-                    'contains',
-                    'startsWith',
-                    'exists',
-                    'gt',
-                    'gte',
-                    'lt',
-                    'lte',
-                  ].map((operator) => (
+                  {queryOperatorsForFieldType(
+                    activeFields.find((field) => field.key === filter.field)?.type ??
+                      'text',
+                  ).map((operator) => (
                     <option key={operator} value={operator}>
                       {operator}
                     </option>
                   ))}
                 </select>
                 {filter.operator !== 'exists' ? (
-                  <input
-                    aria-label={`Filter ${index + 1} value`}
-                    onChange={(event) =>
-                      updateFilter(index, {
-                        value: queryFilterInputValue(
-                          activeFields.find((field) => field.key === filter.field)?.type,
-                          event.target.value,
-                        ),
-                      })
-                    }
-                    placeholder="Value"
-                    value={
-                      filter.value === undefined || Array.isArray(filter.value)
-                        ? ''
-                        : String(filter.value)
-                    }
-                  />
+                  activeFields.find((field) => field.key === filter.field)?.type ===
+                  'boolean' ? (
+                    <select
+                      aria-label={`Filter ${index + 1} value`}
+                      onChange={(event) =>
+                        updateFilter(index, { value: event.target.value === 'true' })
+                      }
+                      value={String(filter.value ?? false)}
+                    >
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                    </select>
+                  ) : activeFields.find((field) => field.key === filter.field)?.type ===
+                    'select' ? (
+                    <select
+                      aria-label={`Filter ${index + 1} value`}
+                      onChange={(event) =>
+                        updateFilter(index, { value: event.target.value })
+                      }
+                      value={String(filter.value ?? '')}
+                    >
+                      {(
+                        activeFields.find((field) => field.key === filter.field)
+                          ?.options ?? []
+                      ).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      aria-label={`Filter ${index + 1} value`}
+                      onChange={(event) =>
+                        updateFilter(index, {
+                          value: queryFilterInputValue(
+                            activeFields.find((field) => field.key === filter.field)
+                              ?.type,
+                            event.target.value,
+                          ),
+                        })
+                      }
+                      placeholder="Value"
+                      value={
+                        filter.value === undefined || Array.isArray(filter.value)
+                          ? ''
+                          : String(filter.value)
+                      }
+                    />
+                  )
                 ) : null}
                 <button
                   aria-label={`Remove filter ${index + 1}`}
@@ -456,6 +513,8 @@ function BindingEditor({
   composition,
   collections,
   onChange,
+  currentEntryCollection,
+  allowCurrentEntry,
 }: {
   selected: SelectedBuilderNode;
   property: ComponentPropertyDefinition;
@@ -463,13 +522,18 @@ function BindingEditor({
   composition?: PageCompositionFields | undefined;
   collections: readonly Collection[];
   onChange: (binding: PageBinding | null) => void;
+  currentEntryCollection?: Collection | undefined;
+  allowCurrentEntry?: boolean | undefined;
 }) {
   const queries = composition?.queries ?? [];
   const sourceType = binding?.source.type ?? 'static';
   const selectedQuery = binding?.source.sourceId
     ? queries.find((query) => query.id === binding.source.sourceId)
     : undefined;
-  const collection = queryCollection(selectedQuery, collections);
+  const collection =
+    binding?.source.type === 'current-entry'
+      ? currentEntryCollection
+      : queryCollection(selectedQuery, collections);
   const fields = collection?.fields.filter((field) => field.status === 'active') ?? [];
   const setSource = (type: 'static' | 'current-entry' | 'query-item') => {
     if (type === 'static') {
@@ -493,23 +557,35 @@ function BindingEditor({
     if (!binding) return;
     onChange({ ...binding, source: { ...binding.source, ...patch } } as PageBinding);
   };
+  const updateTemplate = (template: string) => {
+    if (!binding) return;
+    onChange({
+      ...binding,
+      source: {
+        ...binding.source,
+        template: template.trim() || undefined,
+      },
+    } as PageBinding);
+  };
 
   return (
     <div className="builder-binding-editor" data-builder-binding-property={property.key}>
       <label className="builder-inspector-field">
         <span>Data source for {property.label}</span>
         <select
-          aria-label={`Data source for ${property.label}`}
+          aria-label="Data source"
           onChange={(event) =>
             setSource(event.target.value as 'static' | 'current-entry' | 'query-item')
           }
           value={sourceType}
         >
-          {Object.entries(bindingSourceLabels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(bindingSourceLabels)
+            .filter(([value]) => value !== 'current-entry' || allowCurrentEntry)
+            .map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
         </select>
       </label>
       {binding ? (
@@ -565,6 +641,23 @@ function BindingEditor({
               value={typeof binding.fallback === 'string' ? binding.fallback : ''}
             />
           </label>
+          {property.key === 'href' ? (
+            <>
+              <label className="builder-inspector-field">
+                <span>URL template</span>
+                <input
+                  aria-label="Binding URL template"
+                  onChange={(event) => updateTemplate(event.target.value)}
+                  placeholder="/products/{value}"
+                  value={binding.source.template ?? ''}
+                />
+              </label>
+              <p className="muted small">
+                Use {'{value}'} to insert the selected value. Public platform links add
+                the current site slug automatically.
+              </p>
+            </>
+          ) : null}
           <button
             className="button button-small button-ghost"
             onClick={() => onChange(null)}
@@ -608,6 +701,8 @@ export function BuilderInspector({
   composition,
   onUpdateBinding,
   onUpdateQuery,
+  currentEntryCollection,
+  allowCurrentEntry,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
@@ -678,6 +773,8 @@ export function BuilderInspector({
             )}
             collections={collections}
             composition={composition}
+            currentEntryCollection={currentEntryCollection}
+            allowCurrentEntry={allowCurrentEntry}
             onChange={onUpdateBinding}
             property={property}
             selected={selected}

@@ -12,6 +12,8 @@ import {
   PublishedPageBundleSchema,
   PublicPageSchema,
   PublicSeoSettingsSchema,
+  PageSeoBindingsSchema,
+  readDataPath,
   SiteGlobalsSchema,
   SiteDesignSystemSchema,
   normalizeHostname,
@@ -262,7 +264,7 @@ export class PublicPageResolver {
       const seoRecord = await this.seoModel
         .findOne({ workspaceId: page.workspaceId, landingPageId: page._id.toString() })
         .exec();
-      const seo = seoRecord ? this.toPublicSeo(seoRecord) : undefined;
+      const seo = seoRecord ? this.toPublicSeo(seoRecord, currentEntry) : undefined;
       const canonicalUrl = await this.resolveCanonicalUrl(
         page,
         seo?.canonicalUrl,
@@ -356,22 +358,48 @@ export class PublicPageResolver {
     }
   }
 
-  private toPublicSeo(record: PageSeoSettingsRecord) {
+  private toPublicSeo(record: PageSeoSettingsRecord, currentEntry?: ResolvedDataRecord) {
+    const bindings = PageSeoBindingsSchema.safeParse(record.bindings);
+    const boundValue = (target: string, fallback: string | undefined) => {
+      const binding = bindings.success
+        ? bindings.data[target as keyof typeof bindings.data]
+        : undefined;
+      if (binding && currentEntry) {
+        const value = readDataPath(currentEntry.values, binding.source.path);
+        if (
+          typeof value === 'string' &&
+          value.trim() &&
+          (!target.toLowerCase().includes('image') || isSafeMetadataUrl(value))
+        ) {
+          return value;
+        }
+      }
+      return binding?.fallback ?? fallback;
+    };
+    const title = boundValue('title', record.title);
+    const description = boundValue('description', record.description);
+    const ogTitle = boundValue('ogTitle', record.ogTitle);
+    const ogDescription = boundValue('ogDescription', record.ogDescription);
+    const ogImage = boundValue('ogImage', record.ogImage);
+    const twitterTitle = boundValue('twitterTitle', record.twitterTitle);
+    const twitterDescription = boundValue(
+      'twitterDescription',
+      record.twitterDescription,
+    );
+    const twitterImage = boundValue('twitterImage', record.twitterImage);
     return PublicSeoSettingsSchema.parse({
-      ...(record.title ? { title: record.title } : {}),
-      ...(record.description ? { description: record.description } : {}),
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
       ...(record.canonicalUrl ? { canonicalUrl: record.canonicalUrl } : {}),
       noIndex: record.noIndex,
       noFollow: record.noFollow,
-      ...(record.ogTitle ? { ogTitle: record.ogTitle } : {}),
-      ...(record.ogDescription ? { ogDescription: record.ogDescription } : {}),
-      ...(record.ogImage ? { ogImage: record.ogImage } : {}),
+      ...(ogTitle ? { ogTitle } : {}),
+      ...(ogDescription ? { ogDescription } : {}),
+      ...(ogImage ? { ogImage } : {}),
       ...(record.twitterCard ? { twitterCard: record.twitterCard } : {}),
-      ...(record.twitterTitle ? { twitterTitle: record.twitterTitle } : {}),
-      ...(record.twitterDescription
-        ? { twitterDescription: record.twitterDescription }
-        : {}),
-      ...(record.twitterImage ? { twitterImage: record.twitterImage } : {}),
+      ...(twitterTitle ? { twitterTitle } : {}),
+      ...(twitterDescription ? { twitterDescription } : {}),
+      ...(twitterImage ? { twitterImage } : {}),
       ...(record.favicon ? { favicon: record.favicon } : {}),
     });
   }
@@ -404,33 +432,31 @@ export class PublicPageResolver {
     site: SiteDocument,
     path: string,
   ): Promise<{ page: PageDocument; entry: ResolvedDataRecord } | null> {
-    const pages = await this.pageModel
-      .find({
+    const lastSlash = path.lastIndexOf('/');
+    const dynamicBasePath = lastSlash > 0 ? path.slice(0, lastSlash) || '/' : '/';
+    const page = await this.pageModel
+      .findOne({
         siteId: site._id.toString(),
         workspaceId: site.workspaceId,
         kind: 'dynamic',
+        dynamicBasePath,
         publishedVersionId: { $exists: true },
       })
-      .sort({ createdAt: 1, _id: 1 })
-      .limit(100)
       .exec();
-    for (const page of pages) {
-      if (!page.pathPattern || !page.collectionId || !page.lookupField) continue;
-      const match = matchDynamicPath(page.pathPattern, path);
-      if (!match) continue;
-      const parameter = Object.keys(match)[0];
-      if (!parameter) continue;
-      const entry = await this.collections.resolvePublishedEntryByValue(
-        site.workspaceId,
-        site._id.toString(),
-        page.collectionId,
-        page.lookupField,
-        match[parameter]!,
-      );
-      if (!entry) throw this.publicNotFound();
-      return { page, entry };
-    }
-    return null;
+    if (!page?.pathPattern || !page.collectionId || !page.lookupField) return null;
+    const match = matchDynamicPath(page.pathPattern, path);
+    if (!match) return null;
+    const parameter = Object.keys(match)[0];
+    if (!parameter) return null;
+    const entry = await this.collections.resolvePublishedEntryByValue(
+      site.workspaceId,
+      site._id.toString(),
+      page.collectionId,
+      page.lookupField,
+      match[parameter]!,
+    );
+    if (!entry) throw this.publicNotFound();
+    return { page, entry };
   }
 
   private publicNotFound(): NotFoundException {
@@ -445,6 +471,15 @@ export class PublicPageResolver {
       code: 'INVALID_PUBLISHED_PAGE',
       message: 'The published page data is invalid',
     });
+  }
+}
+
+function isSafeMetadataUrl(value: string): boolean {
+  if (value.startsWith('/') && !value.startsWith('//')) return true;
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
   }
 }
 

@@ -129,18 +129,17 @@ export class PageService {
         undefined,
         input.composition?.layoutAttachments ?? input.layoutAttachments,
       );
-      const path = this.requirePath(
-        (dynamicMetadata ? dynamicPathBase(dynamicMetadata.pathPattern) : undefined) ??
-          input.path ??
-          (input.slug
-            ? `/${normalizeUrlSlug(input.slug)}`
-            : `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`),
-      );
-      if (!dynamicMetadata) {
-        await this.assertStaticPathDoesNotMatchDynamic(workspaceId, siteId, path);
-      }
+      const path = dynamicMetadata
+        ? undefined
+        : this.requirePath(
+            input.path ??
+              (input.slug
+                ? `/${normalizeUrlSlug(input.slug)}`
+                : `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`),
+          );
+      if (path) await this.assertStaticPathDoesNotMatchDynamic(workspaceId, siteId, path);
       const legacySlug =
-        kind === 'dynamic'
+        kind === 'dynamic' || !path
           ? undefined
           : normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
       if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
@@ -162,7 +161,7 @@ export class PageService {
           siteId,
           name: input.name,
           ...(input.description ? { description: input.description } : {}),
-          path,
+          ...(path ? { path } : {}),
           kind,
           ...(dynamicMetadata ? dynamicMetadata : {}),
           ...(input.parentId ? { parentId: input.parentId } : {}),
@@ -262,6 +261,17 @@ export class PageService {
     const page = await this.requirePageDocument(pageId, workspaceId);
     const latestVersion = await this.findLatestVersion(pageId, workspaceId);
 
+    if (
+      parsedInput.path !== undefined &&
+      parsedInput.path !== null &&
+      (parsedInput.kind ?? page.kind) === 'dynamic'
+    ) {
+      throw new BadRequestException({
+        code: 'DYNAMIC_PAGE_STATIC_PATH_FORBIDDEN',
+        message: 'Dynamic pages use pathPattern and must not define a static path',
+      });
+    }
+
     assertExpectedVersionNumber(
       parsedInput.expectedVersionNumber,
       latestVersion?.versionNumber ?? 0,
@@ -286,6 +296,12 @@ export class PageService {
       if (legacySlug) page.slug = legacySlug;
     }
     if (parsedInput.slug !== undefined) {
+      if ((parsedInput.kind ?? page.kind) === 'dynamic') {
+        throw new BadRequestException({
+          code: 'DYNAMIC_PAGE_SLUG_FORBIDDEN',
+          message: 'Dynamic pages use the parameter in pathPattern instead of a slug',
+        });
+      }
       if (parsedInput.slug === null) {
         page.set('slug', undefined);
       } else {
@@ -315,7 +331,6 @@ export class PageService {
       if (parsedInput.pathPattern === null) page.set('pathPattern', undefined);
       else {
         page.pathPattern = parsedInput.pathPattern;
-        page.path = dynamicPathBase(parsedInput.pathPattern);
       }
     }
     if (parsedInput.lookupField !== undefined) {
@@ -331,8 +346,8 @@ export class PageService {
         page.siteId,
         page._id.toString(),
       );
-      page.path = dynamicPathBase(dynamicMetadata.pathPattern);
       page.set(dynamicMetadata);
+      page.set('path', undefined);
       page.set('slug', undefined);
     } else if (parsedInput.kind === 'dynamic') {
       throw new BadRequestException({
@@ -344,7 +359,14 @@ export class PageService {
       // would make the persisted contract ambiguous or collide at resolve time.
       page.set('collectionId', undefined);
       page.set('pathPattern', undefined);
+      page.set('dynamicBasePath', undefined);
       page.set('lookupField', undefined);
+      if (!page.path) {
+        throw new BadRequestException({
+          code: 'STATIC_PAGE_PATH_REQUIRED',
+          message: 'A page leaving dynamic mode must provide a static path',
+        });
+      }
       await this.assertStaticPathDoesNotMatchDynamic(
         workspaceId,
         page.siteId,
@@ -417,6 +439,12 @@ export class PageService {
         });
       }
       const site = await this.requireSite(source.siteId, workspaceId);
+      if (source.kind === 'dynamic') {
+        throw new ConflictException({
+          code: 'DYNAMIC_DUPLICATE_REQUIRES_NEW_PATTERN',
+          message: 'Duplicate a dynamic page by creating it with a new path pattern',
+        });
+      }
       const path = await this.findAvailablePath(
         site._id.toString(),
         parsedInput.path ??
@@ -431,13 +459,6 @@ export class PageService {
         ...(source.description ? { description: source.description } : {}),
         path,
         kind: source.kind ?? 'standard',
-        ...(source.kind === 'dynamic'
-          ? {
-              ...(source.collectionId ? { collectionId: source.collectionId } : {}),
-              ...(source.pathPattern ? { pathPattern: source.pathPattern } : {}),
-              ...(source.lookupField ? { lookupField: source.lookupField } : {}),
-            }
-          : {}),
         ...(source.parentId ? { parentId: source.parentId } : {}),
         ...(source.anchors ? { anchors: [...source.anchors] } : {}),
       });
@@ -574,6 +595,9 @@ export class PageService {
       page.workspaceId,
       page.siteId,
       composition,
+      page.kind === 'dynamic' && page.collectionId
+        ? { currentEntryCollectionId: page.collectionId }
+        : {},
     );
     const publishedBundle = await this.pageExtensions.compilePublishedBundle(
       pageId,
@@ -983,7 +1007,12 @@ export class PageService {
     workspaceId: string,
     siteId: string,
     exceptPageId?: string,
-  ): Promise<{ collectionId: string; pathPattern: string; lookupField: string }> {
+  ): Promise<{
+    collectionId: string;
+    pathPattern: string;
+    dynamicBasePath: string;
+    lookupField: string;
+  }> {
     const metadata = DynamicPageMetadataSchema.safeParse({
       collectionId,
       pathPattern,
@@ -1012,47 +1041,43 @@ export class PageService {
       });
     }
     const dynamicBase = dynamicPathBase(metadata.data.pathPattern);
-    const existingDynamicPages = await this.pageModel
+    const existingDynamicPage = await this.pageModel
       .find({
         workspaceId,
         siteId,
         kind: 'dynamic',
+        dynamicBasePath: dynamicBase,
         ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
       })
-      .select({ _id: 1, pathPattern: 1 })
-      .limit(10_000)
+      .select({ _id: 1 })
+      .limit(1)
       .exec();
-    if (
-      existingDynamicPages.some(
-        (page) => page.pathPattern && dynamicPathBase(page.pathPattern) === dynamicBase,
-      )
-    ) {
+    if (existingDynamicPage.length > 0) {
       throw new ConflictException({
         code: 'DYNAMIC_PATH_CONFLICT',
         message: 'A dynamic page already owns this route base',
       });
     }
-    const staticPages = await this.pageModel
-      .find({
+    const staticPathPattern = new RegExp(
+      `^${escapeRegExp(dynamicBase === '/' ? '' : dynamicBase)}/[^/]+$`,
+    );
+    const staticPage = await this.pageModel
+      .findOne({
         workspaceId,
         siteId,
         kind: { $ne: 'dynamic' },
+        path: { $regex: staticPathPattern },
         ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
       })
-      .select({ _id: 1, path: 1 })
-      .limit(10_000)
+      .select({ _id: 1 })
       .exec();
-    if (
-      staticPages.some((page) =>
-        Boolean(page.path && matchDynamicPath(metadata.data.pathPattern, page.path)),
-      )
-    ) {
+    if (staticPage) {
       throw new ConflictException({
         code: 'DYNAMIC_PATH_CONFLICT',
         message: 'A static page already occupies a route matched by this dynamic page',
       });
     }
-    return metadata.data;
+    return { ...metadata.data, dynamicBasePath: dynamicBase };
   }
 
   private async assertStaticPathDoesNotMatchDynamic(
@@ -1061,21 +1086,21 @@ export class PageService {
     path: string,
     exceptPageId?: string,
   ): Promise<void> {
-    const dynamicPages = await this.pageModel
-      .find({
+    const segments = path.split('/').filter(Boolean);
+    const candidateBases = segments
+      .slice(0, -1)
+      .map((_, index) => `/${segments.slice(0, index + 1).join('/')}`);
+    const dynamicPage = await this.pageModel
+      .findOne({
         workspaceId,
         siteId,
         kind: 'dynamic',
+        dynamicBasePath: { $in: candidateBases },
         ...(exceptPageId ? { _id: { $ne: exceptPageId } } : {}),
       })
       .select({ pathPattern: 1 })
-      .limit(10_000)
       .exec();
-    if (
-      dynamicPages.some(
-        (page) => page.pathPattern && matchDynamicPath(page.pathPattern, path),
-      )
-    ) {
+    if (dynamicPage?.pathPattern && matchDynamicPath(dynamicPage.pathPattern, path)) {
       throw new ConflictException({
         code: 'DYNAMIC_PATH_CONFLICT',
         message: 'The static page path is matched by a dynamic page',
@@ -1157,16 +1182,27 @@ export class PageService {
   }
 
   private toPageContract(record: PageDocument): Page {
+    const kind = record.kind ?? 'standard';
+    const path =
+      kind === 'dynamic'
+        ? undefined
+        : (record.path ?? (record.slug ? `/${record.slug}` : undefined));
+    const dynamicBasePath =
+      kind === 'dynamic'
+        ? (record.dynamicBasePath ??
+          (record.pathPattern ? dynamicPathBase(record.pathPattern) : undefined))
+        : undefined;
     return PageSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
       siteId: record.siteId,
       name: record.name,
       ...(record.description ? { description: record.description } : {}),
-      path: this.requirePath(record.path ?? (record.slug ? `/${record.slug}` : '/')),
-      kind: record.kind ?? 'standard',
+      ...(path ? { path: this.requirePath(path) } : {}),
+      kind,
       ...(record.collectionId ? { collectionId: record.collectionId } : {}),
       ...(record.pathPattern ? { pathPattern: record.pathPattern } : {}),
+      ...(dynamicBasePath ? { dynamicBasePath } : {}),
       ...(record.lookupField ? { lookupField: record.lookupField } : {}),
       status:
         record.status === 'archived'
@@ -1394,6 +1430,10 @@ function isDuplicateKeyError(error: unknown): boolean {
     'code' in error &&
     (error as { code?: unknown }).code === 11000
   );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseLayoutAttachments(page: PageDocument): PageLayoutAttachment[] {
