@@ -194,6 +194,7 @@ type GrapesEditorProps = {
   onError: (message: string) => void;
   onValidationIssue?: (issue: BuilderValidationIssue) => void;
   validationIssues?: readonly BuilderValidationIssue[];
+  designEnabled?: boolean;
 };
 
 const allViewports: BuilderViewport[] = ['desktop', 'tablet', 'mobile'];
@@ -535,6 +536,7 @@ function bindCanvasComponentDrag(
   temporaryPanRef: { current: boolean },
   commitMove: (intent: MoveNodeIntent) => boolean,
   onCanvasKeyDown?: (event: KeyboardEvent) => void,
+  canDrag?: () => boolean,
 ): (() => void) | undefined {
   const frame = editor.Canvas.getFrameEl();
   const frameDocument = frame?.contentDocument;
@@ -718,6 +720,7 @@ function bindCanvasComponentDrag(
     const source = componentForCanvasElement(root, targetElement);
     if (!source || source === root) return;
     editor.select(source);
+    if (canDrag && !canDrag()) return;
     state = {
       kind: 'drag',
       source,
@@ -1105,6 +1108,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onError,
     onValidationIssue,
     validationIssues = [],
+    designEnabled = true,
   }: GrapesEditorProps,
   ref: Ref<GrapesEditorHandle>,
 ) {
@@ -1150,6 +1154,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   }>({});
   const interactionModeRef = useRef<InteractionMode>('select');
   const temporaryPanRef = useRef(false);
+  const designEnabledRef = useRef(designEnabled);
 
   callbacksRef.current = {
     onDirty,
@@ -1163,6 +1168,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     onValidationIssue,
   };
   validationIssuesRef.current = validationIssues;
+  designEnabledRef.current = designEnabled;
   payloadRef.current = initialPayload;
   reusableRuntimeRef.current = reusableRuntime;
   designSystemRef.current = designSystem;
@@ -1178,6 +1184,42 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       throw new Error('Builder editor root is missing');
     }
     return root;
+  }
+
+  function commandNeedsDesign(editor: Editor, command: EditorCommand): boolean {
+    switch (command.kind) {
+      case 'insert':
+      case 'move':
+      case 'remove':
+      case 'duplicate':
+      case 'detach-reusable':
+      case 'apply-global-preset':
+      case 'insert-child':
+      case 'insert-structural-child':
+      case 'set-style':
+      case 'set-responsive-style':
+      case 'set-part-responsive-style':
+      case 'undo':
+      case 'redo':
+        return true;
+      case 'update-props':
+        return Boolean(command.components);
+      case 'set-content':
+      case 'set-attributes':
+        return false;
+      case 'set-property': {
+        const node = findPayloadComponent(getRoot(editor), command.nodeId);
+        const type = node && payloadNodeType(node);
+        const descriptor = type
+          ? PAGE_COMPONENT_REGISTRY[type].propertiesSchema.find(
+              (property) => property.key === command.property,
+            )
+          : undefined;
+        return descriptor?.editingScope !== 'content';
+      }
+      default:
+        return false;
+    }
   }
 
   function refreshClonedComponentIdentity(editor: Editor, clone: Component): void {
@@ -1328,6 +1370,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     editor: Editor,
     command: EditorCommand,
   ): EditorCommandResult {
+    if (!designEnabledRef.current && commandNeedsDesign(editor, command)) {
+      return { changed: false };
+    }
     // GrapesJS emits component events for the same mutation. Suppress those
     // observer-side dirty notifications while the command is committing so a
     // user action creates one coherent document/dirty update.
@@ -2686,6 +2731,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
             temporaryPanRef,
             (intent) => commitStructuralMove(editor as Editor, intent),
             handleInteractionKeyDown,
+            () => designEnabledRef.current,
           );
         };
         bindCanvasComponentDragWhenReady();

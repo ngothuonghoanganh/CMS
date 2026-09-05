@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -21,12 +22,14 @@ import {
   UpdatePageRequestSchema,
   PaginationQuerySchema,
   PublishPageRequestSchema,
+  RestorePageVersionRequestSchema,
   type CreatePageRequest,
   type CreatePageVersionRequest,
   type DuplicatePageRequest,
   type PageLayoutUpdateRequest,
   type PaginationQuery,
   type PublishPageRequest,
+  type RestorePageVersionRequest,
   type UpdatePageRequest,
 } from '@payload/contracts';
 
@@ -114,6 +117,13 @@ export class PageController {
       pageId,
       input,
       requireWorkspaceId(principal),
+      principal?.subject
+        ? await this.authorization.can(
+            principal.subject,
+            requireWorkspaceId(principal),
+            'page.design',
+          )
+        : false,
     );
     await this.audit
       .record({
@@ -198,6 +208,7 @@ export class PageController {
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.update');
+    await this.authorization.assertCan(principal, 'page.design');
     const attachments = await this.pageService.updateLayout(
       pageId,
       input.attachments,
@@ -230,6 +241,13 @@ export class PageController {
       pageId,
       input,
       requireWorkspaceId(principal),
+      principal?.subject
+        ? await this.authorization.can(
+            principal.subject,
+            requireWorkspaceId(principal),
+            'page.design',
+          )
+        : false,
     );
     await this.audit
       .record({
@@ -271,6 +289,30 @@ export class PageController {
       })
       .catch(() => undefined);
     return result;
+  }
+
+  @Get(':pageId/publish-readiness')
+  async publishReadiness(
+    @Param('pageId') pageId: string,
+    @Query('versionNumber') versionNumber: string | undefined,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.read');
+    if (versionNumber !== undefined) {
+      const parsedVersion = Number(versionNumber);
+      if (!Number.isInteger(parsedVersion) || parsedVersion <= 0) {
+        throw new BadRequestException({
+          code: 'INVALID_VERSION_NUMBER',
+          message: 'versionNumber must be a positive integer',
+        });
+      }
+      return this.pageService.getPublishReadiness(
+        pageId,
+        requireWorkspaceId(principal),
+        parsedVersion,
+      );
+    }
+    return this.pageService.getPublishReadiness(pageId, requireWorkspaceId(principal));
   }
 
   @Post(':pageId/unpublish')
@@ -321,6 +363,40 @@ export class PageController {
       requireWorkspaceId(principal),
     );
   }
+
+  @Post(':pageId/versions/:versionNumber/restore')
+  async restoreVersion(
+    @Param('pageId') pageId: string,
+    @Param('versionNumber', ParseIntPipe) versionNumber: number,
+    @Body(new ZodValidationPipe(RestorePageVersionRequestSchema))
+    input: RestorePageVersionRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.rollback');
+    const result = await this.pageService.restoreVersion(
+      pageId,
+      versionNumber,
+      input,
+      requireWorkspaceId(principal),
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'page.rollback',
+        resourceType: 'page_version',
+        resourceId: result.id,
+        ...(principal?.workspaceId ? { workspaceId: principal.workspaceId } : {}),
+        result: 'success',
+        metadata: {
+          pageId,
+          sourceVersionNumber: versionNumber,
+          newVersionNumber: result.versionNumber,
+        },
+      })
+      .catch(() => undefined);
+    return result;
+  }
 }
 
 @Controller('public/sites')
@@ -361,6 +437,7 @@ export class PreviewPageController {
   async getPreviewPage(
     @Param('pageId') pageId: string,
     @Query('entryId') entryId: string | undefined,
+    @Query('versionNumber') versionNumber: string | undefined,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.read');
@@ -368,6 +445,7 @@ export class PreviewPageController {
       pageId,
       requireWorkspaceId(principal),
       entryId,
+      versionNumber === undefined ? undefined : Number(versionNumber),
     );
   }
 }

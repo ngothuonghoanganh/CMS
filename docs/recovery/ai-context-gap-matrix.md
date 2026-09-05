@@ -24,20 +24,20 @@ The highest-value remaining work is consolidation rather than new page types:
 
 ## 01 — Product and domain
 
-| Context item              | Current source truth                                                                              | Upgrade/status                                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Visual publishing product | CMS, Builder, API and Renderer routes exist                                                       | Implemented; core journey is covered by Playwright.                                                  |
-| Platform operator         | Master/control-plane tenant services and platform roles exist                                     | Partial; operational observability and migration dashboard remain.                                   |
-| Company administrator     | Tenant RBAC, users, roles, pages, forms, integrations and settings exist                          | Implemented for current scope; invitations/reset are intentionally deferred.                         |
-| Designer/advanced editor  | Builder exposes structure, styles, responsive editing, minimap and preview                        | Partial; reusable sections, context menus, hide/lock and richer drop affordances remain.             |
-| Content editor            | No explicit restricted builder mode                                                               | Planned P1; requires a permission/capability decision before hiding structural commands.             |
-| Tenant/company            | Tenant DB topology and request context are implemented                                            | Implemented; migration status and operational diagnostics remain.                                    |
-| Page/PageDocument         | Versioned payload plus `PageDocument` envelope                                                    | Implemented with legacy payload migration seam.                                                      |
-| Component contract        | Shared registry contains defaults, slots, relationships, properties and migrations                | Implemented for current node set; per-node component versions and real migrations remain.            |
-| Form/submission/lead      | Forms and submissions are first-class; lead is represented by submission/workflow domain behavior | Partial; the product distinction between submission and durable lead needs a future domain decision. |
-| Integrations              | Tenant-scoped integrations, encrypted secrets and delivery records exist                          | Implemented for current providers; credential rotation UX remains.                                   |
-| Renderer                  | Public and preview runtime consume validated page payloads                                        | Implemented; registry-generated compatibility tests and richer diagnostics are next.                 |
-| Extensibility             | Extension, capability and workflow registries exist                                               | Implemented; new extensions should add registry entries instead of switch branches.                  |
+| Context item              | Current source truth                                                                               | Upgrade/status                                                                                       |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Visual publishing product | CMS, Builder, API and Renderer routes exist                                                        | Implemented; core journey is covered by Playwright.                                                  |
+| Platform operator         | Master/control-plane tenant services and platform roles exist                                      | Partial; operational observability and migration dashboard remain.                                   |
+| Company administrator     | Tenant RBAC, users, roles, pages, forms, integrations and settings exist                           | Implemented for current scope; invitations/reset are intentionally deferred.                         |
+| Designer/advanced editor  | Builder exposes structure, styles, responsive editing, minimap and preview                         | Partial; reusable sections, context menus, hide/lock and richer drop affordances remain.             |
+| Content editor            | Content/Design Page Builder modes, registry-scoped content fields, server-side `page.design` guard | Implemented in Phase 21; approval/collaboration remains deferred.                                    |
+| Tenant/company            | Tenant DB topology and request context are implemented                                             | Implemented; migration status and operational diagnostics remain.                                    |
+| Page/PageDocument         | Versioned payload plus `PageDocument` envelope                                                     | Implemented with legacy payload migration seam.                                                      |
+| Component contract        | Shared registry contains defaults, slots, relationships, properties and migrations                 | Implemented for current node set; per-node component versions and real migrations remain.            |
+| Form/submission/lead      | Forms and submissions are first-class; lead is represented by submission/workflow domain behavior  | Partial; the product distinction between submission and durable lead needs a future domain decision. |
+| Integrations              | Tenant-scoped integrations, encrypted secrets and delivery records exist                           | Implemented for current providers; credential rotation UX remains.                                   |
+| Renderer                  | Public and preview runtime consume validated page payloads                                         | Implemented; registry-generated compatibility tests and richer diagnostics are next.                 |
+| Extensibility             | Extension, capability and workflow registries exist                                                | Implemented; new extensions should add registry entries instead of switch branches.                  |
 
 ## 02 — Current-state problem map
 
@@ -87,21 +87,21 @@ The highest-value remaining work is consolidation rather than new page types:
 
 ## 05 — Visual builder UX
 
-| UX requirement                          | Current source truth                                                                   | Upgrade/status                                                    |
-| --------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Desktop workspace                       | Blocks/Layers, Canvas, Properties, viewport toolbar, save/preview header               | Implemented.                                                      |
-| Adaptive workspace                      | Three columns collapse to stacked panels below tablet width                            | Implemented baseline; true resizable/collapsible sidebars remain. |
-| Insert search/categories                | Component search is available; categories are registry metadata but not visual filters | Improved; category filters and favorites are optional follow-ups. |
-| Layers tree                             | Hierarchy, expand/collapse, selection, search, drag handle and shared move             | Implemented baseline.                                             |
-| Layers keyboard navigation              | Arrow/Home/End navigation with selection sync                                          | Implemented and covered by E2E.                                   |
-| Rename/context/hide/lock/virtualization | Not persisted or exposed                                                               | Deferred until payload/editor permissions define semantics.       |
-| Canvas modes                            | Select, hand, zoom, fit, minimap, viewport selector and breadcrumbs exist              | Implemented baseline; hover/path/drop polish remains.             |
-| Drop feedback                           | before/inside/after indicators and invalid-drop feedback exist                         | Implemented baseline.                                             |
-| Inspector grouping                      | Content/Layout/Spacing/Typography/Appearance/Advanced accordions                       | Implemented.                                                      |
-| Semantic controls                       | number/unit/spacing/color/segmented/select/textarea/datetime fields exist              | Implemented for supported PagePayload values.                     |
-| Responsive reset                        | Current breakpoint override can be reset to inherited value                            | Implemented.                                                      |
-| Save status                             | saved/unsaved/saving/error/conflict header state                                       | Implemented.                                                      |
-| Content-editor mode                     | No restricted mode                                                                     | Deferred P1 pending authorization/product decision.               |
+| UX requirement                          | Current source truth                                                                   | Upgrade/status                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Desktop workspace                       | Blocks/Layers, Canvas, Properties, viewport toolbar, save/preview header               | Implemented.                                                           |
+| Adaptive workspace                      | Three columns collapse to stacked panels below tablet width                            | Implemented baseline; true resizable/collapsible sidebars remain.      |
+| Insert search/categories                | Component search is available; categories are registry metadata but not visual filters | Improved; category filters and favorites are optional follow-ups.      |
+| Layers tree                             | Hierarchy, expand/collapse, selection, search, drag handle and shared move             | Implemented baseline.                                                  |
+| Layers keyboard navigation              | Arrow/Home/End navigation with selection sync                                          | Implemented and covered by E2E.                                        |
+| Rename/context/hide/lock/virtualization | Not persisted or exposed                                                               | Deferred until payload/editor permissions define semantics.            |
+| Canvas modes                            | Select, hand, zoom, fit, minimap, viewport selector and breadcrumbs exist              | Implemented baseline; hover/path/drop polish remains.                  |
+| Drop feedback                           | before/inside/after indicators and invalid-drop feedback exist                         | Implemented baseline.                                                  |
+| Inspector grouping                      | Content/Layout/Spacing/Typography/Appearance/Advanced accordions                       | Implemented.                                                           |
+| Semantic controls                       | number/unit/spacing/color/segmented/select/textarea/datetime fields exist              | Implemented for supported PagePayload values.                          |
+| Responsive reset                        | Current breakpoint override can be reset to inherited value                            | Implemented.                                                           |
+| Save status                             | saved/unsaved/saving/error/conflict header state                                       | Implemented.                                                           |
+| Content-editor mode                     | Single Builder with Content/Design tabs, content-only Inspector, and command guards    | Implemented in Phase 21; explicit Save remains and autosave stays off. |
 
 ## 06 — CMS UX and design system
 
@@ -156,7 +156,8 @@ The highest-value remaining work is consolidation rather than new page types:
 - R4: partial; resource views are extracted incrementally, but dashboard decomposition is not complete.
 - R5: implemented baseline; registry-iterated parity and fallback diagnostics are covered, while generated extension fixtures remain.
 - R6: implemented baseline; migration operations and observability remain.
-- R7/R8: intentionally deferred until R1–R6 gaps are closed.
+- R7: substantially implemented for Phase 21 content mode, revision/history, publish readiness and asset operations; richer diffing and collaboration remain future work.
+- R8: intentionally deferred; experiments, collaboration and AI remain outside Phase 21.
 
 ## 10 — AI working protocol
 

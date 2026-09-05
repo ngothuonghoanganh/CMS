@@ -14,6 +14,15 @@ export class AssetRecord {
   @Prop({ type: String, required: true, trim: true, maxlength: 255 })
   filename!: string;
 
+  @Prop({ type: String, required: false, trim: true, maxlength: 200 })
+  title?: string;
+
+  @Prop({ type: String, required: false, trim: true, maxlength: 500 })
+  defaultAltText?: string;
+
+  @Prop({ type: String, required: false, trim: true, maxlength: 1000 })
+  description?: string;
+
   @Prop({ type: String, required: true, trim: true, maxlength: 100 })
   mimeType!: string;
 

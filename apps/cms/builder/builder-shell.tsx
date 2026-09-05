@@ -19,6 +19,7 @@ import {
   PageVersionListResponseSchema,
   PageVersionSchema,
   PageCompositionFieldsSchema,
+  EffectivePermissionsResponseSchema,
   PAGE_COMPONENT_REGISTRY,
   builderPreviewForComponent,
   type Asset,
@@ -442,6 +443,8 @@ export default function BuilderShell({
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [validationIssues, setValidationIssues] = useState<BuilderValidationIssue[]>([]);
   const [page, setPage] = useState<Page | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [editorMode, setEditorMode] = useState<'content' | 'design'>('design');
   const [version, setVersion] = useState<PageVersion | null>(null);
   // Model A: GrapesJS owns the live editable document. This is only the last
   // validated server snapshot used to initialize the editor, never a second
@@ -559,6 +562,8 @@ export default function BuilderShell({
   const postPreviewSnapshotRef = useRef<
     (overrides?: Partial<PagePreviewSnapshot>) => void
   >(() => undefined);
+  const canDesign = permissions.includes('page.design');
+  const designEnabled = canDesign && editorMode === 'design';
 
   useEffect(() => {
     const restorePanelPreferences = () => {
@@ -580,6 +585,11 @@ export default function BuilderShell({
     if (!panelPreferencesReady) return;
     persistPanelWidths(window.localStorage, panelWidths);
   }, [panelPreferencesReady, panelWidths]);
+
+  useEffect(() => {
+    if (!canDesign && editorMode !== 'content') setEditorMode('content');
+    if (!designEnabled && activeTool !== 'assets') setActiveTool('assets');
+  }, [activeTool, canDesign, designEnabled, editorMode]);
 
   function updatePanelWidth(side: BuilderPanelSide, width: number) {
     setPanelWidths((current) =>
@@ -666,21 +676,23 @@ export default function BuilderShell({
         layoutExtension: source,
       })),
   ];
-  const visibleBlockOptions = availableBlockOptions.filter((block) => {
-    const query = blockQuery.trim().toLowerCase();
-    return (
-      !query ||
-      block.label.toLowerCase().includes(query) ||
-      block.type?.toLowerCase().includes(query) ||
-      block.presetId?.toLowerCase().includes(query) ||
-      block.globalPresetId?.toLowerCase().includes(query) ||
-      block.description.toLowerCase().includes(query) ||
-      block.group.toLowerCase().includes(query) ||
-      block.keywords?.some((keyword) => keyword.toLowerCase().includes(query)) ||
-      block.extensionId?.toLowerCase().includes(query) ||
-      block.layoutExtension?.resource.kind.includes(query)
-    );
-  });
+  const visibleBlockOptions = (designEnabled ? availableBlockOptions : []).filter(
+    (block) => {
+      const query = blockQuery.trim().toLowerCase();
+      return (
+        !query ||
+        block.label.toLowerCase().includes(query) ||
+        block.type?.toLowerCase().includes(query) ||
+        block.presetId?.toLowerCase().includes(query) ||
+        block.globalPresetId?.toLowerCase().includes(query) ||
+        block.description.toLowerCase().includes(query) ||
+        block.group.toLowerCase().includes(query) ||
+        block.keywords?.some((keyword) => keyword.toLowerCase().includes(query)) ||
+        block.extensionId?.toLowerCase().includes(query) ||
+        block.layoutExtension?.resource.kind.includes(query)
+      );
+    },
+  );
   // Keep the initial Add surface discoverable for existing keyboard/palette
   // flows; the Layouts/Elements tabs provide an explicit focused filter once
   // the user chooses one.
@@ -1042,6 +1054,7 @@ export default function BuilderShell({
           headerLayoutsResponseRaw,
           footerLayoutsResponseRaw,
           collectionsResponseRaw,
+          permissionsResponseRaw,
         ] = await Promise.all([
           api.get(`/pages/${pageId}`),
           api.get(`/pages/${pageId}/versions?limit=100`),
@@ -1074,6 +1087,9 @@ export default function BuilderShell({
               }
               throw caughtError;
             }),
+          api
+            .get(`/me/permissions?workspaceId=${encodeURIComponent(workspaceId)}`)
+            .catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -1101,6 +1117,23 @@ export default function BuilderShell({
           createPageDocument(nextPayload, compositionFieldsFromVersion(parsedVersion)),
         );
         setAssets(AssetListResponseSchema.parse(assetsResponse).items);
+        const permissionResponse = permissionsResponseRaw
+          ? EffectivePermissionsResponseSchema.safeParse(permissionsResponseRaw)
+          : null;
+        const nextPermissions = permissionResponse?.success
+          ? permissionResponse.data.permissions
+          : [];
+        setPermissions(nextPermissions);
+        if (!nextPermissions.includes('page.design')) {
+          setEditorMode('content');
+        } else {
+          setEditorMode((currentMode) =>
+            currentMode === 'content' ? 'design' : currentMode,
+          );
+          setActiveTool((currentTool) =>
+            currentTool === 'assets' ? 'add' : currentTool,
+          );
+        }
         const collectionItems = Array.isArray(collectionsResponseRaw)
           ? collectionsResponseRaw.map((item) => CollectionDefinitionSchema.parse(item))
           : collectionsResponseRaw &&
@@ -1857,7 +1890,7 @@ export default function BuilderShell({
   }
 
   function openQuickAdd() {
-    if (!selected) return;
+    if (!designEnabled || !selected) return;
     setQuickAddTarget({
       targetNodeId: selected.id,
       position: selected.type === 'root' ? 'inside' : 'after',
@@ -1865,7 +1898,7 @@ export default function BuilderShell({
   }
 
   function insertQuickAdd(type: BuilderInsertable) {
-    if (!quickAddTarget) return;
+    if (!designEnabled || !quickAddTarget) return;
     const changed = editorRef.current?.insertBlock(type, quickAddTarget);
     if (changed) {
       setQuickAddTarget(null);
@@ -2042,6 +2075,15 @@ export default function BuilderShell({
     );
   }
 
+  const builderTools = designEnabled
+    ? ([
+        ['add', '＋', 'Add blocks'],
+        ['layers', '▤', 'Layers'],
+        ['assets', '▧', 'Assets'],
+        ['settings', '⚙', 'Page settings'],
+      ] as const)
+    : ([['assets', '▧', 'Assets']] as const);
+
   return (
     <main className="builder-frame">
       <header className="builder-topbar">
@@ -2068,6 +2110,34 @@ export default function BuilderShell({
               ← Page
             </button>
           ) : null}
+          <div aria-label="Editing mode" className="builder-editing-mode" role="group">
+            <button
+              aria-pressed={editorMode === 'content'}
+              className={
+                editorMode === 'content'
+                  ? 'button button-small active'
+                  : 'button button-small'
+              }
+              onClick={() => setEditorMode('content')}
+              type="button"
+            >
+              Content
+            </button>
+            {canDesign ? (
+              <button
+                aria-pressed={editorMode === 'design'}
+                className={
+                  editorMode === 'design'
+                    ? 'button button-small active'
+                    : 'button button-small'
+                }
+                onClick={() => setEditorMode('design')}
+                type="button"
+              >
+                Design
+              </button>
+            ) : null}
+          </div>
           <div className="builder-topbar-viewport" aria-label="Viewport">
             {BUILDER_VIEWPORTS.map((item) => (
               <button
@@ -2201,14 +2271,7 @@ export default function BuilderShell({
           data-active-tool={activeTool}
         >
           <nav aria-label="Builder tools" className="builder-tool-rail">
-            {(
-              [
-                ['add', '＋', 'Add blocks'],
-                ['layers', '▤', 'Layers'],
-                ['assets', '▧', 'Assets'],
-                ['settings', '⚙', 'Page settings'],
-              ] as const
-            ).map(([tool, icon, label]) => (
+            {builderTools.map(([tool, icon, label]) => (
               <button
                 aria-label={label}
                 aria-pressed={activeTool === tool}
@@ -2234,7 +2297,7 @@ export default function BuilderShell({
             </button>
           </nav>
           <aside className="builder-panel builder-blocks-panel" data-panel="left">
-            {activeTool === 'add' ? (
+            {designEnabled && activeTool === 'add' ? (
               <>
                 <div className="builder-panel-heading">
                   <span className="eyebrow">Components</span>
@@ -2446,7 +2509,7 @@ export default function BuilderShell({
                 </p>
               </>
             ) : null}
-            {activeTool === 'settings' ? (
+            {designEnabled && activeTool === 'settings' ? (
               <>
                 <div className="builder-layers-section builder-page-capabilities">
                   <div className="builder-panel-heading">
@@ -2560,7 +2623,7 @@ export default function BuilderShell({
                 )}
               </div>
             ) : null}
-            {activeTool === 'layers' ? (
+            {designEnabled && activeTool === 'layers' ? (
               <>
                 <div className="builder-layers-section">
                   <div className="builder-panel-heading">
@@ -2671,7 +2734,7 @@ export default function BuilderShell({
               onDetachReusable={detachSelectedReusable}
               onSelectParent={() => editorRef.current?.selectParent()}
               position={contextToolbarPosition}
-              selected={selected}
+              selected={designEnabled ? selected : null}
             />
             <QuickAddOverlay
               anchor={
@@ -2723,6 +2786,7 @@ export default function BuilderShell({
               onHistoryChange={setHistory}
               onCanvasStateChange={setCanvasState}
               onInteractionModeChange={setInteractionMode}
+              designEnabled={designEnabled}
               onReady={() =>
                 setSaveStatus((current) =>
                   current === 'initializing' ? 'saved' : current,
@@ -2882,6 +2946,7 @@ export default function BuilderShell({
                 onUpdateBinding={updatePageBinding}
                 onUpdateQuery={updatePageQuery}
                 viewport={viewport}
+                contentOnly={!designEnabled}
               />
             </div>
           ) : (

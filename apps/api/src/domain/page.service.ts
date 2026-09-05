@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -25,6 +26,10 @@ import {
   PageVersionSchema,
   PageCompositionSchema,
   DynamicPageMetadataSchema,
+  classifyPageDocumentChanges,
+  summarizePageChanges,
+  PublishIssueCodeSchema,
+  PublishReadinessSchema,
   dynamicPathBase,
   matchDynamicPath,
   PaginationQuerySchema,
@@ -49,6 +54,11 @@ import {
   type PageRuntimeExtension,
   type PaginationQuery,
   type PublishPageRequest,
+  type PublishIssue,
+  type PublishReadiness,
+  type RestorePageVersionRequest,
+  type PageDocument as ContractPageDocument,
+  RestorePageVersionRequestSchema,
   type UpdatePageRequest,
 } from '@payload/contracts';
 
@@ -256,10 +266,30 @@ export class PageService {
     pageId: string,
     input: UpdatePageRequest,
     workspaceId: string,
+    canDesign = true,
   ): Promise<Page> {
     const parsedInput = UpdatePageRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
     const latestVersion = await this.findLatestVersion(pageId, workspaceId);
+
+    if (!canDesign) {
+      const metadataFields = Object.keys(parsedInput).filter(
+        (field) => !['payload', 'composition', 'expectedVersionNumber'].includes(field),
+      );
+      if (metadataFields.length > 0) {
+        throw this.designPermissionRequired();
+      }
+      const draftPayload = parsedInput.payload ?? parsedInput.composition?.payload;
+      if (draftPayload !== undefined && latestVersion) {
+        const classification = this.classifyVersionInput(
+          page,
+          latestVersion,
+          this.parsePayload(draftPayload),
+          parsedInput.composition,
+        );
+        this.assertDesignCapability(canDesign, classification);
+      }
+    }
 
     if (
       parsedInput.path !== undefined &&
@@ -526,6 +556,7 @@ export class PageService {
     pageId: string,
     input: CreatePageVersionRequest,
     workspaceId: string,
+    canDesign = true,
   ): Promise<PageVersion> {
     const parsedInput = CreatePageVersionRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
@@ -535,6 +566,19 @@ export class PageService {
       parsedInput.expectedVersionNumber,
       latestVersion?.versionNumber ?? 0,
     );
+
+    if (!canDesign && latestVersion) {
+      const nextPayload = this.parsePayload(
+        parsedInput.payload ?? parsedInput.composition?.payload,
+      );
+      const classification = this.classifyVersionInput(
+        page,
+        latestVersion,
+        nextPayload,
+        parsedInput.composition,
+      );
+      this.assertDesignCapability(canDesign, classification);
+    }
 
     return this.persistVersion(
       page,
@@ -552,6 +596,7 @@ export class PageService {
   ): Promise<Page> {
     const parsedInput = PublishPageRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
+    await this.assertPageRoutePublishable(page, workspaceId);
 
     const version = await this.findPublicationVersion(page, parsedInput.versionNumber);
     if (!version) {
@@ -562,9 +607,20 @@ export class PageService {
     }
 
     const storedComposition = PageCompositionSchema.safeParse(version.composition);
-    const payload = PagePayloadSchema.parse(
-      storedComposition.success ? storedComposition.data.payload : version.payload,
-    );
+    let payload: PagePayload;
+    try {
+      payload = this.parsePayload(
+        storedComposition.success ? storedComposition.data.payload : version.payload,
+      );
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException({
+          code: 'INVALID_PAGE_DOCUMENT',
+          message: 'The selected page document is invalid.',
+        });
+      }
+      throw error;
+    }
     const composition = this.compositionForVersion(page, version, payload, false);
     if (!composition) {
       throw new InternalServerErrorException({
@@ -645,6 +701,7 @@ export class PageService {
     pageId: string,
     workspaceId: string,
     entryId?: string,
+    versionNumber?: number,
   ): Promise<PublicPage> {
     const page = await this.requirePageDocument(pageId, workspaceId);
     const site = await this.siteModel.findOne({ _id: page.siteId, workspaceId }).exec();
@@ -653,7 +710,7 @@ export class PageService {
       throw this.pageNotFound(pageId);
     }
 
-    const version = await this.findPublicationVersion(page);
+    const version = await this.findPublicationVersion(page, versionNumber);
     if (!version) {
       throw new NotFoundException({
         code: 'DRAFT_VERSION_NOT_FOUND',
@@ -730,6 +787,169 @@ export class PageService {
     }
 
     return this.toVersionContract(record);
+  }
+
+  async restoreVersion(
+    pageId: string,
+    versionNumber: number,
+    input: RestorePageVersionRequest,
+    workspaceId: string,
+  ): Promise<PageVersion> {
+    const parsedInput = RestorePageVersionRequestSchema.parse(input);
+    const page = await this.requirePageDocument(pageId, workspaceId);
+    const target = await this.versionModel
+      .findOne({ landingPageId: pageId, workspaceId, versionNumber })
+      .exec();
+    if (!target) {
+      throw new NotFoundException({
+        code: 'PAGE_VERSION_NOT_FOUND',
+        message: `Version ${versionNumber} for page ${pageId} was not found`,
+      });
+    }
+    const latest = await this.findLatestVersion(pageId, workspaceId);
+    assertExpectedVersionNumber(
+      parsedInput.expectedCurrentVersionNumber,
+      latest?.versionNumber ?? 0,
+    );
+    const payload = this.parsePayload(target.payload);
+    const composition = PageCompositionSchema.safeParse(target.composition);
+    return this.persistVersion(
+      page,
+      payload,
+      latest?.versionNumber,
+      latest?._id.toString(),
+      composition.success
+        ? {
+            pageId,
+            payload,
+            attachments: composition.data.attachments,
+            layoutAttachments: composition.data.layoutAttachments,
+            bindings: composition.data.bindings,
+            actions: composition.data.actions,
+            resources: composition.data.resources,
+            queries: composition.data.queries,
+          }
+        : undefined,
+    );
+  }
+
+  async getPublishReadiness(
+    pageId: string,
+    workspaceId: string,
+    versionNumber?: number,
+  ): Promise<PublishReadiness> {
+    const page = await this.requirePageDocument(pageId, workspaceId);
+    const version = await this.findPublicationVersion(page, versionNumber);
+    const blockingIssues: PublishIssue[] = [];
+    if (!version) {
+      return PublishReadinessSchema.parse({
+        ready: false,
+        versionNumber: versionNumber ?? 1,
+        blockingIssues: [
+          {
+            code: 'DRAFT_NOT_FOUND',
+            message: 'The page has no publishable draft version.',
+          },
+        ],
+        warnings: [],
+        summary: summarizePageChanges({ contentChanges: [], designChanges: [] }),
+      });
+    }
+
+    const storedComposition = PageCompositionSchema.safeParse(version.composition);
+    const payloadResult = PagePayloadSchema.safeParse(
+      storedComposition.success ? storedComposition.data.payload : version.payload,
+    );
+    if (!payloadResult.success) {
+      blockingIssues.push({
+        code: 'INVALID_PAGE_DOCUMENT',
+        message: 'The draft page document is invalid.',
+      });
+    }
+    const payload = payloadResult.success ? payloadResult.data : undefined;
+    const composition = payload
+      ? this.compositionForVersion(page, version, payload, false)
+      : undefined;
+    if (payload && !composition) {
+      blockingIssues.push({
+        code: 'INVALID_PAGE_COMPOSITION',
+        message: 'The draft page composition could not be normalized.',
+      });
+    }
+
+    if (payload && composition) {
+      const checks: Array<() => Promise<void>> = [
+        () => this.assertPageRoutePublishable(page, workspaceId),
+        () =>
+          this.reusables.assertDependenciesAvailable(
+            page.workspaceId,
+            page.siteId,
+            payload,
+          ),
+        async () => {
+          const designSystem = await this.sites.getDesignSystem(
+            page.workspaceId,
+            page.siteId,
+          );
+          await this.reusables.assertDesignTokenDependenciesAvailable(
+            page.workspaceId,
+            page.siteId,
+            designSystem.draft,
+            [payload],
+          );
+        },
+        () => this.workflows.validatePagePublishDependencies(pageId, workspaceId),
+        () =>
+          this.pageExtensions.validateBeforePublish(
+            pageId,
+            workspaceId,
+            payload,
+            composition,
+          ),
+        () =>
+          this.collections.validateComposition(
+            page.workspaceId,
+            page.siteId,
+            composition,
+            page.kind === 'dynamic' && page.collectionId
+              ? { currentEntryCollectionId: page.collectionId }
+              : {},
+          ),
+      ];
+      for (const check of checks) {
+        try {
+          await check();
+        } catch (error) {
+          const issue = this.publishIssueFromError(error);
+          if (!blockingIssues.some((candidate) => candidate.code === issue.code)) {
+            blockingIssues.push(issue);
+          }
+        }
+      }
+    }
+
+    const previous = page.publishedVersionId
+      ? await this.versionModel
+          .findOne({ _id: page.publishedVersionId, workspaceId, landingPageId: pageId })
+          .exec()
+      : null;
+    const summary = payload
+      ? summarizePageChanges(
+          classifyPageDocumentChanges(
+            previous
+              ? this.documentForVersion(page, previous)
+              : this.documentForVersion(page, version),
+            this.documentForVersion(page, version),
+          ),
+        )
+      : summarizePageChanges({ contentChanges: [], designChanges: [] });
+    return PublishReadinessSchema.parse({
+      ready: blockingIssues.length === 0,
+      versionNumber: version.versionNumber,
+      blockingIssues,
+      warnings: [],
+      summary,
+    });
   }
 
   async getLayout(pageId: string, workspaceId: string): Promise<PageLayoutAttachment[]> {
@@ -1080,6 +1300,47 @@ export class PageService {
     return { ...metadata.data, dynamicBasePath: dynamicBase };
   }
 
+  private async assertPageRoutePublishable(
+    page: PageDocument,
+    workspaceId: string,
+  ): Promise<void> {
+    if (page.kind === 'dynamic') {
+      await this.requireDynamicMetadata(
+        page.collectionId,
+        page.pathPattern,
+        page.lookupField,
+        workspaceId,
+        page.siteId,
+        page._id.toString(),
+      );
+      return;
+    }
+
+    const path = this.requirePath(page.path ?? '');
+    const conflict = await this.pageModel
+      .findOne({
+        workspaceId,
+        siteId: page.siteId,
+        kind: { $ne: 'dynamic' },
+        path,
+        _id: { $ne: page._id.toString() },
+      })
+      .select({ _id: 1 })
+      .exec();
+    if (conflict) {
+      throw new ConflictException({
+        code: 'ROUTE_CONFLICT',
+        message: 'Another page already owns this public route',
+      });
+    }
+    await this.assertStaticPathDoesNotMatchDynamic(
+      workspaceId,
+      page.siteId,
+      path,
+      page._id.toString(),
+    );
+  }
+
   private async assertStaticPathDoesNotMatchDynamic(
     workspaceId: string,
     siteId: string,
@@ -1381,6 +1642,116 @@ export class PageService {
       undefined,
       parseLayoutAttachments(page),
     );
+  }
+
+  private documentForVersion(
+    page: PageDocument,
+    version: PageVersionDocument,
+  ): ContractPageDocument {
+    const payload = this.parsePayload(version.payload);
+    const composition = this.compositionForVersion(page, version, payload);
+    return {
+      schemaVersion: 1,
+      payload,
+      ...(composition
+        ? {
+            composition: {
+              attachments: composition.attachments,
+              layoutAttachments: composition.layoutAttachments,
+              bindings: composition.bindings,
+              actions: composition.actions,
+              resources: composition.resources,
+              queries: composition.queries,
+            },
+          }
+        : {}),
+    };
+  }
+
+  private classifyVersionInput(
+    page: PageDocument,
+    previousVersion: PageVersionDocument,
+    payload: PagePayload,
+    compositionInput?: PageCompositionInput,
+  ) {
+    const previousPayload = this.parsePayload(previousVersion.payload);
+    const previousComposition = this.compositionForVersion(
+      page,
+      previousVersion,
+      previousPayload,
+    );
+    const nextComposition = this.normalizeComposition(
+      page._id.toString(),
+      payload,
+      compositionInput,
+      previousComposition,
+      parseLayoutAttachments(page),
+    );
+    return classifyPageDocumentChanges(this.documentForVersion(page, previousVersion), {
+      schemaVersion: 1,
+      payload,
+      composition: {
+        attachments: nextComposition.attachments,
+        layoutAttachments: nextComposition.layoutAttachments,
+        bindings: nextComposition.bindings,
+        actions: nextComposition.actions,
+        resources: nextComposition.resources,
+        queries: nextComposition.queries,
+      },
+    });
+  }
+
+  private assertDesignCapability(
+    canDesign: boolean,
+    classification: { designChanges: readonly unknown[] },
+  ): void {
+    if (!canDesign && classification.designChanges.length > 0) {
+      throw this.designPermissionRequired();
+    }
+  }
+
+  private designPermissionRequired(): ForbiddenException {
+    return new ForbiddenException({
+      code: 'PAGE_DESIGN_PERMISSION_REQUIRED',
+      message: 'Structural and design changes require the page.design permission.',
+    });
+  }
+
+  private publishIssueFromError(error: unknown): PublishIssue {
+    const response =
+      error && typeof error === 'object' && 'getResponse' in error
+        ? (error as { getResponse: () => unknown }).getResponse()
+        : undefined;
+    const candidate =
+      response && typeof response === 'object'
+        ? (response as Record<string, unknown>)
+        : {};
+    const nested =
+      candidate.error && typeof candidate.error === 'object'
+        ? (candidate.error as Record<string, unknown>)
+        : candidate;
+    const rawCode = typeof nested.code === 'string' ? nested.code : 'UNKNOWN';
+    const normalizedCode =
+      rawCode === 'DYNAMIC_PAGE_METADATA_REQUIRED' ||
+      rawCode === 'DYNAMIC_LOOKUP_FIELD_NOT_FOUND'
+        ? 'INVALID_DYNAMIC_CONFIGURATION'
+        : rawCode === 'DYNAMIC_PATH_CONFLICT'
+          ? 'ROUTE_CONFLICT'
+          : rawCode;
+    const code = PublishIssueCodeSchema.safeParse(normalizedCode);
+    const rawMessage =
+      typeof nested.message === 'string'
+        ? nested.message
+        : error instanceof Error
+          ? error.message
+          : 'The page is not ready to publish.';
+    return {
+      code: code.success ? code.data : 'UNKNOWN',
+      message: rawMessage.slice(0, 500),
+      ...(nested.details && typeof nested.details === 'object'
+        ? { details: nested.details as Record<string, unknown> }
+        : {}),
+    };
   }
 
   private pageNotFound(pageId: string): NotFoundException {

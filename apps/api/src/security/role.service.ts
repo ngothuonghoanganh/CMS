@@ -66,6 +66,19 @@ export class RoleService {
         )
         .exec();
     }
+    // One-time compatibility migration for tenant-defined full editors. The
+    // system Editor persona is intentionally content-only; custom roles that
+    // already granted page.update retain their previous structural capability.
+    await this.roleModel
+      .updateMany(
+        {
+          type: 'custom',
+          permissions: 'page.update',
+          $and: [{ permissions: { $ne: 'page.design' } }],
+        },
+        { $addToSet: { permissions: 'page.design' } },
+      )
+      .exec();
   }
 
   async list(principal?: AuthPrincipal): Promise<{ items: Role[] }> {

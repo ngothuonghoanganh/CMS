@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  assetPath,
   collectionPath,
   cmsViewPath,
   isStandaloneWorkspaceRoute,
@@ -35,6 +36,7 @@ describe('CMS route map', () => {
       '/workspaces/w/sites/s/collections/c/entries',
     );
     expect(templatePath('w', 't', 'edit')).toBe('/workspaces/w/templates/t/edit');
+    expect(assetPath('w', 'asset-1')).toBe('/workspaces/w/assets/asset-1');
   });
 
   it('recognizes only explicit standalone builder routes', () => {

@@ -6,6 +6,7 @@ import {
   type Integration,
   type Page,
   type PageVersion,
+  type PublishReadiness,
   type Collection,
   type CollectionEntryResponse,
   type Site,
@@ -14,7 +15,13 @@ import {
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 
 import { StatusBadge } from '../status-badge';
-import { Drawer, Modal, PageHeader, ResourceToolbar } from '../ui/surfaces';
+import {
+  Drawer,
+  Modal,
+  PageHeader,
+  PaginationControls,
+  ResourceToolbar,
+} from '../ui/surfaces';
 import { PageLayoutEditor } from './page-layout-editor';
 
 export type PageForm = {
@@ -46,6 +53,12 @@ export type PagesViewProps = {
   selectedPage: Page | undefined;
   selectedSite: Site | undefined;
   versions: PageVersion[];
+  versionPagination: {
+    limit: number;
+    offset: number;
+    total: number;
+    hasNextPage: boolean;
+  };
   bindings: FormIntegrationBinding[];
   bindingSaving: boolean;
   integrations: Integration[];
@@ -58,6 +71,7 @@ export type PagesViewProps = {
   canCreatePage: boolean;
   canUpdatePage: boolean;
   canPublishPage: boolean;
+  canRollbackPage: boolean;
   canDeletePage: boolean;
   canReadWorkflows: boolean;
   onSaveFormBinding: (formNodeId: string, integrationIds: string[]) => void;
@@ -67,7 +81,16 @@ export type PagesViewProps = {
   onOpenWorkflows: (page: Page) => void;
   onOpenSeo: (page: Page) => void;
   onPreview: (page: Page) => void;
-  onPublish: (page: Page) => void;
+  onPublish: (page: Page, versionNumber?: number) => void;
+  onOpenPublishDialog: (page: Page, versionNumber?: number) => void;
+  onClosePublishDialog: () => void;
+  onRestoreVersion: (page: Page, version: PageVersion) => void;
+  onPreviewVersion: (page: Page, version: PageVersion) => void;
+  onVersionPage: (offset: number) => void;
+  publishCandidate: Page | undefined;
+  publishVersionNumber: number | undefined;
+  publishReadiness: PublishReadiness | null;
+  publishLoading: boolean;
   onSelectSite: (siteId: string) => void;
   onSelectPage: (page: Page) => void;
   onUnpublish: (page: Page) => void;
@@ -390,6 +413,7 @@ export function PagesView({
   selectedPage,
   selectedSite,
   versions,
+  versionPagination,
   bindings,
   bindingSaving,
   integrations,
@@ -402,6 +426,7 @@ export function PagesView({
   canCreatePage,
   canUpdatePage,
   canPublishPage,
+  canRollbackPage,
   canDeletePage,
   canReadWorkflows,
   onSaveFormBinding,
@@ -412,6 +437,11 @@ export function PagesView({
   onOpenSeo,
   onPreview,
   onPublish,
+  onOpenPublishDialog,
+  onClosePublishDialog,
+  onRestoreVersion,
+  onPreviewVersion,
+  onVersionPage,
   onSelectSite,
   onSelectPage,
   onUnpublish,
@@ -422,6 +452,10 @@ export function PagesView({
   onPageSubmit,
   onClosePageDrawer,
   onChooseTemplate,
+  publishCandidate,
+  publishVersionNumber,
+  publishReadiness,
+  publishLoading,
 }: PagesViewProps) {
   const [pageSearch, setPageSearch] = useState('');
   const [pageStatus, setPageStatus] = useState('');
@@ -677,7 +711,7 @@ export function PagesView({
                       onClick={() =>
                         publicationStatus(selectedPage) === 'Published'
                           ? onUnpublish(selectedPage)
-                          : onPublish(selectedPage)
+                          : onOpenPublishDialog(selectedPage)
                       }
                       type="button"
                     >
@@ -754,7 +788,37 @@ export function PagesView({
                       {new Date(version.createdAt).toLocaleString()}
                     </span>
                   </div>
-                  <span className="muted">Snapshot</span>
+                  <div className="form-actions">
+                    <button
+                      className="button button-small button-ghost"
+                      onClick={() => onPreviewVersion(selectedPage, version)}
+                      type="button"
+                    >
+                      Preview
+                    </button>
+                    {canPublishPage ? (
+                      <button
+                        className="button button-small button-ghost"
+                        onClick={() =>
+                          onOpenPublishDialog(selectedPage, version.versionNumber)
+                        }
+                        type="button"
+                      >
+                        Check readiness
+                      </button>
+                    ) : null}
+                    {canRollbackPage &&
+                    version.id !== selectedPage.currentDraftVersionId ? (
+                      <button
+                        className="button button-small button-ghost"
+                        disabled={busy}
+                        onClick={() => onRestoreVersion(selectedPage, version)}
+                        type="button"
+                      >
+                        Restore as draft
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
@@ -764,6 +828,21 @@ export function PagesView({
               description="The page has no readable draft history."
             />
           )}
+          {versionPagination.total ? (
+            <PaginationControls
+              busy={busy}
+              noun="versions"
+              onNext={() =>
+                onVersionPage(versionPagination.offset + versionPagination.limit)
+              }
+              onPrevious={() =>
+                onVersionPage(
+                  Math.max(0, versionPagination.offset - versionPagination.limit),
+                )
+              }
+              pagination={versionPagination}
+            />
+          ) : null}
         </section>
       ) : null}
 
@@ -837,6 +916,148 @@ export function PagesView({
 
       <Modal
         description={
+          publishCandidate
+            ? `Review version ${publishVersionNumber ?? draftVersion?.versionNumber ?? '—'} for ${publishCandidate.name} before making it public.`
+            : undefined
+        }
+        eyebrow="Publish readiness"
+        footer={
+          <div className="form-actions">
+            <button
+              className="button button-ghost"
+              disabled={!publishCandidate}
+              onClick={() => {
+                if (!publishCandidate) return;
+                if (publishVersionNumber === undefined) onPreview(publishCandidate);
+                else {
+                  const version = versions.find(
+                    (candidate) => candidate.versionNumber === publishVersionNumber,
+                  );
+                  if (version) onPreviewVersion(publishCandidate, version);
+                }
+              }}
+              type="button"
+            >
+              Preview
+            </button>
+            <button
+              className="button button-ghost"
+              onClick={onClosePublishDialog}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="button button-primary"
+              disabled={
+                busy || publishLoading || !publishReadiness || !publishReadiness.ready
+              }
+              onClick={() => {
+                if (publishCandidate) onPublish(publishCandidate, publishVersionNumber);
+              }}
+              type="button"
+            >
+              {publishLoading ? 'Checking…' : 'Publish version'}
+            </button>
+          </div>
+        }
+        onClose={onClosePublishDialog}
+        open={Boolean(publishCandidate)}
+        size="lg"
+        title="Publish this version?"
+      >
+        {publishLoading ? (
+          <div aria-busy="true" className="analytics-skeleton">
+            Checking publish readiness…
+          </div>
+        ) : publishReadiness ? (
+          <div className="stack">
+            <div className="page-detail-summary-grid">
+              <div>
+                <span className="muted small">Page</span>
+                <strong>{publishCandidate?.name ?? '—'}</strong>
+              </div>
+              <div>
+                <span className="muted small">Draft version</span>
+                <strong>v{publishReadiness.versionNumber}</strong>
+              </div>
+              <div>
+                <span className="muted small">Current public version</span>
+                <strong>
+                  {publishCandidate?.publishedVersionId
+                    ? (versions.find(
+                        (version) => version.id === publishCandidate.publishedVersionId,
+                      )?.versionNumber ?? 'Published')
+                    : 'Not published'}
+                </strong>
+              </div>
+              <div>
+                <span className="muted small">Public URL</span>
+                <code>
+                  {publishCandidate
+                    ? pageUrl(
+                        publishCandidate,
+                        selectedSite,
+                        collectionEntries,
+                        pageForm.previewEntryId,
+                      )
+                    : '—'}
+                </code>
+              </div>
+            </div>
+            {publishReadiness.blockingIssues.length ? (
+              <div className="alert alert-error" role="alert">
+                <strong>Publishing is blocked.</strong>
+                <ul>
+                  {publishReadiness.blockingIssues.map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="alert alert-success" role="status">
+                This version is ready to publish.
+              </div>
+            )}
+            {publishReadiness.warnings.length ? (
+              <div className="alert alert-warning" role="status">
+                <strong>Warnings</strong>
+                <ul>
+                  {publishReadiness.warnings.map((issue, index) => (
+                    <li key={`${issue.code}-${index}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="page-detail-summary-grid">
+              <div>
+                <span className="muted small">Content changes</span>
+                <strong>{publishReadiness.summary.contentFieldChanges}</strong>
+              </div>
+              <div>
+                <span className="muted small">Design changes</span>
+                <strong>{publishReadiness.summary.designValueChanges}</strong>
+              </div>
+              <div>
+                <span className="muted small">Components added</span>
+                <strong>{publishReadiness.summary.componentsAdded}</strong>
+              </div>
+              <div>
+                <span className="muted small">Components removed</span>
+                <strong>{publishReadiness.summary.componentsRemoved}</strong>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <PageEmptyState
+            title="Readiness unavailable"
+            description="The server did not return a publish readiness result."
+          />
+        )}
+      </Modal>
+
+      <Modal
+        description={
           deleteCandidate
             ? `Deleting ${deleteCandidate.name} removes its draft history and public route.`
             : undefined
@@ -894,7 +1115,7 @@ export function PagesView({
                     onClick={() =>
                       publicationStatus(selectedPage) === 'Published'
                         ? onUnpublish(selectedPage)
-                        : onPublish(selectedPage)
+                        : onOpenPublishDialog(selectedPage)
                     }
                     type="button"
                   >

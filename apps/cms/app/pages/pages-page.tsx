@@ -5,6 +5,7 @@ import {
   IntegrationListResponseSchema,
   PageListResponseSchema,
   PageVersionListResponseSchema,
+  PublishReadinessSchema,
   SiteListResponseSchema,
   TemplateListResponseSchema,
   type Collection,
@@ -13,6 +14,7 @@ import {
   type Integration,
   type Page,
   type PageVersion,
+  type PublishReadiness,
   type Site,
   type Template,
 } from '@payload/contracts';
@@ -90,6 +92,13 @@ export default function PagesPage({
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [entries, setEntries] = useState<CollectionEntryResponse[]>([]);
   const [versions, setVersions] = useState<PageVersion[]>([]);
+  const [versionOffset, setVersionOffset] = useState(0);
+  const [versionPagination, setVersionPagination] = useState({
+    limit: 20,
+    offset: 0,
+    total: 0,
+    hasNextPage: false,
+  });
   const [bindings, setBindings] = useState<FormIntegrationBinding[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState(siteId ?? '');
   const [pageForm, setPageForm] = useState<PageForm>(blankPage);
@@ -97,6 +106,10 @@ export default function PagesPage({
   const [bindingSaving, setBindingSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [publishCandidate, setPublishCandidate] = useState<Page | undefined>();
+  const [publishVersionNumber, setPublishVersionNumber] = useState<number | undefined>();
+  const [publishReadiness, setPublishReadiness] = useState<PublishReadiness | null>(null);
+  const [publishLoading, setPublishLoading] = useState(false);
   const selectedPage = pages.find((page) => page.id === pageId);
   const selectedSite = sites.find((site) => site.id === selectedSiteId);
 
@@ -155,22 +168,26 @@ export default function PagesPage({
   useEffect(() => {
     if (!pageId) {
       setVersions([]);
+      setVersionOffset(0);
+      setVersionPagination({ limit: 20, offset: 0, total: 0, hasNextPage: false });
       setBindings([]);
       setEntries([]);
       return;
     }
     void Promise.all([
-      api.get(`/pages/${pageId}/versions?limit=100`),
+      api.get(`/pages/${pageId}/versions?limit=20&offset=${versionOffset}`),
       api.get(`/pages/${pageId}/form-integrations`),
     ])
       .then(([versionsResponse, bindingsResponse]) => {
-        setVersions(PageVersionListResponseSchema.parse(versionsResponse).items);
+        const parsedVersions = PageVersionListResponseSchema.parse(versionsResponse);
+        setVersions(parsedVersions.items);
+        setVersionPagination(parsedVersions.pagination);
         setBindings(
           FormIntegrationBindingListResponseSchema.parse(bindingsResponse).items,
         );
       })
       .catch((caughtError: unknown) => setError(message(caughtError)));
-  }, [pageId]);
+  }, [pageId, versionOffset]);
   useEffect(() => {
     if (!selectedSiteId || !selectedPage?.collectionId) {
       setEntries([]);
@@ -271,9 +288,10 @@ export default function PagesPage({
     method: 'post' | 'delete',
     page: Page,
     successMessage?: string,
+    body: Record<string, unknown> = {},
   ) {
     await run(async () => {
-      const updated = method === 'post' ? await api.post<Page>(path, {}) : null;
+      const updated = method === 'post' ? await api.post<Page>(path, body) : null;
       if (method === 'delete') {
         await api.delete(path);
         setPages((current) => current.filter((item) => item.id !== page.id));
@@ -285,6 +303,66 @@ export default function PagesPage({
       if (successMessage) setNotice(successMessage);
     });
   }
+
+  async function openPublishDialog(page: Page, versionNumber?: number) {
+    setPublishCandidate(page);
+    setPublishVersionNumber(versionNumber);
+    setPublishReadiness(null);
+    setPublishLoading(true);
+    setError(null);
+    try {
+      const query = versionNumber ? `?versionNumber=${versionNumber}` : '';
+      const response = await api.get(`/pages/${page.id}/publish-readiness${query}`);
+      setPublishReadiness(PublishReadinessSchema.parse(response));
+    } catch (caughtError) {
+      setError(message(caughtError));
+      setPublishCandidate(undefined);
+    } finally {
+      setPublishLoading(false);
+    }
+  }
+
+  function closePublishDialog() {
+    setPublishCandidate(undefined);
+    setPublishVersionNumber(undefined);
+    setPublishReadiness(null);
+  }
+
+  function confirmPublish(page: Page, versionNumber?: number) {
+    closePublishDialog();
+    void mutatePage(
+      `/pages/${page.id}/publish`,
+      'post',
+      page,
+      'Page published.',
+      versionNumber ? { versionNumber } : {},
+    );
+  }
+
+  function restoreVersion(page: Page, version: PageVersion) {
+    const expectedCurrentVersionNumber = versions[0]?.versionNumber;
+    if (!expectedCurrentVersionNumber) return;
+    void run(async () => {
+      const restored = await api.post<PageVersion>(
+        `/pages/${page.id}/versions/${version.versionNumber}/restore`,
+        { expectedCurrentVersionNumber },
+      );
+      setVersions((current) => [restored, ...current]);
+      setPages((current) =>
+        current.map((item) =>
+          item.id === page.id
+            ? {
+                ...item,
+                currentDraftVersionId: restored.id,
+                updatedAt: restored.createdAt,
+              }
+            : item,
+        ),
+      );
+      setNotice(`Version ${version.versionNumber} restored as a new draft.`);
+    });
+  }
+
   async function saveBinding(formNodeId: string, integrationIds: string[]) {
     setBindingSaving(true);
     setError(null);
@@ -311,12 +389,26 @@ export default function PagesPage({
     router.push(pagePath(workspaceId, page.siteId, page.id, 'builder'));
   }
   function openPreview(page: Page) {
-    const entryQuery =
-      page.kind === 'dynamic' && pageForm.previewEntryId
-        ? `?entryId=${encodeURIComponent(pageForm.previewEntryId)}`
-        : '';
+    const query = new URLSearchParams();
+    if (page.kind === 'dynamic' && pageForm.previewEntryId) {
+      query.set('entryId', pageForm.previewEntryId);
+    }
+    const queryString = query.toString();
     window.open(
-      `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}${entryQuery}`,
+      `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}${
+        queryString ? `?${queryString}` : ''
+      }`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }
+  function openHistoricalPreview(page: Page, version: PageVersion) {
+    const query = new URLSearchParams({ versionNumber: String(version.versionNumber) });
+    if (page.kind === 'dynamic' && pageForm.previewEntryId) {
+      query.set('entryId', pageForm.previewEntryId);
+    }
+    window.open(
+      `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}?${query.toString()}`,
       '_blank',
       'noopener,noreferrer',
     );
@@ -341,6 +433,7 @@ export default function PagesPage({
         canCreatePage={can('page.create')}
         canDeletePage={can('page.delete')}
         canPublishPage={can('page.publish')}
+        canRollbackPage={can('page.rollback')}
         canReadWorkflows={can('workflow.read')}
         canUpdatePage={can('page.update')}
         collectionEntries={collectionEntries}
@@ -390,9 +483,12 @@ export default function PagesPage({
         onPageFormChange={setPageForm}
         onPageSubmit={(event) => void save(event)}
         onPreview={openPreview}
-        onPublish={(page) =>
-          void mutatePage(`/pages/${page.id}/publish`, 'post', page, 'Page published.')
-        }
+        onPublish={confirmPublish}
+        onOpenPublishDialog={openPublishDialog}
+        onClosePublishDialog={closePublishDialog}
+        onPreviewVersion={openHistoricalPreview}
+        onRestoreVersion={restoreVersion}
+        onVersionPage={setVersionOffset}
         onSaveFormBinding={(formNodeId, integrationIds) =>
           void saveBinding(formNodeId, integrationIds)
         }
@@ -415,12 +511,17 @@ export default function PagesPage({
         pageDrawerOpen={Boolean(action)}
         pageForm={pageForm}
         pages={pages}
+        publishCandidate={publishCandidate}
+        publishLoading={publishLoading}
+        publishReadiness={publishReadiness}
+        publishVersionNumber={publishVersionNumber}
         selectedPage={selectedPage}
         selectedSite={selectedSite}
         selectedSiteId={selectedSiteId}
         sites={sites}
         templates={templates}
         versions={versions}
+        versionPagination={versionPagination}
       />
     </>
   );

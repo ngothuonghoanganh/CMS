@@ -69,6 +69,7 @@ export const TenantPermissions = {
   PageCreate: 'page.create',
   PageUpdate: 'page.update',
   PageDelete: 'page.delete',
+  PageDesign: 'page.design',
   PagePublish: 'page.publish',
   PageRollback: 'page.rollback',
   LeadRead: 'lead.read',
@@ -99,6 +100,7 @@ export const TenantPermissions = {
   LayoutDelete: 'layout.delete',
   AssetRead: 'asset.read',
   AssetCreate: 'asset.create',
+  AssetUpdate: 'asset.update',
   AssetDelete: 'asset.delete',
   TemplateRead: 'template.read',
   TemplateCreate: 'template.create',
@@ -4904,6 +4906,9 @@ export const AssetSchema = z
     id: EntityIdSchema,
     workspaceId: EntityIdSchema,
     filename: nonEmptyText.max(255),
+    title: z.string().trim().max(200).optional(),
+    defaultAltText: z.string().trim().max(500).optional(),
+    description: z.string().trim().max(1000).optional(),
     mimeType: nonEmptyText.max(100),
     size: z.number().int().nonnegative(),
     storageKey: nonEmptyText.max(500),
@@ -5022,6 +5027,63 @@ export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 export type Pagination = z.infer<typeof PaginationSchema>;
 export type PageListResponse = z.infer<typeof PageListResponseSchema>;
 export type PageVersionListResponse = z.infer<typeof PageVersionListResponseSchema>;
+
+export const RestorePageVersionRequestSchema = z
+  .object({ expectedCurrentVersionNumber: z.number().int().positive() })
+  .strict();
+export type RestorePageVersionRequest = z.infer<typeof RestorePageVersionRequestSchema>;
+
+export const PublishIssueCodeSchema = z.enum([
+  'DRAFT_NOT_FOUND',
+  'INVALID_PAGE_PATH',
+  'INVALID_PAGE_DOCUMENT',
+  'INVALID_PAGE_COMPOSITION',
+  'ROUTE_CONFLICT',
+  'INVALID_DYNAMIC_CONFIGURATION',
+  'MISSING_REQUIRED_BINDING',
+  'MISSING_LAYOUT_RESOURCE',
+  'UNPUBLISHED_DEPENDENCY',
+  'PAGE_WORKFLOW_NOT_PUBLISHED',
+  'PAGE_EXTENSION_INSTANCE_REQUIRED',
+  'QUERY_NOT_FOUND',
+  'COLLECTION_LIST_SOURCE_INVALID',
+  'CURRENT_ENTRY_CONTEXT_REQUIRED',
+  'UNKNOWN',
+]);
+export type PublishIssueCode = z.infer<typeof PublishIssueCodeSchema>;
+
+export const PublishIssueSchema = z
+  .object({
+    code: PublishIssueCodeSchema,
+    message: nonEmptyText.max(500),
+    details: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+export type PublishIssue = z.infer<typeof PublishIssueSchema>;
+
+export const PageChangeSummarySchema = z
+  .object({
+    contentFieldChanges: z.number().int().nonnegative(),
+    designValueChanges: z.number().int().nonnegative(),
+    componentsAdded: z.number().int().nonnegative(),
+    componentsRemoved: z.number().int().nonnegative(),
+    componentsMoved: z.number().int().nonnegative(),
+    componentsReordered: z.number().int().nonnegative(),
+    componentsTypeChanged: z.number().int().nonnegative(),
+  })
+  .strict();
+export type PageChangeSummary = z.infer<typeof PageChangeSummarySchema>;
+
+export const PublishReadinessSchema = z
+  .object({
+    ready: z.boolean(),
+    versionNumber: z.number().int().positive(),
+    blockingIssues: z.array(PublishIssueSchema).max(50),
+    warnings: z.array(PublishIssueSchema).max(50),
+    summary: PageChangeSummarySchema,
+  })
+  .strict();
+export type PublishReadiness = z.infer<typeof PublishReadinessSchema>;
 
 export const SiteListResponseSchema = z
   .object({ items: z.array(SiteSchema), pagination: PaginationSchema })
@@ -5228,11 +5290,44 @@ export type DuplicatePageRequest = z.infer<typeof DuplicatePageRequestSchema>;
 export const CreateAssetRequestSchema = z
   .object({
     filename: nonEmptyText.max(255),
+    title: z.string().trim().max(200).optional(),
+    defaultAltText: z.string().trim().max(500).optional(),
+    description: z.string().trim().max(1000).optional(),
     mimeType: nonEmptyText.max(100),
     size: z.number().int().nonnegative(),
     storageKey: nonEmptyText.max(500),
   })
   .strict();
+export const UpdateAssetRequestSchema = z
+  .object({
+    title: z.string().trim().max(200).nullable().optional(),
+    defaultAltText: z.string().trim().max(500).nullable().optional(),
+    description: z.string().trim().max(1000).nullable().optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export type UpdateAssetRequest = z.infer<typeof UpdateAssetRequestSchema>;
+
+export const AssetUsageReferenceSchema = z
+  .object({
+    resourceType: nonEmptyText.max(80),
+    resourceId: EntityIdSchema,
+    label: nonEmptyText.max(200),
+    location: z.string().trim().max(200).optional(),
+    versionState: z.enum(['draft', 'published', 'historical']).optional(),
+  })
+  .strict();
+export type AssetUsageReference = z.infer<typeof AssetUsageReferenceSchema>;
+
+export const AssetUsageResponseSchema = z
+  .object({
+    assetId: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    items: z.array(AssetUsageReferenceSchema).max(100),
+    truncated: z.boolean(),
+  })
+  .strict();
+export type AssetUsageResponse = z.infer<typeof AssetUsageResponseSchema>;
 
 export const CreateTemplateRequestSchema = z
   .object({
@@ -5772,3 +5867,5 @@ export const FormSubmittedWebhookV1Schema = z
   })
   .strict();
 export type FormSubmittedWebhookV1 = z.infer<typeof FormSubmittedWebhookV1Schema>;
+
+export * from './page-change-classifier';

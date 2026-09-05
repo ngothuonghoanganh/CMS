@@ -107,6 +107,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await expect(webhookCheckbox).toBeChecked();
   await expect(page.getByRole('status')).toContainText('Form notifications updated');
   await page.getByRole('button', { name: 'Publish draft' }).click();
+  await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });

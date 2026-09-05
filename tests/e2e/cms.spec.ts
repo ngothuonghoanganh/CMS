@@ -450,6 +450,7 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   await page.getByLabel('Site').selectOption({ label: `Countdown Site ${suffix}` });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
+  await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicResponse = await page.request.get(

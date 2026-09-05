@@ -1233,6 +1233,23 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.asset-library-thumbnail,
+.asset-library-file-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 2.75rem;
+  border: 1px solid var(--cms-border-default);
+  border-radius: 0.5rem;
+  object-fit: cover;
+}
+.asset-library-file-icon {
+  display: grid;
+  place-items: center;
+  color: var(--cms-text-secondary);
+  background: var(--cms-bg-surface-selected);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
 .selectable {
   width: 100%;
   color: inherit;

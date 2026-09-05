@@ -163,6 +163,7 @@ test('attaches a page workflow and configures trigger, condition and action node
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByRole('button', { name: /__e2e__ phase-workflows/ }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
+  await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Page published' }),
   ).toBeVisible();

@@ -45,6 +45,7 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await returnToPages(page, siteName);
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
+  await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
@@ -70,6 +71,7 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await expect(publicPage.getByText('Draft content B')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Publish draft' }).click();
+  await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
   await publicPage.reload();
   await expect(publicPage.getByText('Draft content B')).toBeVisible();
@@ -100,6 +102,7 @@ test('publishes a site after its homepage is published', async ({
   const publishPageButton = page.getByRole('button', { name: 'Publish draft' });
   if (await publishPageButton.isVisible()) {
     await publishPageButton.click();
+    await page.getByRole('button', { name: 'Publish version' }).click();
     await expect(page.getByRole('status')).toContainText('Page published');
   }
 

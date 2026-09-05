@@ -38,6 +38,7 @@ All routes are rooted at `/workspaces/:workspaceId`:
 ├── analytics
 ├── assets
 │   └── new
+│   └── :assetId
 ├── audit
 ├── billing
 ├── collections
@@ -98,7 +99,7 @@ Feature route composition and data ownership now live in:
 | Sites                | `app/sites`                       | `sites-page.tsx`                                             |
 | Pages                | `app/pages`                       | `pages-page.tsx`, `pages-view.tsx`, `page-layout-editor.tsx` |
 | Collections          | `app/collections`                 | `collections-page.tsx`, `collections-view.tsx`               |
-| Assets               | `app/assets`                      | `assets-page.tsx`                                            |
+| Assets               | `app/assets`                      | `assets-page.tsx`, route-driven asset detail                 |
 | Templates            | `app/templates`                   | `templates-page.tsx`                                         |
 | Navigation           | `app/navigation`                  | navigation page/view/tree                                    |
 | SEO                  | `app/seo`                         | SEO page/view                                                |

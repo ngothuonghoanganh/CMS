@@ -68,6 +68,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
     .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
+  await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
   const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });

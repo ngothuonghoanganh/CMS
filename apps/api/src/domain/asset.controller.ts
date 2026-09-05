@@ -8,14 +8,17 @@ import {
   Inject,
   Param,
   Post,
+  Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   CreateAssetRequestSchema,
   AssetListQuerySchema,
+  UpdateAssetRequestSchema,
   type CreateAssetRequest,
   type AssetListQuery,
+  type UpdateAssetRequest,
 } from '@payload/contracts';
 
 import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
@@ -83,6 +86,47 @@ export class AssetController {
   ) {
     await this.authorization.assertCan(principal, 'asset.read', workspaceId);
     return this.assetService.getById(
+      requireRequestedWorkspace(principal, workspaceId),
+      assetId,
+    );
+  }
+
+  @Patch(':assetId')
+  async update(
+    @Param('workspaceId') workspaceId: string,
+    @Param('assetId') assetId: string,
+    @Body(new ZodValidationPipe(UpdateAssetRequestSchema)) input: UpdateAssetRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'asset.update', workspaceId);
+    const result = await this.assetService.update(
+      requireRequestedWorkspace(principal, workspaceId),
+      assetId,
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'asset.update',
+        resourceType: 'asset',
+        resourceId: assetId,
+        workspaceId,
+        result: 'success',
+        metadata: { changedFields: Object.keys(input) },
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Get(':assetId/usages')
+  async usages(
+    @Param('workspaceId') workspaceId: string,
+    @Param('assetId') assetId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'asset.read', workspaceId);
+    return this.assetService.usages(
       requireRequestedWorkspace(principal, workspaceId),
       assetId,
     );

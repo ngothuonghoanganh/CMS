@@ -33,6 +33,19 @@ describe('component style capabilities', () => {
     ).toEqual(['text']);
   });
 
+  it('marks content fields and design fields from the shared registry', () => {
+    expect(
+      PAGE_COMPONENT_REGISTRY.text.propertiesSchema.find(
+        (property) => property.key === 'text',
+      ),
+    ).toMatchObject({ editingScope: 'content' });
+    expect(
+      PAGE_COMPONENT_REGISTRY.text.propertiesSchema.find(
+        (property) => property.key === 'font-size',
+      ),
+    ).toMatchObject({ editingScope: 'design' });
+  });
+
   it('registers V4 content properties and explicit style capabilities', () => {
     expect(PAGE_COMPONENT_REGISTRY.heading.propertiesSchema).toEqual(
       expect.arrayContaining([

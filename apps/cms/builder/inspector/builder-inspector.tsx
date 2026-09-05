@@ -86,6 +86,7 @@ type BuilderInspectorProps = {
   onUpdateQuery?: (query: PageQuery) => void;
   currentEntryCollection?: Collection | undefined;
   allowCurrentEntry?: boolean | undefined;
+  contentOnly?: boolean;
 };
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
@@ -733,6 +734,7 @@ export function BuilderInspector({
   onUpdateQuery,
   currentEntryCollection,
   allowCurrentEntry,
+  contentOnly = false,
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
@@ -755,6 +757,7 @@ export function BuilderInspector({
   const contentProperties = definition.propertiesSchema.filter(
     (property) =>
       property.group === 'content' &&
+      (!contentOnly || property.editingScope === 'content') &&
       !(selected.type === 'collection-list' && property.key === 'queryId'),
   );
 
@@ -794,7 +797,7 @@ export function BuilderInspector({
           value={value}
           viewport={viewport}
         />
-        {property.bindable && onUpdateBinding ? (
+        {!contentOnly && property.bindable && onUpdateBinding ? (
           <BindingEditor
             binding={composition?.bindings.find(
               (binding) =>
@@ -811,6 +814,25 @@ export function BuilderInspector({
           />
         ) : null}
       </div>
+    );
+  }
+
+  if (contentOnly) {
+    return (
+      <InspectorSection label="Content" onToggle={() => undefined} open>
+        {contentProperties.length > 0 ? (
+          <div className="builder-inspector-fields">
+            {contentProperties.map((property) =>
+              renderProperty(property, selected.props[property.key]),
+            )}
+          </div>
+        ) : (
+          <p className="muted small">
+            This element has no editable content. Select another text, media, button, or
+            content element.
+          </p>
+        )}
+      </InspectorSection>
     );
   }
 

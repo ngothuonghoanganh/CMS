@@ -32,6 +32,8 @@ export type ComponentPropertyDefinition = {
   key: string;
   label: string;
   group: ComponentPropertyGroup;
+  /** Whether changing this property is safe for a content-only editor. */
+  editingScope?: 'content' | 'design';
   control: ComponentPropertyControl;
   description?: string;
   responsive?: boolean;
@@ -731,7 +733,15 @@ const definition = (
     slots,
     componentParts: input.componentParts ?? {},
     migrations: input.migrations ?? [],
-    propertiesSchema: [...(input.propertiesSchema ?? []), ...styleSchemaFor(input.type)],
+    propertiesSchema: [
+      ...(input.propertiesSchema ?? []),
+      ...styleSchemaFor(input.type),
+    ].map((property) => ({
+      ...property,
+      editingScope:
+        property.editingScope ??
+        (property.group === 'content' ? ('content' as const) : ('design' as const)),
+    })),
     builder: {
       insertable: input.builder?.insertable ?? !input.internal,
       group: input.builder?.group ?? categoryToGroup[input.category],

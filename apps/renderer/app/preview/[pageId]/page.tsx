@@ -7,7 +7,7 @@ import { PreviewBridge } from './preview-bridge';
 
 type PreviewPageProps = {
   params: Promise<{ pageId: string }>;
-  searchParams?: Promise<{ entryId?: string }>;
+  searchParams?: Promise<{ entryId?: string; versionNumber?: string }>;
 };
 
 async function resolvePage(
@@ -15,8 +15,14 @@ async function resolvePage(
   searchParams?: PreviewPageProps['searchParams'],
 ) {
   const { pageId } = await params;
-  const entryId = searchParams ? (await searchParams).entryId : undefined;
-  const page = await getPreviewPage(pageId, entryId);
+  const query = searchParams ? await searchParams : {};
+  const entryId = query.entryId;
+  const versionNumber = query.versionNumber ? Number(query.versionNumber) : undefined;
+  const page = await getPreviewPage(
+    pageId,
+    entryId,
+    versionNumber && Number.isInteger(versionNumber) ? versionNumber : undefined,
+  );
   if (!page) {
     notFound();
   }
@@ -28,8 +34,14 @@ export async function generateMetadata({
   searchParams,
 }: PreviewPageProps): Promise<Metadata> {
   const { pageId } = await params;
-  const entryId = searchParams ? (await searchParams).entryId : undefined;
-  const page = await getPreviewPage(pageId, entryId);
+  const query = searchParams ? await searchParams : {};
+  const entryId = query.entryId;
+  const versionNumber = query.versionNumber ? Number(query.versionNumber) : undefined;
+  const page = await getPreviewPage(
+    pageId,
+    entryId,
+    versionNumber && Number.isInteger(versionNumber) ? versionNumber : undefined,
+  );
   if (!page) {
     return { robots: { index: false, follow: false }, title: 'Preview unavailable' };
   }

@@ -138,6 +138,11 @@ export function templatePath(
   return action ? `${base}/${action}` : base;
 }
 
+export function assetPath(workspaceId: string, assetId?: string): string {
+  const base = `${workspacePath(workspaceId)}/assets`;
+  return assetId ? `${base}/${segment(assetId)}` : base;
+}
+
 export function cmsViewPath(workspaceId: string, view: CmsView, siteId?: string): string {
   switch (view) {
     case 'dashboard':

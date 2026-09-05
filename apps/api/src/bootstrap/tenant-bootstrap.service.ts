@@ -357,4 +357,14 @@ async function seedTenantRoles(roleModel: Model<RoleRecord>): Promise<void> {
       )
       .exec();
   }
+  await roleModel
+    .updateMany(
+      {
+        type: 'custom',
+        permissions: 'page.update',
+        $and: [{ permissions: { $ne: 'page.design' } }],
+      },
+      { $addToSet: { permissions: 'page.design' } },
+    )
+    .exec();
 }
