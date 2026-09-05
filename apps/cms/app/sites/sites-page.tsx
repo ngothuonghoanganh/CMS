@@ -49,6 +49,9 @@ export default function SitesPage({
 
   const selectedSite = sites.find((site) => site.id === siteId);
   const editLoading = action === 'edit' && (loading || !selectedSite);
+  const publishedSiteCount = sites.filter((site) => site.status === 'published').length;
+  const draftSiteCount = sites.filter((site) => site.status === 'draft').length;
+  const archivedSiteCount = sites.filter((site) => site.status === 'archived').length;
 
   async function load(offset = pagination.offset) {
     setLoading(true);
@@ -131,6 +134,7 @@ export default function SitesPage({
     <>
       {isDetail ? (
         <SiteDetail
+          loading={loading}
           site={selectedSite}
           canUpdate={can('site.update')}
           workspaceId={workspaceId}
@@ -151,6 +155,38 @@ export default function SitesPage({
             eyebrow="Workspace"
             title="Sites"
           />
+          <section aria-label="Sites summary" className="sites-summary-grid">
+            <div className="sites-summary-card sites-summary-card-primary">
+              <div className="sites-summary-icon" aria-hidden="true">
+                ◫
+              </div>
+              <div>
+                <span className="eyebrow">Total sites</span>
+                <strong>{pagination.total}</strong>
+                <span className="muted">In this workspace</span>
+              </div>
+            </div>
+            <div className="sites-summary-card">
+              <div className="sites-summary-icon" aria-hidden="true">
+                ↗
+              </div>
+              <div>
+                <span className="eyebrow">Published</span>
+                <strong>{publishedSiteCount}</strong>
+                <span className="muted">Live destinations</span>
+              </div>
+            </div>
+            <div className="sites-summary-card">
+              <div className="sites-summary-icon" aria-hidden="true">
+                ◌
+              </div>
+              <div>
+                <span className="eyebrow">In progress</span>
+                <strong>{draftSiteCount + archivedSiteCount}</strong>
+                <span className="muted">Drafts and archived</span>
+              </div>
+            </div>
+          </section>
           {error ? (
             <div className="alert alert-error" role="alert">
               {error}
@@ -161,11 +197,17 @@ export default function SitesPage({
               {notice}
             </div>
           ) : null}
-          <section className="panel">
+          <section className="panel sites-list-panel">
             <div className="panel-heading">
-              <h2>Your sites</h2>
-              <span className="pill">{pagination.total}</span>
+              <div>
+                <span className="eyebrow">Workspace portfolio</span>
+                <h2>Your sites</h2>
+              </div>
+              <span className="count-badge">{pagination.total}</span>
             </div>
+            <p className="panel-description">
+              Manage each destination, its public URL and the content it delivers.
+            </p>
             {loading ? (
               <div aria-busy="true" className="analytics-skeleton">
                 Loading sites…
@@ -176,7 +218,7 @@ export default function SitesPage({
                   <thead>
                     <tr>
                       <th>Site</th>
-                      <th>Public URL</th>
+                      <th>Published URL</th>
                       <th>Status</th>
                       <th>
                         <span className="sr-only">Actions</span>
@@ -185,28 +227,37 @@ export default function SitesPage({
                   </thead>
                   <tbody>
                     {sites.map((site) => (
-                      <tr key={site.id}>
-                        <td>
-                          <a className="text-link" href={sitePath(workspaceId, site.id)}>
-                            {site.name}
+                      <tr className="site-table-row" key={site.id}>
+                        <td className="site-name-cell">
+                          <a
+                            className="site-name-link"
+                            href={sitePath(workspaceId, site.id)}
+                          >
+                            <span aria-hidden="true" className="site-avatar">
+                              {initials(site.name)}
+                            </span>
+                            <span className="site-name-copy">
+                              <strong>{site.name}</strong>
+                              <span>/{site.slug}</span>
+                            </span>
                           </a>
-                          <span className="table-secondary">/{site.slug}</span>
                         </td>
-                        <td>
+                        <td className="site-url-cell">
                           {site.officialUrl ? (
                             <a
-                              className="text-link"
+                              className="site-url-link"
                               href={site.officialUrl}
                               target="_blank"
                               rel="noreferrer"
                             >
-                              {site.officialUrl} ↗
+                              <span>{site.officialUrl}</span>{' '}
+                              <span aria-hidden="true">↗</span>
                             </a>
                           ) : (
-                            <span className="muted">Not published</span>
+                            <span className="site-url-empty">Not published yet</span>
                           )}
                         </td>
-                        <td>
+                        <td className="site-status-cell">
                           {site.status === 'published' ? (
                             <button
                               className="button button-small button-primary"
@@ -220,7 +271,7 @@ export default function SitesPage({
                           )}
                         </td>
                         <td>
-                          <div className="row-menu">
+                          <div className="row-menu site-row-actions">
                             <button
                               className="button button-small button-ghost"
                               onClick={() =>
@@ -351,15 +402,29 @@ export default function SitesPage({
 }
 
 function SiteDetail({
+  loading,
   site,
   canUpdate,
   workspaceId,
 }: {
+  loading: boolean;
   site: Site | undefined;
   canUpdate: boolean;
   workspaceId: string;
 }) {
   const router = useRouter();
+  if (loading && !site) {
+    return (
+      <section aria-busy="true" className="site-detail-loading">
+        <div className="site-detail-loading-mark" />
+        <div>
+          <span className="eyebrow">Site</span>
+          <strong>Loading site…</strong>
+          <span className="muted">Preparing site details and quick actions.</span>
+        </div>
+      </section>
+    );
+  }
   if (!site)
     return (
       <EmptyState
@@ -385,10 +450,23 @@ function SiteDetail({
         title={site.name}
       />
       <section className="panel site-detail-panel">
+        <div className="site-detail-hero">
+          <div className="site-detail-identity">
+            <div aria-hidden="true" className="site-detail-avatar">
+              {initials(site.name)}
+            </div>
+            <div>
+              <span className="eyebrow">Site workspace</span>
+              <strong>{site.name}</strong>
+              <span className="muted">/{site.slug}</span>
+            </div>
+          </div>
+          <StatusBadge label={site.status} status={site.status} />
+        </div>
         <div className="site-detail-summary">
           <div>
             <span className="eyebrow">Publication</span>
-            <StatusBadge status={site.status} />
+            <strong className="site-detail-value">{site.status}</strong>
           </div>
           <div>
             <span className="eyebrow">Public URL</span>
@@ -409,6 +487,13 @@ function SiteDetail({
             <span className="eyebrow">Last updated</span>
             <span>{new Date(site.updatedAt).toLocaleDateString()}</span>
           </div>
+        </div>
+        <div className="site-detail-section-heading">
+          <div>
+            <span className="eyebrow">Workspace tools</span>
+            <h2>Manage this site</h2>
+          </div>
+          <span className="muted">Choose a surface to continue</span>
         </div>
         <div className="site-detail-links">
           <button
@@ -443,6 +528,15 @@ function SiteDetail({
       </section>
     </>
   );
+}
+
+function initials(value: string): string {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '—';
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
 }
 
 function errorMessage(error: unknown): string {

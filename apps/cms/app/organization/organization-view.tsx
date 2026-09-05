@@ -3,6 +3,7 @@
 import type { Organization, OrganizationMembership, Workspace } from '@payload/contracts';
 import type { FormEvent } from 'react';
 
+import { StatusBadge } from '../status-badge';
 import { EmptyState, PageHeader } from '../ui/surfaces';
 
 export function OrganizationView({
@@ -64,16 +65,36 @@ export function OrganizationView({
   canUpdateMember: boolean;
 }) {
   const organization = organizations.find((item) => item.id === selectedOrganizationId);
+  const organizationInitials = initials(organization?.name ?? 'Organization');
   return (
     <>
       <PageHeader
         description="Manage organization ownership, workspaces and members."
         eyebrow="Organization"
         title={organization?.name ?? 'Organizations'}
-      />
-      <div className="toolbar">
-        <label className="inline-field">
-          Organization
+      >
+        <div className="organization-header-meta">
+          <StatusBadge status={organization?.status ?? 'active'} />
+          <span>{organization?.slug ?? 'Select an organization'}</span>
+        </div>
+      </PageHeader>
+      <section aria-label="Organization overview" className="organization-context-card">
+        <div className="organization-identity">
+          <div aria-hidden="true" className="organization-avatar">
+            {organizationInitials}
+          </div>
+          <div className="organization-identity-copy">
+            <span className="eyebrow">Current organization</span>
+            <strong>{organization?.name ?? 'No organization selected'}</strong>
+            <span className="muted">
+              {organization?.slug
+                ? `/${organization.slug}`
+                : 'Choose an organization to continue'}
+            </span>
+          </div>
+        </div>
+        <label className="organization-context-select">
+          <span className="eyebrow">Switch context</span>
           <select
             aria-label="Organization management context"
             onChange={(event) => onSelectOrganization(event.target.value)}
@@ -86,12 +107,38 @@ export function OrganizationView({
             ))}
           </select>
         </label>
-      </div>
-      <div className="two-column">
-        <section className="panel">
-          <div className="panel-heading">
-            <h2>Create an organization</h2>
+        <div className="organization-stat-grid">
+          <div className="organization-stat">
+            <span className="eyebrow">Workspaces</span>
+            <strong>{workspaces.length}</strong>
+            <span className="muted">Delivery environments</span>
           </div>
+          <div className="organization-stat">
+            <span className="eyebrow">Members</span>
+            <strong>{members.length}</strong>
+            <span className="muted">People with access</span>
+          </div>
+          <div className="organization-stat organization-stat-status">
+            <span className="eyebrow">Status</span>
+            <StatusBadge status={organization?.status ?? 'active'} />
+            <span className="muted">Organization availability</span>
+          </div>
+        </div>
+      </section>
+      <div className="organization-main-grid">
+        <section className="panel organization-create-card">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">New organization</span>
+              <h2>Create an organization</h2>
+            </div>
+            <span aria-hidden="true" className="organization-panel-mark">
+              +
+            </span>
+          </div>
+          <p className="panel-description">
+            Start a separate workspace for a new brand, client or team.
+          </p>
           {canCreateOrganization ? (
             <form className="stack" onSubmit={onCreate}>
               <label>
@@ -114,13 +161,19 @@ export function OrganizationView({
             <p className="muted">You do not have permission to create organizations.</p>
           )}
         </section>
-        <section className="panel">
+        <section className="panel organization-workspaces-card">
           <div className="panel-heading">
-            <h2>Workspaces</h2>
-            <span className="pill">{workspaces.length}</span>
+            <div>
+              <span className="eyebrow">Workspace portfolio</span>
+              <h2>Workspaces</h2>
+            </div>
+            <span className="count-badge">{workspaces.length}</span>
           </div>
+          <p className="panel-description">
+            Each workspace keeps sites, pages and permissions scoped to one environment.
+          </p>
           {canCreateWorkspace ? (
-            <form className="form-actions" onSubmit={onCreateWorkspace}>
+            <form className="organization-inline-form" onSubmit={onCreateWorkspace}>
               <input
                 aria-label="New workspace name"
                 onChange={(event) => onSetWorkspaceName(event.target.value)}
@@ -134,11 +187,19 @@ export function OrganizationView({
             </form>
           ) : null}
           {workspaces.length ? (
-            <div className="list">
+            <div className="organization-workspace-list">
               {workspaces.map((workspace) => (
-                <div className="list-row" key={workspace.id}>
-                  <strong>{workspace.name}</strong>
-                  <span className="muted">{workspace.id.slice(0, 8)}</span>
+                <div className="organization-workspace-row" key={workspace.id}>
+                  <div className="workspace-avatar" aria-hidden="true">
+                    {initials(workspace.name)}
+                  </div>
+                  <div className="workspace-row-copy">
+                    <strong>{workspace.name}</strong>
+                    <span className="muted">
+                      Workspace ID · {workspace.id.slice(0, 8)}
+                    </span>
+                  </div>
+                  <span className="workspace-row-status">Workspace</span>
                 </div>
               ))}
             </div>
@@ -150,13 +211,19 @@ export function OrganizationView({
           )}
         </section>
       </div>
-      <section className="panel">
+      <section className="panel organization-members-card">
         <div className="panel-heading">
-          <h2>Members</h2>
-          <span className="pill">{members.length}</span>
+          <div>
+            <span className="eyebrow">Access control</span>
+            <h2>Members</h2>
+          </div>
+          <span className="count-badge">{members.length}</span>
         </div>
+        <p className="panel-description">
+          Invite teammates and keep organization roles up to date.
+        </p>
         {canAddMember ? (
-          <form className="form-actions" onSubmit={onAddMember}>
+          <form className="organization-member-form" onSubmit={onAddMember}>
             <input
               aria-label="Member user id"
               onChange={(event) => onSetMemberUserId(event.target.value)}
@@ -180,14 +247,17 @@ export function OrganizationView({
           </form>
         ) : null}
         {members.length ? (
-          <div className="list">
+          <div className="organization-member-list">
             {members.map((member) => (
-              <div className="list-row" key={member.id}>
-                <div>
-                  <strong>{member.userId}</strong>
-                  <span className="muted">{member.role}</span>
+              <div className="organization-member-row" key={member.id}>
+                <div className="member-avatar" aria-hidden="true">
+                  {initials(member.userId)}
                 </div>
-                <div className="row-actions">
+                <div className="member-row-copy">
+                  <strong>{member.userId}</strong>
+                  <span className="muted">Added member · {member.role}</span>
+                </div>
+                <div className="organization-member-actions">
                   {canUpdateMember && member.role !== 'owner' ? (
                     <select
                       aria-label={`Role for ${member.userId}`}
@@ -225,4 +295,13 @@ export function OrganizationView({
       </section>
     </>
   );
+}
+
+function initials(value: string): string {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '—';
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
 }
