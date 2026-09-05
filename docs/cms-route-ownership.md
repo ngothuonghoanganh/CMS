@@ -9,17 +9,18 @@ selected the screen from a route descriptor. The URL changed, but ownership did 
 ## New architecture
 
 ```text
-App Router page
+App Router workspace layout
   -> CmsShell (auth, workspace context, permissions, global navigation)
-  -> feature page (feature data and mutations)
+  -> App Router feature page (feature data and mutations)
   -> feature view/components
   -> shared UI and API client
 ```
 
-`CmsShell` does not render feature content and does not own selected pages, collections,
-assets, forms, drawers, or feature CRUD. Navigation is made of `Link` elements and the
-active item is derived from the current pathname. Workspace and permission context are
-the only feature-independent data loaded by the shell.
+`CmsShell` is mounted once by `app/workspaces/[workspaceId]/layout.tsx`. It does not
+render feature content and does not own selected pages, collections, assets, forms,
+drawers, or feature CRUD. Navigation is made of `Link` elements and the active item is
+derived from the current pathname. Workspace and permission context are the only
+feature-independent data loaded by the shell.
 
 The old `cms-dashboard.tsx` and `workspaces/[workspaceId]/route-page.tsx` adapters were
 removed. The root `/?view=...` compatibility path is one-way: it resolves an old

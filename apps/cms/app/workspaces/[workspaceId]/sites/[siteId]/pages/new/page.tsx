@@ -1,4 +1,3 @@
-import CmsShell from '../../../../../../cms-shell';
 import PagesPage from '../../../../../../pages/pages-page';
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -15,18 +14,16 @@ export default async function NewPageRoute({
     templateVersionId?: string | string[];
   }>;
 }) {
-  const { siteId, workspaceId } = await params;
+  const { siteId } = await params;
   const query = searchParams ? await searchParams : {};
   const templateId = first(query.templateId);
   const templateVersionId = first(query.templateVersionId);
   return (
-    <CmsShell workspaceId={workspaceId}>
-      <PagesPage
-        action="create"
-        siteId={siteId}
-        {...(templateId ? { templateId } : {})}
-        {...(templateVersionId ? { templateVersionId } : {})}
-      />
-    </CmsShell>
+    <PagesPage
+      action="create"
+      siteId={siteId}
+      {...(templateId ? { templateId } : {})}
+      {...(templateVersionId ? { templateVersionId } : {})}
+    />
   );
 }

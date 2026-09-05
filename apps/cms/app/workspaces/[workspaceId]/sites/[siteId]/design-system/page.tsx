@@ -1,4 +1,3 @@
-import CmsShell from '../../../../../cms-shell';
 import DesignSystemPage from '../../../../../design-system/design-system-page';
 
 export default async function SiteDesignSystemPage({
@@ -6,10 +5,6 @@ export default async function SiteDesignSystemPage({
 }: {
   params: Promise<{ workspaceId: string; siteId: string }>;
 }) {
-  const { siteId, workspaceId } = await params;
-  return (
-    <CmsShell workspaceId={workspaceId}>
-      <DesignSystemPage siteId={siteId} />
-    </CmsShell>
-  );
+  const { siteId } = await params;
+  return <DesignSystemPage siteId={siteId} />;
 }

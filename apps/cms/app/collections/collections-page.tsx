@@ -33,26 +33,48 @@ export default function CollectionsPage({
   const [assets, setAssets] = useState<Asset[]>([]);
   const [activeSiteId, setActiveSiteId] = useState(siteId ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
+  const [assetsLoading, setAssetsLoading] = useState(false);
   useEffect(() => {
-    void Promise.all([
-      api.get(`/workspaces/${workspaceId}/sites?limit=100&offset=0`),
-      can('asset.read')
-        ? api.get(`/workspaces/${workspaceId}/assets?limit=100`)
-        : Promise.resolve(null),
-    ])
-      .then(([siteResponse, assetResponse]) => {
+    let active = true;
+    void api
+      .get(`/workspaces/${workspaceId}/sites?limit=100&offset=0`)
+      .then((siteResponse) => {
+        if (!active) return;
         const nextSites = SiteListResponseSchema.parse(siteResponse).items;
         setSites(nextSites);
         setActiveSiteId(siteId ?? nextSites[0]?.id ?? '');
-        if (assetResponse) setAssets(AssetListResponseSchema.parse(assetResponse).items);
       })
-      .catch((caughtError: unknown) =>
-        setError(
-          caughtError instanceof ApiClientError
-            ? caughtError.message
-            : 'Unable to load collections context.',
-        ),
-      );
+      .catch((caughtError: unknown) => {
+        if (active)
+          setError(
+            caughtError instanceof ApiClientError
+              ? caughtError.message
+              : 'Unable to load sites for collections.',
+          );
+      });
+    if (can('asset.read')) {
+      setAssetsLoading(true);
+      void api
+        .get(`/workspaces/${workspaceId}/assets?limit=100&offset=0`)
+        .then((assetResponse) => {
+          if (active) setAssets(AssetListResponseSchema.parse(assetResponse).items);
+        })
+        .catch((caughtError: unknown) => {
+          if (active)
+            setAssetError(
+              caughtError instanceof ApiClientError
+                ? caughtError.message
+                : 'Unable to load assets for collection fields.',
+            );
+        })
+        .finally(() => {
+          if (active) setAssetsLoading(false);
+        });
+    }
+    return () => {
+      active = false;
+    };
   }, [can, siteId, workspaceId]);
   const closeCollection = () => {
     if (!activeSiteId) return;
@@ -62,9 +84,15 @@ export default function CollectionsPage({
         : collectionPath(workspaceId, activeSiteId),
     );
   };
-  const closeEntry = () => {
+  const closeEntry = (savedEntryId?: string) => {
     if (activeSiteId && collectionId)
-      router.replace(collectionPath(workspaceId, activeSiteId, collectionId, 'entries'));
+      router.replace(
+        savedEntryId
+          ? `${collectionPath(workspaceId, activeSiteId, collectionId, 'entries')}/${savedEntryId}`
+          : entryAction === 'edit' && entryId
+            ? `${collectionPath(workspaceId, activeSiteId, collectionId, 'entries')}/${entryId}`
+            : collectionPath(workspaceId, activeSiteId, collectionId, 'entries'),
+      );
   };
   return (
     <>
@@ -75,10 +103,14 @@ export default function CollectionsPage({
       ) : null}
       <CollectionsView
         assets={assets}
-        canCreate={can('collection.create') && can('entry.create')}
+        assetError={assetError ?? undefined}
+        assetsLoading={assetsLoading}
+        canCreateCollection={can('collection.create')}
+        canCreateEntry={can('entry.create')}
         canDelete={can('collection.delete')}
         canPublish={can('entry.publish')}
-        canUpdate={can('collection.update') && can('entry.update')}
+        canUpdateCollection={can('collection.update')}
+        canUpdateEntry={can('entry.update')}
         onCloseCollectionEditor={closeCollection}
         onCloseEntry={closeEntry}
         onCreateCollection={() =>

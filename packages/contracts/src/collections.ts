@@ -8,6 +8,46 @@ const key = z
 const nonEmpty = z.string().trim().min(1);
 const timestamp = z.string().datetime({ offset: true });
 
+/**
+ * These names are projections owned by the platform, not user content. Keep
+ * the list in the shared contract so every client rejects the same field
+ * vocabulary before it can reach persistence or query construction.
+ */
+export const RESERVED_COLLECTION_FIELD_KEYS = [
+  '_id',
+  'id',
+  'workspaceId',
+  'siteId',
+  'collectionId',
+  'entryId',
+  'draftVersionId',
+  'publishedVersionId',
+  'draftValues',
+  'publishedValues',
+  'draftSearchText',
+  'publishedSearchText',
+  'uniqueTokens',
+  'autoSlugSourceValues',
+  'status',
+  'createdAt',
+  'updatedAt',
+] as const;
+const reservedCollectionFieldKeys = new Set<string>(RESERVED_COLLECTION_FIELD_KEYS);
+
+export function isReservedCollectionFieldKey(value: string): boolean {
+  return (
+    reservedCollectionFieldKeys.has(value) ||
+    value === '__proto__' ||
+    value === 'constructor' ||
+    value === 'prototype'
+  );
+}
+
+const collectionFieldKey = key.refine(
+  (value) => !isReservedCollectionFieldKey(value),
+  'This field key is reserved by the platform',
+);
+
 const unsafeValidationPattern =
   /(?:\\[1-9]|\\k<|\\[pP]\{|\(\?[=!<:]|\([^)]*[+*][^)]*\)[+*{]|\[[^\]]*[+*][^\]]*\][+*{])/;
 
@@ -127,7 +167,7 @@ export type CollectionReferenceCardinality = z.infer<
 >;
 
 const collectionFieldDefinitionInputShape = {
-  key,
+  key: collectionFieldKey,
   label: nonEmpty.max(200),
   type: CollectionFieldTypeSchema,
   required: z.boolean(),
@@ -190,7 +230,100 @@ const validateCollectionFieldDefinition = (
       message: 'Only slug fields can define an automatic source field',
     });
   }
+  if (
+    field.defaultValue !== undefined &&
+    !isCollectionFieldValueCompatible(field.type, field.defaultValue, field.options)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['defaultValue'],
+      message: `Default value is not compatible with ${field.type} fields`,
+    });
+  }
+  if (field.validation?.allowedMimeTypes && !['asset', 'image'].includes(field.type)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['validation', 'allowedMimeTypes'],
+      message: 'MIME type restrictions are only valid for asset fields',
+    });
+  }
+  if (
+    field.validation?.maxFileSize !== undefined &&
+    !['asset', 'image'].includes(field.type)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['validation', 'maxFileSize'],
+      message: 'File size restrictions are only valid for asset fields',
+    });
+  }
 };
+
+function isCollectionFieldValueCompatible(
+  type: CollectionFieldType,
+  value: unknown,
+  options?: readonly CollectionFieldOption[],
+): boolean {
+  if (value === null) return true;
+  if (
+    [
+      'text',
+      'long-text',
+      'rich-text',
+      'url',
+      'email',
+      'slug',
+      'date',
+      'datetime',
+    ].includes(type)
+  )
+    return typeof value === 'string';
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'asset')
+    return typeof value === 'string' && entityId.safeParse(value).success;
+  if (type === 'image') return typeof value === 'string';
+  if (type === 'select')
+    return (
+      typeof value === 'string' &&
+      (!options || options.some((option) => option.value === value))
+    );
+  if (type === 'multi-select')
+    return (
+      Array.isArray(value) &&
+      value.every(
+        (item) =>
+          typeof item === 'string' &&
+          (!options || options.some((option) => option.value === item)),
+      )
+    );
+  if (type === 'reference') {
+    const values = Array.isArray(value) ? value : [value];
+    return values.every(
+      (item) => typeof item === 'string' && entityId.safeParse(item).success,
+    );
+  }
+  if (type === 'array') return Array.isArray(value);
+  if (type === 'group') return typeof value === 'object' && !Array.isArray(value);
+  return false;
+}
+
+function assertUniqueCollectionFieldKeys(
+  fields: readonly { key: string }[],
+  context: z.RefinementCtx,
+): void {
+  const keys = new Set<string>();
+  fields.forEach((field, index) => {
+    if (keys.has(field.key)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['fields', index, 'key'],
+        message: 'Field keys must be unique',
+      });
+    }
+    keys.add(field.key);
+  });
+}
 
 export const CollectionFieldDefinitionInputSchema = z
   .object(collectionFieldDefinitionInputShape)
@@ -272,7 +405,20 @@ export const CreateCollectionRequestSchema = z
     fields: z.array(CollectionFieldDefinitionInputSchema).max(100).default([]),
     titleFieldKey: key.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((collection, context) => {
+    assertUniqueCollectionFieldKeys(collection.fields, context);
+    if (
+      collection.titleFieldKey &&
+      !collection.fields.some((field) => field.key === collection.titleFieldKey)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['titleFieldKey'],
+        message: 'titleFieldKey must reference a field in the collection',
+      });
+    }
+  });
 export type CreateCollectionRequest = z.infer<typeof CreateCollectionRequestSchema>;
 
 export const UpdateCollectionRequestSchema = z
@@ -285,6 +431,20 @@ export const UpdateCollectionRequestSchema = z
     expectedSchemaVersion: CollectionSchemaVersionSchema.optional(),
   })
   .strict()
+  .superRefine((collection, context) => {
+    if (collection.fields) assertUniqueCollectionFieldKeys(collection.fields, context);
+    if (
+      collection.fields &&
+      collection.titleFieldKey &&
+      !collection.fields.some((field) => field.key === collection.titleFieldKey)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['titleFieldKey'],
+        message: 'titleFieldKey must reference a field in the collection',
+      });
+    }
+  })
   .refine((value) => Object.keys(value).length > 0, 'At least one field is required');
 export type UpdateCollectionRequest = z.infer<typeof UpdateCollectionRequestSchema>;
 
@@ -413,8 +573,8 @@ const queryOperatorsByFieldType: Record<
   'rich-text': [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
   number: [...commonQueryOperators, 'gt', 'gte', 'lt', 'lte', 'in', 'notIn'],
   boolean: commonQueryOperators,
-  date: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
-  datetime: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
+  date: [...commonQueryOperators, 'gt', 'gte', 'lt', 'lte', 'in', 'notIn'],
+  datetime: [...commonQueryOperators, 'gt', 'gte', 'lt', 'lte', 'in', 'notIn'],
   asset: [...commonQueryOperators, 'in', 'notIn'],
   image: [...commonQueryOperators, 'in', 'notIn'],
   url: [...commonQueryOperators, 'contains', 'startsWith', 'in', 'notIn'],
@@ -502,7 +662,23 @@ export const DynamicPathPatternSchema = z
   .trim()
   .min(3)
   .max(300)
-  .regex(/^\/[a-z0-9][a-z0-9._~-]*(?:\/[a-z0-9][a-z0-9._~-]*)*\/\{[a-z][a-z0-9_]*\}$/);
+  .regex(/^\/[a-z0-9][a-z0-9._~-]*(?:\/[a-z0-9][a-z0-9._~-]*)*\/\{[a-z][a-z0-9_]*\}$/)
+  .refine((value) => {
+    const base = value.slice(1, value.lastIndexOf('/{')).split('/');
+    return !base.some((segment) =>
+      [
+        'api',
+        'admin',
+        'auth',
+        'cms',
+        'health',
+        'login',
+        'logout',
+        'preview',
+        'static',
+      ].includes(segment),
+    );
+  }, 'Dynamic paths cannot use a reserved public route segment');
 export type DynamicPathPattern = z.infer<typeof DynamicPathPatternSchema>;
 
 export function dynamicPathBase(pathPattern: string): string {

@@ -2,8 +2,8 @@
 
 ## Global shell
 
-- [x] `CmsShell` owns auth/session, workspace context, permissions, header, sidebar,
-      workspace switching, and global shell errors.
+- [x] `CmsShell`, mounted by the workspace layout, owns auth/session, workspace context,
+      permissions, header, sidebar, workspace switching, and global shell errors.
 - [x] No feature CRUD, feature fetch bootstrap, selected resource, feature drawer, or
       feature form lives in the shell.
 - [x] Active navigation derives from pathname.
@@ -62,8 +62,8 @@ Covered modules:
 - [x] Root `pnpm typecheck`
 - [x] Root `pnpm test`
 - [x] Root `pnpm build`
-- [x] Full Playwright suite executed: 79/81 passed; two existing fixture failures remain
-      in billing control-plane login and the missing `parity-extension` fixture.
+- [x] Full Playwright suite executed: 74/81 passed; seven failures remain in
+      control-plane/fixture, locator, drag/debug, and custom-domain scenarios.
 
-The two remaining full-suite failures are outside the CMS route ownership change and are
-listed explicitly in the task handoff.
+The remaining full-suite failures are listed explicitly in
+`docs/phase-20-completion-audit.md`. The scoped Phase 20 browser journeys pass.

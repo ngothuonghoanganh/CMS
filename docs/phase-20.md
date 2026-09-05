@@ -30,6 +30,12 @@ remain the source of truth for page composition.
   published composition and published entry.
 - Dynamic pages reuse Page kind/versioning and resolve `/products/{slug}`-style
   paths against published collection entries.
+- The workspace layout owns the authenticated `CmsShell`; feature routes render
+  directly beneath it and take collection, entry, site, and page identity from
+  route parameters.
+- Collection entry forms are generated from field metadata. Asset fields use a
+  workspace-scoped asset picker and reference fields use a site-scoped entry
+  picker; persisted values remain IDs, not embedded resource objects.
 
 ## Review/public semantics
 
@@ -61,6 +67,8 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm check:cms-design-system
+pnpm exec playwright test
 ```
 
 The dedicated E2E journey should create Products, publish entries, build and
@@ -69,7 +77,14 @@ separation before and after entry publication.
 
 ## Known limitations
 
-The current CMS entry editor accepts JSON values for breadth across all field
-types; specialized asset/reference pickers and bulk operations remain follow-up
-UX work. Sitemap enumeration, external data providers, caching, formulas, and
-interactive pagination are intentionally outside this phase.
+Array/group values retain an Advanced JSON editor because those structured
+shapes do not have a complete nested form builder in this phase. Asset browsing
+is intentionally bounded to the loaded workspace result set and has no bulk
+operation. Sitemap enumeration, external data providers, caching, formulas, and
+interactive public pagination are intentionally outside this phase.
+
+The scoped Phase 20 browser journeys pass. The latest full Playwright run was
+executed and reported 74 passed / 7 failed; the failures are existing
+environment/fixture or drag-behavior failures outside the Phase 20 collection
+journey, so the repository-wide browser gate remains open until those are
+resolved.

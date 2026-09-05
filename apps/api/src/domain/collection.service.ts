@@ -28,6 +28,7 @@ import {
   isQueryValueCompatibleForFieldType,
   normalizeCollectionSlug,
   queryOperatorsForFieldType,
+  PAGE_COMPONENT_REGISTRY,
   type Collection,
   type CollectionDefinition,
   type CollectionEntryListQuery,
@@ -42,6 +43,7 @@ import {
   type PageComposition,
   type ResolvedDataContext,
   type ResolvedDataRecord,
+  type AnyPageNode,
   type UpdateCollectionEntryRequest,
   type UpdateCollectionRequest,
 } from '@payload/contracts';
@@ -57,6 +59,7 @@ import {
 import { AssetRecord } from '../persistence/schemas/asset.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import { SiteRecord } from '../persistence/schemas/site.schema';
 import {
   TemplateRecord,
   TemplateVersionRecord,
@@ -84,9 +87,12 @@ export class CollectionService {
     private readonly templateModel: Model<TemplateRecord>,
     @InjectModel(TemplateVersionRecord.name)
     private readonly templateVersionModel: Model<TemplateVersionRecord>,
+    @InjectModel(SiteRecord.name)
+    private readonly siteModel: Model<SiteRecord>,
   ) {}
 
   async list(workspaceId: string, siteId: string): Promise<Collection[]> {
+    await this.requireSite(workspaceId, siteId);
     const records = await this.collectionModel
       .find({ workspaceId, siteId })
       .sort({ name: 1, _id: 1 })
@@ -253,6 +259,7 @@ export class CollectionService {
     collectionId: string,
     field?: { fieldId: string; fieldKey: string },
   ): Promise<CollectionUsageReference[]> {
+    await this.requireCollection(workspaceId, siteId, collectionId);
     const references: CollectionUsageReference[] = [];
     const withField = (
       reference: Omit<CollectionUsageReference, 'fieldId' | 'fieldKey'>,
@@ -607,16 +614,27 @@ export class CollectionService {
     );
     const { values, autoSlugSourceValues } = validated;
     const uniqueTokens = buildUniqueTokens(collection, values);
-    const version = await this.entryVersionModel.create({
-      _id: randomUUID(),
-      workspaceId,
-      siteId,
-      entryId,
-      collectionId,
-      versionNumber: current.versionNumber + 1,
-      values,
-      ...(actorId ? { createdBy: actorId } : {}),
-    });
+    let version: CollectionEntryVersionDocument;
+    try {
+      version = await this.entryVersionModel.create({
+        _id: randomUUID(),
+        workspaceId,
+        siteId,
+        entryId,
+        collectionId,
+        versionNumber: current.versionNumber + 1,
+        values,
+        ...(actorId ? { createdBy: actorId } : {}),
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw new ConflictException({
+          code: 'ENTRY_VERSION_CONFLICT',
+          message: 'The entry changed while it was being edited',
+        });
+      }
+      throw error;
+    }
     const advanced = await this.entryModel
       .findOneAndUpdate(
         { _id: entryId, workspaceId, siteId, draftVersionId: current._id.toString() },
@@ -816,7 +834,19 @@ export class CollectionService {
       entryId,
     );
     if (!entry.publishedVersionId) {
-      await this.entryModel.deleteOne({ _id: entryId, workspaceId, siteId }).exec();
+      const deleted = await this.entryModel
+        .deleteOne({
+          _id: entryId,
+          workspaceId,
+          siteId,
+          draftVersionId: entry.draftVersionId,
+        })
+        .exec();
+      if (deleted.deletedCount === 0)
+        throw new ConflictException({
+          code: 'ENTRY_VERSION_CONFLICT',
+          message: 'The entry changed while it was being discarded',
+        });
       await this.entryVersionModel.deleteMany({ entryId, workspaceId, siteId }).exec();
       return DiscardCollectionEntryResponseSchema.parse({ entryId, deleted: true });
     }
@@ -845,12 +875,21 @@ export class CollectionService {
       },
     };
     const next = await this.entryModel
-      .findOneAndUpdate({ _id: entryId, workspaceId, siteId }, update, { new: true })
+      .findOneAndUpdate(
+        {
+          _id: entryId,
+          workspaceId,
+          siteId,
+          draftVersionId: entry.draftVersionId,
+        },
+        update,
+        { new: true },
+      )
       .exec();
     if (!next)
-      throw new NotFoundException({
-        code: 'ENTRY_NOT_FOUND',
-        message: 'The entry was not found',
+      throw new ConflictException({
+        code: 'ENTRY_VERSION_CONFLICT',
+        message: 'The entry changed while it was being discarded',
       });
     return this.toEntryResponse(next, publishedVersion);
   }
@@ -1001,6 +1040,7 @@ export class CollectionService {
     field: string,
     value: string,
   ): Promise<ResolvedDataRecord | null> {
+    const collection = await this.requireCollection(workspaceId, siteId, collectionId);
     const result = await this.query(
       workspaceId,
       siteId,
@@ -1008,14 +1048,17 @@ export class CollectionService {
       { filters: [{ field, operator: 'equals', value }], sort: [], limit: 1, offset: 0 },
       'published',
     );
+    if (result.pagination.total > 1) return null;
     const item = result.items[0];
-    return item
-      ? ResolvedDataRecordSchema.parse({
-          id: item.id,
-          collectionId: item.collectionId,
-          values: item.values,
-        })
-      : null;
+    if (!item) return null;
+    const [record] = await this.toRuntimeRecords(workspaceId, collection, [
+      {
+        id: item.id,
+        collectionId: item.collectionId,
+        values: item.values,
+      },
+    ]);
+    return record ?? null;
   }
 
   async resolveDataContext(
@@ -1024,10 +1067,18 @@ export class CollectionService {
     composition: PageComposition,
     options: { mode: 'draft' | 'published'; currentEntry?: ResolvedDataRecord },
   ): Promise<ResolvedDataContext> {
+    const currentEntry = options.currentEntry
+      ? await this.resolveRuntimeRecord(workspaceId, siteId, options.currentEntry)
+      : undefined;
     const resolvedQueries = await Promise.all(
       composition.queries.map(async (query) => {
         const parsed = PageQuerySchema.parse(query);
         if (parsed.source.type === 'collection') {
+          const collection = await this.requireCollection(
+            workspaceId,
+            siteId,
+            parsed.source.collectionId,
+          );
           const result = await this.query(
             workspaceId,
             siteId,
@@ -1040,31 +1091,94 @@ export class CollectionService {
             },
             options.mode,
           );
-          return [
-            parsed.id,
-            result.items.map((item) =>
-              ResolvedDataRecordSchema.parse({
-                id: item.id,
-                collectionId: item.collectionId,
-                values: item.values,
-              }),
-            ),
-          ] as const;
+          const records = await this.toRuntimeRecords(
+            workspaceId,
+            collection,
+            result.items.map((item) => ({
+              id: item.id,
+              collectionId: item.collectionId,
+              values: item.values,
+            })),
+          );
+          return [parsed.id, records] as const;
         }
         return [
           parsed.id,
-          parsed.source.type === 'current-entry' && options.currentEntry
-            ? [options.currentEntry]
-            : [],
+          parsed.source.type === 'current-entry' && currentEntry ? [currentEntry] : [],
         ] as const;
       }),
     );
     const queryItems = Object.fromEntries(resolvedQueries);
     return ResolvedDataContextSchema.parse({
-      ...(options.currentEntry ? { currentEntry: options.currentEntry } : {}),
+      ...(currentEntry ? { currentEntry } : {}),
       queryItems,
       variables: {},
     });
+  }
+
+  private async resolveRuntimeRecord(
+    workspaceId: string,
+    siteId: string,
+    record: ResolvedDataRecord,
+  ): Promise<ResolvedDataRecord> {
+    const collection = await this.requireCollection(
+      workspaceId,
+      siteId,
+      record.collectionId,
+    );
+    const [resolved] = await this.toRuntimeRecords(workspaceId, collection, [record]);
+    return resolved ?? record;
+  }
+
+  /**
+   * Collection values persist asset IDs. Public/review data contexts expose
+   * the safe storage key for renderable asset fields without persisting the
+   * entire asset document or making one lookup per rendered row.
+   */
+  private async toRuntimeRecords(
+    workspaceId: string,
+    collection: CollectionDefinition,
+    records: readonly ResolvedDataRecord[],
+  ): Promise<ResolvedDataRecord[]> {
+    const assetFields = new Set(
+      collection.fields
+        .filter((field) => field.type === 'asset' || field.type === 'image')
+        .map((field) => field.key),
+    );
+    const assetIds = [
+      ...new Set(
+        records.flatMap((record) =>
+          Object.entries(record.values).flatMap(([key, value]) =>
+            assetFields.has(key) && typeof value === 'string' && uuidLike.test(value)
+              ? [value]
+              : [],
+          ),
+        ),
+      ),
+    ];
+    const assets =
+      assetIds.length > 0
+        ? await this.assetModel
+            .find({ _id: { $in: assetIds }, workspaceId })
+            .select({ _id: 1, storageKey: 1 })
+            .exec()
+        : [];
+    const storageKeyById = new Map(
+      assets.map((asset) => [asset._id.toString(), asset.storageKey]),
+    );
+    return records.map((record) =>
+      ResolvedDataRecordSchema.parse({
+        ...record,
+        values: Object.fromEntries(
+          Object.entries(record.values).map(([key, value]) => [
+            key,
+            assetFields.has(key) && typeof value === 'string'
+              ? (storageKeyById.get(value) ?? value)
+              : value,
+          ]),
+        ),
+      }),
+    );
   }
 
   async validateComposition(
@@ -1075,6 +1189,38 @@ export class CollectionService {
   ): Promise<void> {
     const parsed = PageCompositionSchema.parse(composition);
     const queryCollections = new Map<string, CollectionDefinition>();
+    const queryById = new Map<string, PageComposition['queries'][number]>();
+    for (const query of parsed.queries) {
+      if (queryById.has(query.id))
+        throw new BadRequestException({
+          code: 'QUERY_ID_DUPLICATE',
+          message: 'Page composition query IDs must be unique',
+        });
+      queryById.set(query.id, query);
+    }
+    const nodesById = new Map<string, AnyPageNode>();
+    const visit = (node: AnyPageNode) => {
+      nodesById.set(node.id, node);
+      node.children.forEach(visit);
+    };
+    visit(parsed.payload.root);
+    for (const node of nodesById.values()) {
+      if (node.type === 'collection-list') {
+        const query = queryById.get(node.props.queryId);
+        if (!query) {
+          throw new BadRequestException({
+            code: 'QUERY_NOT_FOUND',
+            message: 'A collection list must reference a query in the page composition',
+          });
+        }
+        if (query.source.type !== 'collection') {
+          throw new BadRequestException({
+            code: 'COLLECTION_LIST_SOURCE_INVALID',
+            message: 'A collection list must reference a collection query',
+          });
+        }
+      }
+    }
     for (const query of parsed.queries) {
       const source = DataSourceDescriptorSchema.parse(query.source);
       if (source.type === 'collection') {
@@ -1127,15 +1273,30 @@ export class CollectionService {
           code: 'INVALID_BINDING_PATH',
           message: 'Bindings may only address a field path such as title or author.name',
         });
-      if (
-        binding.source.sourceId &&
-        binding.source.type === 'query-item' &&
-        !parsed.queries.some((query) => query.id === binding.source.sourceId)
-      )
+      const targetNode = nodesById.get(binding.targetNodeId);
+      if (!targetNode)
         throw new BadRequestException({
-          code: 'QUERY_NOT_FOUND',
-          message: 'The binding query was not found in the page composition',
+          code: 'BINDING_TARGET_NOT_FOUND',
+          message: 'The binding target node was not found in the page composition',
         });
+      const targetProperty = PAGE_COMPONENT_REGISTRY[
+        targetNode.type
+      ].propertiesSchema.find((property) => property.key === binding.targetProperty);
+      if (!targetProperty?.bindable)
+        throw new BadRequestException({
+          code: 'BINDING_TARGET_INVALID',
+          message: `${binding.targetProperty} is not a bindable property on ${targetNode.type}`,
+        });
+      if (binding.source.type === 'query' || binding.source.type === 'query-item') {
+        const query = binding.source.sourceId
+          ? queryById.get(binding.source.sourceId)
+          : undefined;
+        if (!query || !queryCollections.has(query.id))
+          throw new BadRequestException({
+            code: 'QUERY_NOT_FOUND',
+            message: 'The binding query was not found in the page composition',
+          });
+      }
       if (binding.source.type === 'current-entry' && binding.source.sourceId)
         throw new BadRequestException({
           code: 'INVALID_BINDING_SOURCE',
@@ -1165,23 +1326,20 @@ export class CollectionService {
           });
         }
       }
-      if (binding.source.type === 'query-item') {
-        const query = parsed.queries.find(
-          (candidate) => candidate.id === binding.source.sourceId,
-        );
+      if (binding.source.type === 'query' || binding.source.type === 'query-item') {
+        const query = queryById.get(binding.source.sourceId!);
         const collection = query ? queryCollections.get(query.id) : undefined;
-        if (collection) {
-          const fieldKey = binding.source.path.split('.')[0];
-          if (
-            !collection.fields.some(
-              (field) => field.key === fieldKey && field.status === 'active',
-            )
-          ) {
-            throw new BadRequestException({
-              code: 'BINDING_FIELD_NOT_FOUND',
-              message: `Binding field ${fieldKey} is not available`,
-            });
-          }
+        if (!collection) continue;
+        const fieldKey = binding.source.path.split('.')[0];
+        if (
+          !collection.fields.some(
+            (field) => field.key === fieldKey && field.status === 'active',
+          )
+        ) {
+          throw new BadRequestException({
+            code: 'BINDING_FIELD_NOT_FOUND',
+            message: `Binding field ${fieldKey} is not available`,
+          });
         }
       }
     }
@@ -1288,11 +1446,13 @@ export class CollectionService {
       Number.isNaN(Date.parse(value as string))
     )
       throw this.invalidField(field.key, 'must be a valid date');
-    const isImageAssetReference =
-      field.type === 'image' && uuidLike.test(value as string);
+    const isAssetReference =
+      ['asset', 'image'].includes(field.type) && uuidLike.test(value as string);
+    if (field.type === 'asset' && !isAssetReference)
+      throw this.invalidField(field.key, 'must reference a workspace asset');
     if (
       ['url', 'image'].includes(field.type) &&
-      !isImageAssetReference &&
+      !isAssetReference &&
       !isSafeUrl(value as string)
     )
       throw this.invalidField(field.key, 'must be an http(s) or safe relative URL');
@@ -1337,9 +1497,27 @@ export class CollectionService {
       if (typeof value === 'string' && uuidLike.test(value)) {
         const asset = await this.assetModel
           .findOne({ _id: value, workspaceId })
-          .select({ _id: 1 })
+          .select({ _id: 1, mimeType: 1, size: 1 })
           .exec();
         if (!asset) throw this.invalidField(field.key, 'references an unavailable asset');
+        const allowedMimeTypes = field.validation?.allowedMimeTypes;
+        if (
+          allowedMimeTypes &&
+          !allowedMimeTypes.some(
+            (mimeType) => mimeType.toLowerCase() === asset.mimeType.toLowerCase(),
+          )
+        ) {
+          throw this.invalidField(
+            field.key,
+            'references an asset with an unsupported MIME type',
+          );
+        }
+        if (
+          field.validation?.maxFileSize !== undefined &&
+          asset.size > field.validation.maxFileSize
+        ) {
+          throw this.invalidField(field.key, 'references an asset that is too large');
+        }
       }
     }
     const validation = field.validation;
@@ -1468,6 +1646,18 @@ export class CollectionService {
     return this.toCollection(
       await this.requireCollectionDocument(workspaceId, siteId, collectionId),
     );
+  }
+
+  private async requireSite(workspaceId: string, siteId: string): Promise<void> {
+    const site = await this.siteModel
+      .findOne({ _id: siteId, workspaceId })
+      .select({ _id: 1 })
+      .exec();
+    if (!site)
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found`,
+      });
   }
 
   private async requireCollectionDocument(

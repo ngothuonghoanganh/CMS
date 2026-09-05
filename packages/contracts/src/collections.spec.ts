@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CollectionDefinitionSchema,
+  CreateCollectionRequestSchema,
   DynamicPageMetadataSchema,
   PageQuerySchema,
 } from './collections';
@@ -85,5 +86,49 @@ describe('Phase 20 collection contracts', () => {
         lookupField: 'slug',
       }),
     ).toThrow();
+    expect(() =>
+      DynamicPageMetadataSchema.parse({
+        collectionId: ids.collection,
+        pathPattern: '/api/products/{slug}',
+        lookupField: 'slug',
+      }),
+    ).toThrow(/reserved/i);
+  });
+
+  it('rejects reserved and duplicate field keys at request boundaries', () => {
+    const field = {
+      key: 'title',
+      label: 'Title',
+      type: 'text' as const,
+      required: false,
+      indexed: false,
+      unique: false,
+      status: 'active' as const,
+      manualSlugOverride: true,
+    };
+    expect(() =>
+      CreateCollectionRequestSchema.parse({
+        key: 'products',
+        name: 'Products',
+        singularName: 'Product',
+        fields: [field, { ...field }],
+      }),
+    ).toThrow(/unique/i);
+    expect(() =>
+      CreateCollectionRequestSchema.parse({
+        key: 'products',
+        name: 'Products',
+        singularName: 'Product',
+        fields: [{ ...field, key: 'publishedValues' }],
+      }),
+    ).toThrow(/reserved/i);
+    expect(() =>
+      CreateCollectionRequestSchema.parse({
+        key: 'products',
+        name: 'Products',
+        singularName: 'Product',
+        fields: [{ ...field, type: 'number', defaultValue: 'not-a-number' }],
+      }),
+    ).toThrow(/default/i);
   });
 });

@@ -1,4 +1,3 @@
-import CmsShell from '../../../../cms-shell';
 import SitesPage from '../../../../sites/sites-page';
 
 export default async function SiteDetailPage({
@@ -6,10 +5,6 @@ export default async function SiteDetailPage({
 }: {
   params: Promise<{ workspaceId: string; siteId: string }>;
 }) {
-  const { siteId, workspaceId } = await params;
-  return (
-    <CmsShell workspaceId={workspaceId}>
-      <SitesPage siteId={siteId} />
-    </CmsShell>
-  );
+  const { siteId } = await params;
+  return <SitesPage siteId={siteId} />;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { readDataPath, resolveBinding, resolveNodeProperty } from './data-runtime';
+import { PageBindingSchema } from './extension-platform';
 
 const binding = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -15,6 +16,15 @@ const binding = {
 };
 
 describe('safe data binding runtime', () => {
+  it('requires query bindings to identify a query source', () => {
+    expect(() =>
+      PageBindingSchema.parse({
+        ...binding,
+        source: { ...binding.source, type: 'query', sourceId: undefined },
+      }),
+    ).toThrow(/sourceId/i);
+  });
+
   it('reads only finite field paths and resolves a query item', () => {
     expect(readDataPath({ title: 'A' }, 'title')).toBe('A');
     expect(readDataPath({ title: 'A' }, 'constructor.name')).toBeUndefined();

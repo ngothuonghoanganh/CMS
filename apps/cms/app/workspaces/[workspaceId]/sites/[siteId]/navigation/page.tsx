@@ -1,4 +1,3 @@
-import CmsShell from '../../../../../cms-shell';
 import NavigationPage from '../../../../../navigation/navigation-page';
 
 export default async function SiteNavigationPage({
@@ -6,10 +5,6 @@ export default async function SiteNavigationPage({
 }: {
   params: Promise<{ workspaceId: string; siteId: string }>;
 }) {
-  const { siteId, workspaceId } = await params;
-  return (
-    <CmsShell workspaceId={workspaceId}>
-      <NavigationPage siteId={siteId} />
-    </CmsShell>
-  );
+  const { siteId } = await params;
+  return <NavigationPage siteId={siteId} />;
 }

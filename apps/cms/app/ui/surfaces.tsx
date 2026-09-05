@@ -1,6 +1,16 @@
 'use client';
 
-import React, { useEffect, useRef, useState, type ReactNode } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
+
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 type SurfaceSize = 'sm' | 'md' | 'lg' | 'fullscreen';
 
@@ -51,15 +61,20 @@ function useOverlay(
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!open) return;
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
-    if (!allowBackgroundInteraction) document.body.style.overflow = 'hidden';
+    const previousPaddingRight = document.body.style.paddingRight;
+    if (!allowBackgroundInteraction) {
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = 'hidden';
+      if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCloseRef.current();
       if (allowBackgroundInteraction || event.key !== 'Tab') return;
@@ -87,17 +102,18 @@ function useOverlay(
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
       document.removeEventListener('keydown', onKeyDown);
-      restoreFocusRef.current?.focus();
+      restoreFocusRef.current?.focus({ preventScroll: true });
     };
   }, [allowBackgroundInteraction, open]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!mounted || !open) return;
     const firstFocusable = surfaceRef.current
       ? getFocusableElements(surfaceRef.current)[0]
       : undefined;
-    firstFocusable?.focus();
+    firstFocusable?.focus({ preventScroll: true });
   }, [mounted, open]);
 
   return { mounted, surfaceRef };
@@ -146,7 +162,7 @@ export function Modal({
   const { mounted, surfaceRef } = useOverlay(open, onClose);
   if (!mounted || !open) return null;
 
-  return (
+  return createPortal(
     <div className="ui-overlay-layer" role="presentation">
       <button
         aria-label="Close dialog"
@@ -171,7 +187,8 @@ export function Modal({
         <div className="ui-surface-body">{children}</div>
         {footer ? <footer className="ui-surface-footer">{footer}</footer> : null}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -216,7 +233,7 @@ export function Drawer({
     );
   }
 
-  return (
+  return createPortal(
     <div
       className={`ui-overlay-layer ui-drawer-layer${
         allowBackgroundInteraction ? ' ui-drawer-layer-interactive' : ''
@@ -246,7 +263,8 @@ export function Drawer({
         <div className="ui-surface-body">{children}</div>
         {footer ? <footer className="ui-surface-footer">{footer}</footer> : null}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

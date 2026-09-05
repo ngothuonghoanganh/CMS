@@ -170,16 +170,19 @@ export default function CmsShell({
   children: ReactNode;
   workspaceId: string;
 }) {
+  const parentShell = useContext(CmsShellContext);
+  const isNestedShell = parentShell?.workspaceId === workspaceId;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isBuilderRoute = pathname.includes('/builder');
   const [session, setSession] = useState<AuthSessionResponse | null>(null);
   const [permissions, setPermissions] = useState<TenantPermission[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !isNestedShell);
   const [error, setError] = useState<string | null>(null);
   const mobileSidebarCloseRef = useRef<HTMLButtonElement>(null);
   const activeNavigationKey = viewFromPathname(pathname);
@@ -191,6 +194,7 @@ export default function CmsShell({
   const siteId = searchParams.get('siteId') ?? extractSiteId(pathname);
 
   useEffect(() => {
+    if (isNestedShell) return;
     let active = true;
     setLoading(true);
     setError(null);
@@ -234,19 +238,21 @@ export default function CmsShell({
     return () => {
       active = false;
     };
-  }, [router, workspaceId]);
+  }, [isNestedShell, router, workspaceId]);
 
   useEffect(() => {
+    if (isNestedShell) return;
     const stored = window.localStorage.getItem('cms.sidebar.collapsed');
     if (stored === 'true') setSidebarCollapsed(true);
-  }, []);
+  }, [isNestedShell]);
 
   useEffect(() => {
+    if (isNestedShell) return;
     window.localStorage.setItem('cms.sidebar.collapsed', String(sidebarCollapsed));
-  }, [sidebarCollapsed]);
+  }, [isNestedShell, sidebarCollapsed]);
 
   useEffect(() => {
-    if (!mobileSidebarOpen) return;
+    if (isNestedShell || !mobileSidebarOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     mobileSidebarCloseRef.current?.focus();
@@ -276,13 +282,14 @@ export default function CmsShell({
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [mobileSidebarOpen]);
+  }, [isNestedShell, mobileSidebarOpen]);
 
   useEffect(() => {
+    if (isNestedShell) return;
     document.title = session
       ? `${viewLabels[activeNavigationKey]} · Payload CMS`
       : 'Payload CMS';
-  }, [activeNavigationKey, session]);
+  }, [activeNavigationKey, isNestedShell, session]);
 
   async function handleLogout() {
     try {
@@ -306,6 +313,7 @@ export default function CmsShell({
     }
   }
 
+  if (isNestedShell) return <>{children}</>;
   if (loading) return loadingShell();
   if (!session) return <main className="loading-page">Redirecting to sign in…</main>;
 
@@ -393,7 +401,11 @@ export default function CmsShell({
             ))}
           </nav>
         </aside>
-        <main className="content-area">
+        <main
+          className={
+            isBuilderRoute ? 'content-area content-area-builder' : 'content-area'
+          }
+        >
           <AppHeader
             companyName={currentCompanyName}
             currentWorkspaceId={session.workspace.id}
@@ -406,7 +418,11 @@ export default function CmsShell({
             userEmail={session.user.email}
             workspaces={workspaces}
           />
-          <section className="content-inner">
+          <section
+            className={
+              isBuilderRoute ? 'content-inner content-inner-builder' : 'content-inner'
+            }
+          >
             {error ? (
               <div className="alert alert-error" role="alert">
                 <div>

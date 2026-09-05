@@ -1,4 +1,3 @@
-import CmsShell from '../../../../../../../cms-shell';
 import WorkflowsPage from '../../../../../../../workflows/workflows-page';
 
 export default async function PageWorkflowsRoute({
@@ -6,10 +5,6 @@ export default async function PageWorkflowsRoute({
 }: {
   params: Promise<{ workspaceId: string; siteId: string; pageId: string }>;
 }) {
-  const { pageId, workspaceId } = await params;
-  return (
-    <CmsShell workspaceId={workspaceId}>
-      <WorkflowsPage pageId={pageId} />
-    </CmsShell>
-  );
+  const { pageId } = await params;
+  return <WorkflowsPage pageId={pageId} />;
 }

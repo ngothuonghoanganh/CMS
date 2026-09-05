@@ -628,6 +628,12 @@ test('Builder visual QA stays readable without horizontal overflow across viewpo
   for (const width of [1440, 1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.locator('.builder-frame')).toBeVisible();
+    const contentBox = await page.locator('.content-inner-builder').boundingBox();
+    const builderBox = await page.locator('.builder-frame').boundingBox();
+    expect(contentBox).not.toBeNull();
+    expect(builderBox).not.toBeNull();
+    expect(builderBox!.width).toBeGreaterThanOrEqual(contentBox!.width - 1);
+    expect(builderBox!.height).toBeGreaterThanOrEqual(contentBox!.height - 1);
     expect(
       await page.locator('body').evaluate((element) => element.scrollWidth),
     ).toBeLessThanOrEqual(width);

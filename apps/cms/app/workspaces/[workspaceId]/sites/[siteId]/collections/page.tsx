@@ -1,4 +1,3 @@
-import CmsShell from '../../../../../cms-shell';
 import CollectionsPage from '../../../../../collections/collections-page';
 
 export default async function SiteCollectionsPage({
@@ -6,10 +5,6 @@ export default async function SiteCollectionsPage({
 }: {
   params: Promise<{ workspaceId: string; siteId: string }>;
 }) {
-  const { siteId, workspaceId } = await params;
-  return (
-    <CmsShell workspaceId={workspaceId}>
-      <CollectionsPage siteId={siteId} />
-    </CmsShell>
-  );
+  const { siteId } = await params;
+  return <CollectionsPage siteId={siteId} />;
 }

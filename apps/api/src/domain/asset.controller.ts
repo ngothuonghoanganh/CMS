@@ -13,9 +13,9 @@ import {
 } from '@nestjs/common';
 import {
   CreateAssetRequestSchema,
-  PaginationQuerySchema,
+  AssetListQuerySchema,
   type CreateAssetRequest,
-  type PaginationQuery,
+  type AssetListQuery,
 } from '@payload/contracts';
 
 import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
@@ -65,7 +65,7 @@ export class AssetController {
   @Get()
   async list(
     @Param('workspaceId') workspaceId: string,
-    @Query(new ZodValidationPipe(PaginationQuerySchema)) query: PaginationQuery,
+    @Query(new ZodValidationPipe(AssetListQuerySchema)) query: AssetListQuery,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'asset.read', workspaceId);

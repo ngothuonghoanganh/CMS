@@ -1,4 +1,3 @@
-import CmsShell from '../../../../../../../../cms-shell';
 import CollectionsPage from '../../../../../../../../collections/collections-page';
 
 export default async function CollectionEntryDetailPage({
@@ -11,10 +10,8 @@ export default async function CollectionEntryDetailPage({
     entryId: string;
   }>;
 }) {
-  const { collectionId, entryId, siteId, workspaceId } = await params;
+  const { collectionId, entryId, siteId } = await params;
   return (
-    <CmsShell workspaceId={workspaceId}>
-      <CollectionsPage collectionId={collectionId} entryId={entryId} siteId={siteId} />
-    </CmsShell>
+    <CollectionsPage collectionId={collectionId} entryId={entryId} siteId={siteId} />
   );
 }

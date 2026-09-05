@@ -5026,12 +5026,18 @@ export const AssetListResponseSchema = z
   .object({ items: z.array(AssetSchema), pagination: PaginationSchema })
   .strict();
 
+export const AssetListQuerySchema = PaginationQuerySchema.extend({
+  search: z.string().trim().max(200).optional(),
+  mediaType: z.enum(['image', 'video', 'audio', 'document']).optional(),
+}).strict();
+
 export const TemplateListResponseSchema = z
   .object({ items: z.array(TemplateSchema), pagination: PaginationSchema })
   .strict();
 
 export type SiteListResponse = z.infer<typeof SiteListResponseSchema>;
 export type AssetListResponse = z.infer<typeof AssetListResponseSchema>;
+export type AssetListQuery = z.infer<typeof AssetListQuerySchema>;
 export type TemplateListResponse = z.infer<typeof TemplateListResponseSchema>;
 
 export const CreateWorkspaceRequestSchema = z

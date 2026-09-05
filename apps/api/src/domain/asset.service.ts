@@ -5,12 +5,12 @@ import { randomUUID } from 'node:crypto';
 
 import {
   AssetListResponseSchema,
+  AssetListQuerySchema,
   AssetSchema,
-  PaginationQuerySchema,
   type Asset,
   type AssetListResponse,
+  type AssetListQuery,
   type CreateAssetRequest,
-  type PaginationQuery,
 } from '@payload/contracts';
 
 import { AssetRecord, type AssetDocument } from '../persistence/schemas/asset.schema';
@@ -31,22 +31,32 @@ export class AssetService {
     return this.toContract(record);
   }
 
-  async list(workspaceId: string, input: PaginationQuery): Promise<AssetListResponse> {
-    const query = PaginationQuerySchema.parse(input);
+  async list(workspaceId: string, input: AssetListQuery): Promise<AssetListResponse> {
+    const query = AssetListQuerySchema.parse(input);
+    const filter: Record<string, unknown> = {
+      workspaceId,
+      ...(query.search
+        ? { filename: { $regex: escapeRegex(query.search), $options: 'i' } }
+        : {}),
+      ...(query.mediaType
+        ? { mimeType: { $regex: `^${query.mediaType}/`, $options: 'i' } }
+        : {}),
+    };
     const [records, total] = await Promise.all([
       this.assetModel
-        .find({ workspaceId })
+        .find(filter)
         .sort({ createdAt: -1, _id: -1 })
         .skip(query.offset)
         .limit(query.limit)
         .exec(),
-      this.assetModel.countDocuments({ workspaceId }).exec(),
+      this.assetModel.countDocuments(filter).exec(),
     ]);
 
     return AssetListResponseSchema.parse({
       items: records.map((record) => this.toContract(record)),
       pagination: {
-        ...query,
+        limit: query.limit,
+        offset: query.offset,
         hasNextPage: query.offset + records.length < total,
         total,
       },
@@ -87,4 +97,8 @@ export class AssetService {
       message: `Asset ${assetId} was not found`,
     });
   }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

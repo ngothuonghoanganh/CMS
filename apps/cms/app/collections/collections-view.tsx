@@ -13,6 +13,7 @@ import { ApiClientError, api } from '../lib/api';
 import { Drawer, Modal, PageHeader } from '../ui/surfaces';
 import { Panel, SearchField } from '../ui/primitives';
 import { StatusBadge } from '../status-badge';
+import { CollectionEntryFields } from './collection-field-controls';
 
 type FieldDraft = Collection['fields'][number];
 
@@ -32,6 +33,8 @@ const fieldTypes: CollectionFieldType[] = [
   'select',
   'multi-select',
   'reference',
+  'array',
+  'group',
 ];
 
 const newField = (): FieldDraft => ({
@@ -45,17 +48,6 @@ const newField = (): FieldDraft => ({
   status: 'active',
   manualSlugOverride: true,
 });
-
-function parseEntryValues(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
 
 function entryTitle(entry: CollectionEntryResponse, collection: Collection): string {
   const value = collection.titleFieldKey
@@ -72,18 +64,11 @@ function entryPreviewValue(value: unknown): string {
   return String(value ?? '—');
 }
 
-function inputTypeForField(type: CollectionFieldType): string {
-  if (type === 'number') return 'number';
-  if (type === 'date') return 'date';
-  if (type === 'datetime') return 'datetime-local';
-  if (type === 'email') return 'email';
-  if (type === 'url') return 'url';
-  return 'text';
-}
-
-function fieldInputValue(value: unknown): string {
+function defaultFieldValue(value: unknown): string {
   if (value === undefined || value === null) return '';
-  return Array.isArray(value) ? value.join(', ') : String(value);
+  if (Array.isArray(value)) return value.map(String).join(', ');
+  if (typeof value === 'object') return JSON.stringify(value, null, 2);
+  return String(value);
 }
 
 function collectionErrorMessage(error: unknown, fallback: string): string {
@@ -102,178 +87,16 @@ function collectionErrorMessage(error: unknown, fallback: string): string {
   return error.message;
 }
 
-function CollectionEntryFields({
-  assets,
-  collection,
-  entryValues,
-  onChange,
-}: {
-  assets: Asset[];
-  collection: Collection;
-  entryValues: string;
-  onChange: (value: string) => void;
-}) {
-  const values = parseEntryValues(entryValues);
-  const updateField = (field: Collection['fields'][number], value: unknown) => {
-    const nextValues = { ...values };
-    if (value === '' && !field.required) delete nextValues[field.key];
-    else nextValues[field.key] = value;
-    onChange(JSON.stringify(nextValues, null, 2));
-  };
-
-  return (
-    <div className="collection-entry-fields">
-      {collection.fields.map((field) => {
-        const value = values[field.key];
-        const displayValue = fieldInputValue(value);
-
-        if (field.type === 'boolean') {
-          return (
-            <label className="collection-entry-checkbox" key={field.id}>
-              <span>
-                <strong>{field.label}</strong>
-                <small>{field.key}</small>
-              </span>
-              <input
-                checked={value === true}
-                onChange={(event) => updateField(field, event.target.checked)}
-                type="checkbox"
-              />
-            </label>
-          );
-        }
-
-        if (field.type === 'select') {
-          return (
-            <label className="collection-entry-field" key={field.id}>
-              <span className="collection-entry-field-label">
-                <strong>{field.label}</strong>
-                <small>{field.key} · select</small>
-              </span>
-              <select
-                value={displayValue}
-                onChange={(event) => updateField(field, event.target.value)}
-              >
-                <option value="">Choose an option</option>
-                {(field.options ?? []).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        }
-        if (field.type === 'multi-select') {
-          const selected = Array.isArray(value) ? value.map(String) : [];
-          return (
-            <fieldset className="collection-entry-field" key={field.id}>
-              <legend className="collection-entry-field-label">
-                <strong>{field.label}</strong>
-                <small>{field.key} · multi-select</small>
-              </legend>
-              <div className="collection-option-list">
-                {(field.options ?? []).map((option) => (
-                  <label className="checkbox-field" key={option.value}>
-                    <input
-                      checked={selected.includes(option.value)}
-                      onChange={(event) =>
-                        updateField(
-                          field,
-                          event.target.checked
-                            ? [...selected, option.value]
-                            : selected.filter((item) => item !== option.value),
-                        )
-                      }
-                      type="checkbox"
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          );
-        }
-        if (field.type === 'array' || field.type === 'group') {
-          return (
-            <div
-              className="collection-entry-field collection-entry-structured-note"
-              key={field.id}
-            >
-              <strong>{field.label}</strong>
-              <small>
-                {field.key} · {field.type}
-              </small>
-              <span className="muted small">
-                Configure this structured value in Advanced JSON below.
-              </span>
-            </div>
-          );
-        }
-        const multiline = ['long-text', 'rich-text'].includes(field.type);
-        const assetField = field.type === 'asset' || field.type === 'image';
-        return (
-          <label className="collection-entry-field" key={field.id}>
-            <span className="collection-entry-field-label">
-              <strong>{field.label}</strong>
-              <small>
-                {field.key} · {field.type}
-                {field.required ? ' · required' : ''}
-              </small>
-            </span>
-            {multiline ? (
-              <textarea
-                onChange={(event) => updateField(field, event.target.value)}
-                placeholder={field.ui?.placeholder ?? ''}
-                rows={4}
-                value={displayValue}
-              />
-            ) : (
-              <input
-                list={assetField ? `collection-assets-${field.id}` : undefined}
-                onChange={(event) => {
-                  const rawValue = event.target.value;
-                  updateField(
-                    field,
-                    field.type === 'number' && rawValue !== ''
-                      ? Number(rawValue)
-                      : field.type === 'reference' && field.cardinality === 'many'
-                        ? rawValue
-                            .split(',')
-                            .map((item) => item.trim())
-                            .filter(Boolean)
-                        : rawValue,
-                  );
-                }}
-                type={inputTypeForField(field.type)}
-                value={displayValue}
-              />
-            )}
-            {assetField ? (
-              <datalist id={`collection-assets-${field.id}`}>
-                {assets.map((asset) => (
-                  <option key={asset.id} value={asset.storageKey}>
-                    {asset.filename}
-                  </option>
-                ))}
-              </datalist>
-            ) : null}
-            {field.ui?.helpText ? (
-              <small className="muted">{field.ui.helpText}</small>
-            ) : null}
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
 export function CollectionsView({
   assets,
-  canCreate,
+  assetError,
+  assetsLoading,
+  canCreateCollection,
+  canCreateEntry,
   canDelete,
   canPublish,
-  canUpdate,
+  canUpdateCollection,
+  canUpdateEntry,
   onCloseCollectionEditor,
   onCloseEntry,
   onCreateCollection,
@@ -291,12 +114,16 @@ export function CollectionsView({
   workspaceId,
 }: {
   assets: Asset[];
-  canCreate: boolean;
+  assetError?: string | undefined;
+  assetsLoading: boolean;
+  canCreateCollection: boolean;
+  canCreateEntry: boolean;
   canDelete: boolean;
   canPublish: boolean;
-  canUpdate: boolean;
+  canUpdateCollection: boolean;
+  canUpdateEntry: boolean;
   onCloseCollectionEditor?: () => void;
-  onCloseEntry?: () => void;
+  onCloseEntry?: (entryId?: string) => void;
   onCreateCollection?: () => void;
   onCreateEntry?: (collectionId?: string) => void;
   onEditEntry?: (entryId: string, collectionId?: string) => void;
@@ -313,11 +140,8 @@ export function CollectionsView({
 }) {
   const [siteId, setSiteId] = useState(selectedSiteId || sites[0]?.id || '');
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [collectionId, setCollectionId] = useState(routeCollectionId ?? '');
   const [entries, setEntries] = useState<CollectionEntryResponse[]>([]);
-  const [selectedEntry, setSelectedEntry] = useState<CollectionEntryResponse | null>(
-    null,
-  );
+  const [entryRecord, setEntryRecord] = useState<CollectionEntryResponse | null>(null);
   const [entrySearch, setEntrySearch] = useState('');
   const [entryStatus, setEntryStatus] = useState<'' | 'draft' | 'published' | 'archived'>(
     '',
@@ -334,9 +158,6 @@ export function CollectionsView({
   const [collectionDrawerOpen, setCollectionDrawerOpen] = useState(
     routeCollectionAction === 'create' || routeCollectionAction === 'schema',
   );
-  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(
-    routeCollectionAction === 'schema' ? (routeCollectionId ?? null) : null,
-  );
   const [entryDrawerOpen, setEntryDrawerOpen] = useState(
     Boolean(routeEntryId || routeEntryAction === 'create'),
   );
@@ -345,17 +166,26 @@ export function CollectionsView({
     key: '',
     name: '',
     singularName: '',
+    titleFieldKey: '',
   });
   const [fieldDrafts, setFieldDrafts] = useState<FieldDraft[]>([newField()]);
+  const [titleFieldKey, setTitleFieldKey] = useState('');
   const [entryValues, setEntryValues] = useState('{}');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedCollection = useMemo(
-    () => collections.find((collection) => collection.id === collectionId),
-    [collectionId, collections],
+    () => collections.find((collection) => collection.id === routeCollectionId),
+    [routeCollectionId, collections],
   );
+  const collectionId = routeCollectionId ?? '';
+  const selectedEntry = routeEntryId
+    ? (entryRecord ?? entries.find((entry) => entry.id === routeEntryId) ?? null)
+    : null;
+  const editingCollectionId =
+    routeCollectionAction === 'schema' ? routeCollectionId : null;
+  const entryReadOnly = Boolean(routeEntryId && routeEntryAction !== 'edit');
   const publishedEntryCount = entries.filter(
     (entry) => entry.status === 'published',
   ).length;
@@ -367,18 +197,14 @@ export function CollectionsView({
   }, [selectedSiteId]);
 
   useEffect(() => {
-    if (routeCollectionId !== undefined) setCollectionId(routeCollectionId);
-  }, [routeCollectionId]);
-
-  useEffect(() => {
     if (routeCollectionAction === 'create') {
-      setEditingCollectionId(null);
-      setCollectionForm({ key: '', name: '', singularName: '' });
+      setCollectionForm({ key: '', name: '', singularName: '', titleFieldKey: '' });
       setFieldDrafts([newField()]);
+      setTitleFieldKey('');
       setCollectionDrawerOpen(true);
     } else if (routeCollectionAction === 'schema' && selectedCollection) {
-      setEditingCollectionId(selectedCollection.id);
       setFieldDrafts(selectedCollection.fields.map((field) => ({ ...field })));
+      setTitleFieldKey(selectedCollection.titleFieldKey ?? '');
       setCollectionDrawerOpen(true);
     } else if (!routeCollectionAction) {
       setCollectionDrawerOpen(false);
@@ -387,36 +213,57 @@ export function CollectionsView({
 
   useEffect(() => {
     if (routeEntryAction === 'create') {
-      setSelectedEntry(null);
+      setEntryRecord(null);
       setEntryValues('{}');
       setEntryDrawerOpen(true);
-    } else if (routeEntryId) {
-      setEntryDrawerOpen(true);
-      const entry = entries.find((candidate) => candidate.id === routeEntryId);
-      if (entry) {
-        setSelectedEntry(entry);
-        setEntryValues(JSON.stringify(entry.values, null, 2));
-      }
-    } else {
-      setEntryDrawerOpen(false);
+      return;
     }
-  }, [entries, routeEntryAction, routeEntryId]);
+    if (!routeEntryId || !siteId || !collectionId) {
+      setEntryRecord(null);
+      setEntryDrawerOpen(false);
+      return;
+    }
+    setEntryDrawerOpen(true);
+    setEntryRecord(null);
+    let active = true;
+    void api
+      .get<CollectionEntryResponse>(
+        `/workspaces/${workspaceId}/sites/${siteId}/collections/${collectionId}/entries/${routeEntryId}`,
+      )
+      .then((entry) => {
+        if (!active) return;
+        setEntryRecord(entry);
+        setEntryValues(JSON.stringify(entry.values, null, 2));
+      })
+      .catch((caughtError: unknown) => {
+        if (active)
+          setError(collectionErrorMessage(caughtError, 'Unable to load this entry.'));
+      });
+    return () => {
+      active = false;
+    };
+  }, [collectionId, routeEntryAction, routeEntryId, siteId, workspaceId]);
 
   useEffect(() => {
     if (!siteId) return;
+    let active = true;
     setLoading(true);
     void api
       .get<Collection[]>(`/workspaces/${workspaceId}/sites/${siteId}/collections`)
       .then((next) => {
+        if (!active) return;
         setCollections(next);
-        setCollectionId((current) => {
-          const requested = routeCollectionId ?? current;
-          return next.some((item) => item.id === requested)
-            ? requested
-            : (next[0]?.id ?? '');
-        });
       })
-      .finally(() => setLoading(false));
+      .catch((caughtError: unknown) => {
+        if (active)
+          setError(collectionErrorMessage(caughtError, 'Unable to load collections.'));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [routeCollectionId, siteId, workspaceId]);
 
   useEffect(() => {
@@ -424,6 +271,7 @@ export function CollectionsView({
       setEntries([]);
       return;
     }
+    let active = true;
     const params = new URLSearchParams({
       limit: '20',
       offset: String(entryOffset),
@@ -441,14 +289,19 @@ export function CollectionsView({
         `/workspaces/${workspaceId}/sites/${siteId}/collections/${collectionId}/entries?${params.toString()}`,
       )
       .then((result) => {
+        if (!active) return;
         setEntries(result.items);
         setEntryPagination(result.pagination);
       })
-      .catch((caughtError: unknown) =>
-        setError(
-          collectionErrorMessage(caughtError, 'Unable to load collection entries.'),
-        ),
-      );
+      .catch((caughtError: unknown) => {
+        if (active)
+          setError(
+            collectionErrorMessage(caughtError, 'Unable to load collection entries.'),
+          );
+      });
+    return () => {
+      active = false;
+    };
   }, [
     collectionId,
     entryOffset,
@@ -472,42 +325,63 @@ export function CollectionsView({
       }));
     const created = await api.post<Collection>(
       `/workspaces/${workspaceId}/sites/${siteId}/collections`,
-      { ...collectionForm, fields },
+      {
+        ...collectionForm,
+        titleFieldKey: collectionForm.titleFieldKey || undefined,
+        fields,
+      },
     );
     setCollections((current) => [...current, created]);
-    setCollectionId(created.id);
     onSelectCollection?.(created.id);
     setCollectionDrawerOpen(false);
-    setCollectionForm({ key: '', name: '', singularName: '' });
+    setCollectionForm({ key: '', name: '', singularName: '', titleFieldKey: '' });
     setFieldDrafts([newField()]);
     setMessage(`Created ${created.name}.`);
   }
 
   async function updateCollection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedCollection || !canUpdate) return;
+    if (!selectedCollection || !canUpdateCollection) return;
     setError(null);
     const fields = fieldDrafts
       .filter((field) => field.key.trim() && field.label.trim())
       .map((field) => ({ ...field, key: field.key.trim(), label: field.label.trim() }));
     const updated = await api.patch<Collection>(
       `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}`,
-      { fields, expectedSchemaVersion: selectedCollection.schemaVersion },
+      {
+        fields,
+        titleFieldKey: titleFieldKey || null,
+        expectedSchemaVersion: selectedCollection.schemaVersion,
+      },
     );
     setCollections((current) =>
       current.map((item) => (item.id === updated.id ? updated : item)),
     );
     setCollectionDrawerOpen(false);
-    setEditingCollectionId(null);
     setMessage('Collection schema updated.');
     onCloseCollectionEditor?.();
   }
 
   async function saveEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedCollection) return;
+    if (!selectedCollection || (selectedEntry ? !canUpdateEntry : !canCreateEntry))
+      return;
+    if (routeEntryId && !selectedEntry) {
+      setError('This entry is still loading. Try again in a moment.');
+      return;
+    }
     setError(null);
-    const values = parseEntryValues(entryValues);
+    let values: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(entryValues) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Entry values must be a JSON object.');
+      }
+      values = parsed as Record<string, unknown>;
+    } catch {
+      setError('Entry values must be a valid JSON object before saving.');
+      return;
+    }
     const path = `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}/entries`;
     const saved = selectedEntry
       ? await api.patch<CollectionEntryResponse>(`${path}/${selectedEntry.id}`, {
@@ -520,9 +394,9 @@ export function CollectionsView({
         ? current.map((entry) => (entry.id === saved.id ? saved : entry))
         : [saved, ...current],
     );
-    setSelectedEntry(saved);
+    setEntryRecord(saved);
     setEntryDrawerOpen(false);
-    onCloseEntry?.();
+    onCloseEntry?.(saved.id);
     setMessage(selectedEntry ? 'Entry draft saved.' : 'Entry created as draft.');
   }
 
@@ -545,8 +419,8 @@ export function CollectionsView({
     setCollections((current) =>
       current.filter((item) => item.id !== selectedCollection.id),
     );
-    setCollectionId('');
     setArchiveDialogOpen(false);
+    onCloseCollectionEditor?.();
     setMessage('Collection archived.');
   }
 
@@ -555,7 +429,7 @@ export function CollectionsView({
       onEditEntry(entry.id, selectedCollection?.id);
       return;
     }
-    setSelectedEntry(entry);
+    setEntryRecord(entry);
     setEntryValues(JSON.stringify(entry.values, null, 2));
     setEntryDrawerOpen(true);
   }
@@ -565,14 +439,13 @@ export function CollectionsView({
       onCreateEntry(selectedCollection?.id);
       return;
     }
-    setSelectedEntry(null);
+    setEntryRecord(null);
     setEntryValues('{}');
     setEntryDrawerOpen(true);
   }
 
   function editSchema() {
     if (!selectedCollection) return;
-    setEditingCollectionId(selectedCollection.id);
     setFieldDrafts(selectedCollection.fields.map((field) => ({ ...field })));
   }
 
@@ -617,7 +490,7 @@ export function CollectionsView({
               </select>
               <button
                 className="button button-primary"
-                disabled={!siteId || !canCreate}
+                disabled={!siteId || !canCreateCollection}
                 onClick={onCreateCollection}
                 type="button"
               >
@@ -710,7 +583,7 @@ export function CollectionsView({
                   <p className="muted">Create your first structured content model.</p>
                   <button
                     className="button button-small button-secondary"
-                    disabled={!siteId || !canCreate}
+                    disabled={!siteId || !canCreateCollection}
                     onClick={onCreateCollection}
                     type="button"
                   >
@@ -729,7 +602,6 @@ export function CollectionsView({
                       }
                       key={collection.id}
                       onClick={() => {
-                        setCollectionId(collection.id);
                         setEntrySearch('');
                         setEntryOffset(0);
                         onSelectCollection?.(collection.id);
@@ -777,7 +649,7 @@ export function CollectionsView({
                     <div className="form-actions collection-detail-actions">
                       <button
                         className="button button-small button-ghost"
-                        disabled={!canUpdate}
+                        disabled={!canUpdateCollection}
                         onClick={() => {
                           if (onEditSchema) onEditSchema(selectedCollection.id);
                           else {
@@ -818,7 +690,7 @@ export function CollectionsView({
                       </div>
                       <button
                         className="button button-small button-ghost"
-                        disabled={!canUpdate}
+                        disabled={!canUpdateCollection}
                         onClick={() => {
                           if (onEditSchema) onEditSchema(selectedCollection.id);
                           else {
@@ -857,7 +729,7 @@ export function CollectionsView({
                       </div>
                       <button
                         className="button button-primary"
-                        disabled={!canCreate}
+                        disabled={!canCreateEntry}
                         onClick={startNewEntry}
                         type="button"
                       >
@@ -944,7 +816,7 @@ export function CollectionsView({
                         </p>
                         <button
                           className="button button-small button-secondary"
-                          disabled={!canCreate}
+                          disabled={!canCreateEntry}
                           onClick={startNewEntry}
                           type="button"
                         >
@@ -1163,6 +1035,32 @@ export function CollectionsView({
               </label>
             </>
           ) : null}
+          <label>
+            Title field
+            <select
+              value={editingCollectionId ? titleFieldKey : collectionForm.titleFieldKey}
+              onChange={(event) => {
+                if (editingCollectionId) setTitleFieldKey(event.target.value);
+                else
+                  setCollectionForm({
+                    ...collectionForm,
+                    titleFieldKey: event.target.value,
+                  });
+              }}
+            >
+              <option value="">Use entry ID when no title is set</option>
+              {fieldDrafts
+                .filter((field) => field.key.trim())
+                .map((field) => (
+                  <option key={field.id} value={field.key}>
+                    {field.label || field.key}
+                  </option>
+                ))}
+            </select>
+            <small className="muted">
+              This field labels entries in the CMS and reference pickers.
+            </small>
+          </label>
           <div className="collection-drawer-section-heading">
             <div>
               <span className="eyebrow">Schema</span>
@@ -1188,6 +1086,46 @@ export function CollectionsView({
                 </span>
                 <strong>{field.label || 'Untitled field'}</strong>
                 {field.key ? <code>{field.key}</code> : null}
+                <span className="collection-field-reorder-actions">
+                  <button
+                    aria-label={`Move field ${index + 1} up`}
+                    className="button button-small button-ghost"
+                    disabled={index === 0}
+                    onClick={() =>
+                      setFieldDrafts((current) => {
+                        if (index === 0) return current;
+                        const next = [...current];
+                        const previous = next[index - 1];
+                        const currentField = next[index];
+                        if (!previous || !currentField) return current;
+                        next.splice(index - 1, 2, currentField, previous);
+                        return next;
+                      })
+                    }
+                    type="button"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    aria-label={`Move field ${index + 1} down`}
+                    className="button button-small button-ghost"
+                    disabled={index === fieldDrafts.length - 1}
+                    onClick={() =>
+                      setFieldDrafts((current) => {
+                        if (index === current.length - 1) return current;
+                        const next = [...current];
+                        const currentField = next[index];
+                        const following = next[index + 1];
+                        if (!currentField || !following) return current;
+                        next.splice(index, 2, following, currentField);
+                        return next;
+                      })
+                    }
+                    type="button"
+                  >
+                    ↓
+                  </button>
+                </span>
                 {fieldDrafts.length > 1 ? (
                   <button
                     aria-label={`Remove field ${index + 1}`}
@@ -1291,6 +1229,252 @@ export function CollectionsView({
                   </span>
                 </label>
               </div>
+              {field.type !== 'reference' ? (
+                <label>
+                  Default value
+                  <small className="muted">
+                    Applied to new entries when the field is left empty.
+                  </small>
+                  {field.type === 'boolean' ? (
+                    <span className="collection-required-toggle">
+                      <span>
+                        <input
+                          checked={field.defaultValue === true}
+                          onChange={(event) =>
+                            setFieldDrafts((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? {
+                                      ...item,
+                                      defaultValue: event.target.checked
+                                        ? true
+                                        : undefined,
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        Default to true
+                      </span>
+                    </span>
+                  ) : field.type === 'select' ? (
+                    <select
+                      value={defaultFieldValue(field.defaultValue)}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, defaultValue: event.target.value || undefined }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">No default</option>
+                      {(field.options ?? []).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.type === 'multi-select' ? (
+                    <div className="collection-option-list">
+                      {(field.options ?? []).map((option) => {
+                        const selected = Array.isArray(field.defaultValue)
+                          ? field.defaultValue.includes(option.value)
+                          : false;
+                        return (
+                          <label className="checkbox-field" key={option.value}>
+                            <input
+                              checked={selected}
+                              onChange={(event) => {
+                                const current = Array.isArray(field.defaultValue)
+                                  ? field.defaultValue.map(String)
+                                  : [];
+                                const next = event.target.checked
+                                  ? [...current, option.value]
+                                  : current.filter((value) => value !== option.value);
+                                setFieldDrafts((currentFields) =>
+                                  currentFields.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? {
+                                          ...item,
+                                          defaultValue: next.length ? next : undefined,
+                                        }
+                                      : item,
+                                  ),
+                                );
+                              }}
+                              type="checkbox"
+                            />
+                            {option.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : field.type === 'array' || field.type === 'group' ? (
+                    <textarea
+                      placeholder={field.type === 'array' ? '[]' : '{}'}
+                      rows={3}
+                      value={defaultFieldValue(field.defaultValue)}
+                      onChange={(event) => {
+                        const raw = event.target.value.trim();
+                        let next: unknown = undefined;
+                        if (raw) {
+                          try {
+                            next = JSON.parse(raw);
+                          } catch {
+                            next = raw;
+                          }
+                        }
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, defaultValue: next } : item,
+                          ),
+                        );
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type={field.type === 'number' ? 'number' : 'text'}
+                      value={defaultFieldValue(field.defaultValue)}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        const next =
+                          raw === ''
+                            ? undefined
+                            : field.type === 'number'
+                              ? Number(raw)
+                              : raw;
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, defaultValue: next } : item,
+                          ),
+                        );
+                      }}
+                    />
+                  )}
+                </label>
+              ) : null}
+              {field.type === 'asset' || field.type === 'image' ? (
+                <div className="collection-drawer-field-grid">
+                  <label>
+                    Allowed MIME types
+                    <small className="muted">
+                      Comma-separated, for example image/png, image/jpeg.
+                    </small>
+                    <input
+                      value={field.validation?.allowedMimeTypes?.join(', ') ?? ''}
+                      onChange={(event) => {
+                        const allowedMimeTypes = event.target.value
+                          .split(',')
+                          .map((value) => value.trim())
+                          .filter(Boolean);
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  validation: {
+                                    ...item.validation,
+                                    allowedMimeTypes: allowedMimeTypes.length
+                                      ? allowedMimeTypes
+                                      : undefined,
+                                  },
+                                }
+                              : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Maximum file size (bytes)
+                    <input
+                      min={1}
+                      type="number"
+                      value={field.validation?.maxFileSize ?? ''}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  validation: {
+                                    ...item.validation,
+                                    maxFileSize: raw === '' ? undefined : Number(raw),
+                                  },
+                                }
+                              : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {field.type === 'number' ||
+              field.type === 'text' ||
+              field.type === 'long-text' ||
+              field.type === 'rich-text' ? (
+                <div className="collection-drawer-field-grid">
+                  <label>
+                    {field.type === 'number' ? 'Minimum' : 'Minimum length'}
+                    <input
+                      min={0}
+                      type="number"
+                      value={
+                        field.type === 'number'
+                          ? (field.validation?.min ?? '')
+                          : (field.validation?.minLength ?? '')
+                      }
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        const patch =
+                          field.type === 'number'
+                            ? { min: raw === '' ? undefined : Number(raw) }
+                            : { minLength: raw === '' ? undefined : Number(raw) };
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, validation: { ...item.validation, ...patch } }
+                              : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    {field.type === 'number' ? 'Maximum' : 'Maximum length'}
+                    <input
+                      min={0}
+                      type="number"
+                      value={
+                        field.type === 'number'
+                          ? (field.validation?.max ?? '')
+                          : (field.validation?.maxLength ?? '')
+                      }
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        const patch =
+                          field.type === 'number'
+                            ? { max: raw === '' ? undefined : Number(raw) }
+                            : { maxLength: raw === '' ? undefined : Number(raw) };
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, validation: { ...item.validation, ...patch } }
+                              : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
               <div className="collection-drawer-field-grid">
                 <label>
                   Description
@@ -1504,14 +1688,36 @@ export function CollectionsView({
         description="Entry drafts are immutable versions. Publish promotes one version atomically to public delivery."
         footer={
           <div className="form-actions">
-            <button className="button button-primary" form="entry-form" type="submit">
-              Save draft
-            </button>
+            {entryReadOnly ? (
+              <button
+                className="button button-primary"
+                disabled={!routeEntryId || !canUpdateEntry}
+                onClick={() =>
+                  routeEntryId && onEditEntry?.(routeEntryId, selectedCollection?.id)
+                }
+                type="button"
+              >
+                Edit entry
+              </button>
+            ) : (
+              <button
+                className="button button-primary"
+                disabled={
+                  !selectedCollection ||
+                  (selectedEntry ? !canUpdateEntry : !canCreateEntry) ||
+                  Boolean(routeEntryId && !selectedEntry)
+                }
+                form="entry-form"
+                type="submit"
+              >
+                Save draft
+              </button>
+            )}
             <button
               className="button button-ghost"
               onClick={() => {
                 setEntryDrawerOpen(false);
-                onCloseEntry?.();
+                onCloseEntry?.(routeEntryAction === 'edit' ? routeEntryId : undefined);
               }}
               type="button"
             >
@@ -1521,7 +1727,7 @@ export function CollectionsView({
         }
         onClose={() => {
           setEntryDrawerOpen(false);
-          onCloseEntry?.();
+          onCloseEntry?.(routeEntryAction === 'edit' ? routeEntryId : undefined);
         }}
         open={entryDrawerOpen}
         size="lg"
@@ -1562,22 +1768,34 @@ export function CollectionsView({
               </div>
               <CollectionEntryFields
                 assets={assets}
+                assetError={assetError}
+                assetsLoading={assetsLoading}
                 collection={selectedCollection}
+                collections={collections}
+                disabled={entryReadOnly}
                 entryValues={entryValues}
                 onChange={setEntryValues}
+                siteId={siteId}
+                workspaceId={workspaceId}
               />
-              <details className="collection-entry-advanced">
-                <summary>Advanced JSON</summary>
-                <p className="muted small">
-                  Use the field keys from the schema for structured values.
-                </p>
-                <textarea
-                  aria-label="Entry values"
-                  rows={12}
-                  value={entryValues}
-                  onChange={(event) => setEntryValues(event.target.value)}
-                />
-              </details>
+              {selectedCollection.fields.some((field) =>
+                ['array', 'group'].includes(field.type),
+              ) ? (
+                <details className="collection-entry-advanced">
+                  <summary>Advanced JSON for structured fields</summary>
+                  <p className="muted small">
+                    Use this editor only for array and group values that need nested
+                    structure.
+                  </p>
+                  <textarea
+                    aria-label="Entry values"
+                    disabled={entryReadOnly}
+                    rows={12}
+                    value={entryValues}
+                    onChange={(event) => setEntryValues(event.target.value)}
+                  />
+                </details>
+              ) : null}
             </>
           ) : null}
         </form>

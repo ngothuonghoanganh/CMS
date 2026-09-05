@@ -281,6 +281,13 @@ export const PageBindingSchema = z
   })
   .strict()
   .superRefine((binding, context) => {
+    if (binding.source.type === 'query' && !binding.source.sourceId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['source', 'sourceId'],
+        message: 'Query bindings require sourceId',
+      });
+    }
     if (binding.source.type === 'query-item' && !binding.source.sourceId) {
       context.addIssue({
         code: 'custom',

@@ -199,6 +199,7 @@ function inheritedDescription(
 const bindingSourceLabels = {
   static: 'Static value',
   'current-entry': 'Current entry',
+  query: 'First collection result',
   'query-item': 'Collection item',
 } as const;
 
@@ -215,7 +216,15 @@ function queryCollection(
 function queryFilterInputValue(
   fieldType: Collection['fields'][number]['type'] | undefined,
   value: string,
-): string | number | boolean {
+  listValue = false,
+): string | number | boolean | Array<string | number | boolean> {
+  if (listValue) {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => queryFilterInputValue(fieldType, item) as string | number | boolean);
+  }
   if (fieldType === 'number' && value.trim() !== '') {
     const numericValue = Number(value);
     return Number.isFinite(numericValue) ? numericValue : value;
@@ -347,12 +356,23 @@ function CollectionQueryEditor({
                 </select>
                 <select
                   aria-label={`Filter ${index + 1} operator`}
-                  onChange={(event) =>
-                    updateFilter(index, {
-                      operator: event.target
-                        .value as PageQuery['filters'][number]['operator'],
-                    })
-                  }
+                  onChange={(event) => {
+                    const operator = event.target
+                      .value as PageQuery['filters'][number]['operator'];
+                    const nextValue =
+                      operator === 'exists'
+                        ? undefined
+                        : ['in', 'notIn'].includes(operator)
+                          ? Array.isArray(filter.value)
+                            ? filter.value
+                            : filter.value === undefined
+                              ? []
+                              : [filter.value]
+                          : Array.isArray(filter.value)
+                            ? filter.value[0]
+                            : filter.value;
+                    updateFilter(index, { operator, value: nextValue });
+                  }}
                   value={filter.operator}
                 >
                   {queryOperatorsForFieldType(
@@ -366,7 +386,7 @@ function CollectionQueryEditor({
                 </select>
                 {filter.operator !== 'exists' ? (
                   activeFields.find((field) => field.key === filter.field)?.type ===
-                  'boolean' ? (
+                    'boolean' && !['in', 'notIn'].includes(filter.operator) ? (
                     <select
                       aria-label={`Filter ${index + 1} value`}
                       onChange={(event) =>
@@ -378,7 +398,7 @@ function CollectionQueryEditor({
                       <option value="false">False</option>
                     </select>
                   ) : activeFields.find((field) => field.key === filter.field)?.type ===
-                    'select' ? (
+                      'select' && !['in', 'notIn'].includes(filter.operator) ? (
                     <select
                       aria-label={`Filter ${index + 1} value`}
                       onChange={(event) =>
@@ -404,14 +424,17 @@ function CollectionQueryEditor({
                             activeFields.find((field) => field.key === filter.field)
                               ?.type,
                             event.target.value,
+                            ['in', 'notIn'].includes(filter.operator),
                           ),
                         })
                       }
                       placeholder="Value"
                       value={
-                        filter.value === undefined || Array.isArray(filter.value)
+                        filter.value === undefined
                           ? ''
-                          : String(filter.value)
+                          : Array.isArray(filter.value)
+                            ? filter.value.join(', ')
+                            : String(filter.value)
                       }
                     />
                   )
@@ -456,11 +479,15 @@ function CollectionQueryEditor({
                 value={query.sort[0]?.field ?? ''}
               >
                 <option value="">Default order</option>
-                {activeFields.map((field) => (
-                  <option key={field.key} value={field.key}>
-                    {field.label}
-                  </option>
-                ))}
+                {activeFields
+                  .filter(
+                    (field) => !['array', 'group', 'multi-select'].includes(field.type),
+                  )
+                  .map((field) => (
+                    <option key={field.key} value={field.key}>
+                      {field.label}
+                    </option>
+                  ))}
               </select>
             </label>
             {query.sort[0] ? (
@@ -535,20 +562,21 @@ function BindingEditor({
       ? currentEntryCollection
       : queryCollection(selectedQuery, collections);
   const fields = collection?.fields.filter((field) => field.status === 'active') ?? [];
-  const setSource = (type: 'static' | 'current-entry' | 'query-item') => {
+  const setSource = (type: 'static' | 'current-entry' | 'query' | 'query-item') => {
     if (type === 'static') {
       onChange(null);
       return;
     }
     const query = queries.find((candidate) => candidate.source.type === 'collection');
+    if ((type === 'query-item' || type === 'query') && !query) return;
     const path = binding?.source.path ?? fields[0]?.key ?? 'title';
     onChange({
       id: binding?.id ?? newBuilderUuid(),
       targetNodeId: selected.id,
       targetProperty: property.key,
       source:
-        type === 'query-item'
-          ? { type, sourceId: query?.id ?? newBuilderUuid(), path }
+        type === 'query-item' || type === 'query'
+          ? { type, sourceId: query!.id, path }
           : { type, path },
       ...(binding?.fallback !== undefined ? { fallback: binding.fallback } : {}),
     });
@@ -575,7 +603,9 @@ function BindingEditor({
         <select
           aria-label="Data source"
           onChange={(event) =>
-            setSource(event.target.value as 'static' | 'current-entry' | 'query-item')
+            setSource(
+              event.target.value as 'static' | 'current-entry' | 'query' | 'query-item',
+            )
           }
           value={sourceType}
         >
@@ -590,7 +620,7 @@ function BindingEditor({
       </label>
       {binding ? (
         <>
-          {binding.source.type === 'query-item' ? (
+          {binding.source.type === 'query' || binding.source.type === 'query-item' ? (
             <label className="builder-inspector-field">
               <span>Query</span>
               <select

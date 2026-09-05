@@ -133,7 +133,7 @@ export class CollectionController {
     await this.writeAudit(
       principal,
       workspaceId,
-      'collection.update',
+      input.fields !== undefined ? 'collection.schema.update' : 'collection.update',
       'collection',
       collectionId,
     );
