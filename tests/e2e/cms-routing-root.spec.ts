@@ -28,6 +28,21 @@ test('legacy root collection bookmarks convert to canonical routes', async ({
   ).toBeVisible();
 });
 
+test('legacy navigation bookmarks redirect to the Design System surface', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  await loginToCanonicalBuilder(page);
+  const workspacePath = `/workspaces/${canonicalEnvironment.workspaceId}`;
+  const sitePath = `${workspacePath}/sites/${canonicalEnvironment.siteId}`;
+
+  await page.goto(`${workspacePath}/navigation`);
+  await expect(page).toHaveURL(`${workspacePath}/design-system`);
+
+  await page.goto(`${sitePath}/navigation`);
+  await expect(page).toHaveURL(`${sitePath}/design-system`);
+});
+
 test('login response goes directly to the canonical workspace route', async ({
   page,
 }) => {

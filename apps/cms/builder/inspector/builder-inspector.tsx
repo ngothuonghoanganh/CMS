@@ -9,6 +9,7 @@ import {
   type PageBinding,
   type PageComponentType,
   type PageCompositionFields,
+  type Page,
   type PageQuery,
   type SiteDesignSystem,
   type StyleTokenReference,
@@ -46,6 +47,7 @@ type InspectorStyleSection = {
 };
 
 type BuilderInspectorProps = {
+  workspaceId: string;
   selected: SelectedBuilderNode;
   viewport: BuilderViewport;
   inspectorTab: InspectorTab;
@@ -73,8 +75,7 @@ type BuilderInspectorProps = {
   onDuplicateStructuralChild: (nodeId: string) => void;
   usableAssets: Asset[];
   designSystem?: SiteDesignSystem;
-  navigationItemCount?: number;
-  onEditNavigation?: () => void;
+  navigationPages?: readonly Pick<Page, 'id' | 'name' | 'path' | 'anchors'>[];
   validationIssues?: readonly BuilderValidationIssue[];
   validationScope?: BuilderValidationScope;
   onValidationIssue?:
@@ -703,6 +704,7 @@ function BindingEditor({
 }
 
 export function BuilderInspector({
+  workspaceId,
   selected,
   viewport,
   inspectorTab,
@@ -722,8 +724,7 @@ export function BuilderInspector({
   onDuplicateStructuralChild,
   usableAssets,
   designSystem,
-  navigationItemCount = 0,
-  onEditNavigation,
+  navigationPages = [],
   validationIssues = [],
   validationScope = 'page',
   onValidationIssue,
@@ -757,7 +758,8 @@ export function BuilderInspector({
   const contentProperties = definition.propertiesSchema.filter(
     (property) =>
       property.group === 'content' &&
-      (!contentOnly || property.editingScope === 'content'),
+      (!contentOnly || property.editingScope === 'content') &&
+      isPropertyVisible(property, selected.props),
   );
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {
@@ -775,7 +777,18 @@ export function BuilderInspector({
         <Editor
           definition={property}
           key={property.key}
-          onChange={(nextValue) => updateSelectedProperty(property.key, nextValue)}
+          navigationPages={navigationPages}
+          onChange={(nextValue) =>
+            property.customEditor === 'navigation' &&
+            nextValue &&
+            typeof nextValue === 'object' &&
+            'items' in nextValue
+              ? updateSelectedProperty(
+                  property.key,
+                  (nextValue as { items?: unknown }).items ?? [],
+                )
+              : updateSelectedProperty(property.key, nextValue)
+          }
           value={selected.props}
         />
       );
@@ -794,6 +807,7 @@ export function BuilderInspector({
           section="content"
           tab="content"
           value={value}
+          workspaceId={workspaceId}
           viewport={viewport}
         />
         {!contentOnly && property.bindable && onUpdateBinding ? (
@@ -818,20 +832,22 @@ export function BuilderInspector({
 
   if (contentOnly) {
     return (
-      <InspectorSection label="Content" onToggle={() => undefined} open>
-        {contentProperties.length > 0 ? (
-          <div className="builder-inspector-fields">
-            {contentProperties.map((property) =>
-              renderProperty(property, selected.props[property.key]),
-            )}
-          </div>
-        ) : (
-          <p className="muted small">
-            This element has no editable content. Select another text, media, button, or
-            content element.
-          </p>
-        )}
-      </InspectorSection>
+      <div className="builder-inspector">
+        <InspectorSection label="Content" onToggle={() => undefined} open>
+          {contentProperties.length > 0 ? (
+            <div className="builder-inspector-fields">
+              {contentProperties.map((property) =>
+                renderProperty(property, selected.props[property.key]),
+              )}
+            </div>
+          ) : (
+            <p className="muted small">
+              This element has no editable content. Select another text, media, button, or
+              content element.
+            </p>
+          )}
+        </InspectorSection>
+      </div>
     );
   }
 
@@ -1005,7 +1021,7 @@ export function BuilderInspector({
   }
 
   return (
-    <>
+    <div className="builder-inspector">
       <div aria-label="Inspector tabs" className="builder-inspector-tabs" role="tablist">
         {(['content', 'style', 'settings'] as const).map((tab) => (
           <button
@@ -1048,27 +1064,6 @@ export function BuilderInspector({
             )}
             selected={selected}
           />
-        </InspectorSection>
-      ) : null}
-
-      {selected.type === 'navigation-view' ? (
-        <InspectorSection label="Navigation source" onToggle={() => undefined} open>
-          <div className="builder-navigation-source">
-            <span className="muted small">Source</span>
-            <strong>Site navigation</strong>
-            <span className="muted small">
-              {navigationItemCount} top-level item{navigationItemCount === 1 ? '' : 's'}
-            </span>
-            {onEditNavigation ? (
-              <button
-                className="button button-secondary button-small"
-                onClick={onEditNavigation}
-                type="button"
-              >
-                Edit navigation
-              </button>
-            ) : null}
-          </div>
         </InspectorSection>
       ) : null}
 
@@ -1127,6 +1122,24 @@ export function BuilderInspector({
           </InspectorSection>
         </>
       ) : null}
-    </>
+    </div>
   );
+}
+
+function isPropertyVisible(
+  property: ComponentPropertyDefinition,
+  props: Record<string, unknown>,
+): boolean {
+  const rule = property.visibleWhen;
+  if (!rule) return true;
+  const value = props[rule.property];
+  if (rule.operator === 'isEmpty') {
+    const empty =
+      value === undefined ||
+      value === null ||
+      value === '' ||
+      (Array.isArray(value) && value.length === 0);
+    return rule.value === undefined ? empty : rule.value === empty;
+  }
+  return rule.operator === 'equals' ? value === rule.value : value !== rule.value;
 }

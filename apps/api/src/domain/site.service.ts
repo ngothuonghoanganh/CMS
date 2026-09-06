@@ -33,6 +33,7 @@ import {
   SiteDesignSystemSchema,
   SiteDesignSystemResponseSchema,
   createDefaultSiteDesignSystem,
+  mergeSiteDesignSystems,
   type SiteDesignSystem,
   type SiteDesignSystemResponse,
 } from '@payload/contracts';
@@ -208,7 +209,11 @@ export class SiteService {
       });
     }
 
-    const designSystem = this.readDesignSystem(record.designSystemDraft);
+    const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const designSystem = this.readEffectiveDesignSystem(
+      workspace?.designSystemDraft,
+      record.designSystemDraft,
+    );
     await this.reusables.assertDesignTokenDependenciesAvailable(
       workspaceId,
       siteId,
@@ -279,10 +284,15 @@ export class SiteService {
         message: `Site ${siteId} was not found in workspace ${workspaceId}`,
       });
     }
-    const draft = this.readDesignSystem(record.designSystemDraft);
-    const published = record.publishedDesignSystem
-      ? this.readDesignSystem(record.publishedDesignSystem)
-      : undefined;
+    const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const draft = this.readEffectiveDesignSystem(
+      workspace?.designSystemDraft,
+      record.designSystemDraft,
+    );
+    const published = this.readPublishedDesignSystem(
+      workspace?.publishedDesignSystem,
+      record.publishedDesignSystem,
+    );
     return SiteDesignSystemResponseSchema.parse({
       draft,
       ...(published ? { published } : {}),
@@ -597,6 +607,28 @@ export class SiteService {
       );
     }
     return parsed.data;
+  }
+
+  private readEffectiveDesignSystem(
+    workspaceValue: unknown,
+    siteValue: unknown,
+  ): SiteDesignSystem {
+    return (
+      mergeSiteDesignSystems(
+        this.readDesignSystem(workspaceValue),
+        siteValue ? this.readDesignSystem(siteValue) : undefined,
+      ) ?? createDefaultSiteDesignSystem()
+    );
+  }
+
+  private readPublishedDesignSystem(
+    workspaceValue: unknown,
+    siteValue: unknown,
+  ): SiteDesignSystem | undefined {
+    return mergeSiteDesignSystems(
+      workspaceValue ? this.readDesignSystem(workspaceValue) : undefined,
+      siteValue ? this.readDesignSystem(siteValue) : undefined,
+    );
   }
 }
 

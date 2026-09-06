@@ -29,6 +29,7 @@ import {
   type SegmentedOption,
 } from '../../app/ui/fields';
 import { normalizeHexColor, parseCssDimension } from '../../app/ui/field-utils';
+import { AssetPicker } from '../../app/collections/collection-field-controls';
 import type { BuilderViewport } from '../builder-adapter';
 import {
   createBuilderValidationIssue,
@@ -44,6 +45,7 @@ export type PropertyControlRendererProps = {
   value: unknown;
   description?: string | undefined;
   assets?: readonly Asset[];
+  workspaceId?: string;
   assetKind?: 'image' | 'video' | undefined;
   onChange: (value: unknown) => void;
   onReset?: (() => void) | undefined;
@@ -60,6 +62,13 @@ export type PropertyControlRendererProps = {
 
 function textValue(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
+}
+
+function isEntityId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
 }
 
 function requiredTextProperty(property: string): boolean {
@@ -218,6 +227,7 @@ export function PropertyControlRenderer({
   value,
   description,
   assets = [],
+  workspaceId,
   assetKind,
   onChange,
   onReset,
@@ -492,18 +502,39 @@ export function PropertyControlRenderer({
     );
     return wrap(
       <FieldShell label={definition.label} onReset={onReset}>
-        <SelectField
-          {...common}
-          onChange={(event) => onChange(event.target.value)}
-          value={string}
-        >
-          <option value="">Select a workspace asset</option>
-          {available.map((asset) => (
-            <option key={asset.id} value={asset.storageKey}>
-              {asset.filename}
-            </option>
-          ))}
-        </SelectField>
+        {workspaceId ? (
+          <AssetPicker
+            allowExternalUrl={assetKind === 'image'}
+            initialMediaType={assetKind ?? 'all'}
+            onAssetSelected={(asset) => onChange(asset.publicUrl ?? asset.storageKey)}
+            onChange={(assetId) => {
+              const asset = available.find((candidate) => candidate.id === assetId);
+              onChange(asset?.publicUrl ?? asset?.storageKey ?? assetId);
+            }}
+            onRemove={() => onChange('')}
+            value={
+              isEntityId(string)
+                ? string
+                : (available.find(
+                    (asset) => (asset.publicUrl ?? asset.storageKey) === string,
+                  )?.id ?? '')
+            }
+            workspaceId={workspaceId}
+          />
+        ) : (
+          <SelectField
+            {...common}
+            onChange={(event) => onChange(event.target.value)}
+            value={string}
+          >
+            <option value="">Select a workspace asset</option>
+            {available.map((asset) => (
+              <option key={asset.id} value={asset.publicUrl ?? asset.storageKey}>
+                {asset.filename}
+              </option>
+            ))}
+          </SelectField>
+        )}
         <TextField
           compact
           description="Or use a direct http(s) URL."

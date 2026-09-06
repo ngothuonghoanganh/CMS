@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import {
   AssetRecord,
   AssetSchema,
+  AssetFolderRecord,
+  AssetFolderSchema,
   AnalyticsEventRecord,
   AnalyticsEventSchema,
   AuthSessionRecord,
@@ -79,6 +81,7 @@ import type { Schema } from 'mongoose';
 
 const models = [
   [AssetRecord, AssetSchema],
+  [AssetFolderRecord, AssetFolderSchema],
   [AnalyticsEventRecord, AnalyticsEventSchema],
   [AuthSessionRecord, AuthSessionSchema],
   [CustomDomainRecord, CustomDomainSchema],

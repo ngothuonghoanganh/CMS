@@ -14,8 +14,7 @@ test('major CMS modules are independently deep-linkable and refresh-safe', async
     workspacePath,
     `${workspacePath}/sites`,
     `${sitePath}/pages`,
-    `${sitePath}/collections`,
-    `${sitePath}/navigation`,
+    `${workspacePath}/collections`,
     `${sitePath}/design-system`,
     `${workspacePath}/assets`,
     `${workspacePath}/templates`,
@@ -133,7 +132,7 @@ test('create routes keep resource lists quiet until the primary action is chosen
   await expect(page.getByRole('dialog', { name: 'New template' })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
 
-  const collectionsPath = `${workspacePath}/sites/${canonicalEnvironment.siteId}/collections`;
+  const collectionsPath = `${workspacePath}/collections`;
   await page.goto(collectionsPath);
   await expect(
     page.getByRole('heading', { name: 'Collections', exact: true }).first(),

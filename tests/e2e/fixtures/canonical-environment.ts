@@ -310,6 +310,14 @@ export async function resetCanonicalEnvironment(
       ),
     );
   }
+  // Keep the published fixture in sync with the draft reset. Workspace
+  // defaults are published-only in public rendering, so parity tests must
+  // explicitly publish this shared fixture state.
+  await json(
+    await request.post(
+      `${apiBase}/workspaces/${environment.workspaceId}/design-system/publish`,
+    ),
+  );
 
   const reusables = await json<{ items: Array<{ id: string; name: string }> }>(
     await request.get(

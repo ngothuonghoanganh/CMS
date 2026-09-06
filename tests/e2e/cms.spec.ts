@@ -65,7 +65,9 @@ async function dragWithRealPointer(
   expect(sourceBox).not.toBeNull();
   expect(targetBox).not.toBeNull();
   const sourceX = sourceBox!.x + sourceBox!.width / 2;
-  const sourceY = sourceBox!.y + sourceBox!.height / 2;
+  // Grab near the top edge so a container with full-width children is still
+  // draggable as a container rather than resolving to its centered child.
+  const sourceY = sourceBox!.y + Math.min(4, sourceBox!.height / 4);
   const targetX = targetBox!.x + targetBox!.width / 2;
   const targetY = targetBox!.y + Math.max(4, Math.min(48, targetBox!.height / 2));
   await page.mouse.move(sourceX, sourceY);

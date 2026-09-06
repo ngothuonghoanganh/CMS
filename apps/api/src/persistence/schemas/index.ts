@@ -1,4 +1,5 @@
 export { AssetRecord, AssetSchema } from './asset.schema';
+export { AssetFolderRecord, AssetFolderSchema } from './asset-folder.schema';
 export { AnalyticsEventRecord, AnalyticsEventSchema } from './analytics-event.schema';
 export { AuthSessionRecord, AuthSessionSchema } from './auth-session.schema';
 export { PageRecord, PageSchema } from './page.schema';

@@ -1,6 +1,17 @@
-import { Body, Controller, Get, Inject, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   CreateWorkspaceRequestSchema,
+  SiteDesignSystemSchema,
+  type SiteDesignSystem,
   type CreateWorkspaceRequest,
 } from '@payload/contracts';
 
@@ -60,6 +71,41 @@ export class WorkspaceController {
       workspaceId,
       requireRequestedWorkspace(principal, workspaceId),
       requireOrganizationId(principal),
+    );
+  }
+
+  @Get(':workspaceId/design-system')
+  async getDesignSystem(
+    @Param('workspaceId') workspaceId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.read', workspaceId);
+    return this.workspaceService.getDesignSystem(
+      requireRequestedWorkspace(principal, workspaceId),
+    );
+  }
+
+  @Patch(':workspaceId/design-system')
+  async updateDesignSystem(
+    @Param('workspaceId') workspaceId: string,
+    @Body(new ZodValidationPipe(SiteDesignSystemSchema)) input: SiteDesignSystem,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.update', workspaceId);
+    return this.workspaceService.updateDesignSystem(
+      requireRequestedWorkspace(principal, workspaceId),
+      input,
+    );
+  }
+
+  @Post(':workspaceId/design-system/publish')
+  async publishDesignSystem(
+    @Param('workspaceId') workspaceId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.update', workspaceId);
+    return this.workspaceService.publishDesignSystem(
+      requireRequestedWorkspace(principal, workspaceId),
     );
   }
 }

@@ -5,13 +5,14 @@ import {
   type FormField,
   type FormNode,
 } from '@payload/contracts';
-import React, { useState, type FormEvent } from 'react';
+import React, { useState, type CSSProperties, type FormEvent } from 'react';
 
 import { getAnalyticsSessionId } from './analytics-client';
 
 type FormRendererProps = {
   node: FormNode;
   submissionUrl?: string;
+  style?: CSSProperties;
 };
 
 type FormValue = string | boolean;
@@ -116,7 +117,7 @@ function FieldControl({
   }
 }
 
-export function FormRenderer({ node, submissionUrl }: FormRendererProps) {
+export function FormRenderer({ node, submissionUrl, style }: FormRendererProps) {
   const [values, setValues] = useState(() => initialValues(node));
   const [state, setState] = useState<FormState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +183,7 @@ export function FormRenderer({ node, submissionUrl }: FormRendererProps) {
       data-payload-node-id={node.id}
       data-payload-node-type="form"
       onSubmit={submit}
+      style={style}
     >
       {node.props.fields.map((field) => (
         <div className={PAGE_RUNTIME_CLASS_NAMES.formField} key={field.id}>

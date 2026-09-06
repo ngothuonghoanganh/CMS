@@ -6,13 +6,14 @@ import {
   NavigationItemsSchema,
   NavigationListResponseSchema,
   NavigationSchema,
+  navigationActionHref,
+  validateNavigationItems,
   PagePayloadSchema,
   ResolvedNavigationItemSchema,
   UpdateNavigationRequestSchema,
   normalizePagePath,
   type CreateNavigationRequest,
   type Navigation,
-  type NavigationActionType,
   type NavigationItem,
   type NavigationListResponse,
   type ResolvedNavigationItem,
@@ -55,6 +56,72 @@ export class NavigationService {
     return NavigationListResponseSchema.parse({
       items: records.map((record) => this.toContract(record)),
     });
+  }
+
+  /** Canonical workspace-owned navigation read. */
+  async listWorkspace(workspaceId: string): Promise<NavigationListResponse> {
+    const records = await this.navigationModel
+      .find({ workspaceId, siteId: { $exists: false } })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
+    return NavigationListResponseSchema.parse({
+      items: records.map((record) => this.toContract(record)),
+    });
+  }
+
+  async getWorkspace(workspaceId: string, navigationId: string): Promise<Navigation> {
+    const record = await this.navigationModel
+      .findOne({ _id: navigationId, workspaceId, siteId: { $exists: false } })
+      .exec();
+    if (!record) throw this.notFound(navigationId);
+    return this.toContract(record);
+  }
+
+  async createWorkspace(
+    workspaceId: string,
+    input: CreateNavigationRequest,
+  ): Promise<Navigation> {
+    const parsed = CreateNavigationRequestSchema.parse(input);
+    await this.validateItems(undefined, workspaceId, parsed.items);
+    try {
+      const record = await this.navigationModel.create({
+        _id: randomUUID(),
+        workspaceId,
+        name: parsed.name,
+        key: parsed.key,
+        items: parsed.items,
+      });
+      return this.toContract(record);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw this.duplicateKey();
+      throw error;
+    }
+  }
+
+  async updateWorkspace(
+    workspaceId: string,
+    navigationId: string,
+    input: UpdateNavigationRequest,
+  ): Promise<Navigation> {
+    const parsed = UpdateNavigationRequestSchema.parse(input);
+    const record = await this.navigationModel
+      .findOne({ _id: navigationId, workspaceId, siteId: { $exists: false } })
+      .exec();
+    if (!record) throw this.notFound(navigationId);
+    if (parsed.name !== undefined) record.name = parsed.name;
+    if (parsed.items !== undefined) {
+      await this.validateItems(undefined, workspaceId, parsed.items);
+      record.items = parsed.items;
+    }
+    await record.save();
+    return this.toContract(record);
+  }
+
+  async removeWorkspace(workspaceId: string, navigationId: string): Promise<void> {
+    const result = await this.navigationModel
+      .deleteOne({ _id: navigationId, workspaceId, siteId: { $exists: false } })
+      .exec();
+    if (!result.deletedCount) throw this.notFound(navigationId);
   }
 
   async get(
@@ -174,6 +241,36 @@ export class NavigationService {
     return result;
   }
 
+  /** Resolve page identities used by Builder-owned inline navigation items. */
+  async resolvePagePaths(
+    siteId: string,
+    workspaceId: string,
+    pageIds: readonly string[],
+    homePageId: string | undefined,
+    mode: 'draft' | 'published' = 'published',
+  ): Promise<Record<string, string>> {
+    if (pageIds.length === 0) return {};
+    const pages = await this.pageModel
+      .find({ _id: { $in: [...new Set(pageIds)] }, siteId, workspaceId })
+      .exec();
+    const result: Record<string, string> = {};
+    for (const page of pages) {
+      if (page.kind === 'dynamic') continue;
+      const versionId =
+        mode === 'published'
+          ? page.publishedVersionId
+          : (page.currentDraftVersionId ?? page.publishedVersionId);
+      if (!versionId) continue;
+      const id = page._id.toString();
+      const path =
+        id === homePageId
+          ? '/'
+          : normalizePagePath(page.path ?? (page.slug ? `/${page.slug}` : ''));
+      if (path) result[id] = path;
+    }
+    return result;
+  }
+
   private async resolveItems(
     siteId: string,
     workspaceId: string,
@@ -190,7 +287,7 @@ export class NavigationService {
           href = item.externalUrl;
         } else if (item.type === 'action') {
           if (!item.action) throw this.invalidTarget();
-          href = actionHref(item.action.type, item.action.value);
+          href = navigationActionHref(item.action.type, item.action.value);
         } else {
           if (!item.pageId) throw this.invalidTarget();
           const page = await this.pageModel
@@ -242,11 +339,21 @@ export class NavigationService {
   }
 
   private async validateItems(
-    siteId: string,
+    siteId: string | undefined,
     workspaceId: string,
     items: NavigationItem[],
     pageById?: Map<string, PageRecord>,
   ): Promise<void> {
+    const limits = validateNavigationItems(items);
+    if (!limits.valid) {
+      throw new ConflictException({
+        code:
+          limits.reason === 'node-limit'
+            ? 'NAVIGATION_NODE_LIMIT_EXCEEDED'
+            : 'NAVIGATION_PAYLOAD_TOO_LARGE',
+        message: 'Navigation data exceeds the supported size limit',
+      });
+    }
     const ids = new Set<string>();
     for (const item of flattenItems(items)) {
       if (ids.has(item.id)) {
@@ -260,7 +367,13 @@ export class NavigationService {
       if (!item.pageId) throw this.invalidTarget();
       const page =
         pageById?.get(item.pageId) ??
-        (await this.pageModel.findOne({ _id: item.pageId, siteId, workspaceId }).exec());
+        (await this.pageModel
+          .findOne({
+            _id: item.pageId,
+            workspaceId,
+            ...(siteId ? { siteId } : {}),
+          })
+          .exec());
       if (!page) throw this.invalidTarget();
       if (item.type === 'section') {
         if (!item.anchorId) throw this.invalidTarget();
@@ -311,7 +424,8 @@ export class NavigationService {
   private toContract(record: NavigationDocument): Navigation {
     return NavigationSchema.parse({
       id: record._id.toString(),
-      siteId: record.siteId,
+      ...(isEntityId(record.workspaceId) ? { workspaceId: record.workspaceId } : {}),
+      ...(record.siteId ? { siteId: record.siteId } : {}),
       name: record.name,
       key: record.key,
       items: this.readItems(record),
@@ -340,13 +454,57 @@ export class NavigationService {
       message: 'Navigation contains invalid persisted items',
     });
   }
+
+  private duplicateKey(): ConflictException {
+    return new ConflictException({
+      code: 'DUPLICATE_NAVIGATION_KEY',
+      message: 'A navigation with this key already exists in the workspace',
+    });
+  }
+}
+
+/** Collect page references without recursively walking an untrusted tree. */
+export function collectNavigationPageIds(value: unknown): string[] {
+  const ids = new Set<string>();
+  const pending: unknown[] = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      pending.push(...current);
+      continue;
+    }
+    if (!current || typeof current !== 'object') continue;
+    const record = current as Record<string, unknown>;
+    if (
+      (record.type === 'page' || record.type === 'section') &&
+      typeof record.pageId === 'string'
+    ) {
+      ids.add(record.pageId);
+    }
+    pending.push(...Object.values(record));
+  }
+  return [...ids];
+}
+
+function isEntityId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/.test(
+      value,
+    )
+  );
 }
 
 function flattenItems(items: NavigationItem[]): NavigationItem[] {
-  return items.flatMap((item) => [
-    item,
-    ...(item.children ? flattenItems(item.children) : []),
-  ]);
+  const result: NavigationItem[] = [];
+  const pending = [...items].reverse();
+  while (pending.length) {
+    const item = pending.pop();
+    if (!item) continue;
+    result.push(item);
+    if (item.children?.length) pending.push(...[...item.children].reverse());
+  }
+  return result;
 }
 
 function containsPage(record: NavigationDocument, pageId: string): boolean {
@@ -381,12 +539,6 @@ function hasNodeId(node: { id: string; children: unknown[] }, target: string): b
     }
     return hasNodeId(child as { id: string; children: unknown[] }, target);
   });
-}
-
-function actionHref(type: NavigationActionType, value: string): string {
-  if (type === 'phone') return `tel:${value}`;
-  if (type === 'email') return value.startsWith('mailto:') ? value : `mailto:${value}`;
-  return value;
 }
 
 function isDuplicateKeyError(error: unknown): boolean {

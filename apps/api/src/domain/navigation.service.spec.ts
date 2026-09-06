@@ -93,6 +93,37 @@ describe('NavigationService menu data semantics', () => {
     expect(publicNavigation?.main).toEqual([]);
   });
 
+  it('resolves Builder-owned page references to stable public paths', async () => {
+    const service = Object.create(NavigationService.prototype) as NavigationService;
+    const state = internals(service);
+    state.pageModel = {
+      find: vi.fn().mockReturnValue(
+        cursor([
+          {
+            ...page(homePageId, true),
+            path: '/',
+          },
+          page(campaignPageId, true),
+        ]),
+      ),
+      findOne: vi.fn(),
+    };
+
+    await expect(
+      service.resolvePagePaths(
+        'site-1',
+        'workspace-1',
+        [homePageId, campaignPageId],
+        homePageId,
+      ),
+    ).resolves.toEqual({ [homePageId]: '/', [campaignPageId]: `/${campaignPageId}` });
+    expect(state.pageModel.find).toHaveBeenCalledWith({
+      _id: { $in: [homePageId, campaignPageId] },
+      siteId: 'site-1',
+      workspaceId: 'workspace-1',
+    });
+  });
+
   it('hides a section whose anchor is absent from the published payload', async () => {
     const service = Object.create(NavigationService.prototype) as NavigationService;
     const state = internals(service);

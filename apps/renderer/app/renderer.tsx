@@ -38,6 +38,8 @@ import {
   type PageRuntimeExtension,
   type PageLayoutSlot,
   type ResolvedNavigationItem,
+  type NavigationItem,
+  type NavigationPagePaths,
   SiteGlobalPayloadV1Schema,
   type SiteGlobals,
   PAGE_RESPONSIVE_BREAKPOINTS,
@@ -48,6 +50,8 @@ import {
   pageStyleReactProperty,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   resolvePageStyleValue,
+  resolveDesignSystemComponentDefaults,
+  navigationActionHref,
   type ReusableRuntime,
   type SiteDesignSystem,
 } from '@payload/contracts';
@@ -129,6 +133,7 @@ export type RenderContext = {
     | {
         main?: readonly ResolvedNavigationItem[] | undefined;
         footer?: readonly ResolvedNavigationItem[] | undefined;
+        pagePaths?: NavigationPagePaths | undefined;
       }
     | undefined;
   globals?: SiteGlobals | undefined;
@@ -167,7 +172,14 @@ function styleBlockToProperties(
 }
 
 function nodeStyle(node: RenderableNode, context: RenderContext = {}): CSSProperties {
-  const style = styleBlockToProperties(node.style?.base, context);
+  const defaults = resolveDesignSystemComponentDefaults(context.designSystem, node.type);
+  const style = styleBlockToProperties(
+    {
+      ...(defaults?.style?.base ?? {}),
+      ...(node.style?.base ?? {}),
+    },
+    context,
+  );
   // `props.align` is retained only as a legacy fallback. New edits are
   // written to style.textAlign, which must win whenever it is authored.
   if (node.type === 'text' && !node.style?.base?.textAlign && node.props.align) {
@@ -184,9 +196,42 @@ function nodePartStyle(
   const partsStyle = (
     node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
   ).partsStyle;
-  return partsStyle?.[part]
-    ? styleBlockToProperties(partsStyle[part].base, context)
-    : undefined;
+  const defaults = resolveDesignSystemComponentDefaults(context.designSystem, node.type);
+  const defaultPart = defaults?.partsStyle?.[part];
+  const localPart = partsStyle?.[part];
+  if (!defaultPart && !localPart) return undefined;
+  return styleBlockToProperties(
+    { ...(defaultPart?.base ?? {}), ...(localPart?.base ?? {}) },
+    context,
+  );
+}
+
+function nodeViewportStyle(
+  node: RenderableNode,
+  viewport: 'tablet' | 'mobile',
+  context: RenderContext,
+): Record<string, unknown> {
+  const defaults = resolveDesignSystemComponentDefaults(context.designSystem, node.type);
+  return {
+    ...(defaults?.style?.[viewport] ?? {}),
+    ...(node.style?.[viewport] ?? {}),
+  };
+}
+
+function nodePartViewportStyle(
+  node: RenderableNode,
+  part: string,
+  viewport: 'tablet' | 'mobile',
+  context: RenderContext,
+): Record<string, unknown> {
+  const defaults = resolveDesignSystemComponentDefaults(context.designSystem!, node.type);
+  const localParts = (
+    node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
+  ).partsStyle;
+  return {
+    ...(defaults?.partsStyle?.[part]?.[viewport] ?? {}),
+    ...(localParts?.[part]?.[viewport] ?? {}),
+  };
 }
 
 function nodeAttributes(node: RenderableNode): {
@@ -591,7 +636,13 @@ function renderForm(node: FormNode, context: RenderContext): ReactElement {
   const submissionUrl = context.siteSlug
     ? `${apiBaseUrl}/public/sites/${encodeURIComponent(context.siteSlug)}/forms/${encodeURIComponent(node.id)}/submissions?path=${encodeURIComponent(pagePath)}${context.tenantSlug ? `&tenantSlug=${encodeURIComponent(context.tenantSlug)}` : ''}`
     : undefined;
-  return <FormRenderer node={node} {...(submissionUrl ? { submissionUrl } : {})} />;
+  return (
+    <FormRenderer
+      node={node}
+      {...(submissionUrl ? { submissionUrl } : {})}
+      style={nodeStyle(node, context)}
+    />
+  );
 }
 
 function renderNavigationView(
@@ -599,9 +650,10 @@ function renderNavigationView(
   context: RenderContext,
 ): ReactElement {
   const items =
-    node.props.source === 'footer'
+    inlineNavigationItems(node.props.items, context.navigation?.pagePaths) ??
+    (node.props.source === 'footer'
       ? (context.navigation?.footer ?? [])
-      : (context.navigation?.main ?? []);
+      : (context.navigation?.main ?? []));
   return (
     <NavigationViewRuntime
       alignment={node.props.alignment}
@@ -626,6 +678,43 @@ function renderNavigationView(
       siteSlug={context.siteSlug}
     />
   );
+}
+
+function inlineNavigationItems(
+  items: readonly NavigationItem[] | undefined,
+  pagePaths?: NavigationPagePaths,
+): ResolvedNavigationItem[] | undefined {
+  if (!items?.length) return undefined;
+  return items.flatMap((item) => {
+    const pagePath =
+      item.type === 'page' || item.type === 'section'
+        ? pagePaths?.[item.pageId ?? '']
+        : undefined;
+    if ((item.type === 'page' || item.type === 'section') && pagePaths && !pagePath) {
+      return [];
+    }
+    return [
+      {
+        id: item.id,
+        label: item.label,
+        type: item.type,
+        href:
+          item.type === 'external'
+            ? (item.externalUrl ?? '#')
+            : item.type === 'section'
+              ? `${pagePath ?? ''}#${item.anchorId ?? item.id}`
+              : item.type === 'action'
+                ? item.action
+                  ? navigationActionHref(item.action.type, item.action.value)
+                  : '#'
+                : (pagePath ?? `#${item.pageId ?? item.id}`),
+        ...(item.openInNewTab !== undefined ? { openInNewTab: item.openInNewTab } : {}),
+        ...(item.children?.length
+          ? { children: inlineNavigationItems(item.children, pagePaths) }
+          : {}),
+      },
+    ];
+  });
 }
 
 function renderSiteBrand(
@@ -922,7 +1011,7 @@ function responsiveRules(
   rules: ResponsiveRule[],
   context: RenderContext,
 ): void {
-  const style = node.style?.[viewport];
+  const style = nodeViewportStyle(node, viewport, context);
   const declarations = style
     ? Object.entries(style)
         .flatMap(([property, value]) => {
@@ -948,26 +1037,28 @@ function responsiveRules(
     });
   }
 
-  for (const [partName, partStyle] of Object.entries(
+  for (const [partName] of Object.entries(
     (node as { partsStyle?: Record<string, PageNodeStyle> }).partsStyle ?? {},
   )) {
-    const partDeclarations = partStyle[viewport]
-      ? Object.entries(partStyle[viewport] ?? {})
-          .flatMap(([property, value]) => {
-            const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
-            if (!definition || (typeof value !== 'string' && typeof value !== 'object'))
-              return [];
-            const resolved = resolvePageStyleValue(
-              value as string | { kind: 'token'; tokenId: string },
-              context.designSystem,
-              definition.key,
-            );
-            return resolved && isSafePageStyleValue(resolved)
-              ? [`${definition.cssProperty}:${resolved}!important`]
-              : [];
-          })
-          .join(';')
-      : '';
+    const partViewportStyle = nodePartViewportStyle(node, partName, viewport, context);
+    const partDeclarations =
+      Object.keys(partViewportStyle).length > 0
+        ? Object.entries(partViewportStyle)
+            .flatMap(([property, value]) => {
+              const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
+              if (!definition || (typeof value !== 'string' && typeof value !== 'object'))
+                return [];
+              const resolved = resolvePageStyleValue(
+                value as string | { kind: 'token'; tokenId: string },
+                context.designSystem,
+                definition.key,
+              );
+              return resolved && isSafePageStyleValue(resolved)
+                ? [`${definition.cssProperty}:${resolved}!important`]
+                : [];
+            })
+            .join(';')
+        : '';
     if (partDeclarations) {
       rules.push({
         selector:

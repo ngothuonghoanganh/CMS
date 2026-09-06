@@ -111,11 +111,12 @@ async function requestWithoutDedup<T>(
   init?: RequestInit,
   allowRefresh = true,
 ): Promise<T> {
+  const isMultipart = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.body && !isMultipart ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
   });
@@ -168,5 +169,8 @@ export const api = {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       method: 'POST',
     });
+  },
+  upload<T>(path: string, body: FormData): Promise<T> {
+    return request<T>(path, { body, method: 'POST' });
   },
 };

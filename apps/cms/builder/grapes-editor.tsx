@@ -15,10 +15,12 @@ import {
   type BuilderViewport,
   applyEditorViewportStyle,
   applyEditorPartViewportStyles,
+  applyEditorComponentDefaultStyle,
   createBlockDefinition,
   createExtensionBlockDefinition,
   createReusableInstanceDefinition,
   reusableDocumentToEditorDefinition,
+  refreshNavigationPreview,
   countdownPreviewComponents,
   formPreviewComponents,
   isBuilderNodeType,
@@ -80,6 +82,7 @@ import {
   type SiteDesignSystem,
   type StyleTokenReference,
   type ResolvedNavigationItem,
+  type NavigationPagePaths,
 } from '@payload/contracts';
 
 import {
@@ -183,6 +186,7 @@ type GrapesEditorProps = {
   navigation?: {
     main?: readonly ResolvedNavigationItem[];
     footer?: readonly ResolvedNavigationItem[];
+    pagePaths?: NavigationPagePaths;
   };
   onDirty: () => void;
   onDocumentChange: (document: PageDocument | SiteGlobalPayloadV1) => void;
@@ -201,6 +205,16 @@ const allViewports: BuilderViewport[] = ['desktop', 'tablet', 'mobile'];
 
 function isPayloadNodeType(value: unknown): value is BuilderNodeType {
   return isBuilderNodeType(value);
+}
+
+function isGlobalRootForDocument(
+  documentKind: BuilderDocumentKind,
+  childType: BuilderNodeType,
+): boolean {
+  return (
+    (documentKind === 'site-header' && childType === 'global-header') ||
+    (documentKind === 'site-footer' && childType === 'global-footer')
+  );
 }
 
 function canInsertIntoComponent(
@@ -248,6 +262,22 @@ function ensureAllFormPreviews(root: Component): void {
   root.onAll((component) => {
     const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
     if (type === 'form') ensureFormPreview(component);
+  });
+}
+
+function refreshAllNavigationPreviews(
+  root: Component,
+  projectionContext: {
+    navigation?: {
+      main?: readonly ResolvedNavigationItem[];
+      footer?: readonly ResolvedNavigationItem[];
+    };
+    navigationPagePaths?: NavigationPagePaths;
+  },
+): void {
+  root.onAll((component) => {
+    if (payloadNodeType(component) !== 'navigation-view') return;
+    refreshNavigationPreview(component, projectionContext);
   });
 }
 
@@ -615,6 +645,9 @@ function bindCanvasComponentDrag(
   };
   const onMove = (event: MouseEvent) => {
     if (!state) return;
+    // This capture handler is the source of truth for Canvas movement. Consume
+    // the event before GrapesJS' delegated sorter can reorder the live model.
+    event.stopImmediatePropagation();
     if (state.kind === 'pan') {
       panCanvas(editor, event.clientX - state.startX, event.clientY - state.startY);
       state.startX = event.clientX;
@@ -677,6 +710,7 @@ function bindCanvasComponentDrag(
   };
   const onUp = (event: MouseEvent) => {
     if (!state) return;
+    event.stopImmediatePropagation();
     const current = state;
     cleanupState();
     if (current.kind === 'pan' || !current.dragging) return;
@@ -692,7 +726,8 @@ function bindCanvasComponentDrag(
           event.clientY,
         );
       if (intent) {
-        commitMove(intent);
+        const validation = validateNodeIntent(root, intent);
+        if (validation.valid) commitMove(intent);
       }
     }
   };
@@ -712,6 +747,7 @@ function bindCanvasComponentDrag(
       state = { kind: 'pan', startX: event.clientX, startY: event.clientY };
       document.body.classList.add('builder-canvas-panning');
       setCanvasInteractionClass(editor, modeRef.current, true);
+      event.stopImmediatePropagation();
       event.preventDefault();
       return;
     }
@@ -728,6 +764,7 @@ function bindCanvasComponentDrag(
       startY: event.clientY,
       dragging: false,
     };
+    event.stopImmediatePropagation();
     event.preventDefault();
   };
 
@@ -885,6 +922,8 @@ function applyAllViewportStyles(
   root.onAll((component) => {
     components.push(component);
     applyEditorViewportStyle(component, viewport, designSystem);
+    const type = payloadNodeType(component);
+    if (type) applyEditorComponentDefaultStyle(component, type, viewport, designSystem);
   });
   // Part presentation is a second pass so a parent compound part cannot be
   // overwritten by the ordinary inline style of its projected child. Reverse
@@ -1151,6 +1190,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       main?: readonly ResolvedNavigationItem[];
       footer?: readonly ResolvedNavigationItem[];
     };
+    navigationPagePaths?: NavigationPagePaths;
   }>({});
   const interactionModeRef = useRef<InteractionMode>('select');
   const temporaryPanRef = useRef(false);
@@ -1176,6 +1216,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     ...(siteName !== undefined ? { siteName } : {}),
     ...(siteLogo !== undefined ? { siteLogo } : {}),
     ...(navigation !== undefined ? { navigation } : {}),
+    ...(navigation?.pagePaths ? { navigationPagePaths: navigation.pagePaths } : {}),
   };
 
   function getRoot(editor: Editor): Component {
@@ -1423,6 +1464,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       internalChangeRef.current = wasInternalChange;
     });
     if (!result.changed) return result;
+    if (command.kind === 'set-property') {
+      const changedNode = findPayloadComponent(getRoot(editor), command.nodeId);
+      if (changedNode && payloadNodeType(changedNode) === 'navigation-view') {
+        refreshNavigationPreview(changedNode, projectionContextRef.current);
+      }
+    }
     if (result.selection) {
       const expectedSelectionId = payloadNodeId(result.selection) ?? '';
       pendingProgrammaticSelectionRef.current = expectedSelectionId;
@@ -1515,6 +1562,19 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       const existing = root
         .components()
         .models.filter((child) => payloadNodeType(child) === globalType);
+      if (existing.length === 0) {
+        // A user can remove the global root from the canvas. Restore it only
+        // when the document root is otherwise empty so we never create an
+        // invalid document with multiple top-level layout nodes.
+        if (root.components().models.length > 0) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'insert',
+          definition,
+          parentId: payloadNodeId(root) ?? '',
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      }
       if (existing.length !== 1) return false;
       const target = existing[0];
       if (!target) return false;
@@ -1605,11 +1665,18 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return;
-        if (documentKind !== 'page' && isGlobalBuilderPresetId(type)) {
+        if (
+          documentKind !== 'page' &&
+          (isGlobalRootForDocument(documentKind, childType) ||
+            isGlobalBuilderPresetId(type))
+        ) {
+          // A Header/Footer document must keep exactly one global root child.
+          // Treat the root block as a safe reset of that existing component,
+          // rather than inserting a nested or duplicate global root.
           applyGlobalPreset(editor, definition);
           return;
         }
-        const selected = editor.getSelected();
+        const selected = getSelectedComponent(editor);
         const selectedType = selected?.getAttributes({ noStyle: true })[
           BUILDER_NODE_TYPE_ATTRIBUTE
         ];
@@ -1660,7 +1727,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const editor = editorRef.current;
         if (!editor) return;
         const definition = createExtensionBlockDefinition(extensionId);
-        const selected = editor.getSelected();
+        const selected = getSelectedComponent(editor);
         const selectedType = selected?.getAttributes({ noStyle: true })[
           BUILDER_NODE_TYPE_ATTRIBUTE
         ];
@@ -1699,7 +1766,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const childType = insertableNodeType(definition);
         if (childType !== 'global-header' && childType !== 'global-footer') return;
         getRoot(editor).addAttributes({ [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: '7' });
-        const selected = editor.getSelected();
+        const selected = getSelectedComponent(editor);
         const selectedType = selected?.getAttributes({ noStyle: true })[
           BUILDER_NODE_TYPE_ATTRIBUTE
         ];
@@ -2120,7 +2187,11 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return false;
-        if (documentKind !== 'page' && isGlobalBuilderPresetId(type)) {
+        if (
+          documentKind !== 'page' &&
+          (isGlobalRootForDocument(documentKind, childType) ||
+            isGlobalBuilderPresetId(type))
+        ) {
           return applyGlobalPreset(editor, definition);
         }
         if (placement) {
@@ -2847,6 +2918,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           callbacksRef.current.onSelectionChange(selectionFromComponent(selected));
         };
         const handleComponentDragEnd = () => handleComponentUpdate();
+        const handleNativeComponentDragStart = (event: { cancelled?: boolean }) => {
+          // Payload owns structural movement through MoveNodeIntent. Cancel
+          // GrapesJS' fallback sorter so an invalid drop cannot mutate the
+          // live model outside the command bus.
+          event.cancelled = true;
+        };
         // GrapesJS emits `component:input` for every RTE keystroke. Refresh the
         // selected snapshot from the live model so Canvas inline edits appear
         // in Content without requiring a second selection.
@@ -2860,6 +2937,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         editor.on('component:update', handleComponentUpdate);
         editor.on('component:add', handleComponentUpdate);
         editor.on('component:remove', handleComponentUpdate);
+        editor.on('component:drag:start', handleNativeComponentDragStart);
         editor.on('component:drag:end', handleComponentDragEnd);
         editor.on('component:styleUpdate', handleComponentUpdate);
         editor.on('component:input', handleComponentInput);
@@ -2918,6 +2996,22 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       editor?.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const wasInternalChange = internalChangeRef.current;
+    internalChangeRef.current = true;
+    try {
+      editor
+        .getModel()
+        .skip(() =>
+          refreshAllNavigationPreviews(getRoot(editor), projectionContextRef.current),
+        );
+    } finally {
+      internalChangeRef.current = wasInternalChange;
+    }
+  }, [navigation?.pagePaths]);
 
   return (
     <div

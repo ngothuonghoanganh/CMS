@@ -36,7 +36,7 @@ test('Phase 17.1 keeps compound duplicate identity canonical', async ({
   await expect(
     page.getByText('Add a button block to your page.', { exact: true }),
   ).toBeVisible();
-  await page.getByLabel('Search components').fill('navigation');
+  await page.getByLabel('Search components').fill('no-such-component');
   await expect(page.getByRole('button', { name: 'Button add', exact: true })).toHaveCount(
     0,
   );

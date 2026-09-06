@@ -505,20 +505,6 @@ function SiteDetail({
           </button>
           <button
             className="button button-secondary"
-            onClick={() => router.push(`${sitePath(workspaceId, site.id)}/collections`)}
-            type="button"
-          >
-            Collections
-          </button>
-          <button
-            className="button button-secondary"
-            onClick={() => router.push(`${sitePath(workspaceId, site.id)}/navigation`)}
-            type="button"
-          >
-            Navigation
-          </button>
-          <button
-            className="button button-secondary"
             onClick={() => router.push(`${sitePath(workspaceId, site.id)}/design-system`)}
             type="button"
           >

@@ -426,3 +426,295 @@ export class CollectionController {
       .catch(() => undefined);
   }
 }
+
+/** Workspace-owned collection API. The site-prefixed controller above remains
+ * as a compatibility read/write surface until legacy rows are migrated. */
+@Controller('workspaces/:workspaceId/collections')
+@UseGuards(AuthenticationGuard)
+export class WorkspaceCollectionController {
+  constructor(
+    @Inject(CollectionService) private readonly collections: CollectionService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+  ) {}
+
+  @Get()
+  async list(
+    @Param('workspaceId') workspaceId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.CollectionRead,
+      workspaceId,
+    );
+    return this.collections.list(requireRequestedWorkspace(principal, workspaceId));
+  }
+
+  @Post()
+  async create(
+    @Param('workspaceId') workspaceId: string,
+    @Body(new ZodValidationPipe(CreateCollectionRequestSchema))
+    input: CreateCollectionRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.CollectionCreate,
+      workspaceId,
+    );
+    return this.collections.create(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      input,
+    );
+  }
+
+  @Get(':collectionId')
+  async get(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.CollectionRead,
+      workspaceId,
+    );
+    return this.collections.get(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+    );
+  }
+
+  @Patch(':collectionId')
+  async update(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Body(new ZodValidationPipe(UpdateCollectionRequestSchema))
+    input: UpdateCollectionRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.CollectionUpdate,
+      workspaceId,
+    );
+    return this.collections.update(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      input,
+    );
+  }
+
+  @Delete(':collectionId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async archive(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ): Promise<void> {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.CollectionDelete,
+      workspaceId,
+    );
+    await this.collections.archive(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+    );
+  }
+
+  @Get(':collectionId/usage')
+  async usage(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.CollectionRead,
+      workspaceId,
+    );
+    return {
+      collectionId,
+      references: await this.collections.getUsage(
+        requireRequestedWorkspace(principal, workspaceId),
+        undefined,
+        collectionId,
+      ),
+    };
+  }
+
+  @Get(':collectionId/entries')
+  async listEntries(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Query(new ZodValidationPipe(CollectionEntryListQuerySchema))
+    query: CollectionEntryListQuery,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryRead,
+      workspaceId,
+    );
+    return this.collections.listEntries(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      query,
+    );
+  }
+
+  @Post(':collectionId/entries')
+  async createEntry(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Body(new ZodValidationPipe(CreateCollectionEntryRequestSchema))
+    input: CreateCollectionEntryRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryCreate,
+      workspaceId,
+    );
+    return this.collections.createEntry(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      input,
+      principal?.subject,
+    );
+  }
+
+  @Get(':collectionId/entries/:entryId')
+  async getEntry(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Param('entryId') entryId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryRead,
+      workspaceId,
+    );
+    return this.collections.getEntry(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      entryId,
+    );
+  }
+
+  @Patch(':collectionId/entries/:entryId')
+  async updateEntry(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Param('entryId') entryId: string,
+    @Body(new ZodValidationPipe(UpdateCollectionEntryRequestSchema))
+    input: UpdateCollectionEntryRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryUpdate,
+      workspaceId,
+    );
+    return this.collections.updateEntry(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      entryId,
+      input,
+      principal?.subject,
+    );
+  }
+
+  @Post(':collectionId/entries/:entryId/publish')
+  async publishEntry(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Param('entryId') entryId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryPublish,
+      workspaceId,
+    );
+    return this.collections.publishEntry(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      entryId,
+    );
+  }
+
+  @Post(':collectionId/entries/:entryId/discard')
+  async discardEntry(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Param('entryId') entryId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryUpdate,
+      workspaceId,
+    );
+    return this.collections.discardDraft(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      entryId,
+    );
+  }
+
+  @Delete(':collectionId/entries/:entryId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async archiveEntry(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Param('entryId') entryId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ): Promise<void> {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryDelete,
+      workspaceId,
+    );
+    await this.collections.archiveEntry(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      entryId,
+    );
+  }
+
+  @Post(':collectionId/query')
+  async query(
+    @Param('workspaceId') workspaceId: string,
+    @Param('collectionId') collectionId: string,
+    @Body(new ZodValidationPipe(CollectionQueryRequestSchema))
+    input: CollectionQueryRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(
+      principal,
+      TenantPermissions.EntryRead,
+      workspaceId,
+    );
+    return this.collections.query(
+      requireRequestedWorkspace(principal, workspaceId),
+      undefined,
+      collectionId,
+      input,
+      'draft',
+    );
+  }
+}

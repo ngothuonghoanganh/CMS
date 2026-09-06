@@ -78,6 +78,45 @@ function footerDocument(text: string) {
   };
 }
 
+function legacyNavigationProps() {
+  return {
+    source: 'main',
+    orientation: 'horizontal',
+    mobileBehavior: 'collapse',
+    alignment: 'left',
+    ariaLabel: 'Main navigation',
+  };
+}
+
+function globalNavigationDocument(kind: 'site-header' | 'site-footer') {
+  const globalType = kind === 'site-header' ? 'global-header' : 'global-footer';
+  return {
+    version: 1,
+    documentKind: kind,
+    metadata: { documentTitle: kind },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [
+        {
+          id: nodeId(globalType),
+          type: globalType,
+          props: kind === 'site-header' ? { position: 'static' } : {},
+          children: [
+            {
+              id: nodeId('navigation'),
+              type: 'navigation-view',
+              props: legacyNavigationProps(),
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 async function responseJson<T>(
   response: import('@playwright/test').APIResponse,
 ): Promise<T> {
@@ -196,6 +235,23 @@ test('layout resources publish independently and render only when explicitly att
   for (const tab of ['Layouts', 'Elements', 'Saved', 'Templates']) {
     await expect(page.getByRole('tab', { name: tab, exact: true })).toBeVisible();
   }
+  await expect(
+    page.getByRole('button', { name: 'Global Header add', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Global Header add', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Remove selected element', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Global Header add', exact: true }).click();
+  const resetHeader = await page.evaluate(() => {
+    const debug = (
+      window as Window & { __payloadBuilderDebug?: { getPayload: () => unknown } }
+    ).__payloadBuilderDebug;
+    return debug?.getPayload();
+  });
+  expect(
+    (resetHeader as { root: BuilderNode }).root.children.map((child) => child.type),
+  ).toEqual(['global-header']);
   await page.getByRole('button', { name: 'Site Brand add', exact: true }).click();
   const document = await page.evaluate(() => {
     const debug = (
@@ -280,6 +336,23 @@ test('footer layout builder exposes blocks and publishes to an attached page', a
   await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeVisible({
     timeout: 15_000,
   });
+  await expect(
+    page.getByRole('button', { name: 'Global Footer add', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Global Footer add', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Remove selected element', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Global Footer add', exact: true }).click();
+  const resetFooter = await page.evaluate(() => {
+    const debug = (
+      window as Window & { __payloadBuilderDebug?: { getPayload: () => unknown } }
+    ).__payloadBuilderDebug;
+    return debug?.getPayload();
+  });
+  expect(
+    (resetFooter as { root: BuilderNode }).root.children.map((child) => child.type),
+  ).toEqual(['global-footer']);
   await page.getByRole('button', { name: 'Site Brand add', exact: true }).click();
   const document = await page.evaluate(() => {
     const debug = (
@@ -314,6 +387,268 @@ test('footer layout builder exposes blocks and publishes to an attached page', a
   await expect(page.locator('[data-payload-node-type="site-brand"]')).toContainText(
     canonicalEnvironment.siteName,
   );
+});
+
+test('header and footer menus can be removed and added again in the inspector', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  test.setTimeout(120_000);
+  const layouts = await Promise.all(
+    (
+      [
+        ['headers', 'header', 'site-header'],
+        ['footers', 'footer', 'site-footer'],
+      ] as const
+    ).map(async ([pathKind, resourceKind, documentKind]) => ({
+      pathKind,
+      id: (
+        await responseJson<{ id: string }>(
+          await request.post(
+            `${apiBaseUrl}/sites/${canonicalEnvironment.siteId}/layouts/${pathKind}`,
+            {
+              data: {
+                kind: resourceKind,
+                name: `__e2e__ Menu reset ${resourceKind} ${Date.now()}`,
+                document: globalNavigationDocument(documentKind),
+              },
+            },
+          ),
+        )
+      ).id,
+    })),
+  );
+
+  try {
+    await loginToCanonicalBuilder(page);
+    await switchCanonicalBrowserContext(page, canonicalEnvironment);
+    for (const layout of layouts) {
+      await page.goto(
+        `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/layouts/${layout.pathKind}/${layout.id}/builder`,
+      );
+      await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeVisible({
+        timeout: 15_000,
+      });
+      await page.getByRole('button', { name: 'Layers', exact: true }).click();
+      await page
+        .getByRole('treeitem', { name: 'Select Navigation', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Remove selected element', exact: true })
+        .click();
+      await expect(
+        page.getByRole('treeitem', { name: 'Select Navigation', exact: true }),
+      ).toHaveCount(0);
+      await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
+      await page.getByRole('tab', { name: 'Elements', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Navigation View add', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Navigation View add', exact: true })
+        .click();
+      await page.getByRole('button', { name: 'Layers', exact: true }).click();
+      await expect(
+        page.getByRole('treeitem', { name: 'Select Navigation', exact: true }),
+      ).toHaveCount(2);
+      await page
+        .getByRole('treeitem', { name: 'Select Navigation', exact: true })
+        .last()
+        .click();
+      await expect(page.getByText('Menu items', { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: '+ Add item', exact: true }).click();
+      await page.getByRole('button', { name: 'Remove', exact: true }).click();
+      await expect(
+        page.getByText('Add items to own this menu in the Builder.', { exact: false }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: '+ Add item', exact: true }).click();
+
+      const payload = await page.evaluate(() => {
+        const debug = (
+          window as Window & { __payloadBuilderDebug?: { getPayload: () => unknown } }
+        ).__payloadBuilderDebug;
+        return debug?.getPayload();
+      });
+      const navigations = (
+        payload as {
+          root: {
+            children: Array<{ children: Array<{ type: string; props: unknown }> }>;
+          };
+        }
+      ).root.children[0]?.children.filter((child) => child.type === 'navigation-view');
+      expect(navigations).toHaveLength(2);
+      expect(
+        navigations.some((navigation) =>
+          (navigation.props as { items?: Array<{ label: string }> }).items?.some(
+            (item) => item.label === 'New item',
+          ),
+        ),
+      ).toBe(true);
+    }
+  } finally {
+    await Promise.all(
+      layouts.map(async (layout) => {
+        const deleted = await request.delete(
+          `${apiBaseUrl}/workspaces/${canonicalEnvironment.workspaceId}/layouts/${layout.pathKind}/${layout.id}`,
+        );
+        expect([204, 404]).toContain(deleted.status());
+      }),
+    );
+  }
+});
+
+test('navbar property fields accept edits and persist after save and reload', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  test.setTimeout(120_000);
+  const layout = await responseJson<{ id: string }>(
+    await request.post(
+      `${apiBaseUrl}/sites/${canonicalEnvironment.siteId}/layouts/headers`,
+      {
+        data: {
+          kind: 'header',
+          name: `__e2e__ Navbar properties ${Date.now()}`,
+          document: globalNavigationDocument('site-header'),
+        },
+      },
+    ),
+  );
+  let sectionPageId: string | undefined;
+
+  try {
+    const sectionPage = await responseJson<{ id: string }>(
+      await request.post(`${apiBaseUrl}/sites/${canonicalEnvironment.siteId}/pages`, {
+        data: {
+          name: `__e2e__ Navbar section ${Date.now()}`,
+          slug: `e2e-navbar-section-${Date.now()}`,
+          anchors: ['details'],
+          payload: {
+            version: 1,
+            metadata: { documentTitle: 'Navbar section' },
+            root: { id: 'root', type: 'root', props: {}, children: [] },
+          },
+        },
+      }),
+    );
+    sectionPageId = sectionPage.id;
+    await loginToCanonicalBuilder(page);
+    await switchCanonicalBrowserContext(page, canonicalEnvironment);
+    await page.goto(
+      `/workspaces/${canonicalEnvironment.workspaceId}/layouts/headers/${layout.id}/builder`,
+    );
+    await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByLabel('Preview site', { exact: true })).toHaveValue(
+      canonicalEnvironment.siteId,
+    );
+    await page.getByRole('button', { name: 'Layers', exact: true }).click();
+    await page.getByRole('treeitem', { name: 'Select Navigation', exact: true }).click();
+    await page.getByLabel('Navigation source', { exact: true }).selectOption('footer');
+    await page.getByLabel('Orientation', { exact: true }).selectOption('vertical');
+    await page.getByLabel('Mobile behavior', { exact: true }).selectOption('stack');
+    await page.getByLabel('Alignment', { exact: true }).selectOption('center');
+    await page.getByLabel('Accessible label', { exact: true }).fill('Footer navigation');
+    await page.getByRole('button', { name: '+ Add item', exact: true }).click();
+
+    await page.getByLabel('Label', { exact: true }).first().fill('Home');
+    await expect(
+      page
+        .frameLocator('iframe.gjs-frame')
+        .locator('[data-payload-navigation-preview="true"] a')
+        .first(),
+    ).toHaveText('Home');
+    const homeUrl = page.getByLabel('URL', { exact: true }).first();
+    await homeUrl.fill('not-a-url');
+    await expect(homeUrl).toHaveAttribute('aria-invalid', 'true');
+    await homeUrl.fill('https://example.com/home');
+    await expect(homeUrl).not.toHaveAttribute('aria-invalid', 'true');
+    await page.getByLabel('Open in', { exact: true }).first().selectOption('_blank');
+
+    await page.getByRole('button', { name: '+ Add item', exact: true }).click();
+    await page.getByLabel('Label', { exact: true }).nth(1).fill('Contact');
+    await page.getByLabel('Target type').nth(1).selectOption('action');
+    await page.getByLabel('Action', { exact: true }).first().selectOption('email');
+    const contactValue = page.getByLabel('Value', { exact: true }).first();
+    await contactValue.fill('not-an-email');
+    await expect(contactValue).toHaveAttribute('aria-invalid', 'true');
+    await contactValue.fill('contact@example.com');
+    await expect(contactValue).not.toHaveAttribute('aria-invalid', 'true');
+    await page.getByLabel('Open in', { exact: true }).nth(1).selectOption('_blank');
+    await page.getByRole('button', { name: '+ Add item', exact: true }).click();
+    await page.getByLabel('Label', { exact: true }).nth(2).fill('Home page');
+    await page.getByLabel('Target type').nth(2).selectOption('page');
+    await page
+      .getByLabel('Page', { exact: true })
+      .first()
+      .selectOption(canonicalEnvironment.pageId);
+    await page.getByLabel('Target type').nth(2).selectOption('section');
+    await page.getByLabel('Page', { exact: true }).first().selectOption(sectionPageId);
+    await expect(page.getByLabel('Section', { exact: true }).first()).toBeEnabled();
+    await page.getByLabel('Section', { exact: true }).first().selectOption('details');
+    await page.getByLabel('Open in', { exact: true }).nth(2).selectOption('_blank');
+    await page.getByRole('button', { name: 'Add child to Home', exact: true }).click();
+
+    await expect(page.getByLabel('Label', { exact: true })).toHaveCount(4);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(page.getByText('Draft · Not published', { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.reload();
+    await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.getByRole('button', { name: 'Layers', exact: true }).click();
+    await page.getByRole('treeitem', { name: 'Select Navigation', exact: true }).click();
+    await expect(page.getByLabel('Navigation source', { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Orientation', { exact: true })).toHaveValue('vertical');
+    await expect(page.getByLabel('Mobile behavior', { exact: true })).toHaveValue(
+      'stack',
+    );
+    await expect(page.getByLabel('Alignment', { exact: true })).toHaveValue('center');
+    await expect(page.getByLabel('Accessible label', { exact: true })).toHaveValue(
+      'Footer navigation',
+    );
+    const homeItem = page.getByRole('treeitem', { name: /Drag Home Label Home/ });
+    const contactItem = page.getByRole('treeitem', {
+      name: /Drag Contact Label Contact/,
+    });
+    const pageItem = page.getByRole('treeitem', {
+      name: /Drag Home page Label Home page/,
+    });
+    await expect(homeItem.getByLabel('Label', { exact: true })).toHaveValue('Home');
+    await expect(homeItem.getByLabel('URL', { exact: true })).toHaveValue(
+      'https://example.com/home',
+    );
+    await expect(homeItem.getByLabel('Open in', { exact: true })).toHaveValue('_blank');
+    await expect(contactItem.getByLabel('Label', { exact: true })).toHaveValue('Contact');
+    await expect(contactItem.getByLabel('Action', { exact: true })).toHaveValue('email');
+    await expect(contactItem.getByLabel('Value', { exact: true })).toHaveValue(
+      'contact@example.com',
+    );
+    await expect(contactItem.getByLabel('Open in', { exact: true })).toHaveValue(
+      '_blank',
+    );
+    await expect(pageItem.getByLabel('Target type', { exact: true })).toHaveValue(
+      'section',
+    );
+    await expect(pageItem.getByLabel('Page', { exact: true })).toHaveValue(sectionPageId);
+    await expect(pageItem.getByLabel('Section', { exact: true })).toHaveValue('details');
+    await expect(pageItem.getByLabel('Open in', { exact: true })).toHaveValue('_blank');
+  } finally {
+    if (sectionPageId) {
+      const deletedPage = await request.delete(`${apiBaseUrl}/pages/${sectionPageId}`);
+      expect([204, 404]).toContain(deletedPage.status());
+    }
+    const deleted = await request.delete(
+      `${apiBaseUrl}/workspaces/${canonicalEnvironment.workspaceId}/layouts/headers/${layout.id}`,
+    );
+    expect([204, 404]).toContain(deleted.status());
+  }
 });
 
 test('applying a template clones its attachment configuration and payload', async ({

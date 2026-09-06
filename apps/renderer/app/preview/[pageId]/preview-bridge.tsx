@@ -13,6 +13,7 @@ import {
   type PagePreviewSnapshot,
   type PageLayoutComposition,
   type ResolvedNavigationItem,
+  type NavigationPagePaths,
   type PageBinding,
   type ResolvedDataContext,
 } from '@payload/contracts';
@@ -36,6 +37,7 @@ type PreviewBridgeProps = {
     | {
         main?: readonly ResolvedNavigationItem[] | undefined;
         footer?: readonly ResolvedNavigationItem[] | undefined;
+        pagePaths?: NavigationPagePaths | undefined;
       }
     | undefined;
   bindings?: readonly PageBinding[] | undefined;

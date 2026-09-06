@@ -22,8 +22,9 @@ export class NavigationRecord {
   @Prop({ type: String, required: true, index: true })
   workspaceId!: string;
 
-  @Prop({ type: String, required: true, index: true })
-  siteId!: string;
+  /** Legacy site scope. New navigation records are workspace-owned. */
+  @Prop({ type: String, required: false, index: true })
+  siteId?: string;
 
   @Prop({ type: String, required: true, trim: true, maxlength: 200 })
   name!: string;
@@ -47,5 +48,6 @@ export class NavigationRecord {
 }
 
 export const NavigationSchemaMongoose = SchemaFactory.createForClass(NavigationRecord);
-NavigationSchemaMongoose.index({ siteId: 1, key: 1 }, { unique: true });
+NavigationSchemaMongoose.index({ siteId: 1, key: 1 }, { unique: true, sparse: true });
+NavigationSchemaMongoose.index({ workspaceId: 1, siteId: 1, key: 1 }, { unique: true });
 NavigationSchemaMongoose.index({ workspaceId: 1, siteId: 1, createdAt: -1 });

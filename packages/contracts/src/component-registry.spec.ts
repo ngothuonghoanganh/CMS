@@ -133,6 +133,9 @@ describe('component style capabilities', () => {
     expect(findAcceptingSlot('gallery', 'button')).toBeUndefined();
     expect(canInsertChild('gallery', 'image', 49)).toBe(true);
     expect(canInsertChild('gallery', 'image', 50)).toBe(false);
+    expect(findAcceptingSlot('global-header', 'navigation-view', 100)).toMatchObject({
+      structural: true,
+    });
     expect(canRemoveChild('accordion', 'accordion-item', 1)).toBe(false);
     expect(canRemoveChild('accordion', 'accordion-item', 2)).toBe(true);
     expect(canDuplicateChild('tabs', 'tab-item', 20)).toBe(false);

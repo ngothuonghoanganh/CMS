@@ -32,6 +32,10 @@ Final security-closure ending HEAD: `c224291ec4584ddd27105efb34a10559c979270a`
 - Searchable, filterable and paginated asset library; route-driven detail;
   metadata update; workspace-scoped usage inspection; exhaustive fail-closed
   guarded deletion with exact asset ID/storage-key matching.
+- Pre-Phase-22 UX foundation consolidation: workspace-owned collections and
+  navigation APIs, Builder-owned inline menu editing, constant/conditional
+  collection fields, Form/JSON entry editing, asset upload/folders, and a
+  workspace Design System fallback.
 
 ## Key files
 
@@ -71,5 +75,6 @@ changed by this worktree pass.
 
 ## Intentional limitations
 
-Binary upload/storage providers, approval workflows, comments, collaboration,
-scheduling, AI, experiments and external data providers remain deferred.
+Approval workflows, comments, collaboration, scheduling, AI, experiments and
+external data providers remain deferred. The consolidation adds a local asset
+storage provider; managed object-storage adapters remain deployment work.

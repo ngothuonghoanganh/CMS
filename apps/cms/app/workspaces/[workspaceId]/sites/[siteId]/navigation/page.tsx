@@ -1,10 +1,11 @@
-import NavigationPage from '../../../../../navigation/navigation-page';
+import { redirect } from 'next/navigation';
+import { cmsViewPath } from '../../../../../cms-routes';
 
 export default async function SiteNavigationPage({
   params,
 }: {
   params: Promise<{ workspaceId: string; siteId: string }>;
 }) {
-  const { siteId } = await params;
-  return <NavigationPage siteId={siteId} />;
+  const { workspaceId, siteId } = await params;
+  redirect(cmsViewPath(workspaceId, 'design-system', siteId));
 }

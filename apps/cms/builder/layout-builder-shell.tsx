@@ -8,15 +8,19 @@ import {
   PAGE_COMPONENT_REGISTRY,
   SiteDesignSystemResponseSchema,
   SiteGlobalPayloadV1Schema,
+  SiteListResponseSchema,
   SiteSchema,
+  PageListResponseSchema,
   createDefaultSiteDesignSystem,
   type Asset,
   type BuilderDocumentKind,
   type ExtensionDescriptor,
   type LayoutExtensionResource,
   type LayoutExtensionVersion,
+  type Page,
   type SiteDesignSystem,
   type SiteGlobalPayloadV1,
+  type Site,
   type StyleTokenReference,
   builderPreviewForComponent,
 } from '@payload/contracts';
@@ -34,6 +38,7 @@ import {
 import { cmsViewPath, pagePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { Icon } from '../app/ui/icons';
+import { SelectField } from '../app/ui/fields';
 import {
   GLOBAL_FOOTER_PRESET_REGISTRY,
   GLOBAL_HEADER_PRESET_REGISTRY,
@@ -216,7 +221,10 @@ export default function LayoutBuilderShell({
   const [document, setDocument] = useState<SiteGlobalPayloadV1 | null>(null);
   const [siteName, setSiteName] = useState('');
   const [siteLogo, setSiteLogo] = useState<string | undefined>();
+  const [previewSites, setPreviewSites] = useState<Site[]>([]);
+  const [workspacePreviewSiteId, setWorkspacePreviewSiteId] = useState<string>();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [navigationPages, setNavigationPages] = useState<Page[]>([]);
   const [customExtensions, setCustomExtensions] = useState<ExtensionDescriptor[]>([]);
   const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
     createDefaultSiteDesignSystem(),
@@ -257,12 +265,21 @@ export default function LayoutBuilderShell({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const isDirty = status === 'unsaved' || status === 'saving' || status === 'conflict';
+  const effectivePreviewSiteId =
+    previewSiteId ?? workspacePreviewSiteId ?? resource?.siteId;
 
   const documentKind = layoutDocumentKind(layoutKind);
   const label = layoutKindLabel(layoutKind);
   const usableAssets = useMemo(
     () => assets.filter((asset) => asset.mimeType.startsWith('image/')),
     [assets],
+  );
+  const navigationPagePaths = useMemo(
+    () =>
+      Object.fromEntries(
+        navigationPages.flatMap((page) => (page.path ? [[page.id, page.path]] : [])),
+      ),
+    [navigationPages],
   );
   const blocks = useMemo(
     () =>
@@ -271,7 +288,9 @@ export default function LayoutBuilderShell({
           (definition) =>
             definition.type !== 'root' &&
             definition.type !== 'extension' &&
-            definition.builder.insertable &&
+            (definition.builder.insertable ||
+              (documentKind === 'site-header' && definition.type === 'global-header') ||
+              (documentKind === 'site-footer' && definition.type === 'global-footer')) &&
             definition.builder.documentKinds.includes(documentKind),
         )
         .map((definition) => ({
@@ -403,6 +422,7 @@ export default function LayoutBuilderShell({
         siteResponse,
         assetsResponse,
         designResponse,
+        pagesResponse,
         extensionsResponse,
       ] = await Promise.all([
         api.get(`/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}`),
@@ -420,6 +440,9 @@ export default function LayoutBuilderShell({
                 throw caughtError;
               })
           : Promise.resolve(null),
+        previewSiteId
+          ? api.get(`/sites/${previewSiteId}/pages?limit=100&offset=0`).catch(() => null)
+          : Promise.resolve(null),
         api.get('/extensions').catch(() => null),
       ]);
       const nextResource = LayoutExtensionResourceSchema.parse(resourceResponse);
@@ -436,6 +459,9 @@ export default function LayoutBuilderShell({
       setSiteName(site?.name ?? 'All sites');
       setSiteLogo(site?.logo);
       setAssets(AssetListResponseSchema.parse(assetsResponse).items);
+      setNavigationPages(
+        pagesResponse ? PageListResponseSchema.parse(pagesResponse).items : [],
+      );
       setCustomExtensions(
         extensionsResponse
           ? ExtensionListResponseSchema.parse(extensionsResponse).items.filter(
@@ -460,6 +486,67 @@ export default function LayoutBuilderShell({
   useEffect(() => {
     void load();
   }, [layoutId, layoutKind, previewSiteId, workspaceId]);
+
+  useEffect(() => {
+    if (previewSiteId) return;
+    let active = true;
+    void api
+      .get(`/workspaces/${workspaceId}/sites?limit=100&offset=0`)
+      .then((response) => {
+        if (!active) return;
+        const sites = SiteListResponseSchema.parse(response).items;
+        setPreviewSites(sites);
+        setWorkspacePreviewSiteId((current) =>
+          current && sites.some((site) => site.id === current)
+            ? current
+            : (resource?.siteId ?? sites[0]?.id),
+        );
+      })
+      .catch(() => {
+        if (active) setPreviewSites([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [previewSiteId, resource?.siteId, workspaceId]);
+
+  useEffect(() => {
+    if (previewSiteId || !effectivePreviewSiteId) return;
+    let active = true;
+    void Promise.all([
+      api.get(`/workspaces/${workspaceId}/sites/${effectivePreviewSiteId}`),
+      api
+        .get(`/workspaces/${workspaceId}/sites/${effectivePreviewSiteId}/design-system`)
+        .catch(() => null),
+      api
+        .get(`/sites/${effectivePreviewSiteId}/pages?limit=100&offset=0`)
+        .catch(() => null),
+    ])
+      .then(([siteResponse, designResponse, pagesResponse]) => {
+        if (!active) return;
+        const site = SiteSchema.parse(siteResponse);
+        setSiteName(site.name);
+        setSiteLogo(site.logo);
+        setNavigationPages(
+          pagesResponse ? PageListResponseSchema.parse(pagesResponse).items : [],
+        );
+        setDesignSystem(
+          designResponse
+            ? SiteDesignSystemResponseSchema.parse(designResponse).draft
+            : createDefaultSiteDesignSystem(),
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setNavigationPages([]);
+        setSiteName('All sites');
+        setSiteLogo(undefined);
+        setDesignSystem(createDefaultSiteDesignSystem());
+      });
+    return () => {
+      active = false;
+    };
+  }, [effectivePreviewSiteId, previewSiteId, workspaceId]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -985,10 +1072,14 @@ export default function LayoutBuilderShell({
                         <button
                           className="builder-asset-card"
                           key={asset.id}
-                          onClick={() => editorRef.current?.selectAsset(asset.storageKey)}
+                          onClick={() =>
+                            editorRef.current?.selectAsset(
+                              asset.publicUrl ?? asset.storageKey,
+                            )
+                          }
                           type="button"
                         >
-                          <img alt="" src={asset.storageKey} />
+                          <img alt="" src={asset.publicUrl ?? asset.storageKey} />
                           <span>{asset.filename}</span>
                         </button>
                       ))}
@@ -1084,7 +1175,9 @@ export default function LayoutBuilderShell({
               designSystem={designSystem}
               documentKind={documentKind}
               initialPayload={document}
-              navigation={{}}
+              navigation={{
+                pagePaths: navigationPagePaths,
+              }}
               onCanvasStateChange={setCanvasState}
               onDirty={markDirty}
               onDocumentChange={(nextDocument) => {
@@ -1145,9 +1238,31 @@ export default function LayoutBuilderShell({
                 Hide
               </button>
             </div>
+            {!previewSiteId && previewSites.length > 0 ? (
+              <div className="builder-preview-site-context">
+                <SelectField
+                  compact
+                  label="Preview site"
+                  onChange={(event) => setWorkspacePreviewSiteId(event.target.value)}
+                  value={effectivePreviewSiteId ?? ''}
+                >
+                  {previewSites.map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name}
+                    </option>
+                  ))}
+                </SelectField>
+                <p className="muted small">
+                  Page and Section targets use this site&apos;s routes in the builder
+                  preview.
+                </p>
+              </div>
+            ) : null}
             {selected ? (
               <BuilderInspector
+                workspaceId={workspaceId}
                 designSystem={designSystem}
+                navigationPages={navigationPages}
                 inspectorTab={inspectorTab}
                 onAddStructuralChild={(slotName, childType) =>
                   childType && childType !== 'root' && childType !== 'reusable-instance'

@@ -27,6 +27,9 @@ import { SiteController } from './site.controller';
 import { SiteService } from './site.service';
 import { AssetController } from './asset.controller';
 import { AssetService } from './asset.service';
+import { AssetFolderController } from './asset-folder.controller';
+import { AssetFolderService } from './asset-folder.service';
+import { PublicAssetController } from './public-asset.controller';
 import { TemplateController } from './template.controller';
 import { TemplateService } from './template.service';
 import { WorkspaceController } from './workspace.controller';
@@ -58,7 +61,10 @@ import { ControlPlaneModule } from '../tenancy/control-plane.module';
 import { SecurityModule } from '../security/security.module';
 import { ExtensionModule } from '../extensions/extension.module';
 import { WorkflowModule } from '../workflows/workflow.module';
-import { NavigationController } from './navigation.controller';
+import {
+  NavigationController,
+  WorkspaceNavigationController,
+} from './navigation.controller';
 import { NavigationService } from './navigation.service';
 import {
   LayoutExtensionController,
@@ -68,8 +74,12 @@ import { LayoutExtensionService } from './layout-extension.service';
 import { SiteUrlService } from './site-url.service';
 import { ReusableController } from './reusable.controller';
 import { ReusableService } from './reusable.service';
-import { CollectionController } from './collection.controller';
+import {
+  CollectionController,
+  WorkspaceCollectionController,
+} from './collection.controller';
 import { CollectionService } from './collection.service';
+import { ASSET_STORAGE, LocalFilesystemAssetStorageProvider } from './asset-storage';
 
 @Module({
   imports: [
@@ -84,6 +94,8 @@ import { CollectionService } from './collection.service';
   ],
   controllers: [
     AssetController,
+    AssetFolderController,
+    PublicAssetController,
     PageController,
     PreviewPageController,
     PublicPageController,
@@ -102,13 +114,16 @@ import { CollectionService } from './collection.service';
     SeoController,
     OrganizationController,
     NavigationController,
+    WorkspaceNavigationController,
     LayoutExtensionController,
     WorkspaceLayoutExtensionController,
     ReusableController,
     CollectionController,
+    WorkspaceCollectionController,
   ],
   providers: [
     AssetService,
+    AssetFolderService,
     PageService,
     SiteService,
     SubmissionService,
@@ -130,6 +145,7 @@ import { CollectionService } from './collection.service';
     SeoService,
     ReusableService,
     CollectionService,
+    { provide: ASSET_STORAGE, useClass: LocalFilesystemAssetStorageProvider },
     {
       provide: DOMAIN_VERIFICATION_RESOLVER,
       useFactory: () =>

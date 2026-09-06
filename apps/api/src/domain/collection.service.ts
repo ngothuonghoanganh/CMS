@@ -26,6 +26,7 @@ import {
   UpdateCollectionEntryRequestSchema,
   UpdateCollectionRequestSchema,
   isQueryValueCompatibleForFieldType,
+  isCollectionFieldVisible,
   normalizeCollectionSlug,
   queryOperatorsForFieldType,
   PAGE_COMPONENT_REGISTRY,
@@ -68,6 +69,16 @@ import {
 const safeDataPath = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)*$/;
 const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function scope(workspaceId: string, siteId?: string): Record<string, unknown> {
+  return siteId
+    ? { workspaceId, $or: [{ siteId }, { siteId: { $exists: false } }] }
+    : { workspaceId, siteId: { $exists: false } };
+}
+
+function ownershipScope(workspaceId: string, siteId?: string): Record<string, string> {
+  return { workspaceId, ...(siteId ? { siteId } : {}) };
+}
+
 @Injectable()
 export class CollectionService {
   constructor(
@@ -91,10 +102,10 @@ export class CollectionService {
     private readonly siteModel: Model<SiteRecord>,
   ) {}
 
-  async list(workspaceId: string, siteId: string): Promise<Collection[]> {
+  async list(workspaceId: string, siteId?: string): Promise<Collection[]> {
     await this.requireSite(workspaceId, siteId);
     const records = await this.collectionModel
-      .find({ workspaceId, siteId })
+      .find(scope(workspaceId, siteId))
       .sort({ name: 1, _id: 1 })
       .exec();
     return records.map((record) => this.toCollection(record));
@@ -102,7 +113,7 @@ export class CollectionService {
 
   async get(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
   ): Promise<Collection> {
     return this.toCollection(
@@ -112,7 +123,7 @@ export class CollectionService {
 
   async create(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     input: CreateCollectionRequest,
   ): Promise<Collection> {
     const parsed = CreateCollectionRequestSchema.parse(input);
@@ -122,8 +133,7 @@ export class CollectionService {
     try {
       const record = await this.collectionModel.create({
         _id: randomUUID(),
-        workspaceId,
-        siteId,
+        ...ownershipScope(workspaceId, siteId),
         key: parsed.key,
         name: parsed.name,
         singularName: parsed.singularName,
@@ -147,7 +157,7 @@ export class CollectionService {
 
   async update(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     input: UpdateCollectionRequest,
   ): Promise<Collection> {
@@ -232,7 +242,7 @@ export class CollectionService {
 
   async archive(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
   ): Promise<void> {
     const record = await this.requireCollectionDocument(
@@ -255,11 +265,18 @@ export class CollectionService {
 
   async getUsage(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     field?: { fieldId: string; fieldKey: string },
   ): Promise<CollectionUsageReference[]> {
-    await this.requireCollection(workspaceId, siteId, collectionId);
+    const collectionRecord = await this.requireCollectionDocument(
+      workspaceId,
+      siteId,
+      collectionId,
+    );
+    const pageScope = collectionRecord.siteId
+      ? { workspaceId, siteId: collectionRecord.siteId }
+      : { workspaceId };
     const references: CollectionUsageReference[] = [];
     const withField = (
       reference: Omit<CollectionUsageReference, 'fieldId' | 'fieldKey'>,
@@ -269,8 +286,7 @@ export class CollectionService {
         : reference;
     const dynamicPages = await this.pageModel
       .find({
-        workspaceId,
-        siteId,
+        ...pageScope,
         collectionId,
         ...(field ? { lookupField: field.fieldKey } : {}),
       })
@@ -285,7 +301,7 @@ export class CollectionService {
       })),
     );
     const pages = await this.pageModel
-      .find({ workspaceId, siteId })
+      .find(pageScope)
       .select({ _id: 1, name: 1, currentDraftVersionId: 1, publishedVersionId: 1 })
       .exec();
     const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
@@ -299,7 +315,7 @@ export class CollectionService {
       ),
     ];
     const versions = await this.pageVersionModel
-      .find({ _id: { $in: currentVersionIds }, workspaceId, siteId })
+      .find({ _id: { $in: currentVersionIds }, ...pageScope })
       .select({ landingPageId: 1, composition: 1 })
       .exec();
     const pageIds = new Set<string>();
@@ -359,7 +375,11 @@ export class CollectionService {
     const templates = await this.templateModel
       .find({
         workspaceId,
-        $or: [{ siteId }, { siteId: { $exists: false } }],
+        ...(collectionRecord.siteId
+          ? {
+              $or: [{ siteId: collectionRecord.siteId }, { siteId: { $exists: false } }],
+            }
+          : {}),
       })
       .select({ _id: 1, name: 1, latestVersionId: 1, publishedVersionId: 1 })
       .exec();
@@ -422,7 +442,7 @@ export class CollectionService {
 
   async listEntries(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     input: CollectionEntryListQuery,
   ): Promise<CollectionEntryListResponse> {
@@ -440,8 +460,7 @@ export class CollectionService {
       }
     }
     const filter: Record<string, unknown> = {
-      workspaceId,
-      siteId,
+      ...scope(workspaceId, siteId),
       collectionId,
       ...(query.status ? { status: query.status } : {}),
     };
@@ -481,7 +500,7 @@ export class CollectionService {
 
   async getEntry(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     entryId: string,
     mode: 'draft' | 'published' = 'draft',
@@ -497,7 +516,7 @@ export class CollectionService {
       mode === 'published' ? entry.publishedVersionId : entry.draftVersionId;
     const version = versionId
       ? await this.entryVersionModel
-          .findOne({ _id: versionId, entryId, workspaceId, siteId })
+          .findOne({ _id: versionId, entryId, ...scope(workspaceId, siteId) })
           .exec()
       : null;
     if (!version)
@@ -510,16 +529,17 @@ export class CollectionService {
 
   async createEntry(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     input: CreateCollectionEntryRequest,
     actorId?: string,
   ): Promise<CollectionEntryResponse> {
     const collection = await this.requireCollection(workspaceId, siteId, collectionId);
+    const collectionSiteId = collection.siteId;
     const parsed = CreateCollectionEntryRequestSchema.parse(input);
     const validated = await this.validateValues(
       workspaceId,
-      siteId,
+      collectionSiteId,
       collection,
       parsed.values,
     );
@@ -529,8 +549,7 @@ export class CollectionService {
     const versionId = randomUUID();
     const version = await this.entryVersionModel.create({
       _id: versionId,
-      workspaceId,
-      siteId,
+      ...ownershipScope(workspaceId, collectionSiteId),
       entryId,
       collectionId,
       versionNumber: 1,
@@ -541,7 +560,7 @@ export class CollectionService {
       const entry = await this.entryModel.create({
         _id: entryId,
         workspaceId,
-        siteId,
+        ...ownershipScope(workspaceId, collectionSiteId),
         collectionId,
         draftVersionId: versionId,
         draftValues: values,
@@ -565,17 +584,18 @@ export class CollectionService {
 
   async updateEntry(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     entryId: string,
     input: UpdateCollectionEntryRequest,
     actorId?: string,
   ): Promise<CollectionEntryResponse> {
     const collection = await this.requireCollection(workspaceId, siteId, collectionId);
+    const collectionSiteId = collection.siteId;
     const parsed = UpdateCollectionEntryRequestSchema.parse(input);
     const entry = await this.requireEntryDocument(
       workspaceId,
-      siteId,
+      collectionSiteId,
       collectionId,
       entryId,
     );
@@ -585,8 +605,7 @@ export class CollectionService {
             _id: entry.draftVersionId,
             entryId,
             collectionId,
-            workspaceId,
-            siteId,
+            ...scope(workspaceId, siteId),
           })
           .exec()
       : null;
@@ -618,8 +637,7 @@ export class CollectionService {
     try {
       version = await this.entryVersionModel.create({
         _id: randomUUID(),
-        workspaceId,
-        siteId,
+        ...ownershipScope(workspaceId, collectionSiteId),
         entryId,
         collectionId,
         versionNumber: current.versionNumber + 1,
@@ -637,7 +655,11 @@ export class CollectionService {
     }
     const advanced = await this.entryModel
       .findOneAndUpdate(
-        { _id: entryId, workspaceId, siteId, draftVersionId: current._id.toString() },
+        {
+          _id: entryId,
+          ...scope(workspaceId, siteId),
+          draftVersionId: current._id.toString(),
+        },
         {
           $set: {
             draftVersionId: version._id.toString(),
@@ -683,14 +705,15 @@ export class CollectionService {
 
   async publishEntry(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     entryId: string,
   ): Promise<CollectionEntryResponse> {
     const collection = await this.requireCollection(workspaceId, siteId, collectionId);
+    const collectionSiteId = collection.siteId;
     const entry = await this.requireEntryDocument(
       workspaceId,
-      siteId,
+      collectionSiteId,
       collectionId,
       entryId,
     );
@@ -704,8 +727,7 @@ export class CollectionService {
         _id: entry.draftVersionId,
         entryId,
         collectionId,
-        workspaceId,
-        siteId,
+        ...scope(workspaceId, siteId),
       })
       .exec();
     if (!draftVersion)
@@ -728,8 +750,7 @@ export class CollectionService {
       try {
         publishVersion = await this.entryVersionModel.create({
           _id: randomUUID(),
-          workspaceId,
-          siteId,
+          ...ownershipScope(workspaceId, collectionSiteId),
           entryId,
           collectionId,
           versionNumber: draftVersion.versionNumber + 1,
@@ -739,8 +760,7 @@ export class CollectionService {
           .findOneAndUpdate(
             {
               _id: entryId,
-              workspaceId,
-              siteId,
+              ...scope(workspaceId, siteId),
               draftVersionId: draftVersion._id.toString(),
             },
             {
@@ -779,7 +799,7 @@ export class CollectionService {
     const draftVersionId = publishVersion._id.toString();
     const published = await this.entryModel
       .findOneAndUpdate(
-        { _id: entryId, workspaceId, siteId, draftVersionId },
+        { _id: entryId, ...scope(workspaceId, siteId), draftVersionId },
         {
           $set: {
             publishedVersionId: draftVersionId,
@@ -822,7 +842,7 @@ export class CollectionService {
 
   async discardDraft(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     entryId: string,
   ): Promise<CollectionEntryResponse | DiscardCollectionEntryResponse> {
@@ -837,8 +857,7 @@ export class CollectionService {
       const deleted = await this.entryModel
         .deleteOne({
           _id: entryId,
-          workspaceId,
-          siteId,
+          ...scope(workspaceId, siteId),
           draftVersionId: entry.draftVersionId,
         })
         .exec();
@@ -847,15 +866,19 @@ export class CollectionService {
           code: 'ENTRY_VERSION_CONFLICT',
           message: 'The entry changed while it was being discarded',
         });
-      await this.entryVersionModel.deleteMany({ entryId, workspaceId, siteId }).exec();
+      await this.entryVersionModel
+        .deleteMany({
+          entryId,
+          ...scope(workspaceId, siteId),
+        })
+        .exec();
       return DiscardCollectionEntryResponseSchema.parse({ entryId, deleted: true });
     }
     const publishedVersion = await this.entryVersionModel
       .findOne({
         _id: entry.publishedVersionId,
         entryId,
-        workspaceId,
-        siteId,
+        ...scope(workspaceId, siteId),
       })
       .exec();
     if (!publishedVersion)
@@ -878,8 +901,7 @@ export class CollectionService {
       .findOneAndUpdate(
         {
           _id: entryId,
-          workspaceId,
-          siteId,
+          ...scope(workspaceId, siteId),
           draftVersionId: entry.draftVersionId,
         },
         update,
@@ -896,14 +918,14 @@ export class CollectionService {
 
   async archiveEntry(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     entryId: string,
   ): Promise<void> {
     await this.requireCollection(workspaceId, siteId, collectionId);
     const result = await this.entryModel
       .updateOne(
-        { _id: entryId, workspaceId, siteId, collectionId },
+        { _id: entryId, ...scope(workspaceId, siteId), collectionId },
         { $set: { status: 'archived' } },
       )
       .exec();
@@ -916,7 +938,7 @@ export class CollectionService {
 
   async query(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     input: CollectionQueryRequest,
     mode: 'draft' | 'published' = 'published',
@@ -927,8 +949,7 @@ export class CollectionService {
     const projectionName = mode === 'published' ? 'publishedValues' : 'draftValues';
     const conditions: Record<string, unknown>[] = [
       {
-        workspaceId,
-        siteId,
+        ...scope(workspaceId, siteId),
         collectionId,
         ...(mode === 'published'
           ? { status: 'published', publishedVersionId: { $exists: true } }
@@ -1035,7 +1056,7 @@ export class CollectionService {
 
   async resolvePublishedEntryByValue(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     field: string,
     value: string,
@@ -1063,7 +1084,7 @@ export class CollectionService {
 
   async resolveDataContext(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     composition: PageComposition,
     options: { mode: 'draft' | 'published'; currentEntry?: ResolvedDataRecord },
   ): Promise<ResolvedDataContext> {
@@ -1118,7 +1139,7 @@ export class CollectionService {
 
   private async resolveRuntimeRecord(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     record: ResolvedDataRecord,
   ): Promise<ResolvedDataRecord> {
     const collection = await this.requireCollection(
@@ -1160,11 +1181,11 @@ export class CollectionService {
       assetIds.length > 0
         ? await this.assetModel
             .find({ _id: { $in: assetIds }, workspaceId })
-            .select({ _id: 1, storageKey: 1 })
+            .select({ _id: 1, storageKey: 1, publicUrl: 1 })
             .exec()
         : [];
     const storageKeyById = new Map(
-      assets.map((asset) => [asset._id.toString(), asset.storageKey]),
+      assets.map((asset) => [asset._id.toString(), asset.publicUrl ?? asset.storageKey]),
     );
     return records.map((record) =>
       ResolvedDataRecordSchema.parse({
@@ -1183,7 +1204,7 @@ export class CollectionService {
 
   async validateComposition(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     composition: PageComposition,
     options: { currentEntryCollectionId?: string } = {},
   ): Promise<void> {
@@ -1347,7 +1368,7 @@ export class CollectionService {
 
   private async validateValues(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collection: CollectionDefinition,
     input: Record<string, unknown>,
     exceptEntryId?: string,
@@ -1389,10 +1410,18 @@ export class CollectionService {
         delete autoSlugSourceValues[field.key];
       }
     }
+    // Constants are owned by the schema, never by an entry editor. Apply
+    // them before visibility checks so conditions cannot be bypassed.
     for (const field of collection.fields) {
       if (field.status === 'archived') continue;
-      if (values[field.key] === undefined && field.defaultValue !== undefined)
+      if (field.valueMode === 'constant') values[field.key] = field.constantValue;
+      else if (values[field.key] === undefined && field.defaultValue !== undefined)
         values[field.key] = field.defaultValue;
+    }
+    const fieldsByKey = new Map(collection.fields.map((field) => [field.key, field]));
+    for (const field of collection.fields) {
+      if (field.status === 'archived') continue;
+      if (!isCollectionFieldVisible(field, values, fieldsByKey)) continue;
       const value = values[field.key];
       if (field.required && isEmptyValue(value))
         throw new BadRequestException({
@@ -1408,7 +1437,7 @@ export class CollectionService {
 
   private async validateFieldValue(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     field: CollectionDefinition['fields'][number],
     value: unknown,
   ): Promise<void> {
@@ -1481,8 +1510,7 @@ export class CollectionService {
       const targetCount = await this.entryModel
         .countDocuments({
           _id: { $in: ids },
-          workspaceId,
-          siteId,
+          ...scope(workspaceId, siteId),
           collectionId: field.targetCollectionId,
           status: { $ne: 'archived' },
         })
@@ -1490,7 +1518,7 @@ export class CollectionService {
       if (targetCount !== ids.length)
         throw this.invalidField(
           field.key,
-          'references an entry outside this site or collection',
+          'references an entry outside this workspace or collection',
         );
     }
     if (field.type === 'asset' || field.type === 'image') {
@@ -1555,7 +1583,7 @@ export class CollectionService {
 
   private async assertUniqueValues(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collection: CollectionDefinition,
     values: Record<string, unknown>,
     exceptEntryId?: string,
@@ -1568,8 +1596,7 @@ export class CollectionService {
     await Promise.all(
       uniqueFields.map(async (field) => {
         const conflict = await this.entryModel.exists({
-          workspaceId,
-          siteId,
+          ...scope(workspaceId, siteId),
           collectionId: collection.id,
           status: { $ne: 'archived' },
           uniqueTokens: uniqueTokenForField(field, values[field.key]),
@@ -1621,7 +1648,7 @@ export class CollectionService {
 
   private async assertReferenceTargets(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     fields: CollectionDefinition['fields'],
   ): Promise<void> {
     const ids = fields.flatMap((field) =>
@@ -1629,7 +1656,7 @@ export class CollectionService {
     );
     if (ids.length === 0) return;
     const count = await this.collectionModel
-      .countDocuments({ _id: { $in: ids }, workspaceId, siteId })
+      .countDocuments({ _id: { $in: ids }, ...scope(workspaceId, siteId) })
       .exec();
     if (count !== new Set(ids).size)
       throw new BadRequestException({
@@ -1640,7 +1667,7 @@ export class CollectionService {
 
   private async requireCollection(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
   ): Promise<CollectionDefinition> {
     return this.toCollection(
@@ -1648,7 +1675,8 @@ export class CollectionService {
     );
   }
 
-  private async requireSite(workspaceId: string, siteId: string): Promise<void> {
+  private async requireSite(workspaceId: string, siteId?: string): Promise<void> {
+    if (!siteId) return;
     const site = await this.siteModel
       .findOne({ _id: siteId, workspaceId })
       .select({ _id: 1 })
@@ -1662,11 +1690,15 @@ export class CollectionService {
 
   private async requireCollectionDocument(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
   ): Promise<CollectionDocument> {
     const record = await this.collectionModel
-      .findOne({ _id: collectionId, workspaceId, siteId, status: { $ne: 'archived' } })
+      .findOne({
+        _id: collectionId,
+        ...scope(workspaceId, siteId),
+        status: { $ne: 'archived' },
+      })
       .exec();
     if (!record)
       throw new NotFoundException({
@@ -1678,12 +1710,12 @@ export class CollectionService {
 
   private async requireEntryDocument(
     workspaceId: string,
-    siteId: string,
+    siteId: string | undefined,
     collectionId: string,
     entryId: string,
   ): Promise<CollectionEntryDocument> {
     const entry = await this.entryModel
-      .findOne({ _id: entryId, workspaceId, siteId, collectionId })
+      .findOne({ _id: entryId, ...scope(workspaceId, siteId), collectionId })
       .exec();
     if (!entry)
       throw new NotFoundException({
@@ -1709,8 +1741,7 @@ export class CollectionService {
         ? await this.entryVersionModel
             .find({
               _id: { $in: ids },
-              ...(workspaceId ? { workspaceId } : {}),
-              ...(siteId ? { siteId } : {}),
+              ...(workspaceId ? scope(workspaceId, siteId) : {}),
             })
             .exec()
         : [];
@@ -1728,7 +1759,7 @@ export class CollectionService {
     return CollectionDefinitionSchema.parse({
       id: record._id.toString(),
       workspaceId: record.workspaceId,
-      siteId: record.siteId,
+      ...(record.siteId ? { siteId: record.siteId } : {}),
       key: record.key,
       name: record.name,
       singularName: record.singularName,
@@ -1754,7 +1785,7 @@ export class CollectionService {
     return CollectionEntryResponseSchema.parse({
       id: entry._id.toString(),
       workspaceId: entry.workspaceId,
-      siteId: entry.siteId,
+      ...(entry.siteId ? { siteId: entry.siteId } : {}),
       collectionId: entry.collectionId,
       ...(entry.draftVersionId ? { draftVersionId: entry.draftVersionId } : {}),
       ...(entry.publishedVersionId

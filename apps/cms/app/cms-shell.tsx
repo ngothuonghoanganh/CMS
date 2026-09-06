@@ -93,9 +93,6 @@ function navigationSections(can: (permission: TenantPermission) => boolean) {
     ...(can('collection.read')
       ? [{ icon: 'collections', key: 'collections', label: 'Collections' }]
       : []),
-    ...(can('site.read')
-      ? [{ icon: 'navigation', key: 'navigation', label: 'Navigation' }]
-      : []),
     ...(can('design-system.read')
       ? [{ icon: 'designSystem', key: 'design-system', label: 'Design system' }]
       : []),

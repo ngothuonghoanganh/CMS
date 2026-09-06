@@ -1,9 +1,12 @@
 'use client';
 
 import {
+  AssetFolderListResponseSchema,
   AssetListResponseSchema,
   CollectionEntryListResponseSchema,
+  isCollectionFieldVisible,
   type Asset,
+  type AssetFolder,
   type Collection,
   type CollectionEntryResponse,
   type CollectionFieldType,
@@ -156,7 +159,9 @@ function assetMediaType(mimeType: string): 'image' | 'video' | 'audio' | 'docume
 
 export function AssetPicker({
   allowExternalUrl = false,
+  initialMediaType = 'all',
   onChange,
+  onAssetSelected,
   onRemove,
   value,
   workspaceId,
@@ -164,7 +169,9 @@ export function AssetPicker({
 }: {
   allowExternalUrl?: boolean;
   disabled?: boolean;
+  initialMediaType?: 'all' | 'image' | 'video' | 'audio' | 'document';
   onChange: (assetId: string) => void;
+  onAssetSelected?: (asset: Asset) => void;
   onRemove: () => void;
   value: unknown;
   workspaceId: string;
@@ -173,7 +180,9 @@ export function AssetPicker({
   const [search, setSearch] = useState('');
   const [mediaType, setMediaType] = useState<
     'all' | 'image' | 'video' | 'audio' | 'document'
-  >('all');
+  >(initialMediaType);
+  const [folderId, setFolderId] = useState('');
+  const [folders, setFolders] = useState<AssetFolder[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,6 +195,8 @@ export function AssetPicker({
   });
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [selectedAssetUnavailable, setSelectedAssetUnavailable] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const listRequestSequence = useRef(0);
   const selectedRequestSequence = useRef(0);
   const selectedValue = isString(value) ? value : '';
@@ -213,6 +224,14 @@ export function AssetPicker({
 
   useEffect(() => {
     if (!open) return;
+    void api
+      .get<unknown>(`/workspaces/${workspaceId}/asset-folders`)
+      .then((response) => setFolders(AssetFolderListResponseSchema.parse(response).items))
+      .catch(() => setFolders([]));
+  }, [open, workspaceId]);
+
+  useEffect(() => {
+    if (!open) return;
     const sequence = ++listRequestSequence.current;
     const timer = window.setTimeout(() => {
       setLoading(true);
@@ -222,6 +241,7 @@ export function AssetPicker({
         offset: String(offset),
         ...(search.trim() ? { search: search.trim() } : {}),
         ...(mediaType !== 'all' ? { mediaType } : {}),
+        ...(folderId ? { folderId } : {}),
       });
       void api
         .get<unknown>(`/workspaces/${workspaceId}/assets?${params.toString()}`)
@@ -246,7 +266,7 @@ export function AssetPicker({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [mediaType, offset, open, pagination.limit, search, workspaceId]);
+  }, [folderId, mediaType, offset, open, pagination.limit, search, workspaceId]);
 
   const externalImageUrl =
     allowExternalUrl && selectedValue && !isEntityId(selectedValue)
@@ -254,12 +274,40 @@ export function AssetPicker({
       : undefined;
   const visibleAssets = assets;
 
+  async function uploadAsset(file: File): Promise<void> {
+    if (disabled) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      if (folderId) body.append('folderId', folderId);
+      const created = await api.upload<Asset>(
+        `/workspaces/${workspaceId}/assets/upload`,
+        body,
+      );
+      onChange(created.id);
+      onAssetSelected?.(created);
+      setSelectedAsset(created);
+      setSelectedAssetUnavailable(false);
+      setOpen(false);
+    } catch (caughtError: unknown) {
+      setError(
+        caughtError instanceof ApiClientError
+          ? caughtError.message
+          : 'Unable to upload this asset.',
+      );
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <div className="collection-picker">
       {selectedAsset ? (
         <div className="collection-picker-current">
           {selectedAsset.mimeType.toLowerCase().startsWith('image/') ? (
-            <img alt="" src={selectedAsset.storageKey} />
+            <img alt="" src={selectedAsset.publicUrl ?? selectedAsset.storageKey} />
           ) : (
             <span className="collection-picker-file" aria-hidden="true">
               ▧
@@ -344,6 +392,43 @@ export function AssetPicker({
               <option value="document">Documents</option>
             </select>
           </label>
+          <label className="inline-field">
+            Folder
+            <select
+              aria-label="Filter assets by folder"
+              onChange={(event) => {
+                setFolderId(event.target.value);
+                setOffset(0);
+              }}
+              value={folderId}
+            >
+              <option value="">All folders</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input
+            accept={allowExternalUrl ? 'image/*' : undefined}
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void uploadAsset(file);
+            }}
+            ref={uploadInputRef}
+            type="file"
+          />
+          <button
+            className="button button-small button-secondary"
+            disabled={disabled || uploading}
+            onClick={() => uploadInputRef.current?.click()}
+            type="button"
+          >
+            {uploading ? 'Uploading…' : 'Upload'}
+          </button>
         </div>
         {loading ? (
           <div aria-busy="true" className="collection-picker-state">
@@ -356,7 +441,7 @@ export function AssetPicker({
             {visibleAssets.map((asset) => (
               <div className="collection-picker-row" key={asset.id}>
                 {assetMediaType(asset.mimeType) === 'image' ? (
-                  <img alt="" src={asset.storageKey} />
+                  <img alt="" src={asset.publicUrl ?? asset.storageKey} />
                 ) : (
                   <span className="collection-picker-file" aria-hidden="true">
                     ▧
@@ -371,6 +456,7 @@ export function AssetPicker({
                   disabled={disabled}
                   onClick={() => {
                     onChange(asset.id);
+                    onAssetSelected?.(asset);
                     setSelectedAsset(asset);
                     setSelectedAssetUnavailable(false);
                     setOpen(false);
@@ -453,7 +539,7 @@ export function ReferencePicker({
   const selectedIdSet = useMemo(() => new Set(ids), [ids]);
   const idKey = ids.join('|');
   const collectionPath = collection
-    ? `/workspaces/${workspaceId}/sites/${siteId}/collections/${collection.id}/entries`
+    ? `${siteId ? `/workspaces/${workspaceId}/sites/${siteId}` : `/workspaces/${workspaceId}`}/collections/${collection.id}/entries`
     : '';
 
   useEffect(() => {
@@ -734,6 +820,7 @@ export function CollectionEntryFields({
   );
 
   const updateField = (field: Collection['fields'][number], value: unknown) => {
+    if (field.valueMode === 'constant') return;
     onChange(updateEntryDraft(values, field, value));
   };
 
@@ -750,17 +837,22 @@ export function CollectionEntryFields({
     updateField(field, parsed);
   };
 
+  const fieldsByKey = new Map(collection.fields.map((field) => [field.key, field]));
+
   return (
     <div className="collection-entry-fields">
       {collection.fields.map((field) => {
+        if (!isCollectionFieldVisible(field, values, fieldsByKey)) return null;
         const value = values[field.key];
         const control = collectionFieldControl(field.type);
+        const fieldDisabled = disabled || field.valueMode === 'constant';
         const label = (
           <span className="collection-entry-field-label">
             <strong>{field.label}</strong>
             <small>
               {field.key} · {field.type}
               {field.required ? ' · required' : ''}
+              {field.valueMode === 'constant' ? ' · constant' : ''}
             </small>
           </span>
         );
@@ -774,7 +866,7 @@ export function CollectionEntryFields({
               </span>
               <input
                 checked={value === true}
-                disabled={disabled}
+                disabled={fieldDisabled}
                 onChange={(event) => updateField(field, event.target.checked)}
                 type="checkbox"
               />
@@ -786,7 +878,7 @@ export function CollectionEntryFields({
             <label className="collection-entry-field" key={field.id}>
               {label}
               <select
-                disabled={disabled}
+                disabled={fieldDisabled}
                 value={displayValue(value)}
                 onChange={(event) => updateField(field, event.target.value)}
               >
@@ -813,7 +905,7 @@ export function CollectionEntryFields({
                   <label className="checkbox-field" key={option.value}>
                     <input
                       checked={selected.includes(option.value)}
-                      disabled={disabled}
+                      disabled={fieldDisabled}
                       onChange={(event) =>
                         updateField(
                           field,
@@ -837,7 +929,7 @@ export function CollectionEntryFields({
               {label}
               <AssetPicker
                 allowExternalUrl={field.type === 'image'}
-                disabled={disabled}
+                disabled={fieldDisabled}
                 onChange={(assetId) => updateField(field, assetId)}
                 onRemove={() => updateField(field, undefined)}
                 value={value}
@@ -847,7 +939,7 @@ export function CollectionEntryFields({
                 <label>
                   Or use an image URL
                   <input
-                    disabled={disabled}
+                    disabled={fieldDisabled}
                     onChange={(event) => updateField(field, event.target.value)}
                     placeholder="https://… or /assets/…"
                     type="url"
@@ -871,7 +963,7 @@ export function CollectionEntryFields({
               <ReferencePicker
                 cardinality={field.cardinality ?? 'one'}
                 collection={target}
-                disabled={disabled}
+                disabled={fieldDisabled}
                 onChange={(next) => updateField(field, next)}
                 siteId={siteId}
                 value={value}
@@ -889,7 +981,7 @@ export function CollectionEntryFields({
               {label}
               <textarea
                 aria-label={`Advanced JSON · ${field.label}`}
-                disabled={disabled}
+                disabled={fieldDisabled}
                 onChange={(event) => onAdvancedJsonChange(field.key, event.target.value)}
                 placeholder={field.type === 'array' ? '[]' : '{}'}
                 rows={6}
@@ -913,7 +1005,7 @@ export function CollectionEntryFields({
             {label}
             {multiline ? (
               <textarea
-                disabled={disabled}
+                disabled={fieldDisabled}
                 onChange={(event) => updateField(field, event.target.value)}
                 placeholder={field.ui?.placeholder ?? ''}
                 rows={4}
@@ -921,7 +1013,7 @@ export function CollectionEntryFields({
               />
             ) : (
               <input
-                disabled={disabled}
+                disabled={fieldDisabled}
                 onChange={(event) => {
                   const rawValue = event.target.value;
                   if (field.type === 'number') {

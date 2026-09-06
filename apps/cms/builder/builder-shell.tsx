@@ -10,6 +10,7 @@ import {
   PageExtensionInstanceSchema,
   PageExtensionListResponseSchema,
   PageSchema,
+  PageListResponseSchema,
   PAGE_PREVIEW_MESSAGE_TYPE,
   PAGE_PREVIEW_READY_MESSAGE_TYPE,
   PagePayloadSchema,
@@ -48,6 +49,7 @@ import {
   type ReusableComponentDocument,
   type ReusableRuntime,
   type ResolvedNavigationItem,
+  type NavigationPagePaths,
   type PagePreviewSnapshot,
   type PageRuntimeExtension,
   type PageCompositionFields,
@@ -171,6 +173,7 @@ type SaveDraftResult = boolean;
 type BuilderPreviewNavigation = {
   main?: ResolvedNavigationItem[];
   footer?: ResolvedNavigationItem[];
+  pagePaths?: NavigationPagePaths;
 };
 type BuilderSiteContext = {
   name: string;
@@ -203,6 +206,7 @@ const blockGroupOrder = [
   'conversion',
   'typography',
   'media',
+  'navigation',
   'interactive',
   'advanced',
   'preset',
@@ -211,6 +215,7 @@ const blockGroupLabels: Record<(typeof blockGroupOrder)[number], string> = {
   layout: 'Layout',
   typography: 'Text & type',
   media: 'Media',
+  navigation: 'Navigation',
   interactive: 'Interactive',
   conversion: 'Conversion',
   advanced: 'Extensions & advanced',
@@ -281,7 +286,11 @@ function toErrorMessage(error: unknown): string {
 }
 
 function isUsableImageSource(value: string): boolean {
-  return value.startsWith('/assets/') || /^https?:\/\//i.test(value);
+  return (
+    value.startsWith('/assets/') ||
+    value.startsWith('/api/') ||
+    /^https?:\/\//i.test(value)
+  );
 }
 
 function renderLayerNodes(
@@ -541,6 +550,7 @@ export default function BuilderShell({
   const [siteContext, setSiteContext] = useState<BuilderSiteContext | null>(null);
   const [previewExtensions, setPreviewExtensions] = useState<PageRuntimeExtension[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [navigationPages, setNavigationPages] = useState<Page[]>([]);
   const [previewEntryId, setPreviewEntryId] = useState<string | undefined>();
   const [previewDataContext, setPreviewDataContext] = useState<
     PagePreviewSnapshot['dataContext']
@@ -763,7 +773,8 @@ export default function BuilderShell({
       ? selected.id
       : layerNavigationIds[0];
   const usableAssets = useMemo(
-    () => assets.filter((asset) => isUsableImageSource(asset.storageKey)),
+    () =>
+      assets.filter((asset) => isUsableImageSource(asset.publicUrl ?? asset.storageKey)),
     [assets],
   );
   const imageAssets = useMemo(
@@ -1055,6 +1066,7 @@ export default function BuilderShell({
           headerLayoutsResponseRaw,
           footerLayoutsResponseRaw,
           collectionsResponseRaw,
+          navigationPagesResponseRaw,
           permissionsResponseRaw,
         ] = await Promise.all([
           api.get(`/pages/${pageId}`),
@@ -1082,13 +1094,14 @@ export default function BuilderShell({
           api.get(`/workspaces/${workspaceId}/layouts/headers`).catch(() => null),
           api.get(`/workspaces/${workspaceId}/layouts/footers`).catch(() => null),
           api
-            .get(`/workspaces/${workspaceId}/sites/${siteId}/collections?limit=100`)
+            .get(`/workspaces/${workspaceId}/collections?limit=100`)
             .catch((caughtError: unknown) => {
               if (caughtError instanceof ApiClientError && caughtError.status === 404) {
                 return null;
               }
               throw caughtError;
             }),
+          api.get(`/sites/${siteId}/pages?limit=100&offset=0`).catch(() => null),
           api
             .get(`/me/permissions?workspaceId=${encodeURIComponent(workspaceId)}`)
             .catch(() => null),
@@ -1143,12 +1156,17 @@ export default function BuilderShell({
               )
             : [];
         setCollections(collectionItems);
+        setNavigationPages(
+          navigationPagesResponseRaw
+            ? PageListResponseSchema.parse(navigationPagesResponseRaw).items
+            : [],
+        );
         let resolvedPreviewResponseRaw = previewResponseRaw;
         if (nextPage.kind === 'dynamic' && nextPage.collectionId) {
           try {
             const entryResponse = CollectionEntryListResponseSchema.parse(
               await api.get(
-                `/workspaces/${workspaceId}/sites/${siteId}/collections/${nextPage.collectionId}/entries?limit=100&offset=0`,
+                `/workspaces/${workspaceId}/collections/${nextPage.collectionId}/entries?limit=100&offset=0`,
               ),
             );
             const requestedEntry = requestedPreviewEntryId
@@ -1182,6 +1200,9 @@ export default function BuilderShell({
         setNavigation({
           ...(previewNavigation?.main ? { main: previewNavigation.main } : {}),
           ...(previewNavigation?.footer ? { footer: previewNavigation.footer } : {}),
+          ...(previewNavigation?.pagePaths
+            ? { pagePaths: previewNavigation.pagePaths }
+            : {}),
         });
         setPreviewExtensions(preview?.success ? (preview.data.extensions ?? []) : []);
         setPreviewDataContext(
@@ -2607,10 +2628,14 @@ export default function BuilderShell({
                       <button
                         className="builder-asset-card"
                         key={asset.id}
-                        onClick={() => editorRef.current?.selectAsset(asset.storageKey)}
+                        onClick={() =>
+                          editorRef.current?.selectAsset(
+                            asset.publicUrl ?? asset.storageKey,
+                          )
+                        }
                         type="button"
                       >
-                        <img alt="" src={asset.storageKey} />
+                        <img alt="" src={asset.publicUrl ?? asset.storageKey} />
                         <span>{asset.filename}</span>
                       </button>
                     ))}
@@ -2878,6 +2903,7 @@ export default function BuilderShell({
                 </div>
               </div>
               <BuilderInspector
+                workspaceId={workspaceId}
                 inspectorTab={inspectorTab}
                 onInspectorTabChange={setInspectorTab}
                 onAddStructuralChild={(slotName, childType) =>
@@ -2924,12 +2950,7 @@ export default function BuilderShell({
                 focusPartName={focusPartName}
                 usableAssets={usableAssets}
                 designSystem={designSystem}
-                navigationItemCount={navigation.main?.length ?? 0}
-                onEditNavigation={() =>
-                  router.push(
-                    `/workspaces/${encodeURIComponent(workspaceId)}/sites/${encodeURIComponent(siteId)}/navigation`,
-                  )
-                }
+                navigationPages={navigationPages}
                 collections={collections}
                 allowCurrentEntry={page?.kind === 'dynamic'}
                 currentEntryCollection={

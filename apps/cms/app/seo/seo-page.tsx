@@ -48,7 +48,7 @@ export default function SeoPage({
     const pageSites = sites;
     void Promise.all([
       Promise.all(pageSites.map((site) => api.get(`/sites/${site.id}/pages?limit=100`))),
-      api.get(`/workspaces/${workspaceId}/sites/${selectedSiteId}/collections`),
+      api.get(`/workspaces/${workspaceId}/collections`),
     ])
       .then(([pageResponses, collectionResponse]) => {
         const nextPages = pageResponses.flatMap(

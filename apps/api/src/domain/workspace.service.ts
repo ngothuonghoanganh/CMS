@@ -5,8 +5,13 @@ import { randomUUID } from 'node:crypto';
 
 import {
   WorkspaceSchema,
+  SiteDesignSystemSchema,
+  SiteDesignSystemResponseSchema,
+  createDefaultSiteDesignSystem,
   type Workspace,
   type CreateWorkspaceRequest,
+  type SiteDesignSystem,
+  type SiteDesignSystemResponse,
 } from '@payload/contracts';
 
 import { QuotaService } from '../billing/quota.service';
@@ -31,6 +36,8 @@ export class WorkspaceService {
     return this.quotas.withHardQuota('workspaces', async () => {
       const record = await this.workspaceModel.create({
         _id: randomUUID(),
+        designSystemDraft: createDefaultSiteDesignSystem(),
+        publishedDesignSystem: createDefaultSiteDesignSystem(),
         ...input,
       });
       await this.events.publish('workspace.created', {
@@ -40,6 +47,54 @@ export class WorkspaceService {
       });
       return this.toContract(record);
     });
+  }
+
+  async getDesignSystem(workspaceId: string): Promise<SiteDesignSystemResponse> {
+    const record = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    if (!record)
+      throw new NotFoundException({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace was not found',
+      });
+    const draft = record.designSystemDraft
+      ? SiteDesignSystemSchema.parse(record.designSystemDraft)
+      : createDefaultSiteDesignSystem();
+    const published = record.publishedDesignSystem
+      ? SiteDesignSystemSchema.parse(record.publishedDesignSystem)
+      : undefined;
+    return SiteDesignSystemResponseSchema.parse({
+      draft,
+      ...(published ? { published } : {}),
+    });
+  }
+
+  async updateDesignSystem(
+    workspaceId: string,
+    input: SiteDesignSystem,
+  ): Promise<SiteDesignSystemResponse> {
+    const record = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    if (!record)
+      throw new NotFoundException({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace was not found',
+      });
+    record.designSystemDraft = SiteDesignSystemSchema.parse(input);
+    await record.save();
+    return this.getDesignSystem(workspaceId);
+  }
+
+  async publishDesignSystem(workspaceId: string): Promise<SiteDesignSystemResponse> {
+    const record = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    if (!record)
+      throw new NotFoundException({
+        code: 'WORKSPACE_NOT_FOUND',
+        message: 'Workspace was not found',
+      });
+    record.publishedDesignSystem = record.designSystemDraft
+      ? SiteDesignSystemSchema.parse(record.designSystemDraft)
+      : createDefaultSiteDesignSystem();
+    await record.save();
+    return this.getDesignSystem(workspaceId);
   }
 
   async getById(

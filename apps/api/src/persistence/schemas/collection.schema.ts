@@ -20,7 +20,8 @@ export class CollectionRecord {
   @Prop({ type: String, required: true, immutable: true }) _id!: string;
   @Prop({ type: String, required: true, index: true, immutable: true })
   workspaceId!: string;
-  @Prop({ type: String, required: true, index: true, immutable: true }) siteId!: string;
+  /** Legacy site scope; canonical collections are workspace-owned. */
+  @Prop({ type: String, required: false, index: true, immutable: true }) siteId?: string;
   @Prop({ type: String, required: true, trim: true, maxlength: 100 }) key!: string;
   @Prop({ type: String, required: true, trim: true, maxlength: 200 }) name!: string;
   @Prop({ type: String, required: true, trim: true, maxlength: 200 })
@@ -45,7 +46,8 @@ export class CollectionRecord {
 }
 
 export const CollectionSchema = SchemaFactory.createForClass(CollectionRecord);
-CollectionSchema.index({ siteId: 1, key: 1 }, { unique: true });
+CollectionSchema.index({ siteId: 1, key: 1 }, { unique: true, sparse: true });
+CollectionSchema.index({ workspaceId: 1, siteId: 1, key: 1 }, { unique: true });
 CollectionSchema.index({ workspaceId: 1, siteId: 1, status: 1 });
 CollectionSchema.path('fields').validate(
   (value: unknown) => CollectionDefinitionSchema.shape.fields.safeParse(value).success,
@@ -57,7 +59,8 @@ export class CollectionEntryRecord {
   @Prop({ type: String, required: true, immutable: true }) _id!: string;
   @Prop({ type: String, required: true, index: true, immutable: true })
   workspaceId!: string;
-  @Prop({ type: String, required: true, index: true, immutable: true }) siteId!: string;
+  /** Legacy site scope; canonical entries are workspace-owned. */
+  @Prop({ type: String, required: false, index: true, immutable: true }) siteId?: string;
   @Prop({ type: String, required: true, index: true, immutable: true })
   collectionId!: string;
   @Prop({ type: String, required: false, index: true }) draftVersionId?: string;
@@ -126,7 +129,8 @@ export class CollectionEntryVersionRecord {
   @Prop({ type: String, required: true, immutable: true }) _id!: string;
   @Prop({ type: String, required: true, index: true, immutable: true })
   workspaceId!: string;
-  @Prop({ type: String, required: true, index: true, immutable: true }) siteId!: string;
+  /** Legacy site scope; canonical versions are workspace-owned. */
+  @Prop({ type: String, required: false, index: true, immutable: true }) siteId?: string;
   @Prop({ type: String, required: true, index: true, immutable: true }) entryId!: string;
   @Prop({ type: String, required: true, index: true, immutable: true })
   collectionId!: string;

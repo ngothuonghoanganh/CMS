@@ -18,20 +18,19 @@ export default function DesignSystemPage({ siteId }: { siteId?: string }) {
       .catch(() => setSites([]));
   }, [siteId, workspaceId]);
   const selectedSiteId = siteId ?? sites[0]?.id;
-  if (!selectedSiteId)
+  if (!siteId) {
     return (
-      <section className="panel">
-        <p>
-          {can('site.read')
-            ? 'Select a site to manage its design system.'
-            : 'You do not have access to site design systems.'}
-        </p>
-      </section>
+      <DesignSystemView
+        canUpdate={can('design-system.update')}
+        inheritedSiteCount={sites.length}
+        workspaceId={workspaceId}
+      />
     );
+  }
   return (
     <DesignSystemView
       canUpdate={can('design-system.update')}
-      siteId={selectedSiteId}
+      siteId={selectedSiteId!}
       workspaceId={workspaceId}
     />
   );

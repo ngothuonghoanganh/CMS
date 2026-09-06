@@ -32,6 +32,11 @@ export class AssetRecord {
   @Prop({ type: String, required: true, trim: true, maxlength: 500 })
   storageKey!: string;
 
+  @Prop({ type: String, required: false, index: true }) folderId?: string;
+
+  @Prop({ type: String, required: false, trim: true, maxlength: 2000 })
+  publicUrl?: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

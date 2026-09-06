@@ -184,6 +184,66 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('padding:16px!important');
   });
 
+  it('applies inherited component defaults while preserving local overrides', () => {
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
+      metadata: { documentTitle: 'Component defaults' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'heading',
+                type: 'heading',
+                props: { text: 'Inherited heading', level: 2 },
+                children: [],
+              },
+              {
+                id: 'button',
+                type: 'button',
+                props: { label: 'Inherited button', href: '/', target: '_self' },
+                style: { base: { borderRadius: '0px' } },
+                children: [],
+              },
+              {
+                id: 'form',
+                type: 'form',
+                props: {
+                  fields: [
+                    {
+                      id: 'email',
+                      type: 'email',
+                      name: 'email',
+                      label: 'Email',
+                      required: true,
+                    },
+                  ],
+                  submitLabel: 'Submit',
+                  successMessage: 'Thanks',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const markup = renderToStaticMarkup(
+      renderPage(payload, { designSystem: createDefaultSiteDesignSystem() }),
+    );
+
+    expect(markup).toContain('font-size:clamp(2rem, 5vw, 4rem)');
+    expect(markup).toContain('background-color:#2563eb');
+    expect(markup).toContain('border-radius:0px');
+    expect(markup).toContain('padding:16px');
+  });
+
   it('keeps base styles and emits controlled responsive rules', () => {
     const markup = renderToStaticMarkup(renderPage(createPayload()));
 
@@ -282,6 +342,78 @@ describe('PagePayloadV1 renderer', () => {
     );
     expect(customDomainMarkup).toContain('href="/docs"');
     expect(customDomainMarkup).not.toContain('href="/demo/docs"');
+  });
+
+  it('resolves Builder-owned page, section, and action navigation targets', () => {
+    const pageId = '00000000-0000-4000-8000-000000000001';
+    const header: SiteGlobalPayloadV1 = {
+      version: 1,
+      documentKind: 'site-header',
+      metadata: { documentTitle: 'Inline navigation' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'header',
+            type: 'global-header',
+            props: { position: 'static' },
+            children: [
+              {
+                id: 'navigation',
+                type: 'navigation-view',
+                props: {
+                  items: [
+                    {
+                      id: '00000000-0000-4000-8000-000000000002',
+                      label: 'Pricing',
+                      type: 'page',
+                      pageId,
+                    },
+                    {
+                      id: '00000000-0000-4000-8000-000000000003',
+                      label: 'Details',
+                      type: 'section',
+                      pageId,
+                      anchorId: 'details',
+                    },
+                    {
+                      id: '00000000-0000-4000-8000-000000000004',
+                      label: 'Call us',
+                      type: 'action',
+                      action: { type: 'phone', value: '+123456789' },
+                    },
+                    {
+                      id: '00000000-0000-4000-8000-000000000005',
+                      label: 'Email us',
+                      type: 'action',
+                      action: { type: 'email', value: 'hello@example.com' },
+                    },
+                  ],
+                  orientation: 'horizontal',
+                  mobileBehavior: 'collapse',
+                  alignment: 'left',
+                  ariaLabel: 'Inline navigation',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      renderLayoutExtension(header, {
+        navigation: { pagePaths: { [pageId]: '/pricing' } },
+        siteSlug: 'demo',
+      }) ?? '',
+    );
+    expect(markup).toContain('href="/demo/pricing"');
+    expect(markup).toContain('href="/demo/pricing#details"');
+    expect(markup).toContain('href="tel:+123456789"');
+    expect(markup).toContain('href="mailto:hello@example.com"');
   });
 
   it('does not render header, footer, or navigation automatically from globals', () => {

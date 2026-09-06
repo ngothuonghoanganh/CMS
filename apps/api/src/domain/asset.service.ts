@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -31,6 +31,8 @@ import {
 import { ReusableRecord } from '../persistence/schemas/reusable.schema';
 import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
+import { AssetFolderRecord } from '../persistence/schemas/asset-folder.schema';
+import { ASSET_STORAGE, type AssetStorageProvider } from './asset-storage';
 
 const ASSET_USAGE_RESPONSE_LIMIT = 100;
 
@@ -108,6 +110,9 @@ export class AssetService {
     private readonly siteModel: Model<SiteRecord>,
     @InjectModel(PageSeoSettingsRecord.name)
     private readonly seoModel: Model<PageSeoSettingsRecord>,
+    @InjectModel(AssetFolderRecord.name)
+    private readonly folderModel?: Model<AssetFolderRecord>,
+    @Inject(ASSET_STORAGE) private readonly storage?: AssetStorageProvider,
   ) {}
 
   async create(workspaceId: string, input: CreateAssetRequest): Promise<Asset> {
@@ -117,6 +122,63 @@ export class AssetService {
       ...input,
     });
     return this.toContract(record);
+  }
+
+  async upload(
+    workspaceId: string,
+    file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+    metadata: {
+      title?: string;
+      defaultAltText?: string;
+      description?: string;
+      folderId?: string;
+    } = {},
+  ): Promise<Asset> {
+    if (!this.storage) {
+      throw new ConflictException({
+        code: 'ASSET_STORAGE_UNAVAILABLE',
+        message: 'Asset storage is not configured',
+      });
+    }
+    if (!file || !file.buffer || !Number.isFinite(file.size) || file.size <= 0) {
+      throw new ConflictException({
+        code: 'ASSET_FILE_REQUIRED',
+        message: 'Upload a non-empty file',
+      });
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      throw new ConflictException({
+        code: 'ASSET_FILE_TOO_LARGE',
+        message: 'Files must be 25 MB or smaller',
+      });
+    }
+    if (!SUPPORTED_UPLOAD_MIME_TYPES.has(file.mimetype.toLowerCase())) {
+      throw new ConflictException({
+        code: 'ASSET_MIME_NOT_ALLOWED',
+        message: 'This file type is not supported',
+      });
+    }
+    if (metadata.folderId) await this.assertFolder(workspaceId, metadata.folderId);
+    const assetId = randomUUID();
+    const filename = safeFilename(file.originalname);
+    const storageKey = `${workspaceId}/${assetId}/${filename}`;
+    await this.storage.put(storageKey, file.buffer);
+    try {
+      const record = await this.assetModel.create({
+        _id: assetId,
+        workspaceId,
+        filename,
+        mimeType: file.mimetype,
+        size: file.size,
+        storageKey,
+        publicUrl: this.storage.publicUrl(storageKey),
+        ...metadata,
+      });
+      return this.toContract(record);
+    } catch (error) {
+      await this.storage.delete(storageKey).catch(() => undefined);
+      throw error;
+    }
   }
 
   async list(workspaceId: string, input: AssetListQuery): Promise<AssetListResponse> {
@@ -129,6 +191,7 @@ export class AssetService {
       ...(query.mediaType
         ? { mimeType: { $regex: `^${query.mediaType}/`, $options: 'i' } }
         : {}),
+      ...(query.folderId ? { folderId: query.folderId } : {}),
     };
     const [records, total] = await Promise.all([
       this.assetModel
@@ -159,6 +222,19 @@ export class AssetService {
     return this.toContract(record);
   }
 
+  async readPublic(
+    workspaceId: string,
+    assetId: string,
+  ): Promise<{ asset: Asset; data: Buffer }> {
+    if (!this.storage) throw this.notFound(assetId);
+    const record = await this.assetModel.findOne({ _id: assetId, workspaceId }).exec();
+    if (!record) throw this.notFound(assetId);
+    return {
+      asset: this.toContract(record),
+      data: await this.storage.read(record.storageKey),
+    };
+  }
+
   async update(
     workspaceId: string,
     assetId: string,
@@ -167,10 +243,13 @@ export class AssetService {
     const parsed = UpdateAssetRequestSchema.parse(input);
     const record = await this.assetModel.findOne({ _id: assetId, workspaceId }).exec();
     if (!record) throw this.notFound(assetId);
-    for (const field of ['title', 'defaultAltText', 'description'] as const) {
+    for (const field of ['title', 'defaultAltText', 'description', 'folderId'] as const) {
       if (parsed[field] === undefined) continue;
       if (parsed[field] === null) record.set(field, undefined);
-      else record[field] = parsed[field];
+      else {
+        if (field === 'folderId') await this.assertFolder(workspaceId, parsed[field]);
+        record[field] = parsed[field];
+      }
     }
     await record.save();
     return this.toContract(record);
@@ -181,11 +260,17 @@ export class AssetService {
     if (!asset) throw this.notFound(assetId);
     const references: AssetUsageItem[] = [];
     let matchCount = 0;
-    await this.scanAssetReferences(workspaceId, assetId, asset.storageKey, (usage) => {
-      matchCount += 1;
-      if (references.length < ASSET_USAGE_RESPONSE_LIMIT) references.push(usage);
-      return matchCount > ASSET_USAGE_RESPONSE_LIMIT;
-    });
+    await this.scanAssetReferences(
+      workspaceId,
+      assetId,
+      asset.storageKey,
+      asset.publicUrl,
+      (usage) => {
+        matchCount += 1;
+        if (references.length < ASSET_USAGE_RESPONSE_LIMIT) references.push(usage);
+        return matchCount > ASSET_USAGE_RESPONSE_LIMIT;
+      },
+    );
 
     return AssetUsageResponseSchema.parse({
       assetId,
@@ -199,10 +284,13 @@ export class AssetService {
 
   async remove(workspaceId: string, assetId: string): Promise<void> {
     await this.assertAssetCanBeDeleted(workspaceId, assetId);
+    const asset = await this.assetModel.findOne({ _id: assetId, workspaceId }).exec();
     const result = await this.assetModel.deleteOne({ _id: assetId, workspaceId }).exec();
     if (result.deletedCount === 0) {
       throw this.notFound(assetId);
     }
+    if (asset && this.storage)
+      await this.storage.delete(asset.storageKey).catch(() => undefined);
   }
 
   /**
@@ -215,10 +303,16 @@ export class AssetService {
     if (!asset) throw this.notFound(assetId);
 
     let firstUsage: AssetUsageItem | undefined;
-    await this.scanAssetReferences(workspaceId, assetId, asset.storageKey, (usage) => {
-      firstUsage = usage;
-      return true;
-    });
+    await this.scanAssetReferences(
+      workspaceId,
+      assetId,
+      asset.storageKey,
+      asset.publicUrl,
+      (usage) => {
+        firstUsage = usage;
+        return true;
+      },
+    );
     if (firstUsage) {
       throw new ConflictException({
         code: 'ASSET_IN_USE',
@@ -232,10 +326,11 @@ export class AssetService {
     workspaceId: string,
     assetId: string,
     storageKey: string,
+    publicUrl: string | undefined,
     onMatch: (usage: AssetUsageItem) => boolean | Promise<boolean>,
   ): Promise<void> {
     const matches = (value: unknown): boolean =>
-      containsReference(value, assetId, storageKey);
+      containsReference(value, assetId, storageKey, publicUrl);
 
     if (
       await this.scanCursor(
@@ -468,6 +563,8 @@ export class AssetService {
       mimeType: record.mimeType,
       size: record.size,
       storageKey: record.storageKey,
+      ...(record.folderId ? { folderId: record.folderId } : {}),
+      ...(record.publicUrl ? { publicUrl: record.publicUrl } : {}),
       updatedAt: record.updatedAt.toISOString(),
       workspaceId: record.workspaceId,
     });
@@ -479,15 +576,61 @@ export class AssetService {
       message: `Asset ${assetId} was not found`,
     });
   }
+
+  private async assertFolder(workspaceId: string, folderId: string): Promise<void> {
+    const folder = await this.folderModel?.findOne({ _id: folderId, workspaceId }).exec();
+    if (!folder) {
+      throw new ConflictException({
+        code: 'ASSET_FOLDER_NOT_FOUND',
+        message: 'The selected asset folder was not found in this workspace',
+      });
+    }
+  }
 }
 
-function containsReference(value: unknown, assetId: string, storageKey: string): boolean {
-  if (typeof value === 'string') return value === assetId || value === storageKey;
+const SUPPORTED_UPLOAD_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'image/svg+xml',
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
+  'application/pdf',
+  'application/json',
+  'text/plain',
+  'text/csv',
+]);
+
+function safeFilename(value: string): string {
+  const normalized = value
+    .normalize('NFKC')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized.slice(0, 180) || 'upload';
+}
+
+function containsReference(
+  value: unknown,
+  assetId: string,
+  storageKey: string,
+  publicUrl?: string,
+): boolean {
+  if (typeof value === 'string') {
+    return value === assetId || value === storageKey || value === publicUrl;
+  }
   if (Array.isArray(value))
-    return value.some((item) => containsReference(item, assetId, storageKey));
+    return value.some((item) => containsReference(item, assetId, storageKey, publicUrl));
   if (value && typeof value === 'object') {
     return Object.values(value as Record<string, unknown>).some((item) =>
-      containsReference(item, assetId, storageKey),
+      containsReference(item, assetId, storageKey, publicUrl),
     );
   }
   return false;

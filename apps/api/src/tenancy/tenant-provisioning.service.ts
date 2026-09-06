@@ -31,6 +31,10 @@ import {
 } from '../persistence/schemas/workspace.schema';
 import { AssetRecord, AssetSchema } from '../persistence/schemas/asset.schema';
 import {
+  AssetFolderRecord,
+  AssetFolderSchema,
+} from '../persistence/schemas/asset-folder.schema';
+import {
   AnalyticsEventRecord,
   AnalyticsEventSchema,
 } from '../persistence/schemas/analytics-event.schema';
@@ -105,6 +109,7 @@ const tenantMigrations = [
   [AuthSessionRecord, AuthSessionSchema],
   [WorkspaceRecord, WorkspaceSchema],
   [AssetRecord, AssetSchema],
+  [AssetFolderRecord, AssetFolderSchema],
   [AnalyticsEventRecord, AnalyticsEventSchema],
   [CustomDomainRecord, CustomDomainSchema],
   [FormIntegrationBindingRecord, FormIntegrationBindingSchema],

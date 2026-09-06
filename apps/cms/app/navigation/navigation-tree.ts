@@ -1,9 +1,15 @@
 import type { NavigationItem } from '@payload/contracts';
 
+let fallbackNavigationItemSequence = 0;
+
 export function createNavigationItemId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `00000000-0000-4000-8000-${Date.now().toString().padStart(12, '0')}`;
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  const sequence = (fallbackNavigationItemSequence++ % 0x1000000000000)
+    .toString(16)
+    .padStart(12, '0');
+  return `00000000-0000-4000-8000-${sequence}`;
 }
 
 export function findNavigationItem(
@@ -148,6 +154,31 @@ export function outdentNavigationItem(
         children: insertAfter(parent.children ?? []),
       }))
     : insertAfter(without);
+}
+
+/** Move an item onto a target without allowing a subtree to contain itself. */
+export function moveNavigationItemTo(
+  items: readonly NavigationItem[],
+  id: string,
+  targetId: string,
+  asChild = true,
+): NavigationItem[] {
+  if (id === targetId) return [...items];
+  const item = findNavigationItem(items, id);
+  const target = findNavigationItem(items, targetId);
+  if (!item || !target || findNavigationItem(item.children ?? [], targetId))
+    return [...items];
+  const without = removeNavigationItem(items, id);
+  if (asChild) {
+    return updateNavigationItem(without, targetId, (current) => ({
+      ...current,
+      children: [...(current.children ?? []), item],
+    }));
+  }
+  return mapSiblings(without, targetId, (siblings, index) => {
+    siblings.splice(index + 1, 0, item);
+    return siblings;
+  }).items;
 }
 
 function cloneWithFreshIds(item: NavigationItem): NavigationItem {

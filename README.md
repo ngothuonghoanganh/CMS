@@ -80,6 +80,13 @@ renderer open and sends validated `PageDocument` snapshots over `postMessage`; s
 `NEXT_PUBLIC_CMS_BASE_URL` to the exact CMS origin outside local development so the
 preview bridge can enforce its trusted sender.
 
+Uploaded local assets are stored below `ASSET_STORAGE_ROOT` (default:
+`.data/assets` relative to the API working directory). The CMS and renderer serve
+their `/api/v1/public/assets/*` URLs through same-origin rewrites to
+`NEXT_PUBLIC_API_BASE_URL` and `RENDERER_API_BASE_URL`, respectively. Set those
+variables to the reachable API origin in non-local environments and use a
+persistent absolute `ASSET_STORAGE_ROOT` when running the local filesystem provider.
+
 The API readiness endpoint is http://localhost:3001/api/v1/health/ready and reports
 the MongoDB connection state.
 

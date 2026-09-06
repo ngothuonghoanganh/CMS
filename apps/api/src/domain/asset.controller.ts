@@ -11,7 +11,10 @@ import {
   Patch,
   Query,
   UseGuards,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   CreateAssetRequestSchema,
   AssetListQuerySchema,
@@ -75,6 +78,30 @@ export class AssetController {
     return this.assetService.list(
       requireRequestedWorkspace(principal, workspaceId),
       query,
+    );
+  }
+
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  async upload(
+    @Param('workspaceId') workspaceId: string,
+    @UploadedFile()
+    file:
+      | { originalname: string; mimetype: string; size: number; buffer: Buffer }
+      | undefined,
+    @Body() body: Record<string, string | undefined>,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'asset.create', workspaceId);
+    return this.assetService.upload(
+      requireRequestedWorkspace(principal, workspaceId),
+      file!,
+      {
+        ...(body.title ? { title: body.title } : {}),
+        ...(body.defaultAltText ? { defaultAltText: body.defaultAltText } : {}),
+        ...(body.description ? { description: body.description } : {}),
+        ...(body.folderId ? { folderId: body.folderId } : {}),
+      },
     );
   }
 

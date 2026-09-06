@@ -1,10 +1,11 @@
 'use client';
 
 import {
+  conditionOperatorsForFieldType,
   type Collection,
+  type CollectionConditionOperator,
   type CollectionEntryResponse,
   type CollectionFieldType,
-  type Site,
 } from '@payload/contracts';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
@@ -21,6 +22,18 @@ import {
 } from './collection-field-controls';
 
 type FieldDraft = Collection['fields'][number];
+
+function collectionApiPath(
+  workspaceId: string,
+  siteId: string,
+  collectionId?: string,
+  child?: string,
+): string {
+  const base = siteId
+    ? `/workspaces/${workspaceId}/sites/${siteId}/collections`
+    : `/workspaces/${workspaceId}/collections`;
+  return `${base}${collectionId ? `/${collectionId}` : ''}${child ? `/${child}` : ''}`;
+}
 
 const fieldTypes: CollectionFieldType[] = [
   'text',
@@ -88,6 +101,376 @@ function structuredDrafts(
   );
 }
 
+function sampleEntryValues(collection: Collection): EntryDraft {
+  const sample: EntryDraft = {};
+  for (const field of collection.fields) {
+    if (field.status === 'archived') continue;
+    if (field.valueMode === 'constant') {
+      sample[field.key] = field.constantValue;
+      continue;
+    }
+    if (field.defaultValue !== undefined) {
+      sample[field.key] = field.defaultValue;
+      continue;
+    }
+    switch (field.type) {
+      case 'number':
+        sample[field.key] = 100;
+        break;
+      case 'boolean':
+        sample[field.key] = true;
+        break;
+      case 'date':
+        sample[field.key] = '2026-09-06';
+        break;
+      case 'datetime':
+        sample[field.key] = '2026-09-06T00:00:00.000Z';
+        break;
+      case 'select':
+        if (field.options?.[0]) sample[field.key] = field.options[0].value;
+        break;
+      case 'multi-select':
+        sample[field.key] = field.options?.[0] ? [field.options[0].value] : [];
+        break;
+      case 'url':
+        sample[field.key] = 'https://example.com';
+        break;
+      case 'email':
+        sample[field.key] = 'hello@example.com';
+        break;
+      case 'slug':
+        sample[field.key] = 'example-title';
+        break;
+      case 'array':
+        sample[field.key] = [];
+        break;
+      case 'group':
+        sample[field.key] = {};
+        break;
+      case 'asset':
+      case 'image':
+      case 'reference':
+        // Never invent fake IDs. The picker can add a real workspace reference.
+        break;
+      default:
+        sample[field.key] = `Example ${field.label}`;
+        break;
+    }
+  }
+  return sample;
+}
+
+const conditionOperatorLabels: Record<CollectionConditionOperator, string> = {
+  equals: 'Equals',
+  notEquals: 'Does not equal',
+  in: 'Is one of',
+  notIn: 'Is not one of',
+  isSet: 'Is set',
+  isEmpty: 'Is empty',
+  gt: 'Greater than',
+  gte: 'At least',
+  lt: 'Less than',
+  lte: 'At most',
+};
+
+function conditionValueForField(
+  field: FieldDraft | undefined,
+  operator: CollectionConditionOperator,
+): unknown {
+  if (operator === 'isSet' || operator === 'isEmpty') return undefined;
+  if (operator === 'in' || operator === 'notIn') return [];
+  if (!field) return '';
+  if (field.type === 'boolean') return false;
+  if (field.type === 'number') return 0;
+  if (field.type === 'select') return field.options?.[0]?.value ?? '';
+  if (field.type === 'multi-select') return [];
+  if (field.type === 'array') return [];
+  if (field.type === 'group') return {};
+  return '';
+}
+
+function conditionInputValue(
+  field: FieldDraft | undefined,
+  operator: CollectionConditionOperator,
+  value: unknown,
+): string {
+  if (operator === 'in' || operator === 'notIn') {
+    return Array.isArray(value) ? value.map(String).join(', ') : '';
+  }
+  if (field?.type === 'boolean') return value === true ? 'true' : 'false';
+  return defaultFieldValue(value);
+}
+
+function parseConditionInput(
+  field: FieldDraft | undefined,
+  operator: CollectionConditionOperator,
+  raw: string,
+): unknown {
+  if (operator === 'in' || operator === 'notIn') {
+    const values = raw
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (field?.type === 'number') return values.map(Number);
+    if (field?.type === 'boolean') return values.map((value) => value === 'true');
+    return values;
+  }
+  if (field?.type === 'number') return raw ? Number(raw) : undefined;
+  if (field?.type === 'boolean') return raw === 'true';
+  if (field?.type === 'array' || field?.type === 'group') {
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+type ConditionDraft = NonNullable<FieldDraft['condition']>;
+type ConditionRuleDraft = ConditionDraft['rules'][number];
+
+function updateConditionRule(
+  condition: ConditionDraft,
+  ruleIndex: number,
+  patch: Partial<ConditionRuleDraft>,
+): ConditionDraft {
+  return {
+    ...condition,
+    rules: condition.rules.map((rule, index) =>
+      index === ruleIndex ? { ...rule, ...patch } : rule,
+    ),
+  };
+}
+
+function ConditionRuleValueEditor({
+  field,
+  operator,
+  value,
+  onChange,
+}: {
+  field: FieldDraft | undefined;
+  operator: CollectionConditionOperator;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  if (operator === 'isSet' || operator === 'isEmpty') return null;
+
+  const inputType =
+    field?.type === 'number'
+      ? 'number'
+      : field?.type === 'date'
+        ? 'date'
+        : field?.type === 'datetime'
+          ? 'datetime-local'
+          : 'text';
+
+  if (field?.type === 'boolean') {
+    return (
+      <select
+        value={conditionInputValue(field, operator, value)}
+        onChange={(event) =>
+          onChange(parseConditionInput(field, operator, event.target.value))
+        }
+      >
+        <option value="true">True</option>
+        <option value="false">False</option>
+      </select>
+    );
+  }
+
+  if (field?.type === 'select' && operator !== 'in' && operator !== 'notIn') {
+    return (
+      <select
+        value={conditionInputValue(field, operator, value)}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {(field.options ?? []).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (field?.type === 'multi-select') {
+    const selectedValues = Array.isArray(value) ? value.map(String) : [];
+    return (
+      <select
+        multiple
+        value={selectedValues}
+        onChange={(event) =>
+          onChange(Array.from(event.target.selectedOptions, (option) => option.value))
+        }
+      >
+        {(field.options ?? []).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={inputType}
+      value={conditionInputValue(field, operator, value)}
+      onChange={(event) =>
+        onChange(parseConditionInput(field, operator, event.target.value))
+      }
+    />
+  );
+}
+
+function CollectionConditionRulesEditor({
+  condition,
+  fields,
+  onChange,
+}: {
+  condition: ConditionDraft;
+  fields: FieldDraft[];
+  onChange: (condition: ConditionDraft | undefined) => void;
+}) {
+  const addRule = () => {
+    const sourceField = fields[0];
+    if (!sourceField || condition.rules.length >= 20) return;
+    const operator = conditionOperatorsForFieldType(sourceField.type)[0] ?? 'equals';
+    onChange({
+      ...condition,
+      rules: [
+        ...condition.rules,
+        {
+          fieldKey: sourceField.key,
+          operator,
+          ...(operator === 'isSet' || operator === 'isEmpty'
+            ? {}
+            : { value: conditionValueForField(sourceField, operator) }),
+        },
+      ],
+    });
+  };
+
+  return (
+    <div className="collection-condition-rules">
+      {condition.rules.map((rule, ruleIndex) => {
+        const sourceField = fields.find((field) => field.key === rule.fieldKey);
+        const operators = sourceField
+          ? conditionOperatorsForFieldType(sourceField.type)
+          : [];
+
+        return (
+          <div
+            className="collection-condition-rule"
+            key={`${rule.fieldKey}-${ruleIndex}`}
+          >
+            <label>
+              Condition field
+              <select
+                value={rule.fieldKey}
+                onChange={(event) => {
+                  const nextSource = fields.find(
+                    (field) => field.key === event.target.value,
+                  );
+                  const nextOperator = nextSource
+                    ? (conditionOperatorsForFieldType(nextSource.type)[0] ?? 'equals')
+                    : 'equals';
+                  onChange(
+                    updateConditionRule(condition, ruleIndex, {
+                      fieldKey: event.target.value,
+                      operator: nextOperator,
+                      ...(nextOperator === 'isSet' || nextOperator === 'isEmpty'
+                        ? {}
+                        : { value: conditionValueForField(nextSource, nextOperator) }),
+                    }),
+                  );
+                }}
+              >
+                {sourceField ? null : (
+                  <option value={rule.fieldKey}>{rule.fieldKey}</option>
+                )}
+                {fields.map((field) => (
+                  <option key={field.id} value={field.key}>
+                    {field.label || field.key}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Condition operator
+              <select
+                value={rule.operator}
+                onChange={(event) => {
+                  const operator = event.target.value as CollectionConditionOperator;
+                  onChange(
+                    updateConditionRule(condition, ruleIndex, {
+                      operator,
+                      ...(operator === 'isSet' || operator === 'isEmpty'
+                        ? {}
+                        : { value: conditionValueForField(sourceField, operator) }),
+                    }),
+                  );
+                }}
+              >
+                {operators.map((operator) => (
+                  <option key={operator} value={operator}>
+                    {conditionOperatorLabels[operator]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!['isSet', 'isEmpty'].includes(rule.operator) ? (
+              <label>
+                Condition value
+                <ConditionRuleValueEditor
+                  field={sourceField}
+                  operator={rule.operator}
+                  value={rule.value}
+                  onChange={(value) =>
+                    onChange(updateConditionRule(condition, ruleIndex, { value }))
+                  }
+                />
+                <small className="muted">
+                  {rule.operator === 'in' || rule.operator === 'notIn'
+                    ? 'Select multiple values or separate scalar values with commas.'
+                    : sourceField?.type === 'array' || sourceField?.type === 'group'
+                      ? 'Enter a JSON value.'
+                      : 'Only values compatible with the source field are allowed.'}
+                </small>
+              </label>
+            ) : null}
+            <button
+              className="button button-ghost collection-condition-remove"
+              type="button"
+              onClick={() =>
+                onChange(
+                  condition.rules.length === 1
+                    ? undefined
+                    : {
+                        ...condition,
+                        rules: condition.rules.filter((_, index) => index !== ruleIndex),
+                      },
+                )
+              }
+            >
+              Remove rule
+            </button>
+          </div>
+        );
+      })}
+      <button
+        className="button button-ghost"
+        disabled={condition.rules.length >= 20 || fields.length === 0}
+        type="button"
+        onClick={addRule}
+      >
+        + Add condition rule
+      </button>
+    </div>
+  );
+}
+
 function collectionErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof ApiClientError)) return fallback;
   const references = error.details?.references;
@@ -118,13 +501,11 @@ export function CollectionsView({
   onEditEntry,
   onEditSchema,
   onSelectCollection,
-  onSelectSite,
   routeCollectionAction,
   routeEntryAction,
   routeEntryId,
   routeCollectionId,
-  selectedSiteId,
-  sites,
+  siteId,
   workspaceId,
 }: {
   canCreateCollection: boolean;
@@ -140,16 +521,14 @@ export function CollectionsView({
   onEditEntry?: (entryId: string, collectionId?: string) => void;
   onEditSchema?: (collectionId: string) => void;
   onSelectCollection?: (collectionId: string) => void;
-  onSelectSite?: (siteId: string) => void;
   routeCollectionAction?: 'create' | 'schema';
   routeCollectionId?: string;
   routeEntryAction?: 'create' | 'edit';
   routeEntryId?: string;
-  selectedSiteId: string;
-  sites: Site[];
   workspaceId: string;
+  siteId?: string;
 }) {
-  const [siteId, setSiteId] = useState(selectedSiteId || sites[0]?.id || '');
+  const siteScopeId = siteId ?? '';
   const [collections, setCollections] = useState<Collection[]>([]);
   const [entries, setEntries] = useState<CollectionEntryResponse[]>([]);
   const [entryRecord, setEntryRecord] = useState<CollectionEntryResponse | null>(null);
@@ -182,6 +561,9 @@ export function CollectionsView({
   const [fieldDrafts, setFieldDrafts] = useState<FieldDraft[]>([newField()]);
   const [titleFieldKey, setTitleFieldKey] = useState('');
   const [entryDraft, setEntryDraft] = useState<EntryDraft>({});
+  const [entryEditorMode, setEntryEditorMode] = useState<'form' | 'json'>('form');
+  const [entryJsonDraft, setEntryJsonDraft] = useState('{}');
+  const [entryJsonError, setEntryJsonError] = useState<string | null>(null);
   const [advancedJsonDrafts, setAdvancedJsonDrafts] = useState<Record<string, string>>(
     {},
   );
@@ -210,10 +592,6 @@ export function CollectionsView({
   const isSchemaPage = routeCollectionAction === 'schema';
 
   useEffect(() => {
-    if (selectedSiteId) setSiteId(selectedSiteId);
-  }, [selectedSiteId]);
-
-  useEffect(() => {
     if (routeCollectionAction === 'create') {
       setCollectionForm({ key: '', name: '', singularName: '', titleFieldKey: '' });
       setFieldDrafts([newField()]);
@@ -234,10 +612,13 @@ export function CollectionsView({
       setEntryDraft({});
       setAdvancedJsonDrafts(structuredDrafts(selectedCollection, {}));
       setAdvancedJsonErrors({});
+      setEntryEditorMode('form');
+      setEntryJsonDraft('{}');
+      setEntryJsonError(null);
       setEntryDrawerOpen(true);
       return;
     }
-    if (!routeEntryId || !siteId || !collectionId) {
+    if (!routeEntryId || !collectionId) {
       setEntryRecord(null);
       setEntryDrawerOpen(false);
       return;
@@ -247,12 +628,19 @@ export function CollectionsView({
     let active = true;
     void api
       .get<CollectionEntryResponse>(
-        `/workspaces/${workspaceId}/sites/${siteId}/collections/${collectionId}/entries/${routeEntryId}`,
+        collectionApiPath(
+          workspaceId,
+          siteScopeId,
+          collectionId,
+          `entries/${routeEntryId}`,
+        ),
       )
       .then((entry) => {
         if (!active) return;
         setEntryRecord(entry);
         setEntryDraft(entry.values);
+        setEntryJsonDraft(JSON.stringify(entry.values, null, 2));
+        setEntryJsonError(null);
         setAdvancedJsonDrafts(structuredDrafts(selectedCollection, entry.values));
         setAdvancedJsonErrors({});
       })
@@ -263,14 +651,13 @@ export function CollectionsView({
     return () => {
       active = false;
     };
-  }, [collectionId, routeEntryAction, routeEntryId, siteId, workspaceId]);
+  }, [collectionId, routeEntryAction, routeEntryId, siteScopeId, workspaceId]);
 
   useEffect(() => {
-    if (!siteId) return;
     let active = true;
     setLoading(true);
     void api
-      .get<Collection[]>(`/workspaces/${workspaceId}/sites/${siteId}/collections`)
+      .get<Collection[]>(collectionApiPath(workspaceId, siteScopeId))
       .then((next) => {
         if (!active) return;
         setCollections(next);
@@ -285,10 +672,10 @@ export function CollectionsView({
     return () => {
       active = false;
     };
-  }, [routeCollectionId, siteId, workspaceId]);
+  }, [routeCollectionId, siteScopeId, workspaceId]);
 
   useEffect(() => {
-    if (!siteId || !collectionId) {
+    if (!collectionId) {
       setEntries([]);
       return;
     }
@@ -307,7 +694,7 @@ export function CollectionsView({
         items: CollectionEntryResponse[];
         pagination: typeof entryPagination;
       }>(
-        `/workspaces/${workspaceId}/sites/${siteId}/collections/${collectionId}/entries?${params.toString()}`,
+        `${collectionApiPath(workspaceId, siteScopeId, collectionId, 'entries')}?${params.toString()}`,
       )
       .then((result) => {
         if (!active) return;
@@ -330,7 +717,7 @@ export function CollectionsView({
     entrySortDirection,
     entrySortField,
     entryStatus,
-    siteId,
+    siteScopeId,
     workspaceId,
   ]);
 
@@ -345,7 +732,7 @@ export function CollectionsView({
         label: field.label.trim(),
       }));
     const created = await api.post<Collection>(
-      `/workspaces/${workspaceId}/sites/${siteId}/collections`,
+      collectionApiPath(workspaceId, siteScopeId),
       {
         ...collectionForm,
         titleFieldKey: collectionForm.titleFieldKey || undefined,
@@ -368,7 +755,7 @@ export function CollectionsView({
       .filter((field) => field.key.trim() && field.label.trim())
       .map((field) => ({ ...field, key: field.key.trim(), label: field.label.trim() }));
     const updated = await api.patch<Collection>(
-      `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}`,
+      collectionApiPath(workspaceId, siteScopeId, selectedCollection.id),
       {
         fields,
         titleFieldKey: titleFieldKey || null,
@@ -393,7 +780,20 @@ export function CollectionsView({
     }
     setError(null);
     let values: EntryDraft = { ...entryDraft };
-    for (const field of selectedCollection.fields) {
+    if (entryEditorMode === 'json') {
+      try {
+        const parsed = JSON.parse(entryJsonDraft) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+          throw new Error();
+        values = parsed as EntryDraft;
+        setEntryJsonError(null);
+      } catch {
+        setEntryJsonError('Enter a JSON object containing the entry values.');
+        setError('The entry JSON is malformed.');
+        return;
+      }
+    }
+    for (const field of entryEditorMode === 'json' ? [] : selectedCollection.fields) {
       if (field.type !== 'array' && field.type !== 'group') continue;
       const raw = advancedJsonDrafts[field.key] ?? '';
       if (!raw.trim()) {
@@ -411,7 +811,12 @@ export function CollectionsView({
       }
       values = updateEntryDraft(values, field, parsed.value);
     }
-    const path = `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}/entries`;
+    const path = collectionApiPath(
+      workspaceId,
+      siteScopeId,
+      selectedCollection.id,
+      'entries',
+    );
     const saved = selectedEntry
       ? await api.patch<CollectionEntryResponse>(`${path}/${selectedEntry.id}`, {
           values,
@@ -425,6 +830,7 @@ export function CollectionsView({
     );
     setEntryRecord(saved);
     setEntryDraft(saved.values);
+    setEntryJsonDraft(JSON.stringify(saved.values, null, 2));
     setAdvancedJsonDrafts(structuredDrafts(selectedCollection, saved.values));
     setAdvancedJsonErrors({});
     setEntryDrawerOpen(false);
@@ -436,7 +842,12 @@ export function CollectionsView({
     if (!canPublish || !selectedCollection) return;
     setError(null);
     const saved = await api.post<CollectionEntryResponse>(
-      `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}/entries/${entry.id}/publish`,
+      collectionApiPath(
+        workspaceId,
+        siteScopeId,
+        selectedCollection.id,
+        `entries/${entry.id}/publish`,
+      ),
     );
     setEntries((current) => current.map((item) => (item.id === saved.id ? saved : item)));
     setMessage('Entry published.');
@@ -445,9 +856,7 @@ export function CollectionsView({
   async function archiveCollection() {
     if (!canDelete || !selectedCollection) return;
     setError(null);
-    await api.delete(
-      `/workspaces/${workspaceId}/sites/${siteId}/collections/${selectedCollection.id}`,
-    );
+    await api.delete(collectionApiPath(workspaceId, siteScopeId, selectedCollection.id));
     setCollections((current) =>
       current.filter((item) => item.id !== selectedCollection.id),
     );
@@ -463,6 +872,9 @@ export function CollectionsView({
     }
     setEntryRecord(entry);
     setEntryDraft(entry.values);
+    setEntryEditorMode('form');
+    setEntryJsonDraft(JSON.stringify(entry.values, null, 2));
+    setEntryJsonError(null);
     setAdvancedJsonDrafts(structuredDrafts(selectedCollection, entry.values));
     setAdvancedJsonErrors({});
     setEntryDrawerOpen(true);
@@ -475,6 +887,9 @@ export function CollectionsView({
     }
     setEntryRecord(null);
     setEntryDraft({});
+    setEntryEditorMode('form');
+    setEntryJsonDraft('{}');
+    setEntryJsonError(null);
     setAdvancedJsonDrafts(structuredDrafts(selectedCollection, {}));
     setAdvancedJsonErrors({});
     setEntryDrawerOpen(true);
@@ -503,6 +918,14 @@ export function CollectionsView({
     setFieldDrafts(selectedCollection.fields.map((field) => ({ ...field })));
   }
 
+  function updateFieldConstant(index: number, value: unknown): void {
+    setFieldDrafts((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, constantValue: value } : item,
+      ),
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -528,23 +951,9 @@ export function CollectionsView({
             </button>
           ) : (
             <div className="form-actions">
-              <select
-                aria-label="Collection site"
-                onChange={(event) => {
-                  setSiteId(event.target.value);
-                  onSelectSite?.(event.target.value);
-                }}
-                value={siteId}
-              >
-                {sites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.name}
-                  </option>
-                ))}
-              </select>
               <button
                 className="button button-primary"
-                disabled={!siteId || !canCreateCollection}
+                disabled={!canCreateCollection}
                 onClick={onCreateCollection}
                 type="button"
               >
@@ -637,7 +1046,7 @@ export function CollectionsView({
                   <p className="muted">Create your first structured content model.</p>
                   <button
                     className="button button-small button-secondary"
-                    disabled={!siteId || !canCreateCollection}
+                    disabled={!canCreateCollection}
                     onClick={onCreateCollection}
                     type="button"
                   >
@@ -1195,544 +1604,732 @@ export function CollectionsView({
                   </button>
                 ) : null}
               </div>
-              <div className="collection-drawer-field-grid">
-                <label>
-                  Key
-                  <input
-                    pattern="[a-z][a-z0-9_]*"
-                    required
-                    value={field.key}
-                    onChange={(event) =>
-                      setFieldDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, key: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Label
-                  <input
-                    required
-                    value={field.label}
-                    onChange={(event) =>
-                      setFieldDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, label: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Type
-                  <select
-                    value={field.type}
-                    onChange={(event) =>
-                      setFieldDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? {
-                                ...item,
-                                type: event.target.value as CollectionFieldType,
-                                ...(event.target.value === 'select' ||
-                                event.target.value === 'multi-select'
-                                  ? { options: item.options ?? [] }
-                                  : { options: undefined }),
-                                ...(event.target.value === 'reference'
-                                  ? { cardinality: item.cardinality ?? 'one' }
-                                  : {
-                                      targetCollectionId: undefined,
-                                      cardinality: undefined,
-                                    }),
-                              }
-                            : item,
-                        ),
-                      )
-                    }
-                  >
-                    {[...new Set([...fieldTypes, field.type])].map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="collection-required-toggle">
-                  <span>Validation</span>
-                  <span>
+              <details className="collection-field-settings">
+                <summary>Configure field</summary>
+                <div className="collection-drawer-field-grid">
+                  <label>
+                    Key
                     <input
-                      checked={field.required}
+                      pattern="[a-z][a-z0-9_]*"
+                      required
+                      value={field.key}
                       onChange={(event) =>
                         setFieldDrafts((current) =>
                           current.map((item, itemIndex) =>
                             itemIndex === index
-                              ? { ...item, required: event.target.checked }
+                              ? { ...item, key: event.target.value }
                               : item,
                           ),
                         )
                       }
-                      type="checkbox"
                     />
-                    Required field
-                  </span>
-                </label>
-              </div>
-              {field.type !== 'reference' ? (
-                <label>
-                  Default value
-                  <small className="muted">
-                    Applied to new entries when the field is left empty.
-                  </small>
-                  {field.type === 'boolean' ? (
-                    <span className="collection-required-toggle">
-                      <span>
-                        <input
-                          checked={field.defaultValue === true}
-                          onChange={(event) =>
-                            setFieldDrafts((current) =>
-                              current.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? {
-                                      ...item,
-                                      defaultValue: event.target.checked
-                                        ? true
-                                        : undefined,
-                                    }
-                                  : item,
-                              ),
-                            )
-                          }
-                          type="checkbox"
-                        />
-                        Default to true
-                      </span>
-                    </span>
-                  ) : field.type === 'select' ? (
-                    <select
-                      value={defaultFieldValue(field.defaultValue)}
+                  </label>
+                  <label>
+                    Label
+                    <input
+                      required
+                      value={field.label}
                       onChange={(event) =>
                         setFieldDrafts((current) =>
                           current.map((item, itemIndex) =>
                             itemIndex === index
-                              ? { ...item, defaultValue: event.target.value || undefined }
+                              ? { ...item, label: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Type
+                    <select
+                      value={field.type}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  type: event.target.value as CollectionFieldType,
+                                  ...(event.target.value === 'select' ||
+                                  event.target.value === 'multi-select'
+                                    ? { options: item.options ?? [] }
+                                    : { options: undefined }),
+                                  ...(event.target.value === 'reference'
+                                    ? { cardinality: item.cardinality ?? 'one' }
+                                    : {
+                                        targetCollectionId: undefined,
+                                        cardinality: undefined,
+                                      }),
+                                }
                               : item,
                           ),
                         )
                       }
                     >
-                      <option value="">No default</option>
-                      {(field.options ?? []).map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
+                      {[...new Set([...fieldTypes, field.type])].map((type) => (
+                        <option key={type} value={type}>
+                          {type}
                         </option>
                       ))}
                     </select>
-                  ) : field.type === 'multi-select' ? (
-                    <div className="collection-option-list">
-                      {(field.options ?? []).map((option) => {
-                        const selected = Array.isArray(field.defaultValue)
-                          ? field.defaultValue.includes(option.value)
-                          : false;
-                        return (
-                          <label className="checkbox-field" key={option.value}>
-                            <input
-                              checked={selected}
-                              onChange={(event) => {
-                                const current = Array.isArray(field.defaultValue)
-                                  ? field.defaultValue.map(String)
-                                  : [];
-                                const next = event.target.checked
-                                  ? [...current, option.value]
-                                  : current.filter((value) => value !== option.value);
-                                setFieldDrafts((currentFields) =>
-                                  currentFields.map((item, itemIndex) =>
-                                    itemIndex === index
-                                      ? {
-                                          ...item,
-                                          defaultValue: next.length ? next : undefined,
-                                        }
-                                      : item,
-                                  ),
-                                );
-                              }}
-                              type="checkbox"
-                            />
-                            {option.label}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : field.type === 'array' || field.type === 'group' ? (
-                    <textarea
-                      placeholder={field.type === 'array' ? '[]' : '{}'}
-                      rows={3}
-                      value={defaultFieldValue(field.defaultValue)}
-                      onChange={(event) => {
-                        const raw = event.target.value.trim();
-                        let next: unknown = undefined;
-                        if (raw) {
-                          try {
-                            next = JSON.parse(raw);
-                          } catch {
-                            next = raw;
-                          }
-                        }
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, defaultValue: next } : item,
-                          ),
-                        );
-                      }}
-                    />
-                  ) : (
-                    <input
-                      type={field.type === 'number' ? 'number' : 'text'}
-                      value={defaultFieldValue(field.defaultValue)}
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        const next =
-                          raw === ''
-                            ? undefined
-                            : field.type === 'number'
-                              ? Number(raw)
-                              : raw;
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, defaultValue: next } : item,
-                          ),
-                        );
-                      }}
-                    />
-                  )}
-                </label>
-              ) : null}
-              {field.type === 'asset' || field.type === 'image' ? (
-                <div className="collection-drawer-field-grid">
-                  <label>
-                    Allowed MIME types
-                    <small className="muted">
-                      Comma-separated, for example image/png, image/jpeg.
-                    </small>
-                    <input
-                      value={field.validation?.allowedMimeTypes?.join(', ') ?? ''}
-                      onChange={(event) => {
-                        const allowedMimeTypes = event.target.value
-                          .split(',')
-                          .map((value) => value.trim())
-                          .filter(Boolean);
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  validation: {
-                                    ...item.validation,
-                                    allowedMimeTypes: allowedMimeTypes.length
-                                      ? allowedMimeTypes
-                                      : undefined,
-                                  },
-                                }
-                              : item,
-                          ),
-                        );
-                      }}
-                    />
-                  </label>
-                  <label>
-                    Maximum file size (bytes)
-                    <input
-                      min={1}
-                      type="number"
-                      value={field.validation?.maxFileSize ?? ''}
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  validation: {
-                                    ...item.validation,
-                                    maxFileSize: raw === '' ? undefined : Number(raw),
-                                  },
-                                }
-                              : item,
-                          ),
-                        );
-                      }}
-                    />
-                  </label>
-                </div>
-              ) : null}
-              {field.type === 'number' ||
-              field.type === 'text' ||
-              field.type === 'long-text' ||
-              field.type === 'rich-text' ? (
-                <div className="collection-drawer-field-grid">
-                  <label>
-                    {field.type === 'number' ? 'Minimum' : 'Minimum length'}
-                    <input
-                      min={0}
-                      type="number"
-                      value={
-                        field.type === 'number'
-                          ? (field.validation?.min ?? '')
-                          : (field.validation?.minLength ?? '')
-                      }
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        const patch =
-                          field.type === 'number'
-                            ? { min: raw === '' ? undefined : Number(raw) }
-                            : { minLength: raw === '' ? undefined : Number(raw) };
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, validation: { ...item.validation, ...patch } }
-                              : item,
-                          ),
-                        );
-                      }}
-                    />
-                  </label>
-                  <label>
-                    {field.type === 'number' ? 'Maximum' : 'Maximum length'}
-                    <input
-                      min={0}
-                      type="number"
-                      value={
-                        field.type === 'number'
-                          ? (field.validation?.max ?? '')
-                          : (field.validation?.maxLength ?? '')
-                      }
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        const patch =
-                          field.type === 'number'
-                            ? { max: raw === '' ? undefined : Number(raw) }
-                            : { maxLength: raw === '' ? undefined : Number(raw) };
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, validation: { ...item.validation, ...patch } }
-                              : item,
-                          ),
-                        );
-                      }}
-                    />
-                  </label>
-                </div>
-              ) : null}
-              <div className="collection-drawer-field-grid">
-                <label>
-                  Description
-                  <input
-                    value={field.description ?? ''}
-                    onChange={(event) =>
-                      setFieldDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, description: event.target.value || undefined }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Placeholder
-                  <input
-                    value={field.ui?.placeholder ?? ''}
-                    onChange={(event) =>
-                      setFieldDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? {
-                                ...item,
-                                ui: {
-                                  ...item.ui,
-                                  placeholder: event.target.value || undefined,
-                                },
-                              }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label className="collection-required-toggle">
-                  <span>Database behavior</span>
-                  <span>
-                    <input
-                      checked={field.indexed}
-                      onChange={(event) =>
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, indexed: event.target.checked }
-                              : item,
-                          ),
-                        )
-                      }
-                      type="checkbox"
-                    />
-                    Indexed
-                  </span>
-                  <span>
-                    <input
-                      checked={field.unique}
-                      onChange={(event) =>
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, unique: event.target.checked }
-                              : item,
-                          ),
-                        )
-                      }
-                      type="checkbox"
-                    />
-                    Unique
-                  </span>
-                </label>
-              </div>
-              {field.type === 'select' || field.type === 'multi-select' ? (
-                <label>
-                  Options
-                  <span className="muted small">One option per line: value | Label</span>
-                  <textarea
-                    rows={4}
-                    value={(field.options ?? [])
-                      .map((option) => `${option.value} | ${option.label}`)
-                      .join('\n')}
-                    onChange={(event) => {
-                      const options = event.target.value
-                        .split('\n')
-                        .map((line) => line.trim())
-                        .filter(Boolean)
-                        .map((line) => {
-                          const [value, ...labelParts] = line.split('|');
-                          return {
-                            value: value?.trim() ?? '',
-                            label: labelParts.join('|').trim() || value?.trim() || '',
-                          };
-                        })
-                        .filter((option) => option.value && option.label);
-                      setFieldDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, options } : item,
-                        ),
-                      );
-                    }}
-                  />
-                </label>
-              ) : null}
-              {field.type === 'slug' ? (
-                <div className="collection-drawer-field-grid">
-                  <label>
-                    Auto slug source
-                    <select
-                      value={field.slugFromFieldKey ?? ''}
-                      onChange={(event) =>
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  slugFromFieldKey: event.target.value || undefined,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">Manual slug</option>
-                      {fieldDrafts
-                        .filter((candidate) => candidate.id !== field.id)
-                        .map((candidate) => (
-                          <option key={candidate.id} value={candidate.key}>
-                            {candidate.label || candidate.key}
-                          </option>
-                        ))}
-                    </select>
                   </label>
                   <label className="collection-required-toggle">
-                    <span>Slug behavior</span>
+                    <span>Validation</span>
                     <span>
                       <input
-                        checked={field.manualSlugOverride}
+                        checked={field.required}
                         onChange={(event) =>
                           setFieldDrafts((current) =>
                             current.map((item, itemIndex) =>
                               itemIndex === index
-                                ? { ...item, manualSlugOverride: event.target.checked }
+                                ? { ...item, required: event.target.checked }
                                 : item,
                             ),
                           )
                         }
                         type="checkbox"
                       />
-                      Allow manual override
+                      Required field
                     </span>
                   </label>
                 </div>
-              ) : null}
-              {field.type === 'reference' ? (
                 <div className="collection-drawer-field-grid">
                   <label>
-                    Target collection
+                    Value ownership
                     <select
-                      required
-                      value={field.targetCollectionId ?? ''}
-                      onChange={(event) =>
-                        setFieldDrafts((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, targetCollectionId: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">Choose a collection</option>
-                      {collections
-                        .filter((candidate) => candidate.id !== selectedCollection?.id)
-                        .map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {candidate.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <label>
-                    Cardinality
-                    <select
-                      value={field.cardinality ?? 'one'}
+                      value={field.valueMode ?? 'editable'}
                       onChange={(event) =>
                         setFieldDrafts((current) =>
                           current.map((item, itemIndex) =>
                             itemIndex === index
                               ? {
                                   ...item,
-                                  cardinality: event.target.value as 'one' | 'many',
+                                  valueMode: event.target.value as
+                                    'editable' | 'constant',
+                                  ...(event.target.value === 'editable'
+                                    ? { constantValue: undefined }
+                                    : {}),
                                 }
                               : item,
                           ),
                         )
                       }
                     >
-                      <option value="one">One entry</option>
-                      <option value="many">Many entries</option>
+                      <option value="editable">Editable per entry</option>
+                      <option value="constant">Constant schema value</option>
                     </select>
                   </label>
+                  {field.valueMode === 'constant' ? (
+                    <label>
+                      Constant value
+                      {field.type === 'boolean' ? (
+                        <select
+                          value={
+                            field.constantValue === undefined
+                              ? ''
+                              : String(field.constantValue)
+                          }
+                          onChange={(event) =>
+                            updateFieldConstant(
+                              index,
+                              event.target.value === ''
+                                ? undefined
+                                : event.target.value === 'true',
+                            )
+                          }
+                        >
+                          <option value="">Choose a value</option>
+                          <option value="true">True</option>
+                          <option value="false">False</option>
+                        </select>
+                      ) : field.type === 'select' ? (
+                        <select
+                          value={defaultFieldValue(field.constantValue)}
+                          onChange={(event) =>
+                            updateFieldConstant(index, event.target.value || undefined)
+                          }
+                        >
+                          <option value="">Choose a value</option>
+                          {(field.options ?? []).map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : field.type === 'multi-select' ? (
+                        <span className="collection-option-list">
+                          {(field.options ?? []).map((option) => {
+                            const selected = Array.isArray(field.constantValue)
+                              ? field.constantValue.includes(option.value)
+                              : false;
+                            return (
+                              <span className="checkbox-field" key={option.value}>
+                                <input
+                                  checked={selected}
+                                  onChange={(event) => {
+                                    const current = Array.isArray(field.constantValue)
+                                      ? field.constantValue.map(String)
+                                      : [];
+                                    const next = event.target.checked
+                                      ? [...current, option.value]
+                                      : current.filter((value) => value !== option.value);
+                                    updateFieldConstant(index, next);
+                                  }}
+                                  type="checkbox"
+                                />
+                                {option.label}
+                              </span>
+                            );
+                          })}
+                        </span>
+                      ) : field.type === 'array' || field.type === 'group' ? (
+                        <textarea
+                          placeholder={field.type === 'array' ? '[]' : '{}'}
+                          rows={3}
+                          value={defaultFieldValue(field.constantValue)}
+                          onChange={(event) => {
+                            const raw = event.target.value.trim();
+                            if (!raw) {
+                              updateFieldConstant(index, undefined);
+                              return;
+                            }
+                            try {
+                              updateFieldConstant(index, JSON.parse(raw));
+                            } catch {
+                              updateFieldConstant(index, raw);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type={field.type === 'number' ? 'number' : 'text'}
+                          value={defaultFieldValue(field.constantValue)}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            updateFieldConstant(
+                              index,
+                              raw === ''
+                                ? undefined
+                                : field.type === 'number'
+                                  ? Number(raw)
+                                  : raw,
+                            );
+                          }}
+                        />
+                      )}
+                    </label>
+                  ) : null}
                 </div>
-              ) : null}
+                {field.condition ? (
+                  <>
+                    <div className="collection-drawer-field-grid">
+                      <label>
+                        Match rules
+                        <select
+                          value={field.condition.logic}
+                          onChange={(event) =>
+                            setFieldDrafts((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index && item.condition
+                                  ? {
+                                      ...item,
+                                      condition: {
+                                        ...item.condition,
+                                        logic: event.target.value as 'all' | 'any',
+                                      },
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          <option value="all">All rules</option>
+                          <option value="any">Any rule</option>
+                        </select>
+                      </label>
+                    </div>
+                    <CollectionConditionRulesEditor
+                      condition={field.condition}
+                      fields={fieldDrafts.filter(
+                        (candidate) => candidate.id !== field.id && candidate.key,
+                      )}
+                      onChange={(condition) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, condition } : item,
+                          ),
+                        )
+                      }
+                    />
+                  </>
+                ) : null}
+                {field.type !== 'reference' ? (
+                  <label>
+                    Default value
+                    <small className="muted">
+                      Applied to new entries when the field is left empty.
+                    </small>
+                    {field.type === 'boolean' ? (
+                      <span className="collection-required-toggle">
+                        <span>
+                          <input
+                            checked={field.defaultValue === true}
+                            onChange={(event) =>
+                              setFieldDrafts((current) =>
+                                current.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? {
+                                        ...item,
+                                        defaultValue: event.target.checked
+                                          ? true
+                                          : undefined,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          Default to true
+                        </span>
+                      </span>
+                    ) : field.type === 'select' ? (
+                      <select
+                        value={defaultFieldValue(field.defaultValue)}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    defaultValue: event.target.value || undefined,
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">No default</option>
+                        {(field.options ?? []).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : field.type === 'multi-select' ? (
+                      <div className="collection-option-list">
+                        {(field.options ?? []).map((option) => {
+                          const selected = Array.isArray(field.defaultValue)
+                            ? field.defaultValue.includes(option.value)
+                            : false;
+                          return (
+                            <label className="checkbox-field" key={option.value}>
+                              <input
+                                checked={selected}
+                                onChange={(event) => {
+                                  const current = Array.isArray(field.defaultValue)
+                                    ? field.defaultValue.map(String)
+                                    : [];
+                                  const next = event.target.checked
+                                    ? [...current, option.value]
+                                    : current.filter((value) => value !== option.value);
+                                  setFieldDrafts((currentFields) =>
+                                    currentFields.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? {
+                                            ...item,
+                                            defaultValue: next.length ? next : undefined,
+                                          }
+                                        : item,
+                                    ),
+                                  );
+                                }}
+                                type="checkbox"
+                              />
+                              {option.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : field.type === 'array' || field.type === 'group' ? (
+                      <textarea
+                        placeholder={field.type === 'array' ? '[]' : '{}'}
+                        rows={3}
+                        value={defaultFieldValue(field.defaultValue)}
+                        onChange={(event) => {
+                          const raw = event.target.value.trim();
+                          let next: unknown = undefined;
+                          if (raw) {
+                            try {
+                              next = JSON.parse(raw);
+                            } catch {
+                              next = raw;
+                            }
+                          }
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, defaultValue: next }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    ) : (
+                      <input
+                        type={field.type === 'number' ? 'number' : 'text'}
+                        value={defaultFieldValue(field.defaultValue)}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const next =
+                            raw === ''
+                              ? undefined
+                              : field.type === 'number'
+                                ? Number(raw)
+                                : raw;
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, defaultValue: next }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    )}
+                  </label>
+                ) : null}
+                {field.type === 'asset' || field.type === 'image' ? (
+                  <div className="collection-drawer-field-grid">
+                    <label>
+                      Allowed MIME types
+                      <small className="muted">
+                        Comma-separated, for example image/png, image/jpeg.
+                      </small>
+                      <input
+                        value={field.validation?.allowedMimeTypes?.join(', ') ?? ''}
+                        onChange={(event) => {
+                          const allowedMimeTypes = event.target.value
+                            .split(',')
+                            .map((value) => value.trim())
+                            .filter(Boolean);
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    validation: {
+                                      ...item.validation,
+                                      allowedMimeTypes: allowedMimeTypes.length
+                                        ? allowedMimeTypes
+                                        : undefined,
+                                    },
+                                  }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </label>
+                    <label>
+                      Maximum file size (bytes)
+                      <input
+                        min={1}
+                        type="number"
+                        value={field.validation?.maxFileSize ?? ''}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    validation: {
+                                      ...item.validation,
+                                      maxFileSize: raw === '' ? undefined : Number(raw),
+                                    },
+                                  }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                {field.type === 'number' ||
+                field.type === 'text' ||
+                field.type === 'long-text' ||
+                field.type === 'rich-text' ? (
+                  <div className="collection-drawer-field-grid">
+                    <label>
+                      {field.type === 'number' ? 'Minimum' : 'Minimum length'}
+                      <input
+                        min={0}
+                        type="number"
+                        value={
+                          field.type === 'number'
+                            ? (field.validation?.min ?? '')
+                            : (field.validation?.minLength ?? '')
+                        }
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const patch =
+                            field.type === 'number'
+                              ? { min: raw === '' ? undefined : Number(raw) }
+                              : { minLength: raw === '' ? undefined : Number(raw) };
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    validation: { ...item.validation, ...patch },
+                                  }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </label>
+                    <label>
+                      {field.type === 'number' ? 'Maximum' : 'Maximum length'}
+                      <input
+                        min={0}
+                        type="number"
+                        value={
+                          field.type === 'number'
+                            ? (field.validation?.max ?? '')
+                            : (field.validation?.maxLength ?? '')
+                        }
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          const patch =
+                            field.type === 'number'
+                              ? { max: raw === '' ? undefined : Number(raw) }
+                              : { maxLength: raw === '' ? undefined : Number(raw) };
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    validation: { ...item.validation, ...patch },
+                                  }
+                                : item,
+                            ),
+                          );
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <div className="collection-drawer-field-grid">
+                  <label>
+                    Description
+                    <input
+                      value={field.description ?? ''}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, description: event.target.value || undefined }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label>
+                    Placeholder
+                    <input
+                      value={field.ui?.placeholder ?? ''}
+                      onChange={(event) =>
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  ui: {
+                                    ...item.ui,
+                                    placeholder: event.target.value || undefined,
+                                  },
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <label className="collection-required-toggle">
+                    <span>Database behavior</span>
+                    <span>
+                      <input
+                        checked={field.indexed}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, indexed: event.target.checked }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      Indexed
+                    </span>
+                    <span>
+                      <input
+                        checked={field.unique}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, unique: event.target.checked }
+                                : item,
+                            ),
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      Unique
+                    </span>
+                  </label>
+                </div>
+                {field.type === 'select' || field.type === 'multi-select' ? (
+                  <label>
+                    Options
+                    <span className="muted small">
+                      One option per line: value | Label
+                    </span>
+                    <textarea
+                      rows={4}
+                      value={(field.options ?? [])
+                        .map((option) => `${option.value} | ${option.label}`)
+                        .join('\n')}
+                      onChange={(event) => {
+                        const options = event.target.value
+                          .split('\n')
+                          .map((line) => line.trim())
+                          .filter(Boolean)
+                          .map((line) => {
+                            const [value, ...labelParts] = line.split('|');
+                            return {
+                              value: value?.trim() ?? '',
+                              label: labelParts.join('|').trim() || value?.trim() || '',
+                            };
+                          })
+                          .filter((option) => option.value && option.label);
+                        setFieldDrafts((current) =>
+                          current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, options } : item,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                ) : null}
+                {field.type === 'slug' ? (
+                  <div className="collection-drawer-field-grid">
+                    <label>
+                      Auto slug source
+                      <select
+                        value={field.slugFromFieldKey ?? ''}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    slugFromFieldKey: event.target.value || undefined,
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">Manual slug</option>
+                        {fieldDrafts
+                          .filter((candidate) => candidate.id !== field.id)
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.key}>
+                              {candidate.label || candidate.key}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="collection-required-toggle">
+                      <span>Slug behavior</span>
+                      <span>
+                        <input
+                          checked={field.manualSlugOverride}
+                          onChange={(event) =>
+                            setFieldDrafts((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, manualSlugOverride: event.target.checked }
+                                  : item,
+                              ),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        Allow manual override
+                      </span>
+                    </label>
+                  </div>
+                ) : null}
+                {field.type === 'reference' ? (
+                  <div className="collection-drawer-field-grid">
+                    <label>
+                      Target collection
+                      <select
+                        required
+                        value={field.targetCollectionId ?? ''}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, targetCollectionId: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="">Choose a collection</option>
+                        {collections
+                          .filter((candidate) => candidate.id !== selectedCollection?.id)
+                          .map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>
+                              {candidate.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      Cardinality
+                      <select
+                        value={field.cardinality ?? 'one'}
+                        onChange={(event) =>
+                          setFieldDrafts((current) =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    cardinality: event.target.value as 'one' | 'many',
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value="one">One entry</option>
+                        <option value="many">Many entries</option>
+                      </select>
+                    </label>
+                  </div>
+                ) : null}
+              </details>
             </div>
           ))}
         </form>
@@ -1817,19 +2414,109 @@ export function CollectionsView({
                 </div>
                 {selectedEntry ? <StatusBadge status={selectedEntry.status} /> : null}
               </div>
-              <CollectionEntryFields
-                key={routeEntryId ?? 'new-entry'}
-                collection={selectedCollection}
-                collections={collections}
-                disabled={entryReadOnly}
-                advancedJsonDrafts={advancedJsonDrafts}
-                advancedJsonErrors={advancedJsonErrors}
-                entryDraft={entryDraft}
-                onAdvancedJsonChange={updateAdvancedJson}
-                onChange={setEntryDraft}
-                siteId={siteId}
-                workspaceId={workspaceId}
-              />
+              {entryEditorMode === 'form' ? (
+                <CollectionEntryFields
+                  key={routeEntryId ?? 'new-entry'}
+                  collection={selectedCollection}
+                  collections={collections}
+                  disabled={entryReadOnly}
+                  advancedJsonDrafts={advancedJsonDrafts}
+                  advancedJsonErrors={advancedJsonErrors}
+                  entryDraft={entryDraft}
+                  onAdvancedJsonChange={updateAdvancedJson}
+                  onChange={setEntryDraft}
+                  siteId={siteScopeId}
+                  workspaceId={workspaceId}
+                />
+              ) : null}
+              {!entryReadOnly ? (
+                <div className="collection-entry-editor-mode">
+                  <span className="muted small">Editor mode</span>
+                  <button
+                    className={
+                      entryEditorMode === 'form'
+                        ? 'button button-small button-primary'
+                        : 'button button-small button-ghost'
+                    }
+                    onClick={() => setEntryEditorMode('form')}
+                    type="button"
+                  >
+                    Form
+                  </button>
+                  <button
+                    className={
+                      entryEditorMode === 'json'
+                        ? 'button button-small button-primary'
+                        : 'button button-small button-ghost'
+                    }
+                    onClick={() => {
+                      setEntryJsonDraft(JSON.stringify(entryDraft, null, 2));
+                      setEntryEditorMode('json');
+                    }}
+                    type="button"
+                  >
+                    JSON
+                  </button>
+                </div>
+              ) : null}
+              {entryEditorMode === 'json' ? (
+                <label>
+                  Entry values (JSON)
+                  <textarea
+                    aria-describedby={entryJsonError ? 'entry-json-error' : undefined}
+                    aria-label="Entry values JSON"
+                    disabled={entryReadOnly}
+                    onChange={(event) => {
+                      const nextDraft = event.target.value;
+                      setEntryJsonDraft(nextDraft);
+                      const parsed = parseStructuredValue(nextDraft);
+                      if (
+                        parsed.success &&
+                        parsed.value &&
+                        typeof parsed.value === 'object' &&
+                        !Array.isArray(parsed.value)
+                      ) {
+                        setEntryDraft(parsed.value as EntryDraft);
+                        setAdvancedJsonDrafts(
+                          structuredDrafts(
+                            selectedCollection,
+                            parsed.value as EntryDraft,
+                          ),
+                        );
+                        setEntryJsonError(null);
+                      } else {
+                        setEntryJsonError(
+                          'Enter a JSON object containing the entry values.',
+                        );
+                      }
+                    }}
+                    rows={14}
+                    value={entryJsonDraft}
+                  />
+                  {entryJsonError ? (
+                    <small id="entry-json-error" className="muted">
+                      {entryJsonError}
+                    </small>
+                  ) : null}
+                  {!selectedEntry ? (
+                    <button
+                      className="button button-small button-ghost"
+                      onClick={() => {
+                        const sample = sampleEntryValues(selectedCollection);
+                        setEntryDraft(sample);
+                        setEntryJsonDraft(JSON.stringify(sample, null, 2));
+                        setAdvancedJsonDrafts(
+                          structuredDrafts(selectedCollection, sample),
+                        );
+                        setEntryJsonError(null);
+                      }}
+                      type="button"
+                    >
+                      Load sample
+                    </button>
+                  ) : null}
+                </label>
+              ) : null}
             </>
           ) : null}
         </form>

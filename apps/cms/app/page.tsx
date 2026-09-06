@@ -63,12 +63,19 @@ export default function CmsHomePage() {
           target = pagePath(workspace.id, siteId, pageId);
         } else if ((view === 'seo' || view === 'workflows') && siteId && pageId) {
           target = pagePath(workspace.id, siteId, pageId, view);
-        } else if (view === 'collections' && siteId) {
+        } else if (view === 'collections') {
           const requestedCollectionId = query.get('collectionId') || undefined;
+          // Preserve bookmarks that explicitly named a site until the
+          // workspace-ownership migration has been observed. New CMS links
+          // never generate this compatibility route.
           target = collectionPath(workspace.id, siteId, requestedCollectionId);
         } else if ((view === 'navigation' || view === 'design-system') && siteId) {
           target = cmsViewPath(workspace.id, view, siteId);
         } else if (view === 'pages') {
+          target = pagesPath(workspace.id, siteId);
+        } else if (view === 'navigation') {
+          // Navigation content now belongs to page/layout documents. Keep
+          // old deep links useful without reopening the deprecated editor.
           target = pagesPath(workspace.id, siteId);
         } else {
           target = cmsViewPath(workspace.id, view, siteId);

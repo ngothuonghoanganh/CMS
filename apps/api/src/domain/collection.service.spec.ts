@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   CollectionDefinitionSchema,
@@ -120,5 +120,72 @@ describe('CollectionService query validation', () => {
         offset: 0,
       }),
     ).toThrow(/sort/i);
+  });
+});
+
+describe('CollectionService entry value semantics', () => {
+  it('overwrites constants and skips required validation for hidden fields', async () => {
+    const service = Object.create(CollectionService.prototype) as CollectionService;
+    (
+      service as unknown as { entryModel: { exists: ReturnType<typeof vi.fn> } }
+    ).entryModel = {
+      exists: vi.fn().mockResolvedValue(false),
+    };
+    const validator = (
+      service as unknown as {
+        validateValues: (
+          workspaceId: string,
+          siteId: string | undefined,
+          model: CollectionDefinition,
+          input: Record<string, unknown>,
+        ) => Promise<{ values: Record<string, unknown> }>;
+      }
+    ).validateValues.bind(service);
+    const conditionalCollection = CollectionDefinitionSchema.parse({
+      ...collection,
+      fields: [
+        {
+          ...collection.fields[0],
+          valueMode: 'constant',
+          constantValue: 'server-owned',
+        },
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          key: 'show_details',
+          label: 'Show details',
+          type: 'boolean',
+          required: false,
+          indexed: false,
+          unique: false,
+          status: 'active',
+          manualSlugOverride: true,
+        },
+        {
+          id: '77777777-7777-4777-8777-777777777777',
+          key: 'details',
+          label: 'Details',
+          type: 'text',
+          required: true,
+          indexed: false,
+          unique: false,
+          status: 'active',
+          manualSlugOverride: true,
+          condition: {
+            logic: 'all',
+            rules: [{ fieldKey: 'show_details', operator: 'equals', value: true }],
+          },
+        },
+      ],
+      titleFieldKey: 'title',
+    });
+
+    await expect(
+      validator(collection.workspaceId, undefined, conditionalCollection, {
+        title: 'client-value',
+        show_details: false,
+      }),
+    ).resolves.toMatchObject({
+      values: { title: 'server-owned', show_details: false },
+    });
   });
 });

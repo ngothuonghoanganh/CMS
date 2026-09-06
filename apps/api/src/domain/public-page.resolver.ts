@@ -16,6 +16,7 @@ import {
   readDataPath,
   SiteGlobalsSchema,
   SiteDesignSystemSchema,
+  mergeSiteDesignSystems,
   normalizeHostname,
   matchDynamicPath,
   type PublicPage,
@@ -35,9 +36,10 @@ import {
   type PageVersionDocument,
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { SiteUrlService } from './site-url.service';
-import { NavigationService } from './navigation.service';
+import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
@@ -48,6 +50,8 @@ export class PublicPageResolver {
   constructor(
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
+    @InjectModel(WorkspaceRecord.name)
+    private readonly workspaceModel: Model<WorkspaceRecord>,
     @InjectModel(PageRecord.name)
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
@@ -270,17 +274,33 @@ export class PublicPageResolver {
         seo?.canonicalUrl,
         resolvedPath,
       );
-      const navigation = await this.navigation.resolveForSite(
-        site._id.toString(),
-        site.workspaceId,
-        { mode: 'published' },
-      );
       const layout = await this.layoutExtensions.resolveComposition(
         publishedBundle?.layoutAttachments ??
           (versionComposition.success ? versionComposition.data.layoutAttachments : []),
         'published',
         { siteId: site._id.toString(), workspaceId: site.workspaceId },
       );
+      const navigation = await this.navigation.resolveForSite(
+        site._id.toString(),
+        site.workspaceId,
+        { mode: 'published' },
+      );
+      const navigationPagePaths = await this.navigation.resolvePagePaths(
+        site._id.toString(),
+        site.workspaceId,
+        collectNavigationPageIds({ payload, layout }),
+        site.homePageId,
+        'published',
+      );
+      const publicNavigation =
+        navigation || Object.keys(navigationPagePaths).length > 0
+          ? {
+              ...(navigation ?? {}),
+              ...(Object.keys(navigationPagePaths).length > 0
+                ? { pagePaths: navigationPagePaths }
+                : {}),
+            }
+          : undefined;
       const globals = site.publishedGlobals
         ? SiteGlobalsSchema.parse(site.publishedGlobals)
         : undefined;
@@ -290,9 +310,17 @@ export class PublicPageResolver {
         payload,
         true,
       );
-      const designSystem = site.publishedDesignSystem
-        ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
-        : undefined;
+      const workspace = await this.workspaceModel
+        .findOne({ _id: page.workspaceId })
+        .exec();
+      const designSystem = mergeSiteDesignSystems(
+        workspace?.publishedDesignSystem
+          ? SiteDesignSystemSchema.parse(workspace.publishedDesignSystem)
+          : undefined,
+        site.publishedDesignSystem
+          ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
+          : undefined,
+      );
       const dataContext = await this.collections.resolveDataContext(
         page.workspaceId,
         page.siteId,
@@ -328,7 +356,7 @@ export class PublicPageResolver {
         ...(extensions.length ? { extensions } : {}),
         ...(seo ? { seo } : {}),
         ...(canonicalUrl ? { canonicalUrl } : {}),
-        ...(navigation ? { navigation } : {}),
+        ...(publicNavigation ? { navigation: publicNavigation } : {}),
         ...(layout.header || layout.footer ? { layout } : {}),
         ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),

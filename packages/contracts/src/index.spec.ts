@@ -60,6 +60,8 @@ import {
   ReusableComponentDocumentSchema,
   SiteDesignSystemSchema,
   createDefaultSiteDesignSystem,
+  mergeSiteDesignSystems,
+  resolveDesignSystemComponentDefaults,
   resolvePageStyleValue,
 } from './index';
 
@@ -1395,5 +1397,52 @@ describe('foundation contracts', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('defines token-backed component defaults without materializing local node styles', () => {
+    const system = createDefaultSiteDesignSystem();
+    const heading = resolveDesignSystemComponentDefaults(system, 'heading');
+    expect(heading?.style?.base.fontSize).toEqual({
+      kind: 'token',
+      tokenId: 'type-heading',
+    });
+    expect(resolvePageStyleValue(heading?.style?.base.color!, system, 'color')).toBe(
+      '#111827',
+    );
+    expect(
+      SiteDesignSystemSchema.safeParse({
+        ...system,
+        componentDefaults: {
+          heading,
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('merges a site override over published workspace defaults', () => {
+    const workspace = createDefaultSiteDesignSystem();
+    const site = SiteDesignSystemSchema.parse({
+      ...workspace,
+      colors: workspace.colors.map((token) =>
+        token.id === 'color-primary' ? { ...token, value: '#7c3aed' } : token,
+      ),
+      componentDefaults: {
+        button: {
+          style: { base: { borderRadius: '2px' } },
+        },
+      },
+    });
+    const effective = mergeSiteDesignSystems(workspace, site);
+
+    expect(effective?.colors.find((token) => token.id === 'color-primary')?.value).toBe(
+      '#7c3aed',
+    );
+    expect(effective?.colors.find((token) => token.id === 'color-text')?.value).toBe(
+      '#111827',
+    );
+    expect(effective?.componentDefaults?.button?.style?.base).toMatchObject({
+      backgroundColor: { kind: 'token', tokenId: 'color-primary' },
+      borderRadius: '2px',
+    });
   });
 });

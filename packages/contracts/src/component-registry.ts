@@ -42,10 +42,16 @@ export type ComponentPropertyDefinition = {
   max?: number;
   step?: number;
   options?: readonly ComponentPropertyOption[];
-  customEditor?: 'form' | 'list';
+  customEditor?: 'form' | 'list' | 'navigation';
   assetKind?: 'image' | 'video';
   /** Allows the Phase 20 binding editor to offer this property as a target. */
   bindable?: boolean;
+  /** Finite declarative visibility rule for progressive disclosure. */
+  visibleWhen?: {
+    property: string;
+    operator: 'equals' | 'notEquals' | 'isEmpty';
+    value?: unknown;
+  };
 };
 
 export type BuilderPreviewAlign = 'start' | 'center' | 'end';
@@ -182,7 +188,14 @@ export type ComponentSlotDefinition = {
 export type ComponentBuilderExposure = {
   /** Internal nodes remain selectable/persisted but are not global Add blocks. */
   insertable: boolean;
-  group: 'layout' | 'typography' | 'media' | 'interactive' | 'conversion' | 'advanced';
+  group:
+    | 'layout'
+    | 'typography'
+    | 'media'
+    | 'navigation'
+    | 'interactive'
+    | 'conversion'
+    | 'advanced';
   keywords: readonly string[];
   description: string;
   preview: ComponentBuilderPreview;
@@ -1607,7 +1620,6 @@ const rawPageComponentRegistry = {
         name: 'navigation',
         label: 'Navigation',
         accepts: ['navigation-view'],
-        maxChildren: 1,
         structural: true,
       },
       {
@@ -1703,15 +1715,15 @@ const rawPageComponentRegistry = {
     category: 'content',
     editorTagName: 'nav',
     defaultProps: {
-      source: 'main',
+      items: [],
       orientation: 'horizontal',
       mobileBehavior: 'collapse',
       alignment: 'left',
       ariaLabel: 'Main navigation',
     },
     builder: {
-      group: 'interactive',
-      documentKinds: ['site-header', 'site-footer'],
+      group: 'navigation',
+      documentKinds: ['page', 'site-header', 'site-footer'],
       keywords: ['navigation', 'menu', 'nav'],
     },
     componentParts: {
@@ -1762,6 +1774,15 @@ const rawPageComponentRegistry = {
           { value: 'main', label: 'Main navigation' },
           { value: 'footer', label: 'Footer navigation' },
         ],
+        visibleWhen: { property: 'items', operator: 'isEmpty', value: true },
+      },
+      {
+        key: 'items',
+        label: 'Menu items',
+        group: 'content',
+        editingScope: 'content',
+        control: 'custom',
+        customEditor: 'navigation',
       },
       {
         key: 'orientation',

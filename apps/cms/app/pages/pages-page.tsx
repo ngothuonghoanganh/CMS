@@ -137,7 +137,11 @@ export default function PagesPage({
         .get(`/sites/${selectedSiteId}/pages?limit=100`)
         .then((response) => setPages(PageListResponseSchema.parse(response).items)),
       api
-        .get(`/workspaces/${workspaceId}/sites/${selectedSiteId}/collections`)
+        .get(
+          siteId
+            ? `/workspaces/${workspaceId}/sites/${selectedSiteId}/collections`
+            : `/workspaces/${workspaceId}/collections`,
+        )
         .then((response) => setCollections(response as Collection[])),
     ];
     if (can('template.read'))
@@ -159,7 +163,7 @@ export default function PagesPage({
     void Promise.all(requests).catch((caughtError: unknown) =>
       setError(message(caughtError)),
     );
-  }, [can, selectedSiteId, workspaceId]);
+  }, [can, selectedSiteId, siteId, workspaceId]);
   useEffect(() => {
     setPageForm(
       selectedPage
@@ -225,13 +229,15 @@ export default function PagesPage({
     }
     void api
       .get(
-        `/workspaces/${workspaceId}/sites/${selectedSiteId}/collections/${selectedPage.collectionId}/entries?limit=100&offset=0`,
+        siteId
+          ? `/workspaces/${workspaceId}/sites/${selectedSiteId}/collections/${selectedPage.collectionId}/entries?limit=100&offset=0`
+          : `/workspaces/${workspaceId}/collections/${selectedPage.collectionId}/entries?limit=100&offset=0`,
       )
       .then((response) =>
         setEntries((response as { items: CollectionEntryResponse[] }).items),
       )
       .catch(() => setEntries([]));
-  }, [selectedPage?.collectionId, selectedSiteId, workspaceId]);
+  }, [selectedPage?.collectionId, selectedSiteId, siteId, workspaceId]);
   useEffect(() => {
     if (selectedPage?.kind !== 'dynamic') return;
     setPageForm((current) => {

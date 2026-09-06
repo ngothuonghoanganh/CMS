@@ -98,6 +98,59 @@ export type CollectionFieldType = z.infer<typeof CollectionFieldTypeSchema>;
 export const CollectionFieldStatusSchema = z.enum(['active', 'archived']);
 export type CollectionFieldStatus = z.infer<typeof CollectionFieldStatusSchema>;
 
+export const CollectionFieldValueModeSchema = z.enum(['editable', 'constant']);
+export type CollectionFieldValueMode = z.infer<typeof CollectionFieldValueModeSchema>;
+
+export const CollectionConditionOperatorSchema = z.enum([
+  'equals',
+  'notEquals',
+  'in',
+  'notIn',
+  'isSet',
+  'isEmpty',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+]);
+export type CollectionConditionOperator = z.infer<
+  typeof CollectionConditionOperatorSchema
+>;
+
+export const CollectionConditionRuleSchema = z
+  .object({
+    fieldKey: key,
+    operator: CollectionConditionOperatorSchema,
+    value: z.unknown().optional(),
+  })
+  .strict()
+  .superRefine((rule, context) => {
+    const requiresValue = !['isSet', 'isEmpty'].includes(rule.operator);
+    if (requiresValue && rule.value === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `${rule.operator} conditions require a value`,
+      });
+    }
+    if (!requiresValue && rule.value !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['value'],
+        message: `${rule.operator} conditions cannot define a value`,
+      });
+    }
+  });
+export type CollectionConditionRule = z.infer<typeof CollectionConditionRuleSchema>;
+
+export const CollectionFieldConditionSchema = z
+  .object({
+    logic: z.enum(['all', 'any']).default('all'),
+    rules: z.array(CollectionConditionRuleSchema).min(1).max(20),
+  })
+  .strict();
+export type CollectionFieldCondition = z.infer<typeof CollectionFieldConditionSchema>;
+
 export const CollectionFieldOptionSchema = z
   .object({ label: nonEmpty.max(160), value: z.string().trim().min(1).max(160) })
   .strict();
@@ -183,6 +236,9 @@ const collectionFieldDefinitionInputShape = {
   cardinality: CollectionReferenceCardinalitySchema.optional(),
   slugFromFieldKey: key.optional(),
   manualSlugOverride: z.boolean().default(true),
+  valueMode: CollectionFieldValueModeSchema.optional(),
+  constantValue: z.unknown().optional(),
+  condition: CollectionFieldConditionSchema.optional(),
 };
 
 const validateCollectionFieldDefinition = (
@@ -255,6 +311,30 @@ const validateCollectionFieldDefinition = (
       code: 'custom',
       path: ['validation', 'maxFileSize'],
       message: 'File size restrictions are only valid for asset fields',
+    });
+  }
+  if (field.valueMode === 'constant' && field.constantValue === undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['constantValue'],
+      message: 'Constant fields require a constant value',
+    });
+  }
+  if (field.valueMode !== 'constant' && field.constantValue !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['constantValue'],
+      message: 'Editable fields cannot define a constant value',
+    });
+  }
+  if (
+    field.constantValue !== undefined &&
+    !isCollectionFieldValueCompatible(field.type, field.constantValue, field.options)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['constantValue'],
+      message: `Constant value is not compatible with ${field.type} fields`,
     });
   }
 };
@@ -342,7 +422,8 @@ export const CollectionDefinitionSchema = z
   .object({
     id: entityId,
     workspaceId: entityId,
-    siteId: entityId,
+    /** @deprecated Legacy site ownership, read-only during migration. */
+    siteId: entityId.optional(),
     key: z
       .string()
       .trim()
@@ -386,6 +467,7 @@ export const CollectionDefinitionSchema = z
         message: 'titleFieldKey must reference a field in the collection',
       });
     }
+    validateCollectionFieldConditions(collection.fields, context);
   });
 export type CollectionDefinition = z.infer<typeof CollectionDefinitionSchema>;
 
@@ -408,6 +490,7 @@ export const CreateCollectionRequestSchema = z
   .strict()
   .superRefine((collection, context) => {
     assertUniqueCollectionFieldKeys(collection.fields, context);
+    validateCollectionFieldConditions(collection.fields, context);
     if (
       collection.titleFieldKey &&
       !collection.fields.some((field) => field.key === collection.titleFieldKey)
@@ -433,6 +516,7 @@ export const UpdateCollectionRequestSchema = z
   .strict()
   .superRefine((collection, context) => {
     if (collection.fields) assertUniqueCollectionFieldKeys(collection.fields, context);
+    if (collection.fields) validateCollectionFieldConditions(collection.fields, context);
     if (
       collection.fields &&
       collection.titleFieldKey &&
@@ -455,7 +539,8 @@ export const CollectionEntrySchema = z
   .object({
     id: entityId,
     workspaceId: entityId,
-    siteId: entityId,
+    /** @deprecated Legacy site ownership, read-only during migration. */
+    siteId: entityId.optional(),
     collectionId: entityId,
     draftVersionId: entityId.optional(),
     publishedVersionId: entityId.optional(),
@@ -469,6 +554,9 @@ export type CollectionEntry = z.infer<typeof CollectionEntrySchema>;
 export const CollectionEntryVersionSchema = z
   .object({
     id: entityId,
+    workspaceId: entityId,
+    /** @deprecated Legacy site ownership, read-only during migration. */
+    siteId: entityId.optional(),
     entryId: entityId,
     collectionId: entityId,
     versionNumber: z.number().int().positive(),
@@ -758,3 +846,213 @@ export const CollectionUsageResponseSchema = z
   })
   .strict();
 export type CollectionUsageResponse = z.infer<typeof CollectionUsageResponseSchema>;
+
+type CollectionFieldConditionSource = {
+  key: string;
+  type: CollectionFieldType;
+  options?: readonly CollectionFieldOption[] | undefined;
+  condition?: CollectionFieldCondition | undefined;
+};
+
+function compatibleConditionValue(
+  field: CollectionFieldConditionSource,
+  operator: CollectionConditionOperator,
+  value: unknown,
+): boolean {
+  if (operator === 'isSet' || operator === 'isEmpty') return value === undefined;
+  if (operator === 'in' || operator === 'notIn') {
+    if (field.type === 'multi-select') {
+      return (
+        Array.isArray(value) &&
+        value.every(
+          (candidate) =>
+            typeof candidate === 'string' &&
+            (!field.options ||
+              field.options.some((option) => option.value === candidate)),
+        )
+      );
+    }
+    return (
+      Array.isArray(value) &&
+      value.every((candidate) =>
+        isCollectionFieldValueCompatible(field.type, candidate, field.options),
+      )
+    );
+  }
+  return isCollectionFieldValueCompatible(field.type, value, field.options);
+}
+
+/** Validate the finite condition AST against sibling fields and field types. */
+export function validateCollectionFieldConditions(
+  fields: readonly CollectionFieldConditionSource[],
+  context: z.RefinementCtx,
+): void {
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  for (const [index, field] of fields.entries()) {
+    for (const [ruleIndex, rule] of (field.condition?.rules ?? []).entries()) {
+      if (rule.fieldKey === field.key) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'condition', 'rules', ruleIndex, 'fieldKey'],
+          message: 'A field condition cannot depend on itself',
+        });
+        continue;
+      }
+      const source = byKey.get(rule.fieldKey);
+      if (!source) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'condition', 'rules', ruleIndex, 'fieldKey'],
+          message: `Condition field ${rule.fieldKey} was not found`,
+        });
+        continue;
+      }
+      const allowed = conditionOperatorsForFieldType(source.type);
+      if (!allowed.includes(rule.operator)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'condition', 'rules', ruleIndex, 'operator'],
+          message: `${rule.operator} is not valid for ${source.type} fields`,
+        });
+      } else if (!compatibleConditionValue(source, rule.operator, rule.value)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'condition', 'rules', ruleIndex, 'value'],
+          message: `Condition value is not compatible with ${source.type} fields`,
+        });
+      }
+    }
+  }
+  const graph = new Map<string, string[]>();
+  for (const field of fields) {
+    graph.set(field.key, field.condition?.rules.map((rule) => rule.fieldKey) ?? []);
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (keyValue: string): boolean => {
+    if (visiting.has(keyValue)) return true;
+    if (visited.has(keyValue)) return false;
+    visiting.add(keyValue);
+    for (const dependency of graph.get(keyValue) ?? []) {
+      if (visit(dependency)) return true;
+    }
+    visiting.delete(keyValue);
+    visited.add(keyValue);
+    return false;
+  };
+  if ([...graph.keys()].some((keyValue) => visit(keyValue))) {
+    context.addIssue({
+      code: 'custom',
+      path: ['fields'],
+      message: 'Collection field conditions cannot contain cycles',
+    });
+  }
+}
+
+const allConditionOperators = [
+  'equals',
+  'notEquals',
+  'in',
+  'notIn',
+  'isSet',
+  'isEmpty',
+] as const;
+
+const conditionOperatorsByFieldType: Record<
+  CollectionFieldType,
+  readonly CollectionConditionOperator[]
+> = {
+  text: [...allConditionOperators],
+  'long-text': [...allConditionOperators],
+  'rich-text': [...allConditionOperators],
+  number: [...allConditionOperators, 'gt', 'gte', 'lt', 'lte'],
+  boolean: ['equals', 'notEquals', 'isSet', 'isEmpty'],
+  date: [...allConditionOperators, 'gt', 'gte', 'lt', 'lte'],
+  datetime: [...allConditionOperators, 'gt', 'gte', 'lt', 'lte'],
+  asset: [...allConditionOperators],
+  image: [...allConditionOperators],
+  url: [...allConditionOperators],
+  email: [...allConditionOperators],
+  slug: [...allConditionOperators],
+  select: [...allConditionOperators],
+  'multi-select': [...allConditionOperators],
+  reference: [...allConditionOperators],
+  array: ['equals', 'notEquals', 'isSet', 'isEmpty'],
+  group: ['equals', 'notEquals', 'isSet', 'isEmpty'],
+};
+
+export function conditionOperatorsForFieldType(
+  type: CollectionFieldType,
+): readonly CollectionConditionOperator[] {
+  return conditionOperatorsByFieldType[type];
+}
+
+export function isCollectionFieldVisible(
+  field: CollectionFieldDefinition,
+  values: Record<string, unknown>,
+  fieldsByKey?: ReadonlyMap<string, CollectionFieldDefinition>,
+): boolean {
+  if (!field.condition) return true;
+  const fields = fieldsByKey ?? new Map();
+  const ruleResults = field.condition.rules.map((rule) => {
+    const source = fields.get(rule.fieldKey);
+    const current = values[rule.fieldKey];
+    if (!source) return false;
+    switch (rule.operator) {
+      case 'equals':
+        return current === rule.value;
+      case 'notEquals':
+        return current !== rule.value;
+      case 'in':
+        if (!Array.isArray(rule.value)) return false;
+        {
+          const expected = rule.value as unknown[];
+          return Array.isArray(current)
+            ? current.some((candidate) => expected.includes(candidate))
+            : expected.includes(current);
+        }
+      case 'notIn':
+        if (!Array.isArray(rule.value)) return false;
+        {
+          const expected = rule.value as unknown[];
+          return Array.isArray(current)
+            ? current.every((candidate) => !expected.includes(candidate))
+            : !expected.includes(current);
+        }
+      case 'isSet':
+        return !isEmptyCollectionValue(current);
+      case 'isEmpty':
+        return isEmptyCollectionValue(current);
+      case 'gt':
+        return compareCondition(current, rule.value, (a, b) => a > b);
+      case 'gte':
+        return compareCondition(current, rule.value, (a, b) => a >= b);
+      case 'lt':
+        return compareCondition(current, rule.value, (a, b) => a < b);
+      case 'lte':
+        return compareCondition(current, rule.value, (a, b) => a <= b);
+    }
+  });
+  return field.condition.logic === 'any'
+    ? ruleResults.some(Boolean)
+    : ruleResults.every(Boolean);
+}
+
+function isEmptyCollectionValue(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+function compareCondition(
+  left: unknown,
+  right: unknown,
+  compare: (left: string | number, right: string | number) => boolean,
+): boolean {
+  if (typeof left === 'number' && typeof right === 'number') return compare(left, right);
+  if (typeof left === 'string' && typeof right === 'string') return compare(left, right);
+  return false;
+}

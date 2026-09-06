@@ -23,6 +23,7 @@ import {
   GlobalHeaderPropsSchema,
   GlobalFooterPropsSchema,
   NavigationViewPropsSchema,
+  navigationActionHref,
   SiteBrandPropsSchema,
   SiteGlobalPayloadV1Schema,
   createPageDocument,
@@ -34,6 +35,7 @@ import {
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   isSafePageStyleValue,
   resolveSiteDesignToken,
+  resolveDesignSystemComponentDefaults,
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
@@ -59,6 +61,8 @@ import {
   type ReusableRuntime,
   type BuilderDocumentKind,
   type ResolvedNavigationItem,
+  type NavigationPagePaths,
+  type NavigationItem,
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
 import { builderExtensionElement } from './builder-extension-registry';
@@ -282,6 +286,79 @@ function navigationPreviewComponents(
   ];
 }
 
+/**
+ * Rebuild the editor-only navigation projection after semantic properties are
+ * changed. The projection is deliberately not part of the persisted payload,
+ * so it must be refreshed separately from the JSON props attribute.
+ */
+export function refreshNavigationPreview(
+  component: Component,
+  options: {
+    navigation?: {
+      main?: readonly ResolvedNavigationItem[];
+      footer?: readonly ResolvedNavigationItem[];
+    };
+    navigationPagePaths?: NavigationPagePaths;
+  } = {},
+): void {
+  const rawProps = component.getAttributes({ noStyle: true })[
+    BUILDER_GLOBAL_PROPS_ATTRIBUTE
+  ];
+  if (typeof rawProps !== 'string') return;
+
+  let parsedProps: unknown;
+  try {
+    parsedProps = JSON.parse(rawProps);
+  } catch {
+    return;
+  }
+
+  const props = NavigationViewPropsSchema.safeParse(parsedProps);
+  if (!props.success) return;
+
+  const items =
+    inlineNavigationPreviewItems(props.data.items, options.navigationPagePaths) ??
+    options.navigation?.[props.data.source ?? 'main'];
+  component.components(navigationPreviewComponents(items));
+}
+
+function inlineNavigationPreviewItems(
+  items: readonly NavigationItem[] | undefined,
+  pagePaths?: NavigationPagePaths,
+): ResolvedNavigationItem[] | undefined {
+  if (!items?.length) return undefined;
+  return items.flatMap((item) => {
+    const pagePath =
+      item.type === 'page' || item.type === 'section'
+        ? pagePaths?.[item.pageId ?? '']
+        : undefined;
+    if ((item.type === 'page' || item.type === 'section') && pagePaths && !pagePath) {
+      return [];
+    }
+    return [
+      {
+        id: item.id,
+        label: item.label,
+        type: item.type,
+        href:
+          item.type === 'external'
+            ? (item.externalUrl ?? '#')
+            : item.type === 'section'
+              ? `${pagePath ?? ''}#${item.anchorId ?? item.id}`
+              : item.type === 'action'
+                ? item.action
+                  ? navigationActionHref(item.action.type, item.action.value)
+                  : '#'
+                : (pagePath ?? `#${item.pageId ?? item.id}`),
+        ...(item.openInNewTab !== undefined ? { openInNewTab: item.openInNewTab } : {}),
+        ...(item.children?.length
+          ? { children: inlineNavigationPreviewItems(item.children, pagePaths) }
+          : {}),
+      },
+    ];
+  });
+}
+
 function accordionPreviewComponents(
   node: Extract<BuilderNode, { type: 'accordion-item' }>,
   payloadVersion: 1 | 2 | 3 | 4 | 5 | 6 | 7,
@@ -368,6 +445,7 @@ type BuilderProjectionContext = {
     main?: readonly ResolvedNavigationItem[];
     footer?: readonly ResolvedNavigationItem[];
   };
+  navigationPagePaths?: NavigationPagePaths;
 };
 
 function reusablePreviewTree(definition: ComponentDefinition): ComponentDefinition {
@@ -1150,7 +1228,10 @@ function componentDefinitionForNode(
           [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: jsonAttribute(node.props),
         },
         components: navigationPreviewComponents(
-          projectionContext?.navigation?.[node.props.source],
+          inlineNavigationPreviewItems(
+            node.props.items,
+            projectionContext?.navigationPagePaths,
+          ) ?? projectionContext?.navigation?.[node.props.source ?? 'main'],
         ),
       };
     case 'site-brand':
@@ -1804,7 +1885,7 @@ export function createBlockDefinition(
           ...baseNode,
           type: 'navigation-view',
           props: {
-            source: 'main',
+            items: [],
             orientation: 'horizontal',
             mobileBehavior: 'collapse',
             alignment: 'left',
@@ -2826,8 +2907,12 @@ export function applyEditorPartViewportStyles(
         : Array.from(
             element.querySelectorAll<HTMLElement>(`[data-payload-part="${partName}"]`),
           );
+    const defaults = resolveDesignSystemComponentDefaults(designSystem, type);
     const effective = styleBlockToEditorStyle(
-      resolveViewportStyle(persisted[partName], viewport),
+      {
+        ...resolveViewportStyle(defaults?.partsStyle?.[partName], viewport),
+        ...resolveViewportStyle(persisted[partName], viewport),
+      },
       designSystem,
     );
     const cssStyles = Object.entries(effective).flatMap(([editorProperty, value]) => {
@@ -2872,6 +2957,40 @@ export function applyEditorViewportStyle(
   );
   const currentStyle = { ...component.getStyle() } as Record<string, unknown>;
   if (!sameStyleValues(currentStyle, nextStyle)) component.setStyle(nextStyle);
+}
+
+const appliedEditorDefaultProperties = new WeakMap<HTMLElement, Set<string>>();
+
+/** Paints inherited Design System defaults without adding them to the saved node style. */
+export function applyEditorComponentDefaultStyle(
+  component: Component,
+  type: BuilderNodeType,
+  viewport: BuilderViewport,
+  designSystem?: SiteDesignSystem,
+): void {
+  const element = component.getEl?.() as HTMLElement | undefined;
+  if (!element) return;
+  const defaults = resolveDesignSystemComponentDefaults(designSystem, type);
+  const effective = styleBlockToEditorStyle(
+    resolveViewportStyle(defaults?.style, viewport),
+    designSystem,
+  );
+  const local = component.getStyle() as Record<string, unknown>;
+  const previous = appliedEditorDefaultProperties.get(element) ?? new Set<string>();
+  previous.forEach((property) => {
+    if (local[property] === undefined) element.style.removeProperty(property);
+  });
+  const applied = new Set<string>();
+  for (const [editorProperty, value] of Object.entries(effective)) {
+    const definition =
+      PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+        editorProperty as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+      ];
+    if (!definition || local[editorProperty] !== undefined) continue;
+    element.style.setProperty(definition.cssProperty, value);
+    applied.add(definition.cssProperty);
+  }
+  appliedEditorDefaultProperties.set(element, applied);
 }
 
 export function updateEditorViewportStyle(

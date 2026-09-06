@@ -92,3 +92,70 @@ export class NavigationController {
     await this.navigation.remove(siteId, navigationId, requireWorkspaceId(principal));
   }
 }
+
+/** Canonical workspace-owned navigation API used by Builder and future CMS views. */
+@Controller('workspaces/:workspaceId/navigations')
+@UseGuards(AuthenticationGuard)
+export class WorkspaceNavigationController {
+  constructor(
+    @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
+  ) {}
+
+  @Get()
+  async list(
+    @Param('workspaceId') workspaceId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.read', workspaceId);
+    return this.navigation.listWorkspace(requireWorkspaceId(principal));
+  }
+
+  @Get(':navigationId')
+  async get(
+    @Param('workspaceId') workspaceId: string,
+    @Param('navigationId') navigationId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.read', workspaceId);
+    return this.navigation.getWorkspace(requireWorkspaceId(principal), navigationId);
+  }
+
+  @Post()
+  async create(
+    @Param('workspaceId') workspaceId: string,
+    @Body(new ZodValidationPipe(CreateNavigationRequestSchema))
+    input: CreateNavigationRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    return this.navigation.createWorkspace(requireWorkspaceId(principal), input);
+  }
+
+  @Patch(':navigationId')
+  async update(
+    @Param('workspaceId') workspaceId: string,
+    @Param('navigationId') navigationId: string,
+    @Body(new ZodValidationPipe(UpdateNavigationRequestSchema))
+    input: UpdateNavigationRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    return this.navigation.updateWorkspace(
+      requireWorkspaceId(principal),
+      navigationId,
+      input,
+    );
+  }
+
+  @Delete(':navigationId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('workspaceId') workspaceId: string,
+    @Param('navigationId') navigationId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ): Promise<void> {
+    await this.authorization.assertCan(principal, 'site.update', workspaceId);
+    await this.navigation.removeWorkspace(requireWorkspaceId(principal), navigationId);
+  }
+}

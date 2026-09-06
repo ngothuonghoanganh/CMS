@@ -53,6 +53,35 @@ describe('registry property bindings', () => {
       attributes: {},
       semanticPropsPatch: { property: 'label', value: 'Pricing' },
     });
+    expect(
+      resolveEditorPropertyUpdate('navigation-view', 'items', [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          label: 'Home',
+          type: 'external',
+          externalUrl: 'https://example.com',
+        },
+      ]),
+    ).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: {
+        property: 'items',
+        value: [
+          {
+            id: '00000000-0000-4000-8000-000000000001',
+            label: 'Home',
+            type: 'external',
+            externalUrl: 'https://example.com',
+          },
+        ],
+      },
+    });
+    expect(resolveEditorPropertyUpdate('navigation-view', 'items', [])).toEqual({
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property: 'items', value: [] },
+    });
   });
 
   it('validates unsafe URLs and complex custom values before dispatch', () => {

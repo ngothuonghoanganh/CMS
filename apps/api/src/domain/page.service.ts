@@ -16,7 +16,6 @@ import {
   DuplicatePageRequestSchema,
   PageSchema,
   PagePayloadSchema,
-  SiteDesignSystemSchema,
   SiteGlobalsSchema,
   PageLayoutAttachmentsSchema,
   PageLayoutUpdateRequestSchema,
@@ -77,7 +76,7 @@ import { PageExtensionService } from '../extensions/page-extension.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { WorkflowService } from '../workflows/workflow.service';
 import { SiteService } from './site.service';
-import { NavigationService } from './navigation.service';
+import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
 import { CollectionService } from './collection.service';
@@ -1606,6 +1605,22 @@ export class PageService {
         preview ? 'draft' : 'published',
         { siteId: page.siteId, workspaceId: page.workspaceId },
       );
+      const navigationPagePaths = await this.navigation.resolvePagePaths(
+        page.siteId,
+        page.workspaceId,
+        collectNavigationPageIds({ payload: versionContract.payload, layout }),
+        site.homePageId,
+        preview ? 'draft' : 'published',
+      );
+      const publicNavigation =
+        navigation || Object.keys(navigationPagePaths).length > 0
+          ? {
+              ...(navigation ?? {}),
+              ...(Object.keys(navigationPagePaths).length > 0
+                ? { pagePaths: navigationPagePaths }
+                : {}),
+            }
+          : undefined;
       const extensions = mergeRuntimeExtensions(
         await this.pageExtensions.resolveRuntimeForComposition(
           page._id.toString(),
@@ -1617,11 +1632,13 @@ export class PageService {
           ...(layout.footer ? [layout.footer.document] : []),
         ]),
       );
-      const designSystem = (preview ? site.designSystemDraft : site.publishedDesignSystem)
-        ? SiteDesignSystemSchema.parse(
-            preview ? site.designSystemDraft : site.publishedDesignSystem,
-          )
-        : undefined;
+      const designSystemResponse = await this.sites.getDesignSystem(
+        page.workspaceId,
+        page.siteId,
+      );
+      const designSystem = preview
+        ? designSystemResponse.draft
+        : designSystemResponse.published;
       return PublicPageSchema.parse({
         site: {
           name: site.name,
@@ -1635,7 +1652,7 @@ export class PageService {
         },
         payload: versionContract.payload,
         ...(extensions.length ? { extensions } : {}),
-        ...(navigation ? { navigation } : {}),
+        ...(publicNavigation ? { navigation: publicNavigation } : {}),
         ...(layout.header || layout.footer ? { layout } : {}),
         ...(globals ? { globals } : {}),
         ...(reusables.length ? { reusables } : {}),

@@ -14,6 +14,7 @@ import {
   TabItemPropsSchema,
   GlobalHeaderPropsSchema,
   GlobalFooterPropsSchema,
+  NavigationItemsSchema,
   NavigationViewPropsSchema,
   SiteBrandPropsSchema,
   isSafePageHref,
@@ -133,6 +134,16 @@ export function resolveEditorPropertyUpdate(
         property as keyof typeof NavigationViewPropsSchema.shape
       ].safeParse(value);
     if (!parsed.success) throw new Error('Navigation setting is invalid');
+    return {
+      kind: 'attributes',
+      attributes: {},
+      semanticPropsPatch: { property, value: parsed.data },
+    };
+  }
+
+  if (type === 'navigation-view' && property === 'items') {
+    const parsed = NavigationItemsSchema.safeParse(value);
+    if (!parsed.success) throw new Error('Navigation items are invalid');
     return {
       kind: 'attributes',
       attributes: {},

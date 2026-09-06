@@ -120,11 +120,13 @@ export function pagePath(
 
 export function collectionPath(
   workspaceId: string,
-  siteId: string,
+  siteId: string | undefined,
   collectionId?: string,
   child?: 'entries' | 'schema' | 'settings',
 ): string {
-  const base = `${sitePath(workspaceId, siteId)}/collections`;
+  const base = siteId
+    ? `${sitePath(workspaceId, siteId)}/collections`
+    : `${workspacePath(workspaceId)}/collections`;
   if (!collectionId) return base;
   return `${base}/${segment(collectionId)}${child ? `/${child}` : ''}`;
 }

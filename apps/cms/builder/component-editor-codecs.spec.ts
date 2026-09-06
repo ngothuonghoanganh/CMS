@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
+  BUILDER_GLOBAL_PROPS_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_QUOTE_PROPS_ATTRIBUTE,
@@ -186,5 +187,56 @@ describe('component editor codecs', () => {
       headingLevel: 3,
       ariaLabel: 'FAQ',
     });
+  });
+
+  it('allows a navigation menu to be emptied and populated again', () => {
+    const navigation = new MutableComponent(
+      attrs('navigation', 'navigation-view', {
+        [BUILDER_GLOBAL_PROPS_ATTRIBUTE]: JSON.stringify({
+          items: [
+            {
+              id: '00000000-0000-4000-8000-000000000001',
+              label: 'Home',
+              type: 'external',
+              externalUrl: 'https://example.com',
+            },
+          ],
+          orientation: 'horizontal',
+          mobileBehavior: 'collapse',
+          alignment: 'left',
+          ariaLabel: 'Main navigation',
+        }),
+      }),
+    );
+
+    const emptyUpdate = resolveEditorPropertyUpdate('navigation-view', 'items', []);
+    expect(emptyUpdate).not.toBeNull();
+    expect(
+      applyEditorPropertyUpdate(navigation as never, 'navigation-view', emptyUpdate!),
+    ).toBe(true);
+    expect(
+      JSON.parse(navigation.attributes[BUILDER_GLOBAL_PROPS_ATTRIBUTE]!).items,
+    ).toEqual([]);
+
+    const restoredItems = [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        label: 'Pricing',
+        type: 'external' as const,
+        externalUrl: 'https://example.com/pricing',
+      },
+    ];
+    const addUpdate = resolveEditorPropertyUpdate(
+      'navigation-view',
+      'items',
+      restoredItems,
+    );
+    expect(addUpdate).not.toBeNull();
+    expect(
+      applyEditorPropertyUpdate(navigation as never, 'navigation-view', addUpdate!),
+    ).toBe(true);
+    expect(
+      JSON.parse(navigation.attributes[BUILDER_GLOBAL_PROPS_ATTRIBUTE]!).items,
+    ).toEqual(restoredItems);
   });
 });

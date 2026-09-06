@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { NavigationItem } from '@payload/contracts';
 
 import {
+  createNavigationItemId,
   duplicateNavigationItem,
   flattenNavigationItems,
   indentNavigationItem,
   moveNavigationItem,
+  moveNavigationItemTo,
   outdentNavigationItem,
   removeNavigationItem,
 } from './navigation-tree';
@@ -18,6 +20,12 @@ const page = (id: string, label = id): NavigationItem => ({
 });
 
 describe('navigation tree operations', () => {
+  it('always creates UUID-compatible item IDs', () => {
+    expect(createNavigationItemId()).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+  });
+
   it('supports indent, outdent, and sibling movement without changing IDs', () => {
     const items = [page('one'), page('two'), page('three')];
     const indented = indentNavigationItem(items, 'two');
@@ -50,5 +58,18 @@ describe('navigation tree operations', () => {
       'Child',
       'two',
     ]);
+  });
+
+  it('supports drag-style nesting and rejects moving a parent into its subtree', () => {
+    const items = [page('one'), page('two'), page('three')];
+    const nested = moveNavigationItemTo(items, 'three', 'one');
+    expect(nested[0]?.children?.map((item) => item.id)).toEqual(['three']);
+
+    const unchanged = moveNavigationItemTo(
+      [{ ...page('one'), children: [page('child')] }],
+      'one',
+      'child',
+    );
+    expect(unchanged[0]?.children?.[0]?.id).toBe('child');
   });
 });

@@ -1,9 +1,66 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 test('API liveness is reachable', async ({ request }) => {
   const response = await request.get('http://127.0.0.1:3001/api/v1/health/live');
   expect(response.ok()).toBeTruthy();
   expect((await response.json()) as { status: string }).toMatchObject({ status: 'ok' });
+});
+
+test('uploaded local assets are reachable through the CMS and renderer proxies', async ({
+  request,
+}) => {
+  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const loginResponse = await request.post(`${baseUrl}/auth/login`, {
+    data: {
+      email: process.env.AUTH_EMAIL ?? 'admin@example.com',
+      password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
+    },
+  });
+  expect(loginResponse.status()).toBe(200);
+
+  const meResponse = await request.get(`${baseUrl}/auth/me`);
+  expect(meResponse.status()).toBe(200);
+  const workspaceId = ((await meResponse.json()) as { workspace: { id: string } })
+    .workspace.id;
+  const filename = `local-asset-proxy-${randomUUID()}.png`;
+  const assetBytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
+
+  let assetId: string | undefined;
+  try {
+    const uploadResponse = await request.post(
+      `${baseUrl}/workspaces/${workspaceId}/assets/upload`,
+      {
+        multipart: {
+          file: { name: filename, mimeType: 'image/png', buffer: assetBytes },
+        },
+      },
+    );
+    expect(uploadResponse.status()).toBe(201);
+    const asset = (await uploadResponse.json()) as {
+      id: string;
+      publicUrl: string;
+    };
+    assetId = asset.id;
+    expect(asset.publicUrl).toMatch(/^\/api\/v1\/public\/assets\//);
+
+    for (const origin of ['http://127.0.0.1:3000', 'http://127.0.0.1:3002']) {
+      const proxiedResponse = await request.get(`${origin}${asset.publicUrl}`);
+      expect(proxiedResponse.status(), `${origin} asset proxy`).toBe(200);
+      expect(proxiedResponse.headers()['content-type']).toContain('image/png');
+      expect(await proxiedResponse.body()).toEqual(assetBytes);
+    }
+  } finally {
+    if (assetId) {
+      const deleteResponse = await request.delete(
+        `${baseUrl}/workspaces/${workspaceId}/assets/${assetId}`,
+      );
+      expect([200, 204]).toContain(deleteResponse.status());
+    }
+  }
 });
 
 test('management API requires authentication and supports session lifecycle', async ({

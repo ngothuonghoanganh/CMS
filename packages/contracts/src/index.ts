@@ -668,7 +668,8 @@ function isSafeButtonHref(value: string): boolean {
 
 function isSafeImageSource(value: string): boolean {
   return (
-    (isRelativePath(value) && value.startsWith('/assets/')) ||
+    (isRelativePath(value) &&
+      (value.startsWith('/assets/') || value.startsWith('/api/v1/public/assets/'))) ||
     isSafeAbsoluteUrl(value, ['http:', 'https:'])
   );
 }
@@ -697,14 +698,20 @@ const safeImageSource = z
   .trim()
   .min(1)
   .max(PAGE_PAYLOAD_MAX_URL_LENGTH)
-  .refine(isSafeImageSource, 'Image source must be http(s) or an /assets/ path');
+  .refine(
+    isSafeImageSource,
+    'Image source must be http(s), an /assets/ path, or a public workspace asset path',
+  );
 
 const safeVideoSource = z
   .string()
   .trim()
   .min(1)
   .max(PAGE_PAYLOAD_MAX_URL_LENGTH)
-  .refine(isSafePageVideoSource, 'Video source must be http(s) or an /assets/ path');
+  .refine(
+    isSafePageVideoSource,
+    'Video source must be http(s), an /assets/ path, or a public workspace asset path',
+  );
 
 const StyleBlockSchema = z
   .object({
@@ -2236,17 +2243,6 @@ export type GlobalHeaderProps = z.infer<typeof GlobalHeaderPropsSchema>;
 export const GlobalFooterPropsSchema = z.object({}).strict();
 export type GlobalFooterProps = z.infer<typeof GlobalFooterPropsSchema>;
 
-export const NavigationViewPropsSchema = z
-  .object({
-    source: z.enum(['main', 'footer']),
-    orientation: z.enum(['horizontal', 'vertical']),
-    mobileBehavior: z.enum(['collapse', 'wrap', 'stack']),
-    alignment: z.enum(['left', 'center', 'right']),
-    ariaLabel: nonEmptyText.max(200),
-  })
-  .strict();
-export type NavigationViewProps = z.infer<typeof NavigationViewPropsSchema>;
-
 export const SiteBrandPropsSchema = z
   .object({
     display: z.enum(['logo', 'text', 'logo-text']),
@@ -3309,6 +3305,14 @@ export type DesignTokenUsageResponse = z.infer<typeof DesignTokenUsageResponseSc
 export const DesignTokenUsageQuerySchema = z.object({ tokenId: designTokenId }).strict();
 export type DesignTokenUsageQuery = z.infer<typeof DesignTokenUsageQuerySchema>;
 
+export const ComponentDefaultAppearanceSchema = z
+  .object({
+    style: PageNodeStyleV7Schema.optional(),
+    partsStyle: PageNodePartsStyleV7Schema.optional(),
+  })
+  .strict();
+export type ComponentDefaultAppearance = z.infer<typeof ComponentDefaultAppearanceSchema>;
+
 export const SiteDesignSystemSchema = z
   .object({
     version: z.literal(1),
@@ -3318,12 +3322,23 @@ export const SiteDesignSystemSchema = z
     radii: z.array(DesignScalarTokenSchema).max(50),
     shadows: z.array(DesignScalarTokenSchema).max(50),
     containerWidths: z.array(DesignScalarTokenSchema).max(50),
+    /** Workspace-authored defaults applied before node-local overrides. */
+    componentDefaults: z
+      .record(
+        z.string().regex(/^[a-z][a-z0-9-]{0,79}$/),
+        ComponentDefaultAppearanceSchema,
+      )
+      .refine(
+        (defaults) => Object.keys(defaults).length <= 100,
+        'Too many component defaults',
+      )
+      .optional(),
   })
   .strict()
   .superRefine((system, context) => {
     const seen = new Set<string>();
     for (const [category, tokens] of Object.entries(system)) {
-      if (category === 'version') continue;
+      if (category === 'version' || category === 'componentDefaults') continue;
       for (const [index, token] of (tokens as Array<{ id: string }>).entries()) {
         if (seen.has(token.id)) {
           context.addIssue({
@@ -3338,7 +3353,116 @@ export const SiteDesignSystemSchema = z
   });
 export type SiteDesignSystem = z.infer<typeof SiteDesignSystemSchema>;
 
+export function resolveDesignSystemComponentDefaults(
+  system: SiteDesignSystem | undefined,
+  componentType: string,
+): ComponentDefaultAppearance | undefined {
+  return system?.componentDefaults?.[componentType];
+}
+
+function mergeDesignTokens<T extends { id: string }>(
+  base: readonly T[],
+  override: readonly T[],
+): T[] {
+  const merged = [...base];
+  const indexes = new Map(merged.map((token, index) => [token.id, index]));
+  for (const token of override) {
+    const index = indexes.get(token.id);
+    if (index === undefined) {
+      indexes.set(token.id, merged.length);
+      merged.push(token);
+    } else {
+      merged[index] = token;
+    }
+  }
+  return merged;
+}
+
+function mergePageNodeStyles(
+  base: PageNodeStyleV7 | undefined,
+  override: PageNodeStyleV7 | undefined,
+): PageNodeStyleV7 | undefined {
+  if (!base) return override;
+  if (!override) return base;
+  return {
+    ...base,
+    ...override,
+    base: { ...base.base, ...override.base },
+    ...(base.tablet || override.tablet
+      ? { tablet: { ...base.tablet, ...override.tablet } }
+      : {}),
+    ...(base.mobile || override.mobile
+      ? { mobile: { ...base.mobile, ...override.mobile } }
+      : {}),
+  };
+}
+
+function mergeComponentDefaultAppearance(
+  base: ComponentDefaultAppearance | undefined,
+  override: ComponentDefaultAppearance | undefined,
+): ComponentDefaultAppearance | undefined {
+  if (!base) return override;
+  if (!override) return base;
+  const partsStyle = { ...(base.partsStyle ?? {}), ...(override.partsStyle ?? {}) };
+  for (const partName of new Set([
+    ...Object.keys(base.partsStyle ?? {}),
+    ...Object.keys(override.partsStyle ?? {}),
+  ])) {
+    const merged = mergePageNodeStyles(
+      base.partsStyle?.[partName],
+      override.partsStyle?.[partName],
+    );
+    if (merged) partsStyle[partName] = merged;
+  }
+  return {
+    ...base,
+    ...override,
+    ...(base.style || override.style
+      ? { style: mergePageNodeStyles(base.style, override.style) }
+      : {}),
+    ...(Object.keys(partsStyle).length ? { partsStyle } : {}),
+  };
+}
+
+/** Merge a site snapshot over workspace defaults without leaking workspace drafts. */
+export function mergeSiteDesignSystems(
+  workspaceSystem: SiteDesignSystem | undefined,
+  siteSystem: SiteDesignSystem | undefined,
+): SiteDesignSystem | undefined {
+  if (!workspaceSystem) return siteSystem;
+  if (!siteSystem) return workspaceSystem;
+  const componentDefaults = {
+    ...(workspaceSystem.componentDefaults ?? {}),
+    ...(siteSystem.componentDefaults ?? {}),
+  };
+  for (const componentType of new Set([
+    ...Object.keys(workspaceSystem.componentDefaults ?? {}),
+    ...Object.keys(siteSystem.componentDefaults ?? {}),
+  ])) {
+    const merged = mergeComponentDefaultAppearance(
+      workspaceSystem.componentDefaults?.[componentType],
+      siteSystem.componentDefaults?.[componentType],
+    );
+    if (merged) componentDefaults[componentType] = merged;
+  }
+  return SiteDesignSystemSchema.parse({
+    ...workspaceSystem,
+    ...siteSystem,
+    colors: mergeDesignTokens(workspaceSystem.colors, siteSystem.colors),
+    typography: mergeDesignTokens(workspaceSystem.typography, siteSystem.typography),
+    spacing: mergeDesignTokens(workspaceSystem.spacing, siteSystem.spacing),
+    radii: mergeDesignTokens(workspaceSystem.radii, siteSystem.radii),
+    shadows: mergeDesignTokens(workspaceSystem.shadows, siteSystem.shadows),
+    containerWidths: mergeDesignTokens(
+      workspaceSystem.containerWidths,
+      siteSystem.containerWidths,
+    ),
+    ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
+  });
+}
+
 export function createDefaultSiteDesignSystem(): SiteDesignSystem {
+  const token = (tokenId: string) => ({ kind: 'token' as const, tokenId });
   return SiteDesignSystemSchema.parse({
     version: 1,
     colors: [
@@ -3380,6 +3504,94 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
       { id: 'container-narrow', name: 'Narrow', value: '720px' },
       { id: 'container-wide', name: 'Wide', value: '1200px' },
     ],
+    componentDefaults: {
+      section: {
+        style: {
+          base: { padding: token('space-2'), backgroundColor: token('color-surface') },
+        },
+      },
+      container: {
+        style: {
+          base: {
+            width: '100%',
+            maxWidth: token('container-wide'),
+            margin: '0 auto',
+            padding: token('space-2'),
+          },
+        },
+      },
+      text: {
+        style: {
+          base: {
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
+            color: token('color-text'),
+          },
+        },
+      },
+      heading: {
+        style: {
+          base: {
+            fontFamily: token('type-heading'),
+            fontSize: token('type-heading'),
+            fontWeight: token('type-heading'),
+            lineHeight: token('type-heading'),
+            color: token('color-text'),
+          },
+        },
+      },
+      button: {
+        style: {
+          base: {
+            display: 'inline-block',
+            padding: token('space-1'),
+            backgroundColor: token('color-primary'),
+            color: token('color-surface'),
+            borderRadius: token('radius-md'),
+          },
+        },
+      },
+      link: {
+        style: {
+          base: { color: token('color-primary'), fontFamily: token('type-body') },
+        },
+      },
+      image: {
+        style: { base: { borderRadius: token('radius-md') } },
+      },
+      form: {
+        style: {
+          base: { padding: token('space-2'), backgroundColor: token('color-surface') },
+        },
+      },
+      'navigation-view': {
+        style: {
+          base: {
+            display: 'flex',
+            gap: token('space-2'),
+            padding: token('space-2'),
+          },
+        },
+      },
+      'global-header': {
+        style: {
+          base: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: token('space-2'),
+            padding: token('space-2'),
+            backgroundColor: token('color-surface'),
+          },
+        },
+      },
+      'global-footer': {
+        style: {
+          base: { padding: token('space-2'), backgroundColor: token('color-surface') },
+        },
+      },
+    },
   });
 }
 
@@ -3628,6 +3840,11 @@ export const SiteDesignSystemResponseSchema = z
   })
   .strict();
 export type SiteDesignSystemResponse = z.infer<typeof SiteDesignSystemResponseSchema>;
+
+export const WorkspaceDesignSystemResponseSchema = SiteDesignSystemResponseSchema;
+export type WorkspaceDesignSystemResponse = z.infer<
+  typeof WorkspaceDesignSystemResponseSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Layout extensions (Header / Footer)
@@ -4578,6 +4795,13 @@ const NavigationActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('custom'), value: safeNavigationActionUrl }).strict(),
 ]);
 
+/** Convert a validated navigation action into the href used by the renderer. */
+export function navigationActionHref(type: NavigationActionType, value: string): string {
+  if (type === 'phone') return `tel:${value}`;
+  if (type === 'email') return value.startsWith('mailto:') ? value : `mailto:${value}`;
+  return value;
+}
+
 export type NavigationItem = {
   id: string;
   label: string;
@@ -4642,6 +4866,19 @@ export const NavigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
 
 export const NavigationItemsSchema = z.array(NavigationItemSchema).max(100);
 
+export const NavigationViewPropsSchema = z
+  .object({
+    /** @deprecated Legacy site navigation binding. New Builder documents own items. */
+    source: z.enum(['main', 'footer']).optional(),
+    items: NavigationItemsSchema.optional(),
+    orientation: z.enum(['horizontal', 'vertical']),
+    mobileBehavior: z.enum(['collapse', 'wrap', 'stack']),
+    alignment: z.enum(['left', 'center', 'right']),
+    ariaLabel: nonEmptyText.max(200),
+  })
+  .strict();
+export type NavigationViewProps = z.infer<typeof NavigationViewPropsSchema>;
+
 /**
  * A Navigation is pure menu data: a named, keyed, ordered set of menu items.
  * It has no layout, no renderer and no publishing lifecycle of its own. The
@@ -4651,7 +4888,10 @@ export const NavigationItemsSchema = z.array(NavigationItemSchema).max(100);
 export const NavigationSchema = z
   .object({
     id: EntityIdSchema,
-    siteId: EntityIdSchema,
+    /** @deprecated Legacy navigation resources are compatibility-only. */
+    workspaceId: EntityIdSchema.optional(),
+    /** @deprecated Legacy navigation resources are compatibility-only. */
+    siteId: EntityIdSchema.optional(),
     name: nonEmptyText.max(200),
     key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     items: NavigationItemsSchema,
@@ -4660,6 +4900,30 @@ export const NavigationSchema = z
   })
   .strict();
 export type Navigation = z.infer<typeof NavigationSchema>;
+
+export const NAVIGATION_MAX_NODES = 1_000;
+export const NAVIGATION_MAX_SERIALIZED_BYTES = 256_000;
+
+/** Validate navigation payload limits without relying on recursive traversal. */
+export function validateNavigationItems(items: readonly NavigationItem[]): {
+  valid: boolean;
+  reason?: 'node-limit' | 'payload-limit';
+} {
+  const serializedSize = new TextEncoder().encode(JSON.stringify(items)).length;
+  if (serializedSize > NAVIGATION_MAX_SERIALIZED_BYTES) {
+    return { valid: false, reason: 'payload-limit' };
+  }
+  const pending = [...items];
+  let count = 0;
+  while (pending.length > 0) {
+    const item = pending.pop();
+    if (!item) continue;
+    count += 1;
+    if (count > NAVIGATION_MAX_NODES) return { valid: false, reason: 'node-limit' };
+    if (item.children) pending.push(...item.children);
+  }
+  return { valid: true };
+}
 
 export const SitePublishResponseSchema = SiteSchema;
 export type SitePublishResponse = z.infer<typeof SitePublishResponseSchema>;
@@ -4672,6 +4936,9 @@ export type ResolvedNavigationItem = {
   openInNewTab?: boolean | undefined;
   children?: ResolvedNavigationItem[] | undefined;
 };
+
+export const NavigationPagePathsSchema = z.record(EntityIdSchema, PagePathSchema);
+export type NavigationPagePaths = z.infer<typeof NavigationPagePathsSchema>;
 
 export const ResolvedNavigationItemSchema: z.ZodType<ResolvedNavigationItem> = z.lazy(
   () =>
@@ -4694,6 +4961,7 @@ export const PagePreviewNavigationSchema = z
   .object({
     main: z.array(ResolvedNavigationItemSchema).max(100).optional(),
     footer: z.array(ResolvedNavigationItemSchema).max(100).optional(),
+    pagePaths: NavigationPagePathsSchema.optional(),
   })
   .strict();
 
@@ -4847,6 +5115,7 @@ export const PublicPageSchema = z
       .object({
         main: z.array(ResolvedNavigationItemSchema).optional(),
         footer: z.array(ResolvedNavigationItemSchema).optional(),
+        pagePaths: NavigationPagePathsSchema.optional(),
       })
       .strict()
       .optional(),
@@ -4912,10 +5181,40 @@ export const AssetSchema = z
     mimeType: nonEmptyText.max(100),
     size: z.number().int().nonnegative(),
     storageKey: nonEmptyText.max(500),
+    folderId: EntityIdSchema.optional(),
+    publicUrl: z.string().trim().max(2_000).optional(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
   .strict();
+
+export const AssetFolderSchema = z
+  .object({
+    id: EntityIdSchema,
+    workspaceId: EntityIdSchema,
+    name: nonEmptyText.max(160),
+    parentId: EntityIdSchema.optional(),
+    createdAt: timestampSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+export type AssetFolder = z.infer<typeof AssetFolderSchema>;
+
+export const CreateAssetFolderRequestSchema = z
+  .object({ name: nonEmptyText.max(160), parentId: EntityIdSchema.optional() })
+  .strict();
+export const UpdateAssetFolderRequestSchema = z
+  .object({
+    name: nonEmptyText.max(160).optional(),
+    parentId: EntityIdSchema.nullable().optional(),
+  })
+  .strict()
+  .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
+export const AssetFolderListResponseSchema = z
+  .object({ items: z.array(AssetFolderSchema) })
+  .strict();
+export type CreateAssetFolderRequest = z.infer<typeof CreateAssetFolderRequestSchema>;
+export type UpdateAssetFolderRequest = z.infer<typeof UpdateAssetFolderRequestSchema>;
 
 /**
  * A Design Template is a versioned starter snapshot. `payload` and
@@ -5096,6 +5395,7 @@ export const AssetListResponseSchema = z
 export const AssetListQuerySchema = PaginationQuerySchema.extend({
   search: z.string().trim().max(200).optional(),
   mediaType: z.enum(['image', 'video', 'audio', 'document']).optional(),
+  folderId: EntityIdSchema.optional(),
 }).strict();
 
 export const TemplateListResponseSchema = z
@@ -5303,6 +5603,7 @@ export const UpdateAssetRequestSchema = z
     title: z.string().trim().max(200).nullable().optional(),
     defaultAltText: z.string().trim().max(500).nullable().optional(),
     description: z.string().trim().max(1000).nullable().optional(),
+    folderId: EntityIdSchema.nullable().optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');

@@ -5,6 +5,7 @@ import {
   ExtensionListResponseSchema,
   LayoutExtensionListResponseSchema,
   PagePayloadSchema,
+  PageListResponseSchema,
   PAGE_COMPONENT_REGISTRY,
   SiteDesignSystemResponseSchema,
   SiteSchema,
@@ -16,6 +17,7 @@ import {
   type BuilderDocumentKind,
   type ExtensionDescriptor,
   type PagePayload,
+  type Page,
   type SiteDesignSystem,
   type Site,
   type Template,
@@ -148,6 +150,9 @@ export default function TemplateBuilderShell({
   );
   const [headers, setHeaders] = useState<LayoutExtensionResource[]>([]);
   const [footers, setFooters] = useState<LayoutExtensionResource[]>([]);
+  const [navigationPages, setNavigationPages] = useState<
+    Array<Pick<Page, 'id' | 'name' | 'path' | 'anchors'>>
+  >([]);
   const [layoutAttachments, setLayoutAttachments] = useState<PageLayoutAttachment[]>([]);
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -271,6 +276,7 @@ export default function TemplateBuilderShell({
         siteResponse,
         assetsResponse,
         designResponse,
+        pagesResponse,
         headersResponse,
         footersResponse,
         extensionsResponse,
@@ -282,6 +288,7 @@ export default function TemplateBuilderShell({
         api
           .get(`/workspaces/${workspaceId}/sites/${siteId}/design-system`)
           .catch(() => null),
+        api.get(`/sites/${siteId}/pages?limit=100&offset=0`).catch(() => null),
         api.get(`/workspaces/${workspaceId}/layouts/headers`),
         api.get(`/workspaces/${workspaceId}/layouts/footers`),
         api.get('/extensions').catch(() => null),
@@ -304,6 +311,9 @@ export default function TemplateBuilderShell({
       setPayload(nextPayload);
       setSite(nextSite);
       setAssets(AssetListResponseSchema.parse(assetsResponse).items);
+      setNavigationPages(
+        pagesResponse ? PageListResponseSchema.parse(pagesResponse).items : [],
+      );
       setDesignSystem(
         designResponse
           ? SiteDesignSystemResponseSchema.parse(designResponse).draft
@@ -868,7 +878,13 @@ export default function TemplateBuilderShell({
               designSystem={designSystem}
               documentKind="page"
               initialPayload={payload}
-              navigation={{}}
+              navigation={{
+                pagePaths: Object.fromEntries(
+                  navigationPages.flatMap((page) =>
+                    page.path ? [[page.id, page.path]] : [],
+                  ),
+                ),
+              }}
               onCanvasStateChange={setCanvasState}
               onDirty={markDirty}
               onDocumentChange={(nextDocument) => {
@@ -931,7 +947,9 @@ export default function TemplateBuilderShell({
             </div>
             {selected ? (
               <BuilderInspector
+                workspaceId={workspaceId}
                 designSystem={designSystem}
+                navigationPages={navigationPages}
                 inspectorTab={inspectorTab}
                 onAddStructuralChild={(slotName, childType) =>
                   childType && childType !== 'root' && childType !== 'reusable-instance'
