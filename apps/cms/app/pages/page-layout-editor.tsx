@@ -50,10 +50,10 @@ function selectedResourceId(
 }
 
 export function PageLayoutEditor({
-  canUpdate,
+  canDesign,
   page,
 }: {
-  canUpdate: boolean;
+  canDesign: boolean;
   page: Page;
 }) {
   const router = useRouter();
@@ -125,7 +125,7 @@ export function PageLayoutEditor({
 
   async function createLayout(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!canUpdate || !newLayout.name.trim()) return;
+    if (!canDesign || !newLayout.name.trim()) return;
     setCreating(true);
     setError(null);
     setNotice(null);
@@ -192,6 +192,11 @@ export function PageLayoutEditor({
         This page renders only the layouts selected here. Changing a layout resource does
         not change pages until that resource is published.
       </p>
+      {!canDesign ? (
+        <p className="helper-text" role="status">
+          Page layout attachments and layout editing require design permission.
+        </p>
+      ) : null}
       {error ? (
         <p className="alert alert-error" role="alert">
           {error}
@@ -215,7 +220,7 @@ export function PageLayoutEditor({
               Header
               <select
                 aria-label="Page header"
-                disabled={loading || !canUpdate}
+                disabled={loading || !canDesign}
                 onChange={(event) => setResource('header', event.target.value)}
                 value={selectedResourceId(attachments, 'header')}
               >
@@ -232,7 +237,7 @@ export function PageLayoutEditor({
                 Header placement
                 <select
                   aria-label="Header placement"
-                  disabled={!canUpdate}
+                  disabled={!canDesign}
                   onChange={(event) =>
                     setHeaderSlot(event.target.value as PageLayoutSlot)
                   }
@@ -248,7 +253,7 @@ export function PageLayoutEditor({
               Footer
               <select
                 aria-label="Page footer"
-                disabled={loading || !canUpdate}
+                disabled={loading || !canDesign}
                 onChange={(event) => setResource('footer', event.target.value)}
                 value={selectedResourceId(attachments, 'footer')}
               >
@@ -263,7 +268,7 @@ export function PageLayoutEditor({
             <div className="row-actions">
               <button
                 className="button button-primary button-small"
-                disabled={loading || saving || !canUpdate}
+                disabled={loading || saving || !canDesign}
                 onClick={() => void save()}
                 type="button"
               >
@@ -272,6 +277,7 @@ export function PageLayoutEditor({
               {headerAttachment ? (
                 <button
                   className="button button-ghost button-small"
+                  disabled={!canDesign}
                   onClick={() => {
                     const resource = headers.find(
                       (candidate) => candidate.id === headerAttachment.resourceId,
@@ -286,6 +292,7 @@ export function PageLayoutEditor({
               {selectedResourceId(attachments, 'footer') ? (
                 <button
                   className="button button-ghost button-small"
+                  disabled={!canDesign}
                   onClick={() => {
                     const resource = footers.find(
                       (candidate) =>
@@ -313,7 +320,7 @@ export function PageLayoutEditor({
               Type
               <select
                 aria-label="New layout type"
-                disabled={!canUpdate || creating}
+                disabled={!canDesign || creating}
                 onChange={(event) =>
                   setNewLayout((current) => ({
                     ...current,
@@ -330,7 +337,7 @@ export function PageLayoutEditor({
               Name
               <input
                 aria-label="New layout name"
-                disabled={!canUpdate || creating}
+                disabled={!canDesign || creating}
                 onChange={(event) =>
                   setNewLayout((current) => ({ ...current, name: event.target.value }))
                 }
@@ -343,7 +350,7 @@ export function PageLayoutEditor({
               Description <span className="muted">Optional</span>
               <textarea
                 aria-label="Layout creation notes"
-                disabled={!canUpdate || creating}
+                disabled={!canDesign || creating}
                 onChange={(event) =>
                   setNewLayout((current) => ({
                     ...current,
@@ -356,7 +363,7 @@ export function PageLayoutEditor({
             </label>
             <button
               className="button button-secondary button-small"
-              disabled={!canUpdate || creating || !newLayout.name.trim()}
+              disabled={!canDesign || creating || !newLayout.name.trim()}
               type="submit"
             >
               {creating ? 'Creating…' : 'Create and build'}

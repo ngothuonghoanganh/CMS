@@ -61,6 +61,14 @@ function payloadV7(children: Array<Record<string, unknown>> = []) {
   });
 }
 
+function payloadV7WithRootChildren(rootChildren: Array<Record<string, unknown>>) {
+  return PagePayloadV7Schema.parse({
+    version: 7,
+    metadata: { documentTitle: 'Page' },
+    root: { id: 'root', type: 'root', props: {}, children: rootChildren },
+  });
+}
+
 describe('page change classifier', () => {
   it('treats collection query changes as design changes even in the content group', () => {
     const queryA = '11111111-1111-4111-8111-111111111111';
@@ -87,6 +95,70 @@ describe('page change classifier', () => {
       expect.objectContaining({
         category: 'design-property-changed',
         property: 'queryId',
+      }),
+    ]);
+  });
+
+  it.each([
+    [
+      'tabs',
+      'orientation',
+      { orientation: 'horizontal', ariaLabel: 'Tabs', activationMode: 'automatic' },
+      { orientation: 'vertical', ariaLabel: 'Tabs', activationMode: 'automatic' },
+    ],
+    [
+      'navigation-view',
+      'source',
+      {
+        source: 'main',
+        orientation: 'horizontal',
+        mobileBehavior: 'collapse',
+        alignment: 'left',
+        ariaLabel: 'Main navigation',
+      },
+      {
+        source: 'footer',
+        orientation: 'horizontal',
+        mobileBehavior: 'collapse',
+        alignment: 'left',
+        ariaLabel: 'Main navigation',
+      },
+    ],
+    ['global-header', 'position', { position: 'static' }, { position: 'sticky' }],
+  ] as const)('%s.%s is design-scoped', (type, property, previousProps, nextProps) => {
+    const component = (props: Record<string, unknown>) => ({
+      id: 'component-1',
+      type,
+      props,
+      children:
+        type === 'tabs'
+          ? [{ id: 'tab-1', type: 'tab-item', props: { label: 'Tab' }, children: [] }]
+          : [],
+    });
+    const tree = (props: Record<string, unknown>) => {
+      const selected = component(props);
+      if (type === 'navigation-view') {
+        return [
+          {
+            id: 'header-1',
+            type: 'global-header',
+            props: { position: 'static' },
+            children: [selected],
+          },
+        ];
+      }
+      if (type === 'global-header') return [selected];
+      return [{ id: 'section-1', type: 'section', props: {}, children: [selected] }];
+    };
+    const previous = payloadV7WithRootChildren(tree(previousProps));
+    const next = payloadV7WithRootChildren(tree(nextProps));
+
+    const classification = classifyPageDocumentChanges(previous, next);
+    expect(classification.contentChanges).toEqual([]);
+    expect(classification.designChanges).toEqual([
+      expect.objectContaining({
+        category: 'design-property-changed',
+        property,
       }),
     ]);
   });

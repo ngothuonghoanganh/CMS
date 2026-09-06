@@ -28,6 +28,7 @@ export {
 } from './collection.schema';
 export { RoleRecord, RoleSchema } from './role.schema';
 export { RoleAssignmentRecord, RoleAssignmentSchema } from './role-assignment.schema';
+export { TenantMigrationRecord, TenantMigrationSchema } from './tenant-migration.schema';
 export { AuditLogRecord, AuditLogSchema } from './audit-log.schema';
 export { CustomDomainRecord, CustomDomainSchema } from './custom-domain.schema';
 export { PageSeoSettingsRecord, PageSeoSettingsSchema } from './page-seo-settings.schema';

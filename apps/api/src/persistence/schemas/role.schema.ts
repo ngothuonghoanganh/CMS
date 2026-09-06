@@ -24,6 +24,10 @@ export class RoleRecord {
   @Prop({ type: [String], required: true, default: [] })
   permissions!: string[];
 
+  /** Version marker separating pre-capability-split roles from new roles. */
+  @Prop({ type: Number, required: false, min: 1 })
+  capabilityVersion?: number;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

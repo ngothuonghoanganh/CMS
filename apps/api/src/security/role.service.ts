@@ -35,6 +35,7 @@ import {
 import { TenantMembershipRecord } from '../tenancy/schemas/tenant-membership.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
+import { ROLE_CAPABILITY_VERSION } from './role-migrations';
 
 @Injectable()
 export class RoleService {
@@ -66,19 +67,6 @@ export class RoleService {
         )
         .exec();
     }
-    // One-time compatibility migration for tenant-defined full editors. The
-    // system Editor persona is intentionally content-only; custom roles that
-    // already granted page.update retain their previous structural capability.
-    await this.roleModel
-      .updateMany(
-        {
-          type: 'custom',
-          permissions: 'page.update',
-          $and: [{ permissions: { $ne: 'page.design' } }],
-        },
-        { $addToSet: { permissions: 'page.design' } },
-      )
-      .exec();
   }
 
   async list(principal?: AuthPrincipal): Promise<{ items: Role[] }> {
@@ -112,6 +100,7 @@ export class RoleService {
         _id: randomUUID(),
         ...parsed,
         type: 'custom',
+        capabilityVersion: ROLE_CAPABILITY_VERSION,
       });
       const result = await this.toContract(record);
       await this.auditMutation(principal, 'role.create', 'role', result.id, {

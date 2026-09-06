@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useCmsShell } from '../cms-shell';
 import { pagePath, pagesPath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
+import { canCreateDesignedPage } from '../lib/page-capabilities';
 import { PagesView, type PageForm } from './pages-view';
 
 const blankPage: PageForm = {
@@ -85,7 +86,8 @@ export default function PagesPage({
   templateVersionId?: string;
 }) {
   const router = useRouter();
-  const { workspaceId, can } = useCmsShell();
+  const { permissions, workspaceId, can } = useCmsShell();
+  const canCreateDesigned = canCreateDesignedPage(permissions);
   const [sites, setSites] = useState<Site[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -459,11 +461,12 @@ export default function PagesPage({
         bindings={bindings}
         bindingSaving={bindingSaving}
         busy={busy}
-        canCreatePage={can('page.create')}
+        canCreateDesignedPage={canCreateDesigned}
         canDeletePage={can('page.delete')}
         canPublishPage={can('page.publish')}
         canRollbackPage={can('page.rollback')}
         canReadWorkflows={can('workflow.read')}
+        canDesignPage={can('page.design')}
         canUpdatePage={can('page.update')}
         collectionEntries={collectionEntries}
         collections={collections}

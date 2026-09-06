@@ -69,7 +69,8 @@ export type PagesViewProps = {
   pageForm: PageForm;
   pageDrawerOpen: boolean;
   busy: boolean;
-  canCreatePage: boolean;
+  canCreateDesignedPage: boolean;
+  canDesignPage: boolean;
   canUpdatePage: boolean;
   canPublishPage: boolean;
   canRollbackPage: boolean;
@@ -311,6 +312,7 @@ function PageActions({
   site,
   busy,
   canDeletePage,
+  canCreateDesignedPage,
   onDuplicate,
   onDelete,
   onSetHomepage,
@@ -320,6 +322,7 @@ function PageActions({
   site: Site | undefined;
   busy: boolean;
   canDeletePage: boolean;
+  canCreateDesignedPage: boolean;
   onDuplicate: (page: Page) => void;
   onDelete: (page: Page) => void;
   onSetHomepage: (page: Page) => void;
@@ -338,9 +341,11 @@ function PageActions({
             Set as homepage
           </button>
         ) : null}
-        <button onClick={() => onDuplicate(page)} type="button">
-          Duplicate
-        </button>
+        {canCreateDesignedPage ? (
+          <button onClick={() => onDuplicate(page)} type="button">
+            Duplicate
+          </button>
+        ) : null}
         {canDeletePage ? (
           <button disabled={isHome || busy} onClick={() => onDelete(page)} type="button">
             Delete
@@ -357,13 +362,24 @@ function CreationSource({
   onBlank,
   onTemplate,
   onDuplicate,
+  canCreateDesignedPage,
 }: {
   templates: Template[];
   pages: Page[];
   onBlank: () => void;
   onTemplate: (template: Template) => void;
   onDuplicate: (page: Page) => void;
+  canCreateDesignedPage: boolean;
 }) {
+  if (!canCreateDesignedPage) {
+    return (
+      <div className="page-create-source">
+        <p className="helper-text" role="status">
+          Creating a page requires both page creation and design permission.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="page-create-source">
       <p className="muted">Start with a structure that fits your next page.</p>
@@ -425,7 +441,8 @@ export function PagesView({
   pageForm,
   pageDrawerOpen,
   busy,
-  canCreatePage,
+  canCreateDesignedPage,
+  canDesignPage,
   canUpdatePage,
   canPublishPage,
   canRollbackPage,
@@ -491,6 +508,7 @@ export function PagesView({
       ? findFormNodes(draftVersion.payload.root as unknown as PageNodeWithChildren)
       : [];
   const isCreating = !selectedPage;
+  const metadataDisabled = Boolean(selectedPage && !canDesignPage);
   const dynamicCollection = collections.find(
     (collection) => collection.id === pageForm.collectionId,
   );
@@ -521,14 +539,16 @@ export function PagesView({
     <>
       <PageHeader
         actions={
-          <button
-            className="button button-primary"
-            disabled={!selectedSiteId || !canCreatePage}
-            onClick={openCreateFlow}
-            type="button"
-          >
-            + New page
-          </button>
+          canCreateDesignedPage ? (
+            <button
+              className="button button-primary"
+              disabled={!selectedSiteId}
+              onClick={openCreateFlow}
+              type="button"
+            >
+              + New page
+            </button>
+          ) : undefined
         }
         eyebrow="Website structure"
         title="Pages"
@@ -607,7 +627,7 @@ export function PagesView({
                     : 'Create a page to start shaping your website.'
                 }
                 action={
-                  canCreatePage ? (
+                  canCreateDesignedPage ? (
                     <button
                       className="button button-primary"
                       onClick={openCreateFlow}
@@ -634,6 +654,7 @@ export function PagesView({
                   </div>
                   <PageActions
                     busy={busy}
+                    canCreateDesignedPage={canCreateDesignedPage}
                     canDeletePage={canDeletePage}
                     onDelete={setDeleteCandidate}
                     onDuplicate={onDuplicate}
@@ -847,7 +868,7 @@ export function PagesView({
       ) : null}
 
       {selectedPage ? (
-        <PageLayoutEditor canUpdate={canUpdatePage} page={selectedPage} />
+        <PageLayoutEditor canDesign={canDesignPage} page={selectedPage} />
       ) : null}
 
       {selectedPage ? (
@@ -1151,7 +1172,10 @@ export function PagesView({
             ) : null}
             <button
               className="button button-primary"
-              disabled={busy || (isCreating ? !canCreatePage : !canUpdatePage)}
+              disabled={
+                busy ||
+                (isCreating ? !canCreateDesignedPage : !canUpdatePage || !canDesignPage)
+              }
               form="page-metadata-form"
               type="submit"
             >
@@ -1173,6 +1197,7 @@ export function PagesView({
       >
         {isCreating && creationStep === 'source' ? (
           <CreationSource
+            canCreateDesignedPage={canCreateDesignedPage}
             onBlank={chooseBlank}
             onDuplicate={onDuplicate}
             onTemplate={chooseTemplate}
@@ -1181,10 +1206,16 @@ export function PagesView({
           />
         ) : selectedSite ? (
           <form className="stack" id="page-metadata-form" onSubmit={onPageSubmit}>
+            {metadataDisabled ? (
+              <p className="helper-text" role="status">
+                Page metadata and layout settings require design permission.
+              </p>
+            ) : null}
             <label>
               Page title
               <input
                 aria-label="Page name"
+                disabled={metadataDisabled}
                 onChange={(event) =>
                   onPageFormChange({ ...pageForm, name: event.target.value })
                 }
@@ -1196,6 +1227,7 @@ export function PagesView({
               Page type
               <select
                 aria-label="Page type"
+                disabled={metadataDisabled}
                 onChange={(event) =>
                   onPageFormChange({
                     ...pageForm,
@@ -1221,6 +1253,7 @@ export function PagesView({
                   Collection
                   <select
                     aria-label="Dynamic collection"
+                    disabled={metadataDisabled}
                     onChange={(event) =>
                       onPageFormChange({
                         ...pageForm,
@@ -1245,6 +1278,7 @@ export function PagesView({
                   <span className="muted">Example: /products/{'{slug}'}</span>
                   <input
                     aria-label="Path pattern"
+                    disabled={metadataDisabled}
                     onChange={(event) =>
                       onPageFormChange({ ...pageForm, pathPattern: event.target.value })
                     }
@@ -1257,6 +1291,7 @@ export function PagesView({
                   Lookup field
                   <select
                     aria-label="Dynamic lookup field"
+                    disabled={metadataDisabled}
                     onChange={(event) =>
                       onPageFormChange({ ...pageForm, lookupField: event.target.value })
                     }
@@ -1277,6 +1312,7 @@ export function PagesView({
                   Preview entry
                   <select
                     aria-label="Preview entry"
+                    disabled={metadataDisabled}
                     onChange={(event) =>
                       onPageFormChange({
                         ...pageForm,
@@ -1327,6 +1363,7 @@ export function PagesView({
                   <span className="muted">Use lowercase URL-safe segments.</span>
                   <input
                     aria-label="Slug"
+                    disabled={metadataDisabled}
                     onChange={(event) =>
                       onPageFormChange({
                         ...pageForm,
@@ -1354,6 +1391,7 @@ export function PagesView({
               Description <span className="muted">Optional</span>
               <textarea
                 aria-label="Description"
+                disabled={metadataDisabled}
                 maxLength={500}
                 onChange={(event) =>
                   onPageFormChange({ ...pageForm, description: event.target.value })

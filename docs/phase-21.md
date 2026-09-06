@@ -41,8 +41,24 @@ page update and version creation. A caller with `page.update` but without
 
 Owner and Admin retain `page.design`; the system Editor persona is content-only.
 Existing custom roles with `page.update` are migrated to retain structural
-editing capability. Asset metadata editing is separately protected by
-`asset.update`.
+editing capability by the tenant-scoped, one-time migration
+`phase21-page-design-custom-role-backfill-v1`. The migration records completion
+in the tenant `tenantMigrations` collection and stamps migrated/new custom roles
+with capability version `1`; later role reads, lists, bootstraps and provisioning
+do not infer or restore `page.design`. This preserves content-only custom roles
+created after the split and preserves an administrator's explicit removal of
+`page.design`. Asset metadata editing is separately protected by `asset.update`.
+
+Ambiguous and behavioral properties are explicitly classified in the registry:
+heading level and ordered-list semantics are content; list item structure,
+video playback flags, accordion behavior, tab behavior, global-header
+positioning, navigation source/responsiveness/alignment, site-brand display,
+link targets and button targets are design. The full form editor and collection
+query source remain design-scoped until narrower copy-only contracts exist.
+
+Page creation, duplication and template application require both
+`page.create` and `page.design`. Page metadata and page layout attachments are
+design-scoped; content-only editors retain normal copy editing in the Builder.
 
 ## Content Editor Mode
 
@@ -114,10 +130,11 @@ publish readiness/issue/summary schemas, asset metadata update schema and asset
 usage response. Focused contract tests cover registry scopes, content/design
 classification, structural changes, semantic composition comparison and
 summary output. API tests cover exhaustive asset scans, workspace isolation,
-fail-closed scan errors, design authorization, CAS restore, legacy composition
-normalization and first-publish summaries. The dedicated
-`tests/e2e/phase-21-closure.spec.ts` test exercises the current-version,
-readiness, CAS and restore seams through the API.
+fail-closed scan errors, design authorization, role migration boundaries, CAS
+restore, legacy composition normalization and first-publish summaries. The
+dedicated `tests/e2e/phase-21-closure.spec.ts` suite exercises the
+current-version/readiness/CAS/restore seams through the API and proves both
+content-only Builder save/reload and designer structural save/reload journeys.
 
 ## Intentional limitations
 

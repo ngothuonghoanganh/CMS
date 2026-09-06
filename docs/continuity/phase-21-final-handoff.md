@@ -1,14 +1,26 @@
 # Phase 21 final handoff
 
-Status: COMPLETE — implementation complete; all required local repository gates pass.
+Status: COMPLETE — final security closure implemented; all required local repository gates pass.
 
-Starting closure-pass HEAD: `6da922231f2f7ce1a8997585a5f03b6a579188b8`.
-Ending HEAD: `6da922231f2f7ce1a8997585a5f03b6a579188b8` (no commit created).
+Original Phase 21 implementation HEAD: `6da922231f2f7ce1a8997585a5f03b6a579188b8`.
+First closure-pass HEAD: `c224291ec4584ddd27105efb34a10559c979270a`.
+Final security-closure starting HEAD: `c224291ec4584ddd27105efb34a10559c979270a`.
+Final security-closure ending HEAD: `c224291ec4584ddd27105efb34a10559c979270a`
+(final closure changes are uncommitted in the working tree).
 
 ## Delivered seams
 
 - `page.design` capability with registry-driven content/design classification
   and server-side `PAGE_DESIGN_PERMISSION_REQUIRED` enforcement.
+- Tenant-scoped one-time custom-role migration
+  `phase21-page-design-custom-role-backfill-v1`, with capability version `1`,
+  preserving legacy structural roles without recurring privilege escalation.
+- Explicit registry scopes for ambiguous/behavioral properties, including
+  heading/list semantics, media playback, compound interaction behavior,
+  navigation source/layout and brand presentation.
+- Shared CMS `page.create` + `page.design` gating for page creation,
+  duplication and template application; metadata and page layout attachments
+  are unavailable to content-only users.
 - Content/Design modes in the single Page Builder with content-only Inspector
   filtering and command/drag safety.
 - Bounded version history, authenticated historical preview, CAS restore as a
@@ -41,15 +53,21 @@ pnpm format:check              PASS
 pnpm lint                      PASS
 pnpm typecheck                 PASS
 pnpm check:cms-design-system   PASS
-pnpm test                      PASS (54 contract, 118 CMS, 77 API, 22 renderer tests; 12 API integration tests skipped)
+pnpm test                      PASS (58 contract, 118 CMS, 83 API, 22 renderer tests; 12 API integration tests skipped)
 pnpm build                     PASS
-pnpm exec playwright test      PASS (89/89, including `phase-21-closure.spec.ts`)
+pnpm exec playwright test      PASS (91/91, including `phase-21-closure.spec.ts`)
 git diff --check               PASS
 ```
 
 The commands emitted the repository's existing Node engine warning because this
-workspace uses Node 22 while the package metadata requests Node 24+. Hosted CI
-was not inspected or changed in this local worktree pass.
+workspace uses Node 22 while the package metadata requests Node 24+. Production
+build regenerated the tracked CMS and renderer `next-env.d.ts` references from
+`.next/dev` to `.next/types`; no manual generated-file edits were made.
+
+Hosted CI: Foundation CI run #32 for `c224291ec4584ddd27105efb34a10559c979270a`
+failed before any job step because the GitHub account was locked due to a billing
+issue. Hosted repository gates are therefore not verified; no hosted state was
+changed by this worktree pass.
 
 ## Intentional limitations
 

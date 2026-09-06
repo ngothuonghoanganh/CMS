@@ -83,6 +83,41 @@ describe('component style capabilities', () => {
     expect(styleSchemaFor('video').map((property) => property.key)).toContain('width');
   });
 
+  it('keeps the capability contract explicit for semantic and behavioral properties', () => {
+    const propertyScopes = [
+      ['heading', 'level', 'content'],
+      ['list', 'ordered', 'content'],
+      ['list', 'items', 'design'],
+      ['video', 'controls', 'design'],
+      ['video', 'autoplay', 'design'],
+      ['video', 'muted', 'design'],
+      ['video', 'loop', 'design'],
+      ['video', 'playsInline', 'design'],
+      ['accordion', 'allowMultiple', 'design'],
+      ['accordion', 'headingLevel', 'design'],
+      ['accordion-item', 'defaultOpen', 'design'],
+      ['tabs', 'orientation', 'design'],
+      ['tabs', 'activationMode', 'design'],
+      ['global-header', 'position', 'design'],
+      ['navigation-view', 'source', 'design'],
+      ['navigation-view', 'orientation', 'design'],
+      ['navigation-view', 'mobileBehavior', 'design'],
+      ['navigation-view', 'alignment', 'design'],
+      ['site-brand', 'display', 'design'],
+      ['form', 'form', 'design'],
+      ['collection-list', 'queryId', 'design'],
+    ] as const;
+
+    for (const [component, property, editingScope] of propertyScopes) {
+      expect(
+        PAGE_COMPONENT_REGISTRY[component].propertiesSchema.find(
+          (candidate) => candidate.key === property,
+        ),
+        `${component}.${property}`,
+      ).toMatchObject({ editingScope });
+    }
+  });
+
   it('describes compound structure and builder exposure in the registry', () => {
     expect(PAGE_COMPONENT_REGISTRY.accordion.builder.insertable).toBe(true);
     expect(PAGE_COMPONENT_REGISTRY['accordion-item'].builder.insertable).toBe(false);

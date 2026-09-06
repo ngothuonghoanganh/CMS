@@ -37,6 +37,10 @@ import {
   RoleAssignmentSchema,
 } from '../persistence/schemas/role-assignment.schema';
 import {
+  TenantMigrationRecord,
+  TenantMigrationSchema,
+} from '../persistence/schemas/tenant-migration.schema';
+import {
   PlatformRoleRecord,
   PlatformRoleSchema,
 } from '../tenancy/schemas/platform-role.schema';
@@ -44,7 +48,7 @@ import {
   PlatformRoleAssignmentRecord,
   PlatformRoleAssignmentSchema,
 } from '../tenancy/schemas/platform-role-assignment.schema';
-import { systemRoleDefinitions } from '../security/role-defaults';
+import { seedTenantRoles } from '../security/role-migrations';
 
 const scrypt = promisify(nodeScrypt);
 
@@ -176,7 +180,11 @@ export class TenantBootstrapService implements OnModuleInit {
       RoleAssignmentRecord.name,
       RoleAssignmentSchema,
     );
-    await seedTenantRoles(roleModel);
+    const migrationModel = this.models.proxy(
+      TenantMigrationRecord.name,
+      TenantMigrationSchema,
+    );
+    await seedTenantRoles(roleModel, migrationModel);
     const ownerRole = await roleModel.findOne({ key: 'owner' }).exec();
     if (
       ownerRole &&
@@ -261,6 +269,7 @@ export class TenantBootstrapService implements OnModuleInit {
       const scope = this.resolver.toScope(tenant);
       try {
         await this.connections.get(scope);
+        await this.ensureTenantRoleMigration(scope);
         await this.syncExistingSiteRoutes(scope);
       } catch (error) {
         this.logger.warn(
@@ -270,6 +279,19 @@ export class TenantBootstrapService implements OnModuleInit {
         );
       }
     }
+  }
+
+  private async ensureTenantRoleMigration(
+    scope: ReturnType<TenantResolver['toScope']>,
+  ): Promise<void> {
+    await this.context.run(scope, async () => {
+      const roleModel = this.models.proxy(RoleRecord.name, RoleSchema);
+      const migrationModel = this.models.proxy(
+        TenantMigrationRecord.name,
+        TenantMigrationSchema,
+      );
+      await seedTenantRoles(roleModel, migrationModel);
+    });
   }
 
   private async ensurePlatformUser(): Promise<PlatformUserRecord> {
@@ -342,29 +364,4 @@ function isDuplicateKey(error: unknown): boolean {
   return (
     typeof error === 'object' && error !== null && 'code' in error && error.code === 11000
   );
-}
-
-async function seedTenantRoles(roleModel: Model<RoleRecord>): Promise<void> {
-  for (const role of systemRoleDefinitions) {
-    await roleModel
-      .updateOne(
-        { key: role.key },
-        {
-          $set: { ...role, type: 'system' },
-          $setOnInsert: { _id: randomUUID() },
-        },
-        { upsert: true, setDefaultsOnInsert: true },
-      )
-      .exec();
-  }
-  await roleModel
-    .updateMany(
-      {
-        type: 'custom',
-        permissions: 'page.update',
-        $and: [{ permissions: { $ne: 'page.design' } }],
-      },
-      { $addToSet: { permissions: 'page.design' } },
-    )
-    .exec();
 }

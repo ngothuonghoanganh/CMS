@@ -12,6 +12,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useCmsShell } from '../cms-shell';
 import { cmsViewPath, pagesPath, templatePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
+import { canCreateDesignedPage } from '../lib/page-capabilities';
 import { EmptyState, Drawer, PageHeader } from '../ui/surfaces';
 
 type TemplateForm = { name: string; description: string };
@@ -35,7 +36,8 @@ export default function TemplatesPage({
   siteId?: string;
 }) {
   const router = useRouter();
-  const { workspaceId, can } = useCmsShell();
+  const { permissions, workspaceId, can } = useCmsShell();
+  const canUseForPage = canCreateDesignedPage(permissions);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [form, setForm] = useState(blankTemplate);
   const [loading, setLoading] = useState(true);
@@ -168,6 +170,7 @@ export default function TemplatesPage({
       {selected && !action ? (
         <TemplateDetail
           canUpdate={can('template.update')}
+          canUseForPage={canUseForPage}
           template={selected}
           workspaceId={workspaceId}
           {...(siteId ? { siteId } : {})}
@@ -239,17 +242,19 @@ export default function TemplatesPage({
                       ))}
                     </div>
                     <div className="row-actions">
-                      <button
-                        className="button button-small button-primary"
-                        onClick={() =>
-                          router.push(
-                            `${pagesPath(workspaceId, siteId)}/new?templateId=${encodeURIComponent(template.id)}`,
-                          )
-                        }
-                        type="button"
-                      >
-                        Use for page
-                      </button>
+                      {canUseForPage ? (
+                        <button
+                          className="button button-small button-primary"
+                          onClick={() =>
+                            router.push(
+                              `${pagesPath(workspaceId, siteId)}/new?templateId=${encodeURIComponent(template.id)}`,
+                            )
+                          }
+                          type="button"
+                        >
+                          Use for page
+                        </button>
+                      ) : null}
                       <button
                         className="button button-small button-secondary"
                         disabled={!siteId || !can('template.update')}
@@ -374,11 +379,13 @@ export default function TemplatesPage({
 function TemplateDetail({
   template,
   canUpdate,
+  canUseForPage,
   siteId,
   workspaceId,
 }: {
   template: Template;
   canUpdate: boolean;
+  canUseForPage: boolean;
   siteId?: string;
   workspaceId: string;
 }) {
@@ -426,17 +433,19 @@ function TemplateDetail({
             <span>{new Date(template.updatedAt).toLocaleDateString()}</span>
           </div>
         </div>
-        <button
-          className="button button-secondary"
-          onClick={() =>
-            router.push(
-              `${pagesPath(workspaceId, siteId)}/new?templateId=${encodeURIComponent(template.id)}`,
-            )
-          }
-          type="button"
-        >
-          Use for page
-        </button>
+        {canUseForPage ? (
+          <button
+            className="button button-secondary"
+            onClick={() =>
+              router.push(
+                `${pagesPath(workspaceId, siteId)}/new?templateId=${encodeURIComponent(template.id)}`,
+              )
+            }
+            type="button"
+          >
+            Use for page
+          </button>
+        ) : null}
       </section>
     </>
   );

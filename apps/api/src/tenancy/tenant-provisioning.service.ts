@@ -79,10 +79,14 @@ import { TenantResolver } from './tenant-resolver';
 import { SubscriptionService } from '../billing/subscription.service';
 import { RoleRecord, RoleSchema } from '../persistence/schemas/role.schema';
 import {
+  TenantMigrationRecord,
+  TenantMigrationSchema,
+} from '../persistence/schemas/tenant-migration.schema';
+import {
   RoleAssignmentRecord,
   RoleAssignmentSchema,
 } from '../persistence/schemas/role-assignment.schema';
-import { systemRoleDefinitions } from '../security/role-defaults';
+import { seedTenantRoles } from '../security/role-migrations';
 import { hashPassword } from '../common/guards/password';
 import {
   TenantExtensionRecord,
@@ -116,6 +120,7 @@ const tenantMigrations = [
   [TenantMembershipRecord, TenantMembershipSchema],
   [RoleRecord, RoleSchema],
   [RoleAssignmentRecord, RoleAssignmentSchema],
+  [TenantMigrationRecord, TenantMigrationSchema],
   [TenantExtensionRecord, TenantExtensionSchema],
   [PageExtensionInstanceRecord, PageExtensionInstanceSchema],
   [NavigationRecord, NavigationSchemaMongoose],
@@ -328,6 +333,10 @@ export class TenantProvisioningService {
       RoleAssignmentRecord.name,
       RoleAssignmentSchema,
     );
+    const migrationModel = this.models.proxy(
+      TenantMigrationRecord.name,
+      TenantMigrationSchema,
+    );
     const tenantId = this.context.require().id;
     const membership = await membershipModel.findOne({ tenantId, userId: email }).exec();
     if (!membership) {
@@ -338,7 +347,7 @@ export class TenantProvisioningService {
         role: 'owner',
       });
     }
-    await seedTenantRoles(roleModel);
+    await seedTenantRoles(roleModel, migrationModel);
     const ownerRole = await roleModel.findOne({ key: 'owner' }).exec();
     if (
       ownerRole &&
@@ -407,29 +416,4 @@ function safeProvisioningError(error: unknown): string {
   return error instanceof Error
     ? error.message.slice(0, 500)
     : 'Unknown provisioning error';
-}
-
-async function seedTenantRoles(roleModel: Model<RoleRecord>): Promise<void> {
-  for (const role of systemRoleDefinitions) {
-    await roleModel
-      .updateOne(
-        { key: role.key },
-        {
-          $set: { ...role, type: 'system' },
-          $setOnInsert: { _id: randomUUID() },
-        },
-        { upsert: true, setDefaultsOnInsert: true },
-      )
-      .exec();
-  }
-  await roleModel
-    .updateMany(
-      {
-        type: 'custom',
-        permissions: 'page.update',
-        $and: [{ permissions: { $ne: 'page.design' } }],
-      },
-      { $addToSet: { permissions: 'page.design' } },
-    )
-    .exec();
 }

@@ -65,6 +65,8 @@ import {
   CollectionEntrySchema,
   CollectionEntryVersionRecord,
   CollectionEntryVersionSchema,
+  TenantMigrationRecord,
+  TenantMigrationSchema,
 } from '../persistence/schemas';
 import { TenantUserRecord, TenantUserSchema } from './schemas/tenant-user.schema';
 import {
@@ -110,6 +112,7 @@ const models = [
   [CollectionRecord, CollectionSchema],
   [CollectionEntryRecord, CollectionEntrySchema],
   [CollectionEntryVersionRecord, CollectionEntryVersionSchema],
+  [TenantMigrationRecord, TenantMigrationSchema],
 ] as const;
 
 const providers = models.map(([record, schema]) =>

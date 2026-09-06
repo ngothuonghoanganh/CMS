@@ -910,6 +910,7 @@ const rawPageComponentRegistry = {
         key: 'target',
         label: 'Open link',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: '_self', label: 'Same tab' },
@@ -992,6 +993,8 @@ const rawPageComponentRegistry = {
         key: 'level',
         label: 'Heading level',
         group: 'content',
+        // Heading hierarchy is editorial/accessible semantics, not layout.
+        editingScope: 'content',
         control: 'select',
         options: [1, 2, 3, 4, 5, 6].map((level) => ({
           label: `H${level}`,
@@ -1015,6 +1018,7 @@ const rawPageComponentRegistry = {
         key: 'target',
         label: 'Open link',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: '_self', label: 'Same tab' },
@@ -1046,11 +1050,20 @@ const rawPageComponentRegistry = {
       ],
     },
     propertiesSchema: content([
-      { key: 'ordered', label: 'Ordered list', group: 'content', control: 'toggle' },
+      {
+        key: 'ordered',
+        label: 'Ordered list',
+        group: 'content',
+        // Ordered/unordered conveys editorial meaning to assistive technology.
+        editingScope: 'content',
+        control: 'toggle',
+      },
       {
         key: 'items',
         label: 'List items',
         group: 'content',
+        // Adding/removing/reordering persisted item nodes is structural.
+        editingScope: 'design',
         control: 'custom',
         customEditor: 'list',
       },
@@ -1086,11 +1099,41 @@ const rawPageComponentRegistry = {
         control: 'asset',
         assetKind: 'image',
       },
-      { key: 'controls', label: 'Show controls', group: 'content', control: 'toggle' },
-      { key: 'autoplay', label: 'Autoplay', group: 'content', control: 'toggle' },
-      { key: 'muted', label: 'Muted', group: 'content', control: 'toggle' },
-      { key: 'loop', label: 'Loop', group: 'content', control: 'toggle' },
-      { key: 'playsInline', label: 'Play inline', group: 'content', control: 'toggle' },
+      {
+        key: 'controls',
+        label: 'Show controls',
+        group: 'content',
+        editingScope: 'design',
+        control: 'toggle',
+      },
+      {
+        key: 'autoplay',
+        label: 'Autoplay',
+        group: 'content',
+        editingScope: 'design',
+        control: 'toggle',
+      },
+      {
+        key: 'muted',
+        label: 'Muted',
+        group: 'content',
+        editingScope: 'design',
+        control: 'toggle',
+      },
+      {
+        key: 'loop',
+        label: 'Loop',
+        group: 'content',
+        editingScope: 'design',
+        control: 'toggle',
+      },
+      {
+        key: 'playsInline',
+        label: 'Play inline',
+        group: 'content',
+        editingScope: 'design',
+        control: 'toggle',
+      },
     ]),
   }),
   quote: definition({
@@ -1213,19 +1256,27 @@ const rawPageComponentRegistry = {
         key: 'allowMultiple',
         label: 'Allow multiple open',
         group: 'content',
+        editingScope: 'design',
         control: 'toggle',
       },
       {
         key: 'headingLevel',
         label: 'Heading level',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [2, 3, 4, 5, 6].map((level) => ({
           label: `H${level}`,
           value: String(level),
         })),
       },
-      { key: 'ariaLabel', label: 'Accessible label', group: 'content', control: 'text' },
+      {
+        key: 'ariaLabel',
+        label: 'Accessible label',
+        group: 'content',
+        editingScope: 'content',
+        control: 'text',
+      },
     ]),
   }),
   'accordion-item': definition({
@@ -1262,6 +1313,7 @@ const rawPageComponentRegistry = {
         key: 'defaultOpen',
         label: 'Open by default',
         group: 'content',
+        editingScope: 'design',
         control: 'toggle',
       },
     ]),
@@ -1379,17 +1431,25 @@ const rawPageComponentRegistry = {
         key: 'orientation',
         label: 'Orientation',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'horizontal', label: 'Horizontal' },
           { value: 'vertical', label: 'Vertical' },
         ],
       },
-      { key: 'ariaLabel', label: 'Accessible label', group: 'content', control: 'text' },
+      {
+        key: 'ariaLabel',
+        label: 'Accessible label',
+        group: 'content',
+        editingScope: 'content',
+        control: 'text',
+      },
       {
         key: 'activationMode',
         label: 'Activation',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'automatic', label: 'Automatic' },
@@ -1585,6 +1645,7 @@ const rawPageComponentRegistry = {
         key: 'position',
         label: 'Position',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'static', label: 'Static' },
@@ -1695,6 +1756,7 @@ const rawPageComponentRegistry = {
         key: 'source',
         label: 'Navigation source',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'main', label: 'Main navigation' },
@@ -1705,6 +1767,7 @@ const rawPageComponentRegistry = {
         key: 'orientation',
         label: 'Orientation',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'horizontal', label: 'Horizontal' },
@@ -1715,6 +1778,7 @@ const rawPageComponentRegistry = {
         key: 'mobileBehavior',
         label: 'Mobile behavior',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'collapse', label: 'Collapse' },
@@ -1726,6 +1790,7 @@ const rawPageComponentRegistry = {
         key: 'alignment',
         label: 'Alignment',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'left', label: 'Left' },
@@ -1733,7 +1798,13 @@ const rawPageComponentRegistry = {
           { value: 'right', label: 'Right' },
         ],
       },
-      { key: 'ariaLabel', label: 'Accessible label', group: 'content', control: 'text' },
+      {
+        key: 'ariaLabel',
+        label: 'Accessible label',
+        group: 'content',
+        editingScope: 'content',
+        control: 'text',
+      },
     ]),
   }),
   'site-brand': definition({
@@ -1770,6 +1841,7 @@ const rawPageComponentRegistry = {
         key: 'display',
         label: 'Display',
         group: 'content',
+        editingScope: 'design',
         control: 'select',
         options: [
           { value: 'logo', label: 'Logo' },

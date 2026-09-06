@@ -65,6 +65,44 @@ function composition(payloadValue: ReturnType<typeof payload>, queryId: string) 
   };
 }
 
+function tabsPayload(orientation: 'horizontal' | 'vertical') {
+  return {
+    version: 7 as const,
+    metadata: { documentTitle: 'Tabs page' },
+    root: {
+      id: 'root',
+      type: 'root' as const,
+      props: {},
+      children: [
+        {
+          id: 'section-1',
+          type: 'section' as const,
+          props: {},
+          children: [
+            {
+              id: 'tabs-1',
+              type: 'tabs' as const,
+              props: {
+                orientation,
+                ariaLabel: 'Tabs',
+                activationMode: 'automatic' as const,
+              },
+              children: [
+                {
+                  id: 'tab-1',
+                  type: 'tab-item' as const,
+                  props: { label: 'Tab' },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 function setupPageService() {
   const page = {
     _id: { toString: () => pageId },
@@ -129,6 +167,72 @@ describe('PageService design authorization', () => {
           name: 'Designed page',
           path: '/designed-page',
           payload: payload(queryA),
+        },
+        workspaceId,
+        false,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'PAGE_DESIGN_PERMISSION_REQUIRED' }),
+    });
+  });
+
+  it('rejects a behavioral tabs mutation for content-only saves', async () => {
+    const previousPayload = tabsPayload('horizontal');
+    const nextPayload = tabsPayload('vertical');
+    const page = {
+      _id: { toString: () => pageId },
+      workspaceId,
+      siteId,
+      currentDraftVersionId: 'version-1',
+    };
+    const currentVersion = {
+      _id: 'version-1',
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload: previousPayload,
+      composition: {
+        pageId,
+        payload: previousPayload,
+        attachments: [],
+        layoutAttachments: [],
+        bindings: [],
+        actions: [],
+        resources: [],
+        queries: [],
+      },
+    };
+    const pageModel = {
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(page) })),
+    };
+    const versionModel = {
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(currentVersion) })),
+    };
+    const service = Object.create(PageService.prototype) as PageService;
+    const state = service as unknown as {
+      pageModel: typeof pageModel;
+      versionModel: typeof versionModel;
+    };
+    state.pageModel = pageModel;
+    state.versionModel = versionModel;
+
+    expect(
+      (
+        service as unknown as {
+          classifyVersionInput: (...args: unknown[]) => {
+            designChanges: unknown[];
+          };
+        }
+      ).classifyVersionInput(page, currentVersion, nextPayload).designChanges,
+    ).not.toHaveLength(0);
+
+    await expect(
+      service.createVersion(
+        pageId,
+        {
+          expectedVersionNumber: 1,
+          payload: nextPayload,
         },
         workspaceId,
         false,
