@@ -32,6 +32,59 @@ import { ReusableRecord } from '../persistence/schemas/reusable.schema';
 import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
 
+const ASSET_USAGE_RESPONSE_LIMIT = 100;
+
+type AssetUsageItem = AssetUsageResponse['items'][number];
+
+type PageVersionUsageRecord = {
+  landingPageId: string;
+  versionNumber: number;
+  payload: unknown;
+  composition?: unknown;
+};
+
+type EntryVersionUsageRecord = {
+  entryId: string;
+  versionNumber: number;
+  values: unknown;
+};
+
+type TemplateUsageRecord = { _id: string };
+type TemplateVersionUsageRecord = {
+  templateId: string;
+  versionNumber: number;
+  payload: unknown;
+  composition?: unknown;
+};
+type ReusableUsageRecord = {
+  _id: string;
+  name: string;
+  draft: unknown;
+  published?: unknown;
+};
+type LayoutUsageRecord = { _id: string };
+type LayoutVersionUsageRecord = {
+  resourceId: string;
+  versionNumber: number;
+  document: unknown;
+};
+type SiteUsageRecord = {
+  _id: string;
+  name: string;
+  logo?: unknown;
+  globalsDraft?: unknown;
+  publishedGlobals?: unknown;
+  designSystemDraft?: unknown;
+  publishedDesignSystem?: unknown;
+};
+type SeoUsageRecord = {
+  landingPageId: string;
+  ogImage?: unknown;
+  twitterImage?: unknown;
+  favicon?: unknown;
+  bindings?: unknown;
+};
+
 @Injectable()
 export class AssetService {
   constructor(
@@ -126,196 +179,282 @@ export class AssetService {
   async usages(workspaceId: string, assetId: string): Promise<AssetUsageResponse> {
     const asset = await this.assetModel.findOne({ _id: assetId, workspaceId }).exec();
     if (!asset) throw this.notFound(assetId);
-    const references: AssetUsageResponse['items'] = [];
-    const add = (
-      resourceType: string,
-      resourceId: string,
-      label: string,
-      location?: string,
-      versionState?: 'draft' | 'published' | 'historical',
-    ) => {
-      if (references.length >= 100) return;
-      references.push({
-        resourceType,
-        resourceId,
-        label,
-        ...(location ? { location } : {}),
-        ...(versionState ? { versionState } : {}),
-      });
-    };
-    const matches = (value: unknown): boolean =>
-      containsReference(value, assetId, asset.storageKey);
+    const references: AssetUsageItem[] = [];
+    let matchCount = 0;
+    await this.scanAssetReferences(workspaceId, assetId, asset.storageKey, (usage) => {
+      matchCount += 1;
+      if (references.length < ASSET_USAGE_RESPONSE_LIMIT) references.push(usage);
+      return matchCount > ASSET_USAGE_RESPONSE_LIMIT;
+    });
 
-    const pageVersions = await this.pageVersionModel
-      .find({ workspaceId })
-      .select({ landingPageId: 1, versionNumber: 1, payload: 1, composition: 1 })
-      .limit(5000)
-      .lean()
-      .exec();
-    for (const version of pageVersions) {
-      if (matches({ payload: version.payload, composition: version.composition })) {
-        add(
-          'page',
-          version.landingPageId,
-          `Page ${version.landingPageId}`,
-          `Version ${version.versionNumber}`,
-          'historical',
-        );
-      }
-    }
-
-    const entryVersions = await this.entryVersionModel
-      .find({ workspaceId })
-      .select({ entryId: 1, versionNumber: 1, values: 1 })
-      .limit(5000)
-      .lean()
-      .exec();
-    for (const version of entryVersions) {
-      if (matches(version.values)) {
-        add(
-          'collection-entry',
-          version.entryId,
-          `Collection entry ${version.entryId}`,
-          `Version ${version.versionNumber}`,
-          'historical',
-        );
-      }
-    }
-
-    const templates = await this.templateModel
-      .find({ workspaceId })
-      .select({ _id: 1 })
-      .limit(5000)
-      .lean()
-      .exec();
-    const templateIds = templates.map((template) => template._id);
-    const templateVersions = templateIds.length
-      ? await this.templateVersionModel
-          .find({ templateId: { $in: templateIds } })
-          .select({ templateId: 1, versionNumber: 1, payload: 1, composition: 1 })
-          .limit(5000)
-          .lean()
-          .exec()
-      : [];
-    for (const version of templateVersions) {
-      if (matches({ payload: version.payload, composition: version.composition })) {
-        add(
-          'template',
-          version.templateId,
-          `Template ${version.templateId}`,
-          `Version ${version.versionNumber}`,
-          'historical',
-        );
-      }
-    }
-
-    const reusables = await this.reusableModel
-      .find({ workspaceId })
-      .select({ _id: 1, name: 1, draft: 1, published: 1 })
-      .limit(5000)
-      .lean()
-      .exec();
-    for (const reusable of reusables) {
-      if (matches({ draft: reusable.draft, published: reusable.published })) {
-        add('reusable', reusable._id.toString(), reusable.name, undefined, 'draft');
-      }
-    }
-
-    const layouts = await this.layoutModel
-      .find({ workspaceId })
-      .select({ _id: 1 })
-      .limit(5000)
-      .lean()
-      .exec();
-    const layoutIds = layouts.map((layout) => layout._id);
-    const layoutVersions = layoutIds.length
-      ? await this.layoutVersionModel
-          .find({ resourceId: { $in: layoutIds } })
-          .select({ resourceId: 1, versionNumber: 1, document: 1 })
-          .limit(5000)
-          .lean()
-          .exec()
-      : [];
-    for (const version of layoutVersions) {
-      if (matches(version.document)) {
-        add(
-          'layout',
-          version.resourceId,
-          `Layout ${version.resourceId}`,
-          `Version ${version.versionNumber}`,
-          'historical',
-        );
-      }
-    }
-
-    const sites = await this.siteModel
-      .find({ workspaceId })
-      .select({
-        _id: 1,
-        name: 1,
-        logo: 1,
-        globalsDraft: 1,
-        publishedGlobals: 1,
-        designSystemDraft: 1,
-        publishedDesignSystem: 1,
-      })
-      .limit(5000)
-      .lean()
-      .exec();
-    for (const site of sites) {
-      if (
-        matches({
-          logo: site.logo,
-          globalsDraft: site.globalsDraft,
-          publishedGlobals: site.publishedGlobals,
-          designSystemDraft: site.designSystemDraft,
-          publishedDesignSystem: site.publishedDesignSystem,
-        })
-      ) {
-        add('site', site._id, site.name, undefined, 'draft');
-      }
-    }
-
-    const seoSettings = await this.seoModel
-      .find({ workspaceId })
-      .select({ landingPageId: 1, ogImage: 1, twitterImage: 1, favicon: 1, bindings: 1 })
-      .limit(5000)
-      .lean()
-      .exec();
-    for (const seo of seoSettings) {
-      if (matches(seo)) {
-        add('page-seo', seo.landingPageId, `SEO settings for ${seo.landingPageId}`);
-      }
-    }
     return AssetUsageResponseSchema.parse({
       assetId,
       workspaceId,
       items: references,
-      truncated:
-        references.length >= 100 &&
-        (pageVersions.length >= 5000 ||
-          entryVersions.length >= 5000 ||
-          templateVersions.length >= 5000 ||
-          layoutVersions.length >= 5000 ||
-          reusables.length >= 5000 ||
-          sites.length >= 5000 ||
-          seoSettings.length >= 5000),
+      // This is based on an observed matching reference beyond the response
+      // limit, never on an arbitrary source scan limit.
+      truncated: matchCount > ASSET_USAGE_RESPONSE_LIMIT,
     });
   }
 
   async remove(workspaceId: string, assetId: string): Promise<void> {
-    const usage = await this.usages(workspaceId, assetId);
-    if (usage.items.length > 0) {
-      throw new ConflictException({
-        code: 'ASSET_IN_USE',
-        message: `This asset is used by ${usage.items.length}${usage.truncated ? '+' : ''} resources.`,
-        details: { usages: usage.items, truncated: usage.truncated },
-      });
-    }
+    await this.assertAssetCanBeDeleted(workspaceId, assetId);
     const result = await this.assetModel.deleteOne({ _id: assetId, workspaceId }).exec();
     if (result.deletedCount === 0) {
       throw this.notFound(assetId);
     }
+  }
+
+  /**
+   * Deletion integrity is intentionally separate from the bounded management
+   * response. This scan stops only on a proven reference or after every
+   * supported source is exhausted; a cursor failure becomes a hard error.
+   */
+  async assertAssetCanBeDeleted(workspaceId: string, assetId: string): Promise<void> {
+    const asset = await this.assetModel.findOne({ _id: assetId, workspaceId }).exec();
+    if (!asset) throw this.notFound(assetId);
+
+    let firstUsage: AssetUsageItem | undefined;
+    await this.scanAssetReferences(workspaceId, assetId, asset.storageKey, (usage) => {
+      firstUsage = usage;
+      return true;
+    });
+    if (firstUsage) {
+      throw new ConflictException({
+        code: 'ASSET_IN_USE',
+        message: 'This asset is used by another resource and cannot be deleted.',
+        details: { usages: [firstUsage], truncated: false },
+      });
+    }
+  }
+
+  private async scanAssetReferences(
+    workspaceId: string,
+    assetId: string,
+    storageKey: string,
+    onMatch: (usage: AssetUsageItem) => boolean | Promise<boolean>,
+  ): Promise<void> {
+    const matches = (value: unknown): boolean =>
+      containsReference(value, assetId, storageKey);
+
+    if (
+      await this.scanCursor(
+        'page versions',
+        () =>
+          this.pageVersionModel
+            .find({ workspaceId })
+            .select({ landingPageId: 1, versionNumber: 1, payload: 1, composition: 1 })
+            .sort({ _id: 1 })
+            .lean()
+            .cursor() as AsyncIterable<PageVersionUsageRecord>,
+        async (version) =>
+          matches({ payload: version.payload, composition: version.composition }) &&
+          onMatch({
+            resourceType: 'page',
+            resourceId: version.landingPageId,
+            label: `Page ${version.landingPageId}`,
+            location: `Version ${version.versionNumber}`,
+            versionState: 'historical',
+          }),
+      )
+    )
+      return;
+
+    if (
+      await this.scanCursor(
+        'collection entry versions',
+        () =>
+          this.entryVersionModel
+            .find({ workspaceId })
+            .select({ entryId: 1, versionNumber: 1, values: 1 })
+            .sort({ _id: 1 })
+            .lean()
+            .cursor() as AsyncIterable<EntryVersionUsageRecord>,
+        async (version) =>
+          matches(version.values) &&
+          onMatch({
+            resourceType: 'collection-entry',
+            resourceId: version.entryId,
+            label: `Collection entry ${version.entryId}`,
+            location: `Version ${version.versionNumber}`,
+            versionState: 'historical',
+          }),
+      )
+    )
+      return;
+
+    if (
+      await this.scanCursor(
+        'templates',
+        () =>
+          this.templateModel
+            .find({ workspaceId })
+            .select({ _id: 1 })
+            .sort({ _id: 1 })
+            .lean()
+            .cursor() as AsyncIterable<TemplateUsageRecord>,
+        async (template) =>
+          this.scanCursor(
+            'template versions',
+            () =>
+              this.templateVersionModel
+                .find({ templateId: template._id })
+                .select({ templateId: 1, versionNumber: 1, payload: 1, composition: 1 })
+                .sort({ _id: 1 })
+                .lean()
+                .cursor() as AsyncIterable<TemplateVersionUsageRecord>,
+            async (version) =>
+              matches({ payload: version.payload, composition: version.composition }) &&
+              onMatch({
+                resourceType: 'template',
+                resourceId: version.templateId,
+                label: `Template ${version.templateId}`,
+                location: `Version ${version.versionNumber}`,
+                versionState: 'historical',
+              }),
+          ),
+      )
+    )
+      return;
+
+    if (
+      await this.scanCursor(
+        'reusables',
+        () =>
+          this.reusableModel
+            .find({ workspaceId })
+            .select({ _id: 1, name: 1, draft: 1, published: 1 })
+            .sort({ _id: 1 })
+            .lean()
+            .cursor() as AsyncIterable<ReusableUsageRecord>,
+        async (reusable) =>
+          matches({ draft: reusable.draft, published: reusable.published }) &&
+          onMatch({
+            resourceType: 'reusable',
+            resourceId: reusable._id,
+            label: reusable.name,
+            versionState: 'draft',
+          }),
+      )
+    )
+      return;
+
+    if (
+      await this.scanCursor(
+        'layouts',
+        () =>
+          this.layoutModel
+            .find({ workspaceId })
+            .select({ _id: 1 })
+            .sort({ _id: 1 })
+            .lean()
+            .cursor() as AsyncIterable<LayoutUsageRecord>,
+        async (layout) =>
+          this.scanCursor(
+            'layout versions',
+            () =>
+              this.layoutVersionModel
+                .find({ resourceId: layout._id })
+                .select({ resourceId: 1, versionNumber: 1, document: 1 })
+                .sort({ _id: 1 })
+                .lean()
+                .cursor() as AsyncIterable<LayoutVersionUsageRecord>,
+            async (version) =>
+              matches(version.document) &&
+              onMatch({
+                resourceType: 'layout',
+                resourceId: version.resourceId,
+                label: `Layout ${version.resourceId}`,
+                location: `Version ${version.versionNumber}`,
+                versionState: 'historical',
+              }),
+          ),
+      )
+    )
+      return;
+
+    if (
+      await this.scanCursor(
+        'sites',
+        () =>
+          this.siteModel
+            .find({ workspaceId })
+            .select({
+              _id: 1,
+              name: 1,
+              logo: 1,
+              globalsDraft: 1,
+              publishedGlobals: 1,
+              designSystemDraft: 1,
+              publishedDesignSystem: 1,
+            })
+            .sort({ _id: 1 })
+            .lean()
+            .cursor() as AsyncIterable<SiteUsageRecord>,
+        async (site) =>
+          matches({
+            logo: site.logo,
+            globalsDraft: site.globalsDraft,
+            publishedGlobals: site.publishedGlobals,
+            designSystemDraft: site.designSystemDraft,
+            publishedDesignSystem: site.publishedDesignSystem,
+          }) &&
+          onMatch({
+            resourceType: 'site',
+            resourceId: site._id,
+            label: site.name,
+            versionState: 'draft',
+          }),
+      )
+    )
+      return;
+
+    await this.scanCursor(
+      'page SEO settings',
+      () =>
+        this.seoModel
+          .find({ workspaceId })
+          .select({
+            landingPageId: 1,
+            ogImage: 1,
+            twitterImage: 1,
+            favicon: 1,
+            bindings: 1,
+          })
+          .sort({ _id: 1 })
+          .lean()
+          .cursor() as AsyncIterable<SeoUsageRecord>,
+      async (seo) =>
+        matches(seo) &&
+        onMatch({
+          resourceType: 'page-seo',
+          resourceId: seo.landingPageId,
+          label: `SEO settings for ${seo.landingPageId}`,
+        }),
+    );
+  }
+
+  private async scanCursor<T>(
+    source: string,
+    cursorFactory: () => AsyncIterable<T>,
+    onRecord: (record: T) => boolean | Promise<boolean>,
+  ): Promise<boolean> {
+    try {
+      for await (const record of cursorFactory()) {
+        if (await onRecord(record)) return true;
+      }
+      return false;
+    } catch {
+      throw this.usageCheckIncomplete(source);
+    }
+  }
+
+  private usageCheckIncomplete(source: string): ConflictException {
+    return new ConflictException({
+      code: 'ASSET_USAGE_CHECK_INCOMPLETE',
+      message: 'Asset usage verification could not be completed safely.',
+      details: { source },
+    });
   }
 
   private toContract(record: AssetDocument): Asset {

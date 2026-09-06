@@ -5,6 +5,7 @@ import {
   IntegrationListResponseSchema,
   PageListResponseSchema,
   PageVersionListResponseSchema,
+  PageVersionSchema,
   PublishReadinessSchema,
   SiteListResponseSchema,
   TemplateListResponseSchema,
@@ -19,7 +20,7 @@ import {
   type Template,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { useCmsShell } from '../cms-shell';
 import { pagePath, pagesPath } from '../cms-routes';
@@ -92,6 +93,10 @@ export default function PagesPage({
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [entries, setEntries] = useState<CollectionEntryResponse[]>([]);
   const [versions, setVersions] = useState<PageVersion[]>([]);
+  const [currentDraftVersion, setCurrentDraftVersion] = useState<PageVersion | null>(
+    null,
+  );
+  const versionPageRef = useRef<string | undefined>(pageId);
   const [versionOffset, setVersionOffset] = useState(0);
   const [versionPagination, setVersionPagination] = useState({
     limit: 20,
@@ -166,27 +171,50 @@ export default function PagesPage({
     );
   }, [action, previewEntryId, selectedPage]);
   useEffect(() => {
+    let cancelled = false;
     if (!pageId) {
       setVersions([]);
+      setCurrentDraftVersion(null);
       setVersionOffset(0);
       setVersionPagination({ limit: 20, offset: 0, total: 0, hasNextPage: false });
       setBindings([]);
       setEntries([]);
-      return;
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (versionPageRef.current !== pageId) {
+      versionPageRef.current = pageId;
+      setVersions([]);
+      setCurrentDraftVersion(null);
+      setVersionOffset(0);
+      setVersionPagination({ limit: 20, offset: 0, total: 0, hasNextPage: false });
+      setBindings([]);
+      return () => {
+        cancelled = true;
+      };
     }
     void Promise.all([
       api.get(`/pages/${pageId}/versions?limit=20&offset=${versionOffset}`),
+      api.get(`/pages/${pageId}/versions/current`),
       api.get(`/pages/${pageId}/form-integrations`),
     ])
-      .then(([versionsResponse, bindingsResponse]) => {
+      .then(([versionsResponse, currentVersionResponse, bindingsResponse]) => {
+        if (cancelled) return;
         const parsedVersions = PageVersionListResponseSchema.parse(versionsResponse);
         setVersions(parsedVersions.items);
+        setCurrentDraftVersion(PageVersionSchema.parse(currentVersionResponse));
         setVersionPagination(parsedVersions.pagination);
         setBindings(
           FormIntegrationBindingListResponseSchema.parse(bindingsResponse).items,
         );
       })
-      .catch((caughtError: unknown) => setError(message(caughtError)));
+      .catch((caughtError: unknown) => {
+        if (!cancelled) setError(message(caughtError));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [pageId, versionOffset]);
   useEffect(() => {
     if (!selectedSiteId || !selectedPage?.collectionId) {
@@ -248,7 +276,7 @@ export default function PagesPage({
             };
       if (selectedPage) {
         const updated = await api.patch<Page>(`/pages/${selectedPage.id}`, {
-          expectedVersionNumber: versions[0]?.versionNumber,
+          expectedVersionNumber: currentDraftVersion?.versionNumber,
           name: pageForm.name,
           description: pageForm.description.trim() || null,
           ...routeMetadata,
@@ -340,13 +368,14 @@ export default function PagesPage({
   }
 
   function restoreVersion(page: Page, version: PageVersion) {
-    const expectedCurrentVersionNumber = versions[0]?.versionNumber;
+    const expectedCurrentVersionNumber = currentDraftVersion?.versionNumber;
     if (!expectedCurrentVersionNumber) return;
     void run(async () => {
       const restored = await api.post<PageVersion>(
         `/pages/${page.id}/versions/${version.versionNumber}/restore`,
         { expectedCurrentVersionNumber },
       );
+      setCurrentDraftVersion(restored);
       setVersions((current) => [restored, ...current]);
       setPages((current) =>
         current.map((item) =>
@@ -438,6 +467,7 @@ export default function PagesPage({
         canUpdatePage={can('page.update')}
         collectionEntries={collectionEntries}
         collections={collections}
+        {...(currentDraftVersion ? { currentDraftVersion } : {})}
         integrations={integrations}
         onChooseTemplate={(template) =>
           router.replace(

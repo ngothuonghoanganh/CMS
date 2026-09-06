@@ -930,6 +930,11 @@ const rawPageComponentRegistry = {
         key: 'form',
         label: 'Form fields and messages',
         group: 'content',
+        // This editor changes the complete form definition, including field
+        // structure, validation and submission behavior. Keep it
+        // design-scoped until copy-only editing is supported consistently by
+        // the Inspector, command layer and API classifier.
+        editingScope: 'design',
         control: 'custom',
         customEditor: 'form',
       },
@@ -1472,7 +1477,13 @@ const rawPageComponentRegistry = {
       },
     ],
     propertiesSchema: content([
-      { key: 'queryId', label: 'Query', group: 'content', control: 'select' },
+      {
+        key: 'queryId',
+        label: 'Query',
+        group: 'content',
+        editingScope: 'design',
+        control: 'select',
+      },
       { key: 'emptyMessage', label: 'Empty message', group: 'content', control: 'text' },
     ]),
   }),

@@ -217,6 +217,7 @@ export class TemplateController {
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.create', workspaceId);
+    await this.authorization.assertCan(principal, 'page.design', workspaceId);
     if (!input.siteId) {
       throw new BadRequestException({
         code: 'SITE_ID_REQUIRED',

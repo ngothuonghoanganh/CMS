@@ -27,6 +27,7 @@ import {
   PageCompositionSchema,
   DynamicPageMetadataSchema,
   classifyPageDocumentChanges,
+  createPageDocument,
   summarizePageChanges,
   PublishIssueCodeSchema,
   PublishReadinessSchema,
@@ -115,7 +116,9 @@ export class PageService {
     siteId: string,
     input: CreatePageRequest,
     workspaceId: string,
+    canDesign = true,
   ): Promise<Page> {
+    if (!canDesign) throw this.designPermissionRequired();
     return this.quotas.withHardQuota('landing_pages', async () => {
       const site = await this.requireSite(siteId, workspaceId);
       await this.sites.ensureHomePage(site);
@@ -270,7 +273,7 @@ export class PageService {
   ): Promise<Page> {
     const parsedInput = UpdatePageRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
-    const latestVersion = await this.findLatestVersion(pageId, workspaceId);
+    const latestVersion = await this.findCurrentDraftVersion(page);
 
     if (!canDesign) {
       const metadataFields = Object.keys(parsedInput).filter(
@@ -280,6 +283,9 @@ export class PageService {
         throw this.designPermissionRequired();
       }
       const draftPayload = parsedInput.payload ?? parsedInput.composition?.payload;
+      if (draftPayload !== undefined && !latestVersion) {
+        throw this.designPermissionRequired();
+      }
       if (draftPayload !== undefined && latestVersion) {
         const classification = this.classifyVersionInput(
           page,
@@ -461,7 +467,7 @@ export class PageService {
     const parsedInput = DuplicatePageRequestSchema.parse(input);
     return this.quotas.withHardQuota('landing_pages', async () => {
       const source = await this.requirePageDocument(pageId, workspaceId);
-      const latest = await this.findLatestVersion(pageId, workspaceId);
+      const latest = await this.findCurrentDraftVersion(source);
       if (!latest) {
         throw new NotFoundException({
           code: 'PAGE_VERSION_NOT_FOUND',
@@ -560,13 +566,16 @@ export class PageService {
   ): Promise<PageVersion> {
     const parsedInput = CreatePageVersionRequestSchema.parse(input);
     const page = await this.requirePageDocument(pageId, workspaceId);
-    const latestVersion = await this.findLatestVersion(pageId, workspaceId);
+    const latestVersion = await this.findCurrentDraftVersion(page);
 
     assertExpectedVersionNumber(
       parsedInput.expectedVersionNumber,
       latestVersion?.versionNumber ?? 0,
     );
 
+    if (!canDesign && !latestVersion) {
+      throw this.designPermissionRequired();
+    }
     if (!canDesign && latestVersion) {
       const nextPayload = this.parsePayload(
         parsedInput.payload ?? parsedInput.composition?.payload,
@@ -789,6 +798,21 @@ export class PageService {
     return this.toVersionContract(record);
   }
 
+  async getCurrentDraftVersion(
+    pageId: string,
+    workspaceId: string,
+  ): Promise<PageVersion> {
+    const page = await this.requirePageDocument(pageId, workspaceId);
+    const record = await this.findCurrentDraftVersion(page);
+    if (!record) {
+      throw new NotFoundException({
+        code: 'DRAFT_VERSION_NOT_FOUND',
+        message: 'The page does not have a current draft version',
+      });
+    }
+    return this.toVersionContract(record);
+  }
+
   async restoreVersion(
     pageId: string,
     versionNumber: number,
@@ -806,18 +830,29 @@ export class PageService {
         message: `Version ${versionNumber} for page ${pageId} was not found`,
       });
     }
-    const latest = await this.findLatestVersion(pageId, workspaceId);
+    const latest = await this.findCurrentDraftVersion(page);
     assertExpectedVersionNumber(
       parsedInput.expectedCurrentVersionNumber,
       latest?.versionNumber ?? 0,
     );
-    const payload = this.parsePayload(target.payload);
     const composition = PageCompositionSchema.safeParse(target.composition);
+    if (composition.success && composition.data.pageId !== pageId) {
+      throw new InternalServerErrorException({
+        code: 'PAGE_COMPOSITION_INVALID',
+        message: 'The target page composition belongs to another page',
+      });
+    }
+    const payload = this.parsePayload(
+      composition.success ? composition.data.payload : target.payload,
+    );
     return this.persistVersion(
       page,
       payload,
       latest?.versionNumber,
       latest?._id.toString(),
+      // Always provide a target-owned composition. For legacy payload-only
+      // versions this deliberately starts empty, so persistVersion cannot
+      // inherit the current draft's composition or layout attachments.
       composition.success
         ? {
             pageId,
@@ -829,7 +864,16 @@ export class PageService {
             resources: composition.data.resources,
             queries: composition.data.queries,
           }
-        : undefined,
+        : {
+            pageId,
+            payload,
+            attachments: [],
+            layoutAttachments: [],
+            bindings: [],
+            actions: [],
+            resources: [],
+            queries: [],
+          },
     );
   }
 
@@ -938,7 +982,7 @@ export class PageService {
           classifyPageDocumentChanges(
             previous
               ? this.documentForVersion(page, previous)
-              : this.documentForVersion(page, version),
+              : this.emptyDocumentForPayload(payload),
             this.documentForVersion(page, version),
           ),
         )
@@ -966,7 +1010,7 @@ export class PageService {
     const page = await this.requirePageDocument(pageId, workspaceId);
     assertValidLayoutAttachments(parsed);
     await this.assertLayoutAttachmentsAvailable(page.siteId, workspaceId, parsed);
-    const latestVersion = await this.findLatestVersion(pageId, workspaceId);
+    const latestVersion = await this.findCurrentDraftVersion(page);
     if (latestVersion) {
       const storedComposition = PageCompositionSchema.safeParse(
         latestVersion.composition,
@@ -1411,14 +1455,35 @@ export class PageService {
     return page;
   }
 
-  private async findLatestVersion(
-    pageId: string,
-    workspaceId: string,
+  private async findCurrentDraftVersion(
+    page: PageDocument,
   ): Promise<PageVersionDocument | null> {
+    if (!page.currentDraftVersionId) return null;
     return this.versionModel
-      .findOne({ landingPageId: pageId, workspaceId })
-      .sort({ versionNumber: -1 })
+      .findOne({
+        _id: page.currentDraftVersionId,
+        landingPageId: page._id.toString(),
+        siteId: page.siteId,
+        workspaceId: page.workspaceId,
+      })
       .exec();
+  }
+
+  private emptyDocumentForPayload(payload: PagePayload): ContractPageDocument {
+    return createPageDocument(
+      PagePayloadSchema.parse({
+        ...payload,
+        root: { ...payload.root, children: [] },
+      }),
+      {
+        attachments: [],
+        layoutAttachments: [],
+        bindings: [],
+        actions: [],
+        resources: [],
+        queries: [],
+      },
+    );
   }
 
   private parsePayload(payload: unknown): PagePayload {
@@ -1627,28 +1692,23 @@ export class PageService {
     normalizeLegacy = true,
   ): PageComposition | undefined {
     const parsed = PageCompositionSchema.safeParse(version.composition);
-    if (
-      parsed.success &&
-      parsed.data.pageId === page._id.toString() &&
-      JSON.stringify(parsed.data.payload) === JSON.stringify(payload)
-    ) {
+    if (parsed.success && parsed.data.pageId === page._id.toString()) {
       return parsed.data;
     }
     if (!normalizeLegacy) return undefined;
-    return this.normalizeComposition(
-      page._id.toString(),
-      payload,
-      undefined,
-      undefined,
-      parseLayoutAttachments(page),
-    );
+    // Legacy rows contain only their own payload. Never hydrate their
+    // composition from the mutable page projection or a newer draft.
+    return this.normalizeComposition(page._id.toString(), payload);
   }
 
   private documentForVersion(
     page: PageDocument,
     version: PageVersionDocument,
   ): ContractPageDocument {
-    const payload = this.parsePayload(version.payload);
+    const storedComposition = PageCompositionSchema.safeParse(version.composition);
+    const payload = this.parsePayload(
+      storedComposition.success ? storedComposition.data.payload : version.payload,
+    );
     const composition = this.compositionForVersion(page, version, payload);
     return {
       schemaVersion: 1,

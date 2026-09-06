@@ -4,6 +4,7 @@ import {
   classifyPageDocumentChanges,
   createPageDocument,
   PagePayloadSchema,
+  PagePayloadV7Schema,
   summarizePageChanges,
 } from './index';
 
@@ -40,7 +41,108 @@ function textNode(text: string, style?: Record<string, unknown>) {
   };
 }
 
+function payloadV7(children: Array<Record<string, unknown>> = []) {
+  return PagePayloadV7Schema.parse({
+    version: 7,
+    metadata: { documentTitle: 'Page' },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [
+        {
+          id: 'section-1',
+          type: 'section',
+          props: {},
+          children,
+        },
+      ],
+    },
+  });
+}
+
 describe('page change classifier', () => {
+  it('treats collection query changes as design changes even in the content group', () => {
+    const queryA = '11111111-1111-4111-8111-111111111111';
+    const queryB = '22222222-2222-4222-8222-222222222222';
+    const collectionList = (queryId: string) => ({
+      id: 'collection-list-1',
+      type: 'collection-list' as const,
+      props: { queryId, emptyMessage: 'No items' },
+      children: [
+        {
+          id: 'collection-item-1',
+          type: 'collection-item' as const,
+          props: {},
+          children: [],
+        },
+      ],
+    });
+    const previous = payloadV7([collectionList(queryA)]);
+    const next = payloadV7([collectionList(queryB)]);
+
+    const classification = classifyPageDocumentChanges(previous, next);
+    expect(classification.contentChanges).toEqual([]);
+    expect(classification.designChanges).toEqual([
+      expect.objectContaining({
+        category: 'design-property-changed',
+        property: 'queryId',
+      }),
+    ]);
+  });
+
+  it('keeps the whole form custom editor design-scoped until copy-only semantics exist', () => {
+    const previous = payloadV7([
+      {
+        id: 'form-1',
+        type: 'form' as const,
+        props: {
+          fields: [
+            {
+              id: 'field-1',
+              type: 'text' as const,
+              name: 'email',
+              label: 'Email',
+              required: true,
+            },
+          ],
+          submitLabel: 'Submit',
+          successMessage: 'Thanks',
+        },
+        children: [],
+      },
+    ]);
+    const next = payloadV7([
+      {
+        id: 'form-1',
+        type: 'form' as const,
+        props: {
+          fields: [
+            {
+              id: 'field-1',
+              type: 'text' as const,
+              name: 'email',
+              label: 'Email',
+              required: true,
+            },
+          ],
+          submitLabel: 'Send',
+          successMessage: 'Thanks',
+        },
+        children: [],
+      },
+    ]);
+
+    const classification = classifyPageDocumentChanges(previous, next);
+    expect(classification.contentChanges).toEqual([]);
+    expect(classification.designChanges).toEqual([
+      expect.objectContaining({
+        category: 'design-property-changed',
+        property: 'submitLabel',
+      }),
+    ]);
+  });
+
   it('separates registry-scoped content edits from design edits', () => {
     const previous = payload([textNode('Before')]);
     const next = payload([textNode('After')]);

@@ -64,7 +64,15 @@ describe('component style capabilities', () => {
       ]),
     );
     expect(PAGE_COMPONENT_REGISTRY.form.propertiesSchema).toContainEqual(
-      expect.objectContaining({ key: 'form', control: 'custom', customEditor: 'form' }),
+      expect.objectContaining({
+        key: 'form',
+        control: 'custom',
+        customEditor: 'form',
+        editingScope: 'design',
+      }),
+    );
+    expect(PAGE_COMPONENT_REGISTRY['collection-list'].propertiesSchema).toContainEqual(
+      expect.objectContaining({ key: 'queryId', editingScope: 'design' }),
     );
     expect(styleSchemaFor('heading').map((property) => property.key)).toContain(
       'font-size',

@@ -53,6 +53,7 @@ export type PagesViewProps = {
   selectedPage: Page | undefined;
   selectedSite: Site | undefined;
   versions: PageVersion[];
+  currentDraftVersion?: PageVersion;
   versionPagination: {
     limit: number;
     offset: number;
@@ -413,6 +414,7 @@ export function PagesView({
   selectedPage,
   selectedSite,
   versions,
+  currentDraftVersion,
   versionPagination,
   bindings,
   bindingSaving,
@@ -483,9 +485,7 @@ export function PagesView({
     });
     return new Set([...counts].filter(([, count]) => count > 1).map(([path]) => path));
   }, [pages]);
-  const draftVersion = selectedPage
-    ? versions.find((version) => version.id === selectedPage.currentDraftVersionId)
-    : undefined;
+  const draftVersion = currentDraftVersion;
   const formNodes =
     draftVersion && 'children' in draftVersion.payload.root
       ? findFormNodes(draftVersion.payload.root as unknown as PageNodeWithChildren)

@@ -19,15 +19,19 @@ Phase 20 already supplied the persistent `CmsShell` route boundary, GrapesJS
 Model A `PageDocument` adapter, immutable `PageVersion` records, CAS pointer
 advancement, published-only public rendering, bounded collection queries and
 server-backed asset pickers. Phase 21 extends those seams without introducing
-another page tree, history model, renderer, or workflow engine.
+another page tree, history model, renderer, or workflow engine. The dedicated
+`GET /pages/:pageId/versions/current` endpoint is the canonical current-draft
+snapshot for editor reads and CAS writes; paginated history is display data.
 
 ## Content capability model
 
-`PAGE_COMPONENT_REGISTRY` now marks every property with `editingScope:
-'content' | 'design'`. Content scope is derived from the registry's existing
-property groups; unknown properties are conservatively design-scoped. Structure,
-styles, responsive values, component attachments, queries, bindings, actions,
-resources and layout attachments are design-scoped.
+`PAGE_COMPONENT_REGISTRY` records the editing scope of each supported property;
+unknown properties are design-scoped. Content scope is explicit rather than
+inferred from a control name. The entire custom `form` editor is intentionally
+design-scoped until a narrower copy-only form contract exists, and
+`collection-list.queryId` is design-scoped because it changes the data source.
+Structure, styles, responsive values, component attachments, queries, bindings,
+actions, resources and layout attachments are design-scoped.
 
 The shared `classifyPageDocumentChanges` contract compares node identity,
 hierarchy, order, properties and composition structurally. It reports content
@@ -57,9 +61,14 @@ Phase 21 does not add autosave.
 
 Page detail history uses the existing immutable versions with bounded API
 pagination. Rows expose Preview, readiness review, and permission-aware
-Restore as draft actions. Restore requires `page.rollback`, checks the current
-version number, clones the historical payload/composition into a new version,
-advances `currentDraftVersionId`, and leaves `publishedVersionId` unchanged.
+Restore as draft actions. The editor and page detail use the canonical current
+version endpoint for save/restore CAS, reset history pagination when the page
+identity changes, and never infer current state from `versions[0]`. Restore
+requires `page.rollback`, checks the current version number, clones the
+historical payload/composition into a new version, advances
+`currentDraftVersionId`, and leaves `publishedVersionId` unchanged. Legacy
+payload-only targets receive an explicitly empty target composition rather
+than inheriting mutable current-page layout or query state.
 The renderer preview accepts an authenticated `versionNumber` query and never
 changes public delivery.
 
@@ -70,8 +79,10 @@ same source services used by publish: route ownership/dynamic configuration,
 document/composition validity, reusable/design-token dependencies, workflow
 dependencies, extension validation and collection composition. The response
 contains stable issue codes, blocking issues, warnings and a classifier-backed
-change summary. The publish service repeats route and delivery validation to
-avoid treating readiness as authorization or a TOCTOU-safe publish operation.
+change summary. A never-published page compares against an empty document
+baseline, so its first-publish summary reports the authored additions. The
+publish service repeats route and delivery validation to avoid treating
+readiness as authorization or a TOCTOU-safe publish operation.
 
 Pages now open a readiness dialog before publishing. It shows page/version,
 public URL, current public version, content/design/component changes, warnings
@@ -87,10 +98,14 @@ edits title, default alt text and description while keeping storage key, MIME
 type and size read-only.
 
 `GET /workspaces/:workspaceId/assets/:assetId/usages` scans workspace-scoped
-page versions, collection entry versions, templates, reusables, layouts, site
-globals/design data and page SEO references. It recognizes both asset IDs and
-legacy storage-key strings. Delete returns `ASSET_IN_USE` with bounded usage
-references when a match exists; there is no force-delete path.
+page versions, collection entry versions, template versions, reusable
+documents, layout versions, site globals/design data and page SEO references.
+It recognizes both asset IDs and legacy storage-key strings. The management
+response is capped at 100 items and sets `truncated` only after observing a
+101st match. Delete uses a separate exhaustive cursor scan, stops on the first
+proven match, and fails closed with `ASSET_USAGE_CHECK_INCOMPLETE` if any
+source cannot be verified. Delete returns `ASSET_IN_USE` when a match exists;
+there is no force-delete path.
 
 ## Contracts and tests
 
@@ -98,12 +113,16 @@ The contracts package contains the classifier, editing metadata, restore input,
 publish readiness/issue/summary schemas, asset metadata update schema and asset
 usage response. Focused contract tests cover registry scopes, content/design
 classification, structural changes, semantic composition comparison and
-summary output. CMS route and existing builder suites continue to run against
-the shared command and surface primitives.
+summary output. API tests cover exhaustive asset scans, workspace isolation,
+fail-closed scan errors, design authorization, CAS restore, legacy composition
+normalization and first-publish summaries. The dedicated
+`tests/e2e/phase-21-closure.spec.ts` test exercises the current-version,
+readiness, CAS and restore seams through the API.
 
 ## Intentional limitations
 
-Binary upload/processing remains deferred. Asset usage is bounded to the first
-100 references and is conservative for legacy storage-key matches. Author data
-is not added to old immutable version records where it was never persisted.
+Binary upload/processing remains deferred. Asset usage display is bounded to
+the first 100 references; deletion verification is exhaustive and fail-closed.
+Author data is not added to old immutable version records where it was never
+persisted.
 Warnings remain empty until a source-backed non-blocking condition exists.

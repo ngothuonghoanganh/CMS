@@ -757,8 +757,7 @@ export function BuilderInspector({
   const contentProperties = definition.propertiesSchema.filter(
     (property) =>
       property.group === 'content' &&
-      (!contentOnly || property.editingScope === 'content') &&
-      !(selected.type === 'collection-list' && property.key === 'queryId'),
+      (!contentOnly || property.editingScope === 'content'),
   );
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {

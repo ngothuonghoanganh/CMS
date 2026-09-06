@@ -58,10 +58,12 @@ export class SitePagesController {
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.create');
+    await this.authorization.assertCan(principal, 'page.design');
     const result = await this.pageService.create(
       siteId,
       input,
       requireWorkspaceId(principal),
+      true,
     );
     await this.audit
       .record({
@@ -169,6 +171,7 @@ export class PageController {
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.create');
+    await this.authorization.assertCan(principal, 'page.design');
     return this.pageService.duplicate(pageId, input, requireWorkspaceId(principal));
   }
 
@@ -348,6 +351,15 @@ export class PageController {
   ) {
     await this.authorization.assertCan(principal, 'page.read');
     return this.pageService.listVersions(pageId, query, requireWorkspaceId(principal));
+  }
+
+  @Get(':pageId/versions/current')
+  async getCurrentDraftVersion(
+    @Param('pageId') pageId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.read');
+    return this.pageService.getCurrentDraftVersion(pageId, requireWorkspaceId(principal));
   }
 
   @Get(':pageId/versions/:versionNumber')

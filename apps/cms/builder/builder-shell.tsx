@@ -1046,6 +1046,7 @@ export default function BuilderShell({
         const [
           pageResponse,
           versionsResponse,
+          currentVersionResponse,
           assetsResponse,
           siteResponse,
           reusablesResponseRaw,
@@ -1058,6 +1059,7 @@ export default function BuilderShell({
         ] = await Promise.all([
           api.get(`/pages/${pageId}`),
           api.get(`/pages/${pageId}/versions?limit=100`),
+          api.get(`/pages/${pageId}/versions/current`),
           api.get(`/workspaces/${workspaceId}/assets?limit=100`),
           api.get(`/workspaces/${workspaceId}/sites/${siteId}`),
           api
@@ -1098,13 +1100,10 @@ export default function BuilderShell({
         if (nextPage.siteId !== siteId || nextPage.workspaceId !== workspaceId) {
           throw new Error('This page does not belong to the selected workspace/site.');
         }
-        const versionList = PageVersionListResponseSchema.parse(versionsResponse);
-        const nextVersion =
-          versionList.items.find((item) => item.id === nextPage.currentDraftVersionId) ??
-          versionList.items[0];
-        if (!nextVersion) {
-          throw new Error('This page does not have a current draft version.');
-        }
+        PageVersionListResponseSchema.parse(versionsResponse);
+        // History is display data and may be paginated. The dedicated current
+        // endpoint is the canonical CAS/editing snapshot.
+        const nextVersion = PageVersionSchema.parse(currentVersionResponse);
         const nextPayload = PagePayloadSchema.parse(nextVersion.payload);
         setPage(nextPage);
         setSiteContext({

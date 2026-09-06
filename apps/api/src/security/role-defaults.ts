@@ -193,7 +193,6 @@ export const systemRoleDefinitions = [
     permissions: [
       'workspace.read',
       'page.read',
-      'page.create',
       'page.update',
       'collection.read',
       'collection.create',

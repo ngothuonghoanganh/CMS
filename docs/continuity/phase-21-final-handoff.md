@@ -1,8 +1,9 @@
 # Phase 21 final handoff
 
-Status: implementation complete; local repository gates pass.
+Status: COMPLETE — implementation complete; all required local repository gates pass.
 
-Starting HEAD: `5b8b874425ff36834552870d4b5e8fcb77f19181`.
+Starting closure-pass HEAD: `6da922231f2f7ce1a8997585a5f03b6a579188b8`.
+Ending HEAD: `6da922231f2f7ce1a8997585a5f03b6a579188b8` (no commit created).
 
 ## Delivered seams
 
@@ -11,11 +12,14 @@ Starting HEAD: `5b8b874425ff36834552870d4b5e8fcb77f19181`.
 - Content/Design modes in the single Page Builder with content-only Inspector
   filtering and command/drag safety.
 - Bounded version history, authenticated historical preview, CAS restore as a
-  new draft, and rollback audit metadata.
-- Source-backed publish readiness and a publish dialog with issue lists and
-  change summary; publish remains authoritative and unpublish remains separate.
+  new draft, dedicated canonical current-draft reads, page-identity pagination
+  reset, and rollback audit metadata.
+- Source-backed publish readiness and a publish dialog with issue lists and a
+  change summary including first-publish additions; publish remains
+  authoritative and unpublish remains separate.
 - Searchable, filterable and paginated asset library; route-driven detail;
-  metadata update; workspace-scoped usage inspection; guarded deletion.
+  metadata update; workspace-scoped usage inspection; exhaustive fail-closed
+  guarded deletion with exact asset ID/storage-key matching.
 
 ## Key files
 
@@ -37,9 +41,9 @@ pnpm format:check              PASS
 pnpm lint                      PASS
 pnpm typecheck                 PASS
 pnpm check:cms-design-system   PASS
-pnpm test                      PASS (52 contracts, 118 CMS, 65 API, 22 renderer; 12 API integration tests skipped)
+pnpm test                      PASS (54 contract, 118 CMS, 77 API, 22 renderer tests; 12 API integration tests skipped)
 pnpm build                     PASS
-pnpm exec playwright test      PASS (87/87)
+pnpm exec playwright test      PASS (89/89, including `phase-21-closure.spec.ts`)
 git diff --check               PASS
 ```
 
