@@ -154,6 +154,10 @@ export type GrapesEditorHandle = {
     type: BuilderInsertable,
     placement?: { targetNodeId: string; position: DropPosition },
   ) => boolean;
+  canInsertBlock: (
+    type: BuilderInsertable,
+    placement?: { targetNodeId: string; position: DropPosition },
+  ) => boolean;
   addStructuralChild: (slotName?: string, childType?: BuilderBlockType) => boolean;
   removeStructuralChild: (nodeId: string) => boolean;
   moveStructuralChild: (nodeId: string, direction: 'up' | 'down') => boolean;
@@ -2281,6 +2285,43 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           definition,
           parentId: payloadNodeId(parent),
         });
+      },
+      canInsertBlock(type, placement) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const definition = createInsertableDefinition(type);
+        const childType = insertableNodeType(definition);
+        if (!childType) return false;
+        if (placement) {
+          const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
+          if (!target) return false;
+          if (placement.position === 'inside') {
+            if (canInsertIntoComponent(target, childType)) return true;
+            const targetType = payloadNodeType(target);
+            return Boolean(
+              targetType === 'root' &&
+              childType !== 'section' &&
+              canInsertIntoComponent(target, 'section') &&
+              PAGE_COMPONENT_REGISTRY[childType].allowedParents.includes('section'),
+            );
+          }
+          const parent = target.parent();
+          return Boolean(
+            parent &&
+            commandBusRef.current?.canDispatch({
+              kind: 'insert',
+              definition,
+              targetId: placement.targetNodeId,
+              position: placement.position,
+            }),
+          );
+        }
+        const selected = getSelectedComponent(editor);
+        return Boolean(
+          (selected && canInsertIntoComponent(selected, childType)) ||
+          findAppendTarget(getRoot(editor), childType) ||
+          (childType === 'section' && canInsertIntoComponent(getRoot(editor), childType)),
+        );
       },
       insertReusable(reusableId, mode, placement) {
         const editor = editorRef.current;

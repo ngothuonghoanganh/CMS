@@ -1,6 +1,6 @@
 'use client';
 
-import {
+import React, {
   useEffect,
   useId,
   useState,
@@ -33,7 +33,32 @@ type FieldProps = {
   error?: string | undefined;
   htmlFor?: string | undefined;
   label?: string | undefined;
+  recommended?: boolean | undefined;
+  required?: boolean | undefined;
 };
+
+export function FieldLabel({
+  label,
+  recommended = false,
+  required = false,
+}: {
+  label: string;
+  recommended?: boolean | undefined;
+  required?: boolean | undefined;
+}) {
+  return (
+    <span className="ui-field-label">
+      {label}
+      {required ? (
+        <span aria-hidden="true" className="ui-field-required">
+          {' '}
+          *
+        </span>
+      ) : null}
+      {recommended ? <span className="ui-field-recommended">Recommended</span> : null}
+    </span>
+  );
+}
 
 export function Field({
   children,
@@ -43,14 +68,16 @@ export function Field({
   error,
   htmlFor,
   label,
+  recommended = false,
+  required = false,
 }: FieldProps) {
   return (
     <div
       className={`ui-field${compact ? ' ui-field-compact' : ''}${className ? ` ${className}` : ''}`}
     >
       {label ? (
-        <label className="ui-field-label" htmlFor={htmlFor}>
-          {label}
+        <label htmlFor={htmlFor}>
+          <FieldLabel label={label} recommended={recommended} required={required} />
         </label>
       ) : null}
       {children}
@@ -76,6 +103,8 @@ export function TextField({
   error,
   id,
   label,
+  recommended,
+  required,
   type = 'text',
   ...inputProps
 }: TextFieldProps) {
@@ -89,10 +118,13 @@ export function TextField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <input
         className="ui-control ui-text-field"
         id={inputId}
+        required={required}
         type={type}
         {...inputProps}
       />
@@ -110,6 +142,8 @@ export function TextAreaField({
   error,
   id,
   label,
+  recommended,
+  required,
   ...textareaProps
 }: TextAreaFieldProps) {
   const fallbackId = useId();
@@ -122,10 +156,13 @@ export function TextAreaField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <textarea
         className="ui-control ui-textarea-field"
         id={inputId}
+        required={required}
         {...textareaProps}
       />
     </Field>
@@ -143,6 +180,8 @@ export function SelectField({
   error,
   id,
   label,
+  recommended,
+  required,
   ...selectProps
 }: SelectFieldProps) {
   const fallbackId = useId();
@@ -155,8 +194,15 @@ export function SelectField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
-      <select className="ui-control ui-select-field" id={inputId} {...selectProps}>
+      <select
+        className="ui-control ui-select-field"
+        id={inputId}
+        required={required}
+        {...selectProps}
+      >
         {children}
       </select>
     </Field>
@@ -465,6 +511,8 @@ export function NumberField({
   error,
   id,
   label,
+  recommended,
+  required,
   max,
   min,
   onDraftChange,
@@ -484,6 +532,8 @@ export function NumberField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <div className="ui-number-field-row">
         <NumberControl
@@ -530,6 +580,8 @@ export function UnitField({
   error,
   id,
   label,
+  recommended,
+  required,
   max,
   min,
   onDraftChange,
@@ -560,6 +612,8 @@ export function UnitField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <div className="ui-unit-control">
         <NumberControl
@@ -652,6 +706,8 @@ export function ColorField({
   error,
   id,
   label,
+  recommended,
+  required,
   onDraftChange,
   onDraftCommit,
   onValueChange,
@@ -677,6 +733,8 @@ export function ColorField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <div className="ui-color-control">
         <input
@@ -748,6 +806,8 @@ export function DateTimeField({
   error,
   id,
   label,
+  recommended,
+  required,
   onValueChange,
   value,
 }: DateTimeFieldProps) {
@@ -761,6 +821,8 @@ export function DateTimeField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <input
         className="ui-control ui-datetime-field"
@@ -782,6 +844,8 @@ export function DateField({
   error,
   id,
   label,
+  recommended,
+  required,
   onValueChange,
   value,
 }: Omit<FieldProps, 'children' | 'htmlFor'> & {
@@ -800,6 +864,8 @@ export function DateField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <input
         className="ui-control ui-date-field"
@@ -821,6 +887,8 @@ export function TimeField({
   error,
   id,
   label,
+  recommended,
+  required,
   onValueChange,
   value,
 }: Omit<FieldProps, 'children' | 'htmlFor'> & {
@@ -839,6 +907,8 @@ export function TimeField({
       error={error}
       htmlFor={inputId}
       label={label}
+      recommended={recommended}
+      required={required}
     >
       <input
         className="ui-control ui-time-field"
@@ -879,6 +949,263 @@ export function SegmentedControl<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+export type LayoutSelection = {
+  display: string;
+  flexDirection?: 'row' | 'column' | undefined;
+};
+
+export type LayoutFieldProps = Omit<FieldProps, 'children' | 'htmlFor'> & {
+  direction?: string | undefined;
+  id?: string | undefined;
+  onValueChange: (value: LayoutSelection) => void;
+  supportsDirection?: boolean | undefined;
+  value: string | undefined;
+};
+
+function layoutMode(display: string, direction: string | undefined): string {
+  if (display === 'flex') return direction === 'column' ? 'stack' : 'row';
+  if (display === 'grid') return 'grid';
+  if (display === 'block') return 'block';
+  if (display === 'inline') return 'inline';
+  if (display === 'inline-block') return 'inline-block';
+  if (display === 'none') return 'none';
+  return 'auto';
+}
+
+export function LayoutField({
+  className,
+  compact,
+  description,
+  direction,
+  error,
+  id,
+  label,
+  onValueChange,
+  recommended,
+  required,
+  supportsDirection = true,
+  value,
+}: LayoutFieldProps) {
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
+  return (
+    <Field
+      className={className}
+      compact={compact}
+      description={description}
+      error={error}
+      htmlFor={inputId}
+      label={label}
+      recommended={recommended}
+      required={required}
+    >
+      <select
+        className="ui-control ui-select-field"
+        id={inputId}
+        onChange={(event) => {
+          const mode = event.target.value;
+          if (mode === 'stack' || mode === 'row') {
+            onValueChange({
+              display: 'flex',
+              ...(supportsDirection
+                ? { flexDirection: mode === 'stack' ? 'column' : 'row' }
+                : {}),
+            });
+          } else if (mode === 'grid') {
+            onValueChange({ display: 'grid' });
+          } else if (mode === 'auto') {
+            onValueChange({ display: '' });
+          } else {
+            onValueChange({ display: mode });
+          }
+        }}
+        required={required}
+        value={layoutMode(value ?? '', direction)}
+      >
+        <option value="auto">Auto</option>
+        {supportsDirection ? <option value="stack">Stack</option> : null}
+        <option value="row">Row</option>
+        <option value="grid">Grid</option>
+        <option value="block">Block</option>
+        <option value="inline">Inline</option>
+        <option value="inline-block">Inline block</option>
+        <option value="none">Hidden</option>
+      </select>
+    </Field>
+  );
+}
+
+export type LinkDestinationKind =
+  'page' | 'section' | 'external' | 'phone' | 'email' | 'none';
+
+export type LinkPageOption = {
+  id: string;
+  name: string;
+  path?: string | undefined;
+  anchors?: readonly string[] | undefined;
+};
+
+export type LinkFieldProps = Omit<FieldProps, 'children' | 'htmlFor'> & {
+  allowEmpty?: boolean | undefined;
+  onCommit: (value: string) => void;
+  onInvalid?: ((value: string) => void) | undefined;
+  pages?: readonly LinkPageOption[];
+  value: string | undefined;
+};
+
+function linkDestinationKind(value: string): LinkDestinationKind {
+  if (value.startsWith('#')) return 'section';
+  if (/^mailto:/i.test(value)) return 'email';
+  if (/^tel:/i.test(value)) return 'phone';
+  if (/^https?:\/\//i.test(value)) return 'external';
+  return 'page';
+}
+
+/** A semantic link editor that still commits the existing href contract. */
+export function LinkField({
+  allowEmpty = false,
+  compact,
+  description,
+  error,
+  label,
+  onCommit,
+  onInvalid,
+  pages = [],
+  recommended,
+  required,
+  value,
+}: LinkFieldProps) {
+  const [kind, setKind] = useState<LinkDestinationKind>(() =>
+    allowEmpty && !(value ?? '').trim() ? 'none' : linkDestinationKind(value ?? ''),
+  );
+  const [draft, setDraft] = useState(value ?? '');
+
+  useEffect(() => {
+    setDraft(value ?? '');
+    setKind(
+      allowEmpty && !(value ?? '').trim() ? 'none' : linkDestinationKind(value ?? ''),
+    );
+  }, [allowEmpty, value]);
+
+  const selectedPage = pages.find((page) => (page.path || '/') === draft);
+  const sections = pages.flatMap((page) =>
+    (page.anchors ?? []).map((anchor) => ({
+      label: `${page.name} — ${anchor}`,
+      value: `${page.path || '/'}#${anchor}`,
+    })),
+  );
+  const commitDraft = (next: string) => {
+    setDraft(next);
+    onCommit(next);
+  };
+
+  return (
+    <Field
+      compact={compact}
+      description={description}
+      error={error}
+      label={label}
+      recommended={recommended}
+      required={required}
+    >
+      <div className="ui-link-field">
+        <select
+          aria-label={`${label ?? 'Link'} destination type`}
+          className="ui-control ui-select-field"
+          onChange={(event) => {
+            const nextKind = event.target.value as LinkDestinationKind;
+            setKind(nextKind);
+            if (nextKind === 'page') {
+              const next = pages[0]?.path || '/';
+              commitDraft(next);
+            } else if (nextKind === 'section') {
+              const next = sections[0]?.value ?? '#section';
+              commitDraft(next);
+            } else if (nextKind === 'email') {
+              setDraft('');
+            } else if (nextKind === 'phone') {
+              setDraft('');
+            } else if (nextKind === 'none') {
+              commitDraft('');
+            } else {
+              setDraft('');
+            }
+          }}
+          value={kind}
+        >
+          <option value="page">Page</option>
+          <option value="section">Section</option>
+          <option value="external">External website</option>
+          <option value="phone">Phone</option>
+          <option value="email">Email</option>
+          {allowEmpty ? <option value="none">No link</option> : null}
+        </select>
+        {kind === 'page' ? (
+          <select
+            aria-label={`${label ?? 'Link'} page`}
+            className="ui-control ui-select-field"
+            onChange={(event) => commitDraft(event.target.value)}
+            value={selectedPage ? draft : ''}
+          >
+            {!pages.length ? <option value="">No pages available</option> : null}
+            {pages.map((page) => (
+              <option key={page.id} value={page.path || '/'}>
+                {page.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {kind === 'section' ? (
+          <select
+            aria-label={`${label ?? 'Link'} section`}
+            className="ui-control ui-select-field"
+            onChange={(event) => commitDraft(event.target.value)}
+            value={sections.some((section) => section.value === draft) ? draft : ''}
+          >
+            {!sections.length ? <option value="#section">Choose a section</option> : null}
+            {sections.map((section) => (
+              <option key={section.value} value={section.value}>
+                {section.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {kind === 'external' ? (
+          <input
+            aria-label={`${label ?? 'Link'} website`}
+            className="ui-control ui-text-field"
+            onBlur={() => onCommit(draft)}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="example.com"
+            type="text"
+            value={draft}
+          />
+        ) : null}
+        {kind === 'phone' || kind === 'email' ? (
+          <input
+            aria-label={`${label ?? 'Link'} ${kind}`}
+            className="ui-control ui-text-field"
+            onBlur={() => {
+              const prefix = kind === 'email' ? 'mailto:' : 'tel:';
+              const raw = draft.replace(new RegExp(`^${prefix}`, 'i'), '');
+              const next = `${prefix}${raw}`;
+              if (raw.trim()) onCommit(next);
+              else onInvalid?.(next);
+            }}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={kind === 'email' ? 'you@example.com' : '+1 555 0100'}
+            type={kind === 'email' ? 'email' : 'tel'}
+            value={draft.replace(new RegExp(`^(mailto:|tel:)`, 'i'), '')}
+          />
+        ) : null}
+        {kind === 'none' ? (
+          <p className="ui-field-description">This item will not link anywhere.</p>
+        ) : null}
+      </div>
+    </Field>
   );
 }
 

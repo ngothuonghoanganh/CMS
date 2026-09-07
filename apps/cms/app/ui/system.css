@@ -508,6 +508,20 @@
   line-height: 1.3;
 }
 
+.ui-field-required {
+  color: var(--cms-danger);
+}
+
+.ui-field-recommended {
+  display: inline-block;
+  margin-left: 0.4rem;
+  color: var(--cms-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .ui-field-compact .ui-field-label {
   color: var(--cms-text-secondary);
   font-size: 0.73rem;
@@ -544,6 +558,11 @@
   min-width: 0;
   min-height: var(--control-height-default);
   padding: 0.5rem 0.65rem;
+}
+
+.ui-link-field {
+  display: grid;
+  gap: var(--cms-space-2);
 }
 
 .ui-field-compact .ui-control {

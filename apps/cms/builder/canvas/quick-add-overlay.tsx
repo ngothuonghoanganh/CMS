@@ -46,15 +46,19 @@ export function QuickAddOverlay({
         </button>
       </div>
       <div className="builder-quick-add-options">
-        {options.map((option) => (
-          <button
-            key={`${option.type}:${option.label}`}
-            onClick={() => onInsert(option.type)}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
+        {options.length > 0 ? (
+          options.map((option) => (
+            <button
+              key={`${option.type}:${option.label}`}
+              onClick={() => onInsert(option.type)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))
+        ) : (
+          <p className="muted small">No components fit here.</p>
+        )}
       </div>
     </div>
   );

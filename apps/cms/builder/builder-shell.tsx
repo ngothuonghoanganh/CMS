@@ -1925,7 +1925,6 @@ export default function BuilderShell({
 
   function showValidationIssue(issue: BuilderValidationIssue, focus = false): void {
     updateValidationIssue(issue);
-    setSaveStatus('validation');
     setError(null);
     if (focus) window.setTimeout(() => focusValidationIssue(issue), 0);
   }
@@ -2806,6 +2805,16 @@ export default function BuilderShell({
                 .filter(
                   (option) => option.globalPresetId || option.presetId || option.type,
                 )
+                .filter((option) => {
+                  const type = (option.globalPresetId ??
+                    option.presetId ??
+                    option.type) as BuilderInsertable | undefined;
+                  return Boolean(
+                    type &&
+                    quickAddTarget &&
+                    editorRef.current?.canInsertBlock(type, quickAddTarget),
+                  );
+                })
                 .map((option) => ({
                   type: (option.globalPresetId ??
                     option.presetId ??

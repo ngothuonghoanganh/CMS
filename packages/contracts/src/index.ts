@@ -678,6 +678,26 @@ export function isSafePageHref(value: string): boolean {
   return isSafeButtonHref(value);
 }
 
+/**
+ * Normalizes only the unambiguous URL form people commonly type in a field.
+ * The safety predicate remains the authority and still rejects unsupported
+ * protocols, protocol-relative URLs, and malformed values.
+ */
+export function normalizePageHref(value: string): string {
+  const trimmed = value.trim();
+  if (
+    trimmed &&
+    !trimmed.startsWith('/') &&
+    !trimmed.startsWith('#') &&
+    !trimmed.includes('://') &&
+    !/^[a-z][a-z\d+.-]*:/i.test(trimmed) &&
+    /^[^\s/?#]+\.[^\s/?#]+(?:[/?#][^\s]*)?$/i.test(trimmed)
+  ) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 export function isSafePageImageSource(value: string): boolean {
   return isSafeImageSource(value);
 }

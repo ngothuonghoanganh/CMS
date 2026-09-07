@@ -361,6 +361,29 @@ describe('builder adapter', () => {
     expect(responsive.base).toMatchObject({ width: '240px', display: 'inline-block' });
   });
 
+  it('clamps opacity before persisting editor style state', () => {
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'section-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'section',
+      [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: JSON.stringify({ base: {} }),
+    };
+    const component = {
+      getAttributes: () => attrs,
+      setAttributes: (next: Record<string, unknown>) => Object.assign(attrs, next),
+      setStyle: () => undefined,
+    } as never;
+
+    updateEditorViewportStyle(component, 'desktop', 'opacity', '154');
+    expect(
+      JSON.parse(String(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE])).base.opacity,
+    ).toBe('1');
+
+    updateEditorViewportStyle(component, 'desktop', 'opacity', '-2');
+    expect(
+      JSON.parse(String(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE])).base.opacity,
+    ).toBe('0');
+  });
+
   it('persists component part values instead of silently dropping them', () => {
     const attrs: Record<string, unknown> = {
       [BUILDER_NODE_ID_ATTRIBUTE]: 'accordion-1',

@@ -21,6 +21,7 @@ import {
   isSafePageHref,
   isSafePageImageSource,
   isSafePageVideoSource,
+  normalizePageHref,
   type ListProps,
   type FormProps,
   type PageComponentType,
@@ -75,10 +76,11 @@ export function propertyDefinitionFor(type: PageComponentType, property: string)
 }
 
 function stringValue(value: unknown, property: string): string {
-  if (typeof value !== 'string' || sanitizeInlineText(value).trim().length === 0) {
+  const normalized = typeof value === 'string' ? sanitizeInlineText(value).trim() : '';
+  if (!normalized) {
     throw new Error(`${property} must be non-empty text`);
   }
-  return sanitizeInlineText(value);
+  return normalized;
 }
 
 function booleanValue(value: unknown, property: string): boolean {
@@ -299,7 +301,7 @@ export function resolveEditorPropertyUpdate(
   }
 
   if ((type === 'button' || type === 'link') && property === 'href') {
-    const href = stringValue(value, property);
+    const href = normalizePageHref(stringValue(value, property));
     if (!isSafePageHref(href)) throw new Error('URL protocol or format is not allowed');
     return { kind: 'attributes', attributes: { href } };
   }

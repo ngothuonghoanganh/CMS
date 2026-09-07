@@ -3,6 +3,7 @@
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_GROUPS,
+  isComponentPropertyVisible,
   type Asset,
   type Collection,
   type ComponentPropertyDefinition,
@@ -22,6 +23,7 @@ import { resolveInspectorStyleValue } from './inspector-value';
 import { CUSTOM_PROPERTY_EDITORS } from './custom-property-editors';
 import { PropertyControlRenderer } from './property-control-renderer';
 import { StructureEditor } from './structure-editor/structure-editor';
+import type { LayoutSelection } from '../../app/ui/fields';
 import {
   type BuilderValidationIssue,
   type BuilderValidationScope,
@@ -125,6 +127,17 @@ function tokenCategoryForProperty(property: string): TokenCategory | undefined {
     return 'typography';
   }
   return undefined;
+}
+
+function isLayoutSelection(value: unknown): value is LayoutSelection {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as { display?: unknown; flexDirection?: unknown };
+  return (
+    typeof candidate.display === 'string' &&
+    (candidate.flexDirection === undefined ||
+      candidate.flexDirection === 'row' ||
+      candidate.flexDirection === 'column')
+  );
 }
 
 function TokenChoice({
@@ -759,7 +772,7 @@ export function BuilderInspector({
     (property) =>
       property.group === 'content' &&
       (!contentOnly || property.editingScope === 'content') &&
-      isPropertyVisible(property, selected.props),
+      isComponentPropertyVisible(property, selected.props),
   );
 
   function renderProperty(property: ComponentPropertyDefinition, value: unknown) {
@@ -799,6 +812,8 @@ export function BuilderInspector({
           assetKind={property.assetKind}
           assets={usableAssets}
           definition={property}
+          navigationPages={navigationPages}
+          propertyValues={selected.props}
           onChange={(nextValue) => updateSelectedProperty(property.key, nextValue)}
           issue={issue}
           nodeId={selected.id}
@@ -858,7 +873,19 @@ export function BuilderInspector({
         .map((property) => property.key),
     );
     const fields = section.fields.filter((field) => allowed.has(field.key));
-    if (fields.length === 0) return null;
+    const styleValues = Object.fromEntries(
+      inspectorStyleSections.flatMap((candidate) =>
+        candidate.fields.map((field) => [
+          field.key,
+          resolveInspectorStyleValue(selected.style, field.key, viewport, designSystem)
+            .effectiveValue ?? '',
+        ]),
+      ),
+    );
+    const visibleFields = fields.filter((field) =>
+      isComponentPropertyVisible(field, { ...selected.props, ...styleValues }),
+    );
+    if (visibleFields.length === 0) return null;
     return (
       <InspectorSection
         key={section.key}
@@ -867,7 +894,7 @@ export function BuilderInspector({
         open={openSections[section.key]}
       >
         <div className="builder-inspector-fields">
-          {fields.map((field) => {
+          {visibleFields.map((field) => {
             const resolved = resolveInspectorStyleValue(
               selected.style,
               field.key,
@@ -889,9 +916,24 @@ export function BuilderInspector({
                 <PropertyControlRenderer
                   definition={field}
                   description={inheritedDescription(field, resolved)}
-                  onChange={(nextValue) =>
-                    updateSelectedStyle(field.key, String(nextValue ?? ''))
+                  propertyValues={{ ...selected.props, ...styleValues }}
+                  layoutDirection={
+                    field.control === 'layout'
+                      ? String(styleValues['flex-direction'] ?? '')
+                      : undefined
                   }
+                  layoutSupportsDirection
+                  onChange={(nextValue) => {
+                    if (field.control === 'layout' && isLayoutSelection(nextValue)) {
+                      updateSelectedStyle('display', nextValue.display);
+                      updateSelectedStyle(
+                        'flex-direction',
+                        nextValue.flexDirection ?? '',
+                      );
+                    } else {
+                      updateSelectedStyle(field.key, String(nextValue ?? ''));
+                    }
+                  }}
                   issue={validationIssues.find(
                     (candidate) =>
                       candidate.nodeId === selected.id &&
@@ -934,6 +976,20 @@ export function BuilderInspector({
     const fields = inspectorStyleSections.flatMap((section) =>
       section.fields.filter((field) => allowed.has(field.key as never)),
     );
+    const partStyleValues = Object.fromEntries(
+      fields.map((field) => [
+        field.key,
+        resolveInspectorStyleValue(
+          selected.partsStyle?.[selectedPart],
+          field.key,
+          viewport,
+          designSystem,
+        ).effectiveValue ?? '',
+      ]),
+    );
+    const visibleFields = fields.filter((field) =>
+      isComponentPropertyVisible(field, { ...selected.props, ...partStyleValues }),
+    );
     return (
       <InspectorSection label="Component part" onToggle={() => undefined} open>
         <label className="builder-inspector-field">
@@ -950,7 +1006,7 @@ export function BuilderInspector({
           </select>
         </label>
         <div className="builder-inspector-fields">
-          {fields.map((field) => {
+          {visibleFields.map((field) => {
             const resolved = resolveInspectorStyleValue(
               selected.partsStyle?.[selectedPart],
               field.key,
@@ -974,13 +1030,40 @@ export function BuilderInspector({
                 <PropertyControlRenderer
                   definition={field}
                   description={inheritedDescription(field, resolved)}
-                  onChange={(nextValue) =>
-                    updateSelectedPartStyle(
-                      selectedPart,
-                      field.key,
-                      String(nextValue ?? ''),
-                    )
+                  propertyValues={{ ...selected.props, ...partStyleValues }}
+                  layoutDirection={
+                    field.control === 'layout'
+                      ? String(
+                          resolveInspectorStyleValue(
+                            selected.partsStyle?.[selectedPart],
+                            'flex-direction',
+                            viewport,
+                            designSystem,
+                          ).effectiveValue ?? '',
+                        )
+                      : undefined
                   }
+                  layoutSupportsDirection={part.styleCapabilities.includes(
+                    'flex-direction',
+                  )}
+                  onChange={(nextValue) => {
+                    if (field.control === 'layout' && isLayoutSelection(nextValue)) {
+                      updateSelectedPartStyle(selectedPart, 'display', nextValue.display);
+                      if (part.styleCapabilities.includes('flex-direction')) {
+                        updateSelectedPartStyle(
+                          selectedPart,
+                          'flex-direction',
+                          nextValue.flexDirection ?? '',
+                        );
+                      }
+                    } else {
+                      updateSelectedPartStyle(
+                        selectedPart,
+                        field.key,
+                        String(nextValue ?? ''),
+                      );
+                    }
+                  }}
                   issue={validationIssues.find(
                     (candidate) =>
                       candidate.nodeId === selected.id &&
@@ -1033,7 +1116,7 @@ export function BuilderInspector({
             role="tab"
             type="button"
           >
-            {tab === 'style' ? 'Appearance' : tab === 'settings' ? 'Advanced' : 'Content'}
+            {tab === 'style' ? 'Style' : tab === 'settings' ? 'Settings' : 'Content'}
           </button>
         ))}
       </div>
@@ -1125,22 +1208,4 @@ export function BuilderInspector({
       ) : null}
     </div>
   );
-}
-
-function isPropertyVisible(
-  property: ComponentPropertyDefinition,
-  props: Record<string, unknown>,
-): boolean {
-  const rule = property.visibleWhen;
-  if (!rule) return true;
-  const value = props[rule.property];
-  if (rule.operator === 'isEmpty') {
-    const empty =
-      value === undefined ||
-      value === null ||
-      value === '' ||
-      (Array.isArray(value) && value.length === 0);
-    return rule.value === undefined ? empty : rule.value === empty;
-  }
-  return rule.operator === 'equals' ? value === rule.value : value !== rule.value;
 }

@@ -13,6 +13,8 @@ export type ComponentPropertyControl =
   | 'color'
   | 'custom'
   | 'datetime'
+  | 'layout'
+  | 'link'
   | 'number'
   | 'segmented'
   | 'select'
@@ -28,6 +30,21 @@ export type ComponentPropertyOption = {
   value: string;
 };
 
+export type ComponentPropertyCondition = {
+  property: string;
+  operator: 'equals' | 'notEquals' | 'isEmpty' | 'isNotEmpty';
+  value?: unknown;
+};
+
+export type ComponentPropertyNormalization =
+  'trim' | 'url' | 'hex-color' | 'empty-to-undefined';
+
+export type ComponentPropertyConstraints = {
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+};
+
 export type ComponentPropertyDefinition = {
   key: string;
   label: string;
@@ -36,6 +53,22 @@ export type ComponentPropertyDefinition = {
   editingScope?: 'content' | 'design';
   control: ComponentPropertyControl;
   description?: string;
+  /** The field is required in this component configuration. */
+  required?: boolean;
+  /** Makes conditional requiredness explicit instead of inferring from the key. */
+  requiredWhen?: ComponentPropertyCondition;
+  /** Safe initial value used by authoring surfaces when one is available. */
+  defaultValue?: unknown;
+  /** Example shown while the field is empty; never used as persisted data. */
+  placeholder?: string;
+  /** Allows the authoring surface to represent an intentionally empty draft. */
+  allowEmpty?: boolean;
+  /** A non-blocking quality hint for fields that are useful but optional. */
+  recommended?: boolean;
+  help?: { text?: string; example?: string };
+  normalization?:
+    ComponentPropertyNormalization | readonly ComponentPropertyNormalization[];
+  constraints?: ComponentPropertyConstraints;
   responsive?: boolean;
   allowAuto?: boolean;
   min?: number;
@@ -47,12 +80,52 @@ export type ComponentPropertyDefinition = {
   /** Allows the Phase 20 binding editor to offer this property as a target. */
   bindable?: boolean;
   /** Finite declarative visibility rule for progressive disclosure. */
-  visibleWhen?: {
-    property: string;
-    operator: 'equals' | 'notEquals' | 'isEmpty';
-    value?: unknown;
-  };
+  visibleWhen?: ComponentPropertyCondition;
 };
+
+function isEmptyPropertyValue(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
+export function propertyConditionMatches(
+  condition: ComponentPropertyCondition,
+  props: Readonly<Record<string, unknown>>,
+): boolean {
+  const value = props[condition.property];
+  switch (condition.operator) {
+    case 'equals':
+      return value === condition.value;
+    case 'notEquals':
+      return value !== condition.value;
+    case 'isEmpty':
+      return isEmptyPropertyValue(value) === (condition.value ?? true);
+    case 'isNotEmpty':
+      return !isEmptyPropertyValue(value) === (condition.value ?? true);
+  }
+}
+
+export function isComponentPropertyVisible(
+  property: ComponentPropertyDefinition,
+  props: Readonly<Record<string, unknown>>,
+): boolean {
+  return !property.visibleWhen || propertyConditionMatches(property.visibleWhen, props);
+}
+
+export function isComponentPropertyRequired(
+  property: ComponentPropertyDefinition,
+  props: Readonly<Record<string, unknown>> = {},
+): boolean {
+  if (property.allowEmpty) return false;
+  return Boolean(
+    property.required ||
+    (property.requiredWhen && propertyConditionMatches(property.requiredWhen, props)),
+  );
+}
 
 export type BuilderPreviewAlign = 'start' | 'center' | 'end';
 export type BuilderPreviewGap = 'tight' | 'normal' | 'loose';
@@ -920,6 +993,10 @@ const rawPageComponentRegistry = {
         label: 'Text content',
         group: 'content',
         control: 'textarea',
+        required: true,
+        defaultValue: 'Edit this text',
+        placeholder: 'Add your text here',
+        normalization: 'trim',
         bindable: true,
       },
       {
@@ -951,6 +1028,11 @@ const rawPageComponentRegistry = {
         group: 'content',
         control: 'asset',
         assetKind: 'image',
+        allowEmpty: true,
+        recommended: true,
+        help: {
+          text: 'Choose an image when you are ready. The canvas keeps an empty image as a placeholder.',
+        },
         bindable: true,
       },
       {
@@ -958,6 +1040,9 @@ const rawPageComponentRegistry = {
         label: 'Alt text',
         group: 'content',
         control: 'text',
+        recommended: true,
+        placeholder: 'Describe the image for people using screen readers',
+        normalization: 'trim',
         bindable: true,
       },
     ]),
@@ -995,8 +1080,26 @@ const rawPageComponentRegistry = {
       ],
     },
     propertiesSchema: content([
-      { key: 'label', label: 'Label', group: 'content', control: 'text', bindable: true },
-      { key: 'href', label: 'Link', group: 'content', control: 'url', bindable: true },
+      {
+        key: 'label',
+        label: 'Button text',
+        group: 'content',
+        control: 'text',
+        required: true,
+        defaultValue: 'Button',
+        placeholder: 'Button text',
+        normalization: 'trim',
+        bindable: true,
+      },
+      {
+        key: 'href',
+        label: 'Link',
+        group: 'content',
+        control: 'link',
+        required: true,
+        normalization: 'url',
+        bindable: true,
+      },
       {
         key: 'target',
         label: 'Open link',
@@ -1169,12 +1272,23 @@ const rawPageComponentRegistry = {
     editorTagName: 'div',
     defaultProps: {},
     propertiesSchema: content([
-      { key: 'label', label: 'Countdown label', group: 'content', control: 'text' },
+      {
+        key: 'label',
+        label: 'Countdown label',
+        group: 'content',
+        control: 'text',
+        required: true,
+        defaultValue: 'Time remaining',
+        placeholder: 'Time remaining',
+        normalization: 'trim',
+      },
       {
         key: 'targetAt',
         label: 'Target date and time',
         group: 'content',
         control: 'datetime',
+        required: true,
+        help: { text: 'Choose a future date and time.' },
       },
     ]),
   }),
@@ -1223,6 +1337,10 @@ const rawPageComponentRegistry = {
         label: 'Text content',
         group: 'content',
         control: 'textarea',
+        required: true,
+        defaultValue: 'Heading',
+        placeholder: 'Add a heading',
+        normalization: 'trim',
         bindable: true,
       },
       {
@@ -1253,8 +1371,26 @@ const rawPageComponentRegistry = {
       controls: ['color', 'font-family', 'font-size', 'font-weight', 'text-decoration'],
     },
     propertiesSchema: content([
-      { key: 'text', label: 'Text', group: 'content', control: 'text', bindable: true },
-      { key: 'href', label: 'Link', group: 'content', control: 'url', bindable: true },
+      {
+        key: 'text',
+        label: 'Link text',
+        group: 'content',
+        control: 'text',
+        required: true,
+        defaultValue: 'Learn more',
+        placeholder: 'Link text',
+        normalization: 'trim',
+        bindable: true,
+      },
+      {
+        key: 'href',
+        label: 'Link to',
+        group: 'content',
+        control: 'link',
+        required: true,
+        normalization: 'url',
+        bindable: true,
+      },
       {
         key: 'target',
         label: 'Open link',
@@ -1332,6 +1468,8 @@ const rawPageComponentRegistry = {
         group: 'content',
         control: 'asset',
         assetKind: 'video',
+        required: true,
+        defaultValue: '/assets/placeholder.mp4',
       },
       {
         key: 'poster',
@@ -1391,6 +1529,9 @@ const rawPageComponentRegistry = {
         label: 'Quote',
         group: 'content',
         control: 'textarea',
+        required: true,
+        defaultValue: 'A thoughtful quote',
+        normalization: 'trim',
         bindable: true,
       },
       {
@@ -1563,7 +1704,16 @@ const rawPageComponentRegistry = {
       },
     ],
     propertiesSchema: content([
-      { key: 'title', label: 'Title', group: 'content', control: 'text' },
+      {
+        key: 'title',
+        label: 'Title',
+        group: 'content',
+        control: 'text',
+        required: true,
+        defaultValue: 'Accordion item',
+        placeholder: 'Accordion item title',
+        normalization: 'trim',
+      },
       {
         key: 'defaultOpen',
         label: 'Open by default',
@@ -1756,7 +1906,16 @@ const rawPageComponentRegistry = {
       },
     ],
     propertiesSchema: content([
-      { key: 'label', label: 'Tab label', group: 'content', control: 'text' },
+      {
+        key: 'label',
+        label: 'Tab label',
+        group: 'content',
+        control: 'text',
+        required: true,
+        defaultValue: 'Tab',
+        placeholder: 'Tab label',
+        normalization: 'trim',
+      },
     ]),
     internal: true,
   }),

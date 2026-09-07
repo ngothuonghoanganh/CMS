@@ -85,6 +85,10 @@ describe('registry property bindings', () => {
   });
 
   it('validates unsafe URLs and complex custom values before dispatch', () => {
+    expect(resolveEditorPropertyUpdate('link', 'href', ' example.com/docs ')).toEqual({
+      kind: 'attributes',
+      attributes: { href: 'https://example.com/docs' },
+    });
     expect(() =>
       resolveEditorPropertyUpdate('link', 'href', 'javascript:alert(1)'),
     ).toThrow();

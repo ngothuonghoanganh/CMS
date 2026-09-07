@@ -60,7 +60,11 @@ export function BuilderValidationNavigator({
                 aria-hidden="true"
                 className={`builder-validation-severity is-${issue.severity}`}
               >
-                {issue.severity === 'error' ? '●' : '▲'}
+                {issue.severity === 'error'
+                  ? '●'
+                  : issue.severity === 'warning'
+                    ? '▲'
+                    : '◆'}
               </span>
               <span>
                 <strong>{issueLabel(issue, nodeLabels)}</strong>

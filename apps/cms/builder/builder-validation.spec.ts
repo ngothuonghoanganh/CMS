@@ -75,6 +75,33 @@ describe('builder validation issues', () => {
     ).toEqual(['button-1', 'other-node', 'footer-button']);
   });
 
+  it('orders suggestions after warnings without treating them as blocking errors', () => {
+    const issues = [
+      createBuilderValidationIssue({
+        ...buttonContext,
+        code: 'QUALITY_SUGGESTION',
+        message: 'Consider adding supporting text.',
+        severity: 'suggestion',
+      }),
+      createBuilderValidationIssue({
+        ...buttonContext,
+        code: 'IMAGE_ALT_WARNING',
+        message: 'Add a description for this image.',
+        severity: 'warning',
+      }),
+      createBuilderValidationIssue({
+        ...buttonContext,
+        code: 'FIELD_REQUIRED',
+        message: 'Enter a value.',
+      }),
+    ];
+    expect(sortBuilderValidationIssues(issues).map((issue) => issue.severity)).toEqual([
+      'error',
+      'warning',
+      'suggestion',
+    ]);
+  });
+
   it('maps structured adapter paths to actionable user copy', () => {
     const issue = validationIssueFromError(
       { message: 'Invalid value at props.href', path: ['props', 'href'] },

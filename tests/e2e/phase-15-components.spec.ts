@@ -94,10 +94,16 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
   await expect(selectedInspectorNode).toHaveText('Link', { timeout: 5_000 });
   await page.getByRole('tab', { name: 'Content', exact: true }).click();
   await expect(selectedInspectorNode).toHaveText('Link', { timeout: 5_000 });
-  await page.getByLabel('Text', { exact: true }).fill('Read the docs');
-  await page.getByLabel('Link', { exact: true }).fill('/docs');
-  await page.getByLabel('Link', { exact: true }).press('Enter');
-  await expect(link).toHaveAttribute('href', '/docs');
+  await page
+    .getByRole('textbox', { name: 'Link text', exact: true })
+    .fill('Read the docs');
+  await page
+    .getByRole('combobox', { name: 'Link to destination type', exact: true })
+    .selectOption('external');
+  const linkWebsite = page.getByRole('textbox', { name: 'Link to website', exact: true });
+  await linkWebsite.fill('example.com/docs');
+  await linkWebsite.blur();
+  await expect(link).toHaveAttribute('href', 'https://example.com/docs');
 
   await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
   await page.getByRole('button', { name: 'Divider add' }).click();
@@ -137,7 +143,7 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
     canvas
       .locator('a[data-payload-node-type="link"]')
       .filter({ hasText: 'Read the docs' }),
-  ).toHaveAttribute('href', '/docs');
+  ).toHaveAttribute('href', 'https://example.com/docs');
   await expect(canvas.locator('hr[data-payload-node-type="divider"]')).toHaveCount(1);
   await expect(video).toHaveAttribute('src', '/assets/demo.mp4');
   const reloaded = await page.evaluate(() => {

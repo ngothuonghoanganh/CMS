@@ -53,15 +53,16 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     payloadKey: 'display',
     cssProperty: 'display',
     editorProperty: 'display',
-    label: 'Display',
+    label: 'Layout',
     group: 'style',
-    control: 'select',
+    control: 'layout',
     responsive: true,
     options: [
-      option('Default', ''),
-      option('Block', 'block'),
-      option('Flex', 'flex'),
+      option('Auto', 'auto'),
+      option('Stack', 'stack'),
+      option('Row', 'row'),
       option('Grid', 'grid'),
+      option('Block', 'block'),
       option('Inline', 'inline'),
       option('Inline block', 'inline-block'),
       option('Hidden', 'none'),
@@ -76,6 +77,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'segmented',
     responsive: true,
+    visibleWhen: { property: 'display', operator: 'equals', value: 'flex' },
     options: [option('Horizontal', 'row'), option('Vertical', 'column')],
   },
   {
@@ -87,6 +89,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'select',
     responsive: true,
+    visibleWhen: { property: 'display', operator: 'equals', value: 'flex' },
     options: [
       option('Start', 'flex-start'),
       option('Center', 'center'),
@@ -105,6 +108,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'select',
     responsive: true,
+    visibleWhen: { property: 'display', operator: 'equals', value: 'flex' },
     options: [
       option('Start', 'flex-start'),
       option('Center', 'center'),
@@ -122,6 +126,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'select',
     responsive: true,
+    visibleWhen: { property: 'display', operator: 'equals', value: 'flex' },
     options: [option('No wrap', 'nowrap'), option('Wrap', 'wrap')],
   },
   {
@@ -133,6 +138,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'text',
     responsive: true,
+    visibleWhen: { property: 'display', operator: 'equals', value: 'grid' },
     description: 'Example: repeat(3, minmax(0, 1fr))',
   },
   {
@@ -264,6 +270,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'color',
     responsive: true,
+    normalization: 'hex-color',
   },
   {
     key: 'font-size',
@@ -352,6 +359,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'color',
     responsive: true,
+    normalization: 'hex-color',
   },
   {
     key: 'border-width',
@@ -388,6 +396,7 @@ export const PAGE_STYLE_PROPERTY_DEFINITIONS = [
     group: 'style',
     control: 'color',
     responsive: true,
+    normalization: 'hex-color',
   },
   {
     key: 'border-radius',

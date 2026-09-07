@@ -1,6 +1,6 @@
 import type { BuilderDocumentKind } from '@payload/contracts';
 
-export type BuilderValidationSeverity = 'error' | 'warning';
+export type BuilderValidationSeverity = 'error' | 'warning' | 'suggestion';
 
 export type BuilderValidationScope =
   'page' | 'header' | 'footer' | 'navigation' | 'design-system' | 'reusable';
@@ -135,6 +135,10 @@ function viewportRank(viewport?: BuilderValidationViewport): number {
         : 3;
 }
 
+function severityRank(severity: BuilderValidationSeverity): number {
+  return severity === 'error' ? 0 : severity === 'warning' ? 1 : 2;
+}
+
 export function sortBuilderValidationIssues(
   issues: readonly BuilderValidationIssue[],
   context: {
@@ -156,7 +160,9 @@ export function sortBuilderValidationIssues(
     if (leftCurrentViewport !== rightCurrentViewport) {
       return leftCurrentViewport - rightCurrentViewport;
     }
-    if (left.severity !== right.severity) return left.severity === 'error' ? -1 : 1;
+    if (left.severity !== right.severity) {
+      return severityRank(left.severity) - severityRank(right.severity);
+    }
     const leftPath = (left.path ?? []).join('.');
     const rightPath = (right.path ?? []).join('.');
     const pathOrder = leftPath.localeCompare(rightPath);

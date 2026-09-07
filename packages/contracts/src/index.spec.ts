@@ -27,6 +27,7 @@ import {
   deserializePagePayload,
   serializePagePayload,
   normalizeHostname,
+  normalizePageHref,
   normalizeUrlSlug,
   OrganizationSchema,
   OrganizationMembershipSchema,
@@ -1028,6 +1029,13 @@ describe('foundation contracts', () => {
         ]),
       ).success,
     ).toBe(false);
+  });
+
+  it('normalizes obvious external URLs without changing unsafe or relative values', () => {
+    expect(normalizePageHref('  example.com/docs  ')).toBe('https://example.com/docs');
+    expect(normalizePageHref('/docs')).toBe('/docs');
+    expect(normalizePageHref('#details')).toBe('#details');
+    expect(normalizePageHref('javascript:alert(1)')).toBe('javascript:alert(1)');
   });
 
   it('rejects oversized nodes, deep trees, long URLs and large payloads', () => {

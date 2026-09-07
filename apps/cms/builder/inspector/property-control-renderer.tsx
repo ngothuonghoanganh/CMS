@@ -5,8 +5,11 @@ import {
   isSafePageImageSource,
   isSafePageStyleValue,
   isSafePageVideoSource,
+  isComponentPropertyRequired,
+  normalizePageHref,
   type Asset,
   type ComponentPropertyDefinition,
+  type Page,
 } from '@payload/contracts';
 import {
   useEffect,
@@ -19,6 +22,9 @@ import {
 import {
   ColorField,
   DateTimeField,
+  FieldLabel,
+  LayoutField,
+  LinkField,
   NumberField,
   SegmentedControl,
   SelectField,
@@ -43,8 +49,12 @@ import {
 export type PropertyControlRendererProps = {
   definition: ComponentPropertyDefinition;
   value: unknown;
+  propertyValues?: Readonly<Record<string, unknown>>;
   description?: string | undefined;
   assets?: readonly Asset[];
+  navigationPages?: readonly Pick<Page, 'id' | 'name' | 'path' | 'anchors'>[];
+  layoutDirection?: string | undefined;
+  layoutSupportsDirection?: boolean | undefined;
   workspaceId?: string;
   assetKind?: 'image' | 'video' | undefined;
   onChange: (value: unknown) => void;
@@ -71,18 +81,16 @@ function isEntityId(value: unknown): value is string {
   );
 }
 
-function requiredTextProperty(property: string): boolean {
-  return ['text', 'label', 'title', 'src', 'href'].includes(property);
-}
-
 function draftValidation(
   definition: ComponentPropertyDefinition,
   raw: string,
   assetKind?: 'image' | 'video',
+  propertyValues: Readonly<Record<string, unknown>> = {},
 ): { code: string; message: string } | null {
   const value = raw.trim();
-  if (definition.control === 'url' || definition.key === 'href') {
-    if (!value || !isSafePageHref(value)) {
+  if (definition.control === 'url' || definition.control === 'link') {
+    const normalized = normalizePageHref(value);
+    if (value && !isSafePageHref(normalized)) {
       return { code: 'BUTTON_URL_INVALID', message: 'Enter a valid, safe URL.' };
     }
   }
@@ -98,22 +106,47 @@ function draftValidation(
       message: 'Use an https URL or a workspace asset.',
     };
   }
-  if (definition.group === 'content' && requiredTextProperty(definition.key) && !value) {
-    return { code: 'FIELD_REQUIRED', message: 'Enter a value.' };
+  if (isComponentPropertyRequired(definition, propertyValues) && !value) {
+    return {
+      code: 'FIELD_REQUIRED',
+      message: `Enter ${definition.label.toLowerCase()}.`,
+    };
   }
   if (definition.control === 'number' && value) {
     const number = Number(value);
-    if (
-      !Number.isFinite(number) ||
-      (definition.min !== undefined && number < definition.min) ||
-      (definition.max !== undefined && number > definition.max)
-    ) {
+    if (!Number.isFinite(number)) {
       return {
         code: definition.key === 'opacity' ? 'STYLE_OPACITY_INVALID' : 'NUMBER_INVALID',
         message:
           definition.key === 'opacity'
             ? 'Opacity must be between 0 and 1.'
             : `${definition.label} is outside the allowed range.`,
+      };
+    }
+  }
+  if (
+    definition.constraints?.minLength !== undefined &&
+    value.length < definition.constraints.minLength
+  ) {
+    return { code: 'FIELD_TOO_SHORT', message: `${definition.label} is too short.` };
+  }
+  if (
+    definition.constraints?.maxLength !== undefined &&
+    value.length > definition.constraints.maxLength
+  ) {
+    return { code: 'FIELD_TOO_LONG', message: `${definition.label} is too long.` };
+  }
+  if (definition.constraints?.pattern && value) {
+    let pattern: RegExp;
+    try {
+      pattern = new RegExp(definition.constraints.pattern);
+    } catch {
+      pattern = /.^/;
+    }
+    if (!pattern.test(value)) {
+      return {
+        code: 'FIELD_FORMAT_INVALID',
+        message: `Check the ${definition.label.toLowerCase()}.`,
       };
     }
   }
@@ -127,6 +160,31 @@ function draftValidation(
     return { code: 'STYLE_UNSAFE_CSS', message: 'Use a safe CSS value.' };
   }
   return null;
+}
+
+function normalizedPropertyValue(
+  definition: ComponentPropertyDefinition,
+  raw: string,
+): string | number | undefined {
+  const normalizations = definition.normalization
+    ? Array.isArray(definition.normalization)
+      ? definition.normalization
+      : [definition.normalization]
+    : [];
+  let value = raw;
+  if (normalizations.includes('trim') || normalizations.includes('url')) {
+    value = value.trim();
+  }
+  if (normalizations.includes('url')) value = normalizePageHref(value);
+  if (normalizations.includes('hex-color')) value = normalizeHexColor(value) ?? value;
+  if (normalizations.includes('empty-to-undefined') && value === '') return undefined;
+  if (definition.control === 'number') {
+    const number = Number(value);
+    return Number.isFinite(number)
+      ? Math.min(definition.max ?? number, Math.max(definition.min ?? number, number))
+      : value;
+  }
+  return value;
 }
 
 function BuilderValidationField({
@@ -225,8 +283,12 @@ function FieldShell({
 export function PropertyControlRenderer({
   definition,
   value,
+  propertyValues = {},
   description,
   assets = [],
+  navigationPages = [],
+  layoutDirection,
+  layoutSupportsDirection = true,
   workspaceId,
   assetKind,
   onChange,
@@ -240,7 +302,7 @@ export function PropertyControlRenderer({
   issue,
   onValidationIssue,
 }: PropertyControlRendererProps) {
-  const string = textValue(value);
+  const string = textValue(value === undefined ? definition.defaultValue : value);
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const issueContext = {
     scope: scope ?? 'page',
@@ -256,7 +318,7 @@ export function PropertyControlRenderer({
   useEffect(() => setDraft(undefined), [definition.key, nodeId, partName, string]);
 
   function issueFor(raw: string): BuilderValidationIssue | null {
-    const result = draftValidation(definition, raw, assetKind);
+    const result = draftValidation(definition, raw, assetKind, propertyValues);
     return result
       ? createBuilderValidationIssue({
           ...issueContext,
@@ -276,7 +338,7 @@ export function PropertyControlRenderer({
   function commitDraft(raw: string): void {
     setDraft(raw);
     if (!reportDraft(raw)) return;
-    onChange(raw);
+    onChange(normalizedPropertyValue(definition, raw));
     setDraft(undefined);
   }
 
@@ -320,13 +382,33 @@ export function PropertyControlRenderer({
     );
   }
 
-  const common = { compact: true, description, label: definition.label } as const;
+  const common = {
+    compact: true,
+    description:
+      description ??
+      definition.help?.text ??
+      (definition.help?.example ? `Example: ${definition.help.example}` : undefined),
+    label: definition.label,
+    recommended: definition.recommended,
+    required: isComponentPropertyRequired(definition, propertyValues),
+  } as const;
+  const required = common.required;
 
   if (definition.control === 'custom') return null;
+  if (definition.control === 'layout') {
+    return wrap(
+      <LayoutField
+        {...common}
+        direction={layoutDirection}
+        onValueChange={onChange}
+        supportsDirection={layoutSupportsDirection}
+        value={string}
+      />,
+    );
+  }
   if (definition.control === 'textarea') {
     const constrained = definition.group === 'style';
-    const supportsEmptyDraft =
-      definition.group === 'content' && requiredTextProperty(definition.key);
+    const supportsEmptyDraft = required;
     const usesDraft = constrained || draft !== undefined;
     return wrap(
       <TextAreaField
@@ -335,22 +417,37 @@ export function PropertyControlRenderer({
         onChange={(event) => {
           if (constrained || (supportsEmptyDraft && !event.target.value.trim())) {
             setDraft(event.target.value);
-            reportDraft(event.target.value);
           } else {
             setDraft(undefined);
             if (issue) onValidationIssue?.(null, issueId);
             onChange(event.target.value);
           }
         }}
+        placeholder={definition.placeholder}
         rows={5}
         value={usesDraft ? (draft ?? string) : string}
       />,
     );
   }
+  if (definition.control === 'link') {
+    return wrap(
+      <LinkField
+        compact
+        description={common.description}
+        label={definition.label}
+        onCommit={(nextValue) => commitDraft(nextValue)}
+        onInvalid={(nextValue) => reportDraft(nextValue)}
+        pages={navigationPages}
+        allowEmpty={definition.allowEmpty}
+        recommended={definition.recommended}
+        required={required}
+        value={draft ?? string}
+      />,
+    );
+  }
   if (definition.control === 'text' || definition.control === 'url') {
     const constrained = definition.control === 'url' || definition.group === 'style';
-    const supportsEmptyDraft =
-      definition.group === 'content' && requiredTextProperty(definition.key);
+    const supportsEmptyDraft = required;
     const usesDraft = constrained || draft !== undefined;
     return wrap(
       <TextField
@@ -359,13 +456,13 @@ export function PropertyControlRenderer({
         onChange={(event) => {
           if (constrained || (supportsEmptyDraft && !event.target.value.trim())) {
             setDraft(event.target.value);
-            reportDraft(event.target.value);
           } else {
             setDraft(undefined);
             if (issue) onValidationIssue?.(null, issueId);
             onChange(event.target.value);
           }
         }}
+        placeholder={definition.placeholder}
         type={definition.control === 'url' ? 'url' : 'text'}
         value={usesDraft ? (draft ?? string) : string}
       />,
@@ -390,7 +487,6 @@ export function PropertyControlRenderer({
         min={definition.min}
         onDraftChange={(raw) => {
           setDraft(raw);
-          reportDraft(raw);
         }}
         onDraftCommit={(raw) => {
           if (raw.trim() === '') {
@@ -416,7 +512,6 @@ export function PropertyControlRenderer({
         allowAuto={definition.allowAuto}
         onDraftChange={(raw) => {
           setDraft(raw);
-          reportDraft(raw);
         }}
         onDraftCommit={(raw) => commitDraft(raw)}
         onValueChange={onChange as (value: string) => void}
@@ -440,7 +535,6 @@ export function PropertyControlRenderer({
         {...common}
         onDraftChange={(raw) => {
           setDraft(raw);
-          reportDraft(raw);
         }}
         onDraftCommit={(raw) => {
           if (raw.trim() === '') {
@@ -449,11 +543,10 @@ export function PropertyControlRenderer({
             setDraft(undefined);
           } else if (normalizeHexColor(raw)) {
             onValidationIssue?.(null, issueId);
-            onChange(raw.trim());
+            onChange(normalizedPropertyValue(definition, raw));
             setDraft(undefined);
           } else {
-            onValidationIssue?.(null, issueId);
-            setDraft(undefined);
+            reportDraft(raw);
           }
         }}
         onValueChange={(next) => {
@@ -469,7 +562,11 @@ export function PropertyControlRenderer({
     const options = (definition.options ?? []) as readonly SegmentedOption<string>[];
     return wrap(
       <div className="ui-field ui-field-compact">
-        <span className="ui-field-label">{definition.label}</span>
+        <FieldLabel
+          label={definition.label}
+          recommended={definition.recommended}
+          required={required}
+        />
         {description ? <p className="ui-field-description">{description}</p> : null}
         <SegmentedControl
           ariaLabel={definition.label}
@@ -489,7 +586,11 @@ export function PropertyControlRenderer({
           onChange={(event) => onChange(event.target.checked)}
           type="checkbox"
         />
-        {definition.label}
+        <FieldLabel
+          label={definition.label}
+          recommended={definition.recommended}
+          required={required}
+        />
         {description ? <span className="ui-field-description">{description}</span> : null}
       </label>,
     );
@@ -511,7 +612,14 @@ export function PropertyControlRenderer({
               const asset = available.find((candidate) => candidate.id === assetId);
               onChange(asset?.publicUrl ?? asset?.storageKey ?? assetId);
             }}
-            onRemove={() => onChange('')}
+            onRemove={() => {
+              if (definition.allowEmpty) {
+                setDraft('');
+                onValidationIssue?.(null, issueId);
+              } else {
+                onChange('');
+              }
+            }}
             value={
               isEntityId(string)
                 ? string
@@ -542,11 +650,8 @@ export function PropertyControlRenderer({
           onChange={(event) => {
             const next = event.target.value;
             setDraft(next);
-            if (reportDraft(next)) {
-              onChange(next);
-              setDraft(undefined);
-            }
           }}
+          onBlur={(event) => commitDraft(event.currentTarget.value)}
           type="url"
           value={draft ?? string}
         />

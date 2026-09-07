@@ -3310,6 +3310,18 @@ export function applyEditorComponentDefaultStyle(
   appliedEditorDefaultProperties.set(element, applied);
 }
 
+function normalizeEditorStyleValue(
+  payloadKey: string,
+  value: string | StyleTokenReference,
+): string | StyleTokenReference {
+  if (payloadKey !== 'opacity' || typeof value !== 'string' || value.trim() === '') {
+    return value;
+  }
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  return String(Math.min(1, Math.max(0, numericValue)));
+}
+
 export function updateEditorViewportStyle(
   component: Component,
   viewport: BuilderViewport,
@@ -3324,15 +3336,20 @@ export function updateEditorViewportStyle(
   if (!definition) {
     throw new BuilderAdapterError(`Unsupported editor style property "${property}"`);
   }
+  const normalizedValue = normalizeEditorStyleValue(definition.payloadKey, value);
   if (
-    typeof value === 'string' &&
+    typeof normalizedValue === 'string' &&
     definition.payloadKey === 'opacity' &&
-    value.trim() !== '' &&
-    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(value.trim())
+    normalizedValue.trim() !== '' &&
+    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(normalizedValue.trim())
   ) {
     throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
   }
-  if (typeof value === 'string' && value.trim() !== '' && !isSafePageStyleValue(value)) {
+  if (
+    typeof normalizedValue === 'string' &&
+    normalizedValue.trim() !== '' &&
+    !isSafePageStyleValue(normalizedValue)
+  ) {
     throw new BuilderAdapterError(
       `Editor style property "${property}" contains an unsafe CSS value`,
     );
@@ -3344,19 +3361,19 @@ export function updateEditorViewportStyle(
   )?.[definition.payloadKey];
   if (
     (typeof value === 'string' && value.trim() === '' && previousValue === undefined) ||
-    JSON.stringify(previousValue) === JSON.stringify(value)
+    JSON.stringify(previousValue) === JSON.stringify(normalizedValue)
   ) {
     return false;
   }
   const nextBlock = {
     ...(current[payloadViewportKey] ?? {}),
-    [definition.payloadKey]: value,
+    [definition.payloadKey]: normalizedValue,
   };
-  if (typeof value === 'string' && value.trim() === '') {
+  if (typeof normalizedValue === 'string' && normalizedValue.trim() === '') {
     delete nextBlock[definition.payloadKey as keyof typeof nextBlock];
   }
 
-  const hasValue = typeof value !== 'string' || value.trim() !== '';
+  const hasValue = typeof normalizedValue !== 'string' || normalizedValue.trim() !== '';
   const effectiveStyle = resolveViewportStyle(current, viewport) as Record<
     string,
     unknown
@@ -3441,15 +3458,20 @@ export function updateEditorPartViewportStyle(
       `Style property "${property}" is not allowed for ${type}.${partName}`,
     );
   }
+  const normalizedValue = normalizeEditorStyleValue(definition.payloadKey, value);
   if (
-    typeof value === 'string' &&
+    typeof normalizedValue === 'string' &&
     definition.payloadKey === 'opacity' &&
-    value.trim() !== '' &&
-    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(value.trim())
+    normalizedValue.trim() !== '' &&
+    !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(normalizedValue.trim())
   ) {
     throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
   }
-  if (typeof value === 'string' && value.trim() !== '' && !isSafePageStyleValue(value)) {
+  if (
+    typeof normalizedValue === 'string' &&
+    normalizedValue.trim() !== '' &&
+    !isSafePageStyleValue(normalizedValue)
+  ) {
     throw new BuilderAdapterError('Component part style contains an unsafe CSS value');
   }
   const current = readEditorPartsStyle(component, type) ?? {};
@@ -3459,14 +3481,14 @@ export function updateEditorPartViewportStyle(
   const previousValue = nextBlock[definition.payloadKey];
   if (
     (typeof value === 'string' && value.trim() === '' && previousValue === undefined) ||
-    JSON.stringify(previousValue) === JSON.stringify(value)
+    JSON.stringify(previousValue) === JSON.stringify(normalizedValue)
   ) {
     return false;
   }
   if (typeof value === 'string' && value.trim() === '') {
     delete nextBlock[definition.payloadKey];
   } else {
-    nextBlock[definition.payloadKey] = value;
+    nextBlock[definition.payloadKey] = normalizedValue;
   }
   const nextPartStyle = { ...partStyle, [viewportKey]: nextBlock };
   const parsed = PageNodePartsStyleV7Schema.safeParse({

@@ -73,26 +73,29 @@ test('keeps partial URL drafts local and navigates to the exact invalid field', 
   const canvas = page.frameLocator('iframe.gjs-frame');
   await canvas.locator('a[data-payload-node-type="button"]').click();
 
-  const link = page.getByLabel('Link', { exact: true });
-  await link.fill('https://');
-  await expect(link).toHaveValue('https://');
+  const destinationType = page.getByLabel('Link destination type', { exact: true });
+  await destinationType.selectOption('external');
+  const website = page.getByLabel('Link website', { exact: true });
+  await website.fill('https://');
+  await expect(website).toHaveValue('https://');
   await expect(page.locator('.builder-alert')).toHaveCount(0);
-  await expect(link).toHaveAttribute('aria-invalid', 'true');
+  await expect(website).not.toHaveAttribute('aria-invalid', 'true');
   expect(findNode(await readRoot(page), 'button')?.props.href).toBe('#section');
 
+  await website.blur();
+  await expect(website).toHaveAttribute('aria-invalid', 'true');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('1 issue need attention', { exact: true })).toBeVisible();
-  await expect(link).toBeFocused();
   const field = page.locator('[data-builder-field="href"]').first();
   await expect(field).toHaveClass(/builder-validation-field-invalid/);
   await expect(field).toHaveClass(/builder-validation-flash/);
-  const errorId = await link.getAttribute('aria-describedby');
+  const errorId = await website.getAttribute('aria-describedby');
   expect(errorId).toBeTruthy();
   await expect(page.locator(`#${errorId}`)).toHaveText('Enter a valid, safe URL.');
 
-  await link.fill('https://example.org');
-  await link.press('Enter');
-  await expect(link).not.toHaveAttribute('aria-invalid', 'true');
+  await website.fill('example.org');
+  await website.blur();
+  await expect(website).not.toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('[data-builder-validation-summary]')).toHaveCount(0);
   await expect
     .poll(async () => findNode(await readRoot(page), 'button')?.props.href)
@@ -113,20 +116,49 @@ test('keeps invalid number and color drafts out of the document', async ({
   await page.getByText('Effects', { exact: true }).click();
   const opacity = page.getByLabel('Opacity', { exact: true });
   await opacity.fill('1.5');
-  await expect(opacity).toHaveAttribute('aria-invalid', 'true');
+  await expect(opacity).not.toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('.builder-alert')).toHaveCount(0);
   expect(findNode(await readRoot(page), 'button')?.style?.base?.opacity).toBeUndefined();
 
-  await opacity.fill('0.5');
-  await opacity.press('Enter');
+  await opacity.blur();
   await expect(opacity).not.toHaveAttribute('aria-invalid', 'true');
-  expect(findNode(await readRoot(page), 'button')?.style?.base?.opacity).toBe('0.5');
+  expect(findNode(await readRoot(page), 'button')?.style?.base?.opacity).toBe('1');
 
   await page.locator('summary').filter({ hasText: 'Background' }).click();
   const color = page.getByLabel('Background hex value', { exact: true });
   await color.fill('#12');
-  await expect(color).toHaveAttribute('aria-invalid', 'true');
+  await expect(color).not.toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('.builder-alert')).toHaveCount(0);
+  await color.blur();
+  await expect(color).toHaveAttribute('aria-invalid', 'true');
   await color.fill('#112233');
   await expect(color).not.toHaveAttribute('aria-invalid', 'true');
+});
+
+test('uses semantic layout choices and hides irrelevant controls', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  test.setTimeout(120_000);
+  await openCanonicalBuilder(page, canonicalEnvironment);
+  await page.getByRole('button', { name: 'Section add', exact: true }).click();
+  await page
+    .frameLocator('iframe.gjs-frame')
+    .locator('section[data-payload-node-type="section"]')
+    .first()
+    .click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
+
+  const layout = page.getByLabel('Layout', { exact: true });
+  await layout.selectOption('grid');
+  await expect(page.getByLabel('Grid columns', { exact: true })).toBeVisible();
+  await expect(page.getByText('Direction', { exact: true })).toHaveCount(0);
+
+  await layout.selectOption('stack');
+  await expect(page.getByText('Direction', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Grid columns', { exact: true })).toHaveCount(0);
+  expect(findNode(await readRoot(page), 'section')?.style?.base).toMatchObject({
+    display: 'flex',
+    flexDirection: 'column',
+  });
 });

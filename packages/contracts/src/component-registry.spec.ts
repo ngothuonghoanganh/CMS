@@ -11,6 +11,8 @@ import {
   canRemoveChild,
   createStructuralSlotEngine,
   findAcceptingSlot,
+  isComponentPropertyRequired,
+  isComponentPropertyVisible,
   styleSchemaFor,
 } from './component-registry';
 import { PAGE_STYLE_PROPERTY_DEFINITIONS } from './style-registry';
@@ -45,6 +47,55 @@ describe('component style capabilities', () => {
         (property) => property.key === 'font-size',
       ),
     ).toMatchObject({ editingScope: 'design' });
+  });
+
+  it('uses explicit metadata for requiredness instead of property names', () => {
+    const buttonHref = PAGE_COMPONENT_REGISTRY.button.propertiesSchema.find(
+      (property) => property.key === 'href',
+    );
+    const imageSource = PAGE_COMPONENT_REGISTRY.image.propertiesSchema.find(
+      (property) => property.key === 'src',
+    );
+    expect(buttonHref).toMatchObject({ required: true, control: 'link' });
+    expect(imageSource).toMatchObject({ allowEmpty: true });
+    expect(buttonHref && isComponentPropertyRequired(buttonHref)).toBe(true);
+    expect(imageSource && isComponentPropertyRequired(imageSource)).toBe(false);
+    expect(
+      isComponentPropertyRequired({
+        key: 'href',
+        label: 'Optional destination',
+        group: 'content',
+        control: 'url',
+      }),
+    ).toBe(false);
+
+    const conditional = {
+      key: 'columns',
+      label: 'Columns',
+      group: 'style' as const,
+      control: 'number' as const,
+      requiredWhen: { property: 'layout', operator: 'equals' as const, value: 'grid' },
+      visibleWhen: { property: 'layout', operator: 'equals' as const, value: 'grid' },
+    };
+    expect(isComponentPropertyRequired(conditional, { layout: 'stack' })).toBe(false);
+    expect(isComponentPropertyRequired(conditional, { layout: 'grid' })).toBe(true);
+    expect(isComponentPropertyVisible(conditional, { layout: 'stack' })).toBe(false);
+    expect(isComponentPropertyVisible(conditional, { layout: 'grid' })).toBe(true);
+  });
+
+  it('exposes semantic layout choices and conditional layout fields', () => {
+    const layout = PAGE_STYLE_PROPERTY_DEFINITIONS.find(
+      (property) => property.key === 'display',
+    );
+    expect(layout).toMatchObject({ control: 'layout', label: 'Layout' });
+    expect(layout?.options?.map((option) => option.label)).toEqual(
+      expect.arrayContaining(['Stack', 'Row', 'Grid']),
+    );
+    expect(
+      PAGE_STYLE_PROPERTY_DEFINITIONS.find(
+        (property) => property.key === 'grid-template-columns',
+      ),
+    ).toMatchObject({ visibleWhen: { property: 'display', value: 'grid' } });
   });
 
   it('registers V4 content properties and explicit style capabilities', () => {
