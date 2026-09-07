@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { useCmsShell } from '../cms-shell';
-import { pagesPath, sitePath } from '../cms-routes';
+import { cmsViewPath, pagesPath, sitePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
 import { StatusBadge } from '../status-badge';
 import { Drawer, EmptyState, PageHeader, PaginationControls } from '../ui/surfaces';
@@ -144,14 +144,15 @@ export default function SitesPage({
           <PageHeader
             actions={
               <button
+                aria-label="New site"
                 className="button button-primary"
                 onClick={() => router.push(`${sitePath(workspaceId, 'new')}`)}
                 type="button"
               >
-                New site
+                Create website
               </button>
             }
-            description="Create and maintain the destinations that own your pages."
+            description="Create a website, then manage its pages, styles, and publishing from one place."
             eyebrow="Workspace"
             title="Sites"
           />
@@ -161,7 +162,7 @@ export default function SitesPage({
                 ◫
               </div>
               <div>
-                <span className="eyebrow">Total sites</span>
+                <span className="eyebrow">Websites</span>
                 <strong>{pagination.total}</strong>
                 <span className="muted">In this workspace</span>
               </div>
@@ -173,7 +174,7 @@ export default function SitesPage({
               <div>
                 <span className="eyebrow">Published</span>
                 <strong>{publishedSiteCount}</strong>
-                <span className="muted">Live destinations</span>
+                <span className="muted">Live websites</span>
               </div>
             </div>
             <div className="sites-summary-card">
@@ -200,13 +201,13 @@ export default function SitesPage({
           <section className="panel sites-list-panel">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">Workspace portfolio</span>
-                <h2>Your sites</h2>
+                <span className="eyebrow">Your workspace</span>
+                <h2>Your websites</h2>
               </div>
               <span className="count-badge">{pagination.total}</span>
             </div>
             <p className="panel-description">
-              Manage each destination, its public URL and the content it delivers.
+              Open a website to edit pages, update its look, or make changes live.
             </p>
             {loading ? (
               <div aria-busy="true" className="analytics-skeleton">
@@ -322,10 +323,11 @@ export default function SitesPage({
       )}
       {action ? (
         <Drawer
-          description="A site owns pages, collections and delivery settings."
+          description="Give your website a name. We’ll create its homepage and URL for you."
           footer={
             <div className="form-actions">
               <button
+                aria-label={siteId ? 'Save changes' : 'Create site'}
                 className="button button-primary"
                 disabled={busy || editLoading}
                 form="site-metadata-form"
@@ -356,7 +358,7 @@ export default function SitesPage({
             )
           }
           open
-          title={siteId ? 'Edit site' : 'Create site'}
+          title={siteId ? 'Edit website' : 'Create site'}
         >
           {editLoading ? (
             <div aria-busy="true" className="analytics-skeleton">
@@ -369,7 +371,7 @@ export default function SitesPage({
               onSubmit={(event) => void submit(event)}
             >
               <label>
-                Site name
+                Website name
                 <input
                   aria-label="Site name"
                   onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -377,21 +379,27 @@ export default function SitesPage({
                   value={form.name}
                 />
               </label>
-              <label>
-                Slug
-                <input
-                  aria-label="Slug"
-                  onChange={(event) =>
-                    setForm({ ...form, slug: normalizeSlug(event.target.value) })
-                  }
-                  pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                  placeholder="my-site"
-                  required
-                  value={form.slug}
-                />
-              </label>
+              <details className="form-advanced" open={Boolean(siteId)}>
+                <summary>Advanced settings</summary>
+                <label>
+                  Website URL slug
+                  <input
+                    aria-label="Slug"
+                    onChange={(event) =>
+                      setForm({ ...form, slug: normalizeSlug(event.target.value) })
+                    }
+                    pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                    placeholder={normalizeSlug(form.name) || 'my-website'}
+                    value={form.slug}
+                  />
+                  <span className="muted small">
+                    Change this only if you need a specific URL.
+                  </span>
+                </label>
+              </details>
               <p className="helper-text">
-                Public URL: <code>/{form.slug || 'site-slug'}</code>
+                Your website URL:{' '}
+                <code>/{form.slug || normalizeSlug(form.name) || 'my-website'}</code>
               </p>
             </form>
           )}
@@ -442,10 +450,10 @@ function SiteDetail({
             onClick={() => router.push(`${sitePath(workspaceId, site.id)}/edit`)}
             type="button"
           >
-            Edit site
+            Edit website
           </button>
         }
-        description={`/${site.slug} · Manage this site's content, design, and delivery.`}
+        description={`/${site.slug} · Everything you need to edit, style, and publish this website.`}
         eyebrow="Site"
         title={site.name}
       />
@@ -456,7 +464,7 @@ function SiteDetail({
               {initials(site.name)}
             </div>
             <div>
-              <span className="eyebrow">Site workspace</span>
+              <span className="eyebrow">Website workspace</span>
               <strong>{site.name}</strong>
               <span className="muted">/{site.slug}</span>
             </div>
@@ -465,11 +473,13 @@ function SiteDetail({
         </div>
         <div className="site-detail-summary">
           <div>
-            <span className="eyebrow">Publication</span>
-            <strong className="site-detail-value">{site.status}</strong>
+            <span className="eyebrow">Website status</span>
+            <strong className="site-detail-value">
+              {site.status === 'published' ? 'Live' : 'Draft'}
+            </strong>
           </div>
           <div>
-            <span className="eyebrow">Public URL</span>
+            <span className="eyebrow">Website URL</span>
             {site.officialUrl ? (
               <a
                 className="text-link"
@@ -493,7 +503,7 @@ function SiteDetail({
             <span className="eyebrow">Workspace tools</span>
             <h2>Manage this site</h2>
           </div>
-          <span className="muted">Choose a surface to continue</span>
+          <span className="muted">Choose what you want to work on</span>
         </div>
         <div className="site-detail-links">
           <button
@@ -501,14 +511,25 @@ function SiteDetail({
             onClick={() => router.push(pagesPath(workspaceId, site.id))}
             type="button"
           >
-            Manage pages
+            Pages
           </button>
           <button
             className="button button-secondary"
             onClick={() => router.push(`${sitePath(workspaceId, site.id)}/design-system`)}
             type="button"
           >
-            Design system
+            Brand &amp; styles
+          </button>
+          <button
+            className="button button-secondary"
+            onClick={() =>
+              router.push(
+                `${cmsViewPath(workspaceId, 'domains')}?siteId=${encodeURIComponent(site.id)}`,
+              )
+            }
+            type="button"
+          >
+            Domain &amp; publish
           </button>
         </div>
       </section>

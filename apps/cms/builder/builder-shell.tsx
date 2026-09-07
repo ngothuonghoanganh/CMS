@@ -202,14 +202,14 @@ type AvailableBlockOption = {
 };
 
 const blockGroupOrder = [
-  'layout',
-  'conversion',
+  'preset',
   'typography',
   'media',
-  'navigation',
+  'conversion',
   'interactive',
+  'layout',
+  'navigation',
   'advanced',
-  'preset',
 ] as const;
 const blockGroupLabels: Record<(typeof blockGroupOrder)[number], string> = {
   layout: 'Layout',
@@ -219,7 +219,7 @@ const blockGroupLabels: Record<(typeof blockGroupOrder)[number], string> = {
   interactive: 'Interactive',
   conversion: 'Conversion',
   advanced: 'Extensions & advanced',
-  preset: 'Presets',
+  preset: 'Quick sections',
 };
 
 const blockOptions: AvailableBlockOption[] = [
@@ -286,11 +286,7 @@ function toErrorMessage(error: unknown): string {
 }
 
 function isUsableImageSource(value: string): boolean {
-  return (
-    value.startsWith('/assets/') ||
-    value.startsWith('/api/') ||
-    /^https?:\/\//i.test(value)
-  );
+  return value.startsWith('/api/') || /^https?:\/\//i.test(value);
 }
 
 function renderLayerNodes(
@@ -453,7 +449,7 @@ export default function BuilderShell({
   const [validationIssues, setValidationIssues] = useState<BuilderValidationIssue[]>([]);
   const [page, setPage] = useState<Page | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [editorMode, setEditorMode] = useState<'content' | 'design'>('design');
+  const [editorMode, setEditorMode] = useState<'content' | 'design'>('content');
   const [version, setVersion] = useState<PageVersion | null>(null);
   // Model A: GrapesJS owns the live editable document. This is only the last
   // validated server snapshot used to initialize the editor, never a second
@@ -573,7 +569,7 @@ export default function BuilderShell({
     (overrides?: Partial<PagePreviewSnapshot>) => void
   >(() => undefined);
   const canDesign = permissions.includes('page.design');
-  const designEnabled = canDesign && editorMode === 'design';
+  const designEnabled = canDesign;
 
   useEffect(() => {
     const restorePanelPreferences = () => {
@@ -597,9 +593,11 @@ export default function BuilderShell({
   }, [panelPreferencesReady, panelWidths]);
 
   useEffect(() => {
-    if (!canDesign && editorMode !== 'content') setEditorMode('content');
-    if (!designEnabled && activeTool !== 'assets') setActiveTool('assets');
-  }, [activeTool, canDesign, designEnabled, editorMode]);
+    if (!canDesign) {
+      if (editorMode !== 'content') setEditorMode('content');
+      if (activeTool !== 'assets') setActiveTool('assets');
+    }
+  }, [activeTool, canDesign, editorMode]);
 
   function updatePanelWidth(side: BuilderPanelSide, width: number) {
     setPanelWidths((current) =>
@@ -1139,9 +1137,6 @@ export default function BuilderShell({
         if (!nextPermissions.includes('page.design')) {
           setEditorMode('content');
         } else {
-          setEditorMode((currentMode) =>
-            currentMode === 'content' ? 'design' : currentMode,
-          );
           setActiveTool((currentTool) =>
             currentTool === 'assets' ? 'add' : currentTool,
           );
@@ -2097,12 +2092,12 @@ export default function BuilderShell({
 
   const builderTools = designEnabled
     ? ([
-        ['add', '＋', 'Add blocks'],
-        ['layers', '▤', 'Layers'],
-        ['assets', '▧', 'Assets'],
-        ['settings', '⚙', 'Page settings'],
+        ['add', '＋', 'Add', 'Add blocks'],
+        ['layers', '▤', 'Structure', 'Layers'],
+        ['assets', '▧', 'Assets', 'Assets'],
+        ['settings', '⚙', 'Advanced', 'Page settings'],
       ] as const)
-    : ([['assets', '▧', 'Assets']] as const);
+    : ([['assets', '▧', 'Assets', 'Assets']] as const);
 
   return (
     <main className="builder-frame">
@@ -2180,7 +2175,7 @@ export default function BuilderShell({
                 : saveStatus === 'saved'
                   ? isEditingReusable
                     ? `Saved · reusable draft · ${editingReusable?.published ? 'published' : 'not published'}`
-                    : `Saved · v${version.versionNumber} · not published`
+                    : `Saved · v${version.versionNumber} · ${page.publishedVersionId === version.id || page.publishedVersionId === page.currentDraftVersionId ? 'live' : 'not published'}`
                   : saveStatus === 'conflict'
                     ? 'Conflict'
                     : saveStatus === 'validation'
@@ -2217,19 +2212,21 @@ export default function BuilderShell({
             Redo
           </button>
           <button
+            aria-label="Live preview"
             className="button button-secondary"
             onClick={openLivePreview}
             type="button"
           >
-            Live preview
+            Preview
           </button>
           <button
+            aria-label="Save draft"
             className="button button-primary"
             disabled={saveInFlight || saveStatus === 'initializing'}
             onClick={() => void saveDraft()}
             type="button"
           >
-            Save draft
+            Save
           </button>
           <button
             className="button button-success"
@@ -2291,9 +2288,9 @@ export default function BuilderShell({
           data-active-tool={activeTool}
         >
           <nav aria-label="Builder tools" className="builder-tool-rail">
-            {builderTools.map(([tool, icon, label]) => (
+            {builderTools.map(([tool, icon, label, accessibleLabel]) => (
               <button
-                aria-label={label}
+                aria-label={accessibleLabel}
                 aria-pressed={activeTool === tool}
                 className={`builder-tool-button${activeTool === tool ? ' is-active' : ''}`}
                 key={tool}
@@ -2301,7 +2298,7 @@ export default function BuilderShell({
                 type="button"
               >
                 <span aria-hidden="true">{icon}</span>
-                <span>{label.replace(' blocks', '')}</span>
+                <span>{label}</span>
               </button>
             ))}
             <button
@@ -2320,7 +2317,7 @@ export default function BuilderShell({
             {designEnabled && activeTool === 'add' ? (
               <>
                 <div className="builder-panel-heading">
-                  <span className="eyebrow">Components</span>
+                  <span className="eyebrow">Build</span>
                   <strong>Add to page</strong>
                 </div>
                 <div
@@ -2356,7 +2353,7 @@ export default function BuilderShell({
                   <input
                     aria-label="Search components"
                     onChange={(event) => setBlockQuery(event.target.value)}
-                    placeholder="Search components"
+                    placeholder="Search blocks"
                     type="search"
                     value={blockQuery}
                   />
@@ -2523,9 +2520,8 @@ export default function BuilderShell({
                   </p>
                 ) : null}
                 <p className="muted small builder-help">
-                  Components are versioned PagePayload nodes and keep their canvas order
-                  when published. Header/Footer extensions are copied into this page, so
-                  later source edits do not change the page snapshot.
+                  Start with a quick section, then select anything on the canvas to edit
+                  its content. More technical options are available under Advanced.
                 </p>
               </>
             ) : null}
@@ -2534,16 +2530,15 @@ export default function BuilderShell({
                 <div className="builder-layers-section builder-page-capabilities">
                   <div className="builder-panel-heading">
                     <div>
-                      <span className="eyebrow">Page settings</span>
-                      <strong>Extensions</strong>
+                      <span className="eyebrow">Advanced</span>
+                      <strong>Page features</strong>
                     </div>
                     <span className="builder-capability-active">
                       {pageExtensions.filter((item) => item.enabled).length} active
                     </span>
                   </div>
                   <p className="muted small builder-capability-intro">
-                    Page-level switches control which tenant extensions can run on this
-                    page.
+                    Optional features that can run on this page.
                   </p>
                   {pageExtensions.length === 0 ? (
                     <p className="muted small">
@@ -2619,8 +2614,8 @@ export default function BuilderShell({
             {activeTool === 'assets' ? (
               <div className="builder-asset-panel">
                 <div className="builder-panel-heading">
-                  <span className="eyebrow">Workspace library</span>
-                  <strong>Assets</strong>
+                  <span className="eyebrow">Media</span>
+                  <strong>Choose an image</strong>
                 </div>
                 {imageAssets.length ? (
                   <div className="builder-asset-list">
@@ -2651,8 +2646,8 @@ export default function BuilderShell({
               <>
                 <div className="builder-layers-section">
                   <div className="builder-panel-heading">
-                    <span className="eyebrow">Layers</span>
-                    <strong>Page structure</strong>
+                    <span className="eyebrow">Structure</span>
+                    <strong>Page sections</strong>
                   </div>
                   <label className="builder-layer-search">
                     <span className="sr-only">Search layers</span>
@@ -2758,7 +2753,7 @@ export default function BuilderShell({
               onDetachReusable={detachSelectedReusable}
               onSelectParent={() => editorRef.current?.selectParent()}
               position={contextToolbarPosition}
-              selected={designEnabled ? selected : null}
+              selected={selected}
             />
             <QuickAddOverlay
               anchor={
@@ -2966,7 +2961,7 @@ export default function BuilderShell({
                 onUpdateBinding={updatePageBinding}
                 onUpdateQuery={updatePageQuery}
                 viewport={viewport}
-                contentOnly={!designEnabled}
+                contentOnly={false}
               />
             </div>
           ) : (

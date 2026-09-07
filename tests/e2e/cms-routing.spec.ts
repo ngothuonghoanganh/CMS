@@ -63,7 +63,13 @@ test('CMS resource routes are deep-linkable and overlays require intent', async 
 
   await page.getByRole('button', { name: '+ New page', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${pagesRoute}/new$`));
-  await expect(page.getByRole('dialog', { name: 'Create page' })).toBeVisible();
+  const newPageDialog = page.getByRole('dialog', { name: 'Create page' });
+  await expect(newPageDialog).toBeVisible();
+  await expect(newPageDialog.getByLabel('Page name')).toBeVisible();
+  await expect(
+    newPageDialog.getByText('Advanced page options', { exact: true }),
+  ).toBeVisible();
+  await expect(newPageDialog.getByLabel('Slug')).toBeHidden();
   await page
     .getByRole('dialog', { name: 'Create page' })
     .getByRole('button', { name: 'Cancel' })
@@ -106,7 +112,13 @@ test('create routes keep resource lists quiet until the primary action is chosen
   await expect(page.locator('.ui-drawer-layer')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${sitePath}/new$`));
-  await expect(page.getByRole('dialog', { name: 'Create site' })).toBeVisible();
+  const newSiteDialog = page.getByRole('dialog', { name: 'Create site' });
+  await expect(newSiteDialog).toBeVisible();
+  await expect(newSiteDialog.getByLabel('Site name')).toBeVisible();
+  await expect(
+    newSiteDialog.getByText('Advanced settings', { exact: true }),
+  ).toBeVisible();
+  await expect(newSiteDialog.getByLabel('Slug')).toBeHidden();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
 
   const assetsPath = `${workspacePath}/assets`;
@@ -143,4 +155,152 @@ test('create routes keep resource lists quiet until the primary action is chosen
   await expect(page.getByRole('dialog', { name: 'New collection' })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
   await expect(page).toHaveURL(new RegExp(`${collectionsPath}$`));
+});
+
+test('brand styles show website impact without changing the CMS chrome', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  await loginToCanonicalBuilder(page);
+
+  const sitePath = `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}`;
+  await page.setViewportSize({ height: 900, width: 1440 });
+  await page.goto(`${sitePath}/design-system`);
+
+  await expect(
+    page.getByRole('heading', { name: 'Brand & styles', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Preview your website' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Home', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Services', exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Primary color → buttons, links, and highlights', { exact: true }),
+  ).toBeVisible();
+
+  const workbenchLayout = await page
+    .locator('.design-system-workbench')
+    .evaluate((workbench) => {
+      const preview = workbench
+        .querySelector('.design-system-preview')!
+        .getBoundingClientRect();
+      const editor = workbench
+        .querySelector('.design-system-editor')!
+        .getBoundingClientRect();
+      return {
+        editorBottom: editor.bottom,
+        editorLeft: editor.left,
+        editorRight: editor.right,
+        editorTop: editor.top,
+        previewLeft: preview.left,
+        previewRight: preview.right,
+        previewTop: preview.top,
+        editorHeight: editor.height,
+        editorPosition: getComputedStyle(
+          workbench.querySelector('.design-system-editor')!,
+        ).position,
+      };
+    });
+  expect(workbenchLayout.editorPosition).toBe('absolute');
+  expect(workbenchLayout.editorLeft).toBeGreaterThan(workbenchLayout.previewLeft);
+  expect(workbenchLayout.editorRight).toBeLessThan(workbenchLayout.previewRight);
+  expect(workbenchLayout.editorTop).toBeGreaterThan(workbenchLayout.previewTop);
+  expect(workbenchLayout.editorHeight).toBeGreaterThan(440);
+  expect(workbenchLayout.editorHeight).toBeLessThan(460);
+
+  const editor = page.locator('.design-system-editor');
+  await expect(
+    editor.getByRole('button', { name: 'Save draft', exact: true }),
+  ).toBeVisible();
+
+  const primaryColor = page.getByLabel('Primary color hex value', { exact: true });
+  await primaryColor.fill('#e11d48');
+  await expect
+    .poll(async () =>
+      page.locator('.design-system-website-frame').evaluate((frame) => ({
+        brandPrimary: getComputedStyle(frame).getPropertyValue('--brand-primary').trim(),
+        cmsSidebar: getComputedStyle(document.querySelector('.sidebar')!).backgroundColor,
+      })),
+    )
+    .toEqual({ brandPrimary: '#e11d48', cmsSidebar: 'rgb(13, 13, 13)' });
+
+  await page.getByRole('tab', { name: 'Services', exact: true }).click();
+  await expect(page.locator('.site-preview-hero h1')).toHaveText(
+    'Everything you need to move forward.',
+  );
+  await page.getByRole('button', { name: 'Mobile', exact: true }).click();
+  await expect(page.locator('.design-system-website-frame')).toHaveClass(/is-mobile/);
+  await expect(page.getByText('Menu', { exact: true })).toBeVisible();
+
+  const dragHandle = page.getByRole('button', {
+    name: 'Move design editor',
+    exact: true,
+  });
+  const dragHandleBox = await dragHandle.boundingBox();
+  expect(dragHandleBox).not.toBeNull();
+  if (!dragHandleBox) throw new Error('Design editor drag handle is not measurable.');
+  const editorBeforeDrag = await page
+    .locator('.design-system-editor')
+    .evaluate((editor) => editor.getBoundingClientRect().top);
+  await page.mouse.move(
+    dragHandleBox.x + dragHandleBox.width / 2,
+    dragHandleBox.y + dragHandleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    dragHandleBox.x + dragHandleBox.width / 2 - 80,
+    dragHandleBox.y + dragHandleBox.height / 2 - 60,
+  );
+  await page.mouse.up();
+  await expect
+    .poll(() =>
+      page
+        .locator('.design-system-editor')
+        .evaluate((editor) => editor.getBoundingClientRect().top),
+    )
+    .toBeLessThan(editorBeforeDrag - 40);
+  await page.getByRole('button', { name: 'Reset position', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Close design editor', exact: true }).click();
+  await expect(page.locator('.design-system-editor')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open editor', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Move design editor', exact: true }),
+  ).toBeVisible();
+
+  await primaryColor.fill('#2563eb');
+
+  await page.setViewportSize({ height: 900, width: 768 });
+  await page.reload();
+  const smallLayout = await page
+    .locator('.design-system-workbench')
+    .evaluate((workbench) => {
+      const preview = workbench
+        .querySelector('.design-system-preview')!
+        .getBoundingClientRect();
+      const editor = workbench
+        .querySelector('.design-system-editor')!
+        .getBoundingClientRect();
+      return {
+        editorLeft: Math.round(editor.left),
+        editorTop: Math.round(editor.top),
+        previewLeft: Math.round(preview.left),
+        previewTop: Math.round(preview.top),
+        editorPosition: getComputedStyle(
+          workbench.querySelector('.design-system-editor')!,
+        ).position,
+        previewPosition: getComputedStyle(
+          workbench.querySelector('.design-system-preview')!,
+        ).position,
+      };
+    });
+  expect(smallLayout.editorLeft).toBe(smallLayout.previewLeft);
+  expect(smallLayout.editorTop).toBeGreaterThan(smallLayout.previewTop);
+  expect(smallLayout.editorPosition).toBe('static');
+  expect(smallLayout.previewPosition).toBe('static');
+
+  await page.goto(`/workspaces/${canonicalEnvironment.workspaceId}/design-system`);
+  const workspaceEditor = page.locator('.design-system-editor');
+  await expect(
+    workspaceEditor.getByRole('button', { name: 'Publish defaults', exact: true }),
+  ).toBeVisible();
 });

@@ -157,7 +157,7 @@ function TokenChoice({
         <option value="">Custom value</option>
         {tokens.map((token) => (
           <option key={token.id} value={token.id}>
-            {token.name} ({token.id})
+            {token.name}
           </option>
         ))}
       </select>
@@ -1025,6 +1025,9 @@ export function BuilderInspector({
       <div aria-label="Inspector tabs" className="builder-inspector-tabs" role="tablist">
         {(['content', 'style', 'settings'] as const).map((tab) => (
           <button
+            aria-label={
+              tab === 'settings' ? 'Settings' : tab === 'style' ? 'Style' : 'Content'
+            }
             aria-selected={inspectorTab === tab}
             className={inspectorTab === tab ? 'is-active' : ''}
             key={tab}
@@ -1032,7 +1035,7 @@ export function BuilderInspector({
             role="tab"
             type="button"
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === 'style' ? 'Appearance' : tab === 'settings' ? 'Advanced' : 'Content'}
           </button>
         ))}
       </div>
@@ -1055,7 +1058,7 @@ export function BuilderInspector({
       ) : null}
 
       {inspectorTab === 'content' && selected.type === 'collection-list' ? (
-        <InspectorSection label="Collection query" onToggle={() => undefined} open>
+        <InspectorSection label="Content source" onToggle={() => undefined} open>
           <CollectionQueryEditor
             collections={collections}
             onChange={(query) => onUpdateQuery?.(query)}

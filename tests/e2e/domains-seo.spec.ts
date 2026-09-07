@@ -27,7 +27,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await switchCanonicalBrowserContext(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page
-    .getByLabel('Site')
+    .getByLabel('Site', { exact: true })
     .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: /__e2e__ phase-seo/ }).click();
 
@@ -64,7 +64,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
 
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page
-    .getByLabel('Site')
+    .getByLabel('Site', { exact: true })
     .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();

@@ -114,6 +114,11 @@ function layoutKindLabel(kind: LayoutKindSegment): string {
   return kind === 'headers' ? 'Header' : 'Footer';
 }
 
+function assetSource(asset: Asset): string | undefined {
+  const value = (asset.publicUrl ?? asset.storageKey).trim();
+  return value.startsWith('/api/') || /^https?:\/\//i.test(value) ? value : undefined;
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) return error.message;
   return error instanceof Error ? error.message : 'The layout builder could not load.';
@@ -271,7 +276,8 @@ export default function LayoutBuilderShell({
   const documentKind = layoutDocumentKind(layoutKind);
   const label = layoutKindLabel(layoutKind);
   const usableAssets = useMemo(
-    () => assets.filter((asset) => asset.mimeType.startsWith('image/')),
+    () =>
+      assets.filter((asset) => asset.mimeType.startsWith('image/') && assetSource(asset)),
     [assets],
   );
   const navigationPagePaths = useMemo(
@@ -1077,13 +1083,11 @@ export default function LayoutBuilderShell({
                           className="builder-asset-card"
                           key={asset.id}
                           onClick={() =>
-                            editorRef.current?.selectAsset(
-                              asset.publicUrl ?? asset.storageKey,
-                            )
+                            editorRef.current?.selectAsset(assetSource(asset) ?? '')
                           }
                           type="button"
                         >
-                          <img alt="" src={asset.publicUrl ?? asset.storageKey} />
+                          <img alt="" src={assetSource(asset)} />
                           <span>{asset.filename}</span>
                         </button>
                       ))}

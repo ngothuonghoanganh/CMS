@@ -59,7 +59,7 @@ const viewLabels: Record<CmsView, string> = {
   templates: 'Templates',
   users: 'Users',
   workflows: 'Workflows',
-  'design-system': 'Design system',
+  'design-system': 'Brand & styles',
 };
 
 type NavigationItem = { key: CmsView; label: string; icon: CmsIconName };
@@ -83,43 +83,49 @@ function viewFromPathname(pathname: string): CmsView {
 }
 
 function navigationSections(can: (permission: TenantPermission) => boolean) {
-  const workspace: NavigationItem[] = [
+  const home: NavigationItem[] = [
     { icon: 'dashboard', key: 'dashboard', label: 'Dashboard' },
-    ...(can('workspace.read')
-      ? [{ icon: 'organization', key: 'organization', label: 'Organization' }]
-      : []),
-    ...(can('site.read') ? [{ icon: 'sites', key: 'sites', label: 'Sites' }] : []),
+  ] as NavigationItem[];
+  const websites: NavigationItem[] = [
+    ...(can('site.read') ? [{ icon: 'sites', key: 'sites', label: 'Websites' }] : []),
     ...(can('page.read') ? [{ icon: 'pages', key: 'pages', label: 'Pages' }] : []),
-    ...(can('collection.read')
-      ? [{ icon: 'collections', key: 'collections', label: 'Collections' }]
-      : []),
     ...(can('design-system.read')
-      ? [{ icon: 'designSystem', key: 'design-system', label: 'Design system' }]
+      ? [{ icon: 'designSystem', key: 'design-system', label: 'Brand & styles' }]
       : []),
-    ...(can('asset.read') ? [{ icon: 'assets', key: 'assets', label: 'Assets' }] : []),
     ...(can('template.read')
       ? [{ icon: 'templates', key: 'templates', label: 'Templates' }]
       : []),
+  ] as NavigationItem[];
+  const content: NavigationItem[] = [
+    ...(can('collection.read')
+      ? [{ icon: 'collections', key: 'collections', label: 'Content' }]
+      : []),
+  ] as NavigationItem[];
+  const media: NavigationItem[] = [
+    ...(can('asset.read') ? [{ icon: 'assets', key: 'assets', label: 'Media' }] : []),
+  ] as NavigationItem[];
+  const results: NavigationItem[] = [
     ...(can('lead.read')
       ? [{ icon: 'submissions', key: 'submissions', label: 'Submissions' }]
       : []),
+    ...(can('analytics.read')
+      ? [{ icon: 'analytics', key: 'analytics', label: 'Analytics' }]
+      : []),
   ] as NavigationItem[];
-  const operations: NavigationItem[] = [
-    ...(can('workflow.read')
-      ? [{ icon: 'workflows', key: 'workflows', label: 'Workflows' }]
+  const settings: NavigationItem[] = [
+    ...(can('workspace.read')
+      ? [{ icon: 'organization', key: 'organization', label: 'Organization' }]
       : []),
     ...(can('integration.read')
       ? [{ icon: 'integrations', key: 'integrations', label: 'Integrations' }]
-      : []),
-    ...(can('analytics.read')
-      ? [{ icon: 'analytics', key: 'analytics', label: 'Analytics' }]
       : []),
     ...(can('domain.read')
       ? [{ icon: 'domains', key: 'domains', label: 'Domains' }]
       : []),
     ...(can('seo.read') ? [{ icon: 'seo', key: 'seo', label: 'SEO' }] : []),
-  ] as NavigationItem[];
-  const management: NavigationItem[] = [
+    ...(can('workflow.read')
+      ? [{ icon: 'workflows', key: 'workflows', label: 'Workflows' }]
+      : []),
     ...(can('billing.read')
       ? [{ icon: 'billing', key: 'billing', label: 'Billing & Usage' }]
       : []),
@@ -131,9 +137,12 @@ function navigationSections(can: (permission: TenantPermission) => boolean) {
       : []),
   ] as NavigationItem[];
   return [
-    { label: 'Workspace', items: workspace },
-    { label: 'Operations', items: operations },
-    { label: 'Management', items: management },
+    { label: 'Home', items: home },
+    { label: 'Websites', items: websites },
+    { label: 'Content', items: content },
+    { label: 'Media', items: media },
+    { label: 'Results', items: results },
+    { label: 'Settings', items: settings },
   ].filter((section) => section.items.length > 0);
 }
 
@@ -376,8 +385,17 @@ export default function CmsShell({
                 {section.items.map((item) => {
                   const href = navigationHref(workspaceId, item.key, siteId);
                   const active = activeNavigationKey === item.key;
+                  const legacyAccessibleLabel =
+                    item.key === 'sites'
+                      ? 'Sites'
+                      : item.key === 'collections'
+                        ? 'Collections'
+                        : item.key === 'assets'
+                          ? 'Assets'
+                          : item.label;
                   return (
                     <Link
+                      aria-label={legacyAccessibleLabel}
                       aria-current={active ? 'page' : undefined}
                       className={active ? 'nav-item active' : 'nav-item'}
                       href={href}

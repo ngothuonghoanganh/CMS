@@ -10,7 +10,7 @@ import {
 async function openPages(page: Page, siteName?: string) {
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   if (siteName) {
-    await page.getByLabel('Site').selectOption({ label: siteName });
+    await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
   }
 }
 
@@ -97,7 +97,7 @@ test('publishes a site after its homepage is published', async ({
   await loginToCanonicalBuilder(page);
   await switchCanonicalBrowserContext(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site').selectOption({ label: siteName });
+  await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
   await page.getByRole('button', { name: /Select page .* at \/$/ }).click();
   const publishPageButton = page.getByRole('button', { name: 'Publish draft' });
   if (await publishPageButton.isVisible()) {

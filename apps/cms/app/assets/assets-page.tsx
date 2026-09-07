@@ -46,11 +46,7 @@ const blankAsset: AssetForm = {
 };
 
 function isRenderableAssetSource(value: string): boolean {
-  return (
-    value.startsWith('/assets/') ||
-    value.startsWith('/api/') ||
-    /^https?:\/\//i.test(value)
-  );
+  return value.startsWith('/api/') || /^https?:\/\//i.test(value);
 }
 
 export default function AssetsPage({

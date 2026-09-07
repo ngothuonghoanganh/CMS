@@ -265,7 +265,7 @@ export default function PagesPage({
     event.preventDefault();
     if (!selectedSiteId) return;
     await run(async () => {
-      const normalizedPath = pageForm.path
+      const normalizedPath = (pageForm.path.trim() || pageForm.name)
         .trim()
         .replace(/^\/+/, '')
         .toLowerCase()

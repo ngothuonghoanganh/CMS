@@ -541,18 +541,19 @@ export function PagesView({
         actions={
           canCreateDesignedPage ? (
             <button
+              aria-label="+ New page"
               className="button button-primary"
               disabled={!selectedSiteId}
               onClick={openCreateFlow}
               type="button"
             >
-              + New page
+              Create page
             </button>
           ) : undefined
         }
         eyebrow="Website structure"
         title="Pages"
-        description="Organize your sitemap, edit pages visually, and keep every public route clear."
+        description="Choose a page to edit, preview, or publish. New pages get a URL automatically."
       />
       <ResourceToolbar>
         <label className="inline-field">
@@ -712,11 +713,12 @@ export function PagesView({
                   className="page-detail-actions"
                 >
                   <button
+                    aria-label="Open Builder"
                     className="button button-primary"
                     onClick={() => onOpenBuilder(selectedPage)}
                     type="button"
                   >
-                    Open Builder
+                    <span aria-hidden="true">Edit page</span>
                   </button>
                   <button
                     className="button button-secondary"
@@ -742,11 +744,12 @@ export function PagesView({
                     </button>
                   ) : null}
                   <button
+                    aria-label="Settings"
                     className="button button-ghost"
                     onClick={() => onEditPage(selectedPage)}
                     type="button"
                   >
-                    Settings
+                    <span aria-hidden="true">Page settings</span>
                   </button>
                 </div>
                 <div className="page-detail-summary-grid">
@@ -1223,170 +1226,188 @@ export function PagesView({
                 value={pageForm.name}
               />
             </label>
-            <label>
-              Page type
-              <select
-                aria-label="Page type"
-                disabled={metadataDisabled}
-                onChange={(event) =>
-                  onPageFormChange({
-                    ...pageForm,
-                    kind: event.target.value as PageForm['kind'],
-                  })
-                }
-                value={pageForm.kind}
-              >
-                <option value="standard">Standard page</option>
-                <option value="dynamic">Dynamic collection page</option>
-              </select>
-            </label>
-            {pageForm.kind === 'dynamic' ? (
-              <>
-                <div className="page-form-callout">
-                  <strong>One page, many entries</strong>
-                  <span className="muted small">
-                    The route base is derived from the pattern and resolved against
-                    published collection data.
-                  </span>
-                </div>
-                <label>
-                  Collection
-                  <select
-                    aria-label="Dynamic collection"
-                    disabled={metadataDisabled}
-                    onChange={(event) =>
-                      onPageFormChange({
-                        ...pageForm,
-                        collectionId: event.target.value,
-                        lookupField: '',
-                        previewEntryId: '',
-                      })
-                    }
-                    required
-                    value={pageForm.collectionId}
-                  >
-                    <option value="">Choose a collection</option>
-                    {collections.map((collection) => (
-                      <option key={collection.id} value={collection.id}>
-                        {collection.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Path pattern
-                  <span className="muted">Example: /products/{'{slug}'}</span>
-                  <input
-                    aria-label="Path pattern"
-                    disabled={metadataDisabled}
-                    onChange={(event) =>
-                      onPageFormChange({ ...pageForm, pathPattern: event.target.value })
-                    }
-                    placeholder="/products/{slug}"
-                    required
-                    value={pageForm.pathPattern}
-                  />
-                </label>
-                <label>
-                  Lookup field
-                  <select
-                    aria-label="Dynamic lookup field"
-                    disabled={metadataDisabled}
-                    onChange={(event) =>
-                      onPageFormChange({ ...pageForm, lookupField: event.target.value })
-                    }
-                    required
-                    value={pageForm.lookupField}
-                  >
-                    <option value="">Choose a field</option>
-                    {(dynamicCollection?.fields ?? [])
-                      .filter((field) => field.status === 'active')
-                      .map((field) => (
-                        <option key={field.id} value={field.key}>
-                          {field.label} · {field.key}
+            {isCreating && pageForm.kind === 'standard' && !pageForm.path ? (
+              <p className="helper-text">
+                We’ll create{' '}
+                <code>
+                  /
+                  {pageForm.name
+                    ? pageForm.name
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+|-+$/g, '')
+                    : 'your-page'}
+                </code>{' '}
+                automatically.
+              </p>
+            ) : null}
+            <details className="form-advanced page-form-advanced">
+              <summary>Advanced page options</summary>
+              <label>
+                Page type
+                <select
+                  aria-label="Page type"
+                  disabled={metadataDisabled}
+                  onChange={(event) =>
+                    onPageFormChange({
+                      ...pageForm,
+                      kind: event.target.value as PageForm['kind'],
+                    })
+                  }
+                  value={pageForm.kind}
+                >
+                  <option value="standard">Standard page</option>
+                  <option value="dynamic">Dynamic collection page</option>
+                </select>
+              </label>
+              {pageForm.kind === 'dynamic' ? (
+                <>
+                  <div className="page-form-callout">
+                    <strong>One page, many entries</strong>
+                    <span className="muted small">
+                      The route base is derived from the pattern and resolved against
+                      published collection data.
+                    </span>
+                  </div>
+                  <label>
+                    Collection
+                    <select
+                      aria-label="Dynamic collection"
+                      disabled={metadataDisabled}
+                      onChange={(event) =>
+                        onPageFormChange({
+                          ...pageForm,
+                          collectionId: event.target.value,
+                          lookupField: '',
+                          previewEntryId: '',
+                        })
+                      }
+                      required
+                      value={pageForm.collectionId}
+                    >
+                      <option value="">Choose a collection</option>
+                      {collections.map((collection) => (
+                        <option key={collection.id} value={collection.id}>
+                          {collection.name}
                         </option>
                       ))}
-                  </select>
-                </label>
-                <label>
-                  Preview entry
-                  <select
-                    aria-label="Preview entry"
-                    disabled={metadataDisabled}
-                    onChange={(event) =>
-                      onPageFormChange({
-                        ...pageForm,
-                        previewEntryId: event.target.value,
-                      })
-                    }
-                    value={pageForm.previewEntryId}
-                  >
-                    <option value="">Choose an entry when previewing</option>
-                    {collectionEntries.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entryTitle(entry, dynamicCollection ?? ({} as Collection))}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="helper-text">
-                  Canonical route base:{' '}
-                  <code>{pageForm.pathPattern.split('/{')[0] || '/products'}</code>
-                </p>
-                {selectedPage && selectedDynamicPath ? (
-                  <p className="helper-text">
-                    Live detail URL:{' '}
-                    <a
-                      href={pageUrl(
-                        selectedPage,
-                        selectedSite,
-                        collectionEntries,
-                        pageForm.previewEntryId,
-                      )}
-                      rel="noreferrer"
-                      target="_blank"
+                    </select>
+                  </label>
+                  <label>
+                    Path pattern
+                    <span className="muted">Example: /products/{'{slug}'}</span>
+                    <input
+                      aria-label="Path pattern"
+                      disabled={metadataDisabled}
+                      onChange={(event) =>
+                        onPageFormChange({ ...pageForm, pathPattern: event.target.value })
+                      }
+                      placeholder="/products/{slug}"
+                      required
+                      value={pageForm.pathPattern}
+                    />
+                  </label>
+                  <label>
+                    Lookup field
+                    <select
+                      aria-label="Dynamic lookup field"
+                      disabled={metadataDisabled}
+                      onChange={(event) =>
+                        onPageFormChange({ ...pageForm, lookupField: event.target.value })
+                      }
+                      required
+                      value={pageForm.lookupField}
                     >
-                      {pageUrl(
-                        selectedPage,
-                        selectedSite,
-                        collectionEntries,
-                        pageForm.previewEntryId,
-                      )}
-                    </a>
+                      <option value="">Choose a field</option>
+                      {(dynamicCollection?.fields ?? [])
+                        .filter((field) => field.status === 'active')
+                        .map((field) => (
+                          <option key={field.id} value={field.key}>
+                            {field.label} · {field.key}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Preview entry
+                    <select
+                      aria-label="Preview entry"
+                      disabled={metadataDisabled}
+                      onChange={(event) =>
+                        onPageFormChange({
+                          ...pageForm,
+                          previewEntryId: event.target.value,
+                        })
+                      }
+                      value={pageForm.previewEntryId}
+                    >
+                      <option value="">Choose an entry when previewing</option>
+                      {collectionEntries.map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entryTitle(entry, dynamicCollection ?? ({} as Collection))}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="helper-text">
+                    Canonical route base:{' '}
+                    <code>{pageForm.pathPattern.split('/{')[0] || '/products'}</code>
                   </p>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <label>
-                  URL path
-                  <span className="muted">Use lowercase URL-safe segments.</span>
-                  <input
-                    aria-label="Slug"
-                    disabled={metadataDisabled}
-                    onChange={(event) =>
-                      onPageFormChange({
-                        ...pageForm,
-                        path: event.target.value.startsWith('/')
-                          ? event.target.value
-                          : `/${event.target.value}`,
-                      })
-                    }
-                    placeholder="/about"
-                    required
-                    value={pageForm.path}
-                  />
-                </label>
-                <p className="helper-text">
-                  Canonical URL preview:{' '}
-                  <code>
-                    {pageForm.path === '/'
-                      ? `/${selectedSite.slug}`
-                      : `/${selectedSite.slug}${pageForm.path || '/page-path'}`}
-                  </code>
-                </p>
-              </>
-            )}
+                  {selectedPage && selectedDynamicPath ? (
+                    <p className="helper-text">
+                      Live detail URL:{' '}
+                      <a
+                        href={pageUrl(
+                          selectedPage,
+                          selectedSite,
+                          collectionEntries,
+                          pageForm.previewEntryId,
+                        )}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {pageUrl(
+                          selectedPage,
+                          selectedSite,
+                          collectionEntries,
+                          pageForm.previewEntryId,
+                        )}
+                      </a>
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <label>
+                    URL path
+                    <span className="muted">Use lowercase URL-safe segments.</span>
+                    <input
+                      aria-label="Slug"
+                      disabled={metadataDisabled}
+                      onChange={(event) =>
+                        onPageFormChange({
+                          ...pageForm,
+                          path: event.target.value.startsWith('/')
+                            ? event.target.value
+                            : `/${event.target.value}`,
+                        })
+                      }
+                      placeholder="/about"
+                      required
+                      value={pageForm.path}
+                    />
+                  </label>
+                  <p className="helper-text">
+                    Canonical URL preview:{' '}
+                    <code>
+                      {pageForm.path === '/'
+                        ? `/${selectedSite.slug}`
+                        : `/${selectedSite.slug}${pageForm.path || '/page-path'}`}
+                    </code>
+                  </p>
+                </>
+              )}
+            </details>
             <label>
               Description <span className="muted">Optional</span>
               <textarea

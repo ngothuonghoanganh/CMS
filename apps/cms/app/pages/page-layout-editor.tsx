@@ -184,13 +184,13 @@ export function PageLayoutEditor({
       <div className="panel-heading">
         <div>
           <span className="eyebrow">Page composition</span>
-          <h2>Header & Footer</h2>
+          <h2>Header, menu &amp; footer</h2>
         </div>
         {loading ? <span className="muted small">Loading…</span> : null}
       </div>
       <p className="muted small">
-        This page renders only the layouts selected here. Changing a layout resource does
-        not change pages until that resource is published.
+        Choose the shared header and footer for this page. You can edit their menus
+        without leaving the page settings.
       </p>
       {!canDesign ? (
         <p className="helper-text" role="status">
@@ -212,7 +212,7 @@ export function PageLayoutEditor({
           <div className="panel-heading">
             <div>
               <span className="eyebrow">Attached to this page</span>
-              <h3>Choose layouts</h3>
+              <h3>Shared page areas</h3>
             </div>
           </div>
           <div className="stack">
@@ -286,7 +286,7 @@ export function PageLayoutEditor({
                   }}
                   type="button"
                 >
-                  Edit header blocks
+                  Edit header &amp; menu
                 </button>
               ) : null}
               {selectedResourceId(attachments, 'footer') ? (
@@ -302,7 +302,7 @@ export function PageLayoutEditor({
                   }}
                   type="button"
                 >
-                  Edit footer blocks
+                  Edit footer
                 </button>
               ) : null}
             </div>
@@ -311,8 +311,8 @@ export function PageLayoutEditor({
         <div className="page-layout-resource-card">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Reusable resources</span>
-              <h3>Build a Header or Footer</h3>
+              <span className="eyebrow">Shared areas</span>
+              <h3>Create a header or footer</h3>
             </div>
           </div>
           <form className="stack" onSubmit={(event) => void createLayout(event)}>

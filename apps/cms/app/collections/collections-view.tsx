@@ -23,6 +23,22 @@ import {
 
 type FieldDraft = Collection['fields'][number];
 
+function collectionKeyFromName(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'content'
+  );
+}
+
+function singularCollectionName(value: string): string {
+  const name = value.trim();
+  if (!name) return 'Item';
+  return name.endsWith('s') ? name.slice(0, -1) : name;
+}
+
 function collectionApiPath(
   workspaceId: string,
   siteId: string,
@@ -752,6 +768,10 @@ export function CollectionsView({
       collectionApiPath(workspaceId, siteScopeId),
       {
         ...collectionForm,
+        key: collectionForm.key.trim() || collectionKeyFromName(collectionForm.name),
+        singularName:
+          collectionForm.singularName.trim() ||
+          singularCollectionName(collectionForm.name),
         titleFieldKey: collectionForm.titleFieldKey || undefined,
         fields,
       },
@@ -1428,8 +1448,8 @@ export function CollectionsView({
         </>
       ) : null}
       <Drawer
-        eyebrow={editingCollectionId ? 'Schema editor' : 'Content model'}
-        description="Collections are versioned metadata. Field keys become the safe query and binding vocabulary."
+        eyebrow={editingCollectionId ? 'Content fields' : 'Reusable content'}
+        description="Create content once and reuse it across your website. You can add fields now or later."
         footer={
           <div className="form-actions">
             <button
@@ -1478,12 +1498,29 @@ export function CollectionsView({
           }
         >
           {!editingCollectionId ? (
-            <>
+            <label>
+              Content type name
+              <input
+                aria-label="Name"
+                required
+                placeholder="e.g. Blog posts or Team members"
+                value={collectionForm.name}
+                onChange={(event) =>
+                  setCollectionForm({ ...collectionForm, name: event.target.value })
+                }
+              />
+              <span className="muted small">
+                We’ll set up the internal names automatically.
+              </span>
+            </label>
+          ) : null}
+          {!editingCollectionId ? (
+            <details className="form-advanced">
+              <summary>Advanced naming</summary>
               <label>
-                Collection key
+                Internal key
                 <input
                   pattern="[a-z][a-z0-9-]*"
-                  required
                   value={collectionForm.key}
                   onChange={(event) =>
                     setCollectionForm({ ...collectionForm, key: event.target.value })
@@ -1491,19 +1528,8 @@ export function CollectionsView({
                 />
               </label>
               <label>
-                Name
-                <input
-                  required
-                  value={collectionForm.name}
-                  onChange={(event) =>
-                    setCollectionForm({ ...collectionForm, name: event.target.value })
-                  }
-                />
-              </label>
-              <label>
                 Singular name
                 <input
-                  required
                   value={collectionForm.singularName}
                   onChange={(event) =>
                     setCollectionForm({
@@ -1513,7 +1539,7 @@ export function CollectionsView({
                   }
                 />
               </label>
-            </>
+            </details>
           ) : null}
           <label>
             Title field
@@ -1543,9 +1569,9 @@ export function CollectionsView({
           </label>
           <div className="collection-drawer-section-heading">
             <div>
-              <span className="eyebrow">Schema</span>
-              <h3>Fields</h3>
-              <p className="muted small">Define the data available in every entry.</p>
+              <span className="eyebrow">Content fields</span>
+              <h3>What should each item include?</h3>
+              <p className="muted small">Add fields only when you need them.</p>
             </div>
             <span className="collection-count-pill">{fieldDrafts.length}</span>
           </div>
@@ -1628,7 +1654,6 @@ export function CollectionsView({
                     Key
                     <input
                       pattern="[a-z][a-z0-9_]*"
-                      required
                       value={field.key}
                       onChange={(event) =>
                         setFieldDrafts((current) =>
@@ -1644,7 +1669,6 @@ export function CollectionsView({
                   <label>
                     Label
                     <input
-                      required
                       value={field.label}
                       onChange={(event) =>
                         setFieldDrafts((current) =>

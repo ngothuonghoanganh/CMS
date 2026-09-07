@@ -30,7 +30,7 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await page.getByRole('button', { name: '← Pages' }).click();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page
-    .getByLabel('Site')
+    .getByLabel('Site', { exact: true })
     .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();

@@ -190,6 +190,7 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const pageDrawer = page.getByRole('dialog', { name: dynamicPage!.name });
   await expect(pageDrawer).toBeVisible();
+  await pageDrawer.getByText('Advanced page options', { exact: true }).click();
   await expect(pageDrawer.getByLabel('Page type')).toHaveValue('dynamic');
   await expect(pageDrawer.getByLabel('Dynamic collection')).toHaveValue(products!.id);
   const previewEntry = pageDrawer.getByLabel('Preview entry');

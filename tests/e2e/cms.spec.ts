@@ -60,6 +60,7 @@ async function dragWithRealPointer(
   source: Locator,
   target: Locator,
 ): Promise<void> {
+  await source.scrollIntoViewIfNeeded();
   const sourceBox = await source.boundingBox();
   const targetBox = await target.boundingBox();
   expect(sourceBox).not.toBeNull();
@@ -130,10 +131,22 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
 
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
   await expect(navigation).toBeVisible();
-  await expect(navigation.getByText('Workspace', { exact: true })).toBeVisible();
-  await expect(navigation.getByText('Operations', { exact: true })).toBeVisible();
-  await expect(navigation.getByText('Management', { exact: true })).toBeVisible();
+  for (const section of ['Home', 'Websites', 'Content', 'Media', 'Results', 'Settings']) {
+    await expect(
+      navigation.locator('.nav-section-label', { hasText: section }),
+    ).toBeVisible();
+  }
+  await expect(
+    navigation.getByRole('button', { name: 'Brand & styles', exact: true }),
+  ).toBeVisible();
   await expect(navigation.getByText('Headers & Footers', { exact: true })).toHaveCount(0);
+  await navigation.getByRole('button', { name: 'Brand & styles', exact: true }).click();
+  await expect(page).toHaveURL(/\/design-system$/);
+  await expect(
+    page.getByRole('heading', { name: 'Brand & styles', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspaces\/[^/]+$/);
   await expect(page.getByLabel('Current workspace')).toBeVisible();
   await expect(page.locator('.topbar-page-context')).toHaveCount(0);
   await expect(page.getByText('Authenticated', { exact: true })).toHaveCount(0);
@@ -390,11 +403,13 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   await expect(page.getByLabel('Site name')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Countdown Site ${suffix}`);
+  await page.getByText('Advanced settings', { exact: true }).click();
   await page.getByLabel('Slug').fill(siteSlug);
   await page.getByRole('button', { name: 'Create site' }).click();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByRole('button', { name: '+ New page', exact: true }).click();
   await page.getByLabel('Page name').fill(pageName);
+  await page.getByText('Advanced page options', { exact: true }).click();
   await page.getByLabel('Slug').fill(pageSlug);
   await page.getByRole('button', { name: 'Create page' }).click();
   await page.getByRole('button', { name: 'Open Builder' }).click();
@@ -449,7 +464,9 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
 
   await page.getByRole('button', { name: '← Pages' }).click();
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site').selectOption({ label: `Countdown Site ${suffix}` });
+  await page.getByLabel('Site', { exact: true }).selectOption({
+    label: `Countdown Site ${suffix}`,
+  });
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await page.getByRole('button', { name: 'Publish version' }).click();
@@ -535,11 +552,11 @@ test('@tenancy creates and edits a site', async ({ page }) => {
   await expect(page.getByLabel('Site name')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`E2E Site ${suffix}`);
-  await page.getByLabel('Slug').fill(`e2e-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
   await expect(
     page.getByRole('heading', { name: `E2E Site ${suffix}`, exact: true }),
   ).toBeVisible();
+  await expect(page.getByText(`/e2e-site-${suffix}`, { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Edit' }).last().click();
   await page.getByLabel('Site name').fill(`Edited E2E Site ${suffix}`);
@@ -556,12 +573,14 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   await expect(page.getByLabel('Site name')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Page Site ${suffix}`);
+  await page.getByText('Advanced settings', { exact: true }).click();
   await page.getByLabel('Slug').fill(`page-site-${suffix}`);
   await page.getByRole('button', { name: 'Create site' }).click();
 
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page.getByRole('button', { name: '+ New page', exact: true }).click();
   await page.getByLabel('Page name').fill(`Page ${suffix}`);
+  await page.getByText('Advanced page options', { exact: true }).click();
   await page.getByLabel('Slug').fill(`page-${suffix}`);
   await page.getByRole('button', { name: 'Create page' }).click();
   await expect(page.getByRole('button', { name: `Page ${suffix}` })).toBeVisible();
@@ -671,6 +690,7 @@ test('supports true block drag and a second edit after save and reload', async (
   await openBuilder(page, request, canonicalEnvironment, 'Drag Builder');
 
   const dragHandle = page.getByRole('button', { name: 'Drag Text block' });
+  await dragHandle.scrollIntoViewIfNeeded();
   const canvasRoot = page.frameLocator('iframe.gjs-frame').locator('main');
   const dragBox = await dragHandle.boundingBox();
   const targetBox = await canvasRoot.boundingBox();
@@ -1546,7 +1566,7 @@ test('keeps Layers, Canvas, Inspector and Minimap selection in sync', async ({
   await expect(properties.locator('details')).toHaveCount(1);
   await properties.getByRole('tab', { name: 'Settings', exact: true }).click();
   await expect(properties.locator('details')).toHaveCount(3);
-  await properties.getByText('Advanced', { exact: true }).click();
+  await properties.locator('summary', { hasText: 'Advanced' }).click();
   await expect(properties.locator('code')).toBeVisible();
 
   await minimap.locator('.builder-minimap-node-text').click();

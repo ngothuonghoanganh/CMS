@@ -123,7 +123,7 @@ test('attaches a page workflow and configures trigger, condition and action node
   await switchCanonicalBrowserContext(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page
-    .getByLabel('Site')
+    .getByLabel('Site', { exact: true })
     .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: /__e2e__ phase-workflows/ }).click();
   await page.getByRole('button', { name: 'Manage workflows' }).click();

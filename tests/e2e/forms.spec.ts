@@ -7,7 +7,9 @@ import {
 
 async function openPages(page: Page, siteName?: string) {
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  if (siteName) await page.getByLabel('Site').selectOption({ label: siteName });
+  if (siteName) {
+    await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
+  }
 }
 
 test('builds, publishes, submits and manages a form with published-schema isolation', async ({

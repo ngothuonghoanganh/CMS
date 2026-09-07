@@ -86,10 +86,59 @@ export default function OverviewPage() {
   return (
     <>
       <PageHeader
+        actions={
+          <div className="form-actions">
+            {can('page.read') && sites[0] ? (
+              <Link
+                className="button button-secondary"
+                href={pagesPath(workspaceId, sites[0].id)}
+              >
+                Continue editing
+              </Link>
+            ) : null}
+            {can('site.create') ? (
+              <Link
+                className="button button-primary"
+                href={`${cmsViewPath(workspaceId, 'sites')}/new`}
+              >
+                Create website
+              </Link>
+            ) : null}
+          </div>
+        }
         description="A focused workspace for managing your page inventory."
         eyebrow="Overview"
         title="Good morning"
       />
+      <section className="overview-hero panel">
+        <div>
+          <span className="eyebrow">Start here</span>
+          <h2>What would you like to do?</h2>
+          <p className="muted">
+            Create a website, update a page, or add content to your workspace.
+          </p>
+        </div>
+        <div className="overview-hero-actions">
+          {can('site.create') ? (
+            <Link
+              className="overview-action-card"
+              href={`${cmsViewPath(workspaceId, 'sites')}/new`}
+            >
+              <strong>Create a website</strong>
+              <span>Start with a name and a ready-to-edit homepage.</span>
+            </Link>
+          ) : null}
+          {can('page.read') && sites[0] ? (
+            <Link
+              className="overview-action-card"
+              href={pagesPath(workspaceId, sites[0].id)}
+            >
+              <strong>Update a page</strong>
+              <span>Choose a page and open the visual editor.</span>
+            </Link>
+          ) : null}
+        </div>
+      </section>
       {loading ? (
         <div aria-busy="true" className="analytics-skeleton">
           Loading workspace overview…
