@@ -713,6 +713,7 @@ function renderNavigationView(
         } satisfies NavigationViewPartStyles
       }
       siteSlug={context.siteSlug}
+      style={nodeStyle(node, context)}
     />
   );
 }

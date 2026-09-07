@@ -279,11 +279,26 @@ type PreviewPage = 'home' | 'services' | 'contact';
 type WebsitePreviewProps = {
   device: PreviewDevice;
   headingStyle: CSSProperties;
+  headingTwoStyle: CSSProperties;
+  headingThreeStyle: CSSProperties;
   bodyStyle: CSSProperties;
+  pageStyle: CSSProperties;
+  headerStyle: CSSProperties;
+  headerRootStyle: CSSProperties;
+  headerNavigationStyle: CSSProperties;
+  headerActionsStyle: CSSProperties;
+  footerStyle: CSSProperties;
+  footerRootStyle: CSSProperties;
+  navigationStyle: CSSProperties;
+  navigationListStyle: CSSProperties;
+  navigationLinkStyle: CSSProperties;
   buttonStyle: CSSProperties;
   secondaryButtonStyle: CSSProperties;
   formStyle: CSSProperties;
+  formFieldStyle: CSSProperties;
+  formLabelStyle: CSSProperties;
   formInputStyle: CSSProperties;
+  formSubmitStyle: CSSProperties;
   colors: {
     pageBackground: string;
     primary: string;
@@ -371,11 +386,26 @@ function WebsitePreview({
   buttonStyle,
   secondaryButtonStyle,
   formStyle,
+  formFieldStyle,
+  formLabelStyle,
   formInputStyle,
+  formSubmitStyle,
   colors,
   contrast,
   device,
   headingStyle,
+  headingTwoStyle,
+  headingThreeStyle,
+  pageStyle,
+  headerStyle,
+  headerRootStyle,
+  headerNavigationStyle,
+  headerActionsStyle,
+  footerStyle,
+  footerRootStyle,
+  navigationStyle,
+  navigationListStyle,
+  navigationLinkStyle,
   onDeviceChange,
   onPageChange,
   page,
@@ -518,9 +548,15 @@ function WebsitePreview({
           </div>
           <div
             className="site-preview-page"
-            style={{ backgroundColor: 'var(--brand-page-background)' }}
+            style={{
+              backgroundColor: 'var(--brand-page-background)',
+              ...pageStyle,
+            }}
           >
-            <header className="site-preview-header">
+            <header
+              className="site-preview-header"
+              style={{ ...headerStyle, ...headerRootStyle }}
+            >
               <div className="site-preview-brand">
                 {logoSource ? (
                   <img alt="" src={logoSource} />
@@ -531,13 +567,25 @@ function WebsitePreview({
                 )}
                 <strong>{siteName}</strong>
               </div>
-              <nav aria-label="Website preview navigation" className="site-preview-nav">
-                <button type="button">Home</button>
-                <button type="button">Services</button>
-                <button type="button">Contact</button>
+              <nav
+                aria-label="Website preview navigation"
+                className="site-preview-nav"
+                style={{ ...navigationStyle, ...headerNavigationStyle }}
+              >
+                <div className="site-preview-nav-list" style={navigationListStyle}>
+                  <button style={navigationLinkStyle} type="button">
+                    Home
+                  </button>
+                  <button style={navigationLinkStyle} type="button">
+                    Services
+                  </button>
+                  <button style={navigationLinkStyle} type="button">
+                    Contact
+                  </button>
+                </div>
                 <button
                   className="site-preview-nav-cta"
-                  style={buttonStyle}
+                  style={{ ...buttonStyle, ...headerActionsStyle }}
                   type="button"
                 >
                   Get started
@@ -605,7 +653,7 @@ function WebsitePreview({
                 <div className="site-preview-section-heading">
                   <div>
                     <span className="site-preview-eyebrow">What you can show</span>
-                    <h2 style={headingStyle}>A website with room to grow.</h2>
+                    <h2 style={headingTwoStyle}>A website with room to grow.</h2>
                   </div>
                   <p style={bodyStyle}>
                     New sections inherit these same styles automatically.
@@ -619,9 +667,11 @@ function WebsitePreview({
                   ].map(([number, title, description]) => (
                     <article className="site-preview-service-card" key={number}>
                       <span>{number}</span>
-                      <h3>{title}</h3>
+                      <h3 style={headingThreeStyle}>{title}</h3>
                       <p style={bodyStyle}>{description}</p>
-                      <button type="button">Learn more →</button>
+                      <button style={navigationLinkStyle} type="button">
+                        Learn more →
+                      </button>
                     </article>
                   ))}
                 </div>
@@ -636,26 +686,29 @@ function WebsitePreview({
                 </div>
                 <div className="site-preview-contact-card" style={formStyle}>
                   <span className="site-preview-eyebrow">Contact form</span>
-                  <h3>Start a conversation.</h3>
-                  <label>
-                    Name
+                  <h3 style={headingThreeStyle}>Start a conversation.</h3>
+                  <div className="site-preview-form-field" style={formFieldStyle}>
+                    <label style={formLabelStyle}>Name</label>
                     <input placeholder="Your name" readOnly style={formInputStyle} />
-                  </label>
-                  <label>
-                    Email
+                  </div>
+                  <div className="site-preview-form-field" style={formFieldStyle}>
+                    <label style={formLabelStyle}>Email</label>
                     <input
                       placeholder="you@example.com"
                       readOnly
                       style={formInputStyle}
                     />
-                  </label>
-                  <button style={buttonStyle} type="button">
+                  </div>
+                  <button style={formSubmitStyle} type="button">
                     Send message
                   </button>
                 </div>
               </section>
             </main>
-            <footer className="site-preview-footer">
+            <footer
+              className="site-preview-footer"
+              style={{ ...footerStyle, ...footerRootStyle }}
+            >
               <div className="site-preview-brand">
                 <span className="site-preview-logo-fallback">
                   {previewInitials(siteName)}
@@ -954,24 +1007,81 @@ export function DesignSystemView({
   const headingStyle = system.typography.find((token) => token.id === 'type-h2');
   const headingOneStyle = system.typography.find((token) => token.id === 'type-h1');
   const bodyStyle = system.typography.find((token) => token.id === 'type-body');
-  const headingDefaultStyle = resolveComponentDefaultStyle(system, 'heading-1');
+  const headingOneDefaultStyle = resolveComponentDefaultStyle(system, 'heading-1');
+  const headingTwoDefaultStyle = resolveComponentDefaultStyle(system, 'heading-2');
+  const headingThreeDefaultStyle = resolveComponentDefaultStyle(system, 'heading-3');
+  const pageDefaultStyle = resolveComponentDefaultStyle(system, 'root');
+  const headerDefaultStyle = resolveComponentDefaultStyle(system, 'global-header');
+  const headerRootStyle = resolveComponentDefaultPartStyle(
+    system,
+    'global-header',
+    'root',
+  );
+  const headerNavigationStyle = resolveComponentDefaultPartStyle(
+    system,
+    'global-header',
+    'navigation',
+  );
+  const headerActionsStyle = resolveComponentDefaultPartStyle(
+    system,
+    'global-header',
+    'actions',
+  );
+  const footerDefaultStyle = resolveComponentDefaultStyle(system, 'global-footer');
+  const footerRootStyle = resolveComponentDefaultPartStyle(
+    system,
+    'global-footer',
+    'root',
+  );
+  const navigationDefaultStyle = resolveComponentDefaultStyle(system, 'navigation-view');
+  const navigationListDefaultStyle = resolveComponentDefaultPartStyle(
+    system,
+    'navigation-view',
+    'list',
+  );
+  const navigationLinkDefaultStyle = resolveComponentDefaultPartStyle(
+    system,
+    'navigation-view',
+    'link',
+  );
   const bodyDefaultStyle = resolveComponentDefaultStyle(system, 'text');
   const buttonDefaultStyle = resolveComponentDefaultStyle(system, 'button-primary');
   const secondaryButtonStyle = resolveComponentDefaultStyle(system, 'button-secondary');
   const formDefaultStyle = resolveComponentDefaultStyle(system, 'form');
+  const formFieldStyle = resolveComponentDefaultPartStyle(system, 'form', 'field');
+  const formLabelStyle = resolveComponentDefaultPartStyle(system, 'form', 'label');
   const formInputStyle = resolveComponentDefaultPartStyle(system, 'form', 'input');
+  const formSubmitStyle = resolveComponentDefaultPartStyle(system, 'form', 'submit');
   const previewHeadingStyle = {
-    color: headingDefaultStyle.color ?? textColor,
-    fontFamily: headingDefaultStyle.fontFamily ?? headingStyle?.fontFamily,
-    fontSize: headingDefaultStyle.fontSize ?? headingOneStyle?.fontSize ?? '2rem',
-    fontWeight: headingDefaultStyle.fontWeight ?? headingOneStyle?.fontWeight,
-    letterSpacing: headingDefaultStyle.letterSpacing ?? headingOneStyle?.letterSpacing,
-    lineHeight: headingDefaultStyle.lineHeight ?? headingOneStyle?.lineHeight,
+    color: headingOneDefaultStyle.color ?? textColor,
+    fontFamily: headingOneDefaultStyle.fontFamily ?? headingOneStyle?.fontFamily,
+    fontSize: headingOneDefaultStyle.fontSize ?? headingOneStyle?.fontSize ?? '2rem',
+    fontWeight: headingOneDefaultStyle.fontWeight ?? headingOneStyle?.fontWeight,
+    letterSpacing: headingOneDefaultStyle.letterSpacing ?? headingOneStyle?.letterSpacing,
+    lineHeight: headingOneDefaultStyle.lineHeight ?? headingOneStyle?.lineHeight,
+  };
+  const previewHeadingTwoStyle = {
+    color: headingTwoDefaultStyle.color ?? textColor,
+    fontFamily: headingTwoDefaultStyle.fontFamily ?? headingStyle?.fontFamily,
+    fontSize: headingTwoDefaultStyle.fontSize ?? headingStyle?.fontSize ?? '1.75rem',
+    fontWeight: headingTwoDefaultStyle.fontWeight ?? headingStyle?.fontWeight,
+    letterSpacing: headingTwoDefaultStyle.letterSpacing ?? headingStyle?.letterSpacing,
+    lineHeight: headingTwoDefaultStyle.lineHeight ?? headingStyle?.lineHeight,
+  };
+  const previewHeadingThreeStyle = {
+    color: headingThreeDefaultStyle.color ?? textColor,
+    fontFamily: headingThreeDefaultStyle.fontFamily ?? headingStyle?.fontFamily,
+    fontSize: headingThreeDefaultStyle.fontSize ?? '1.5rem',
+    fontWeight: headingThreeDefaultStyle.fontWeight,
+    letterSpacing: headingThreeDefaultStyle.letterSpacing,
+    lineHeight: headingThreeDefaultStyle.lineHeight,
   };
   const previewBodyStyle = {
     color: bodyDefaultStyle.color ?? textColor,
     fontFamily: bodyDefaultStyle.fontFamily ?? bodyStyle?.fontFamily,
     fontSize: bodyDefaultStyle.fontSize ?? bodyStyle?.fontSize,
+    fontWeight: bodyDefaultStyle.fontWeight ?? bodyStyle?.fontWeight,
+    letterSpacing: bodyDefaultStyle.letterSpacing ?? bodyStyle?.letterSpacing,
     lineHeight: bodyDefaultStyle.lineHeight ?? bodyStyle?.lineHeight,
   };
   const previewRadius = previewScalarValue(
@@ -1094,7 +1204,10 @@ export function DesignSystemView({
             buttonStyle={buttonDefaultStyle}
             secondaryButtonStyle={secondaryButtonStyle}
             formStyle={formDefaultStyle}
+            formFieldStyle={formFieldStyle}
+            formLabelStyle={formLabelStyle}
             formInputStyle={formInputStyle}
+            formSubmitStyle={formSubmitStyle}
             colors={{
               pageBackground: pageBackgroundColor,
               primary: primaryColor,
@@ -1105,6 +1218,18 @@ export function DesignSystemView({
             contrast={previewContrast}
             device={previewDevice}
             headingStyle={previewHeadingStyle}
+            headingTwoStyle={previewHeadingTwoStyle}
+            headingThreeStyle={previewHeadingThreeStyle}
+            pageStyle={pageDefaultStyle}
+            headerStyle={headerDefaultStyle}
+            headerRootStyle={headerRootStyle}
+            headerNavigationStyle={headerNavigationStyle}
+            headerActionsStyle={headerActionsStyle}
+            footerStyle={footerDefaultStyle}
+            footerRootStyle={footerRootStyle}
+            navigationStyle={navigationDefaultStyle}
+            navigationListStyle={navigationListDefaultStyle}
+            navigationLinkStyle={navigationLinkDefaultStyle}
             onDeviceChange={setPreviewDevice}
             onPageChange={setPreviewPage}
             page={previewPage}

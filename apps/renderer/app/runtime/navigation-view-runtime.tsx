@@ -191,6 +191,7 @@ export function NavigationViewRuntime({
   pagePath,
   partsStyle,
   siteSlug,
+  style,
 }: {
   ariaLabel: string;
   alignment: 'left' | 'center' | 'right';
@@ -202,6 +203,7 @@ export function NavigationViewRuntime({
   pagePath?: string | undefined;
   partsStyle?: NavigationViewPartStyles;
   siteSlug?: string | undefined;
+  style?: CSSProperties | undefined;
 }): ReactElement {
   const [open, setOpen] = useState(true);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -226,8 +228,10 @@ export function NavigationViewRuntime({
       data-navigation-alignment={alignment}
       data-navigation-mobile-behavior={mobileBehavior}
       data-navigation-orientation={orientation}
+      data-payload-node-id={id}
+      data-payload-node-type="navigation-view"
       data-payload-part="root"
-      style={partsStyle?.root}
+      style={{ ...style, ...partsStyle?.root }}
     >
       {collapsible ? (
         <button

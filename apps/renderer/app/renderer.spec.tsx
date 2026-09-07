@@ -404,6 +404,55 @@ describe('PagePayloadV1 renderer', () => {
     expect(customDomainMarkup).not.toContain('href="/demo/docs"');
   });
 
+  it('applies the navigation component recipe to the renderer root', () => {
+    const header: SiteGlobalPayloadV1 = {
+      version: 1,
+      documentKind: 'site-header',
+      metadata: { documentTitle: 'Header' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'header',
+            type: 'global-header',
+            props: { position: 'static' },
+            children: [
+              {
+                id: 'navigation',
+                type: 'navigation-view',
+                props: {
+                  items: [],
+                  orientation: 'horizontal',
+                  mobileBehavior: 'collapse',
+                  alignment: 'left',
+                  ariaLabel: 'Main navigation',
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      renderLayoutExtension(header, {
+        designSystem: createDefaultSiteDesignSystem(),
+      }) ?? '',
+    );
+
+    const navigationMarkup = markup.match(
+      /<nav[^>]*data-payload-node-type="navigation-view"[^>]*>/,
+    )?.[0];
+
+    expect(navigationMarkup).toBeDefined();
+    expect(navigationMarkup).toContain('display:flex');
+    expect(navigationMarkup).toContain('gap:16px');
+    expect(navigationMarkup).toContain('padding:16px');
+  });
+
   it('resolves Builder-owned page, section, and action navigation targets', () => {
     const pageId = '00000000-0000-4000-8000-000000000001';
     const header: SiteGlobalPayloadV1 = {
