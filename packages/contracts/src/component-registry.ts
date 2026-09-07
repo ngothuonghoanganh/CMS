@@ -209,6 +209,23 @@ export type ComponentPartDefinition = {
   styleCapabilities: readonly PageStylePropertyKey[];
 };
 
+export type DesignSystemComponentExposure = {
+  label: string;
+  category:
+    | 'colors'
+    | 'typography'
+    | 'buttons'
+    | 'forms'
+    | 'navigation'
+    | 'components'
+    | 'layout';
+  /** Finite semantic variants exposed by Brand & Styles. */
+  variants?: readonly { id: string; label: string }[];
+  /** Parts that are safe to style through the component recipe. */
+  parts?: readonly string[];
+  controls: readonly PageStylePropertyKey[];
+};
+
 export type ComponentMigrationDefinition = {
   id: string;
   fromVersion: number;
@@ -228,6 +245,7 @@ export type PageComponentDefinition = {
   componentParts: Readonly<Record<string, ComponentPartDefinition>>;
   migrations: readonly ComponentMigrationDefinition[];
   propertiesSchema: readonly ComponentPropertyDefinition[];
+  designSystem?: DesignSystemComponentExposure;
   builder: ComponentBuilderExposure;
   internal: boolean;
 };
@@ -389,6 +407,11 @@ export const PAGE_COMPONENT_STYLE_CAPABILITIES: Readonly<
     'padding',
     'margin',
     'background-color',
+    'font-family',
+    'color',
+    'font-size',
+    'font-weight',
+    'line-height',
     'border-width',
     'border-style',
     'border-color',
@@ -872,6 +895,23 @@ const rawPageComponentRegistry = {
     // fallback, but newly-created text nodes write visual alignment to style.
     defaultProps: { text: 'Edit this text' },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
+    designSystem: {
+      label: 'Body text',
+      category: 'typography',
+      variants: [
+        { id: 'body', label: 'Body' },
+        { id: 'small', label: 'Small text' },
+        { id: 'muted', label: 'Muted text' },
+      ],
+      controls: [
+        'color',
+        'font-family',
+        'font-size',
+        'font-weight',
+        'line-height',
+        'letter-spacing',
+      ],
+    },
     propertiesSchema: content([
       {
         key: 'text',
@@ -879,6 +919,18 @@ const rawPageComponentRegistry = {
         group: 'content',
         control: 'textarea',
         bindable: true,
+      },
+      {
+        key: 'role',
+        label: 'Text style',
+        group: 'content',
+        editingScope: 'design',
+        control: 'select',
+        options: [
+          { value: 'body', label: 'Body' },
+          { value: 'small', label: 'Small text' },
+          { value: 'muted', label: 'Muted text' },
+        ],
       },
     ]),
   }),
@@ -914,8 +966,32 @@ const rawPageComponentRegistry = {
     label: 'Button',
     category: 'conversion',
     editorTagName: 'a',
-    defaultProps: { label: 'Button', href: '#section', target: '_self' },
+    defaultProps: {
+      label: 'Button',
+      href: '#section',
+      target: '_self',
+      variant: 'primary',
+    },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
+    designSystem: {
+      label: 'Button',
+      category: 'buttons',
+      variants: [
+        { id: 'primary', label: 'Primary' },
+        { id: 'secondary', label: 'Secondary' },
+        { id: 'ghost', label: 'Ghost' },
+      ],
+      controls: [
+        'background-color',
+        'color',
+        'border-color',
+        'border-radius',
+        'padding',
+        'font-family',
+        'font-size',
+        'font-weight',
+      ],
+    },
     propertiesSchema: content([
       { key: 'label', label: 'Label', group: 'content', control: 'text', bindable: true },
       { key: 'href', label: 'Link', group: 'content', control: 'url', bindable: true },
@@ -930,6 +1006,18 @@ const rawPageComponentRegistry = {
           { value: '_blank', label: 'New tab' },
         ],
       },
+      {
+        key: 'variant',
+        label: 'Button style',
+        group: 'content',
+        editingScope: 'design',
+        control: 'select',
+        options: [
+          { value: 'primary', label: 'Primary' },
+          { value: 'secondary', label: 'Secondary' },
+          { value: 'ghost', label: 'Ghost' },
+        ],
+      },
     ]),
   }),
   form: definition({
@@ -939,6 +1027,123 @@ const rawPageComponentRegistry = {
     category: 'conversion',
     editorTagName: 'form',
     defaultProps: {},
+    designSystem: {
+      label: 'Form',
+      category: 'forms',
+      parts: ['field', 'label', 'input', 'option', 'submit', 'error', 'success'],
+      controls: [
+        'background-color',
+        'color',
+        'border-color',
+        'border-radius',
+        'padding',
+        'font-family',
+        'font-size',
+        'font-weight',
+        'line-height',
+      ],
+    },
+    componentParts: {
+      field: {
+        name: 'field',
+        label: 'Field',
+        styleCapabilities: ['display', 'gap', 'margin'],
+      },
+      label: {
+        name: 'label',
+        label: 'Label',
+        styleCapabilities: [
+          'margin',
+          'font-family',
+          'color',
+          'font-size',
+          'font-weight',
+          'line-height',
+        ],
+      },
+      input: {
+        name: 'input',
+        label: 'Input',
+        styleCapabilities: [
+          'width',
+          'height',
+          'padding',
+          'font-family',
+          'color',
+          'font-size',
+          'font-weight',
+          'line-height',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+          'box-shadow',
+        ],
+      },
+      option: {
+        name: 'option',
+        label: 'Option',
+        styleCapabilities: [
+          'display',
+          'gap',
+          'font-family',
+          'color',
+          'font-size',
+          'font-weight',
+          'line-height',
+        ],
+      },
+      submit: {
+        name: 'submit',
+        label: 'Submit button',
+        styleCapabilities: [
+          'width',
+          'height',
+          'padding',
+          'font-family',
+          'color',
+          'font-size',
+          'font-weight',
+          'line-height',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+          'box-shadow',
+        ],
+      },
+      error: {
+        name: 'error',
+        label: 'Error message',
+        styleCapabilities: [
+          'margin',
+          'font-family',
+          'color',
+          'font-size',
+          'font-weight',
+          'line-height',
+        ],
+      },
+      success: {
+        name: 'success',
+        label: 'Success message',
+        styleCapabilities: [
+          'padding',
+          'font-family',
+          'color',
+          'font-size',
+          'font-weight',
+          'line-height',
+          'background-color',
+          'border-width',
+          'border-style',
+          'border-color',
+          'border-radius',
+        ],
+      },
+    },
     propertiesSchema: content([
       {
         key: 'form',
@@ -994,6 +1199,22 @@ const rawPageComponentRegistry = {
     editorTagName: 'h2',
     defaultProps: { text: 'Heading', level: 2 },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
+    designSystem: {
+      label: 'Heading',
+      category: 'typography',
+      variants: [1, 2, 3, 4, 5, 6].map((level) => ({
+        id: `heading-${level}`,
+        label: `Heading ${level}`,
+      })),
+      controls: [
+        'color',
+        'font-family',
+        'font-size',
+        'font-weight',
+        'line-height',
+        'letter-spacing',
+      ],
+    },
     propertiesSchema: content([
       {
         key: 'text',
@@ -1024,6 +1245,11 @@ const rawPageComponentRegistry = {
     editorTagName: 'a',
     defaultProps: { text: 'Learn more', href: '/', target: '_self' },
     builder: { documentKinds: ['page', 'site-header', 'site-footer'] },
+    designSystem: {
+      label: 'Link',
+      category: 'components',
+      controls: ['color', 'font-family', 'font-size', 'font-weight', 'text-decoration'],
+    },
     propertiesSchema: content([
       { key: 'text', label: 'Text', group: 'content', control: 'text', bindable: true },
       { key: 'href', label: 'Link', group: 'content', control: 'url', bindable: true },
@@ -1182,6 +1408,20 @@ const rawPageComponentRegistry = {
     editorTagName: 'div',
     defaultProps: { allowMultiple: false },
     builder: { group: 'interactive' },
+    designSystem: {
+      label: 'Accordion',
+      category: 'components',
+      parts: ['root', 'item', 'trigger', 'panel', 'icon'],
+      controls: [
+        'background-color',
+        'color',
+        'border-color',
+        'border-radius',
+        'padding',
+        'font-family',
+        'font-size',
+      ],
+    },
     slots: [
       {
         name: 'items',
@@ -1340,6 +1580,20 @@ const rawPageComponentRegistry = {
     editorTagName: 'div',
     defaultProps: { orientation: 'horizontal' },
     builder: { group: 'interactive' },
+    designSystem: {
+      label: 'Tabs',
+      category: 'components',
+      parts: ['root', 'list', 'tab', 'activeTab', 'panel'],
+      controls: [
+        'background-color',
+        'color',
+        'border-color',
+        'border-radius',
+        'padding',
+        'font-family',
+        'font-size',
+      ],
+    },
     slots: [
       {
         name: 'items',
@@ -1608,6 +1862,19 @@ const rawPageComponentRegistry = {
       documentKinds: ['site-header'],
       keywords: ['header', 'site header', 'global header'],
     },
+    designSystem: {
+      label: 'Header',
+      category: 'components',
+      parts: ['root', 'brand', 'navigation', 'actions'],
+      controls: [
+        'background-color',
+        'color',
+        'border-color',
+        'padding',
+        'height',
+        'box-shadow',
+      ],
+    },
     slots: [
       {
         name: 'brand',
@@ -1679,6 +1946,12 @@ const rawPageComponentRegistry = {
       documentKinds: ['site-footer'],
       keywords: ['footer', 'site footer', 'global footer'],
     },
+    designSystem: {
+      label: 'Footer',
+      category: 'components',
+      parts: ['root', 'content'],
+      controls: ['background-color', 'color', 'padding', 'gap'],
+    },
     slots: [
       {
         name: 'content',
@@ -1725,6 +1998,20 @@ const rawPageComponentRegistry = {
       group: 'navigation',
       documentKinds: ['page', 'site-header', 'site-footer'],
       keywords: ['navigation', 'menu', 'nav'],
+    },
+    designSystem: {
+      label: 'Navigation',
+      category: 'navigation',
+      parts: [
+        'root',
+        'list',
+        'item',
+        'link',
+        'activeLink',
+        'mobileToggle',
+        'mobilePanel',
+      ],
+      controls: ['color', 'font-family', 'font-size', 'font-weight', 'gap', 'padding'],
     },
     componentParts: {
       root: {

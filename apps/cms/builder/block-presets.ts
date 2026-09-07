@@ -61,7 +61,8 @@ function children(
   return { ...parent, components };
 }
 
-function styled(
+/** Built-in presets own structure, never brand/theme values. */
+function structuralStyle(
   component: ComponentDefinition,
   style: Record<string, string>,
 ): ComponentDefinition {
@@ -73,30 +74,22 @@ function createBlankSection(): ComponentDefinition {
 }
 
 function createCenteredSection(): ComponentDefinition {
-  return children(createBlockDefinition('section'), [
-    styled(createBlockDefinition('container'), {
-      width: '100%',
-      'max-width': '1120px',
-      margin: '0 auto',
-    }),
-  ]);
+  return children(createBlockDefinition('section'), [createBlockDefinition('container')]);
 }
 
 function createVerticalStack(): ComponentDefinition {
   return children(createBlockDefinition('section'), [
-    styled(createBlockDefinition('container'), {
+    structuralStyle(createBlockDefinition('container'), {
       display: 'flex',
       'flex-direction': 'column',
-      gap: '24px',
     }),
   ]);
 }
 
 function createTwoColumns(): ComponentDefinition {
-  const columns = styled(createBlockDefinition('container'), {
+  const columns = structuralStyle(createBlockDefinition('container'), {
     display: 'grid',
     'grid-template-columns': 'repeat(2, minmax(0, 1fr))',
-    gap: '32px',
   });
   return children(createBlockDefinition('section'), [
     children(columns, [
@@ -107,47 +100,30 @@ function createTwoColumns(): ComponentDefinition {
 }
 
 function createHero(): ComponentDefinition {
-  const content = styled(createBlockDefinition('container'), {
+  const content = structuralStyle(createBlockDefinition('container'), {
     display: 'flex',
     'flex-direction': 'column',
-    gap: '20px',
-    'max-width': '720px',
   });
-  return children(
-    styled(createBlockDefinition('section'), {
-      padding: '64px 24px',
-      'background-color': '#eff6ff',
-    }),
-    [
-      children(content, [
-        styled(createBlockDefinition('heading'), {
-          'font-size': '48px',
-          'font-weight': '700',
-          'line-height': '1.1',
-        }),
-        createBlockDefinition('text'),
-        styled(createBlockDefinition('button'), {
-          width: 'fit-content',
-          padding: '12px 18px',
-        }),
-      ]),
-    ],
-  );
+  return children(createBlockDefinition('section'), [
+    children(content, [
+      createBlockDefinition('heading', undefined, { headingLevel: 1 }),
+      createBlockDefinition('text'),
+      structuralStyle(createBlockDefinition('button'), { width: 'fit-content' }),
+    ]),
+  ]);
 }
 
 function createCta(): ComponentDefinition {
-  const content = styled(createBlockDefinition('container'), {
+  const content = structuralStyle(createBlockDefinition('container'), {
     display: 'flex',
     'flex-direction': 'column',
-    gap: '16px',
     'align-items': 'center',
-    padding: '48px 24px',
   });
   return children(createBlockDefinition('section'), [
     children(content, [
       createBlockDefinition('heading'),
       createBlockDefinition('text'),
-      styled(createBlockDefinition('button'), { padding: '12px 18px' }),
+      createBlockDefinition('button', undefined, { buttonVariant: 'primary' }),
     ]),
   ]);
 }
@@ -225,7 +201,9 @@ function createHeaderPreset(withCta: boolean): ComponentDefinition {
     createBlockDefinition('navigation-view'),
   ];
   if (withCta)
-    children.push(styled(createBlockDefinition('button'), { padding: '10px 16px' }));
+    children.push(
+      createBlockDefinition('button', undefined, { buttonVariant: 'primary' }),
+    );
   return childrenForGlobal(header, children);
 }
 

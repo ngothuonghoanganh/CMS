@@ -13,6 +13,7 @@ import {
   findAcceptingSlot,
   styleSchemaFor,
 } from './component-registry';
+import { PAGE_STYLE_PROPERTY_DEFINITIONS } from './style-registry';
 
 describe('component style capabilities', () => {
   it('exposes style controls from the registry only', () => {
@@ -30,7 +31,7 @@ describe('component style capabilities', () => {
       PAGE_COMPONENT_REGISTRY.text.propertiesSchema
         .filter((property) => property.group === 'content')
         .map((property) => property.key),
-    ).toEqual(['text']);
+    ).toEqual(['text', 'role']);
   });
 
   it('marks content fields and design fields from the shared registry', () => {
@@ -139,6 +140,27 @@ describe('component style capabilities', () => {
     expect(canRemoveChild('accordion', 'accordion-item', 1)).toBe(false);
     expect(canRemoveChild('accordion', 'accordion-item', 2)).toBe(true);
     expect(canDuplicateChild('tabs', 'tab-item', 20)).toBe(false);
+  });
+
+  it('keeps Design System exposure metadata aligned with the style registry', () => {
+    const knownProperties = new Set(
+      PAGE_STYLE_PROPERTY_DEFINITIONS.map((property) => property.key),
+    );
+    for (const definition of Object.values(PAGE_COMPONENT_REGISTRY)) {
+      const exposure = definition.designSystem;
+      if (!exposure) continue;
+      for (const property of exposure.controls) {
+        expect(knownProperties.has(property), `${definition.type}.${property}`).toBe(
+          true,
+        );
+      }
+      for (const part of exposure.parts ?? []) {
+        expect(
+          definition.componentParts[part],
+          `${definition.type}.${part}`,
+        ).toBeDefined();
+      }
+    }
   });
 
   it('tracks occupancy per slot and rejects implicit ambiguous placement', () => {

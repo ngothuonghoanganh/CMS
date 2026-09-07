@@ -64,6 +64,8 @@ import {
   mergeSiteDesignSystems,
   normalizeSiteDesignSystemOverride,
   resolveDesignSystemComponentDefaults,
+  resolveDesignSystemAppearance,
+  resolveDesignSystemColorRole,
   resolvePageStyleValue,
 } from './index';
 
@@ -224,6 +226,69 @@ describe('foundation contracts', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('resolves semantic roles and component variants without token-name matching', () => {
+    const base = createDefaultSiteDesignSystem();
+    const system = SiteDesignSystemSchema.parse({
+      ...base,
+      colors: [
+        ...base.colors,
+        { id: 'brand-a', name: 'A renamed brand color', value: '#123456' },
+      ],
+      semanticRoles: {
+        ...base.semanticRoles,
+        primary: 'brand-a',
+      },
+    });
+    expect(resolveDesignSystemColorRole(system, 'primary')).toBe('#123456');
+    expect(resolveDesignSystemColorRole(system, 'pageBackground')).toBe('#ffffff');
+    expect(
+      resolveDesignSystemAppearance(system, {
+        type: 'heading',
+        props: { level: 1 },
+      })?.style?.base.fontSize,
+    ).toEqual({ kind: 'token', tokenId: 'type-h1' });
+    expect(
+      resolveDesignSystemAppearance(system, {
+        type: 'button',
+        props: { variant: 'secondary' },
+      })?.style?.base.backgroundColor,
+    ).toEqual({ kind: 'token', tokenId: 'color-secondary' });
+    expect(
+      resolveDesignSystemAppearance(system, { type: 'text', props: { role: 'small' } })
+        ?.style?.base.fontSize,
+    ).toEqual({ kind: 'token', tokenId: 'type-small' });
+  });
+
+  it('keeps page surfaces separate from transparent layout primitives', () => {
+    const system = createDefaultSiteDesignSystem();
+    expect(resolveDesignSystemColorRole(system, 'pageBackground')).toBe('#ffffff');
+    expect(system.componentDefaults?.root?.style?.base.backgroundColor).toEqual({
+      kind: 'token',
+      tokenId: 'color-page-background',
+    });
+    expect(
+      system.componentDefaults?.section?.style?.base.backgroundColor,
+    ).toBeUndefined();
+    expect(
+      system.componentDefaults?.container?.style?.base.backgroundColor,
+    ).toBeUndefined();
+  });
+
+  it('merges sparse site semantic roles over workspace styles', () => {
+    const workspace = createDefaultSiteDesignSystem();
+    const sitePrimary = { id: 'site-primary', name: 'Site brand', value: '#7c3aed' };
+    const effective = mergeSiteDesignSystems(workspace, {
+      version: 1,
+      colors: [sitePrimary],
+      semanticRoles: { primary: sitePrimary.id },
+    });
+    expect(effective).toBeDefined();
+    expect(resolveDesignSystemColorRole(effective, 'primary')).toBe('#7c3aed');
+    expect(resolveDesignSystemColorRole(effective, 'pageBackground')).toBe('#ffffff');
+    const sparse = normalizeSiteDesignSystemOverride(workspace, effective!);
+    expect(sparse.semanticRoles).toEqual({ primary: sitePrimary.id });
   });
 
   it('keeps page-runtime baseline and opacity control semantics centralized', () => {
@@ -1466,6 +1531,30 @@ describe('foundation contracts', () => {
     expect(override.removedTokenIds?.colors).toEqual(['color-muted']);
     expect(override.typography).toBeUndefined();
     expect(mergeSiteDesignSystems(workspace, override)).toEqual(effective);
+  });
+
+  it('keeps changed token references intact in sparse component overrides', () => {
+    const workspace = createDefaultSiteDesignSystem();
+    const effective = SiteDesignSystemSchema.parse({
+      ...workspace,
+      componentDefaults: {
+        ...workspace.componentDefaults,
+        button: {
+          style: {
+            base: {
+              ...workspace.componentDefaults?.button?.style?.base,
+              color: { kind: 'token', tokenId: 'color-text' },
+            },
+          },
+        },
+      },
+    });
+    const override = normalizeSiteDesignSystemOverride(workspace, effective);
+
+    expect(override.componentDefaults?.button?.style?.base.color).toEqual({
+      kind: 'token',
+      tokenId: 'color-text',
+    });
   });
 
   it('does not impose a fixed child-count cap on navigation trees', () => {

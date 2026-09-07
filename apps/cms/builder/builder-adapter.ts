@@ -35,7 +35,8 @@ import {
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   isSafePageStyleValue,
   resolveSiteDesignToken,
-  resolveDesignSystemComponentDefaults,
+  resolveDesignSystemAppearance,
+  resolveDesignSystemColorRole,
   type CustomExtensionNodeProps,
   type FormField,
   type FormProps,
@@ -52,6 +53,8 @@ import {
   type PageNodeStyleV7,
   type StyleTokenReference,
   type SiteDesignSystem,
+  type ButtonVariant,
+  type TextRole,
   type PagePayload,
   type PagePayloadV1,
   type PageDocument,
@@ -85,6 +88,8 @@ export const BUILDER_COUNTDOWN_PROPS_ATTRIBUTE = 'data-payload-countdown-props';
 export const BUILDER_EXTENSION_PROPS_ATTRIBUTE = 'data-payload-extension-props';
 export const BUILDER_PAYLOAD_VERSION_ATTRIBUTE = 'data-payload-version';
 export const BUILDER_HEADING_LEVEL_ATTRIBUTE = 'data-payload-heading-level';
+export const BUILDER_BUTTON_VARIANT_ATTRIBUTE = 'data-payload-button-variant';
+export const BUILDER_TEXT_ROLE_ATTRIBUTE = 'data-payload-text-role';
 export const BUILDER_LIST_PROPS_ATTRIBUTE = 'data-payload-list-props';
 export const BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE =
   'data-payload-collection-list-props';
@@ -149,12 +154,14 @@ export class BuilderAdapterError extends Error {
 function editorOnlyPreview(
   definition: ComponentDefinition,
   kind: 'field' | 'control' | 'option' | 'submit',
+  part?: string,
 ): ComponentDefinition {
   return {
     ...definition,
     attributes: {
       ...(definition.attributes ?? {}),
       [BUILDER_FORM_PREVIEW_ATTRIBUTE]: kind,
+      ...(part ? { 'data-payload-part': part } : {}),
     },
     copyable: false,
     draggable: false,
@@ -481,7 +488,7 @@ function formPreviewControl(field: FormField): ComponentDefinition {
   }
 
   if (field.type === 'textarea') {
-    return editorOnlyPreview({ tagName: 'textarea', attributes }, 'control');
+    return editorOnlyPreview({ tagName: 'textarea', attributes }, 'control', 'input');
   }
   if (field.type === 'select') {
     return editorOnlyPreview(
@@ -502,6 +509,7 @@ function formPreviewControl(field: FormField): ComponentDefinition {
         ],
       },
       'control',
+      'input',
     );
   }
   if (field.type === 'checkbox') {
@@ -523,19 +531,23 @@ function formPreviewControl(field: FormField): ComponentDefinition {
             {
               tagName: 'label',
               components: [
-                {
-                  tagName: 'input',
-                  void: true,
-                  attributes: {
-                    type: 'radio',
-                    name: field.name,
-                    value: option.value,
-                    ...(field.required ? { required: 'required' } : {}),
+                editorOnlyPreview(
+                  {
+                    tagName: 'input',
+                    void: true,
+                    attributes: {
+                      type: 'radio',
+                      name: field.name,
+                      value: option.value,
+                      ...(field.required ? { required: 'required' } : {}),
+                    },
                   },
-                },
+                  'control',
+                ),
                 option.label,
               ],
             },
+            'option',
             'option',
           ),
         ),
@@ -554,17 +566,24 @@ function formPreviewControl(field: FormField): ComponentDefinition {
       },
     },
     'control',
+    'input',
   );
 }
 
 function formPreviewField(field: FormField): ComponentDefinition {
   const label = `${field.label}${field.required ? ' *' : ''}`;
+  const labelPreview = editorOnlyPreview(
+    { tagName: 'label', content: label },
+    'field',
+    'label',
+  );
   if (field.type === 'checkbox') {
     return editorOnlyPreview(
       {
         tagName: 'div',
-        components: [{ tagName: 'label', content: label }, formPreviewControl(field)],
+        components: [labelPreview, formPreviewControl(field)],
       },
+      'field',
       'field',
     );
   }
@@ -573,8 +592,9 @@ function formPreviewField(field: FormField): ComponentDefinition {
     return editorOnlyPreview(
       {
         tagName: 'div',
-        components: [{ tagName: 'label', content: label }, formPreviewControl(field)],
+        components: [labelPreview, formPreviewControl(field)],
       },
+      'field',
       'field',
     );
   }
@@ -582,8 +602,9 @@ function formPreviewField(field: FormField): ComponentDefinition {
   return editorOnlyPreview(
     {
       tagName: 'div',
-      components: [{ tagName: 'label', content: label }, formPreviewControl(field)],
+      components: [labelPreview, formPreviewControl(field)],
     },
+    'field',
     'field',
   );
 }
@@ -593,6 +614,7 @@ export function formPreviewComponents(props: FormProps): ComponentDefinition[] {
     ...props.fields.map(formPreviewField),
     editorOnlyPreview(
       { tagName: 'button', content: props.submitLabel, attributes: { type: 'button' } },
+      'submit',
       'submit',
     ),
   ];
@@ -711,6 +733,27 @@ export function resolveViewportStyle(
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function editorSemanticProps(component: Component): Record<string, unknown> {
+  const attributes = component.getAttributes({ noStyle: true });
+  const props: Record<string, unknown> = {};
+  const headingLevel = attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE];
+  if (typeof headingLevel === 'string') props.level = Number(headingLevel);
+  const buttonVariant = attributes[BUILDER_BUTTON_VARIANT_ATTRIBUTE];
+  if (typeof buttonVariant === 'string') props.variant = buttonVariant;
+  const textRole = attributes[BUILDER_TEXT_ROLE_ATTRIBUTE];
+  if (typeof textRole === 'string') props.role = textRole;
+  const rawProps = attributes[BUILDER_GLOBAL_PROPS_ATTRIBUTE];
+  if (typeof rawProps === 'string') {
+    try {
+      const parsed = JSON.parse(rawProps) as unknown;
+      if (isObject(parsed)) Object.assign(props, parsed);
+    } catch {
+      // Invalid editor-only projection props are rejected during serialization.
+    }
+  }
+  return props;
 }
 
 function jsonAttribute(value: unknown): string {
@@ -932,6 +975,9 @@ function componentDefinitionForNode(
           ...(node.props.align
             ? { [BUILDER_TEXT_ALIGN_ATTRIBUTE]: node.props.align }
             : {}),
+          ...('role' in node.props && node.props.role
+            ? { [BUILDER_TEXT_ROLE_ATTRIBUTE]: node.props.role }
+            : {}),
         },
       };
     case 'image':
@@ -953,6 +999,9 @@ function componentDefinitionForNode(
           ...attributes,
           href: node.props.href,
           target: node.props.target,
+          ...('variant' in node.props
+            ? { [BUILDER_BUTTON_VARIANT_ATTRIBUTE]: node.props.variant }
+            : {}),
         },
       };
     case 'form':
@@ -1511,6 +1560,11 @@ export function newBuilderUuid(): string {
 export function createBlockDefinition(
   type: BuilderBlockType,
   extensionId?: string,
+  options?: {
+    headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+    buttonVariant?: ButtonVariant;
+    textRole?: TextRole;
+  },
 ): ComponentDefinition {
   const id = newNodeId(type);
   const baseNode = {
@@ -1527,7 +1581,10 @@ export function createBlockDefinition(
       return componentDefinitionForNode({
         ...baseNode,
         type: 'text',
-        props: { text: 'Edit this text' },
+        props: {
+          text: 'Edit this text',
+          ...(options?.textRole ? { role: options.textRole } : {}),
+        },
       });
     case 'image':
       return componentDefinitionForNode({
@@ -1536,11 +1593,20 @@ export function createBlockDefinition(
         props: { src: '/assets/placeholder.png', alt: 'Image' },
       });
     case 'button':
-      return componentDefinitionForNode({
-        ...baseNode,
-        type: 'button',
-        props: { label: 'Button', href: '#section', target: '_self' },
-      });
+      return componentDefinitionForNode(
+        {
+          ...baseNode,
+          type: 'button',
+          props: {
+            label: 'Button',
+            href: '#section',
+            target: '_self',
+            variant: options?.buttonVariant ?? 'primary',
+          },
+        },
+        undefined,
+        7,
+      );
     case 'form':
       return componentDefinitionForNode(
         {
@@ -1610,10 +1676,10 @@ export function createBlockDefinition(
         {
           ...baseNode,
           type: 'heading',
-          props: { text: 'Heading', level: 2 },
+          props: { text: 'Heading', level: options?.headingLevel ?? 2 },
         },
         undefined,
-        4,
+        7,
       );
     case 'link':
       return componentDefinitionForNode(
@@ -2481,6 +2547,21 @@ function nodeFromSnapshotInternal(
         props: {
           text: sanitizeInlineText(snapshot.content),
           ...(align ? { align } : {}),
+          ...(readStringAttribute(
+            snapshot.attributes,
+            BUILDER_TEXT_ROLE_ATTRIBUTE,
+            path,
+            false,
+          )
+            ? {
+                role: readStringAttribute(
+                  snapshot.attributes,
+                  BUILDER_TEXT_ROLE_ATTRIBUTE,
+                  path,
+                  false,
+                ),
+              }
+            : {}),
         },
       };
     }
@@ -2511,6 +2592,21 @@ function nodeFromSnapshotInternal(
           label: sanitizeInlineText(snapshot.content),
           href: readStringAttribute(snapshot.attributes, 'href', path),
           target: readStringAttribute(snapshot.attributes, 'target', path),
+          ...(readStringAttribute(
+            snapshot.attributes,
+            BUILDER_BUTTON_VARIANT_ATTRIBUTE,
+            path,
+            false,
+          )
+            ? {
+                variant: readStringAttribute(
+                  snapshot.attributes,
+                  BUILDER_BUTTON_VARIANT_ATTRIBUTE,
+                  path,
+                  false,
+                ),
+              }
+            : {}),
         },
       };
   }
@@ -2591,6 +2687,169 @@ function nodeFromSnapshot(
   return partsStyle ? { ...node, partsStyle } : node;
 }
 
+type LegacyPresetNode = Record<string, unknown>;
+
+function childNodes(node: LegacyPresetNode): LegacyPresetNode[] {
+  return Array.isArray(node.children) ? node.children.filter(isObject) : [];
+}
+
+function hasExactStyleValues(
+  node: LegacyPresetNode,
+  values: Record<string, string>,
+): boolean {
+  const style = isObject(node.style) && isObject(node.style.base) ? node.style.base : {};
+  return Object.entries(values).every(([property, value]) => style[property] === value);
+}
+
+function withoutExactStyleValues(
+  node: LegacyPresetNode,
+  values: Record<string, string>,
+): LegacyPresetNode {
+  if (!isObject(node.style) || !isObject(node.style.base)) return node;
+  const base = { ...node.style.base };
+  let changed = false;
+  for (const [property, value] of Object.entries(values)) {
+    if (base[property] === value) {
+      delete base[property];
+      changed = true;
+    }
+  }
+  if (!changed) return node;
+  const style: Record<string, unknown> = { ...node.style, base };
+  if (
+    Object.keys(base).length === 0 &&
+    style.tablet === undefined &&
+    style.mobile === undefined
+  ) {
+    const next = { ...node };
+    delete next.style;
+    return next;
+  }
+  return { ...node, style };
+}
+
+function isLegacyHero(node: LegacyPresetNode): boolean {
+  const [container] = childNodes(node);
+  const [heading, text, button] = childNodes(container ?? {});
+  return (
+    node.type === 'section' &&
+    childNodes(node).length === 1 &&
+    container?.type === 'container' &&
+    childNodes(container).length === 3 &&
+    heading?.type === 'heading' &&
+    text?.type === 'text' &&
+    button?.type === 'button' &&
+    hasExactStyleValues(node, { padding: '64px 24px', backgroundColor: '#eff6ff' }) &&
+    hasExactStyleValues(container, { gap: '20px', maxWidth: '720px' }) &&
+    hasExactStyleValues(heading, {
+      fontSize: '48px',
+      fontWeight: '700',
+      lineHeight: '1.1',
+    }) &&
+    hasExactStyleValues(button, { padding: '12px 18px' })
+  );
+}
+
+function isLegacyCta(node: LegacyPresetNode): boolean {
+  const [container] = childNodes(node);
+  const [heading, text, button] = childNodes(container ?? {});
+  return (
+    node.type === 'section' &&
+    childNodes(node).length === 1 &&
+    container?.type === 'container' &&
+    childNodes(container).length === 3 &&
+    heading?.type === 'heading' &&
+    text?.type === 'text' &&
+    button?.type === 'button' &&
+    hasExactStyleValues(container, { gap: '16px', padding: '48px 24px' }) &&
+    hasExactStyleValues(button, { padding: '12px 18px' })
+  );
+}
+
+/**
+ * Remove only exact, known styles written by the pre-V2 built-in presets.
+ * Arbitrary user values, extra properties, and partially-matching trees are
+ * left untouched. Re-running this function is therefore safe and idempotent.
+ */
+export function normalizeLegacyBuiltInPresetStyles(payload: PagePayload): PagePayload {
+  const normalize = (source: LegacyPresetNode): LegacyPresetNode => {
+    const originalChildren = childNodes(source);
+    const normalizedChildren = originalChildren.map(normalize);
+    let node: LegacyPresetNode = {
+      ...source,
+      ...(Array.isArray(source.children) ? { children: normalizedChildren } : {}),
+    };
+
+    if (isLegacyHero(source)) {
+      const [container, heading, , button] = [
+        normalizedChildren[0],
+        ...childNodes(normalizedChildren[0] ?? {}),
+      ];
+      if (container) {
+        const nextContainer = withoutExactStyleValues(container, {
+          gap: '20px',
+          maxWidth: '720px',
+        });
+        const nextChildren = childNodes(nextContainer);
+        node = {
+          ...withoutExactStyleValues(node, {
+            padding: '64px 24px',
+            backgroundColor: '#eff6ff',
+          }),
+          children: [
+            {
+              ...nextContainer,
+              children: [
+                withoutExactStyleValues(heading ?? {}, {
+                  fontSize: '48px',
+                  fontWeight: '700',
+                  lineHeight: '1.1',
+                }),
+                nextChildren[1],
+                withoutExactStyleValues(button ?? {}, { padding: '12px 18px' }),
+              ],
+            },
+          ],
+        };
+      }
+    } else if (isLegacyCta(source)) {
+      const [container] = normalizedChildren;
+      if (container) {
+        const nextContainer = withoutExactStyleValues(container, {
+          gap: '16px',
+          padding: '48px 24px',
+        });
+        const nextChildren = childNodes(nextContainer);
+        node = {
+          ...node,
+          children: [
+            {
+              ...nextContainer,
+              children: [
+                nextChildren[0],
+                nextChildren[1],
+                withoutExactStyleValues(nextChildren[2] ?? {}, { padding: '12px 18px' }),
+              ],
+            },
+          ],
+        };
+      }
+    }
+
+    if (source.type === 'global-header' && Array.isArray(node.children)) {
+      node.children = node.children.map((child) =>
+        child.type === 'button'
+          ? withoutExactStyleValues(child, { padding: '10px 16px' })
+          : child,
+      );
+    }
+    return node;
+  };
+
+  const root = normalize(payload.root as unknown as LegacyPresetNode);
+  return root === payload.root ? payload : ({ ...payload, root } as PagePayload);
+}
+
 export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePayload {
   const root = nodeFromSnapshot(snapshot, ['root']);
   try {
@@ -2634,7 +2893,7 @@ export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePa
       ['payload'],
     );
   }
-  return parsed.data;
+  return normalizeLegacyBuiltInPresetStyles(parsed.data);
 }
 
 function promoteLegacyV6CompoundProps(
@@ -2776,6 +3035,12 @@ function containsV7Node(node: Record<string, unknown>): boolean {
     node.type === 'reusable-instance' ||
     node.type === 'collection-list' ||
     node.type === 'collection-item' ||
+    (node.type === 'button' &&
+      isObject(node.props) &&
+      typeof node.props.variant === 'string') ||
+    (node.type === 'text' &&
+      isObject(node.props) &&
+      typeof node.props.role === 'string') ||
     hasTokenReference(node.style) ||
     hasTokenReference(node.partsStyle)
   ) {
@@ -2907,10 +3172,15 @@ export function applyEditorPartViewportStyles(
         : Array.from(
             element.querySelectorAll<HTMLElement>(`[data-payload-part="${partName}"]`),
           );
-    const defaults = resolveDesignSystemComponentDefaults(designSystem, type);
+    const defaults = resolveDesignSystemAppearance(designSystem, {
+      type,
+      props: editorSemanticProps(component),
+      part: partName,
+      viewport: payloadViewport(viewport),
+    });
     const effective = styleBlockToEditorStyle(
       {
-        ...resolveViewportStyle(defaults?.partsStyle?.[partName], viewport),
+        ...resolveViewportStyle(defaults?.style, viewport),
         ...resolveViewportStyle(persisted[partName], viewport),
       },
       designSystem,
@@ -2961,6 +3231,42 @@ export function applyEditorViewportStyle(
 
 const appliedEditorDefaultProperties = new WeakMap<HTMLElement, Set<string>>();
 
+/**
+ * Paints the website surface on the GrapesJS iframe body. The body is an
+ * editor shell and is never serialized; the persisted root still owns the
+ * page recipe when the document is rendered publicly.
+ */
+export function applyEditorPageSurfaceStyle(
+  root: Component,
+  viewport: BuilderViewport,
+  designSystem?: SiteDesignSystem,
+): void {
+  const body = (root.getEl?.() as HTMLElement | undefined)?.ownerDocument?.body;
+  if (!body) return;
+  const defaults = resolveDesignSystemAppearance(designSystem, {
+    type: 'root',
+    viewport: payloadViewport(viewport),
+  });
+  const inherited = styleBlockToEditorStyle(
+    resolveViewportStyle(defaults?.style, viewport),
+    designSystem,
+  );
+  const local = root.getStyle() as Record<string, unknown>;
+  const background =
+    typeof local['background-color'] === 'string'
+      ? local['background-color']
+      : (inherited['background-color'] ??
+        resolveDesignSystemColorRole(designSystem, 'pageBackground'));
+  const color =
+    typeof local.color === 'string'
+      ? local.color
+      : (inherited.color ?? resolveDesignSystemColorRole(designSystem, 'text'));
+  body.style.setProperty('background-color', background ?? 'transparent');
+  body.style.setProperty('color', color ?? 'inherit');
+  body.style.setProperty('min-height', '100vh');
+  body.style.setProperty('margin', '0');
+}
+
 /** Paints inherited Design System defaults without adding them to the saved node style. */
 export function applyEditorComponentDefaultStyle(
   component: Component,
@@ -2970,7 +3276,11 @@ export function applyEditorComponentDefaultStyle(
 ): void {
   const element = component.getEl?.() as HTMLElement | undefined;
   if (!element) return;
-  const defaults = resolveDesignSystemComponentDefaults(designSystem, type);
+  const defaults = resolveDesignSystemAppearance(designSystem, {
+    type,
+    props: editorSemanticProps(component),
+    viewport: payloadViewport(viewport),
+  });
   const effective = styleBlockToEditorStyle(
     resolveViewportStyle(defaults?.style, viewport),
     designSystem,

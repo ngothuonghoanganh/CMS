@@ -17,6 +17,7 @@ import {
   NavigationItemsSchema,
   NavigationViewPropsSchema,
   SiteBrandPropsSchema,
+  TextRoleSchema,
   isSafePageHref,
   isSafePageImageSource,
   isSafePageVideoSource,
@@ -27,6 +28,7 @@ import {
 
 import {
   BUILDER_HEADING_LEVEL_ATTRIBUTE,
+  BUILDER_TEXT_ROLE_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
   BUILDER_LIST_PROPS_ATTRIBUTE,
@@ -93,6 +95,14 @@ export function resolveEditorPropertyUpdate(
   property: string,
   value: unknown,
 ): EditorPropertyUpdate | null {
+  if (type === 'text' && property === 'role') {
+    const parsed = TextRoleSchema.safeParse(value);
+    if (!parsed.success) throw new Error('Text style is invalid');
+    return {
+      kind: 'attributes',
+      attributes: { [BUILDER_TEXT_ROLE_ATTRIBUTE]: parsed.data },
+    };
+  }
   if (type === 'quote' && (property === 'text' || property === 'cite')) {
     const parsed =
       property === 'text'

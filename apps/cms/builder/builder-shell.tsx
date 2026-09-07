@@ -69,6 +69,7 @@ import {
 import { pagePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { Icon } from '../app/ui/icons';
+import { useConfirm } from '../app/ui/surfaces';
 import {
   BUILDER_VIEWPORTS,
   GrapesEditor,
@@ -442,6 +443,7 @@ export default function BuilderShell({
   reusableId: initialReusableId,
 }: BuilderShellProps) {
   const router = useRouter();
+  const { confirm, dialog } = useConfirm();
   const editorRef = useRef<GrapesEditorHandle>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('initializing');
@@ -1330,8 +1332,16 @@ export default function BuilderShell({
     return () => window.removeEventListener('beforeunload', protectUnsavedNavigation);
   }, [isDirty]);
 
-  function leaveBuilder() {
-    if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?')) {
+  async function leaveBuilder(): Promise<void> {
+    if (
+      isDirty &&
+      !(await confirm({
+        title: 'Leave builder?',
+        message: 'You have unsaved changes. Leaving now will lose them.',
+        confirmLabel: 'Leave builder',
+        tone: 'danger',
+      }))
+    ) {
       return;
     }
     router.push(pagePath(workspaceId, siteId, pageId));
@@ -1775,7 +1785,17 @@ export default function BuilderShell({
 
   async function editReusableSource(reusableId: string): Promise<void> {
     if (reusableId === editingReusableId) return;
-    if (isDirty && !window.confirm('Save this document before switching?')) return;
+    if (
+      isDirty &&
+      !(await confirm({
+        title: 'Save before switching?',
+        message:
+          'This page has unsaved changes. Save the document before opening the reusable source?',
+        confirmLabel: 'Save and switch',
+        tone: 'primary',
+      }))
+    )
+      return;
     if (isDirty && !(await saveDraft())) return;
     const reusable = reusables.find((candidate) => candidate.id === reusableId);
     if (!reusable) {
@@ -1798,7 +1818,17 @@ export default function BuilderShell({
 
   async function exitReusableSource(): Promise<void> {
     if (!isEditingReusable) return;
-    if (isDirty && !window.confirm('Save this reusable source before switching?')) return;
+    if (
+      isDirty &&
+      !(await confirm({
+        title: 'Save before switching?',
+        message:
+          'This reusable source has unsaved changes. Save it before returning to the page?',
+        confirmLabel: 'Save and switch',
+        tone: 'primary',
+      }))
+    )
+      return;
     if (isDirty && !(await saveDraft())) return;
     setEditingReusableId(null);
     setReusableEditorDocument(null);
@@ -1995,9 +2025,12 @@ export default function BuilderShell({
 
   async function archiveReusable(reusable: ReusableComponent): Promise<void> {
     if (
-      !window.confirm(
-        `Archive “${reusable.name}”? Existing linked instances will keep their source snapshot.`,
-      )
+      !(await confirm({
+        title: 'Archive reusable source?',
+        message: `Archive “${reusable.name}”? Existing linked instances will keep their source snapshot.`,
+        confirmLabel: 'Archive source',
+        tone: 'danger',
+      }))
     ) {
       return;
     }
@@ -3066,6 +3099,7 @@ export default function BuilderShell({
           </section>
         </div>
       ) : null}
+      {dialog}
     </main>
   );
 }

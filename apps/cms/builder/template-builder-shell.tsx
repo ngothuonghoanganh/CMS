@@ -31,6 +31,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 
 import { templatePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
+import { useConfirm } from '../app/ui/surfaces';
 import { type BuilderInsertable } from './block-presets';
 import { BUILT_IN_TEMPLATE_REGISTRY } from './template-registry';
 import { BuilderBlockCard } from './builder-block-catalog';
@@ -138,6 +139,7 @@ export default function TemplateBuilderShell({
 }: TemplateBuilderShellProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { confirm, dialog } = useConfirm();
   const editorRef = useRef<GrapesEditorHandle>(null);
   const [template, setTemplate] = useState<Template | null>(null);
   const [versions, setVersions] = useState<TemplateVersion[]>([]);
@@ -361,9 +363,12 @@ export default function TemplateBuilderShell({
   async function reviewDraft(): Promise<void> {
     if (
       status === 'unsaved' &&
-      !window.confirm(
-        'Review loads the last saved draft and discards unsaved canvas changes.',
-      )
+      !(await confirm({
+        title: 'Review saved draft?',
+        message: 'This loads the last saved draft and discards unsaved canvas changes.',
+        confirmLabel: 'Review draft',
+        tone: 'primary',
+      }))
     ) {
       return;
     }
@@ -473,8 +478,16 @@ export default function TemplateBuilderShell({
     }
   }
 
-  function leave() {
-    if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?'))
+  async function leave(): Promise<void> {
+    if (
+      isDirty &&
+      !(await confirm({
+        title: 'Leave builder?',
+        message: 'You have unsaved changes. Leaving now will lose them.',
+        confirmLabel: 'Leave builder',
+        tone: 'danger',
+      }))
+    )
       return;
     router.push(templatePath(workspaceId, templateId));
   }
@@ -1041,6 +1054,7 @@ export default function TemplateBuilderShell({
           ))}
         </div>
       </section>
+      {dialog}
     </main>
   );
 }

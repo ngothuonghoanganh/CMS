@@ -25,6 +25,7 @@ import {
   PageHeader,
   PaginationControls,
   ResourceToolbar,
+  useConfirm,
 } from '../ui/surfaces';
 
 type UserCreateInput = {
@@ -535,6 +536,7 @@ function UserDetail({
 }) {
   const isSelf = detail.user.email === currentUserEmail;
   const isEditing = detailMode === 'edit';
+  const { confirm, dialog } = useConfirm();
   return (
     <div className="user-detail-body">
       <div className="detail-drawer-status-row">
@@ -586,15 +588,25 @@ function UserDetail({
               <button
                 className="button button-secondary"
                 disabled={busy}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    window.confirm(
-                      detail.user.status === 'active'
-                        ? 'Disable this user and revoke their active sessions?'
-                        : 'Enable this user?',
-                    )
+                    await confirm({
+                      title:
+                        detail.user.status === 'active'
+                          ? 'Disable user?'
+                          : 'Enable user?',
+                      message:
+                        detail.user.status === 'active'
+                          ? 'This revokes the user’s active sessions immediately.'
+                          : 'The user will be able to sign in again.',
+                      confirmLabel:
+                        detail.user.status === 'active' ? 'Disable user' : 'Enable user',
+                      tone: detail.user.status === 'active' ? 'danger' : 'primary',
+                    })
                   )
-                    onStatus(detail.user.status === 'active' ? 'disabled' : 'active');
+                    await onStatus(
+                      detail.user.status === 'active' ? 'disabled' : 'active',
+                    );
                 }}
                 type="button"
               >
@@ -605,13 +617,17 @@ function UserDetail({
               <button
                 className="button button-danger"
                 disabled={busy}
-                onClick={() => {
+                onClick={async () => {
                   if (
-                    window.confirm(
-                      'Remove this user? The account will be soft-disabled and retained for audit history.',
-                    )
+                    await confirm({
+                      title: 'Remove user?',
+                      message:
+                        'The account will be soft-disabled and retained for audit history.',
+                      confirmLabel: 'Remove user',
+                      tone: 'danger',
+                    })
                   )
-                    onRemove();
+                    await onRemove();
                 }}
                 type="button"
               >
@@ -739,6 +755,7 @@ function UserDetail({
           ) : null}
         </div>
       </div>
+      {dialog}
     </div>
   );
 }

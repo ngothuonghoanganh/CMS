@@ -39,6 +39,7 @@ import { cmsViewPath, pagePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { Icon } from '../app/ui/icons';
 import { SelectField } from '../app/ui/fields';
+import { useConfirm } from '../app/ui/surfaces';
 import {
   GLOBAL_FOOTER_PRESET_REGISTRY,
   GLOBAL_HEADER_PRESET_REGISTRY,
@@ -219,6 +220,7 @@ export default function LayoutBuilderShell({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { confirm, dialog } = useConfirm();
   const previewSiteId = siteId ?? searchParams.get('siteId') ?? undefined;
   const editorRef = useRef<GrapesEditorHandle>(null);
   const [resource, setResource] = useState<LayoutExtensionResource | null>(null);
@@ -577,9 +579,12 @@ export default function LayoutBuilderShell({
   async function reviewDraft(): Promise<void> {
     if (
       status === 'unsaved' &&
-      !window.confirm(
-        'Review loads the last saved draft and discards unsaved canvas changes.',
-      )
+      !(await confirm({
+        title: 'Review saved draft?',
+        message: 'This loads the last saved draft and discards unsaved canvas changes.',
+        confirmLabel: 'Review draft',
+        tone: 'primary',
+      }))
     ) {
       return;
     }
@@ -665,7 +670,15 @@ export default function LayoutBuilderShell({
 
   async function discard(): Promise<void> {
     if (!resource?.draftVersionId || !resource.publishedVersionId) return;
-    if (!window.confirm(`Discard unpublished changes to “${resource.name}”?`)) return;
+    if (
+      !(await confirm({
+        title: 'Discard draft changes?',
+        message: `Discard unpublished changes to “${resource.name}”? This restores the published version.`,
+        confirmLabel: 'Discard changes',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -772,8 +785,16 @@ export default function LayoutBuilderShell({
       ? pagePath(workspaceId, previewSiteId, returnPageId)
       : cmsViewPath(workspaceId, 'extensions');
 
-  function leave(): void {
-    if (isDirty && !window.confirm('You have unsaved changes. Leave the builder?'))
+  async function leave(): Promise<void> {
+    if (
+      isDirty &&
+      !(await confirm({
+        title: 'Leave builder?',
+        message: 'You have unsaved changes. Leaving now will lose them.',
+        confirmLabel: 'Leave builder',
+        tone: 'danger',
+      }))
+    )
       return;
     router.push(backHref);
   }
@@ -1354,6 +1375,7 @@ export default function LayoutBuilderShell({
           ))}
         </div>
       </section>
+      {dialog}
     </main>
   );
 }

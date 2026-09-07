@@ -22,7 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiClientError } from '../lib/api';
 import { StatusBadge } from '../status-badge';
 import { Icon } from '../ui/icons';
-import { Drawer } from '../ui/surfaces';
+import { Drawer, useConfirm } from '../ui/surfaces';
 
 type CustomExtensionDraft = {
   id: string;
@@ -92,6 +92,7 @@ export function ExtensionsView({
   workspaceId,
   siteId,
 }: ExtensionsViewProps) {
+  const { confirm, dialog } = useConfirm();
   const [extensions, setExtensions] = useState<ExtensionDescriptor[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [configuration, setConfiguration] = useState<ExtensionConfiguration>({});
@@ -255,9 +256,14 @@ export function ExtensionsView({
   async function removeLayoutExtension(resource: LayoutExtensionResource): Promise<void> {
     if (!workspaceId || !canDeleteLayouts) return;
     if (
-      !window.confirm(
-        `Delete ${resource.name}? Existing page blocks must be removed first.`,
-      )
+      !(await confirm({
+        title: 'Delete layout?',
+        description:
+          'Existing page blocks must be removed before this layout can be deleted.',
+        message: `Delete “${resource.name}”?`,
+        confirmLabel: 'Delete layout',
+        tone: 'danger',
+      }))
     ) {
       return;
     }
@@ -398,9 +404,14 @@ export function ExtensionsView({
   async function removeCustomExtension(extension: ExtensionDescriptor): Promise<void> {
     if (!canManage || !extension.custom) return;
     if (
-      !window.confirm(
-        `Delete ${extension.custom.name}? Existing page blocks must be removed first.`,
-      )
+      !(await confirm({
+        title: 'Delete custom extension?',
+        description:
+          'Existing page blocks must be removed before this extension can be deleted.',
+        message: `Delete “${extension.custom.name}”?`,
+        confirmLabel: 'Delete extension',
+        tone: 'danger',
+      }))
     ) {
       return;
     }
@@ -508,7 +519,16 @@ export function ExtensionsView({
     extensionId: string,
     connection: ExtensionConnection,
   ): Promise<void> {
-    if (!canManage || !window.confirm(`Delete ${connection.name}?`)) return;
+    if (
+      !canManage ||
+      !(await confirm({
+        title: 'Delete connection?',
+        message: `Delete “${connection.name}”?`,
+        confirmLabel: 'Delete connection',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusyId(extensionId);
     setError(null);
     try {
@@ -1254,6 +1274,7 @@ export function ExtensionsView({
           </div>
         </Drawer>
       ) : null}
+      {dialog}
     </>
   );
 }

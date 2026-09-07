@@ -20,6 +20,7 @@ import {
   BUILDER_PAYLOAD_VERSION_ATTRIBUTE,
   BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
   BUILDER_HEADING_LEVEL_ATTRIBUTE,
+  BUILDER_TEXT_ROLE_ATTRIBUTE,
   BUILDER_LIST_PROPS_ATTRIBUTE,
   BUILDER_COMPOUND_PROPS_ATTRIBUTE,
   BUILDER_PARTS_STYLE_ATTRIBUTE,
@@ -35,6 +36,7 @@ import {
   payloadToEditorComponent,
   resolveViewportStyle,
   serializeEditorSnapshot,
+  normalizeLegacyBuiltInPresetStyles,
   serializeSiteGlobalSnapshot,
   serializeReusableSubtree,
   reusableDocumentToEditorPageDocument,
@@ -431,6 +433,92 @@ describe('builder adapter', () => {
 
     expect(id).toMatch(/^text-/);
     expect(definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('text');
+  });
+
+  it('persists finite text style roles as semantic intent', () => {
+    const definition = createBlockDefinition('text', undefined, { textRole: 'small' });
+    expect(definition.attributes?.[BUILDER_TEXT_ROLE_ATTRIBUTE]).toBe('small');
+  });
+
+  it('normalizes only known legacy preset styles and is idempotent', () => {
+    const legacy: PagePayloadV7 = {
+      version: 7,
+      metadata: { documentTitle: 'Legacy hero' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'hero',
+            type: 'section',
+            props: {},
+            style: {
+              base: {
+                padding: '64px 24px',
+                backgroundColor: '#eff6ff',
+                color: '#custom-user-color',
+              },
+            },
+            children: [
+              {
+                id: 'content',
+                type: 'container',
+                props: {},
+                style: {
+                  base: { gap: '20px', maxWidth: '720px', margin: '0 auto' },
+                },
+                children: [
+                  {
+                    id: 'heading',
+                    type: 'heading',
+                    props: { text: 'Legacy', level: 2 },
+                    style: {
+                      base: {
+                        fontSize: '48px',
+                        fontWeight: '700',
+                        lineHeight: '1.1',
+                        color: '#custom-user-heading',
+                      },
+                    },
+                    children: [],
+                  },
+                  {
+                    id: 'text',
+                    type: 'text',
+                    props: { text: 'Copy' },
+                    children: [],
+                  },
+                  {
+                    id: 'button',
+                    type: 'button',
+                    props: { label: 'Start', href: '/', target: '_self' },
+                    style: {
+                      base: { padding: '12px 18px', borderRadius: '24px' },
+                    },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const normalized = normalizeLegacyBuiltInPresetStyles(legacy);
+    const section = normalized.root.children[0];
+    if (section?.type !== 'section') throw new Error('Legacy section is missing');
+    expect(section.style?.base).toEqual({ color: '#custom-user-color' });
+    const container = section.children[0];
+    if (container?.type !== 'container') throw new Error('Legacy container is missing');
+    expect(container.style?.base).toEqual({ margin: '0 auto' });
+    const heading = container.children[0];
+    if (heading?.type !== 'heading') throw new Error('Legacy heading is missing');
+    expect(heading.style?.base).toEqual({ color: '#custom-user-heading' });
+    const button = container.children[2];
+    if (button?.type !== 'button') throw new Error('Legacy button is missing');
+    expect(button.style?.base).toEqual({ borderRadius: '24px' });
+    expect(normalizeLegacyBuiltInPresetStyles(normalized)).toEqual(normalized);
   });
 
   it('does not upgrade V1 because text content happens to mention a form', () => {

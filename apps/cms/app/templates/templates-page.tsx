@@ -13,7 +13,7 @@ import { useCmsShell } from '../cms-shell';
 import { cmsViewPath, pagesPath, templatePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
 import { canCreateDesignedPage } from '../lib/page-capabilities';
-import { EmptyState, Drawer, PageHeader } from '../ui/surfaces';
+import { EmptyState, Drawer, PageHeader, useConfirm } from '../ui/surfaces';
 
 type TemplateForm = { name: string; description: string };
 const blankTemplate: TemplateForm = { name: '', description: '' };
@@ -37,6 +37,7 @@ export default function TemplatesPage({
 }) {
   const router = useRouter();
   const { permissions, workspaceId, can } = useCmsShell();
+  const { confirm, dialog } = useConfirm();
   const canUseForPage = canCreateDesignedPage(permissions);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [form, setForm] = useState(blankTemplate);
@@ -103,7 +104,15 @@ export default function TemplatesPage({
     }
   }
   async function remove(template: Template) {
-    if (!window.confirm(`Remove ${template.name}?`)) return;
+    if (
+      !(await confirm({
+        title: 'Remove template?',
+        message: `Remove “${template.name}”? Its saved versions will no longer be available for new pages.`,
+        confirmLabel: 'Remove template',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await api.delete(`/workspaces/${workspaceId}/templates/${template.id}`);
@@ -372,6 +381,7 @@ export default function TemplatesPage({
           </form>
         </Drawer>
       ) : null}
+      {dialog}
     </>
   );
 }

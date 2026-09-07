@@ -16,11 +16,13 @@ import { useEffect, useState } from 'react';
 import { useCmsShell } from '../cms-shell';
 import { sitePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
+import { useConfirm } from '../ui/surfaces';
 import { NavigationView } from './navigation-view';
 
 export default function NavigationPage({ siteId }: { siteId?: string }) {
   const router = useRouter();
   const { workspaceId, can } = useCmsShell();
+  const { confirm, dialog } = useConfirm();
   const [sites, setSites] = useState<Site[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [navigations, setNavigations] = useState<Navigation[]>([]);
@@ -76,7 +78,15 @@ export default function NavigationPage({ siteId }: { siteId?: string }) {
     }
   }
   async function remove(navigation: Navigation) {
-    if (!window.confirm(`Delete ${navigation.name}?`)) return;
+    if (
+      !(await confirm({
+        title: 'Delete navigation?',
+        message: `Delete “${navigation.name}”? Pages using this navigation will no longer show it.`,
+        confirmLabel: 'Delete navigation',
+        tone: 'danger',
+      }))
+    )
+      return;
     setBusy(true);
     try {
       await api.delete(`/sites/${selectedSiteId}/navigations/${navigation.id}`);
@@ -108,6 +118,7 @@ export default function NavigationPage({ siteId }: { siteId?: string }) {
         selectedSiteId={selectedSiteId}
         sites={sites}
       />
+      {dialog}
     </>
   );
 }

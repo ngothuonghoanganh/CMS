@@ -50,7 +50,8 @@ import {
   pageStyleReactProperty,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   resolvePageStyleValue,
-  resolveDesignSystemComponentDefaults,
+  resolveDesignSystemAppearance,
+  resolveDesignSystemColorRole,
   navigationActionHref,
   type ReusableRuntime,
   type SiteDesignSystem,
@@ -172,7 +173,10 @@ function styleBlockToProperties(
 }
 
 function nodeStyle(node: RenderableNode, context: RenderContext = {}): CSSProperties {
-  const defaults = resolveDesignSystemComponentDefaults(context.designSystem, node.type);
+  const defaults = resolveDesignSystemAppearance(context.designSystem, {
+    type: node.type,
+    props: node.props as Record<string, unknown>,
+  });
   const style = styleBlockToProperties(
     {
       ...(defaults?.style?.base ?? {}),
@@ -188,6 +192,17 @@ function nodeStyle(node: RenderableNode, context: RenderContext = {}): CSSProper
   return style;
 }
 
+/** The outer website surface shared by public pages, headers, and footers. */
+export function resolvePageSurfaceStyle(
+  designSystem: SiteDesignSystem | undefined,
+): CSSProperties {
+  return {
+    backgroundColor: resolveDesignSystemColorRole(designSystem, 'pageBackground'),
+    color: resolveDesignSystemColorRole(designSystem, 'text'),
+    minHeight: '100vh',
+  };
+}
+
 function nodePartStyle(
   node: RenderableNode,
   part: string,
@@ -196,12 +211,18 @@ function nodePartStyle(
   const partsStyle = (
     node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
   ).partsStyle;
-  const defaults = resolveDesignSystemComponentDefaults(context.designSystem, node.type);
-  const defaultPart = defaults?.partsStyle?.[part];
+  const defaults = resolveDesignSystemAppearance(context.designSystem, {
+    type: node.type,
+    props: node.props as Record<string, unknown>,
+    part,
+  });
   const localPart = partsStyle?.[part];
-  if (!defaultPart && !localPart) return undefined;
+  if (!defaults?.style && !localPart) return undefined;
   return styleBlockToProperties(
-    { ...(defaultPart?.base ?? {}), ...(localPart?.base ?? {}) },
+    {
+      ...(defaults?.style?.base ?? {}),
+      ...(localPart?.base ?? {}),
+    },
     context,
   );
 }
@@ -211,7 +232,11 @@ function nodeViewportStyle(
   viewport: 'tablet' | 'mobile',
   context: RenderContext,
 ): Record<string, unknown> {
-  const defaults = resolveDesignSystemComponentDefaults(context.designSystem, node.type);
+  const defaults = resolveDesignSystemAppearance(context.designSystem, {
+    type: node.type,
+    props: node.props as Record<string, unknown>,
+    viewport,
+  });
   return {
     ...(defaults?.style?.[viewport] ?? {}),
     ...(node.style?.[viewport] ?? {}),
@@ -224,12 +249,17 @@ function nodePartViewportStyle(
   viewport: 'tablet' | 'mobile',
   context: RenderContext,
 ): Record<string, unknown> {
-  const defaults = resolveDesignSystemComponentDefaults(context.designSystem!, node.type);
+  const defaults = resolveDesignSystemAppearance(context.designSystem, {
+    type: node.type,
+    props: node.props as Record<string, unknown>,
+    part,
+    viewport,
+  });
   const localParts = (
     node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
   ).partsStyle;
   return {
-    ...(defaults?.partsStyle?.[part]?.[viewport] ?? {}),
+    ...(defaults?.style?.[viewport] ?? {}),
     ...(localParts?.[part]?.[viewport] ?? {}),
   };
 }
@@ -636,9 +666,16 @@ function renderForm(node: FormNode, context: RenderContext): ReactElement {
   const submissionUrl = context.siteSlug
     ? `${apiBaseUrl}/public/sites/${encodeURIComponent(context.siteSlug)}/forms/${encodeURIComponent(node.id)}/submissions?path=${encodeURIComponent(pagePath)}${context.tenantSlug ? `&tenantSlug=${encodeURIComponent(context.tenantSlug)}` : ''}`
     : undefined;
+  const partStyles = Object.fromEntries(
+    Object.keys(PAGE_COMPONENT_REGISTRY.form.componentParts).map((part) => [
+      part,
+      nodePartStyle(node, part, context),
+    ]),
+  );
   return (
     <FormRenderer
       node={node}
+      partStyles={partStyles}
       {...(submissionUrl ? { submissionUrl } : {})}
       style={nodeStyle(node, context)}
     />
@@ -1037,9 +1074,13 @@ function responsiveRules(
     });
   }
 
-  for (const [partName] of Object.entries(
+  const localPartNames = Object.keys(
     (node as { partsStyle?: Record<string, PageNodeStyle> }).partsStyle ?? {},
-  )) {
+  );
+  const registeredPartNames = Object.keys(
+    PAGE_COMPONENT_REGISTRY[node.type].componentParts,
+  );
+  for (const partName of new Set([...registeredPartNames, ...localPartNames])) {
     const partViewportStyle = nodePartViewportStyle(node, partName, viewport, context);
     const partDeclarations =
       Object.keys(partViewportStyle).length > 0
@@ -1115,7 +1156,7 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
   }
 
   return (
-    <div className="payload-page">
+    <div className="payload-page" style={resolvePageSurfaceStyle(context.designSystem)}>
       {context.runtimeIds?.length ? (
         <ExtensionRuntimeBootstrap runtimeIds={context.runtimeIds} />
       ) : null}

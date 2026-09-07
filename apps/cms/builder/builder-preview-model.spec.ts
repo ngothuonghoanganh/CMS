@@ -32,7 +32,7 @@ describe('builder composition previews', () => {
     expect(hero?.preview.tree).toMatchObject({
       kind: 'box',
       role: 'section',
-      tone: 'hero',
+      children: [{ kind: 'box', role: 'container' }],
     });
     expect(cta?.preview.tree).not.toEqual(hero?.preview.tree);
     expect(columns?.preview.tree).toMatchObject({

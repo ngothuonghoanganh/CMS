@@ -38,6 +38,7 @@ import {
   BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE,
   BUILDER_QUOTE_PROPS_ATTRIBUTE,
   BUILDER_TEXT_ALIGN_ATTRIBUTE,
+  BUILDER_TEXT_ROLE_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
@@ -131,7 +132,14 @@ const componentPropsReaders: Partial<Record<PageComponentType, ComponentPropsRea
     'data-payload-reusable-props',
     ReusableInstancePropsSchema,
   ),
-  text: (_attributes, content) => ({ props: { text: content } }),
+  text: (attributes, content) => ({
+    props: {
+      text: content,
+      ...(attributes[BUILDER_TEXT_ROLE_ATTRIBUTE]
+        ? { role: attributes[BUILDER_TEXT_ROLE_ATTRIBUTE] }
+        : {}),
+    },
+  }),
   heading: (attributes, content) => {
     const level = Number(attributes[BUILDER_HEADING_LEVEL_ATTRIBUTE]);
     return { props: { text: content, level: Number.isInteger(level) ? level : 2 } };

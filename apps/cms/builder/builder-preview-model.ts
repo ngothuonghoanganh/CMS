@@ -50,11 +50,6 @@ function alignValue(value: string | undefined): BuilderPreviewAlign | undefined 
   return undefined;
 }
 
-function sectionTone(definition: ComponentDefinition): 'hero' | undefined {
-  const background = styleValue(definition, 'backgroundColor', 'background-color');
-  return background?.toLowerCase() === '#eff6ff' ? 'hero' : undefined;
-}
-
 function galleryColumns(definition: ComponentDefinition): 2 | 3 {
   const template = styleValue(definition, 'gridTemplateColumns', 'grid-template-columns');
   const match = template?.match(/repeat\(\s*([23])\s*,/);
@@ -74,11 +69,9 @@ function nodeForDefinition(definition: ComponentDefinition): BuilderPreviewNode 
   }
 
   if (type === 'section') {
-    const tone = sectionTone(definition);
     return {
       kind: 'box',
       role: 'section',
-      ...(tone ? { tone } : {}),
       children: children.map(nodeForDefinition),
     };
   }

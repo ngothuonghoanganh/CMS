@@ -16,6 +16,7 @@ import {
   applyEditorViewportStyle,
   applyEditorPartViewportStyles,
   applyEditorComponentDefaultStyle,
+  applyEditorPageSurfaceStyle,
   createBlockDefinition,
   createExtensionBlockDefinition,
   createReusableInstanceDefinition,
@@ -97,6 +98,7 @@ import {
   type BuilderValidationIssue,
 } from './builder-validation';
 import { compositionFieldsFromPayload, pageDocumentSignature } from './page-composition';
+import { useConfirm } from '../app/ui/surfaces';
 
 export type SelectedBuilderNode = ComponentSelectionSnapshot;
 
@@ -932,6 +934,7 @@ function applyAllViewportStyles(
     const type = payloadNodeType(component);
     if (type) applyEditorPartViewportStyles(component, type, viewport, designSystem);
   });
+  applyEditorPageSurfaceStyle(root, viewport, designSystem);
 }
 
 type BuiltInBuilderBlockType = Exclude<BuilderBlockType, 'extension'>;
@@ -1152,6 +1155,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   ref: Ref<GrapesEditorHandle>,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { confirm, dialog } = useConfirm();
   const editorRef = useRef<Editor | null>(null);
   const commandBusRef = useRef<ReturnType<typeof createEditorCommandBus> | null>(null);
   const blockDragCleanupRef = useRef<(() => void) | null>(null);
@@ -1578,21 +1582,37 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       if (existing.length !== 1) return false;
       const target = existing[0];
       if (!target) return false;
-      if (
-        target.components().models.length > 0 &&
-        !window.confirm(
-          'This global region already has content. Replace it with this preset?',
-        )
-      ) {
+      const commitPreset = (currentEditor: Editor, currentTarget: Component): boolean => {
+        const result = commitEditorCommandResult(currentEditor, {
+          kind: 'apply-global-preset',
+          nodeId: payloadNodeId(currentTarget) ?? '',
+          definition,
+        });
+        if (result.selection)
+          selectionRef.current.select(currentEditor, result.selection);
+        return result.changed;
+      };
+      if (target.components().models.length > 0) {
+        void confirm({
+          title: 'Replace global region?',
+          message: 'This global region already has content. Replace it with this preset?',
+          confirmLabel: 'Replace region',
+          tone: 'danger',
+        }).then((confirmed) => {
+          if (!confirmed) return;
+          const currentEditor = editorRef.current;
+          if (!currentEditor) return;
+          const currentRoot = getRoot(currentEditor);
+          const currentExisting = currentRoot
+            .components()
+            .models.filter((child) => payloadNodeType(child) === globalType);
+          const currentTarget = currentExisting[0];
+          if (currentExisting.length !== 1 || !currentTarget) return;
+          commitPreset(currentEditor, currentTarget);
+        });
         return false;
       }
-      const result = commitEditorCommandResult(editor, {
-        kind: 'apply-global-preset',
-        nodeId: payloadNodeId(target) ?? '',
-        definition,
-      });
-      if (result.selection) selectionRef.current.select(editor, result.selection);
-      return result.changed;
+      return commitPreset(editor, target);
     };
 
     const startDefinitionDrag = (definition: ComponentDefinition, event: Event): void => {
@@ -3014,11 +3034,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
   }, [navigation?.pagePaths]);
 
   return (
-    <div
-      ref={containerRef}
-      className="builder-editor-host"
-      aria-label="Visual page editor"
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="builder-editor-host"
+        aria-label="Visual page editor"
+      />
+      {dialog}
+    </>
   );
 });
 

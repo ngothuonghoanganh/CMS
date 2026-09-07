@@ -10,7 +10,7 @@ import {
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { api } from '../lib/api';
-import { Modal, PageHeader, ResourceToolbar } from '../ui/surfaces';
+import { Modal, PageHeader, ResourceToolbar, useConfirm } from '../ui/surfaces';
 
 type IntegrationType = 'email' | 'webhook';
 type IntegrationForm = {
@@ -44,6 +44,7 @@ export function IntegrationsView({
   initialIntegrations?: Integration[];
   onIntegrationsChanged?: (items: Integration[]) => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [integrations, setIntegrations] = useState(initialIntegrations ?? []);
   const [deliveries, setDeliveries] = useState<IntegrationDelivery[]>([]);
   const [form, setForm] = useState<IntegrationForm>(blankForm);
@@ -128,7 +129,15 @@ export function IntegrationsView({
   }
 
   async function remove(integration: Integration) {
-    if (!window.confirm(`Remove ${integration.name}?`)) return;
+    if (
+      !(await confirm({
+        title: 'Remove integration?',
+        message: `Remove “${integration.name}”? Form notifications using it will stop delivering.`,
+        confirmLabel: 'Remove integration',
+        tone: 'danger',
+      }))
+    )
+      return;
     setError(null);
     try {
       await api.delete(`/workspaces/${workspaceId}/integrations/${integration.id}`);
@@ -451,6 +460,7 @@ export function IntegrationsView({
           </div>
         )}
       </section>
+      {dialog}
     </>
   );
 }

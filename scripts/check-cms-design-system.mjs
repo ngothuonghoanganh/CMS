@@ -15,6 +15,12 @@ const allowedRawColorFiles = [
   'builder/block-presets.ts',
   'builder/builder-preview-model.ts',
 ];
+// The legacy normalizer is intentionally allowed to name the exact historical
+// Hero/CTA signature it removes. Keep this scoped to that value so new theme
+// literals in the adapter still fail the guardrail.
+const allowedRawColorValues = new Map([
+  ['builder/builder-adapter.ts', new Set(['#eff6ff'])],
+]);
 
 async function collectFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -42,7 +48,10 @@ for (const filePath of await collectFiles(root)) {
     violations.push(`${relativePath}: legacy admin palette value`);
   }
   if (isAllowed(relativePath)) continue;
-  const match = rawColorPattern.exec(source);
+  const allowedValues = allowedRawColorValues.get(relativePath);
+  const match = [...source.matchAll(rawColorPattern)].find(
+    (candidate) => !allowedValues?.has(candidate[0].toLowerCase()),
+  );
   rawColorPattern.lastIndex = 0;
   if (match) {
     const line = source.slice(0, match.index).split('\n').length;

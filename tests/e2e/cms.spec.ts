@@ -336,12 +336,14 @@ test('opens a Header extension in the Extensions drawer', async ({ page }) => {
     expect(addMenuResponse.status()).toBe(201);
     await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount + 1);
 
-    page.once('dialog', (dialog) => void dialog.accept());
     await drawer
       .locator('.list-row')
       .last()
       .getByRole('button', { name: 'Delete', exact: true })
       .click();
+    const deleteDialog = page.getByRole('dialog', { name: 'Delete layout?', exact: true });
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole('button', { name: 'Delete layout', exact: true }).click();
     await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount);
 
     await drawer

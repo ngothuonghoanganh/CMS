@@ -124,7 +124,7 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
     ).__payloadBuilderDebug;
     return debug?.getPayload();
   });
-  expect(beforeSave).toMatchObject({ version: 4 });
+  expect(beforeSave).toMatchObject({ version: 7 });
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
 
@@ -146,7 +146,7 @@ test('Phase 15 preset and semantic components stay synchronized through save/rel
     ).__payloadBuilderDebug;
     return debug?.getPayload();
   });
-  expect(reloaded).toMatchObject({ version: 4 });
+  expect(reloaded).toMatchObject({ version: 7 });
   const heading = findNode((reloaded as { root: BuilderNode }).root, 'heading');
   expect(heading?.props).toMatchObject({ text: 'A platform heading', level: 1 });
   expect(heading?.style).toMatchObject({

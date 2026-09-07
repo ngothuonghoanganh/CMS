@@ -21,6 +21,7 @@ import {
   PageHeader,
   PaginationControls,
   ResourceToolbar,
+  useConfirm,
 } from '../ui/surfaces';
 
 type AssetForm = {
@@ -58,6 +59,7 @@ export default function AssetsPage({
 }) {
   const router = useRouter();
   const { workspaceId, can } = useCmsShell();
+  const { confirm, dialog } = useConfirm();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
@@ -77,6 +79,13 @@ export default function AssetsPage({
   const [usages, setUsages] = useState<AssetUsageReference[]>([]);
   const [usagesTruncated, setUsagesTruncated] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Asset | null>(null);
+  const [folderEditor, setFolderEditor] = useState<{
+    folderId?: string;
+    mode: 'create' | 'rename';
+    name: string;
+    parentId?: string;
+  } | null>(null);
+  const [folderBusy, setFolderBusy] = useState(false);
   const [detailAsset, setDetailAsset] = useState<Asset | undefined>();
   const [folders, setFolders] = useState<AssetFolder[]>([]);
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
@@ -269,42 +278,70 @@ export default function AssetsPage({
     }
   }
 
-  async function createFolder(parentId?: string) {
-    const name = window.prompt(parentId ? 'Child folder name' : 'Folder name');
-    if (!name?.trim()) return;
-    try {
-      const folder = await api.post<AssetFolder>(
-        `/workspaces/${workspaceId}/asset-folders`,
-        { name: name.trim(), ...(parentId ? { parentId } : {}) },
-      );
-      setFolders((current) => [...current, folder]);
-    } catch (caughtError: unknown) {
-      setError(
-        caughtError instanceof Error ? caughtError.message : 'Unable to create folder.',
-      );
-    }
+  function createFolder(parentId?: string) {
+    setFolderEditor({
+      mode: 'create',
+      name: '',
+      ...(parentId ? { parentId } : {}),
+    });
   }
 
-  async function renameFolder(folder: AssetFolder) {
-    const name = window.prompt('Folder name', folder.name);
-    if (!name?.trim() || name.trim() === folder.name) return;
+  function renameFolder(folder: AssetFolder) {
+    setFolderEditor({ folderId: folder.id, mode: 'rename', name: folder.name });
+  }
+
+  async function submitFolder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!folderEditor || !folderEditor.name.trim()) return;
+    const current = folderEditor;
+    if (current.mode === 'rename' && current.name.trim() === current.name) {
+      setFolderEditor(null);
+      return;
+    }
+    setFolderBusy(true);
     try {
-      const updated = await api.patch<AssetFolder>(
-        `/workspaces/${workspaceId}/asset-folders/${folder.id}`,
-        { name: name.trim() },
-      );
-      setFolders((current) =>
-        current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
-      );
+      if (current.mode === 'create') {
+        const folder = await api.post<AssetFolder>(
+          `/workspaces/${workspaceId}/asset-folders`,
+          {
+            name: current.name.trim(),
+            ...(current.parentId ? { parentId: current.parentId } : {}),
+          },
+        );
+        setFolders((folders) => [...folders, folder]);
+      } else if (current.folderId) {
+        const updated = await api.patch<AssetFolder>(
+          `/workspaces/${workspaceId}/asset-folders/${current.folderId}`,
+          { name: current.name.trim() },
+        );
+        setFolders((folders) =>
+          folders.map((folder) => (folder.id === updated.id ? updated : folder)),
+        );
+      }
+      setFolderEditor(null);
     } catch (caughtError: unknown) {
       setError(
-        caughtError instanceof Error ? caughtError.message : 'Unable to rename folder.',
+        caughtError instanceof Error
+          ? caughtError.message
+          : current.mode === 'create'
+            ? 'Unable to create folder.'
+            : 'Unable to rename folder.',
       );
+    } finally {
+      setFolderBusy(false);
     }
   }
 
   async function removeFolder(folder: AssetFolder) {
-    if (!window.confirm(`Delete the ${folder.name} folder? Contents are never deleted.`))
+    if (
+      !(await confirm({
+        title: 'Delete folder?',
+        description: 'The folder is removed, but its contents stay in your library.',
+        message: `Delete the “${folder.name}” folder?`,
+        confirmLabel: 'Delete folder',
+        tone: 'danger',
+      }))
+    )
       return;
     try {
       await api.delete(`/workspaces/${workspaceId}/asset-folders/${folder.id}`);
@@ -337,7 +374,7 @@ export default function AssetsPage({
               <button
                 aria-label={`Add child folder to ${folder.name}`}
                 className="button button-small button-ghost"
-                onClick={() => void createFolder(folder.id)}
+                onClick={() => createFolder(folder.id)}
                 type="button"
               >
                 +
@@ -347,7 +384,7 @@ export default function AssetsPage({
               <button
                 aria-label={`Rename ${folder.name}`}
                 className="button button-small button-ghost"
-                onClick={() => void renameFolder(folder)}
+                onClick={() => renameFolder(folder)}
                 type="button"
               >
                 Rename
@@ -439,7 +476,7 @@ export default function AssetsPage({
             {can('asset.create') ? (
               <button
                 className="button button-small button-secondary"
-                onClick={() => void createFolder()}
+                onClick={() => createFolder()}
                 type="button"
               >
                 New
@@ -581,6 +618,63 @@ export default function AssetsPage({
           deletion is blocked safely and the usage locations remain available for review.
         </p>
       </Modal>
+      <Modal
+        description={
+          folderEditor?.mode === 'create'
+            ? folderEditor.parentId
+              ? 'Create a child folder inside the selected media folder.'
+              : 'Create a top-level folder for organizing workspace media.'
+            : 'Update the folder name without changing the media inside it.'
+        }
+        footer={
+          <div className="form-actions">
+            <button
+              className="button button-ghost"
+              disabled={folderBusy}
+              onClick={() => setFolderEditor(null)}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="button button-primary"
+              disabled={folderBusy || !folderEditor?.name.trim()}
+              form="folder-form"
+              type="submit"
+            >
+              {folderBusy
+                ? 'Saving…'
+                : folderEditor?.mode === 'create'
+                  ? 'Create folder'
+                  : 'Save name'}
+            </button>
+          </div>
+        }
+        onClose={() => {
+          if (!folderBusy) setFolderEditor(null);
+        }}
+        open={Boolean(folderEditor)}
+        size="sm"
+        title={folderEditor?.mode === 'create' ? 'Create folder' : 'Rename folder'}
+      >
+        <form className="stack" id="folder-form" onSubmit={submitFolder}>
+          <label>
+            Folder name
+            <input
+              autoFocus
+              disabled={folderBusy}
+              onChange={(event) =>
+                setFolderEditor((current) =>
+                  current ? { ...current, name: event.target.value } : current,
+                )
+              }
+              required
+              value={folderEditor?.name ?? ''}
+            />
+          </label>
+        </form>
+      </Modal>
+      {dialog}
       {action ? (
         <Drawer
           description="Upload media once, organize it into folders, and reuse the stable asset reference across the workspace."

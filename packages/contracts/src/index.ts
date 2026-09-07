@@ -1557,6 +1557,22 @@ export const HeadingPropsSchema = z
   .strict();
 export type HeadingProps = z.infer<typeof HeadingPropsSchema>;
 
+export const TextRoleSchema = z.enum(['body', 'small', 'muted']);
+export type TextRole = z.infer<typeof TextRoleSchema>;
+
+export const ButtonVariantSchema = z.enum(['primary', 'secondary', 'ghost']);
+export type ButtonVariant = z.infer<typeof ButtonVariantSchema>;
+export const ButtonPropsSchema = z
+  .object({
+    label: nonEmptyText.max(200),
+    href: safeButtonHref,
+    target: z.enum(['_self', '_blank']),
+    /** Missing legacy values resolve to primary without rewriting the saved payload. */
+    variant: ButtonVariantSchema.optional(),
+  })
+  .strict();
+export type ButtonProps = z.infer<typeof ButtonPropsSchema>;
+
 export const LinkPropsSchema = z
   .object({
     text: nonEmptyText.max(200),
@@ -2781,7 +2797,11 @@ export type SectionNodeV7 = PageNodeV7Base & { type: 'section'; props: {} };
 export type ContainerNodeV7 = PageNodeV7Base & { type: 'container'; props: {} };
 export type TextNodeV7 = PageNodeV7Base & {
   type: 'text';
-  props: { text: string; align?: 'left' | 'center' | 'right' | undefined };
+  props: {
+    text: string;
+    align?: 'left' | 'center' | 'right' | undefined;
+    role?: TextRole | undefined;
+  };
 };
 export type ImageNodeV7 = PageNodeV7Base & {
   type: 'image';
@@ -2789,7 +2809,7 @@ export type ImageNodeV7 = PageNodeV7Base & {
 };
 export type ButtonNodeV7 = PageNodeV7Base & {
   type: 'button';
-  props: { label: string; href: string; target: '_self' | '_blank' };
+  props: ButtonProps;
 };
 export type FormNodeV7 = PageNodeV7Base & { type: 'form'; props: FormProps };
 export type CountdownNodeV7 = PageNodeV7Base & {
@@ -2910,6 +2930,7 @@ export const PageNodeV7Schema: z.ZodType<PageNodeV7> = z.lazy(() =>
         .object({
           text: nonEmptyText.max(PAGE_PAYLOAD_MAX_TEXT_LENGTH),
           align: z.enum(['left', 'center', 'right']).optional(),
+          role: TextRoleSchema.optional(),
         })
         .strict(),
       emptyPageV7Children(),
@@ -2919,17 +2940,7 @@ export const PageNodeV7Schema: z.ZodType<PageNodeV7> = z.lazy(() =>
       z.object({ src: safeImageSource, alt: z.string().trim().max(500) }).strict(),
       emptyPageV7Children(),
     ),
-    pageNodeV7Base(
-      z.literal('button'),
-      z
-        .object({
-          label: nonEmptyText.max(200),
-          href: safeButtonHref,
-          target: z.enum(['_self', '_blank']),
-        })
-        .strict(),
-      emptyPageV7Children(),
-    ),
+    pageNodeV7Base(z.literal('button'), ButtonPropsSchema, emptyPageV7Children()),
     pageNodeV7Base(z.literal('form'), FormPropsSchema, emptyPageV7Children()),
     pageNodeV7Base(z.literal('countdown'), CountdownPropsSchema, emptyPageV7Children()),
     pageNodeV7Base(
@@ -3313,6 +3324,51 @@ export const ComponentDefaultAppearanceSchema = z
   .strict();
 export type ComponentDefaultAppearance = z.infer<typeof ComponentDefaultAppearanceSchema>;
 
+export const DESIGN_SYSTEM_COLOR_ROLES = [
+  'pageBackground',
+  'surface',
+  'primary',
+  'onPrimary',
+  'secondary',
+  'text',
+  'mutedText',
+  'border',
+  'success',
+  'warning',
+  'error',
+] as const;
+export type DesignSystemColorRole = (typeof DESIGN_SYSTEM_COLOR_ROLES)[number];
+
+const defaultSemanticRoles: Record<DesignSystemColorRole, string> = {
+  pageBackground: 'color-page-background',
+  surface: 'color-surface',
+  primary: 'color-primary',
+  onPrimary: 'color-on-primary',
+  secondary: 'color-secondary',
+  text: 'color-text',
+  mutedText: 'color-muted',
+  border: 'color-border',
+  success: 'color-success',
+  warning: 'color-warning',
+  error: 'color-error',
+};
+
+const SemanticColorRolesSchema = z
+  .object(
+    Object.fromEntries(
+      DESIGN_SYSTEM_COLOR_ROLES.map((role) => [role, designTokenId.optional()]),
+    ) as Record<DesignSystemColorRole, z.ZodOptional<typeof designTokenId>>,
+  )
+  .strict()
+  .default(defaultSemanticRoles);
+const SemanticColorRoleOverrideSchema = z
+  .object(
+    Object.fromEntries(
+      DESIGN_SYSTEM_COLOR_ROLES.map((role) => [role, designTokenId.optional()]),
+    ) as Record<DesignSystemColorRole, z.ZodOptional<typeof designTokenId>>,
+  )
+  .strict();
+
 export const SiteDesignSystemSchema = z
   .object({
     version: z.literal(1),
@@ -3322,6 +3378,8 @@ export const SiteDesignSystemSchema = z
     radii: z.array(DesignScalarTokenSchema).max(50),
     shadows: z.array(DesignScalarTokenSchema).max(50),
     containerWidths: z.array(DesignScalarTokenSchema).max(50),
+    /** Stable semantic-to-token mapping. UI labels never depend on token names. */
+    semanticRoles: SemanticColorRolesSchema.optional(),
     /** Workspace-authored defaults applied before node-local overrides. */
     componentDefaults: z
       .record(
@@ -3338,7 +3396,12 @@ export const SiteDesignSystemSchema = z
   .superRefine((system, context) => {
     const seen = new Set<string>();
     for (const [category, tokens] of Object.entries(system)) {
-      if (category === 'version' || category === 'componentDefaults') continue;
+      if (
+        category === 'version' ||
+        category === 'componentDefaults' ||
+        category === 'semanticRoles'
+      )
+        continue;
       for (const [index, token] of (tokens as Array<{ id: string }>).entries()) {
         if (seen.has(token.id)) {
           context.addIssue({
@@ -3363,6 +3426,7 @@ export const SiteDesignSystemOverrideSchema = z
     radii: z.array(DesignScalarTokenSchema).max(50).optional(),
     shadows: z.array(DesignScalarTokenSchema).max(50).optional(),
     containerWidths: z.array(DesignScalarTokenSchema).max(50).optional(),
+    semanticRoles: SemanticColorRoleOverrideSchema.optional(),
     removedTokenIds: z
       .object({
         colors: z.array(designTokenId).max(100).optional(),
@@ -3412,6 +3476,40 @@ export function resolveDesignSystemComponentDefaults(
   componentType: string,
 ): ComponentDefaultAppearance | undefined {
   return system?.componentDefaults?.[componentType];
+}
+
+export type DesignSystemAppearanceContext = {
+  type: string;
+  props?: Record<string, unknown> | undefined;
+  variant?: string | undefined;
+  part?: string | undefined;
+  viewport?: 'base' | 'tablet' | 'mobile' | undefined;
+};
+
+/** Resolve the semantic recipe before node-local styles are merged. */
+export function resolveDesignSystemAppearance(
+  system: SiteDesignSystem | undefined,
+  context: DesignSystemAppearanceContext,
+): ComponentDefaultAppearance | undefined {
+  if (!system?.componentDefaults) return undefined;
+  const props = context.props ?? {};
+  const semanticVariant =
+    context.variant ??
+    (context.type === 'heading' && typeof props.level === 'number'
+      ? `heading-${props.level}`
+      : context.type === 'button' && typeof props.variant === 'string'
+        ? `button-${props.variant}`
+        : context.type === 'text' && typeof props.role === 'string'
+          ? `text-${props.role}`
+          : undefined);
+  const key =
+    semanticVariant && system.componentDefaults[semanticVariant]
+      ? semanticVariant
+      : context.type;
+  const appearance = system.componentDefaults[key];
+  if (!appearance || !context.part) return appearance;
+  const part = appearance.partsStyle?.[context.part];
+  return part ? { style: part } : undefined;
 }
 
 function mergeDesignTokens<T extends { id: string }>(
@@ -3529,6 +3627,10 @@ export function mergeSiteDesignSystems(
       radii: mergeCategory('radii'),
       shadows: mergeCategory('shadows'),
       containerWidths: mergeCategory('containerWidths'),
+      semanticRoles: {
+        ...workspaceSystem.semanticRoles,
+        ...(sparse.data.semanticRoles ?? {}),
+      },
       ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
     });
   }
@@ -3559,6 +3661,7 @@ export function mergeSiteDesignSystems(
       workspaceSystem.containerWidths,
       fullSiteSystem.containerWidths,
     ),
+    semanticRoles: { ...workspaceSystem.semanticRoles, ...fullSiteSystem.semanticRoles },
     ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
   });
 }
@@ -3578,6 +3681,15 @@ function sameJson(left: unknown, right: unknown): boolean {
 
 function diffObject(base: unknown, value: unknown): unknown {
   if (sameJson(base, value)) return undefined;
+  // Token references are atomic style values. Recursing into them would drop
+  // the unchanged `kind` discriminator and leave an invalid partial token in
+  // a sparse site override.
+  if (
+    (base && typeof base === 'object' && 'kind' in base) ||
+    (value && typeof value === 'object' && 'kind' in value)
+  ) {
+    return value;
+  }
   if (
     base &&
     value &&
@@ -3631,6 +3743,11 @@ export function normalizeSiteDesignSystemOverride(
       componentDefaults[componentType] = difference as ComponentDefaultAppearance;
   }
   if (Object.keys(removedTokenIds).length) result.removedTokenIds = removedTokenIds;
+  const semanticRoles = diffObject(
+    workspaceSystem.semanticRoles,
+    effectiveSystem.semanticRoles,
+  );
+  if (semanticRoles) result.semanticRoles = semanticRoles;
   if (Object.keys(componentDefaults).length) result.componentDefaults = componentDefaults;
   return SiteDesignSystemOverrideSchema.parse(result);
 }
@@ -3640,10 +3757,17 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
   return SiteDesignSystemSchema.parse({
     version: 1,
     colors: [
+      { id: 'color-page-background', name: 'Page background', value: '#ffffff' },
       { id: 'color-primary', name: 'Primary', value: '#2563eb' },
       { id: 'color-surface', name: 'Surface', value: '#ffffff' },
+      { id: 'color-on-primary', name: 'Text on primary', value: '#ffffff' },
+      { id: 'color-secondary', name: 'Secondary', value: '#e2e8f0' },
       { id: 'color-text', name: 'Text', value: '#111827' },
       { id: 'color-muted', name: 'Muted text', value: '#6b7280' },
+      { id: 'color-border', name: 'Border', value: '#e2e8f0' },
+      { id: 'color-success', name: 'Success', value: '#15803d' },
+      { id: 'color-warning', name: 'Warning', value: '#b45309' },
+      { id: 'color-error', name: 'Error', value: '#b91c1c' },
     ],
     typography: [
       {
@@ -3652,14 +3776,48 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
         fontFamily: 'system-ui, sans-serif',
         fontSize: '16px',
         lineHeight: '1.5',
+        letterSpacing: '0',
       },
       {
-        id: 'type-heading',
-        name: 'Heading',
+        id: 'type-h1',
+        name: 'Heading 1',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 'clamp(2.5rem, 6vw, 4rem)',
+        fontWeight: '700',
+        lineHeight: '1.1',
+      },
+      {
+        id: 'type-h2',
+        name: 'Heading 2',
         fontFamily: 'system-ui, sans-serif',
         fontSize: 'clamp(2rem, 5vw, 4rem)',
         fontWeight: '700',
         lineHeight: '1.1',
+      },
+      ...[3, 4, 5, 6].map((level) => ({
+        id: `type-h${level}`,
+        name: `Heading ${level}`,
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: `${Math.max(1.25, 2.25 - level * 0.2)}rem`,
+        fontWeight: '600' as const,
+        lineHeight: '1.2',
+      })),
+      // Kept as a compatibility alias for v1 component recipes and saved sites.
+      {
+        id: 'type-heading',
+        name: 'Heading (legacy)',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: 'clamp(2rem, 5vw, 4rem)',
+        fontWeight: '700',
+        lineHeight: '1.1',
+      },
+      {
+        id: 'type-small',
+        name: 'Small text',
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '14px',
+        fontWeight: '400',
+        lineHeight: '1.5',
       },
     ],
     spacing: [
@@ -3678,11 +3836,20 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
       { id: 'container-narrow', name: 'Narrow', value: '720px' },
       { id: 'container-wide', name: 'Wide', value: '1200px' },
     ],
+    semanticRoles: defaultSemanticRoles,
     componentDefaults: {
-      section: {
+      root: {
         style: {
-          base: { padding: token('space-2'), backgroundColor: token('color-surface') },
+          base: {
+            minHeight: '100vh',
+            backgroundColor: token('color-page-background'),
+            color: token('color-text'),
+            fontFamily: token('type-body'),
+          },
         },
+      },
+      section: {
+        style: { base: { padding: token('space-2') } },
       },
       container: {
         style: {
@@ -3715,13 +3882,137 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
           },
         },
       },
+      'heading-1': {
+        style: {
+          base: {
+            fontFamily: token('type-h1'),
+            fontSize: token('type-h1'),
+            fontWeight: token('type-h1'),
+            lineHeight: token('type-h1'),
+            color: token('color-text'),
+          },
+        },
+      },
+      'heading-2': {
+        style: {
+          base: {
+            fontFamily: token('type-h2'),
+            fontSize: token('type-h2'),
+            fontWeight: token('type-h2'),
+            lineHeight: token('type-h2'),
+            color: token('color-text'),
+          },
+        },
+      },
+      'heading-3': {
+        style: {
+          base: {
+            fontFamily: token('type-h3'),
+            fontSize: token('type-h3'),
+            fontWeight: token('type-h3'),
+            lineHeight: token('type-h3'),
+            color: token('color-text'),
+          },
+        },
+      },
+      'heading-4': {
+        style: {
+          base: {
+            fontFamily: token('type-h4'),
+            fontSize: token('type-h4'),
+            fontWeight: token('type-h4'),
+            lineHeight: token('type-h4'),
+            color: token('color-text'),
+          },
+        },
+      },
+      'heading-5': {
+        style: {
+          base: {
+            fontFamily: token('type-h5'),
+            fontSize: token('type-h5'),
+            fontWeight: token('type-h5'),
+            lineHeight: token('type-h5'),
+            color: token('color-text'),
+          },
+        },
+      },
+      'heading-6': {
+        style: {
+          base: {
+            fontFamily: token('type-h6'),
+            fontSize: token('type-h6'),
+            fontWeight: token('type-h6'),
+            lineHeight: token('type-h6'),
+            color: token('color-text'),
+          },
+        },
+      },
+      'text-small': {
+        style: {
+          base: {
+            fontFamily: token('type-small'),
+            fontSize: token('type-small'),
+            fontWeight: token('type-small'),
+            lineHeight: token('type-small'),
+            color: token('color-muted'),
+          },
+        },
+      },
+      'text-muted': {
+        style: {
+          base: {
+            fontFamily: token('type-small'),
+            fontSize: token('type-small'),
+            fontWeight: token('type-small'),
+            lineHeight: token('type-small'),
+            color: token('color-muted'),
+          },
+        },
+      },
       button: {
         style: {
           base: {
             display: 'inline-block',
             padding: token('space-1'),
             backgroundColor: token('color-primary'),
-            color: token('color-surface'),
+            color: token('color-on-primary'),
+            borderRadius: token('radius-md'),
+          },
+        },
+      },
+      'button-primary': {
+        style: {
+          base: {
+            display: 'inline-block',
+            padding: token('space-1'),
+            backgroundColor: token('color-primary'),
+            color: token('color-on-primary'),
+            borderRadius: token('radius-md'),
+          },
+        },
+      },
+      'button-secondary': {
+        style: {
+          base: {
+            display: 'inline-block',
+            padding: token('space-1'),
+            backgroundColor: token('color-secondary'),
+            color: token('color-primary'),
+            borderColor: token('color-primary'),
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderRadius: token('radius-md'),
+          },
+        },
+      },
+      'button-ghost': {
+        style: {
+          base: {
+            display: 'inline-block',
+            padding: token('space-1'),
+            backgroundColor: 'transparent',
+            color: token('color-primary'),
             borderRadius: token('radius-md'),
           },
         },
@@ -3736,7 +4027,167 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
       },
       form: {
         style: {
-          base: { padding: token('space-2'), backgroundColor: token('color-surface') },
+          base: {
+            padding: token('space-2'),
+            backgroundColor: token('color-surface'),
+            color: token('color-text'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            borderColor: token('color-border'),
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderRadius: token('radius-md'),
+          },
+        },
+        partsStyle: {
+          field: { base: { display: 'grid', gap: token('space-1') } },
+          label: {
+            base: {
+              color: token('color-text'),
+              fontFamily: token('type-body'),
+              fontSize: token('type-body'),
+              fontWeight: token('type-body'),
+              lineHeight: token('type-body'),
+            },
+          },
+          input: {
+            base: {
+              width: '100%',
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+              borderColor: token('color-border'),
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderRadius: token('radius-md'),
+              padding: token('space-1'),
+              fontFamily: token('type-body'),
+              fontSize: token('type-body'),
+              lineHeight: token('type-body'),
+            },
+          },
+          option: {
+            base: {
+              color: token('color-text'),
+              fontFamily: token('type-body'),
+              fontSize: token('type-body'),
+              lineHeight: token('type-body'),
+            },
+          },
+          submit: {
+            base: {
+              width: 'fit-content',
+              backgroundColor: token('color-primary'),
+              color: token('color-on-primary'),
+              borderRadius: token('radius-md'),
+              padding: token('space-1'),
+              fontFamily: token('type-body'),
+              fontSize: token('type-body'),
+              fontWeight: token('type-body'),
+              lineHeight: token('type-body'),
+            },
+          },
+          error: {
+            base: {
+              color: token('color-error'),
+              fontFamily: token('type-body'),
+              fontSize: token('type-body'),
+              lineHeight: token('type-body'),
+            },
+          },
+          success: {
+            base: {
+              color: token('color-success'),
+              backgroundColor: token('color-surface'),
+              borderColor: token('color-border'),
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderRadius: token('radius-md'),
+              padding: token('space-2'),
+              fontFamily: token('type-body'),
+              fontSize: token('type-body'),
+              lineHeight: token('type-body'),
+            },
+          },
+        },
+      },
+      accordion: {
+        style: {
+          base: {
+            borderColor: token('color-border'),
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderRadius: token('radius-md'),
+          },
+        },
+        partsStyle: {
+          root: { base: { gap: token('space-1') } },
+          item: {
+            base: {
+              borderColor: token('color-border'),
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderRadius: token('radius-sm'),
+            },
+          },
+          trigger: {
+            base: {
+              padding: token('space-1'),
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+              fontFamily: token('type-body'),
+            },
+          },
+          panel: {
+            base: {
+              padding: token('space-2'),
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+              fontFamily: token('type-body'),
+            },
+          },
+          icon: { base: { color: token('color-primary') } },
+        },
+      },
+      tabs: {
+        style: { base: { borderColor: token('color-border') } },
+        partsStyle: {
+          root: { base: { gap: token('space-2') } },
+          list: {
+            base: {
+              display: 'flex',
+              gap: token('space-1'),
+              borderColor: token('color-border'),
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderRadius: token('radius-md'),
+              padding: token('space-1'),
+            },
+          },
+          tab: {
+            base: {
+              padding: token('space-1'),
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+              borderRadius: token('radius-sm'),
+              fontFamily: token('type-body'),
+            },
+          },
+          activeTab: {
+            base: {
+              padding: token('space-1'),
+              backgroundColor: token('color-primary'),
+              color: token('color-on-primary'),
+              borderRadius: token('radius-sm'),
+              fontFamily: token('type-body'),
+            },
+          },
+          panel: {
+            base: {
+              padding: token('space-2'),
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+            },
+          },
         },
       },
       'navigation-view': {
@@ -3745,6 +4196,26 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
             display: 'flex',
             gap: token('space-2'),
             padding: token('space-2'),
+          },
+        },
+        partsStyle: {
+          list: { base: { display: 'flex', gap: token('space-2') } },
+          link: {
+            base: { color: token('color-primary'), fontFamily: token('type-body') },
+          },
+          activeLink: {
+            base: {
+              color: token('color-primary'),
+              fontFamily: token('type-body'),
+              fontWeight: token('type-body'),
+            },
+          },
+          mobilePanel: {
+            base: {
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+              padding: token('space-2'),
+            },
           },
         },
       },
@@ -3759,10 +4230,25 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
             backgroundColor: token('color-surface'),
           },
         },
+        partsStyle: {
+          root: {
+            base: {
+              backgroundColor: token('color-surface'),
+              color: token('color-text'),
+            },
+          },
+          brand: { base: { color: token('color-text') } },
+          navigation: { base: { color: token('color-text') } },
+          actions: { base: { color: token('color-text') } },
+        },
       },
       'global-footer': {
         style: {
           base: { padding: token('space-2'), backgroundColor: token('color-surface') },
+        },
+        partsStyle: {
+          root: { base: { color: token('color-text') } },
+          content: { base: { color: token('color-text'), gap: token('space-2') } },
         },
       },
     },
@@ -3796,6 +4282,26 @@ export function resolveSiteDesignToken(
   const key = property ? designTokenPropertyMap[property] : undefined;
   const value = key ? typography[key] : undefined;
   return typeof value === 'string' ? value : undefined;
+}
+
+/** Resolve a semantic color role through its explicit stable token mapping. */
+export function resolveDesignSystemColorRole(
+  system: SiteDesignSystem | undefined,
+  role: DesignSystemColorRole,
+): string | undefined {
+  if (!system) return undefined;
+  const tokenId = system.semanticRoles?.[role] ?? defaultSemanticRoles[role];
+  const value = tokenId ? resolveSiteDesignToken(system, tokenId, 'color') : undefined;
+  if (value !== undefined) return value;
+  // V1 systems predate the page-background role. Keep their published pages
+  // full-bleed by falling back to the existing surface token.
+  return role === 'pageBackground'
+    ? resolveSiteDesignToken(
+        system,
+        system.semanticRoles?.surface ?? defaultSemanticRoles.surface,
+        'color',
+      )
+    : undefined;
 }
 
 export function resolvePageStyleValue(

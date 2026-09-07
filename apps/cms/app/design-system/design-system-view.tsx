@@ -2,10 +2,12 @@
 
 import {
   SiteDesignSystemResponseSchema,
+  PAGE_COMPONENT_REGISTRY,
   createDefaultSiteDesignSystem,
   normalizeSiteDesignSystemOverride,
   resolveDesignSystemComponentDefaults,
   resolvePageStyleValue,
+  resolveDesignSystemColorRole,
   isSafePageStyleValue,
   type DesignScalarToken,
   type PageNodeStyleV7,
@@ -13,14 +15,7 @@ import {
   type StyleTokenReference,
   type TypographyToken,
 } from '@payload/contracts';
-import {
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 
 import { ApiClientError, api } from '../lib/api';
 import { ColorField } from '../ui/fields';
@@ -43,16 +38,7 @@ const scalarCategories = [
   ['containerWidths', 'Container widths'],
 ] as const;
 
-type ComponentStyleProperty =
-  | 'backgroundColor'
-  | 'borderRadius'
-  | 'color'
-  | 'fontFamily'
-  | 'fontSize'
-  | 'fontWeight'
-  | 'gap'
-  | 'lineHeight'
-  | 'padding';
+type ComponentStyleProperty = keyof PageNodeStyleV7['base'];
 
 function typographyFieldLabel(field: string): string {
   return (
@@ -68,50 +54,32 @@ function typographyFieldLabel(field: string): string {
   );
 }
 
-const componentDefaultTypes = [
-  ['heading', 'Heading'],
-  ['text', 'Body text'],
-  ['button', 'Button'],
-  ['form', 'Form'],
-  ['navigation-view', 'Navigation'],
-] as const;
+const designSystemComponentEntries = Object.values(PAGE_COMPONENT_REGISTRY).filter(
+  (definition) => definition.designSystem,
+);
 
 const componentDefaultFields: Record<
-  (typeof componentDefaultTypes)[number][0],
+  string,
   readonly { property: ComponentStyleProperty; label: string }[]
-> = {
-  heading: [
-    { property: 'color', label: 'Text color' },
-    { property: 'fontFamily', label: 'Font family' },
-    { property: 'fontSize', label: 'Font size' },
-    { property: 'fontWeight', label: 'Font weight' },
-  ],
-  text: [
-    { property: 'color', label: 'Text color' },
-    { property: 'fontFamily', label: 'Font family' },
-    { property: 'fontSize', label: 'Font size' },
-    { property: 'lineHeight', label: 'Line height' },
-  ],
-  button: [
-    { property: 'backgroundColor', label: 'Background' },
-    { property: 'color', label: 'Text color' },
-    { property: 'padding', label: 'Padding' },
-    { property: 'borderRadius', label: 'Radius' },
-  ],
-  form: [
-    { property: 'backgroundColor', label: 'Background' },
-    { property: 'padding', label: 'Padding' },
-  ],
-  'navigation-view': [
-    { property: 'color', label: 'Text color' },
-    { property: 'gap', label: 'Item gap' },
-    { property: 'padding', label: 'Padding' },
-  ],
-};
+> = Object.fromEntries(
+  designSystemComponentEntries.map((definition) => [
+    definition.type,
+    definition.designSystem!.controls.map((property) => ({
+      property: property.replace(/-([a-z])/g, (_, character: string) =>
+        character.toUpperCase(),
+      ) as ComponentStyleProperty,
+      label: property
+        .replace(
+          /(^|-)([a-z])/g,
+          (_, _separator: string, character: string) => ` ${character.toUpperCase()}`,
+        )
+        .trim(),
+    })),
+  ]),
+);
 
-const componentTokenCategories: Record<
-  ComponentStyleProperty,
-  (typeof scalarCategories)[number][0] | 'typography'
+const componentTokenCategories: Partial<
+  Record<ComponentStyleProperty, (typeof scalarCategories)[number][0] | 'typography'>
 > = {
   backgroundColor: 'colors',
   borderRadius: 'radii',
@@ -148,6 +116,7 @@ function tokenOptions(
   property: ComponentStyleProperty,
 ): { id: string; label: string }[] {
   const category = componentTokenCategories[property];
+  if (!category) return [];
   if (category === 'typography') {
     return system.typography.map((token) => ({ id: token.id, label: token.name }));
   }
@@ -161,31 +130,105 @@ function selectedStyleValue(value: string): string | StyleTokenReference {
   return value;
 }
 
+function componentRecipeKey(componentType: string, variantId: string): string {
+  if (variantId === 'base') return componentType;
+  if (componentType === 'heading') return variantId;
+  if (componentType === 'text' && variantId === 'body') return 'text';
+  return `${componentType}-${variantId}`;
+}
+
 export function updateComponentDefault(
   system: SiteDesignSystem,
   componentType: string,
   property: ComponentStyleProperty,
   value: string | StyleTokenReference | undefined,
+  viewport: 'base' | 'tablet' | 'mobile' = 'base',
 ): SiteDesignSystem {
   const current = system.componentDefaults?.[componentType];
-  const base = { ...(current?.style?.base ?? {}) };
-  if (value === undefined) delete base[property];
+  const styleBlock: PageNodeStyleV7['base'] = {
+    ...(current?.style?.[viewport] ?? {}),
+  };
+  if (value === undefined) delete styleBlock[property];
   else
-    (base as Record<ComponentStyleProperty, string | StyleTokenReference | undefined>)[
-      property
-    ] = value;
+    (
+      styleBlock as Record<
+        ComponentStyleProperty,
+        string | StyleTokenReference | undefined
+      >
+    )[property] = value;
+  const nextStyle: PageNodeStyleV7 = {
+    ...(current?.style ?? {}),
+    base: current?.style?.base ?? {},
+  };
+  if (viewport === 'base') nextStyle.base = styleBlock;
+  if (viewport === 'tablet') nextStyle.tablet = styleBlock;
+  if (viewport === 'mobile') nextStyle.mobile = styleBlock;
   return {
     ...system,
     componentDefaults: {
       ...(system.componentDefaults ?? {}),
       [componentType]: {
         ...(current ?? {}),
-        style: {
-          ...(current?.style ?? {}),
-          base: base as PageNodeStyleV7['base'],
+        style: nextStyle,
+      },
+    },
+  };
+}
+
+export function updateComponentPartDefault(
+  system: SiteDesignSystem,
+  componentType: string,
+  part: string,
+  property: ComponentStyleProperty,
+  value: string | StyleTokenReference | undefined,
+  viewport: 'base' | 'tablet' | 'mobile' = 'base',
+): SiteDesignSystem {
+  const current = system.componentDefaults?.[componentType];
+  const currentPart = current?.partsStyle?.[part];
+  const styleBlock: PageNodeStyleV7['base'] = {
+    ...(currentPart?.[viewport] ?? {}),
+  };
+  if (value === undefined) delete styleBlock[property];
+  else
+    (
+      styleBlock as Record<
+        ComponentStyleProperty,
+        string | StyleTokenReference | undefined
+      >
+    )[property] = value;
+  const nextPart: PageNodeStyleV7 = {
+    ...(currentPart ?? {}),
+    base: currentPart?.base ?? {},
+  };
+  if (viewport === 'base') nextPart.base = styleBlock;
+  if (viewport === 'tablet') nextPart.tablet = styleBlock;
+  if (viewport === 'mobile') nextPart.mobile = styleBlock;
+  return {
+    ...system,
+    componentDefaults: {
+      ...(system.componentDefaults ?? {}),
+      [componentType]: {
+        ...(current ?? {}),
+        partsStyle: {
+          ...(current?.partsStyle ?? {}),
+          [part]: nextPart,
         },
       },
     },
+  };
+}
+
+function resetComponentDefault(
+  system: SiteDesignSystem,
+  componentType: string,
+): SiteDesignSystem {
+  const componentDefaults = { ...(system.componentDefaults ?? {}) };
+  delete componentDefaults[componentType];
+  return {
+    ...system,
+    ...(Object.keys(componentDefaults).length
+      ? { componentDefaults }
+      : { componentDefaults: undefined }),
   };
 }
 
@@ -208,29 +251,41 @@ export function resolveComponentDefaultStyle(
   return resolved as CSSProperties;
 }
 
+export function resolveComponentDefaultPartStyle(
+  system: SiteDesignSystem,
+  componentType: string,
+  part: string,
+): CSSProperties {
+  const base = resolveDesignSystemComponentDefaults(system, componentType)?.partsStyle?.[
+    part
+  ]?.base;
+  if (!base) return {};
+  const resolved: Record<string, string> = {};
+  for (const [property, value] of Object.entries(base)) {
+    if (typeof value !== 'string' && (!value || value.kind !== 'token')) continue;
+    const cssValue = resolvePageStyleValue(
+      value as string | StyleTokenReference,
+      system,
+      stylePropertyName(property as ComponentStyleProperty),
+    );
+    if (cssValue !== undefined) resolved[property] = cssValue;
+  }
+  return resolved as CSSProperties;
+}
+
 type PreviewDevice = 'desktop' | 'mobile';
 type PreviewPage = 'home' | 'services' | 'contact';
-type EditorOffset = { x: number; y: number };
-type EditorDragTarget = 'editor' | 'reopen';
-type EditorDrag = {
-  animationFrame: number | null;
-  didMove: boolean;
-  element: HTMLElement;
-  latestOffset: EditorOffset;
-  pointerId: number;
-  target: EditorDragTarget;
-  startOffset: EditorOffset;
-  startRect: DOMRect;
-  startX: number;
-  startY: number;
-};
 
 type WebsitePreviewProps = {
   device: PreviewDevice;
   headingStyle: CSSProperties;
   bodyStyle: CSSProperties;
   buttonStyle: CSSProperties;
+  secondaryButtonStyle: CSSProperties;
+  formStyle: CSSProperties;
+  formInputStyle: CSSProperties;
   colors: {
+    pageBackground: string;
     primary: string;
     surface: string;
     text: string;
@@ -249,26 +304,20 @@ type WebsitePreviewProps = {
 
 function previewTokenValue(
   system: SiteDesignSystem,
-  patterns: readonly string[],
+  role: Parameters<typeof resolveDesignSystemColorRole>[1],
   fallback: string,
 ): string {
-  const token = system.colors.find((candidate) => {
-    const searchable = `${candidate.id} ${candidate.name}`.toLowerCase();
-    return patterns.some((pattern) => searchable.includes(pattern));
-  });
-  return token?.value && isSafePageStyleValue(token.value) ? token.value : fallback;
+  const value = resolveDesignSystemColorRole(system, role);
+  return value && isSafePageStyleValue(value) ? value : fallback;
 }
 
 function previewScalarValue(
   system: SiteDesignSystem,
   category: 'spacing' | 'radii' | 'shadows',
-  patterns: readonly string[],
+  tokenIds: readonly string[],
   fallback: string,
 ): string {
-  const token = system[category].find((candidate) => {
-    const searchable = `${candidate.id} ${candidate.name}`.toLowerCase();
-    return patterns.some((pattern) => searchable.includes(pattern));
-  });
+  const token = system[category].find((candidate) => tokenIds.includes(candidate.id));
   return token?.value && isSafePageStyleValue(token.value) ? token.value : fallback;
 }
 
@@ -320,6 +369,9 @@ function contrastRatio(foreground: string, background: string): number | undefin
 function WebsitePreview({
   bodyStyle,
   buttonStyle,
+  secondaryButtonStyle,
+  formStyle,
+  formInputStyle,
   colors,
   contrast,
   device,
@@ -358,6 +410,7 @@ function WebsitePreview({
   const content = pageContent[page];
   const previewVariables = {
     '--brand-primary': colors.primary,
+    '--brand-page-background': colors.pageBackground,
     '--brand-surface': colors.surface,
     '--brand-text': colors.text,
     '--brand-muted': colors.muted,
@@ -440,7 +493,7 @@ function WebsitePreview({
         </span>
         <span>
           <i className="design-system-impact-dot is-surface" />
-          Surface color → page and cards
+          Surface color → cards, forms, and secondary surfaces
         </span>
       </div>
       {contrast !== undefined && contrast < 4.5 ? (
@@ -463,7 +516,10 @@ function WebsitePreview({
             <span />
             <small>{siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.com</small>
           </div>
-          <div className="site-preview-page">
+          <div
+            className="site-preview-page"
+            style={{ backgroundColor: 'var(--brand-page-background)' }}
+          >
             <header className="site-preview-header">
               <div className="site-preview-brand">
                 {logoSource ? (
@@ -505,7 +561,11 @@ function WebsitePreview({
                     <button style={buttonStyle} type="button">
                       Start a project
                     </button>
-                    <button className="site-preview-secondary-button" type="button">
+                    <button
+                      className="site-preview-secondary-button"
+                      style={secondaryButtonStyle}
+                      type="button"
+                    >
                       See how it works
                     </button>
                   </div>
@@ -574,16 +634,20 @@ function WebsitePreview({
                   </blockquote>
                   <span className="site-preview-person">Jordan Lee · Founder</span>
                 </div>
-                <div className="site-preview-contact-card">
+                <div className="site-preview-contact-card" style={formStyle}>
                   <span className="site-preview-eyebrow">Contact form</span>
                   <h3>Start a conversation.</h3>
                   <label>
                     Name
-                    <input placeholder="Your name" readOnly />
+                    <input placeholder="Your name" readOnly style={formInputStyle} />
                   </label>
                   <label>
                     Email
-                    <input placeholder="you@example.com" readOnly />
+                    <input
+                      placeholder="you@example.com"
+                      readOnly
+                      style={formInputStyle}
+                    />
                   </label>
                   <button style={buttonStyle} type="button">
                     Send message
@@ -712,17 +776,21 @@ export function DesignSystemView({
   const [notice, setNotice] = useState<string | null>(null);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('desktop');
   const [previewPage, setPreviewPage] = useState<PreviewPage>('home');
-  const [editorOffset, setEditorOffset] = useState<EditorOffset>({ x: 0, y: 0 });
-  const [reopenOffset, setReopenOffset] = useState<EditorOffset>({ x: 0, y: 0 });
-  const [isEditorDragging, setIsEditorDragging] = useState(false);
-  const [editorDragTarget, setEditorDragTarget] = useState<EditorDragTarget | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(true);
-  const editorRef = useRef<HTMLDivElement>(null);
-  const reopenEditorRef = useRef<HTMLButtonElement>(null);
-  const editorDragRef = useRef<EditorDrag | null>(null);
-  const suppressReopenClickRef = useRef(false);
+  const [selectedColorId, setSelectedColorId] = useState<string | null>(null);
+  const [selectedTypographyId, setSelectedTypographyId] = useState<string | null>(null);
+  const [selectedComponentType, setSelectedComponentType] = useState<string | null>(null);
+  const [selectedComponentPart, setSelectedComponentPart] = useState<string | null>(null);
+  const [componentViewport, setComponentViewport] = useState<
+    'base' | 'tablet' | 'mobile'
+  >('base');
+  const [editorCollapsed, setEditorCollapsed] = useState(false);
   const [activeCategory, setActiveCategory] = useState<
-    'overview' | 'components' | 'typography' | (typeof scalarCategories)[number][0]
+    | 'overview'
+    | 'components'
+    | 'buttons'
+    | 'forms'
+    | 'typography'
+    | (typeof scalarCategories)[number][0]
   >('overview');
 
   useEffect(() => {
@@ -767,123 +835,6 @@ export function DesignSystemView({
       cancelled = true;
     };
   }, [siteId, workspaceId]);
-
-  function offsetForDragTarget(target: EditorDragTarget): EditorOffset {
-    return target === 'editor' ? editorOffset : reopenOffset;
-  }
-
-  function setOffsetForDragTarget(target: EditorDragTarget, offset: EditorOffset) {
-    if (target === 'editor') {
-      setEditorOffset(offset);
-    } else {
-      setReopenOffset(offset);
-    }
-  }
-
-  function startEditorDrag(
-    event: ReactPointerEvent<HTMLButtonElement>,
-    target: EditorDragTarget,
-  ) {
-    const element = target === 'editor' ? editorRef.current : reopenEditorRef.current;
-    if (event.button !== 0 || !element) return;
-    if (target === 'reopen') {
-      suppressReopenClickRef.current = false;
-    }
-    const currentOffset = offsetForDragTarget(target);
-    editorDragRef.current = {
-      animationFrame: null,
-      didMove: false,
-      element,
-      latestOffset: currentOffset,
-      pointerId: event.pointerId,
-      target,
-      startOffset: currentOffset,
-      startRect: element.getBoundingClientRect(),
-      startX: event.clientX,
-      startY: event.clientY,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();
-    setIsEditorDragging(true);
-    setEditorDragTarget(target);
-  }
-
-  function moveEditorDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = editorDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    if (
-      Math.abs(event.clientX - drag.startX) > 3 ||
-      Math.abs(event.clientY - drag.startY) > 3
-    ) {
-      drag.didMove = true;
-    }
-    const desiredLeft = drag.startRect.left + event.clientX - drag.startX;
-    const desiredTop = drag.startRect.top + event.clientY - drag.startY;
-    const minLeft = 16;
-    const maxLeft = Math.max(minLeft, window.innerWidth - drag.startRect.width - 16);
-    const minTop = 72;
-    const maxTop = Math.max(minTop, window.innerHeight - drag.startRect.height - 16);
-    const nextLeft = Math.min(Math.max(minLeft, desiredLeft), maxLeft);
-    const nextTop = Math.min(Math.max(minTop, desiredTop), maxTop);
-    const nextOffset = {
-      x: drag.startOffset.x + nextLeft - drag.startRect.left,
-      y: drag.startOffset.y + nextTop - drag.startRect.top,
-    };
-    drag.latestOffset = nextOffset;
-    if (drag.animationFrame !== null) return;
-    drag.animationFrame = window.requestAnimationFrame(() => {
-      drag.animationFrame = null;
-      if (editorDragRef.current !== drag) return;
-      drag.element.style.transform = `translate3d(${drag.latestOffset.x}px, ${drag.latestOffset.y}px, 0)`;
-    });
-  }
-
-  function stopEditorDrag(event?: ReactPointerEvent<HTMLButtonElement>) {
-    const drag = editorDragRef.current;
-    if (event && event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    if (drag?.animationFrame !== null && drag?.animationFrame !== undefined) {
-      window.cancelAnimationFrame(drag.animationFrame);
-      drag.animationFrame = null;
-    }
-    if (drag) {
-      setOffsetForDragTarget(drag.target, drag.latestOffset);
-      drag.element.style.transform = `translate3d(${drag.latestOffset.x}px, ${drag.latestOffset.y}px, 0)`;
-      if (drag.target === 'reopen' && drag.didMove) {
-        suppressReopenClickRef.current = true;
-      }
-    }
-    editorDragRef.current = null;
-    setIsEditorDragging(false);
-    setEditorDragTarget(null);
-  }
-
-  function nudgeEditor(
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-    target: EditorDragTarget,
-  ) {
-    const step = 16;
-    const moves: Record<string, EditorOffset> = {
-      ArrowDown: { x: 0, y: step },
-      ArrowLeft: { x: -step, y: 0 },
-      ArrowRight: { x: step, y: 0 },
-      ArrowUp: { x: 0, y: -step },
-    };
-    const move = moves[event.key];
-    if (!move) return;
-    event.preventDefault();
-    const current = offsetForDragTarget(target);
-    setOffsetForDragTarget(target, { x: current.x + move.x, y: current.y + move.y });
-  }
-
-  function openEditor() {
-    if (suppressReopenClickRef.current) {
-      suppressReopenClickRef.current = false;
-      return;
-    }
-    setIsEditorOpen(true);
-  }
 
   async function save() {
     if (!system || !canUpdate) return;
@@ -995,22 +946,27 @@ export function DesignSystemView({
       </section>
     );
 
-  const primaryColor = previewTokenValue(system, ['primary', 'brand'], '#2563eb');
-  const surfaceColor = previewTokenValue(system, ['surface', 'background'], '#ffffff');
-  const textColor = previewTokenValue(system, ['text', 'foreground'], '#111827');
-  const mutedColor = previewTokenValue(system, ['muted', 'secondary'], '#6b7280');
-  const headingStyle = system.typography.find((token) => token.id.includes('heading'));
-  const bodyStyle = system.typography.find((token) => token.id.includes('body'));
-  const headingDefaultStyle = resolveComponentDefaultStyle(system, 'heading');
+  const primaryColor = previewTokenValue(system, 'primary', '#2563eb');
+  const surfaceColor = previewTokenValue(system, 'surface', '#ffffff');
+  const textColor = previewTokenValue(system, 'text', '#111827');
+  const mutedColor = previewTokenValue(system, 'mutedText', '#6b7280');
+  const pageBackgroundColor = previewTokenValue(system, 'pageBackground', '#ffffff');
+  const headingStyle = system.typography.find((token) => token.id === 'type-h2');
+  const headingOneStyle = system.typography.find((token) => token.id === 'type-h1');
+  const bodyStyle = system.typography.find((token) => token.id === 'type-body');
+  const headingDefaultStyle = resolveComponentDefaultStyle(system, 'heading-1');
   const bodyDefaultStyle = resolveComponentDefaultStyle(system, 'text');
-  const buttonDefaultStyle = resolveComponentDefaultStyle(system, 'button');
+  const buttonDefaultStyle = resolveComponentDefaultStyle(system, 'button-primary');
+  const secondaryButtonStyle = resolveComponentDefaultStyle(system, 'button-secondary');
+  const formDefaultStyle = resolveComponentDefaultStyle(system, 'form');
+  const formInputStyle = resolveComponentDefaultPartStyle(system, 'form', 'input');
   const previewHeadingStyle = {
     color: headingDefaultStyle.color ?? textColor,
     fontFamily: headingDefaultStyle.fontFamily ?? headingStyle?.fontFamily,
-    fontSize: headingDefaultStyle.fontSize ?? headingStyle?.fontSize ?? '2rem',
-    fontWeight: headingDefaultStyle.fontWeight ?? headingStyle?.fontWeight,
-    letterSpacing: headingDefaultStyle.letterSpacing ?? headingStyle?.letterSpacing,
-    lineHeight: headingDefaultStyle.lineHeight ?? headingStyle?.lineHeight,
+    fontSize: headingDefaultStyle.fontSize ?? headingOneStyle?.fontSize ?? '2rem',
+    fontWeight: headingDefaultStyle.fontWeight ?? headingOneStyle?.fontWeight,
+    letterSpacing: headingDefaultStyle.letterSpacing ?? headingOneStyle?.letterSpacing,
+    lineHeight: headingDefaultStyle.lineHeight ?? headingOneStyle?.lineHeight,
   };
   const previewBodyStyle = {
     color: bodyDefaultStyle.color ?? textColor,
@@ -1021,19 +977,19 @@ export function DesignSystemView({
   const previewRadius = previewScalarValue(
     system,
     'radii',
-    ['medium', 'md', 'card'],
+    ['radius-md', 'radius-sm'],
     '12px',
   );
   const previewShadow = previewScalarValue(
     system,
     'shadows',
-    ['card', 'medium'],
+    ['shadow-card'],
     '0 18px 45px rgba(15, 23, 42, .12)',
   );
   const previewSpacing = previewScalarValue(
     system,
     'spacing',
-    ['large', 'section', 'space-3'],
+    ['space-3', 'space-2'],
     '32px',
   );
   const previewContrast = contrastRatio(textColor, surfaceColor);
@@ -1042,6 +998,42 @@ export function DesignSystemView({
     !isDirty &&
     publishedFingerprint === JSON.stringify(system) &&
     (!siteId || siteStatus === 'published');
+  const selectedComponentDefinition = selectedComponentType
+    ? designSystemComponentEntries.find(
+        (entry) =>
+          selectedComponentType === entry.type ||
+          selectedComponentType.startsWith(`${entry.type}-`),
+      )
+    : undefined;
+  const selectedComponentDefaults = selectedComponentType
+    ? resolveDesignSystemComponentDefaults(system, selectedComponentType)
+    : undefined;
+  const selectedComponentParts = selectedComponentDefinition?.designSystem?.parts ?? [];
+  const activeComponentPart = selectedComponentParts.includes(selectedComponentPart ?? '')
+    ? selectedComponentPart
+    : selectedComponentParts[0];
+  const selectedComponentStyleBlock =
+    (activeComponentPart
+      ? selectedComponentDefaults?.partsStyle?.[activeComponentPart]?.[componentViewport]
+      : selectedComponentDefaults?.style?.[componentViewport]) ?? {};
+  const componentEntriesForCategory = designSystemComponentEntries.filter(
+    (definition) => {
+      const category = definition.designSystem?.category;
+      if (activeCategory === 'buttons') return category === 'buttons';
+      if (activeCategory === 'components') {
+        return (
+          category === 'components' || category === 'forms' || category === 'navigation'
+        );
+      }
+      if (activeCategory === 'forms') return category === 'forms';
+      return false;
+    },
+  );
+  const siteUsesWorkspaceStyles = Boolean(
+    siteId &&
+    workspaceSystem &&
+    JSON.stringify(system) === JSON.stringify(workspaceSystem),
+  );
 
   return (
     <section className="stack">
@@ -1094,11 +1086,17 @@ export function DesignSystemView({
         </div>
       </div>
       <div className="design-system-workbench-shell">
-        <div className="design-system-workbench">
+        <div
+          className={`design-system-workbench${editorCollapsed ? ' is-editor-collapsed' : ''}`}
+        >
           <WebsitePreview
             bodyStyle={previewBodyStyle}
             buttonStyle={buttonDefaultStyle}
+            secondaryButtonStyle={secondaryButtonStyle}
+            formStyle={formDefaultStyle}
+            formInputStyle={formInputStyle}
             colors={{
+              pageBackground: pageBackgroundColor,
               primary: primaryColor,
               surface: surfaceColor,
               text: textColor,
@@ -1116,87 +1114,75 @@ export function DesignSystemView({
             siteName={siteName}
             spacing={previewSpacing}
           />
-          {isEditorOpen ? (
-            <div
-              className={`design-system-editor${isEditorDragging ? ' is-dragging' : ''}`}
-              ref={editorRef}
-              style={{
-                transform: `translate3d(${editorOffset.x}px, ${editorOffset.y}px, 0)`,
-              }}
-            >
-              <div className="design-system-editor-toolbar">
-                <div className="design-system-editor-toolbar-row">
-                  <button
-                    aria-label="Move design editor"
-                    className="design-system-editor-drag-handle"
-                    onKeyDown={(event) => nudgeEditor(event, 'editor')}
-                    onPointerCancel={stopEditorDrag}
-                    onPointerDown={(event) => startEditorDrag(event, 'editor')}
-                    onPointerMove={moveEditorDrag}
-                    onPointerUp={stopEditorDrag}
-                    title="Drag to move the editor panel"
-                    type="button"
-                  >
-                    <span aria-hidden="true">⠿</span>
-                    <span>Move editor</span>
-                  </button>
+          <div
+            className={`design-system-editor${editorCollapsed ? ' is-collapsed' : ''}`}
+          >
+            <div className="design-system-editor-toolbar">
+              <div className="design-system-editor-toolbar-row">
+                <div>
+                  <strong>Brand &amp; styles</strong>
                   <span className="design-system-editor-toolbar-hint">
-                    Drag to keep controls beside your preview
+                    {siteUsesWorkspaceStyles ? 'Using workspace style' : 'Draft style'}
                   </span>
+                </div>
+                <div className="design-system-editor-toolbar-tools">
+                  <span className="design-system-editor-toolbar-hint">Live preview</span>
                   <button
+                    aria-label={editorCollapsed ? 'Open editor' : 'Hide editor'}
                     className="button button-small button-ghost"
-                    onClick={() => setEditorOffset({ x: 0, y: 0 })}
+                    onClick={() => setEditorCollapsed((collapsed) => !collapsed)}
                     type="button"
                   >
-                    Reset position
-                  </button>
-                  <button
-                    aria-label="Close design editor"
-                    className="button button-small button-ghost"
-                    onClick={() => {
-                      stopEditorDrag();
-                      setIsEditorOpen(false);
-                    }}
-                    type="button"
-                  >
-                    Close editor
+                    {editorCollapsed ? 'Open' : 'Hide'}
                   </button>
                 </div>
-                {canUpdate ? (
-                  <div className="form-actions design-system-editor-actions">
+              </div>
+              {siteId && workspaceSystem && !siteUsesWorkspaceStyles ? (
+                <button
+                  className="button button-small button-ghost"
+                  disabled={!canUpdate || saving}
+                  onClick={() => setSystem(workspaceSystem)}
+                  type="button"
+                >
+                  Use workspace style
+                </button>
+              ) : null}
+              {canUpdate ? (
+                <div className="form-actions design-system-editor-actions">
+                  <button
+                    className="button button-primary"
+                    disabled={saving}
+                    onClick={() => void save()}
+                    type="button"
+                  >
+                    {saving ? 'Saving…' : 'Save draft'}
+                  </button>
+                  {!siteId ? (
                     <button
-                      className="button button-primary"
+                      className="button button-secondary"
                       disabled={saving}
-                      onClick={() => void save()}
+                      onClick={() => void publishWorkspace()}
                       type="button"
                     >
-                      {saving ? 'Saving…' : 'Save draft'}
+                      Publish styles
                     </button>
-                    {!siteId ? (
-                      <button
-                        className="button button-secondary"
-                        disabled={saving}
-                        onClick={() => void publishWorkspace()}
-                        type="button"
-                      >
-                        Publish defaults
-                      </button>
-                    ) : null}
-                    {siteId ? (
-                      <button
-                        className="button button-secondary"
-                        disabled={saving}
-                        onClick={() => void publishSite()}
-                        type="button"
-                      >
-                        Publish design system
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
+                  ) : null}
+                  {siteId ? (
+                    <button
+                      className="button button-secondary"
+                      disabled={saving}
+                      onClick={() => void publishSite()}
+                      type="button"
+                    >
+                      Publish styles
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="design-system-editor-content">
               <aside
-                className="panel design-system-category-rail"
+                className="design-system-category-rail"
                 aria-label="Design system categories"
               >
                 <span className="eyebrow">Make it yours</span>
@@ -1223,11 +1209,25 @@ export function DesignSystemView({
                   Typography
                 </button>
                 <button
+                  className={activeCategory === 'buttons' ? 'is-active' : ''}
+                  onClick={() => setActiveCategory('buttons')}
+                  type="button"
+                >
+                  Buttons
+                </button>
+                <button
+                  className={activeCategory === 'forms' ? 'is-active' : ''}
+                  onClick={() => setActiveCategory('forms')}
+                  type="button"
+                >
+                  Forms
+                </button>
+                <button
                   className={activeCategory === 'components' ? 'is-active' : ''}
                   onClick={() => setActiveCategory('components')}
                   type="button"
                 >
-                  Buttons &amp; components
+                  Components
                 </button>
                 <details className="design-system-advanced-menu">
                   <summary>Advanced design system</summary>
@@ -1249,12 +1249,51 @@ export function DesignSystemView({
                 </details>
               </aside>
               <div className="grid grid-2 design-system-token-grid">
+                {activeCategory === 'overview' ? (
+                  <section className="panel stack design-system-overview-panel">
+                    <div className="panel-heading">
+                      <div>
+                        <h2>Quick brand setup</h2>
+                        <span className="muted small">
+                          A small snapshot of the styles used across your site.
+                        </span>
+                      </div>
+                    </div>
+                    {[
+                      ['Primary', primaryColor, 'colors'],
+                      ['Page background', pageBackgroundColor, 'colors'],
+                      [
+                        'Heading font',
+                        headingStyle?.fontFamily ?? 'System font',
+                        'typography',
+                      ],
+                      ['Body font', bodyStyle?.fontFamily ?? 'System font', 'typography'],
+                    ].map(([label, value, category]) => (
+                      <button
+                        className="design-system-setting-row"
+                        key={label}
+                        onClick={() =>
+                          setActiveCategory(category as 'colors' | 'typography')
+                        }
+                        type="button"
+                      >
+                        <span>
+                          <strong>{label}</strong>
+                          <small>{value}</small>
+                        </span>
+                        <span aria-hidden="true">›</span>
+                      </button>
+                    ))}
+                    <div className="design-system-overview-button-preview">
+                      <span className="muted small">Primary button</span>
+                      <button style={buttonDefaultStyle} type="button">
+                        Get started
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
                 {scalarCategories
-                  .filter(
-                    ([category]) =>
-                      activeCategory === category ||
-                      (activeCategory === 'overview' && category === 'colors'),
-                  )
+                  .filter(([category]) => activeCategory === category)
                   .map(([category, label]) => (
                     <section className="panel stack" key={category}>
                       <div className="panel-heading">
@@ -1276,11 +1315,123 @@ export function DesignSystemView({
                           </button>
                         ) : null}
                       </div>
-                      {system[category].map((token: DesignScalarToken) => (
-                        <div className="form-row" key={token.id}>
-                          <div className="stack">
+                      {system[category].map((token: DesignScalarToken) => {
+                        const selected =
+                          category === 'colors' && selectedColorId === token.id;
+                        const usedBy = Object.entries(system.semanticRoles ?? {})
+                          .filter(([, tokenId]) => tokenId === token.id)
+                          .map(([role]) =>
+                            role
+                              .replace(/([A-Z])/g, ' $1')
+                              .replace(/^./, (value) => value.toUpperCase()),
+                          );
+                        return category === 'colors' ? (
+                          <article className="design-system-setting" key={token.id}>
+                            <button
+                              aria-expanded={selected}
+                              className="design-system-setting-row"
+                              onClick={() =>
+                                setSelectedColorId(selected ? null : token.id)
+                              }
+                              type="button"
+                            >
+                              <span>
+                                <strong>{token.name}</strong>
+                                <small>
+                                  {usedBy.length ? usedBy.join(' · ') : 'Custom color'}
+                                </small>
+                              </span>
+                              <span className="design-system-color-summary">
+                                <i style={{ backgroundColor: token.value }} />
+                                {token.value}
+                                <span aria-hidden="true">{selected ? '⌃' : '›'}</span>
+                              </span>
+                            </button>
+                            {selected ? (
+                              <div className="design-system-detail-panel">
+                                <ColorField
+                                  compact
+                                  disabled={!canUpdate}
+                                  label={`${token.name} color`}
+                                  onValueChange={(value) =>
+                                    setSystem(
+                                      updateScalar(
+                                        system,
+                                        category,
+                                        token.id,
+                                        'value',
+                                        value,
+                                      ),
+                                    )
+                                  }
+                                  value={token.value}
+                                />
+                                <label>
+                                  <span>Color name</span>
+                                  <input
+                                    disabled={!canUpdate}
+                                    onChange={(event) =>
+                                      setSystem(
+                                        updateScalar(
+                                          system,
+                                          category,
+                                          token.id,
+                                          'name',
+                                          event.target.value,
+                                        ),
+                                      )
+                                    }
+                                    value={token.name}
+                                  />
+                                </label>
+                                <p className="muted small">
+                                  Used by{' '}
+                                  {usedBy.length ? usedBy.join(', ') : 'custom styles'}.
+                                </p>
+                                {canUpdate ? (
+                                  <div className="button-row">
+                                    <button
+                                      className="button button-small button-ghost"
+                                      onClick={() =>
+                                        setSystem({
+                                          ...system,
+                                          colors: [
+                                            ...system.colors,
+                                            {
+                                              ...token,
+                                              id: nextTokenId('color', system),
+                                              name: `${token.name} copy`,
+                                            },
+                                          ],
+                                        })
+                                      }
+                                      type="button"
+                                    >
+                                      Duplicate
+                                    </button>
+                                    <button
+                                      className="button button-small button-ghost"
+                                      onClick={() =>
+                                        setSystem({
+                                          ...system,
+                                          colors: system.colors.filter(
+                                            (candidate) => candidate.id !== token.id,
+                                          ),
+                                        })
+                                      }
+                                      type="button"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </article>
+                        ) : (
+                          <div className="design-system-advanced-row" key={token.id}>
                             <label>
-                              <span>{category === 'colors' ? 'Color name' : 'Name'}</span>
+                              <span>{token.name}</span>
                               <input
                                 disabled={!canUpdate}
                                 onChange={(event) =>
@@ -1289,99 +1440,24 @@ export function DesignSystemView({
                                       system,
                                       category,
                                       token.id,
-                                      'name',
+                                      'value',
                                       event.target.value,
                                     ),
                                   )
                                 }
-                                value={token.name}
+                                value={token.value}
                               />
                             </label>
                             <details className="design-system-advanced-field">
                               <summary>Advanced</summary>
                               <small className="muted">Stable id: {token.id}</small>
                             </details>
-                            {category === 'colors' ? (
-                              <ColorField
-                                compact
-                                disabled={!canUpdate}
-                                label={`${token.name} color`}
-                                onValueChange={(value) =>
-                                  setSystem(
-                                    updateScalar(
-                                      system,
-                                      category,
-                                      token.id,
-                                      'value',
-                                      value,
-                                    ),
-                                  )
-                                }
-                                value={token.value}
-                              />
-                            ) : (
-                              <label>
-                                <span>Value</span>
-                                <input
-                                  disabled={!canUpdate}
-                                  onChange={(event) =>
-                                    setSystem(
-                                      updateScalar(
-                                        system,
-                                        category,
-                                        token.id,
-                                        'value',
-                                        event.target.value,
-                                      ),
-                                    )
-                                  }
-                                  value={token.value}
-                                />
-                              </label>
-                            )}
-                            {canUpdate ? (
-                              <div className="button-row">
-                                <button
-                                  className="button button-small button-ghost"
-                                  onClick={() =>
-                                    setSystem({
-                                      ...system,
-                                      [category]: [
-                                        ...system[category],
-                                        {
-                                          ...token,
-                                          id: nextTokenId(category.slice(0, -1), system),
-                                          name: `${token.name} copy`,
-                                        },
-                                      ],
-                                    })
-                                  }
-                                  type="button"
-                                >
-                                  Duplicate
-                                </button>
-                                <button
-                                  className="button button-small button-ghost"
-                                  onClick={() =>
-                                    setSystem({
-                                      ...system,
-                                      [category]: system[category].filter(
-                                        (candidate) => candidate.id !== token.id,
-                                      ),
-                                    })
-                                  }
-                                  type="button"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </section>
                   ))}
-                {activeCategory === 'overview' || activeCategory === 'typography' ? (
+                {activeCategory === 'typography' ? (
                   <section className="panel stack">
                     <div className="panel-heading">
                       <div>
@@ -1398,227 +1474,313 @@ export function DesignSystemView({
                         </button>
                       ) : null}
                     </div>
-                    {system.typography.map((token) => (
-                      <div className="stack" key={token.id}>
-                        <label>
-                          <span>Name</span>
-                          <input
-                            disabled={!canUpdate}
-                            onChange={(event) =>
-                              setSystem(
-                                updateTypography(
-                                  system,
-                                  token.id,
-                                  'name',
-                                  event.target.value,
-                                ),
-                              )
-                            }
-                            value={token.name}
-                          />
-                        </label>
-                        <details className="design-system-advanced-field">
-                          <summary>Advanced</summary>
-                          <small className="muted">Stable id: {token.id}</small>
-                        </details>
-                        {(
-                          [
-                            'fontFamily',
-                            'fontSize',
-                            'fontWeight',
-                            'lineHeight',
-                            'letterSpacing',
-                          ] as const
-                        ).map((field) => (
-                          <label key={field}>
-                            {typographyFieldLabel(field)}
-                            <input
-                              disabled={!canUpdate}
-                              onChange={(event) =>
-                                setSystem(
-                                  updateTypography(
-                                    system,
-                                    token.id,
-                                    field,
-                                    event.target.value,
-                                  ),
-                                )
-                              }
-                              value={token[field] ?? ''}
-                            />
-                          </label>
-                        ))}
-                        {canUpdate ? (
-                          <div className="button-row">
+                    {system.typography
+                      .filter((token) => token.id !== 'type-heading')
+                      .map((token) => {
+                        const selected = selectedTypographyId === token.id;
+                        return (
+                          <article className="design-system-setting" key={token.id}>
                             <button
-                              className="button button-small button-ghost"
+                              aria-expanded={selected}
+                              className="design-system-setting-row"
                               onClick={() =>
-                                setSystem({
-                                  ...system,
-                                  typography: [
-                                    ...system.typography,
-                                    {
-                                      ...token,
-                                      id: nextTokenId('type', system),
-                                      name: `${token.name} copy`,
-                                    },
-                                  ],
-                                })
+                                setSelectedTypographyId(selected ? null : token.id)
                               }
                               type="button"
                             >
-                              Duplicate
+                              <span>
+                                <strong>{token.name}</strong>
+                                <small>
+                                  {token.fontFamily ?? 'System font'} ·{' '}
+                                  {token.fontSize ?? 'Auto'} /{' '}
+                                  {token.lineHeight ?? 'normal'} ·{' '}
+                                  {token.fontWeight ?? '400'}
+                                </small>
+                              </span>
+                              <span aria-hidden="true">{selected ? '⌃' : '›'}</span>
                             </button>
-                            <button
-                              className="button button-small button-ghost"
-                              onClick={() =>
-                                setSystem({
-                                  ...system,
-                                  typography: system.typography.filter(
-                                    (candidate) => candidate.id !== token.id,
-                                  ),
-                                })
-                              }
-                              type="button"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                            {selected ? (
+                              <div className="design-system-detail-panel">
+                                {(
+                                  [
+                                    'fontFamily',
+                                    'fontSize',
+                                    'fontWeight',
+                                    'lineHeight',
+                                    'letterSpacing',
+                                  ] as const
+                                ).map((field) => (
+                                  <label key={field}>
+                                    <span>{typographyFieldLabel(field)}</span>
+                                    <input
+                                      disabled={!canUpdate}
+                                      onChange={(event) =>
+                                        setSystem(
+                                          updateTypography(
+                                            system,
+                                            token.id,
+                                            field,
+                                            event.target.value,
+                                          ),
+                                        )
+                                      }
+                                      value={token[field] ?? ''}
+                                    />
+                                  </label>
+                                ))}
+                                <details className="design-system-advanced-field">
+                                  <summary>Advanced</summary>
+                                  <small className="muted">Stable id: {token.id}</small>
+                                </details>
+                                {canUpdate ? (
+                                  <div className="button-row">
+                                    <button
+                                      className="button button-small button-ghost"
+                                      onClick={() =>
+                                        setSystem({
+                                          ...system,
+                                          typography: [
+                                            ...system.typography,
+                                            {
+                                              ...token,
+                                              id: nextTokenId('type', system),
+                                              name: `${token.name} copy`,
+                                            },
+                                          ],
+                                        })
+                                      }
+                                      type="button"
+                                    >
+                                      Duplicate
+                                    </button>
+                                    <button
+                                      className="button button-small button-ghost"
+                                      onClick={() =>
+                                        setSystem({
+                                          ...system,
+                                          typography: system.typography.filter(
+                                            (candidate) => candidate.id !== token.id,
+                                          ),
+                                        })
+                                      }
+                                      type="button"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
                   </section>
                 ) : null}
-                {activeCategory === 'overview' || activeCategory === 'components' ? (
+                {activeCategory === 'components' ||
+                activeCategory === 'buttons' ||
+                activeCategory === 'forms' ? (
                   <section className="panel stack design-system-components-panel">
                     <div className="panel-heading">
                       <div>
-                        <h2>Buttons &amp; components</h2>
+                        <h2>
+                          {activeCategory === 'buttons'
+                            ? 'Buttons'
+                            : activeCategory === 'forms'
+                              ? 'Forms'
+                              : 'Components'}
+                        </h2>
                         <span className="muted small">
                           New sections start with these styles automatically.
                         </span>
                       </div>
                     </div>
                     <div className="design-system-component-grid">
-                      {componentDefaultTypes.map(([componentType, label]) => {
-                        const defaults = resolveDesignSystemComponentDefaults(
-                          system,
-                          componentType,
-                        );
-                        const base = defaults?.style?.base ?? {};
-                        const previewStyle = resolveComponentDefaultStyle(
-                          system,
-                          componentType,
-                        );
-                        return (
-                          <article
-                            className="design-system-component-card"
-                            key={componentType}
-                          >
-                            <div className="panel-heading">
-                              <div>
-                                <h3>{label}</h3>
-                                <span className="muted small">
-                                  Used throughout your website
+                      {componentEntriesForCategory.flatMap((definition) => {
+                        const componentType = definition.type;
+                        const label = definition.designSystem?.label ?? definition.label;
+                        const variants = definition.designSystem?.variants ?? [
+                          { id: 'base', label },
+                        ];
+                        return variants.map((variant) => {
+                          const recipeKey = componentRecipeKey(componentType, variant.id);
+                          const defaults = resolveDesignSystemComponentDefaults(
+                            system,
+                            recipeKey,
+                          );
+                          const previewStyle = resolveComponentDefaultStyle(
+                            system,
+                            recipeKey,
+                          );
+                          const selected = selectedComponentType === recipeKey;
+                          return (
+                            <article
+                              className="design-system-component-card"
+                              key={recipeKey}
+                            >
+                              <button
+                                aria-expanded={selected}
+                                className="design-system-setting-row"
+                                onClick={() => {
+                                  setSelectedComponentType(selected ? null : recipeKey);
+                                  setSelectedComponentPart(null);
+                                }}
+                                type="button"
+                              >
+                                <span>
+                                  <strong>{variant.label}</strong>
+                                  <small>{label}</small>
                                 </span>
-                              </div>
-                            </div>
-                            <div className="design-system-component-preview">
-                              {componentType === 'heading' ? (
-                                <h4 style={previewStyle}>Heading preview</h4>
-                              ) : componentType === 'text' ? (
-                                <p style={previewStyle}>Body copy preview</p>
-                              ) : componentType === 'button' ? (
-                                <button style={previewStyle} type="button">
-                                  Button preview
-                                </button>
-                              ) : componentType === 'form' ? (
-                                <div style={previewStyle}>Form surface preview</div>
-                              ) : (
-                                <nav style={previewStyle}>
-                                  <span>Home</span>
-                                  <span>Work</span>
-                                  <span>Contact</span>
-                                </nav>
-                              )}
-                            </div>
-                            <div className="design-system-component-controls">
-                              {componentDefaultFields[componentType].map(
-                                ({ property, label: fieldLabel }) => {
-                                  const options = tokenOptions(system, property);
-                                  const currentValue = tokenValue(base[property]);
-                                  return (
-                                    <label key={property}>
-                                      <span>{fieldLabel}</span>
+                                <span className="design-system-setting-preview">
+                                  {componentType === 'button' ? (
+                                    <span style={previewStyle}>Preview</span>
+                                  ) : componentType === 'heading' ? (
+                                    <span style={previewStyle}>Aa</span>
+                                  ) : (
+                                    <span style={previewStyle}>Aa</span>
+                                  )}
+                                  <span aria-hidden="true">{selected ? '⌃' : '›'}</span>
+                                </span>
+                              </button>
+                              {selected ? (
+                                <div className="design-system-detail-panel">
+                                  <span className="design-system-inheritance-label">
+                                    {siteId && !siteUsesWorkspaceStyles
+                                      ? 'Customized for this website'
+                                      : 'Using Brand & styles'}
+                                  </span>
+                                  {selectedComponentParts.length > 0 ? (
+                                    <label>
+                                      <span>Part</span>
                                       <select
-                                        disabled={!canUpdate}
                                         onChange={(event) =>
-                                          setSystem(
-                                            updateComponentDefault(
-                                              system,
-                                              componentType,
-                                              property,
-                                              event.target.value
-                                                ? selectedStyleValue(event.target.value)
-                                                : undefined,
-                                            ),
-                                          )
+                                          setSelectedComponentPart(event.target.value)
                                         }
-                                        value={currentValue}
+                                        value={activeComponentPart ?? ''}
                                       >
-                                        {!currentValue ? (
-                                          <option value="">Unset</option>
-                                        ) : null}
-                                        {typeof base[property] === 'string' &&
-                                        !currentValue.startsWith('token:') ? (
-                                          <option value={currentValue}>
-                                            Current literal
-                                          </option>
-                                        ) : null}
-                                        {options.map((option) => (
-                                          <option
-                                            key={option.id}
-                                            value={`token:${option.id}`}
-                                          >
-                                            {option.label}
+                                        {selectedComponentParts.map((part) => (
+                                          <option key={part} value={part}>
+                                            {part.replace(/([A-Z])/g, ' $1')}
                                           </option>
                                         ))}
                                       </select>
                                     </label>
-                                  );
-                                },
-                              )}
-                            </div>
-                          </article>
-                        );
+                                  ) : null}
+                                  <div
+                                    aria-label="Responsive style size"
+                                    className="design-system-responsive-toggle"
+                                    role="group"
+                                  >
+                                    {(
+                                      [
+                                        ['base', 'Desktop'],
+                                        ['tablet', 'Tablet'],
+                                        ['mobile', 'Mobile'],
+                                      ] as const
+                                    ).map(([value, label]) => (
+                                      <button
+                                        aria-pressed={componentViewport === value}
+                                        className={
+                                          componentViewport === value ? 'is-active' : ''
+                                        }
+                                        key={value}
+                                        onClick={() => setComponentViewport(value)}
+                                        type="button"
+                                      >
+                                        {label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {(componentDefaultFields[componentType] ?? []).map(
+                                    ({ property, label: fieldLabel }) => {
+                                      const options = tokenOptions(system, property);
+                                      const currentValue = tokenValue(
+                                        selectedComponentStyleBlock[property],
+                                      );
+                                      return (
+                                        <label key={property}>
+                                          <span>{fieldLabel}</span>
+                                          <select
+                                            disabled={!canUpdate}
+                                            onChange={(event) =>
+                                              setSystem(
+                                                activeComponentPart
+                                                  ? updateComponentPartDefault(
+                                                      system,
+                                                      recipeKey,
+                                                      activeComponentPart,
+                                                      property,
+                                                      event.target.value
+                                                        ? selectedStyleValue(
+                                                            event.target.value,
+                                                          )
+                                                        : undefined,
+                                                      componentViewport,
+                                                    )
+                                                  : updateComponentDefault(
+                                                      system,
+                                                      recipeKey,
+                                                      property,
+                                                      event.target.value
+                                                        ? selectedStyleValue(
+                                                            event.target.value,
+                                                          )
+                                                        : undefined,
+                                                      componentViewport,
+                                                    ),
+                                              )
+                                            }
+                                            value={currentValue}
+                                          >
+                                            {!currentValue ? (
+                                              <option value="">Unset</option>
+                                            ) : null}
+                                            {typeof selectedComponentStyleBlock[
+                                              property
+                                            ] === 'string' &&
+                                            !currentValue.startsWith('token:') ? (
+                                              <option value={currentValue}>
+                                                Current value
+                                              </option>
+                                            ) : null}
+                                            {options.map((option) => (
+                                              <option
+                                                key={option.id}
+                                                value={`token:${option.id}`}
+                                              >
+                                                {option.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                      );
+                                    },
+                                  )}
+                                  {canUpdate ? (
+                                    <button
+                                      className="button button-small button-ghost"
+                                      disabled={!defaults}
+                                      onClick={() =>
+                                        setSystem(
+                                          resetComponentDefault(system, recipeKey),
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      Reset style
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        });
                       })}
                     </div>
                   </section>
                 ) : null}
               </div>
             </div>
-          ) : (
-            <button
-              className={`button button-primary design-system-editor-reopen${
-                editorDragTarget === 'reopen' ? ' is-dragging' : ''
-              }`}
-              onClick={openEditor}
-              onKeyDown={(event) => nudgeEditor(event, 'reopen')}
-              onPointerCancel={stopEditorDrag}
-              onPointerDown={(event) => startEditorDrag(event, 'reopen')}
-              onPointerMove={moveEditorDrag}
-              onPointerUp={stopEditorDrag}
-              ref={reopenEditorRef}
-              style={{
-                transform: `translate3d(${reopenOffset.x}px, ${reopenOffset.y}px, 0)`,
-              }}
-              title="Click to open. Drag to move the button."
-              type="button"
-            >
-              <span aria-hidden="true">✦</span>
-              Open editor
-            </button>
-          )}
+          </div>
         </div>
       </div>
     </section>

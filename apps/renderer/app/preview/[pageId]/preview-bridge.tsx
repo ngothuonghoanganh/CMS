@@ -19,7 +19,11 @@ import {
 } from '@payload/contracts';
 import { useEffect, useState, type ReactElement } from 'react';
 
-import { renderLayoutExtension, renderPage } from '../../renderer';
+import {
+  renderLayoutExtension,
+  renderPage,
+  resolvePageSurfaceStyle,
+} from '../../renderer';
 
 type PreviewBridgeProps = {
   initialPayload: PagePayload;
@@ -140,7 +144,7 @@ export function PreviewBridge({
     tenantSlug,
   });
   return (
-    <>
+    <div className="public-page" style={resolvePageSurfaceStyle(context.designSystem)}>
       {snapshot.layout?.header
         ? renderLayoutExtension(snapshot.layout.header.document, {
             ...context,
@@ -154,7 +158,7 @@ export function PreviewBridge({
             layoutSlot: snapshot.layout.footer.slot,
           })
         : null}
-    </>
+    </div>
   ) as ReactElement;
 }
 

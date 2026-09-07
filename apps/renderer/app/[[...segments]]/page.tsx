@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { AnalyticsTracker } from '../analytics-client';
-import { renderLayoutExtension, renderPage } from '../renderer';
+import { renderLayoutExtension, renderPage, resolvePageSurfaceStyle } from '../renderer';
 import { getPublicPageByPath, getPublicPageForHostnamePath } from '../lib/page-api';
 import { getRequestHostname, isPlatformHostname } from '../lib/host';
 import { publicPageMetadata } from '../lib/seo';
@@ -71,6 +71,7 @@ export default async function PublicRoute({ params }: PublicRouteProps) {
       className="public-page"
       data-page-path={resolved.pagePath}
       data-site-slug={siteSlug}
+      style={resolvePageSurfaceStyle(resolved.page.designSystem)}
     >
       <AnalyticsTracker
         pagePath={resolved.pagePath}

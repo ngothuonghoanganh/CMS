@@ -10,6 +10,8 @@ import {
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_BUTTON_VARIANT_ATTRIBUTE,
+  BUILDER_HEADING_LEVEL_ATTRIBUTE,
 } from './builder-adapter';
 
 function childDefinitions(
@@ -87,5 +89,48 @@ describe('builder block presets', () => {
     expect(attributesOf(footer)[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('global-footer');
     expect(childDefinitions(header)).toHaveLength(3);
     expect(childDefinitions(footer)).toHaveLength(3);
+  });
+
+  it('does not persist theme literals in built-in preset definitions', () => {
+    const forbidden = new Set([
+      'background-color',
+      'color',
+      'font-family',
+      'font-size',
+      'font-weight',
+      'line-height',
+      'border-radius',
+      'box-shadow',
+      'padding',
+      'gap',
+    ]);
+    const definitions = [
+      ...BUILDER_BLOCK_PRESET_REGISTRY.map((preset) => preset.create()),
+      ...GLOBAL_HEADER_PRESET_REGISTRY.map((preset) => preset.create()),
+      ...GLOBAL_FOOTER_PRESET_REGISTRY.map((preset) => preset.create()),
+    ];
+    for (const definition of definitions) {
+      const visit = (current: Record<string, unknown>) => {
+        const style = current.style as Record<string, unknown> | undefined;
+        for (const property of Object.keys(style ?? {})) {
+          expect(
+            forbidden.has(property),
+            `theme style ${property} found in ${String(
+              attributesOf(definition)[BUILDER_NODE_TYPE_ATTRIBUTE],
+            )}`,
+          ).toBe(false);
+        }
+        childDefinitions(current).forEach(visit);
+      };
+      visit(definition as Record<string, unknown>);
+    }
+  });
+
+  it('marks semantic intent on Hero children', () => {
+    const hero = createBlockPresetDefinition('hero') as Record<string, unknown>;
+    const container = childDefinitions(hero)[0]!;
+    const [heading, , button] = childDefinitions(container);
+    expect(attributesOf(heading!)[BUILDER_HEADING_LEVEL_ATTRIBUTE]).toBe('1');
+    expect(attributesOf(button!)[BUILDER_BUTTON_VARIANT_ATTRIBUTE]).toBe('primary');
   });
 });

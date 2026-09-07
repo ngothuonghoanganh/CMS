@@ -13,6 +13,7 @@ type FormRendererProps = {
   node: FormNode;
   submissionUrl?: string;
   style?: CSSProperties;
+  partStyles?: Record<string, CSSProperties | undefined>;
 };
 
 type FormValue = string | boolean;
@@ -32,12 +33,16 @@ function FieldControl({
   field,
   value,
   onChange,
+  partStyles,
 }: {
   field: FormField;
   value: FormValue;
   onChange: (value: FormValue) => void;
+  partStyles: Record<string, CSSProperties | undefined>;
 }) {
   const id = `payload-form-${field.id}`;
+  const inputStyle =
+    field.type === 'checkbox' || field.type === 'radio' ? undefined : partStyles.input;
   const common = {
     id,
     name: field.name,
@@ -49,18 +54,22 @@ function FieldControl({
       return (
         <textarea
           {...common}
+          data-payload-part="input"
           maxLength={10_000}
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
           value={typeof value === 'string' ? value : ''}
+          style={inputStyle}
         />
       );
     case 'select':
       return (
         <select
           {...common}
+          data-payload-part="input"
           onChange={(event) => onChange(event.target.value)}
           value={typeof value === 'string' ? value : ''}
+          style={inputStyle}
         >
           <option value="">{field.placeholder || 'Select an option'}</option>
           {field.options.map((option) => (
@@ -78,7 +87,11 @@ function FieldControl({
           aria-label={field.label}
         >
           {field.options.map((option) => (
-            <label key={option.value}>
+            <label
+              data-payload-part="option"
+              key={option.value}
+              style={partStyles.option}
+            >
               <input
                 checked={value === option.value}
                 name={field.name}
@@ -86,6 +99,7 @@ function FieldControl({
                 required={field.required && value === ''}
                 type="radio"
                 value={option.value}
+                style={inputStyle}
               />
               {option.label}
             </label>
@@ -99,6 +113,7 @@ function FieldControl({
           checked={value === true}
           onChange={(event) => onChange(event.target.checked)}
           type="checkbox"
+          style={inputStyle}
         />
       );
     case 'email':
@@ -107,17 +122,24 @@ function FieldControl({
       return (
         <input
           {...common}
+          data-payload-part="input"
           maxLength={10_000}
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
           type={field.type === 'phone' ? 'tel' : field.type}
           value={typeof value === 'string' ? value : ''}
+          style={inputStyle}
         />
       );
   }
 }
 
-export function FormRenderer({ node, submissionUrl, style }: FormRendererProps) {
+export function FormRenderer({
+  node,
+  submissionUrl,
+  style,
+  partStyles = {},
+}: FormRendererProps) {
   const [values, setValues] = useState(() => initialValues(node));
   const [state, setState] = useState<FormState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -170,7 +192,9 @@ export function FormRenderer({ node, submissionUrl, style }: FormRendererProps) 
         className={PAGE_RUNTIME_CLASS_NAMES.formSuccess}
         data-payload-node-id={node.id}
         data-payload-node-type="form"
+        data-payload-part="success"
         role="status"
+        style={partStyles.success}
       >
         {node.props.successMessage}
       </div>
@@ -182,12 +206,22 @@ export function FormRenderer({ node, submissionUrl, style }: FormRendererProps) 
       className={PAGE_RUNTIME_CLASS_NAMES.form}
       data-payload-node-id={node.id}
       data-payload-node-type="form"
+      data-payload-part="root"
       onSubmit={submit}
       style={style}
     >
       {node.props.fields.map((field) => (
-        <div className={PAGE_RUNTIME_CLASS_NAMES.formField} key={field.id}>
-          <label htmlFor={`payload-form-${field.id}`}>
+        <div
+          className={PAGE_RUNTIME_CLASS_NAMES.formField}
+          data-payload-part="field"
+          key={field.id}
+          style={partStyles.field}
+        >
+          <label
+            data-payload-part="label"
+            htmlFor={`payload-form-${field.id}`}
+            style={partStyles.label}
+          >
             {field.label}
             {field.required ? <span aria-hidden="true"> *</span> : null}
           </label>
@@ -196,16 +230,28 @@ export function FormRenderer({ node, submissionUrl, style }: FormRendererProps) 
             onChange={(value) =>
               setValues((current) => ({ ...current, [field.id]: value }))
             }
+            partStyles={partStyles}
             value={values[field.id] ?? initialValue(field)}
           />
         </div>
       ))}
       {error ? (
-        <p aria-live="polite" className={PAGE_RUNTIME_CLASS_NAMES.formError} role="alert">
+        <p
+          aria-live="polite"
+          className={PAGE_RUNTIME_CLASS_NAMES.formError}
+          data-payload-part="error"
+          role="alert"
+          style={partStyles.error}
+        >
           {error}
         </p>
       ) : null}
-      <button disabled={!submissionUrl || state === 'submitting'} type="submit">
+      <button
+        data-payload-part="submit"
+        disabled={!submissionUrl || state === 'submitting'}
+        style={partStyles.submit}
+        type="submit"
+      >
         {state === 'submitting' ? 'Submitting…' : node.props.submitLabel}
       </button>
     </form>

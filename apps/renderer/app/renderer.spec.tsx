@@ -184,6 +184,66 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('padding:16px!important');
   });
 
+  it('renders a full page surface while keeping sections and containers transparent', () => {
+    const base = createDefaultSiteDesignSystem();
+    const system = {
+      ...base,
+      colors: base.colors.map((token) =>
+        token.id === 'color-page-background' ? { ...token, value: '#101010' } : token,
+      ),
+    };
+    const payload = PagePayloadV7Schema.parse({
+      version: 7,
+      metadata: { documentTitle: 'Surface regression' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'container',
+                type: 'container',
+                props: {},
+                children: [
+                  {
+                    id: 'heading',
+                    type: 'heading',
+                    props: { text: 'Surface', level: 1 },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            id: 'custom-section',
+            type: 'section',
+            props: {},
+            style: { base: { backgroundColor: '#ff0000' } },
+            children: [],
+          },
+        ],
+      },
+    });
+    const markup = renderToStaticMarkup(renderPage(payload, { designSystem: system }));
+    expect(markup).toMatch(
+      /<div class="payload-page" style="background-color:#101010;color:#111827;min-height:100vh">/,
+    );
+    const transparentSection = markup.match(
+      /<section data-payload-node-id="section"[^>]*>/,
+    )?.[0];
+    expect(transparentSection).toContain('padding:16px');
+    expect(transparentSection).not.toContain('background-color:');
+    expect(markup).toContain('data-payload-node-id="custom-section"');
+    expect(markup).toContain('background-color:#ff0000');
+    expect(markup).toContain('font-size:clamp(2.5rem, 6vw, 4rem)');
+  });
+
   it('applies inherited component defaults while preserving local overrides', () => {
     const payload = PagePayloadV7Schema.parse({
       version: 7,
@@ -654,6 +714,7 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('for="payload-form-email"');
     expect(markup).toContain('type="email"');
     expect(markup).toContain('required');
+    expect(markup).toContain('data-payload-part="input"');
     expect(markup).toContain('Send');
     expect(markup).not.toContain('dangerouslySetInnerHTML');
   });

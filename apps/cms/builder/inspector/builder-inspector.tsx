@@ -874,8 +874,7 @@ export function BuilderInspector({
               viewport,
               designSystem,
             );
-            const hasOverride =
-              resolved.authoredValue !== undefined && viewport !== 'desktop';
+            const hasOverride = resolved.authoredValue !== undefined;
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
                 {designSystem && tokenCategoryForProperty(field.key) ? (
@@ -958,8 +957,7 @@ export function BuilderInspector({
               viewport,
               designSystem,
             );
-            const hasOverride =
-              resolved.authoredValue !== undefined && viewport !== 'desktop';
+            const hasOverride = resolved.authoredValue !== undefined;
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
                 {designSystem && tokenCategoryForProperty(field.key) ? (

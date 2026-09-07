@@ -1,6 +1,7 @@
 'use client';
 
 import React, {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -272,6 +273,79 @@ export function Drawer({
  * compatibility with existing feature routes. */
 export const Dialog = Modal;
 export const Sheet = Drawer;
+
+export type ConfirmOptions = {
+  cancelLabel?: string;
+  confirmLabel?: string;
+  description?: string;
+  message: ReactNode;
+  title: string;
+  tone?: 'danger' | 'primary';
+};
+
+/**
+ * Provides a design-system confirmation popup without coupling actions to the
+ * browser's native confirm dialog.
+ */
+export function useConfirm() {
+  const [request, setRequest] = useState<ConfirmOptions | null>(null);
+  const resolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+
+  const finish = useCallback((confirmed: boolean) => {
+    resolverRef.current?.(confirmed);
+    resolverRef.current = null;
+    setRequest(null);
+  }, []);
+
+  const confirm = useCallback((options: ConfirmOptions) => {
+    return new Promise<boolean>((resolve) => {
+      resolverRef.current?.(false);
+      resolverRef.current = resolve;
+      setRequest(options);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      resolverRef.current?.(false);
+      resolverRef.current = null;
+    };
+  }, []);
+
+  const dialog = request ? (
+    <Modal
+      description={request.description}
+      footer={
+        <>
+          <button
+            className="button button-ghost"
+            onClick={() => finish(false)}
+            type="button"
+          >
+            {request.cancelLabel ?? 'Cancel'}
+          </button>
+          <button
+            className={`button ${
+              request.tone === 'danger' ? 'button-danger' : 'button-primary'
+            }`}
+            onClick={() => finish(true)}
+            type="button"
+          >
+            {request.confirmLabel ?? 'Confirm'}
+          </button>
+        </>
+      }
+      onClose={() => finish(false)}
+      open
+      size="sm"
+      title={request.title}
+    >
+      <p>{request.message}</p>
+    </Modal>
+  ) : null;
+
+  return { confirm, dialog };
+}
 
 export function DataTable({
   children,
