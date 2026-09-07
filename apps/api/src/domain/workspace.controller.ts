@@ -11,8 +11,10 @@ import {
 import {
   CreateWorkspaceRequestSchema,
   SiteDesignSystemSchema,
+  PublishDesignSystemRequestSchema,
   type SiteDesignSystem,
   type CreateWorkspaceRequest,
+  type PublishDesignSystemRequest,
 } from '@payload/contracts';
 
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -101,11 +103,14 @@ export class WorkspaceController {
   @Post(':workspaceId/design-system/publish')
   async publishDesignSystem(
     @Param('workspaceId') workspaceId: string,
+    @Body(new ZodValidationPipe(PublishDesignSystemRequestSchema))
+    input: PublishDesignSystemRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'design-system.update', workspaceId);
     return this.workspaceService.publishDesignSystem(
       requireRequestedWorkspace(principal, workspaceId),
+      input,
     );
   }
 }

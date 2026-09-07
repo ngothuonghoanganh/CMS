@@ -26,11 +26,21 @@ export class NavigationRecord {
   @Prop({ type: String, required: false, index: true })
   siteId?: string;
 
+  @Prop({ type: String, required: false, enum: ['workspace', 'site'], index: true })
+  ownershipScope?: 'workspace' | 'site';
+
   @Prop({ type: String, required: true, trim: true, maxlength: 200 })
   name!: string;
 
   @Prop({ type: String, required: true, trim: true, lowercase: true })
   key!: string;
+
+  /** Migration provenance for deterministic compatibility copies. */
+  @Prop({ type: String, required: false, index: true, immutable: true })
+  migrationSourceId?: string;
+
+  @Prop({ type: String, required: false, immutable: true })
+  migrationId?: string;
 
   @Prop({
     type: [Object],
@@ -48,6 +58,20 @@ export class NavigationRecord {
 }
 
 export const NavigationSchemaMongoose = SchemaFactory.createForClass(NavigationRecord);
-NavigationSchemaMongoose.index({ siteId: 1, key: 1 }, { unique: true, sparse: true });
-NavigationSchemaMongoose.index({ workspaceId: 1, siteId: 1, key: 1 }, { unique: true });
+NavigationSchemaMongoose.index(
+  { workspaceId: 1, siteId: 1, key: 1 },
+  {
+    name: 'navigation_legacy_workspace_site_key_unique',
+    unique: true,
+    partialFilterExpression: { siteId: { $exists: true } },
+  },
+);
+NavigationSchemaMongoose.index(
+  { workspaceId: 1, key: 1 },
+  {
+    name: 'navigation_workspace_key_unique',
+    unique: true,
+    partialFilterExpression: { ownershipScope: 'workspace' },
+  },
+);
 NavigationSchemaMongoose.index({ workspaceId: 1, siteId: 1, createdAt: -1 });

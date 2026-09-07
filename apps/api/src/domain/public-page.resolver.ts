@@ -16,6 +16,7 @@ import {
   readDataPath,
   SiteGlobalsSchema,
   SiteDesignSystemSchema,
+  SiteDesignSystemOverrideSchema,
   mergeSiteDesignSystems,
   normalizeHostname,
   matchDynamicPath,
@@ -318,7 +319,8 @@ export class PublicPageResolver {
           ? SiteDesignSystemSchema.parse(workspace.publishedDesignSystem)
           : undefined,
         site.publishedDesignSystem
-          ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
+          ? (SiteDesignSystemOverrideSchema.safeParse(site.publishedDesignSystem).data ??
+              SiteDesignSystemSchema.parse(site.publishedDesignSystem))
           : undefined,
       );
       const dataContext = await this.collections.resolveDataContext(

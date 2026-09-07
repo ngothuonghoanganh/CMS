@@ -7358,6 +7358,41 @@ body {
   padding: 0.15rem 0.25rem 0.45rem;
 }
 
+.builder-navigation-item-summary {
+  align-items: center;
+  background: var(--cms-bg-surface);
+  border: 1px solid var(--cms-border-default);
+  border-radius: 0.45rem;
+  color: var(--cms-text-primary);
+  cursor: pointer;
+  display: flex;
+  gap: 0.5rem;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+}
+
+.builder-navigation-item-summary[aria-selected='true'] {
+  border-color: var(--cms-border-focus, var(--cms-border-default));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cms-border-default) 35%, transparent);
+}
+
+.builder-navigation-item-summary-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.builder-navigation-item-summary-type {
+  color: var(--cms-text-secondary);
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  text-transform: capitalize;
+}
+
 .builder-navigation-item > .ui-field,
 .builder-navigation-item > .row-actions,
 .builder-form-field > .ui-field,

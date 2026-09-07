@@ -50,6 +50,7 @@ import {
   migratePageDocument,
   isPageComponentType,
   NavigationSchema,
+  NavigationItemsSchema,
   PagePathSchema,
   PageSchema,
   LandingPageSchema,
@@ -61,6 +62,7 @@ import {
   SiteDesignSystemSchema,
   createDefaultSiteDesignSystem,
   mergeSiteDesignSystems,
+  normalizeSiteDesignSystemOverride,
   resolveDesignSystemComponentDefaults,
   resolvePageStyleValue,
 } from './index';
@@ -1444,5 +1446,39 @@ describe('foundation contracts', () => {
       backgroundColor: { kind: 'token', tokenId: 'color-primary' },
       borderRadius: '2px',
     });
+  });
+
+  it('round-trips sparse site overrides without copying workspace defaults', () => {
+    const workspace = createDefaultSiteDesignSystem();
+    const effective = SiteDesignSystemSchema.parse({
+      ...workspace,
+      colors: workspace.colors
+        .filter((token) => token.id !== 'color-muted')
+        .map((token) =>
+          token.id === 'color-primary' ? { ...token, value: '#7c3aed' } : token,
+        ),
+    });
+    const override = normalizeSiteDesignSystemOverride(workspace, effective);
+
+    expect(override.colors).toEqual([
+      { id: 'color-primary', name: 'Primary', value: '#7c3aed' },
+    ]);
+    expect(override.removedTokenIds?.colors).toEqual(['color-muted']);
+    expect(override.typography).toBeUndefined();
+    expect(mergeSiteDesignSystems(workspace, override)).toEqual(effective);
+  });
+
+  it('does not impose a fixed child-count cap on navigation trees', () => {
+    const pageId = randomUUID();
+    const items = Array.from({ length: 60 }, (_, index) => ({
+      id: randomUUID(),
+      label: `Item ${index + 1}`,
+      type: 'page' as const,
+      pageId,
+    }));
+    expect(
+      NavigationItemsSchema.safeParse([{ ...items[0], children: items.slice(1) }])
+        .success,
+    ).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -7,11 +7,13 @@ import {
   WorkspaceSchema,
   SiteDesignSystemSchema,
   SiteDesignSystemResponseSchema,
+  PublishDesignSystemRequestSchema,
   createDefaultSiteDesignSystem,
   type Workspace,
   type CreateWorkspaceRequest,
   type SiteDesignSystem,
   type SiteDesignSystemResponse,
+  type PublishDesignSystemRequest,
 } from '@payload/contracts';
 
 import { QuotaService } from '../billing/quota.service';
@@ -83,16 +85,35 @@ export class WorkspaceService {
     return this.getDesignSystem(workspaceId);
   }
 
-  async publishDesignSystem(workspaceId: string): Promise<SiteDesignSystemResponse> {
+  async publishDesignSystem(
+    workspaceId: string,
+    input: PublishDesignSystemRequest = {},
+  ): Promise<SiteDesignSystemResponse> {
     const record = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
     if (!record)
       throw new NotFoundException({
         code: 'WORKSPACE_NOT_FOUND',
         message: 'Workspace was not found',
       });
-    record.publishedDesignSystem = record.designSystemDraft
-      ? SiteDesignSystemSchema.parse(record.designSystemDraft)
-      : createDefaultSiteDesignSystem();
+    const parsed = PublishDesignSystemRequestSchema.parse(input);
+    if (
+      parsed.expectedVersion &&
+      parsed.expectedVersion !== record.updatedAt.toISOString()
+    ) {
+      throw new ConflictException({
+        code: 'DESIGN_SYSTEM_VERSION_CONFLICT',
+        message: 'The design system changed elsewhere. Reload before publishing.',
+      });
+    }
+    const current = parsed.designSystem
+      ? SiteDesignSystemSchema.parse(parsed.designSystem)
+      : record.designSystemDraft
+        ? SiteDesignSystemSchema.parse(record.designSystemDraft)
+        : createDefaultSiteDesignSystem();
+    // One document save updates both pointers so Publish cannot promote stale
+    // server state when the editor has unsaved changes.
+    record.designSystemDraft = current;
+    record.publishedDesignSystem = current;
     await record.save();
     return this.getDesignSystem(workspaceId);
   }

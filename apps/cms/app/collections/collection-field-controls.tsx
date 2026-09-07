@@ -930,6 +930,7 @@ export function CollectionEntryFields({
               <AssetPicker
                 allowExternalUrl={field.type === 'image'}
                 disabled={fieldDisabled}
+                initialMediaType={field.type === 'image' ? 'image' : 'all'}
                 onChange={(assetId) => updateField(field, assetId)}
                 onRemove={() => updateField(field, undefined)}
                 value={value}

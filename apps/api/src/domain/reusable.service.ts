@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -33,6 +33,7 @@ import {
   type ReusableDocument,
 } from '../persistence/schemas/reusable.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
+import { NavigationService } from './navigation.service';
 
 @Injectable()
 export class ReusableService {
@@ -45,11 +46,18 @@ export class ReusableService {
     private readonly pageModel: Model<PageDocument>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
+    @Inject(NavigationService)
+    private readonly navigation: NavigationService,
   ) {}
 
   async create(workspaceId: string, siteId: string, input: CreateReusableRequest) {
     await this.requireSite(workspaceId, siteId);
     const request = CreateReusableRequestSchema.parse(input);
+    await this.navigation.validateInlineNavigationDocument(
+      request.document,
+      workspaceId,
+      siteId,
+    );
     const record = await this.reusableModel.create({
       _id: randomUUID(),
       workspaceId,
@@ -103,6 +111,13 @@ export class ReusableService {
   ) {
     const record = await this.findRecord(workspaceId, siteId, reusableId);
     const request = UpdateReusableRequestSchema.parse(input);
+    if (request.document !== undefined) {
+      await this.navigation.validateInlineNavigationDocument(
+        request.document,
+        workspaceId,
+        siteId,
+      );
+    }
     if (request.name !== undefined) record.name = request.name;
     if (request.description !== undefined) {
       if (request.description === null) delete record.description;

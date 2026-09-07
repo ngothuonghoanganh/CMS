@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { HydratedDocument } from 'mongoose';
+import {
+  SiteDesignSystemOverrideSchema,
+  SiteDesignSystemSchema,
+} from '@payload/contracts';
 
 export type SiteDocument = HydratedDocument<SiteRecord>;
 
@@ -64,3 +68,14 @@ export class SiteRecord {
 
 export const SiteSchema = SchemaFactory.createForClass(SiteRecord);
 SiteSchema.index({ workspaceId: 1, slug: 1 }, { unique: true });
+const validSiteDesignSystemValue = (value: unknown): boolean =>
+  SiteDesignSystemOverrideSchema.safeParse(value).success ||
+  SiteDesignSystemSchema.safeParse(value).success;
+SiteSchema.path('designSystemDraft').validate(
+  (value: unknown) => value === undefined || validSiteDesignSystemValue(value),
+  'designSystemDraft must be a valid sparse design system override',
+);
+SiteSchema.path('publishedDesignSystem').validate(
+  (value: unknown) => value === undefined || validSiteDesignSystemValue(value),
+  'publishedDesignSystem must be a valid sparse design system override',
+);

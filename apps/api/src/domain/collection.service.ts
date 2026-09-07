@@ -76,7 +76,10 @@ function scope(workspaceId: string, siteId?: string): Record<string, unknown> {
 }
 
 function ownershipScope(workspaceId: string, siteId?: string): Record<string, string> {
-  return { workspaceId, ...(siteId ? { siteId } : {}) };
+  return {
+    workspaceId,
+    ...(siteId ? { siteId, ownershipScope: 'site' } : { ownershipScope: 'workspace' }),
+  };
 }
 
 @Injectable()
@@ -1388,6 +1391,15 @@ export class CollectionService {
     const autoSlugSourceValues: Record<string, string> = {
       ...(previousAutoSlugSourceValues ?? {}),
     };
+    // Schema-owned values must be materialized before conditions are
+    // evaluated. An editor cannot override a constant by hiding it behind a
+    // false condition, and generated slugs can depend on constant sources.
+    for (const field of collection.fields) {
+      if (field.status === 'archived') continue;
+      if (field.valueMode === 'constant') values[field.key] = field.constantValue;
+      else if (values[field.key] === undefined && field.defaultValue !== undefined)
+        values[field.key] = field.defaultValue;
+    }
     for (const field of collection.fields) {
       if (field.status === 'archived' || field.type !== 'slug' || !field.slugFromFieldKey)
         continue;
@@ -1410,24 +1422,19 @@ export class CollectionService {
         delete autoSlugSourceValues[field.key];
       }
     }
-    // Constants are owned by the schema, never by an entry editor. Apply
-    // them before visibility checks so conditions cannot be bypassed.
-    for (const field of collection.fields) {
-      if (field.status === 'archived') continue;
-      if (field.valueMode === 'constant') values[field.key] = field.constantValue;
-      else if (values[field.key] === undefined && field.defaultValue !== undefined)
-        values[field.key] = field.defaultValue;
-    }
     const fieldsByKey = new Map(collection.fields.map((field) => [field.key, field]));
     for (const field of collection.fields) {
       if (field.status === 'archived') continue;
-      if (!isCollectionFieldVisible(field, values, fieldsByKey)) continue;
       const value = values[field.key];
-      if (field.required && isEmptyValue(value))
+      const visible = isCollectionFieldVisible(field, values, fieldsByKey);
+      if (visible && field.required && isEmptyValue(value))
         throw new BadRequestException({
           code: 'REQUIRED_COLLECTION_FIELD',
           message: `${field.label} is required`,
         });
+      // Hidden fields are optional, not untyped. Any supplied/defaulted value
+      // still goes through the same type, reference, asset and validation
+      // rules as a visible field.
       if (value !== undefined && value !== null)
         await this.validateFieldValue(workspaceId, siteId, field, value);
     }
@@ -1528,6 +1535,8 @@ export class CollectionService {
           .select({ _id: 1, mimeType: 1, size: 1 })
           .exec();
         if (!asset) throw this.invalidField(field.key, 'references an unavailable asset');
+        if (field.type === 'image' && !asset.mimeType.toLowerCase().startsWith('image/'))
+          throw this.invalidField(field.key, 'references a non-image asset');
         const allowedMimeTypes = field.validation?.allowedMimeTypes;
         if (
           allowedMimeTypes &&

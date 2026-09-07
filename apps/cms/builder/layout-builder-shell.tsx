@@ -427,21 +427,25 @@ export default function LayoutBuilderShell({
       ] = await Promise.all([
         api.get(`/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}`),
         api.get(`/workspaces/${workspaceId}/layouts/${layoutKind}/${layoutId}/versions`),
-        previewSiteId
-          ? api.get(`/workspaces/${workspaceId}/sites/${previewSiteId}`)
+        effectivePreviewSiteId
+          ? api.get(`/workspaces/${workspaceId}/sites/${effectivePreviewSiteId}`)
           : Promise.resolve(null),
         api.get(`/workspaces/${workspaceId}/assets?limit=100`),
-        previewSiteId
+        effectivePreviewSiteId
           ? api
-              .get(`/workspaces/${workspaceId}/sites/${previewSiteId}/design-system`)
+              .get(
+                `/workspaces/${workspaceId}/sites/${effectivePreviewSiteId}/design-system`,
+              )
               .catch((caughtError: unknown) => {
                 if (caughtError instanceof ApiClientError && caughtError.status === 404)
                   return null;
                 throw caughtError;
               })
           : Promise.resolve(null),
-        previewSiteId
-          ? api.get(`/sites/${previewSiteId}/pages?limit=100&offset=0`).catch(() => null)
+        effectivePreviewSiteId
+          ? api
+              .get(`/sites/${effectivePreviewSiteId}/pages?limit=100&offset=0`)
+              .catch(() => null)
           : Promise.resolve(null),
         api.get('/extensions').catch(() => null),
       ]);
@@ -485,7 +489,7 @@ export default function LayoutBuilderShell({
 
   useEffect(() => {
     void load();
-  }, [layoutId, layoutKind, previewSiteId, workspaceId]);
+  }, [effectivePreviewSiteId, layoutId, layoutKind, previewSiteId, workspaceId]);
 
   useEffect(() => {
     if (previewSiteId) return;

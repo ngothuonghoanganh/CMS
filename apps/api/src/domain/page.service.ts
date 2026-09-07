@@ -122,6 +122,7 @@ export class PageService {
       const site = await this.requireSite(siteId, workspaceId);
       await this.sites.ensureHomePage(site);
       const payload = this.parsePayload(input.payload);
+      await this.validateInlineNavigationDocument(payload, workspaceId, siteId);
       const pageId = randomUUID();
       const kind = input.kind ?? 'standard';
       const dynamicMetadata =
@@ -636,6 +637,7 @@ export class PageService {
         message: 'The selected page composition could not be normalized',
       });
     }
+    await this.validateInlineNavigationDocument(payload, page.workspaceId, page.siteId);
     await this.reusables.assertDependenciesAvailable(
       page.workspaceId,
       page.siteId,
@@ -1056,6 +1058,7 @@ export class PageService {
     expectedDraftVersionId: string | undefined,
     compositionInput?: PageCompositionInput,
   ): Promise<PageVersion> {
+    await this.validateInlineNavigationDocument(payload, page.workspaceId, page.siteId);
     const versionNumber = nextVersionNumber(currentVersionNumber);
     const latest = currentVersionNumber
       ? await this.versionModel
@@ -1504,6 +1507,17 @@ export class PageService {
     }
 
     return result.data;
+  }
+
+  private async validateInlineNavigationDocument(
+    payload: PagePayload,
+    workspaceId: string,
+    siteId: string,
+  ): Promise<void> {
+    // A few historical unit fixtures construct PageService without Nest's
+    // injected collaborators. Production instances always have NavigationService.
+    if (!this.navigation) return;
+    await this.navigation.validateInlineNavigationDocument(payload, workspaceId, siteId);
   }
 
   private toPageContract(record: PageDocument): Page {

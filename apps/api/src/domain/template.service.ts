@@ -15,8 +15,10 @@ import {
   PagePayloadSchema,
   PageCompositionSchema,
   SiteDesignSystemSchema,
+  SiteDesignSystemOverrideSchema,
   TemplateCompositionSchema,
   createDefaultSiteDesignSystem,
+  mergeSiteDesignSystems,
   type ApplyTemplateRequest,
   type AnyPageNode,
   type CreateTemplateRequest,
@@ -40,11 +42,13 @@ import {
 } from '../persistence/schemas/template.schema';
 import { PageRecord } from '../persistence/schemas/page.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { LayoutExtensionService } from './layout-extension.service';
 import { PageService } from './page.service';
 import { ReusableService } from './reusable.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { CollectionService } from './collection.service';
+import { NavigationService } from './navigation.service';
 
 /**
  * Design Templates are immutable, versioned starter snapshots. Applying a
@@ -63,6 +67,8 @@ export class TemplateService {
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
+    @InjectModel(WorkspaceRecord.name)
+    private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(PageService)
     private readonly pages: PageService,
     @Inject(PageExtensionService)
@@ -73,6 +79,8 @@ export class TemplateService {
     private readonly reusables: ReusableService,
     @Inject(CollectionService)
     private readonly collections: CollectionService,
+    @Inject(NavigationService)
+    private readonly navigation: NavigationService,
   ) {}
 
   async create(workspaceId: string, input: CreateTemplateRequest): Promise<Template> {
@@ -91,6 +99,11 @@ export class TemplateService {
         parsedInput.layoutAttachments,
       );
     }
+    await this.navigation.validateInlineNavigationDocument(
+      parsedInput.payload,
+      workspaceId,
+      parsedInput.siteId,
+    );
     const versionId = randomUUID();
     const record = await this.templateModel.create({
       _id: randomUUID(),
@@ -198,6 +211,11 @@ export class TemplateService {
           message: 'The template does not have a payload to version',
         });
       }
+      await this.navigation.validateInlineNavigationDocument(
+        payload,
+        workspaceId,
+        record.siteId,
+      );
       if (record.siteId && layoutAttachments) {
         await this.assertLayoutAttachments(workspaceId, record.siteId, layoutAttachments);
       } else if (!record.siteId && layoutAttachments?.length) {
@@ -409,6 +427,11 @@ export class TemplateService {
     version: TemplateVersionDocument,
   ): Promise<void> {
     const payload = PagePayloadSchema.parse(version.payload);
+    await this.navigation.validateInlineNavigationDocument(
+      payload,
+      workspaceId,
+      record.siteId,
+    );
     await this.pageExtensions.validateVisualDocumentDependencies(workspaceId, payload);
     if (record.siteId && version.composition) {
       await this.collections.validateComposition(
@@ -433,9 +456,18 @@ export class TemplateService {
       return;
     }
     const site = await this.requireSite(workspaceId, record.siteId);
-    const designSystem = site.publishedDesignSystem
-      ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
+    const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const workspaceDesignSystem = workspace?.publishedDesignSystem
+      ? SiteDesignSystemSchema.parse(workspace.publishedDesignSystem)
       : createDefaultSiteDesignSystem();
+    const designSystem =
+      mergeSiteDesignSystems(
+        workspaceDesignSystem,
+        site.publishedDesignSystem
+          ? (SiteDesignSystemOverrideSchema.safeParse(site.publishedDesignSystem).data ??
+              SiteDesignSystemSchema.parse(site.publishedDesignSystem))
+          : undefined,
+      ) ?? createDefaultSiteDesignSystem();
     await this.reusables.assertDesignTokenDependenciesAvailableForValues(designSystem, [
       payload,
     ]);

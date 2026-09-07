@@ -2,6 +2,8 @@
 
 import {
   SiteDesignSystemResponseSchema,
+  createDefaultSiteDesignSystem,
+  normalizeSiteDesignSystemOverride,
   resolveDesignSystemComponentDefaults,
   resolvePageStyleValue,
   type DesignScalarToken,
@@ -274,6 +276,8 @@ export function DesignSystemView({
   inheritedSiteCount,
 }: DesignSystemViewProps) {
   const [system, setSystem] = useState<SiteDesignSystem | null>(null);
+  const [workspaceSystem, setWorkspaceSystem] = useState<SiteDesignSystem | null>(null);
+  const [savedFingerprint, setSavedFingerprint] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -286,15 +290,23 @@ export function DesignSystemView({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    void api
-      .get(
-        siteId
-          ? `/workspaces/${workspaceId}/sites/${siteId}/design-system`
-          : `/workspaces/${workspaceId}/design-system`,
-      )
-      .then((response) => {
+    const siteRequest = api.get(
+      siteId
+        ? `/workspaces/${workspaceId}/sites/${siteId}/design-system`
+        : `/workspaces/${workspaceId}/design-system`,
+    );
+    const workspaceRequest = siteId
+      ? api.get(`/workspaces/${workspaceId}/design-system`)
+      : Promise.resolve(undefined);
+    void Promise.all([siteRequest, workspaceRequest])
+      .then(([response, baseline]) => {
         if (cancelled) return;
-        setSystem(SiteDesignSystemResponseSchema.parse(response).draft);
+        const parsed = SiteDesignSystemResponseSchema.parse(response);
+        setSystem(parsed.draft);
+        setSavedFingerprint(JSON.stringify(parsed.draft));
+        setWorkspaceSystem(
+          baseline ? SiteDesignSystemResponseSchema.parse(baseline).draft : null,
+        );
       })
       .catch((caughtError: unknown) => {
         if (cancelled) return;
@@ -320,16 +332,24 @@ export function DesignSystemView({
     setError(null);
     setNotice(null);
     try {
-      setSystem(
-        SiteDesignSystemResponseSchema.parse(
-          await api.patch(
-            siteId
-              ? `/workspaces/${workspaceId}/sites/${siteId}/design-system`
-              : `/workspaces/${workspaceId}/design-system`,
-            system,
-          ),
-        ).draft,
-      );
+      const body = siteId
+        ? {
+            override: normalizeSiteDesignSystemOverride(
+              workspaceSystem ?? createDefaultSiteDesignSystem(),
+              system,
+            ),
+          }
+        : system;
+      const next = SiteDesignSystemResponseSchema.parse(
+        await api.patch(
+          siteId
+            ? `/workspaces/${workspaceId}/sites/${siteId}/design-system`
+            : `/workspaces/${workspaceId}/design-system`,
+          body,
+        ),
+      ).draft;
+      setSystem(next);
+      setSavedFingerprint(JSON.stringify(next));
       setNotice(
         siteId
           ? 'Site design system draft saved.'
@@ -418,8 +438,15 @@ export function DesignSystemView({
                 onClick={() => {
                   setSaving(true);
                   void api
-                    .post(`/workspaces/${workspaceId}/design-system/publish`)
-                    .then(() => setNotice('Workspace Design System published.'))
+                    .post(`/workspaces/${workspaceId}/design-system/publish`, {
+                      designSystem: system,
+                    })
+                    .then((response) => {
+                      const next = SiteDesignSystemResponseSchema.parse(response).draft;
+                      setSystem(next);
+                      setSavedFingerprint(JSON.stringify(next));
+                      setNotice('Workspace Design System published.');
+                    })
                     .catch((caughtError: unknown) =>
                       setError(
                         caughtError instanceof Error
@@ -459,7 +486,13 @@ export function DesignSystemView({
                   : 'Workspace defaults are inherited by sites without an override.'}
             </span>
           </div>
-          <span className="design-system-preview-status">Draft</span>
+          <span className="design-system-preview-status" role="status">
+            {saving
+              ? 'Saving…'
+              : savedFingerprint !== JSON.stringify(system)
+                ? 'Unsaved changes'
+                : 'Saved'}
+          </span>
         </div>
         <div className="design-system-preview-canvas">
           <div className="design-system-preview-nav">

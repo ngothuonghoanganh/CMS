@@ -14,12 +14,12 @@ import {
   PaginationQuerySchema,
   UpdateSiteRequestSchema,
   SiteGlobalsSchema,
-  SiteDesignSystemSchema,
+  UpdateSiteDesignSystemRequestSchema,
   DesignTokenUsageQuerySchema,
   type CreateSiteRequest,
   type PaginationQuery,
   type SiteGlobals,
-  type SiteDesignSystem,
+  type UpdateSiteDesignSystemRequest,
   type UpdateSiteRequest,
   type DesignTokenUsageQuery,
 } from '@payload/contracts';
@@ -165,7 +165,8 @@ export class SiteController {
   async updateDesignSystem(
     @Param('workspaceId') workspaceId: string,
     @Param('siteId') siteId: string,
-    @Body(new ZodValidationPipe(SiteDesignSystemSchema)) input: SiteDesignSystem,
+    @Body(new ZodValidationPipe(UpdateSiteDesignSystemRequestSchema))
+    input: UpdateSiteDesignSystemRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'design-system.update', workspaceId);

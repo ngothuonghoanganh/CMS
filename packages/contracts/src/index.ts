@@ -3353,6 +3353,60 @@ export const SiteDesignSystemSchema = z
   });
 export type SiteDesignSystem = z.infer<typeof SiteDesignSystemSchema>;
 
+/** A site persists only intentional changes over the workspace baseline. */
+export const SiteDesignSystemOverrideSchema = z
+  .object({
+    version: z.literal(1),
+    colors: z.array(DesignScalarTokenSchema).max(100).optional(),
+    typography: z.array(TypographyTokenSchema).max(50).optional(),
+    spacing: z.array(DesignScalarTokenSchema).max(100).optional(),
+    radii: z.array(DesignScalarTokenSchema).max(50).optional(),
+    shadows: z.array(DesignScalarTokenSchema).max(50).optional(),
+    containerWidths: z.array(DesignScalarTokenSchema).max(50).optional(),
+    removedTokenIds: z
+      .object({
+        colors: z.array(designTokenId).max(100).optional(),
+        typography: z.array(designTokenId).max(50).optional(),
+        spacing: z.array(designTokenId).max(100).optional(),
+        radii: z.array(designTokenId).max(50).optional(),
+        shadows: z.array(designTokenId).max(50).optional(),
+        containerWidths: z.array(designTokenId).max(50).optional(),
+      })
+      .strict()
+      .optional(),
+    componentDefaults: z
+      .record(
+        z.string().regex(/^[a-z][a-z0-9-]{0,79}$/),
+        ComponentDefaultAppearanceSchema,
+      )
+      .refine(
+        (defaults) => Object.keys(defaults).length <= 100,
+        'Too many component defaults',
+      )
+      .optional(),
+  })
+  .strict()
+  .superRefine((override, context) => {
+    const seen = new Set<string>();
+    for (const [category, tokens] of Object.entries(override)) {
+      if (!Array.isArray(tokens)) continue;
+      for (const [index, token] of tokens.entries()) {
+        if (typeof token !== 'object' || token === null || !('id' in token)) continue;
+        const id = token.id;
+        if (typeof id !== 'string') continue;
+        if (seen.has(id)) {
+          context.addIssue({
+            code: 'custom',
+            message: `Design token id must be globally unique: ${id}`,
+            path: [category, index, 'id'],
+          });
+        }
+        seen.add(id);
+      }
+    }
+  });
+export type SiteDesignSystemOverride = z.infer<typeof SiteDesignSystemOverrideSchema>;
+
 export function resolveDesignSystemComponentDefaults(
   system: SiteDesignSystem | undefined,
   componentType: string,
@@ -3427,38 +3481,158 @@ function mergeComponentDefaultAppearance(
 /** Merge a site snapshot over workspace defaults without leaking workspace drafts. */
 export function mergeSiteDesignSystems(
   workspaceSystem: SiteDesignSystem | undefined,
-  siteSystem: SiteDesignSystem | undefined,
+  siteSystem: SiteDesignSystem | SiteDesignSystemOverride | undefined,
 ): SiteDesignSystem | undefined {
-  if (!workspaceSystem) return siteSystem;
   if (!siteSystem) return workspaceSystem;
+  if (!workspaceSystem) {
+    const sparse = SiteDesignSystemOverrideSchema.safeParse(siteSystem);
+    return sparse.success
+      ? mergeSiteDesignSystems(createDefaultSiteDesignSystem(), sparse.data)
+      : SiteDesignSystemSchema.parse(siteSystem);
+  }
+  const sparse = SiteDesignSystemOverrideSchema.safeParse(siteSystem);
+  if (sparse.success) {
+    const removed = sparse.data.removedTokenIds ?? {};
+    const mergeCategory = (
+      category: keyof Pick<
+        SiteDesignSystem,
+        'colors' | 'typography' | 'spacing' | 'radii' | 'shadows' | 'containerWidths'
+      >,
+    ) => {
+      const removedIds = new Set(removed[category] ?? []);
+      return mergeDesignTokens(
+        workspaceSystem[category].filter((token) => !removedIds.has(token.id)) as Array<{
+          id: string;
+        }>,
+        (sparse.data[category] ?? []) as Array<{ id: string }>,
+      );
+    };
+    const componentDefaults = {
+      ...(workspaceSystem.componentDefaults ?? {}),
+      ...(sparse.data.componentDefaults ?? {}),
+    };
+    for (const componentType of new Set([
+      ...Object.keys(workspaceSystem.componentDefaults ?? {}),
+      ...Object.keys(sparse.data.componentDefaults ?? {}),
+    ])) {
+      const merged = mergeComponentDefaultAppearance(
+        workspaceSystem.componentDefaults?.[componentType],
+        sparse.data.componentDefaults?.[componentType],
+      );
+      if (merged) componentDefaults[componentType] = merged;
+    }
+    return SiteDesignSystemSchema.parse({
+      version: 1,
+      colors: mergeCategory('colors'),
+      typography: mergeCategory('typography'),
+      spacing: mergeCategory('spacing'),
+      radii: mergeCategory('radii'),
+      shadows: mergeCategory('shadows'),
+      containerWidths: mergeCategory('containerWidths'),
+      ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
+    });
+  }
+  const fullSiteSystem = SiteDesignSystemSchema.parse(siteSystem);
   const componentDefaults = {
     ...(workspaceSystem.componentDefaults ?? {}),
-    ...(siteSystem.componentDefaults ?? {}),
+    ...(fullSiteSystem.componentDefaults ?? {}),
   };
   for (const componentType of new Set([
     ...Object.keys(workspaceSystem.componentDefaults ?? {}),
-    ...Object.keys(siteSystem.componentDefaults ?? {}),
+    ...Object.keys(fullSiteSystem.componentDefaults ?? {}),
   ])) {
     const merged = mergeComponentDefaultAppearance(
       workspaceSystem.componentDefaults?.[componentType],
-      siteSystem.componentDefaults?.[componentType],
+      fullSiteSystem.componentDefaults?.[componentType],
     );
     if (merged) componentDefaults[componentType] = merged;
   }
   return SiteDesignSystemSchema.parse({
     ...workspaceSystem,
-    ...siteSystem,
-    colors: mergeDesignTokens(workspaceSystem.colors, siteSystem.colors),
-    typography: mergeDesignTokens(workspaceSystem.typography, siteSystem.typography),
-    spacing: mergeDesignTokens(workspaceSystem.spacing, siteSystem.spacing),
-    radii: mergeDesignTokens(workspaceSystem.radii, siteSystem.radii),
-    shadows: mergeDesignTokens(workspaceSystem.shadows, siteSystem.shadows),
+    ...fullSiteSystem,
+    colors: mergeDesignTokens(workspaceSystem.colors, fullSiteSystem.colors),
+    typography: mergeDesignTokens(workspaceSystem.typography, fullSiteSystem.typography),
+    spacing: mergeDesignTokens(workspaceSystem.spacing, fullSiteSystem.spacing),
+    radii: mergeDesignTokens(workspaceSystem.radii, fullSiteSystem.radii),
+    shadows: mergeDesignTokens(workspaceSystem.shadows, fullSiteSystem.shadows),
     containerWidths: mergeDesignTokens(
       workspaceSystem.containerWidths,
-      siteSystem.containerWidths,
+      fullSiteSystem.containerWidths,
     ),
     ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
   });
+}
+
+const designSystemTokenCategories = [
+  'colors',
+  'typography',
+  'spacing',
+  'radii',
+  'shadows',
+  'containerWidths',
+] as const;
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function diffObject(base: unknown, value: unknown): unknown {
+  if (sameJson(base, value)) return undefined;
+  if (
+    base &&
+    value &&
+    typeof base === 'object' &&
+    typeof value === 'object' &&
+    !Array.isArray(base) &&
+    !Array.isArray(value)
+  ) {
+    const result: Record<string, unknown> = {};
+    for (const key of new Set([...Object.keys(base), ...Object.keys(value)])) {
+      const difference = diffObject(
+        (base as Record<string, unknown>)[key],
+        (value as Record<string, unknown>)[key],
+      );
+      if (difference !== undefined) result[key] = difference;
+    }
+    return Object.keys(result).length ? result : undefined;
+  }
+  return value;
+}
+
+/** Convert a full editor snapshot into a sparse site-owned delta. */
+export function normalizeSiteDesignSystemOverride(
+  workspaceSystem: SiteDesignSystem,
+  effectiveSystem: SiteDesignSystem,
+): SiteDesignSystemOverride {
+  const result: Record<string, unknown> = { version: 1 };
+  const removedTokenIds: Record<string, string[]> = {};
+  for (const category of designSystemTokenCategories) {
+    const baseline = workspaceSystem[category];
+    const next = effectiveSystem[category];
+    const baselineById = new Map(baseline.map((token) => [token.id, token]));
+    const nextIds = new Set(next.map((token) => token.id));
+    const changed = next.filter((token) => !sameJson(baselineById.get(token.id), token));
+    const removed = baseline
+      .filter((token) => !nextIds.has(token.id))
+      .map((token) => token.id);
+    if (changed.length) result[category] = changed;
+    if (removed.length) removedTokenIds[category] = removed;
+  }
+  const componentDefaults: Record<string, ComponentDefaultAppearance> = {};
+  for (const componentType of new Set([
+    ...Object.keys(workspaceSystem.componentDefaults ?? {}),
+    ...Object.keys(effectiveSystem.componentDefaults ?? {}),
+  ])) {
+    const difference = diffObject(
+      workspaceSystem.componentDefaults?.[componentType],
+      effectiveSystem.componentDefaults?.[componentType],
+    );
+    if (difference)
+      componentDefaults[componentType] = difference as ComponentDefaultAppearance;
+  }
+  if (Object.keys(removedTokenIds).length) result.removedTokenIds = removedTokenIds;
+  if (Object.keys(componentDefaults).length) result.componentDefaults = componentDefaults;
+  return SiteDesignSystemOverrideSchema.parse(result);
 }
 
 export function createDefaultSiteDesignSystem(): SiteDesignSystem {
@@ -3837,6 +4011,9 @@ export const SiteDesignSystemResponseSchema = z
   .object({
     draft: SiteDesignSystemSchema,
     published: SiteDesignSystemSchema.optional(),
+    /** Raw site deltas are exposed so editors never need to persist an effective snapshot. */
+    override: z.record(z.string(), z.unknown()).optional(),
+    publishedOverride: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 export type SiteDesignSystemResponse = z.infer<typeof SiteDesignSystemResponseSchema>;
@@ -3845,6 +4022,16 @@ export const WorkspaceDesignSystemResponseSchema = SiteDesignSystemResponseSchem
 export type WorkspaceDesignSystemResponse = z.infer<
   typeof WorkspaceDesignSystemResponseSchema
 >;
+
+export const PublishDesignSystemRequestSchema = z
+  .object({
+    /** Sending the current editor state makes publish independent of a prior save. */
+    designSystem: SiteDesignSystemSchema.optional(),
+    expectedVersion: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict()
+  .default({});
+export type PublishDesignSystemRequest = z.infer<typeof PublishDesignSystemRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // Layout extensions (Header / Footer)
@@ -4814,7 +5001,10 @@ export type NavigationItem = {
   children?: NavigationItem[] | undefined;
 };
 
-const navigationItemChildren = () => z.array(NavigationItemSchema).max(50);
+// Navigation depth and total size are enforced by validateNavigationItems. A
+// fixed per-parent child cap makes legitimate menus impossible to edit and
+// does not protect against a large tree spread across many parents.
+const navigationItemChildren = () => z.array(NavigationItemSchema);
 export const NavigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
   z.discriminatedUnion('type', [
     z
@@ -4864,7 +5054,7 @@ export const NavigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
   ]),
 );
 
-export const NavigationItemsSchema = z.array(NavigationItemSchema).max(100);
+export const NavigationItemsSchema = z.array(NavigationItemSchema);
 
 export const NavigationViewPropsSchema = z
   .object({
@@ -4952,15 +5142,15 @@ export const ResolvedNavigationItemSchema: z.ZodType<ResolvedNavigationItem> = z
           .min(1)
           .max(MAX_PAGE_PATH_LENGTH + 2_048),
         openInNewTab: z.boolean().optional(),
-        children: z.array(ResolvedNavigationItemSchema).max(50).optional(),
+        children: z.array(ResolvedNavigationItemSchema).optional(),
       })
       .strict(),
 );
 
 export const PagePreviewNavigationSchema = z
   .object({
-    main: z.array(ResolvedNavigationItemSchema).max(100).optional(),
-    footer: z.array(ResolvedNavigationItemSchema).max(100).optional(),
+    main: z.array(ResolvedNavigationItemSchema).optional(),
+    footer: z.array(ResolvedNavigationItemSchema).optional(),
     pagePaths: NavigationPagePathsSchema.optional(),
   })
   .strict();
@@ -5039,13 +5229,13 @@ export const CreateNavigationRequestSchema = z
   .object({
     name: nonEmptyText.max(200),
     key: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-    items: z.array(NavigationItemSchema).max(100).default([]),
+    items: z.array(NavigationItemSchema).default([]),
   })
   .strict();
 export const UpdateNavigationRequestSchema = z
   .object({
     name: nonEmptyText.max(200).optional(),
-    items: z.array(NavigationItemSchema).max(100).optional(),
+    items: z.array(NavigationItemSchema).optional(),
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
@@ -5457,7 +5647,10 @@ export const UpdateSiteRequestSchema = z
   })
   .strict()
   .refine((request) => Object.keys(request).length > 0, 'At least one field is required');
-export const UpdateSiteDesignSystemRequestSchema = SiteDesignSystemSchema;
+export const UpdateSiteDesignSystemRequestSchema = z.union([
+  SiteDesignSystemSchema,
+  z.object({ override: SiteDesignSystemOverrideSchema }).strict(),
+]);
 export const CreatePageRequestSchema = z
   .object({
     name: nonEmptyText.max(200),

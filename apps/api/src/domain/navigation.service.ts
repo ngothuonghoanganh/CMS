@@ -6,6 +6,7 @@ import {
   NavigationItemsSchema,
   NavigationListResponseSchema,
   NavigationSchema,
+  NavigationViewPropsSchema,
   navigationActionHref,
   validateNavigationItems,
   PagePayloadSchema,
@@ -28,6 +29,15 @@ import {
 } from '../persistence/schemas/navigation.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
+import {
+  LayoutExtensionRecord,
+  LayoutExtensionVersionRecord,
+} from '../persistence/schemas/layout-extension.schema';
+import {
+  TemplateRecord,
+  TemplateVersionRecord,
+} from '../persistence/schemas/template.schema';
+import { ReusableRecord } from '../persistence/schemas/reusable.schema';
 
 /**
  * Navigation is pure menu data. There is no draft/published lifecycle, no
@@ -45,6 +55,16 @@ export class NavigationService {
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
+    @InjectModel(LayoutExtensionRecord.name)
+    private readonly layoutModel: Model<LayoutExtensionRecord>,
+    @InjectModel(LayoutExtensionVersionRecord.name)
+    private readonly layoutVersionModel: Model<LayoutExtensionVersionRecord>,
+    @InjectModel(TemplateRecord.name)
+    private readonly templateModel: Model<TemplateRecord>,
+    @InjectModel(TemplateVersionRecord.name)
+    private readonly templateVersionModel: Model<TemplateVersionRecord>,
+    @InjectModel(ReusableRecord.name)
+    private readonly reusableModel: Model<ReusableRecord>,
   ) {}
 
   async list(siteId: string, workspaceId: string): Promise<NavigationListResponse> {
@@ -61,7 +81,7 @@ export class NavigationService {
   /** Canonical workspace-owned navigation read. */
   async listWorkspace(workspaceId: string): Promise<NavigationListResponse> {
     const records = await this.navigationModel
-      .find({ workspaceId, siteId: { $exists: false } })
+      .find({ workspaceId, ownershipScope: 'workspace' })
       .sort({ createdAt: 1, _id: 1 })
       .exec();
     return NavigationListResponseSchema.parse({
@@ -71,7 +91,7 @@ export class NavigationService {
 
   async getWorkspace(workspaceId: string, navigationId: string): Promise<Navigation> {
     const record = await this.navigationModel
-      .findOne({ _id: navigationId, workspaceId, siteId: { $exists: false } })
+      .findOne({ _id: navigationId, workspaceId, ownershipScope: 'workspace' })
       .exec();
     if (!record) throw this.notFound(navigationId);
     return this.toContract(record);
@@ -87,6 +107,7 @@ export class NavigationService {
       const record = await this.navigationModel.create({
         _id: randomUUID(),
         workspaceId,
+        ownershipScope: 'workspace',
         name: parsed.name,
         key: parsed.key,
         items: parsed.items,
@@ -105,7 +126,7 @@ export class NavigationService {
   ): Promise<Navigation> {
     const parsed = UpdateNavigationRequestSchema.parse(input);
     const record = await this.navigationModel
-      .findOne({ _id: navigationId, workspaceId, siteId: { $exists: false } })
+      .findOne({ _id: navigationId, workspaceId, ownershipScope: 'workspace' })
       .exec();
     if (!record) throw this.notFound(navigationId);
     if (parsed.name !== undefined) record.name = parsed.name;
@@ -119,7 +140,7 @@ export class NavigationService {
 
   async removeWorkspace(workspaceId: string, navigationId: string): Promise<void> {
     const result = await this.navigationModel
-      .deleteOne({ _id: navigationId, workspaceId, siteId: { $exists: false } })
+      .deleteOne({ _id: navigationId, workspaceId, ownershipScope: 'workspace' })
       .exec();
     if (!result.deletedCount) throw this.notFound(navigationId);
   }
@@ -149,6 +170,7 @@ export class NavigationService {
         _id: randomUUID(),
         workspaceId,
         siteId,
+        ownershipScope: 'site',
         name: parsed.name,
         key: parsed.key,
         items: parsed.items,
@@ -192,18 +214,202 @@ export class NavigationService {
     if (!result.deletedCount) throw this.notFound(navigationId);
   }
 
+  /**
+   * Validate Builder-owned navigation in any persisted document. Inline menus
+   * deliberately use the same target and size rules as legacy Navigation
+   * resources, while the optional site scope keeps workspace-owned layouts and
+   * templates portable across sites.
+   */
+  async validateInlineNavigationDocument(
+    document: unknown,
+    workspaceId: string,
+    siteId?: string,
+  ): Promise<void> {
+    const pending: unknown[] = [document];
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (Array.isArray(current)) {
+        pending.push(...current);
+        continue;
+      }
+      if (!current || typeof current !== 'object') continue;
+      const record = current as Record<string, unknown>;
+      if (record.type === 'navigation-view') {
+        const props = NavigationViewPropsSchema.safeParse(record.props);
+        if (!props.success) {
+          throw new ConflictException({
+            code: 'INVALID_INLINE_NAVIGATION',
+            message: 'The inline navigation component is invalid',
+            details: { issues: props.error.issues },
+          });
+        }
+        if (props.data.items) {
+          await this.validateItems(siteId, workspaceId, props.data.items);
+        }
+      }
+      pending.push(...Object.values(record));
+    }
+  }
+
   async assertPageCanBeDeleted(
     siteId: string,
     pageId: string,
     workspaceId: string,
   ): Promise<void> {
     const records = await this.navigationModel.find({ siteId, workspaceId }).exec();
-    if (records.some((record) => containsPage(record, pageId))) {
+    const usages: NavigationUsage[] = records.flatMap((record) =>
+      collectLegacyNavigationUsages(record, pageId),
+    );
+    if (usages.length > 0) {
       throw new ConflictException({
         code: 'PAGE_REFERENCED_BY_NAVIGATION',
         message: 'Remove this page from site navigation before deleting it',
+        details: { usages },
       });
     }
+    usages.push(...(await this.findInlineNavigationUsages(siteId, pageId, workspaceId)));
+    if (usages.length > 0) {
+      throw new ConflictException({
+        code: 'PAGE_REFERENCED_BY_NAVIGATION',
+        message: 'Remove this page from site navigation before deleting it',
+        details: { usages },
+      });
+    }
+  }
+
+  private async findInlineNavigationUsages(
+    siteId: string,
+    pageId: string,
+    workspaceId: string,
+  ): Promise<NavigationUsage[]> {
+    const usages: NavigationUsage[] = [];
+    const add = (
+      document: unknown,
+      resourceType: NavigationUsage['resourceType'],
+      resourceId: string,
+      resourceName: string,
+      state: NavigationUsage['state'],
+    ) => {
+      usages.push(
+        ...collectInlineNavigationUsages(document, pageId).map((usage) => ({
+          ...usage,
+          resourceType,
+          resourceId,
+          resourceName,
+          state,
+        })),
+      );
+    };
+
+    const pages = await this.pageModel
+      .find({ workspaceId, siteId })
+      .select({ _id: 1, name: 1, currentDraftVersionId: 1, publishedVersionId: 1 })
+      .exec();
+    const pageVersionIds = [
+      ...new Set(
+        pages.flatMap((page) =>
+          [page.currentDraftVersionId, page.publishedVersionId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ),
+    ];
+    const pageVersions = pageVersionIds.length
+      ? await this.versionModel
+          .find({ workspaceId, siteId, _id: { $in: pageVersionIds } })
+          .select({ _id: 1, landingPageId: 1, payload: 1 })
+          .exec()
+      : [];
+    const pageById = new Map(pages.map((page) => [page._id.toString(), page]));
+    for (const version of pageVersions) {
+      const page = pageById.get(version.landingPageId);
+      if (!page) continue;
+      const state =
+        version._id.toString() === page.publishedVersionId ? 'published' : 'current';
+      add(version.payload, 'page', version.landingPageId, page.name, state);
+    }
+
+    const layoutResources = await this.layoutModel
+      .find({ workspaceId, $or: [{ siteId }, { siteId: { $exists: false } }] })
+      .select({ _id: 1, name: 1, draftVersionId: 1, publishedVersionId: 1 })
+      .exec();
+    const layoutVersionIds = [
+      ...new Set(
+        layoutResources.flatMap((resource) =>
+          [resource.draftVersionId, resource.publishedVersionId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ),
+    ];
+    if (layoutVersionIds.length) {
+      const versions = await this.layoutVersionModel
+        .find({ workspaceId, _id: { $in: layoutVersionIds } })
+        .select({ _id: 1, resourceId: 1, document: 1 })
+        .exec();
+      const resourcesById = new Map(
+        layoutResources.map((resource) => [resource._id.toString(), resource]),
+      );
+      for (const version of versions) {
+        const resource = resourcesById.get(version.resourceId);
+        if (!resource) continue;
+        const state =
+          version._id.toString() === resource.publishedVersionId
+            ? 'published'
+            : 'current';
+        add(version.document, 'layout', version.resourceId, resource.name, state);
+      }
+    }
+
+    const templates = await this.templateModel
+      .find({ workspaceId })
+      .select({ _id: 1, name: 1, latestVersionId: 1, publishedVersionId: 1 })
+      .exec();
+    const templateVersionIds = [
+      ...new Set(
+        templates.flatMap((template) =>
+          [template.latestVersionId, template.publishedVersionId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ),
+    ];
+    if (templateVersionIds.length) {
+      const versions = await this.templateVersionModel
+        .find({ workspaceId, _id: { $in: templateVersionIds } })
+        .select({ _id: 1, templateId: 1, payload: 1 })
+        .exec();
+      const templatesById = new Map(
+        templates.map((template) => [template._id.toString(), template]),
+      );
+      for (const version of versions) {
+        const template = templatesById.get(version.templateId);
+        if (!template) continue;
+        const state =
+          version._id.toString() === template.publishedVersionId
+            ? 'published'
+            : 'current';
+        add(version.payload, 'template', version.templateId, template.name, state);
+      }
+    }
+
+    const reusables = await this.reusableModel
+      .find({ workspaceId, siteId })
+      .select({ _id: 1, name: 1, draft: 1, published: 1 })
+      .exec();
+    for (const reusable of reusables) {
+      add(reusable.draft, 'reusable', reusable._id.toString(), reusable.name, 'current');
+      if (reusable.published) {
+        add(
+          reusable.published,
+          'reusable',
+          reusable._id.toString(),
+          reusable.name,
+          'published',
+        );
+      }
+    }
+    return usages;
   }
 
   /**
@@ -255,7 +461,7 @@ export class NavigationService {
       .exec();
     const result: Record<string, string> = {};
     for (const page of pages) {
-      if (page.kind === 'dynamic') continue;
+      if (page.kind === 'dynamic' || page.status === 'archived') continue;
       const versionId =
         mode === 'published'
           ? page.publishedVersionId
@@ -293,7 +499,7 @@ export class NavigationService {
           const page = await this.pageModel
             .findOne({ _id: item.pageId, siteId, workspaceId })
             .exec();
-          if (!page) {
+          if (!page || page.kind === 'dynamic' || page.status === 'archived') {
             if (!strict) return null;
             throw this.invalidTarget();
           }
@@ -342,7 +548,6 @@ export class NavigationService {
     siteId: string | undefined,
     workspaceId: string,
     items: NavigationItem[],
-    pageById?: Map<string, PageRecord>,
   ): Promise<void> {
     const limits = validateNavigationItems(items);
     if (!limits.valid) {
@@ -365,16 +570,16 @@ export class NavigationService {
       ids.add(item.id);
       if (item.type !== 'page' && item.type !== 'section') continue;
       if (!item.pageId) throw this.invalidTarget();
-      const page =
-        pageById?.get(item.pageId) ??
-        (await this.pageModel
-          .findOne({
-            _id: item.pageId,
-            workspaceId,
-            ...(siteId ? { siteId } : {}),
-          })
-          .exec());
+      const page = await this.pageModel
+        .findOne({
+          _id: item.pageId,
+          workspaceId,
+          ...(siteId ? { siteId } : {}),
+          status: { $ne: 'archived' },
+        })
+        .exec();
       if (!page) throw this.invalidTarget();
+      if (page.kind === 'dynamic') throw this.invalidTarget();
       if (item.type === 'section') {
         if (!item.anchorId) throw this.invalidTarget();
         await this.assertAnchor(page, item.anchorId);
@@ -463,6 +668,16 @@ export class NavigationService {
   }
 }
 
+type NavigationUsage = {
+  resourceType: 'navigation' | 'page' | 'layout' | 'template' | 'reusable';
+  resourceId: string;
+  resourceName: string;
+  state: 'current' | 'published';
+  itemId: string;
+  label: string;
+  navigationKey?: string;
+};
+
 /** Collect page references without recursively walking an untrusted tree. */
 export function collectNavigationPageIds(value: unknown): string[] {
   const ids = new Set<string>();
@@ -486,6 +701,60 @@ export function collectNavigationPageIds(value: unknown): string[] {
   return [...ids];
 }
 
+function collectLegacyNavigationUsages(
+  record: NavigationDocument,
+  pageId: string,
+): NavigationUsage[] {
+  const parsed = NavigationItemsSchema.safeParse(record.items ?? []);
+  if (!parsed.success) return [];
+  return flattenItems(parsed.data)
+    .filter(
+      (item) =>
+        (item.type === 'page' || item.type === 'section') && item.pageId === pageId,
+    )
+    .map((item) => ({
+      resourceType: 'navigation' as const,
+      resourceId: record._id.toString(),
+      resourceName: record.name,
+      state: 'current' as const,
+      itemId: item.id,
+      label: item.label,
+      navigationKey: record.key,
+    }));
+}
+
+function collectInlineNavigationUsages(
+  document: unknown,
+  pageId: string,
+): Array<Pick<NavigationUsage, 'itemId' | 'label'>> {
+  const result: Array<Pick<NavigationUsage, 'itemId' | 'label'>> = [];
+  const pending: unknown[] = [document];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      pending.push(...current);
+      continue;
+    }
+    if (!current || typeof current !== 'object') continue;
+    const record = current as Record<string, unknown>;
+    if (record.type === 'navigation-view') {
+      const props = NavigationViewPropsSchema.safeParse(record.props);
+      if (props.success && props.data.items) {
+        for (const item of flattenItems(props.data.items)) {
+          if (
+            (item.type === 'page' || item.type === 'section') &&
+            item.pageId === pageId
+          ) {
+            result.push({ itemId: item.id, label: item.label });
+          }
+        }
+      }
+    }
+    pending.push(...Object.values(record));
+  }
+  return result;
+}
+
 function isEntityId(value: unknown): value is string {
   return (
     typeof value === 'string' &&
@@ -505,14 +774,6 @@ function flattenItems(items: NavigationItem[]): NavigationItem[] {
     if (item.children?.length) pending.push(...[...item.children].reverse());
   }
   return result;
-}
-
-function containsPage(record: NavigationDocument, pageId: string): boolean {
-  const parsed = NavigationItemsSchema.safeParse(record.items ?? []);
-  if (!parsed.success) return true;
-  return flattenItems(parsed.data).some(
-    (item) => (item.type === 'page' || item.type === 'section') && item.pageId === pageId,
-  );
 }
 
 function isNavigationError(error: unknown, code: string): boolean {

@@ -47,21 +47,24 @@ pnpm exec node scripts/migrate-ux-foundation.mjs --dry-run
 pnpm exec node scripts/migrate-ux-foundation.mjs --database <tenant-db> --apply
 ```
 
-The migration reports duplicate collection/navigation keys at workspace scope
-and leaves those rows legacy-scoped for explicit operator resolution. A run
-with collisions is recorded as `blocked`, not `complete`, so the migration can
-be safely rerun after the operator resolves the collision. It copies
-the earliest site Design System into an empty workspace Design System without
-deleting site data. It marks completion in `tenantMigrations` and is safe to
-rerun. After all collisions are resolved and the compatibility window is
-closed, remove the old site indexes/routes and delete the site ownership fields
-only after a fresh dry-run reports zero legacy rows, zero collisions, and all
-published pages pass publish-readiness checks.
+The migration reports duplicate workspace keys and resolves them with stable
+site/id-derived suffixes. Collection ids and entry/version references are
+preserved. Legacy Navigation rows are never rewritten or deleted: deterministic
+workspace-owned copies are created with `migrationSourceId`, so the existing
+public site resolver continues to work during the compatibility window and a
+rerun is idempotent. Apply writes a `running`/`complete` marker (or `failed`
+with the error) in `tenantMigrations`; dry-run never writes. It copies a full
+legacy site Design System into an empty workspace Design System when it can do
+so safely, and reports sparse values requiring normalization. After the
+compatibility window is closed, remove legacy indexes/routes only after a fresh
+dry-run reports zero legacy rows and all published pages pass publish-readiness
+checks.
 
 ## Intentional limitations
 
 The local provider is a production-shaped default, not a managed object store;
-deployments should bind the storage interface to S3/R2/GCS. Inline Builder page
-targets are validated and represented in previews; public page target URL
-resolution continues to use the published navigation projection until the
-node-addressed resolver is introduced.
+deployments should bind the storage interface to S3/R2/GCS. Uploaded bytes are
+sniffed for common media signatures and storage cleanup failures are logged with
+a retryable API signal. Inline Builder page targets are validated in page,
+layout, template, and reusable documents; public page target URL resolution
+continues to use the published navigation projection for legacy resources.

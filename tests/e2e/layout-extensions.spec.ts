@@ -554,7 +554,7 @@ test('navbar property fields accept edits and persist after save and reload', as
     await page.getByLabel('Accessible label', { exact: true }).fill('Footer navigation');
     await page.getByRole('button', { name: '+ Add item', exact: true }).click();
 
-    await page.getByLabel('Label', { exact: true }).first().fill('Home');
+    await page.getByLabel('Label', { exact: true }).fill('Home');
     await expect(
       page
         .frameLocator('iframe.gjs-frame')
@@ -569,30 +569,34 @@ test('navbar property fields accept edits and persist after save and reload', as
     await page.getByLabel('Open in', { exact: true }).first().selectOption('_blank');
 
     await page.getByRole('button', { name: '+ Add item', exact: true }).click();
-    await page.getByLabel('Label', { exact: true }).nth(1).fill('Contact');
-    await page.getByLabel('Target type').nth(1).selectOption('action');
+    await page.getByLabel('Label', { exact: true }).fill('Contact');
+    await page.getByLabel('Target type').selectOption('action');
     await page.getByLabel('Action', { exact: true }).first().selectOption('email');
     const contactValue = page.getByLabel('Value', { exact: true }).first();
     await contactValue.fill('not-an-email');
     await expect(contactValue).toHaveAttribute('aria-invalid', 'true');
     await contactValue.fill('contact@example.com');
     await expect(contactValue).not.toHaveAttribute('aria-invalid', 'true');
-    await page.getByLabel('Open in', { exact: true }).nth(1).selectOption('_blank');
+    await page.getByLabel('Open in', { exact: true }).selectOption('_blank');
     await page.getByRole('button', { name: '+ Add item', exact: true }).click();
-    await page.getByLabel('Label', { exact: true }).nth(2).fill('Home page');
-    await page.getByLabel('Target type').nth(2).selectOption('page');
+    await page.getByLabel('Label', { exact: true }).fill('Home page');
+    await page.getByLabel('Target type').selectOption('page');
     await page
       .getByLabel('Page', { exact: true })
       .first()
       .selectOption(canonicalEnvironment.pageId);
-    await page.getByLabel('Target type').nth(2).selectOption('section');
+    await page.getByLabel('Target type').selectOption('section');
     await page.getByLabel('Page', { exact: true }).first().selectOption(sectionPageId);
     await expect(page.getByLabel('Section', { exact: true }).first()).toBeEnabled();
     await page.getByLabel('Section', { exact: true }).first().selectOption('details');
-    await page.getByLabel('Open in', { exact: true }).nth(2).selectOption('_blank');
+    await page.getByLabel('Open in', { exact: true }).selectOption('_blank');
+    await page
+      .getByRole('treeitem', { name: /Drag Home Home external/ })
+      .getByRole('button', { name: 'Home external', exact: true })
+      .click();
     await page.getByRole('button', { name: 'Add child to Home', exact: true }).click();
 
-    await expect(page.getByLabel('Label', { exact: true })).toHaveCount(4);
+    await expect(page.locator('.builder-navigation-item-summary')).toHaveCount(4);
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await expect(page.getByText('Draft · Not published', { exact: true })).toBeVisible({
       timeout: 15_000,
@@ -613,18 +617,19 @@ test('navbar property fields accept edits and persist after save and reload', as
     await expect(page.getByLabel('Accessible label', { exact: true })).toHaveValue(
       'Footer navigation',
     );
-    const homeItem = page.getByRole('treeitem', { name: /Drag Home Label Home/ });
-    const contactItem = page.getByRole('treeitem', {
-      name: /Drag Contact Label Contact/,
-    });
-    const pageItem = page.getByRole('treeitem', {
-      name: /Drag Home page Label Home page/,
-    });
+    const homeItem = page.getByRole('treeitem', { name: /Drag Home Home external/ });
     await expect(homeItem.getByLabel('Label', { exact: true })).toHaveValue('Home');
     await expect(homeItem.getByLabel('URL', { exact: true })).toHaveValue(
       'https://example.com/home',
     );
     await expect(homeItem.getByLabel('Open in', { exact: true })).toHaveValue('_blank');
+    const contactSummary = page
+      .getByRole('treeitem', { name: /Drag Contact Contact action/ })
+      .getByRole('button', { name: 'Contact action', exact: true });
+    await contactSummary.click();
+    const contactItem = page.getByRole('treeitem', {
+      name: /Drag Contact Contact action/,
+    });
     await expect(contactItem.getByLabel('Label', { exact: true })).toHaveValue('Contact');
     await expect(contactItem.getByLabel('Action', { exact: true })).toHaveValue('email');
     await expect(contactItem.getByLabel('Value', { exact: true })).toHaveValue(
@@ -633,6 +638,13 @@ test('navbar property fields accept edits and persist after save and reload', as
     await expect(contactItem.getByLabel('Open in', { exact: true })).toHaveValue(
       '_blank',
     );
+    const pageSummary = page
+      .getByRole('treeitem', { name: /Drag Home page Home page section/ })
+      .getByRole('button', { name: 'Home page section', exact: true });
+    await pageSummary.click();
+    const pageItem = page.getByRole('treeitem', {
+      name: /Drag Home page Home page section/,
+    });
     await expect(pageItem.getByLabel('Target type', { exact: true })).toHaveValue(
       'section',
     );

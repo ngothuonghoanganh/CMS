@@ -33,6 +33,15 @@ import {
 import { RoleRecord, RoleSchema } from '../persistence/schemas/role.schema';
 import { SiteRecord, SiteSchema } from '../persistence/schemas/site.schema';
 import {
+  CollectionRecord,
+  CollectionSchema,
+} from '../persistence/schemas/collection.schema';
+import {
+  NavigationRecord,
+  NavigationSchemaMongoose,
+} from '../persistence/schemas/navigation.schema';
+import { syncOwnershipIndexes } from '../tenancy/ownership-indexes';
+import {
   RoleAssignmentRecord,
   RoleAssignmentSchema,
 } from '../persistence/schemas/role-assignment.schema';
@@ -79,7 +88,10 @@ export class TenantBootstrapService implements OnModuleInit {
     await this.ensurePlatformRoleAssignment(platformUser._id.toString());
     const scope = this.resolver.toScope(tenant);
     await this.connections.get(scope);
-    await this.context.run(scope, () => this.ensureTenantSeedData());
+    await this.context.run(scope, async () => {
+      await this.syncOwnershipIndexes();
+      await this.ensureTenantSeedData();
+    });
     await this.syncExistingDomains(scope);
     await this.syncExistingSiteRoutes(scope);
     await this.syncRoutesForOtherActiveTenants(scope.id);
@@ -269,6 +281,7 @@ export class TenantBootstrapService implements OnModuleInit {
       const scope = this.resolver.toScope(tenant);
       try {
         await this.connections.get(scope);
+        await this.context.run(scope, () => this.syncOwnershipIndexes());
         await this.ensureTenantRoleMigration(scope);
         await this.syncExistingSiteRoutes(scope);
       } catch (error) {
@@ -279,6 +292,13 @@ export class TenantBootstrapService implements OnModuleInit {
         );
       }
     }
+  }
+
+  private async syncOwnershipIndexes(): Promise<void> {
+    await syncOwnershipIndexes(
+      this.models.proxy(CollectionRecord.name, CollectionSchema),
+      this.models.proxy(NavigationRecord.name, NavigationSchemaMongoose),
+    );
   }
 
   private async ensureTenantRoleMigration(

@@ -47,4 +47,18 @@ describe('LocalFilesystemAssetStorageProvider', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('supports an absolute public URL when the API has a separate origin', async () => {
+    const previousBase = process.env.ASSET_PUBLIC_BASE_URL;
+    process.env.ASSET_PUBLIC_BASE_URL = 'http://127.0.0.1:3001/api/v1/public/assets/';
+    try {
+      const provider = new LocalFilesystemAssetStorageProvider();
+      expect(provider.publicUrl('workspace-1/asset-1/hero.png')).toBe(
+        'http://127.0.0.1:3001/api/v1/public/assets/workspace-1/asset-1/hero.png',
+      );
+    } finally {
+      if (previousBase === undefined) delete process.env.ASSET_PUBLIC_BASE_URL;
+      else process.env.ASSET_PUBLIC_BASE_URL = previousBase;
+    }
+  });
 });

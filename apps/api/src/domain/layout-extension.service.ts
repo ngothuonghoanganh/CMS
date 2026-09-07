@@ -10,9 +10,11 @@ import {
   LayoutExtensionVersionSchema,
   LayoutExtensionVersionsResponseSchema,
   SiteDesignSystemSchema,
+  SiteDesignSystemOverrideSchema,
   SiteGlobalPayloadV1Schema,
   UpdateLayoutExtensionRequestSchema,
   createDefaultSiteDesignSystem,
+  mergeSiteDesignSystems,
   type CreateLayoutExtensionRequest,
   type DuplicateLayoutExtensionRequest,
   type LayoutExtensionKind,
@@ -34,8 +36,10 @@ import {
 import { NavigationRecord } from '../persistence/schemas/navigation.schema';
 import { PageRecord } from '../persistence/schemas/page.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { ReusableService } from './reusable.service';
+import { NavigationService } from './navigation.service';
 
 /**
  * Header and Footer layout extensions. They share the Page Builder engine but
@@ -52,6 +56,8 @@ export class LayoutExtensionService {
     private readonly versionModel: Model<LayoutExtensionVersionRecord>,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
+    @InjectModel(WorkspaceRecord.name)
+    private readonly workspaceModel: Model<WorkspaceRecord>,
     @InjectModel(NavigationRecord.name)
     private readonly navigationModel: Model<NavigationRecord>,
     @InjectModel(PageRecord.name)
@@ -60,6 +66,8 @@ export class LayoutExtensionService {
     private readonly pageExtensions: PageExtensionService,
     @Inject(ReusableService)
     private readonly reusables: ReusableService,
+    @Inject(NavigationService)
+    private readonly navigation: NavigationService,
   ) {}
 
   async list(siteId: string | undefined, workspaceId: string, kind: LayoutExtensionKind) {
@@ -93,6 +101,7 @@ export class LayoutExtensionService {
     if (siteId) await this.requireSite(siteId, workspaceId);
     const parsed = CreateLayoutExtensionRequestSchema.parse(input);
     const document = parsed.document ?? createDefaultLayoutDocument(kind, parsed.name);
+    await this.navigation.validateInlineNavigationDocument(document, workspaceId, siteId);
     const versionId = randomUUID();
     const resource = await this.resourceModel.create({
       _id: randomUUID(),
@@ -135,6 +144,11 @@ export class LayoutExtensionService {
     }
     if (parsed.document !== undefined) {
       const document = this.assertDocumentKind(kind, parsed.document);
+      await this.navigation.validateInlineNavigationDocument(
+        document,
+        workspaceId,
+        siteId,
+      );
       // Version documents are immutable. A save therefore creates a new draft
       // snapshot and retires the prior unpublishable draft, while every
       // published snapshot remains available in the version history.
@@ -189,6 +203,7 @@ export class LayoutExtensionService {
       });
     }
     const document = SiteGlobalPayloadV1Schema.parse(draft.document);
+    await this.navigation.validateInlineNavigationDocument(document, workspaceId, siteId);
     await this.assertPublishDependencies(siteId, workspaceId, document);
     const promoted = await this.resourceModel
       .findOneAndUpdate(
@@ -418,11 +433,20 @@ export class LayoutExtensionService {
     // Layouts are reusable across every site in the workspace. Site-specific
     // design tokens and navigation menus are therefore resolved in the page
     // context, not rejected while publishing the shared source.
+    const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const workspaceDesignSystem = workspace?.publishedDesignSystem
+      ? SiteDesignSystemSchema.parse(workspace.publishedDesignSystem)
+      : createDefaultSiteDesignSystem();
     if (siteId) {
       const site = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
-      const designSystem: SiteDesignSystem = site?.publishedDesignSystem
-        ? SiteDesignSystemSchema.parse(site.publishedDesignSystem)
-        : createDefaultSiteDesignSystem();
+      const designSystem: SiteDesignSystem =
+        mergeSiteDesignSystems(
+          workspaceDesignSystem,
+          site?.publishedDesignSystem
+            ? (SiteDesignSystemOverrideSchema.safeParse(site.publishedDesignSystem)
+                .data ?? SiteDesignSystemSchema.parse(site.publishedDesignSystem))
+            : undefined,
+        ) ?? createDefaultSiteDesignSystem();
       await this.reusables.assertDesignTokenDependenciesAvailableForValues(designSystem, [
         document,
       ]);

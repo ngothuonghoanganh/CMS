@@ -22,6 +22,8 @@ export class CollectionRecord {
   workspaceId!: string;
   /** Legacy site scope; canonical collections are workspace-owned. */
   @Prop({ type: String, required: false, index: true, immutable: true }) siteId?: string;
+  @Prop({ type: String, required: false, enum: ['workspace', 'site'], index: true })
+  ownershipScope?: 'workspace' | 'site';
   @Prop({ type: String, required: true, trim: true, maxlength: 100 }) key!: string;
   @Prop({ type: String, required: true, trim: true, maxlength: 200 }) name!: string;
   @Prop({ type: String, required: true, trim: true, maxlength: 200 })
@@ -46,8 +48,25 @@ export class CollectionRecord {
 }
 
 export const CollectionSchema = SchemaFactory.createForClass(CollectionRecord);
-CollectionSchema.index({ siteId: 1, key: 1 }, { unique: true, sparse: true });
-CollectionSchema.index({ workspaceId: 1, siteId: 1, key: 1 }, { unique: true });
+// Legacy collections are unique inside a site, while canonical collections
+// are unique inside a workspace. ownershipScope is explicit because MongoDB
+// partial indexes do not support $exists:false predicates.
+CollectionSchema.index(
+  { workspaceId: 1, siteId: 1, key: 1 },
+  {
+    name: 'collection_legacy_workspace_site_key_unique',
+    unique: true,
+    partialFilterExpression: { siteId: { $exists: true } },
+  },
+);
+CollectionSchema.index(
+  { workspaceId: 1, key: 1 },
+  {
+    name: 'collection_workspace_key_unique',
+    unique: true,
+    partialFilterExpression: { ownershipScope: 'workspace' },
+  },
+);
 CollectionSchema.index({ workspaceId: 1, siteId: 1, status: 1 });
 CollectionSchema.path('fields').validate(
   (value: unknown) => CollectionDefinitionSchema.shape.fields.safeParse(value).success,

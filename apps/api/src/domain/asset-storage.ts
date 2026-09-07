@@ -1,10 +1,13 @@
 import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { dirname, join, normalize, resolve } from 'node:path';
 
 export const ASSET_STORAGE = Symbol('ASSET_STORAGE');
 
 export type AssetStorageProvider = {
-  put(key: string, data: Buffer): Promise<void>;
+  put(key: string, data: Buffer | AsyncIterable<Uint8Array>): Promise<void>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   read(key: string): Promise<Buffer>;
@@ -18,10 +21,14 @@ export class LocalFilesystemAssetStorageProvider implements AssetStorageProvider
     process.env.ASSET_STORAGE_ROOT ?? join(process.cwd(), '.data', 'assets'),
   );
 
-  async put(key: string, data: Buffer): Promise<void> {
+  async put(key: string, data: Buffer | AsyncIterable<Uint8Array>): Promise<void> {
     const file = this.safePath(key);
     await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, data, { flag: 'wx' });
+    if (Buffer.isBuffer(data)) {
+      await writeFile(file, data, { flag: 'wx' });
+      return;
+    }
+    await pipeline(Readable.from(data), createWriteStream(file, { flags: 'wx' }));
   }
 
   async delete(key: string): Promise<void> {
@@ -46,7 +53,9 @@ export class LocalFilesystemAssetStorageProvider implements AssetStorageProvider
   }
 
   publicUrl(key: string): string {
-    return `/api/v1/public/assets/${key.split('/').map(encodeURIComponent).join('/')}`;
+    const path = key.split('/').map(encodeURIComponent).join('/');
+    const configuredBase = process.env.ASSET_PUBLIC_BASE_URL?.trim().replace(/\/$/, '');
+    return configuredBase ? `${configuredBase}/${path}` : `/api/v1/public/assets/${path}`;
   }
 
   private safePath(key: string): string {

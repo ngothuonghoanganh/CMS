@@ -6,6 +6,7 @@ import {
   NavigationItemSchema,
   NavigationItemsSchema,
   NavigationViewPropsSchema,
+  NAVIGATION_MAX_NODES,
   validateNavigationItems,
   type NavigationItem,
   type ComponentPropertyDefinition,
@@ -171,6 +172,13 @@ function newNavigationItem(
 ): NavigationItem | null {
   const base = { id: navigationItemId(), label: 'New item' };
   if (type === 'external') return { ...base, type, externalUrl: 'https://example.com' };
+  if (type === 'action') {
+    return {
+      ...base,
+      type,
+      action: { type: 'custom', value: defaultNavigationActionValue('custom') },
+    };
+  }
   const page = pagesForNavigationType(type, pages)[0];
   if (!page) return null;
   if (type === 'page') return { ...base, type, pageId: page.id };
@@ -181,11 +189,7 @@ function newNavigationItem(
       pageId: page.id,
       anchorId: page.anchors?.[0]!,
     };
-  return {
-    ...base,
-    type,
-    action: { type: 'custom', value: defaultNavigationActionValue('custom') },
-  };
+  return null;
 }
 
 function navigationDraftError(
@@ -249,6 +253,7 @@ function NavigationTreeEditor({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [treeError, setTreeError] = useState<string | undefined>();
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const itemsRef = useRef<NavigationItem[]>([]);
   const parsed = NavigationViewPropsSchema.safeParse(value);
   if (!parsed.success) return null;
@@ -278,6 +283,10 @@ function NavigationTreeEditor({
       return false;
     setTreeError(undefined);
     itemsRef.current = nextParsed.data;
+    setSelectedItemId((current) => {
+      if (current && findNavigationItem(nextParsed.data, current)) return current;
+      return nextParsed.data[0]?.id ?? null;
+    });
     onChange({ ...ownedProps, items: nextParsed.data });
     return true;
   };
@@ -352,22 +361,13 @@ function NavigationTreeEditor({
     if (JSON.stringify(next) !== JSON.stringify(itemsRef.current)) updateItems(next);
     clearDraft(itemId, field);
   };
-  const canDuplicate = (itemId: string): boolean => {
-    const visit = (
-      siblings: readonly NavigationItem[],
-      limit: number,
-    ): boolean | null => {
-      if (siblings.some((item) => item.id === itemId)) return siblings.length < limit;
-      for (const item of siblings) {
-        if (item.children) {
-          const result = visit(item.children, 50);
-          if (result !== null) return result;
-        }
-      }
-      return null;
-    };
-    return visit(itemsRef.current, 100) ?? false;
-  };
+  const itemCount = (nodes: readonly NavigationItem[]): number =>
+    nodes.reduce((count, item) => count + 1 + itemCount(item.children ?? []), 0);
+  const canDuplicate = (): boolean => itemCount(itemsRef.current) < NAVIGATION_MAX_NODES;
+  const activeItemId =
+    selectedItemId && findNavigationItem(items, selectedItemId)
+      ? selectedItemId
+      : items[0]?.id;
   const renderItems = (nodes: readonly NavigationItem[], depth = 0): ReactNode[] =>
     nodes.flatMap((item) => {
       const pageOptions = pagesForNavigationType(item.type, navigationPages);
@@ -422,304 +422,324 @@ function NavigationTreeEditor({
           >
             ☰
           </button>
-          <TextField
-            aria-invalid={draftErrors[labelDraft] ? true : undefined}
-            compact
-            error={draftErrors[labelDraft]}
-            label="Label"
-            onBlur={(event) => {
-              const raw = event.currentTarget.value;
-              commitDraft(item.id, 'label', raw, (current) => ({
-                ...current,
-                label: raw,
-              }));
-            }}
-            onChange={(event) => {
-              const raw = event.target.value;
-              updateDraft(item.id, 'label', raw, (current) => ({
-                ...current,
-                label: raw,
-              }));
-            }}
-            value={nextItemLabel}
-          />
-          <SelectField
-            compact
-            label="Target type"
-            onChange={(event) => {
-              const nextType = event.target.value as NavigationItem['type'];
-              const nextItem = newNavigationItem(nextType, navigationPages);
-              if (!nextItem) return;
-              if (
-                updateItems(
-                  updateNavigationItem(itemsRef.current, item.id, (current) => ({
-                    ...nextItem,
-                    id: current.id,
-                    label: drafts[labelDraft]?.trim()
-                      ? drafts[labelDraft]
-                      : current.label,
-                    ...(current.children ? { children: current.children } : {}),
-                    ...(current.openInNewTab !== undefined
-                      ? { openInNewTab: current.openInNewTab }
-                      : {}),
-                  })),
-                )
-              ) {
-                clearDraft(item.id);
-              }
-            }}
-            value={item.type}
+          <button
+            aria-selected={activeItemId === item.id}
+            className="builder-navigation-item-summary"
+            onClick={() => setSelectedItemId(item.id)}
+            type="button"
           >
-            <option disabled={navigationPages.length === 0} value="page">
-              Page
-            </option>
-            <option
-              disabled={pagesForNavigationType('section', navigationPages).length === 0}
-              value="section"
-            >
-              Section
-            </option>
-            <option value="external">External URL</option>
-            <option value="action">Action</option>
-          </SelectField>
-          {item.type === 'page' || item.type === 'section' ? (
+            <span className="builder-navigation-item-summary-label">{item.label}</span>
+            <span className="builder-navigation-item-summary-type">{item.type}</span>
+          </button>
+          {activeItemId === item.id ? (
             <>
-              <SelectField
-                compact
-                label="Page"
-                onChange={(event) => {
-                  const page = pageOptions.find(
-                    (candidate) => candidate.id === event.target.value,
-                  );
-                  if (!page || (item.type === 'section' && !page.anchors?.[0])) return;
-                  updateItems(
-                    updateNavigationItem(itemsRef.current, item.id, (current) => ({
-                      ...current,
-                      pageId: event.target.value,
-                      ...(current.type === 'section'
-                        ? { anchorId: page.anchors?.[0]! }
-                        : {}),
-                    })),
-                  );
-                }}
-                disabled={pageOptions.length === 0}
-                value={item.pageId ?? ''}
-              >
-                <option disabled value="">
-                  Choose a page
-                </option>
-                {pageOptions.map((page) => (
-                  <option key={page.id} value={page.id}>
-                    {page.name}
-                    {page.path ? ` · ${page.path}` : ''}
-                  </option>
-                ))}
-              </SelectField>
-              {item.type === 'section' ? (
-                <SelectField
-                  compact
-                  disabled={sectionAnchors.length === 0}
-                  label="Section"
-                  onChange={(event) => {
-                    if (!event.target.value) return;
-                    updateItems(
-                      updateNavigationItem(itemsRef.current, item.id, (current) => ({
-                        ...current,
-                        anchorId: event.target.value,
-                      })),
-                    );
-                  }}
-                  value={item.anchorId ?? ''}
-                >
-                  <option disabled value="">
-                    Choose a section
-                  </option>
-                  {sectionAnchors.map((anchor) => (
-                    <option key={anchor} value={anchor}>
-                      {anchor}
-                    </option>
-                  ))}
-                </SelectField>
-              ) : null}
-            </>
-          ) : null}
-          {item.type === 'external' ? (
-            <TextField
-              aria-invalid={draftErrors[externalUrlDraft] ? true : undefined}
-              compact
-              error={draftErrors[externalUrlDraft]}
-              label="URL"
-              onBlur={(event) => {
-                const raw = event.currentTarget.value;
-                commitDraft(item.id, 'externalUrl', raw, (current) => ({
-                  ...current,
-                  externalUrl: raw,
-                }));
-              }}
-              onChange={(event) => {
-                const raw = event.target.value;
-                updateDraft(item.id, 'externalUrl', raw, (current) => ({
-                  ...current,
-                  externalUrl: raw,
-                }));
-              }}
-              value={drafts[externalUrlDraft] ?? item.externalUrl ?? ''}
-            />
-          ) : null}
-          {item.type === 'action' ? (
-            <>
-              <SelectField
-                compact
-                label="Action"
-                onChange={(event) => {
-                  const type = event.target.value as NavigationActionType;
-                  updateItems(
-                    updateNavigationItem(itemsRef.current, item.id, (current) => ({
-                      ...current,
-                      action: { type, value: defaultNavigationActionValue(type) },
-                    })),
-                  );
-                  clearDraft(item.id, 'actionValue');
-                }}
-                value={item.action?.type ?? 'custom'}
-              >
-                <option value="phone">Phone</option>
-                <option value="email">Email</option>
-                <option value="download">Download</option>
-                <option value="custom">Custom</option>
-              </SelectField>
               <TextField
-                aria-invalid={draftErrors[actionValueDraft] ? true : undefined}
+                aria-invalid={draftErrors[labelDraft] ? true : undefined}
                 compact
-                error={draftErrors[actionValueDraft]}
-                label="Value"
+                error={draftErrors[labelDraft]}
+                label="Label"
                 onBlur={(event) => {
                   const raw = event.currentTarget.value;
-                  commitDraft(item.id, 'actionValue', raw, (current) => ({
+                  commitDraft(item.id, 'label', raw, (current) => ({
                     ...current,
-                    action: {
-                      type: current.action?.type ?? 'custom',
-                      value: raw,
-                    },
+                    label: raw,
                   }));
                 }}
                 onChange={(event) => {
                   const raw = event.target.value;
-                  updateDraft(item.id, 'actionValue', raw, (current) => ({
+                  updateDraft(item.id, 'label', raw, (current) => ({
                     ...current,
-                    action: {
-                      type: current.action?.type ?? 'custom',
-                      value: raw,
-                    },
+                    label: raw,
                   }));
                 }}
-                value={actionValue}
+                value={nextItemLabel}
               />
+              <SelectField
+                compact
+                label="Target type"
+                onChange={(event) => {
+                  const nextType = event.target.value as NavigationItem['type'];
+                  const nextItem = newNavigationItem(nextType, navigationPages);
+                  if (!nextItem) return;
+                  if (
+                    updateItems(
+                      updateNavigationItem(itemsRef.current, item.id, (current) => ({
+                        ...nextItem,
+                        id: current.id,
+                        label: drafts[labelDraft]?.trim()
+                          ? drafts[labelDraft]
+                          : current.label,
+                        ...(current.children ? { children: current.children } : {}),
+                        ...(current.openInNewTab !== undefined
+                          ? { openInNewTab: current.openInNewTab }
+                          : {}),
+                      })),
+                    )
+                  ) {
+                    clearDraft(item.id);
+                  }
+                }}
+                value={item.type}
+              >
+                <option
+                  disabled={pagesForNavigationType('page', navigationPages).length === 0}
+                  value="page"
+                >
+                  Page
+                </option>
+                <option
+                  disabled={
+                    pagesForNavigationType('section', navigationPages).length === 0
+                  }
+                  value="section"
+                >
+                  Section
+                </option>
+                <option value="external">External URL</option>
+                <option value="action">Action</option>
+              </SelectField>
+              {item.type === 'page' || item.type === 'section' ? (
+                <>
+                  <SelectField
+                    compact
+                    label="Page"
+                    onChange={(event) => {
+                      const page = pageOptions.find(
+                        (candidate) => candidate.id === event.target.value,
+                      );
+                      if (!page || (item.type === 'section' && !page.anchors?.[0]))
+                        return;
+                      updateItems(
+                        updateNavigationItem(itemsRef.current, item.id, (current) => ({
+                          ...current,
+                          pageId: event.target.value,
+                          ...(current.type === 'section'
+                            ? { anchorId: page.anchors?.[0]! }
+                            : {}),
+                        })),
+                      );
+                    }}
+                    disabled={pageOptions.length === 0}
+                    value={item.pageId ?? ''}
+                  >
+                    <option disabled value="">
+                      Choose a page
+                    </option>
+                    {pageOptions.map((page) => (
+                      <option key={page.id} value={page.id}>
+                        {page.name}
+                        {page.path ? ` · ${page.path}` : ''}
+                      </option>
+                    ))}
+                  </SelectField>
+                  {item.type === 'section' ? (
+                    <SelectField
+                      compact
+                      disabled={sectionAnchors.length === 0}
+                      label="Section"
+                      onChange={(event) => {
+                        if (!event.target.value) return;
+                        updateItems(
+                          updateNavigationItem(itemsRef.current, item.id, (current) => ({
+                            ...current,
+                            anchorId: event.target.value,
+                          })),
+                        );
+                      }}
+                      value={item.anchorId ?? ''}
+                    >
+                      <option disabled value="">
+                        Choose a section
+                      </option>
+                      {sectionAnchors.map((anchor) => (
+                        <option key={anchor} value={anchor}>
+                          {anchor}
+                        </option>
+                      ))}
+                    </SelectField>
+                  ) : null}
+                </>
+              ) : null}
+              {item.type === 'external' ? (
+                <TextField
+                  aria-invalid={draftErrors[externalUrlDraft] ? true : undefined}
+                  compact
+                  error={draftErrors[externalUrlDraft]}
+                  label="URL"
+                  onBlur={(event) => {
+                    const raw = event.currentTarget.value;
+                    commitDraft(item.id, 'externalUrl', raw, (current) => ({
+                      ...current,
+                      externalUrl: raw,
+                    }));
+                  }}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    updateDraft(item.id, 'externalUrl', raw, (current) => ({
+                      ...current,
+                      externalUrl: raw,
+                    }));
+                  }}
+                  value={drafts[externalUrlDraft] ?? item.externalUrl ?? ''}
+                />
+              ) : null}
+              {item.type === 'action' ? (
+                <>
+                  <SelectField
+                    compact
+                    label="Action"
+                    onChange={(event) => {
+                      const type = event.target.value as NavigationActionType;
+                      updateItems(
+                        updateNavigationItem(itemsRef.current, item.id, (current) => ({
+                          ...current,
+                          action: { type, value: defaultNavigationActionValue(type) },
+                        })),
+                      );
+                      clearDraft(item.id, 'actionValue');
+                    }}
+                    value={item.action?.type ?? 'custom'}
+                  >
+                    <option value="phone">Phone</option>
+                    <option value="email">Email</option>
+                    <option value="download">Download</option>
+                    <option value="custom">Custom</option>
+                  </SelectField>
+                  <TextField
+                    aria-invalid={draftErrors[actionValueDraft] ? true : undefined}
+                    compact
+                    error={draftErrors[actionValueDraft]}
+                    label="Value"
+                    onBlur={(event) => {
+                      const raw = event.currentTarget.value;
+                      commitDraft(item.id, 'actionValue', raw, (current) => ({
+                        ...current,
+                        action: {
+                          type: current.action?.type ?? 'custom',
+                          value: raw,
+                        },
+                      }));
+                    }}
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      updateDraft(item.id, 'actionValue', raw, (current) => ({
+                        ...current,
+                        action: {
+                          type: current.action?.type ?? 'custom',
+                          value: raw,
+                        },
+                      }));
+                    }}
+                    value={actionValue}
+                  />
+                </>
+              ) : null}
+              <SelectField
+                compact
+                label="Open in"
+                onChange={(event) =>
+                  updateItems(
+                    updateNavigationItem(itemsRef.current, item.id, (current) => ({
+                      ...current,
+                      openInNewTab: event.target.value === '_blank',
+                    })),
+                  )
+                }
+                value={item.openInNewTab ? '_blank' : '_self'}
+              >
+                <option value="_self">Same tab</option>
+                <option value="_blank">New tab</option>
+              </SelectField>
+              <div className="row-actions">
+                <button
+                  aria-label={`Add child to ${item.label}`}
+                  className="button button-small button-ghost"
+                  onClick={() => {
+                    const child = newNavigationItem('external', navigationPages);
+                    if (!child) return;
+                    if (
+                      updateItems(
+                        updateNavigationItem(itemsRef.current, item.id, (current) => ({
+                          ...current,
+                          children: [...(current.children ?? []), child],
+                        })),
+                      )
+                    ) {
+                      setSelectedItemId(child.id);
+                    }
+                  }}
+                  type="button"
+                >
+                  + Child
+                </button>
+                <button
+                  aria-label={`Move ${item.label} up`}
+                  className="button button-small button-ghost"
+                  disabled={!location || location.index === 0}
+                  onClick={() =>
+                    updateItems(moveNavigationItem(itemsRef.current, item.id, -1))
+                  }
+                  type="button"
+                >
+                  ↑
+                </button>
+                <button
+                  aria-label={`Move ${item.label} down`}
+                  className="button button-small button-ghost"
+                  disabled={!location || location.index >= location.siblingCount - 1}
+                  onClick={() =>
+                    updateItems(moveNavigationItem(itemsRef.current, item.id, 1))
+                  }
+                  type="button"
+                >
+                  ↓
+                </button>
+                <button
+                  aria-label={`Indent ${item.label}`}
+                  className="button button-small button-ghost"
+                  disabled={!location || location.index === 0}
+                  onClick={() =>
+                    updateItems(indentNavigationItem(itemsRef.current, item.id))
+                  }
+                  type="button"
+                >
+                  →
+                </button>
+                <button
+                  aria-label={`Outdent ${item.label}`}
+                  className="button button-small button-ghost"
+                  disabled={!location || location.depth === 0}
+                  onClick={() =>
+                    updateItems(outdentNavigationItem(itemsRef.current, item.id))
+                  }
+                  type="button"
+                >
+                  ←
+                </button>
+                <button
+                  className="button button-small button-ghost"
+                  disabled={!canDuplicate()}
+                  onClick={() =>
+                    updateItems(duplicateNavigationItem(itemsRef.current, item.id))
+                  }
+                  type="button"
+                >
+                  Duplicate
+                </button>
+                <button
+                  className="button button-small button-danger"
+                  onClick={() => {
+                    if (updateItems(removeNavigationItem(itemsRef.current, item.id))) {
+                      clearDraft(item.id);
+                    }
+                  }}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
             </>
           ) : null}
-          <SelectField
-            compact
-            label="Open in"
-            onChange={(event) =>
-              updateItems(
-                updateNavigationItem(itemsRef.current, item.id, (current) => ({
-                  ...current,
-                  openInNewTab: event.target.value === '_blank',
-                })),
-              )
-            }
-            value={item.openInNewTab ? '_blank' : '_self'}
-          >
-            <option value="_self">Same tab</option>
-            <option value="_blank">New tab</option>
-          </SelectField>
-          <div className="row-actions">
-            <button
-              aria-label={`Add child to ${item.label}`}
-              className="button button-small button-ghost"
-              disabled={(item.children?.length ?? 0) >= 50}
-              onClick={() => {
-                const child = newNavigationItem('external', navigationPages);
-                if (!child) return;
-                updateItems(
-                  updateNavigationItem(itemsRef.current, item.id, (current) => ({
-                    ...current,
-                    children: [...(current.children ?? []), child],
-                  })),
-                );
-              }}
-              type="button"
-            >
-              + Child
-            </button>
-            <button
-              aria-label={`Move ${item.label} up`}
-              className="button button-small button-ghost"
-              disabled={!location || location.index === 0}
-              onClick={() =>
-                updateItems(moveNavigationItem(itemsRef.current, item.id, -1))
-              }
-              type="button"
-            >
-              ↑
-            </button>
-            <button
-              aria-label={`Move ${item.label} down`}
-              className="button button-small button-ghost"
-              disabled={!location || location.index >= location.siblingCount - 1}
-              onClick={() =>
-                updateItems(moveNavigationItem(itemsRef.current, item.id, 1))
-              }
-              type="button"
-            >
-              ↓
-            </button>
-            <button
-              aria-label={`Indent ${item.label}`}
-              className="button button-small button-ghost"
-              disabled={
-                !location ||
-                location.index === 0 ||
-                (location.previous?.children?.length ?? 0) >= 50
-              }
-              onClick={() => updateItems(indentNavigationItem(itemsRef.current, item.id))}
-              type="button"
-            >
-              →
-            </button>
-            <button
-              aria-label={`Outdent ${item.label}`}
-              className="button button-small button-ghost"
-              disabled={!location || location.depth === 0}
-              onClick={() =>
-                updateItems(outdentNavigationItem(itemsRef.current, item.id))
-              }
-              type="button"
-            >
-              ←
-            </button>
-            <button
-              className="button button-small button-ghost"
-              disabled={!canDuplicate(item.id)}
-              onClick={() =>
-                updateItems(duplicateNavigationItem(itemsRef.current, item.id))
-              }
-              type="button"
-            >
-              Duplicate
-            </button>
-            <button
-              className="button button-small button-danger"
-              onClick={() => {
-                if (updateItems(removeNavigationItem(itemsRef.current, item.id))) {
-                  clearDraft(item.id);
-                }
-              }}
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
         </div>,
         ...(item.children ? renderItems(item.children, depth + 1) : []),
       ];
@@ -735,10 +755,11 @@ function NavigationTreeEditor({
         <span className="builder-property-label">Menu items</span>
         <button
           className="button button-secondary button-small"
-          disabled={items.length >= 100}
           onClick={() => {
             const item = newNavigationItem('external', navigationPages);
-            if (item) updateItems([...itemsRef.current, item]);
+            if (item && updateItems([...itemsRef.current, item])) {
+              setSelectedItemId(item.id);
+            }
           }}
           type="button"
         >

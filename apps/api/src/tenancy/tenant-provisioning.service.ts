@@ -104,6 +104,11 @@ import {
   NavigationRecord,
   NavigationSchemaMongoose,
 } from '../persistence/schemas/navigation.schema';
+import {
+  CollectionRecord,
+  CollectionSchema,
+} from '../persistence/schemas/collection.schema';
+import { syncOwnershipIndexes } from './ownership-indexes';
 
 const tenantMigrations = [
   [AuthSessionRecord, AuthSessionSchema],
@@ -266,6 +271,7 @@ export class TenantProvisioningService {
       await this.connections.get(scope);
       await this.context.run(scope, async () => {
         await this.runMigrations();
+        await this.syncOwnershipIndexes();
         await this.seedTenant(input);
       });
       await this.syncPublicSiteRoutes(scope);
@@ -307,6 +313,19 @@ export class TenantProvisioningService {
       const model = this.models.proxy(record.name, schema as unknown as Schema<unknown>);
       await model.init();
     }
+  }
+
+  /**
+   * `init()` only creates missing indexes. Ownership indexes changed from the
+   * old siteId-first shape, so existing tenant databases must reconcile their
+   * index catalog as part of provisioning. Duplicate data causes this to fail
+   * closed; operators must resolve it with the migration report first.
+   */
+  private async syncOwnershipIndexes(): Promise<void> {
+    await syncOwnershipIndexes(
+      this.models.proxy(CollectionRecord.name, CollectionSchema),
+      this.models.proxy(NavigationRecord.name, NavigationSchemaMongoose),
+    );
   }
 
   private async seedTenant(input: CreateTenantRequest): Promise<void> {

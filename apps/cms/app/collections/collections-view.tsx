@@ -230,7 +230,7 @@ function parseConditionInput(
 type ConditionDraft = NonNullable<FieldDraft['condition']>;
 type ConditionRuleDraft = ConditionDraft['rules'][number];
 
-function updateConditionRule(
+export function updateConditionRule(
   condition: ConditionDraft,
   ruleIndex: number,
   patch: Partial<ConditionRuleDraft>,
@@ -238,7 +238,24 @@ function updateConditionRule(
   return {
     ...condition,
     rules: condition.rules.map((rule, index) =>
-      index === ruleIndex ? { ...rule, ...patch } : rule,
+      index === ruleIndex
+        ? (() => {
+            const next = { ...rule, ...patch };
+            // Rebuild target-shape fields on operator changes. Spreading the
+            // previous rule would keep a stale value on isSet/isEmpty and
+            // make the next contract round-trip invalid.
+            if ('operator' in patch || 'fieldKey' in patch) {
+              return {
+                fieldKey: next.fieldKey,
+                operator: next.operator,
+                ...(['isSet', 'isEmpty'].includes(next.operator)
+                  ? {}
+                  : { value: next.value }),
+              };
+            }
+            return next;
+          })()
+        : rule,
     ),
   };
 }

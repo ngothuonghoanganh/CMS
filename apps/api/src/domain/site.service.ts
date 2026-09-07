@@ -31,9 +31,13 @@ import {
   type SiteGlobals,
   type SiteGlobalsResponse,
   SiteDesignSystemSchema,
+  SiteDesignSystemOverrideSchema,
   SiteDesignSystemResponseSchema,
   createDefaultSiteDesignSystem,
   mergeSiteDesignSystems,
+  normalizeSiteDesignSystemOverride,
+  type UpdateSiteDesignSystemRequest,
+  type SiteDesignSystemOverride,
   type SiteDesignSystem,
   type SiteDesignSystemResponse,
 } from '@payload/contracts';
@@ -210,10 +214,18 @@ export class SiteService {
     }
 
     const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
-    const designSystem = this.readEffectiveDesignSystem(
-      workspace?.designSystemDraft,
+    // Publishing a site may promote its own draft, but its workspace baseline
+    // is always the already-published workspace system. A workspace draft must
+    // never enter a public site snapshot.
+    const publishedWorkspace = workspace?.publishedDesignSystem
+      ? this.readDesignSystem(workspace.publishedDesignSystem)
+      : createDefaultSiteDesignSystem();
+    const siteOverride = this.readSiteOverride(
       record.designSystemDraft,
+      publishedWorkspace,
     );
+    const designSystem =
+      mergeSiteDesignSystems(publishedWorkspace, siteOverride) ?? publishedWorkspace;
     await this.reusables.assertDesignTokenDependenciesAvailable(
       workspaceId,
       siteId,
@@ -229,7 +241,7 @@ export class SiteService {
     record.publishedGlobals = cloneSiteGlobals(
       draftGlobals ?? publishedGlobals ?? { version: 1 },
     );
-    record.publishedDesignSystem = designSystem;
+    record.publishedDesignSystem = siteOverride ?? { version: 1 };
     record.status = 'published';
     await record.save();
     return SitePublishResponseSchema.parse(await this.toContract(record));
@@ -285,24 +297,37 @@ export class SiteService {
       });
     }
     const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const workspaceDraft = workspace?.designSystemDraft
+      ? this.readDesignSystem(workspace.designSystemDraft)
+      : createDefaultSiteDesignSystem();
+    const draftOverride = this.readSiteOverride(record.designSystemDraft, workspaceDraft);
     const draft = this.readEffectiveDesignSystem(
       workspace?.designSystemDraft,
-      record.designSystemDraft,
+      draftOverride,
+    );
+    const publishedWorkspace = workspace?.publishedDesignSystem
+      ? this.readDesignSystem(workspace.publishedDesignSystem)
+      : createDefaultSiteDesignSystem();
+    const publishedOverride = this.readSiteOverride(
+      record.publishedDesignSystem,
+      publishedWorkspace,
     );
     const published = this.readPublishedDesignSystem(
-      workspace?.publishedDesignSystem,
-      record.publishedDesignSystem,
+      publishedWorkspace,
+      publishedOverride,
     );
     return SiteDesignSystemResponseSchema.parse({
       draft,
       ...(published ? { published } : {}),
+      ...(draftOverride ? { override: draftOverride } : {}),
+      ...(publishedOverride ? { publishedOverride } : {}),
     });
   }
 
   async updateDesignSystem(
     workspaceId: string,
     siteId: string,
-    input: SiteDesignSystem,
+    input: UpdateSiteDesignSystemRequest,
   ): Promise<SiteDesignSystemResponse> {
     const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
     if (!record) {
@@ -311,9 +336,23 @@ export class SiteService {
         message: `Site ${siteId} was not found in workspace ${workspaceId}`,
       });
     }
-    const designSystem = SiteDesignSystemSchema.parse(input);
+    const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const workspaceDraft = workspace?.designSystemDraft
+      ? this.readDesignSystem(workspace.designSystemDraft)
+      : createDefaultSiteDesignSystem();
+    const overrideInput =
+      input && typeof input === 'object' && 'override' in input ? input.override : input;
+    const parsed = SiteDesignSystemOverrideSchema.safeParse(overrideInput);
+    const designSystemOverride: SiteDesignSystemOverride = parsed.success
+      ? parsed.data
+      : normalizeSiteDesignSystemOverride(
+          workspaceDraft,
+          SiteDesignSystemSchema.parse(overrideInput),
+        );
+    const designSystem =
+      mergeSiteDesignSystems(workspaceDraft, designSystemOverride) ?? workspaceDraft;
     await this.reusables.assertDesignTokenRemovalSafe(workspaceId, siteId, designSystem);
-    record.designSystemDraft = designSystem;
+    record.designSystemDraft = designSystemOverride;
     await record.save();
     return this.getDesignSystem(workspaceId, siteId);
   }
@@ -611,23 +650,37 @@ export class SiteService {
 
   private readEffectiveDesignSystem(
     workspaceValue: unknown,
-    siteValue: unknown,
+    siteValue: SiteDesignSystem | SiteDesignSystemOverride | undefined,
   ): SiteDesignSystem {
     return (
-      mergeSiteDesignSystems(
-        this.readDesignSystem(workspaceValue),
-        siteValue ? this.readDesignSystem(siteValue) : undefined,
-      ) ?? createDefaultSiteDesignSystem()
+      mergeSiteDesignSystems(this.readDesignSystem(workspaceValue), siteValue) ??
+      createDefaultSiteDesignSystem()
     );
   }
 
   private readPublishedDesignSystem(
     workspaceValue: unknown,
-    siteValue: unknown,
+    siteValue: SiteDesignSystem | SiteDesignSystemOverride | undefined,
   ): SiteDesignSystem | undefined {
     return mergeSiteDesignSystems(
       workspaceValue ? this.readDesignSystem(workspaceValue) : undefined,
-      siteValue ? this.readDesignSystem(siteValue) : undefined,
+      siteValue,
+    );
+  }
+
+  private readSiteOverride(
+    value: unknown,
+    baseline: SiteDesignSystem,
+  ): SiteDesignSystemOverride | undefined {
+    if (!value) return undefined;
+    const sparse = SiteDesignSystemOverrideSchema.safeParse(value);
+    if (sparse.success) return sparse.data;
+    const legacy = SiteDesignSystemSchema.safeParse(value);
+    if (legacy.success) return normalizeSiteDesignSystemOverride(baseline, legacy.data);
+    throw new DomainError(
+      'INVALID_PERSISTED_SITE_DESIGN_SYSTEM',
+      'Persisted site design system is invalid',
+      500,
     );
   }
 }
