@@ -955,6 +955,21 @@ describe('builder adapter', () => {
     );
   });
 
+  it('promotes a page when a navigation view is inserted into a section', () => {
+    const definition = payloadToEditorComponent(payload);
+    const snapshot = snapshotFromEditorDefinition(definition);
+    const section = snapshot.children[0];
+    if (!section) throw new Error('Page section is missing');
+
+    section.children.push(
+      snapshotFromEditorDefinition(createBlockDefinition('navigation-view')),
+    );
+
+    const serialized = serializeEditorSnapshot(snapshot);
+    expect(serialized.version).toBe(7);
+    expect(serialized.root.children[0]?.children.at(-1)?.type).toBe('navigation-view');
+  });
+
   it('projects a saved Header extension as a page-ready definition', () => {
     const global: SiteGlobalPayloadV1 = {
       version: 1,

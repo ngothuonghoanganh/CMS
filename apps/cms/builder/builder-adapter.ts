@@ -3035,6 +3035,13 @@ function containsV7Node(node: Record<string, unknown>): boolean {
     node.type === 'reusable-instance' ||
     node.type === 'collection-list' ||
     node.type === 'collection-item' ||
+    // Global/navigation nodes are represented by V6 schemas as well, but a
+    // page may persist them only in the V7 envelope where the page validator
+    // permits global components.
+    node.type === 'global-header' ||
+    node.type === 'global-footer' ||
+    node.type === 'navigation-view' ||
+    node.type === 'site-brand' ||
     (node.type === 'button' &&
       isObject(node.props) &&
       typeof node.props.variant === 'string') ||
