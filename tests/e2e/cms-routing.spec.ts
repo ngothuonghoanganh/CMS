@@ -200,16 +200,35 @@ test('brand styles show website impact without changing the CMS chrome', async (
         ).position,
       };
     });
-  expect(workbenchLayout.editorPosition).toBe('absolute');
+  expect(workbenchLayout.editorPosition).toBe('fixed');
   expect(workbenchLayout.editorLeft).toBeGreaterThan(workbenchLayout.previewLeft);
-  expect(workbenchLayout.editorRight).toBeLessThan(workbenchLayout.previewRight);
-  expect(workbenchLayout.editorTop).toBeGreaterThan(workbenchLayout.previewTop);
+  expect(workbenchLayout.editorRight).toBeLessThanOrEqual(
+    workbenchLayout.previewRight + 1,
+  );
+  expect(workbenchLayout.editorTop).toBeGreaterThan(0);
   expect(workbenchLayout.editorHeight).toBeGreaterThan(440);
   expect(workbenchLayout.editorHeight).toBeLessThan(460);
+
+  const editorTopBeforeScroll = workbenchLayout.editorTop;
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const pageScrollY = await page.evaluate(() => window.scrollY);
+  if (pageScrollY > 0) {
+    await expect
+      .poll(() =>
+        page
+          .locator('.design-system-editor')
+          .evaluate((editor) => editor.getBoundingClientRect().top),
+      )
+      .toBeCloseTo(editorTopBeforeScroll, 0);
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   const editor = page.locator('.design-system-editor');
   await expect(
     editor.getByRole('button', { name: 'Save draft', exact: true }),
+  ).toBeVisible();
+  await expect(
+    editor.getByRole('button', { name: 'Publish design system', exact: true }),
   ).toBeVisible();
 
   const primaryColor = page.getByLabel('Primary color hex value', { exact: true });
@@ -222,6 +241,12 @@ test('brand styles show website impact without changing the CMS chrome', async (
       })),
     )
     .toEqual({ brandPrimary: '#e11d48', cmsSidebar: 'rgb(13, 13, 13)' });
+  await editor
+    .getByRole('button', { name: 'Publish design system', exact: true })
+    .click();
+  await expect(page.locator('.builder-alert.alert-success')).toHaveText(
+    'Website styles published immediately.',
+  );
 
   await page.getByRole('tab', { name: 'Services', exact: true }).click();
   await expect(page.locator('.site-preview-hero h1')).toHaveText(
@@ -262,7 +287,27 @@ test('brand styles show website impact without changing the CMS chrome', async (
 
   await page.getByRole('button', { name: 'Close design editor', exact: true }).click();
   await expect(page.locator('.design-system-editor')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Open editor', exact: true }).click();
+  const reopenButton = page.getByRole('button', { name: 'Open editor', exact: true });
+  const reopenButtonBox = await reopenButton.boundingBox();
+  expect(reopenButtonBox).not.toBeNull();
+  if (!reopenButtonBox) throw new Error('Reopen button is not measurable.');
+  const reopenBeforeDrag = await reopenButton.evaluate(
+    (button) => button.getBoundingClientRect().left,
+  );
+  await page.mouse.move(
+    reopenButtonBox.x + reopenButtonBox.width / 2,
+    reopenButtonBox.y + reopenButtonBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    reopenButtonBox.x + reopenButtonBox.width / 2 - 80,
+    reopenButtonBox.y + reopenButtonBox.height / 2 - 40,
+  );
+  await page.mouse.up();
+  await expect
+    .poll(() => reopenButton.evaluate((button) => button.getBoundingClientRect().left))
+    .toBeLessThan(reopenBeforeDrag - 40);
+  await reopenButton.click();
   await expect(
     page.getByRole('button', { name: 'Move design editor', exact: true }),
   ).toBeVisible();

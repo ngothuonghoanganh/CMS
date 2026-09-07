@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -96,15 +96,6 @@ export class WorkspaceService {
         message: 'Workspace was not found',
       });
     const parsed = PublishDesignSystemRequestSchema.parse(input);
-    if (
-      parsed.expectedVersion &&
-      parsed.expectedVersion !== record.updatedAt.toISOString()
-    ) {
-      throw new ConflictException({
-        code: 'DESIGN_SYSTEM_VERSION_CONFLICT',
-        message: 'The design system changed elsewhere. Reload before publishing.',
-      });
-    }
     const current = parsed.designSystem
       ? SiteDesignSystemSchema.parse(parsed.designSystem)
       : record.designSystemDraft

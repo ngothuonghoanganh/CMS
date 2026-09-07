@@ -29,7 +29,6 @@ type DesignSystemViewProps = {
   workspaceId: string;
   siteId?: string;
   canUpdate: boolean;
-  canPublish: boolean;
   inheritedSiteCount?: number;
   siteName?: string;
   siteLogo?: string | undefined;
@@ -212,10 +211,14 @@ export function resolveComponentDefaultStyle(
 type PreviewDevice = 'desktop' | 'mobile';
 type PreviewPage = 'home' | 'services' | 'contact';
 type EditorOffset = { x: number; y: number };
+type EditorDragTarget = 'editor' | 'reopen';
 type EditorDrag = {
   animationFrame: number | null;
+  didMove: boolean;
+  element: HTMLElement;
   latestOffset: EditorOffset;
   pointerId: number;
+  target: EditorDragTarget;
   startOffset: EditorOffset;
   startRect: DOMRect;
   startX: number;
@@ -694,7 +697,6 @@ export function DesignSystemView({
   workspaceId,
   siteId,
   canUpdate,
-  canPublish,
   inheritedSiteCount,
   siteLogo,
   siteName = 'Your website',
@@ -711,10 +713,14 @@ export function DesignSystemView({
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('desktop');
   const [previewPage, setPreviewPage] = useState<PreviewPage>('home');
   const [editorOffset, setEditorOffset] = useState<EditorOffset>({ x: 0, y: 0 });
+  const [reopenOffset, setReopenOffset] = useState<EditorOffset>({ x: 0, y: 0 });
   const [isEditorDragging, setIsEditorDragging] = useState(false);
+  const [editorDragTarget, setEditorDragTarget] = useState<EditorDragTarget | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(true);
   const editorRef = useRef<HTMLDivElement>(null);
+  const reopenEditorRef = useRef<HTMLButtonElement>(null);
   const editorDragRef = useRef<EditorDrag | null>(null);
+  const suppressReopenClickRef = useRef(false);
   const [activeCategory, setActiveCategory] = useState<
     'overview' | 'components' | 'typography' | (typeof scalarCategories)[number][0]
   >('overview');
@@ -762,25 +768,55 @@ export function DesignSystemView({
     };
   }, [siteId, workspaceId]);
 
-  function startEditorDrag(event: ReactPointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0 || !editorRef.current) return;
+  function offsetForDragTarget(target: EditorDragTarget): EditorOffset {
+    return target === 'editor' ? editorOffset : reopenOffset;
+  }
+
+  function setOffsetForDragTarget(target: EditorDragTarget, offset: EditorOffset) {
+    if (target === 'editor') {
+      setEditorOffset(offset);
+    } else {
+      setReopenOffset(offset);
+    }
+  }
+
+  function startEditorDrag(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    target: EditorDragTarget,
+  ) {
+    const element = target === 'editor' ? editorRef.current : reopenEditorRef.current;
+    if (event.button !== 0 || !element) return;
+    if (target === 'reopen') {
+      suppressReopenClickRef.current = false;
+    }
+    const currentOffset = offsetForDragTarget(target);
     editorDragRef.current = {
       animationFrame: null,
-      latestOffset: editorOffset,
+      didMove: false,
+      element,
+      latestOffset: currentOffset,
       pointerId: event.pointerId,
-      startOffset: editorOffset,
-      startRect: editorRef.current.getBoundingClientRect(),
+      target,
+      startOffset: currentOffset,
+      startRect: element.getBoundingClientRect(),
       startX: event.clientX,
       startY: event.clientY,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
     setIsEditorDragging(true);
+    setEditorDragTarget(target);
   }
 
   function moveEditorDrag(event: ReactPointerEvent<HTMLButtonElement>) {
     const drag = editorDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
+    if (
+      Math.abs(event.clientX - drag.startX) > 3 ||
+      Math.abs(event.clientY - drag.startY) > 3
+    ) {
+      drag.didMove = true;
+    }
     const desiredLeft = drag.startRect.left + event.clientX - drag.startX;
     const desiredTop = drag.startRect.top + event.clientY - drag.startY;
     const minLeft = 16;
@@ -797,8 +833,8 @@ export function DesignSystemView({
     if (drag.animationFrame !== null) return;
     drag.animationFrame = window.requestAnimationFrame(() => {
       drag.animationFrame = null;
-      if (!editorRef.current || editorDragRef.current !== drag) return;
-      editorRef.current.style.transform = `translate3d(${drag.latestOffset.x}px, ${drag.latestOffset.y}px, 0)`;
+      if (editorDragRef.current !== drag) return;
+      drag.element.style.transform = `translate3d(${drag.latestOffset.x}px, ${drag.latestOffset.y}px, 0)`;
     });
   }
 
@@ -812,16 +848,21 @@ export function DesignSystemView({
       drag.animationFrame = null;
     }
     if (drag) {
-      setEditorOffset(drag.latestOffset);
-      if (editorRef.current) {
-        editorRef.current.style.transform = `translate3d(${drag.latestOffset.x}px, ${drag.latestOffset.y}px, 0)`;
+      setOffsetForDragTarget(drag.target, drag.latestOffset);
+      drag.element.style.transform = `translate3d(${drag.latestOffset.x}px, ${drag.latestOffset.y}px, 0)`;
+      if (drag.target === 'reopen' && drag.didMove) {
+        suppressReopenClickRef.current = true;
       }
     }
     editorDragRef.current = null;
     setIsEditorDragging(false);
+    setEditorDragTarget(null);
   }
 
-  function nudgeEditor(event: ReactKeyboardEvent<HTMLButtonElement>) {
+  function nudgeEditor(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    target: EditorDragTarget,
+  ) {
     const step = 16;
     const moves: Record<string, EditorOffset> = {
       ArrowDown: { x: 0, y: step },
@@ -832,7 +873,16 @@ export function DesignSystemView({
     const move = moves[event.key];
     if (!move) return;
     event.preventDefault();
-    setEditorOffset((current) => ({ x: current.x + move.x, y: current.y + move.y }));
+    const current = offsetForDragTarget(target);
+    setOffsetForDragTarget(target, { x: current.x + move.x, y: current.y + move.y });
+  }
+
+  function openEditor() {
+    if (suppressReopenClickRef.current) {
+      suppressReopenClickRef.current = false;
+      return;
+    }
+    setIsEditorOpen(true);
   }
 
   async function save() {
@@ -876,12 +926,14 @@ export function DesignSystemView({
   }
 
   async function publishSite() {
-    if (!siteId || !canPublish || saving) return;
+    if (!siteId || !canUpdate || !system || saving) return;
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      await api.post(`/workspaces/${workspaceId}/sites/${siteId}/publish`, {});
+      await api.post(`/workspaces/${workspaceId}/sites/${siteId}/design-system/publish`, {
+        designSystem: system,
+      });
       const refreshed = SiteDesignSystemResponseSchema.parse(
         await api.get(`/workspaces/${workspaceId}/sites/${siteId}/design-system`),
       );
@@ -890,12 +942,12 @@ export function DesignSystemView({
       setPublishedFingerprint(
         refreshed.published ? JSON.stringify(refreshed.published) : null,
       );
-      setNotice('Website published with these styles.');
+      setNotice('Website styles published immediately.');
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : 'Website could not be published.',
+          : 'Website styles could not be published.',
       );
     } finally {
       setSaving(false);
@@ -1077,9 +1129,9 @@ export function DesignSystemView({
                   <button
                     aria-label="Move design editor"
                     className="design-system-editor-drag-handle"
-                    onKeyDown={nudgeEditor}
+                    onKeyDown={(event) => nudgeEditor(event, 'editor')}
                     onPointerCancel={stopEditorDrag}
-                    onPointerDown={startEditorDrag}
+                    onPointerDown={(event) => startEditorDrag(event, 'editor')}
                     onPointerMove={moveEditorDrag}
                     onPointerUp={stopEditorDrag}
                     title="Drag to move the editor panel"
@@ -1130,14 +1182,14 @@ export function DesignSystemView({
                         Publish defaults
                       </button>
                     ) : null}
-                    {siteId && canPublish ? (
+                    {siteId ? (
                       <button
                         className="button button-secondary"
                         disabled={saving}
                         onClick={() => void publishSite()}
                         type="button"
                       >
-                        Publish website
+                        Publish design system
                       </button>
                     ) : null}
                   </div>
@@ -1547,8 +1599,20 @@ export function DesignSystemView({
             </div>
           ) : (
             <button
-              className="button button-primary design-system-editor-reopen"
-              onClick={() => setIsEditorOpen(true)}
+              className={`button button-primary design-system-editor-reopen${
+                editorDragTarget === 'reopen' ? ' is-dragging' : ''
+              }`}
+              onClick={openEditor}
+              onKeyDown={(event) => nudgeEditor(event, 'reopen')}
+              onPointerCancel={stopEditorDrag}
+              onPointerDown={(event) => startEditorDrag(event, 'reopen')}
+              onPointerMove={moveEditorDrag}
+              onPointerUp={stopEditorDrag}
+              ref={reopenEditorRef}
+              style={{
+                transform: `translate3d(${reopenOffset.x}px, ${reopenOffset.y}px, 0)`,
+              }}
+              title="Click to open. Drag to move the button."
               type="button"
             >
               <span aria-hidden="true">✦</span>

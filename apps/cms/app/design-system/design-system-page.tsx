@@ -43,7 +43,6 @@ export default function DesignSystemPage({ siteId }: { siteId?: string }) {
     return (
       <DesignSystemView
         canUpdate={can('design-system.update')}
-        canPublish={false}
         inheritedSiteCount={sites.length}
         siteName="Your website"
         workspaceId={workspaceId}
@@ -53,7 +52,6 @@ export default function DesignSystemPage({ siteId }: { siteId?: string }) {
   return (
     <DesignSystemView
       canUpdate={can('design-system.update')}
-      canPublish={can('site.publish')}
       siteId={selectedSiteId!}
       siteLogo={site?.logo}
       siteName={site?.name ?? 'Your website'}

@@ -15,11 +15,13 @@ import {
   UpdateSiteRequestSchema,
   SiteGlobalsSchema,
   UpdateSiteDesignSystemRequestSchema,
+  PublishDesignSystemRequestSchema,
   DesignTokenUsageQuerySchema,
   type CreateSiteRequest,
   type PaginationQuery,
   type SiteGlobals,
   type UpdateSiteDesignSystemRequest,
+  type PublishDesignSystemRequest,
   type UpdateSiteRequest,
   type DesignTokenUsageQuery,
 } from '@payload/contracts';
@@ -180,6 +182,34 @@ export class SiteController {
         actorType: 'user',
         actorId: principal?.subject ?? 'unknown',
         action: 'site.design-system.update',
+        resourceType: 'site',
+        resourceId: siteId,
+        workspaceId,
+        result: 'success',
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Post(':siteId/design-system/publish')
+  async publishDesignSystem(
+    @Param('workspaceId') workspaceId: string,
+    @Param('siteId') siteId: string,
+    @Body(new ZodValidationPipe(PublishDesignSystemRequestSchema))
+    input: PublishDesignSystemRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'design-system.update', workspaceId);
+    const result = await this.siteService.publishDesignSystem(
+      requireRequestedWorkspace(principal, workspaceId),
+      siteId,
+      input,
+    );
+    await this.audit
+      .record({
+        actorType: 'user',
+        actorId: principal?.subject ?? 'unknown',
+        action: 'site.design-system.publish',
         resourceType: 'site',
         resourceId: siteId,
         workspaceId,

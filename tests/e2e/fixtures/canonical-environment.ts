@@ -318,6 +318,12 @@ export async function resetCanonicalEnvironment(
       `${apiBase}/workspaces/${environment.workspaceId}/design-system/publish`,
     ),
   );
+  await json(
+    await request.post(
+      `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/design-system/publish`,
+      { data: { designSystem: defaultDesignSystem } },
+    ),
+  );
 
   const reusables = await json<{ items: Array<{ id: string; name: string }> }>(
     await request.get(

@@ -107,9 +107,9 @@
   min-height: 0;
   overflow: auto;
   padding: 1.35rem;
-  position: absolute;
-  right: 1rem;
-  top: 12rem;
+  position: fixed;
+  right: clamp(1.5rem, 4vw, 3rem);
+  top: max(12rem, calc(50vh - 1rem));
   width: min(34rem, calc(100% - 2rem));
   will-change: transform;
   z-index: 40;
@@ -184,12 +184,20 @@
 
 .design-system-editor-reopen {
   align-items: center;
+  cursor: grab;
   display: inline-flex;
   gap: 0.4rem;
-  position: absolute;
-  right: 1rem;
-  top: 12rem;
+  position: fixed;
+  right: clamp(1.5rem, 4vw, 3rem);
+  bottom: 1rem;
+  touch-action: none;
+  will-change: transform;
   z-index: 40;
+}
+
+.design-system-editor-reopen.is-dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .design-system-editor > .design-system-category-rail {
@@ -212,8 +220,10 @@
   }
 
   .design-system-editor-reopen {
-    margin-top: 1rem;
-    position: static;
+    bottom: 1rem;
+    margin-top: 0;
+    position: fixed;
+    right: 1rem;
   }
 }
 

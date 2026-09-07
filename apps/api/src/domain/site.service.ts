@@ -37,6 +37,7 @@ import {
   mergeSiteDesignSystems,
   normalizeSiteDesignSystemOverride,
   type UpdateSiteDesignSystemRequest,
+  type PublishDesignSystemRequest,
   type SiteDesignSystemOverride,
   type SiteDesignSystem,
   type SiteDesignSystemResponse,
@@ -353,6 +354,43 @@ export class SiteService {
       mergeSiteDesignSystems(workspaceDraft, designSystemOverride) ?? workspaceDraft;
     await this.reusables.assertDesignTokenRemovalSafe(workspaceId, siteId, designSystem);
     record.designSystemDraft = designSystemOverride;
+    await record.save();
+    return this.getDesignSystem(workspaceId, siteId);
+  }
+
+  async publishDesignSystem(
+    workspaceId: string,
+    siteId: string,
+    input: PublishDesignSystemRequest = {},
+  ): Promise<SiteDesignSystemResponse> {
+    const record = await this.siteModel.findOne({ _id: siteId, workspaceId }).exec();
+    if (!record) {
+      throw new NotFoundException({
+        code: 'SITE_NOT_FOUND',
+        message: `Site ${siteId} was not found in workspace ${workspaceId}`,
+      });
+    }
+
+    const workspace = await this.workspaceModel.findOne({ _id: workspaceId }).exec();
+    const workspaceDraft = workspace?.designSystemDraft
+      ? this.readDesignSystem(workspace.designSystemDraft)
+      : createDefaultSiteDesignSystem();
+    const current = input.designSystem
+      ? SiteDesignSystemSchema.parse(input.designSystem)
+      : this.readEffectiveDesignSystem(
+          workspaceDraft,
+          this.readSiteOverride(record.designSystemDraft, workspaceDraft),
+        );
+    const publishedWorkspace = workspace?.publishedDesignSystem
+      ? this.readDesignSystem(workspace.publishedDesignSystem)
+      : createDefaultSiteDesignSystem();
+    const override = normalizeSiteDesignSystemOverride(publishedWorkspace, current);
+
+    // Design-system publishing is intentionally independent from whole-site
+    // publishing. Apply the editor snapshot immediately without readiness,
+    // reusable-token, or archived-site checks.
+    record.designSystemDraft = override;
+    record.publishedDesignSystem = override;
     await record.save();
     return this.getDesignSystem(workspaceId, siteId);
   }
