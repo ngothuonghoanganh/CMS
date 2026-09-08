@@ -415,6 +415,10 @@ function inspectorNodeLabel(type: string): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
+function selectedNodeLabel(selected: SelectedBuilderNode): string {
+  return inspectorNodeLabel(selected.openComposition?.nodeType ?? selected.type);
+}
+
 function inspectorNodeSummary(selected: SelectedBuilderNode): string {
   const summaryValue = ['text', 'label', 'alt', 'src']
     .map((key) => selected.props[key])
@@ -422,7 +426,7 @@ function inspectorNodeSummary(selected: SelectedBuilderNode): string {
       (value): value is string => typeof value === 'string' && value.trim().length > 0,
     );
   if (summaryValue) return summaryValue.trim().slice(0, 80);
-  return `${inspectorNodeLabel(selected.type)} element`;
+  return `${selectedNodeLabel(selected)} element`;
 }
 
 function layerPath(nodes: BuilderCanvasNode[], selectedId: string): BuilderCanvasNode[] {
@@ -2892,7 +2896,7 @@ export default function BuilderShell({
                 <div className="builder-properties-heading-row">
                   <div className="builder-panel-heading">
                     <span className="eyebrow">Properties</span>
-                    <strong>{inspectorNodeLabel(selected.type)}</strong>
+                    <strong>{selectedNodeLabel(selected)}</strong>
                   </div>
                   <button
                     aria-label="Collapse inspector"

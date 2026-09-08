@@ -70,6 +70,7 @@ import {
   PAGE_RUNTIME_BASELINE_CSS,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
+  isOpenCompositionNodeType,
   createPageDocument,
   resolveSlotsForChild,
   type FormProps,
@@ -78,6 +79,7 @@ import {
   type PagePayload,
   type SiteGlobalPayloadV1,
   type BuilderDocumentKind,
+  type OpenCompositionNodeType,
   type ReusableComponentDocument,
   type ReusableRuntime,
   type SiteDesignSystem,
@@ -90,7 +92,7 @@ import {
   selectionFromComponentCodec,
   type ComponentSelectionSnapshot,
 } from './component-editor-codecs';
-import { canInsertLiveChild } from './builder-structural-domain';
+import { canInsertLiveChild, openPayloadNodeType } from './builder-structural-domain';
 import { collectPersistedNodeIds, remapSubtreeNodeIds } from './builder-node-identity';
 import {
   scopeForDocumentKind,
@@ -225,10 +227,10 @@ function isGlobalRootForDocument(
 
 function canInsertIntoComponent(
   parent: Component,
-  childType: BuilderNodeType,
+  childType: BuilderNodeType | OpenCompositionNodeType,
   excluded?: Component,
 ): boolean {
-  const parentType = payloadNodeType(parent);
+  const parentType = openPayloadNodeType(parent);
   if (!parentType) return false;
   return canInsertLiveChild(parent, childType, excluded);
 }
@@ -404,7 +406,7 @@ function canvasDropIntent(
   if (!element) return undefined;
   let target = componentForCanvasElement(root, element);
   const sourceId = payloadNodeId(source);
-  const sourceType = payloadNodeType(source);
+  const sourceType = openPayloadNodeType(source);
   if (!sourceId || !sourceType || !target || target === source) return undefined;
   const initialTargetElement = target.getEl();
   if (!initialTargetElement) return undefined;
@@ -427,7 +429,7 @@ function canvasDropIntent(
       )
     ) {
       const parent = payloadAncestor(target.parent());
-      const parentType = parent ? payloadNodeType(parent) : undefined;
+      const parentType = parent ? openPayloadNodeType(parent) : undefined;
       if (
         parent &&
         parentType &&
@@ -854,7 +856,7 @@ function dropDefinitionAtPoint(
         BUILDER_NODE_TYPE_ATTRIBUTE
       ];
       if (
-        isPayloadNodeType(targetType) &&
+        (isPayloadNodeType(targetType) || isOpenCompositionNodeType(targetType)) &&
         (canInsertIntoComponent(candidate, childType) ||
           (targetType === 'root' && !rootAcceptsDirectly && canWrapInSection))
       ) {
@@ -912,7 +914,10 @@ function findAppendTarget(
       return;
     }
     const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
-    if (isPayloadNodeType(type) && canInsertIntoComponent(component, childType)) {
+    if (
+      (isPayloadNodeType(type) || isOpenCompositionNodeType(type)) &&
+      canInsertIntoComponent(component, childType)
+    ) {
       target = component;
     }
   });
@@ -1008,7 +1013,10 @@ function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
   if ((type === 'text' || type === 'button') && content) {
     return `${canvasNodeLabels[type]}: ${content.slice(0, 28)}${content.length > 28 ? '…' : ''}`;
   }
-  return canvasNodeLabels[type];
+  return (
+    canvasNodeLabels[type] ??
+    `${type.slice(0, 1).toUpperCase()}${type.slice(1).replace(/-/g, ' ')}`
+  );
 }
 
 function canvasNodeDepth(component: Component): number {
@@ -1018,7 +1026,8 @@ function canvasNodeDepth(component: Component): number {
     const parentType = parent.getAttributes({ noStyle: true })[
       BUILDER_NODE_TYPE_ATTRIBUTE
     ];
-    if (isPayloadNodeType(parentType)) depth += 1;
+    if (isPayloadNodeType(parentType) || isOpenCompositionNodeType(parentType))
+      depth += 1;
     parent = parent.parent();
   }
   return depth;
@@ -1057,7 +1066,11 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     const attributes = component.getAttributes({ noStyle: true });
     const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
     const id = attributes[BUILDER_NODE_ID_ATTRIBUTE];
-    if (!isPayloadNodeType(type) || typeof id !== 'string') return;
+    if (
+      (!isPayloadNodeType(type) && !isOpenCompositionNodeType(type)) ||
+      typeof id !== 'string'
+    )
+      return;
 
     const element = component.getEl();
     if (!element) return;
@@ -1073,8 +1086,8 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
       ];
       nodes.push({
         id,
-        type,
-        label: canvasNodeLabel(component, type),
+        type: type as BuilderNodeType,
+        label: canvasNodeLabel(component, type as BuilderNodeType),
         ...(typeof parentId === 'string' ? { parentId } : {}),
         depth: canvasNodeDepth(component),
         x: position.left,
@@ -1538,7 +1551,21 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     mutateAfterInlineEdit(editor, () => {
       const selected = getSelectedComponent(editor);
       if (!selected) return;
-      const type = selected.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+      const attributes = selected.getAttributes({ noStyle: true });
+      const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+      if (
+        attributes['data-payload-open-composition'] === 'true' &&
+        typeof type === 'string' &&
+        isOpenCompositionNodeType(type)
+      ) {
+        commitEditorCommand(editor, {
+          kind: 'set-property',
+          nodeId: payloadNodeId(selected) ?? '',
+          property,
+          value,
+        });
+        return;
+      }
       if (!isBuilderNodeType(type)) return;
       const command = createEditorPropertyCommand(
         payloadNodeId(selected) ?? '',
@@ -1701,12 +1728,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           return;
         }
         const selected = getSelectedComponent(editor);
-        const selectedType = selected?.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
         const target =
           selected &&
-          isPayloadNodeType(selectedType) &&
+          openPayloadNodeType(selected) &&
           canInsertIntoComponent(selected, childType)
             ? selected
             : findAppendTarget(getRoot(editor), childType);
@@ -1752,12 +1776,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!editor) return;
         const definition = createExtensionBlockDefinition(extensionId);
         const selected = getSelectedComponent(editor);
-        const selectedType = selected?.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
         const target =
           selected &&
-          isPayloadNodeType(selectedType) &&
+          openPayloadNodeType(selected) &&
           canInsertIntoComponent(selected, 'extension')
             ? selected
             : findAppendTarget(getRoot(editor), 'extension');
@@ -1791,12 +1812,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (childType !== 'global-header' && childType !== 'global-footer') return;
         getRoot(editor).addAttributes({ [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: '7' });
         const selected = getSelectedComponent(editor);
-        const selectedType = selected?.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
         const target =
           selected &&
-          isPayloadNodeType(selectedType) &&
+          openPayloadNodeType(selected) &&
           canInsertIntoComponent(selected, childType)
             ? selected
             : getRoot(editor);
@@ -2253,12 +2271,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           );
         }
         const selected = getSelectedComponent(editor);
-        const selectedType = selected?.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
         const target =
           selected &&
-          isPayloadNodeType(selectedType) &&
+          openPayloadNodeType(selected) &&
           canInsertIntoComponent(selected, childType)
             ? selected
             : findAppendTarget(getRoot(editor), childType);
@@ -2365,12 +2380,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (childType === 'root') return false;
         const insertType = childType as BuilderBlockType;
         const selected = getSelectedComponent(editor);
-        const selectedType = selected?.getAttributes({ noStyle: true })[
-          BUILDER_NODE_TYPE_ATTRIBUTE
-        ];
         const target =
           selected &&
-          isPayloadNodeType(selectedType) &&
+          openPayloadNodeType(selected) &&
           canInsertIntoComponent(selected, childType)
             ? selected
             : findAppendTarget(getRoot(editor), insertType);
@@ -2466,6 +2478,26 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!editor || !parent) return false;
         const child = findPayloadComponent(parent, nodeId);
         if (!child || child.parent() !== parent) return false;
+        const openParentType = openPayloadNodeType(parent);
+        const openChildType = openPayloadNodeType(child);
+        if (openParentType && openChildType) {
+          const siblings = parent
+            .components()
+            .models.filter((candidate) => openPayloadNodeType(candidate) !== undefined);
+          const index = siblings.indexOf(child);
+          const target = siblings[index + (direction === 'up' ? -1 : 1)];
+          const sourceId = payloadNodeId(child);
+          const targetId = target && payloadNodeId(target);
+          if (!sourceId || !targetId) return false;
+          return commitEditorCommand(editor, {
+            kind: 'move',
+            intent: {
+              nodeId: sourceId,
+              targetNodeId: targetId,
+              position: direction === 'up' ? 'before' : 'after',
+            },
+          });
+        }
         const parentType = payloadNodeType(parent);
         const childType = payloadNodeType(child);
         const slot =

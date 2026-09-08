@@ -105,6 +105,7 @@ export function TextField({
   label,
   recommended,
   required,
+  'aria-label': ariaLabel,
   type = 'text',
   ...inputProps
 }: TextFieldProps) {
@@ -127,6 +128,7 @@ export function TextField({
         required={required}
         type={type}
         {...inputProps}
+        aria-label={ariaLabel ?? label}
       />
     </Field>
   );
@@ -144,6 +146,7 @@ export function TextAreaField({
   label,
   recommended,
   required,
+  'aria-label': ariaLabel,
   ...textareaProps
 }: TextAreaFieldProps) {
   const fallbackId = useId();
@@ -164,6 +167,7 @@ export function TextAreaField({
         id={inputId}
         required={required}
         {...textareaProps}
+        aria-label={ariaLabel ?? label}
       />
     </Field>
   );
@@ -182,6 +186,7 @@ export function SelectField({
   label,
   recommended,
   required,
+  'aria-label': ariaLabel,
   ...selectProps
 }: SelectFieldProps) {
   const fallbackId = useId();
@@ -202,6 +207,7 @@ export function SelectField({
         id={inputId}
         required={required}
         {...selectProps}
+        aria-label={ariaLabel ?? label}
       >
         {children}
       </select>
@@ -342,6 +348,7 @@ export function ComboboxField({
   id,
   label,
   options,
+  'aria-label': ariaLabel,
   ...props
 }: Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'list'> &
   Omit<FieldProps, 'children' | 'htmlFor'> & { options: readonly ChoiceOption[] }) {
@@ -356,7 +363,13 @@ export function ComboboxField({
       htmlFor={inputId}
       label={label}
     >
-      <input className="ui-control" id={inputId} list={listId} {...props} />
+      <input
+        aria-label={ariaLabel ?? label}
+        className="ui-control"
+        id={inputId}
+        list={listId}
+        {...props}
+      />
       <datalist id={listId}>
         {options.map((option) => (
           <option key={option.value} label={option.label} value={option.value} />
@@ -374,6 +387,7 @@ export function MultiSelectField({
   error,
   id,
   label,
+  'aria-label': ariaLabel,
   ...props
 }: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'className'> &
   Omit<FieldProps, 'children' | 'htmlFor'>) {
@@ -393,6 +407,7 @@ export function MultiSelectField({
         id={inputId}
         multiple
         {...props}
+        aria-label={ariaLabel ?? label}
       >
         {children}
       </select>

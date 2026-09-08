@@ -190,17 +190,24 @@ export function collectExtensionPlacements(root: AnyPageNode): ExtensionPlacemen
   while (pending.length > 0) {
     const node = pending.pop();
     if (!node) continue;
+    const props = node.props as Record<string, unknown>;
     if (node.type === 'countdown') {
       result.push({
         extensionId: ExtensionIds.DemoBuilder,
-        ...('attachmentId' in node.props && node.props.attachmentId
-          ? { attachmentId: node.props.attachmentId }
+        ...(typeof props.attachmentId === 'string'
+          ? { attachmentId: props.attachmentId }
           : {}),
       });
     } else if (node.type === 'extension') {
+      if (typeof props.extensionId !== 'string') {
+        pending.push(...node.children);
+        continue;
+      }
       result.push({
-        extensionId: node.props.extensionId,
-        ...(node.props.attachmentId ? { attachmentId: node.props.attachmentId } : {}),
+        extensionId: props.extensionId,
+        ...(typeof props.attachmentId === 'string'
+          ? { attachmentId: props.attachmentId }
+          : {}),
       });
     }
     pending.push(...node.children);
@@ -214,20 +221,23 @@ function remapPayloadReferences(
   queryIds: ReadonlyMap<string, string>,
 ): PagePayload {
   const remap = (node: AnyPageNode): AnyPageNode => {
+    const props = node.props as Record<string, unknown>;
     const nextProps =
       node.type === 'countdown' || node.type === 'extension'
         ? {
-            ...node.props,
-            ...(node.props.attachmentId
-              ? { attachmentId: attachmentIds.get(node.props.attachmentId) }
+            ...props,
+            ...(typeof props.attachmentId === 'string'
+              ? { attachmentId: attachmentIds.get(props.attachmentId) }
               : {}),
           }
         : node.type === 'collection-list'
           ? {
-              ...node.props,
-              queryId: queryIds.get(node.props.queryId) ?? node.props.queryId,
+              ...props,
+              ...(typeof props.queryId === 'string'
+                ? { queryId: queryIds.get(props.queryId) ?? props.queryId }
+                : {}),
             }
-          : node.props;
+          : props;
     return {
       ...node,
       props: nextProps,

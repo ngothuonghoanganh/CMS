@@ -18,6 +18,7 @@ import {
   canInsertLiveChild,
   liveSlotForChild,
   liveSlotOccupancy,
+  openPayloadNodeType,
   payloadNodeType,
   resolveSlotForChild,
 } from './builder-structural-domain';
@@ -108,8 +109,8 @@ export function resolveNodePlacement(
   const target = findPayloadComponent(root, intent.targetNodeId);
   if (!source || !target) return invalid('The source or target node no longer exists.');
 
-  const sourceType = payloadNodeType(source);
-  const targetType = payloadNodeType(target);
+  const sourceType = openPayloadNodeType(source);
+  const targetType = openPayloadNodeType(target);
   if (!sourceType || !targetType || sourceType === 'root') {
     return invalid('The page root cannot be moved.');
   }
@@ -121,7 +122,11 @@ export function resolveNodePlacement(
   let destination: Component | undefined;
   let index: number | undefined;
   const sourceParent = source.parent();
-  const sourceSlot = liveSlotForChild(sourceParent, sourceType);
+  const legacySourceType = payloadNodeType(source);
+  const sourceSlot =
+    isOpenNode(source) || !legacySourceType
+      ? undefined
+      : liveSlotForChild(sourceParent, legacySourceType);
   if (intent.position === 'inside') {
     const sameParent = sourceParent === target;
     if (!canInsertLiveChild(target, sourceType, sameParent ? source : undefined)) {
@@ -130,7 +135,7 @@ export function resolveNodePlacement(
     destination = target;
   } else {
     destination = target.parent();
-    const destinationType = destination ? payloadNodeType(destination) : undefined;
+    const destinationType = destination ? openPayloadNodeType(destination) : undefined;
     const sameParent = sourceParent === destination;
     if (
       !destination ||
@@ -155,7 +160,7 @@ export function resolveNodePlacement(
       !canRemoveFromSlot({
         parentType: sourceParentType,
         slotName: sourceSlot.name,
-        childType: sourceType,
+        childType: legacySourceType!,
         occupancy: liveSlotOccupancy(sourceParent, sourceSlot),
       })
     ) {
@@ -209,7 +214,7 @@ export function moveNodeByIntent(
   const { source, destination, index } = result.resolution;
   const sourceType = payloadNodeType(source);
   const destinationType = payloadNodeType(destination);
-  if (sourceType && destinationType) {
+  if (sourceType && destinationType && !isOpenNode(source) && !isOpenNode(destination)) {
     const slot = resolveSlotForChild(destinationType, sourceType);
     if (slot && typeof source.setAttributes === 'function') {
       source.setAttributes({
@@ -220,4 +225,10 @@ export function moveNodeByIntent(
   }
   source.move(destination, index === undefined ? undefined : { at: index });
   return result;
+}
+
+function isOpenNode(component: Component): boolean {
+  return (
+    component.getAttributes({ noStyle: true })['data-payload-open-composition'] === 'true'
+  );
 }

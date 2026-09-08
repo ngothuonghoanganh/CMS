@@ -5,7 +5,9 @@ import {
   canDuplicateInSlot,
   canRemoveFromSlot,
   resolveSlotForChild,
+  isOpenCompositionNodeType,
   type SiteDesignSystem,
+  type OpenCompositionNodeType,
   type StyleTokenReference,
 } from '@payload/contracts';
 
@@ -18,10 +20,16 @@ import {
 } from './builder-interaction';
 import {
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
+  BUILDER_OPEN_PROPS_ATTRIBUTE,
+  BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
   isBuilderNodeType,
+  payloadToEditorComponent,
   sanitizeInlineText,
+  serializeGrapesComponent,
   snapshotFromGrapesComponent,
   updateEditorViewportStyle,
   updateEditorPartViewportStyle,
@@ -41,6 +49,7 @@ import {
 import {
   assertUniquePersistedNodeIds,
   collectPersistedNodeIds,
+  generateFreshNodeId,
   remapSubtreeNodeIds,
 } from './builder-node-identity';
 
@@ -126,6 +135,19 @@ export type BuilderCommandBus = {
 
 let duplicateHistorySequence = 0;
 
+const OPEN_BEHAVIOR_REFERENCE_KEYS = [
+  'nodeId',
+  'formNodeId',
+  'labelNodeId',
+  'controlNodeId',
+  'targetNodeId',
+] as const;
+
+type OpenBehaviorEntry = {
+  owner: Component;
+  behavior: Record<string, unknown>;
+};
+
 type HistoryEntry = { set?: (key: string, value: unknown) => void };
 
 function getHistoryEntries(editor: Editor): HistoryEntry[] {
@@ -165,6 +187,202 @@ function definitionNodeType(
 ): BuilderNodeType | undefined {
   const type = definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
   return typeof type === 'string' && isBuilderNodeType(type) ? type : undefined;
+}
+
+function definitionOpenNodeType(
+  definition: ComponentDefinition,
+): OpenCompositionNodeType | undefined {
+  const attributes = definition.attributes ?? {};
+  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  return attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    typeof type === 'string' &&
+    isOpenCompositionNodeType(type)
+    ? type
+    : undefined;
+}
+
+function openNodeType(component: Component): OpenCompositionNodeType | undefined {
+  const attributes = component.getAttributes({ noStyle: true });
+  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  return attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    typeof type === 'string' &&
+    isOpenCompositionNodeType(type)
+    ? type
+    : undefined;
+}
+
+function openProps(component: Component): Record<string, unknown> | undefined {
+  const raw = component.getAttributes({ noStyle: true })[BUILDER_OPEN_PROPS_ATTRIBUTE];
+  if (typeof raw !== 'string') return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizedOpenValue(value: unknown, depth = 0): unknown {
+  if (depth > 8) throw new Error('Open Composition property nesting is too deep');
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return typeof value === 'string' ? sanitizeInlineText(value) : value;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value))
+      throw new Error('Open Composition numbers must be finite');
+    return value;
+  }
+  if (Array.isArray(value))
+    return value.map((item) => normalizedOpenValue(item, depth + 1));
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,119}$/.test(key)) {
+        throw new Error('Open Composition property keys are invalid');
+      }
+      result[key] = normalizedOpenValue(item, depth + 1);
+    }
+    return result;
+  }
+  throw new Error('Open Composition properties must be JSON values');
+}
+
+function updateOpenProperty(
+  component: Component,
+  property: string,
+  value: unknown,
+): boolean {
+  const type = openNodeType(component);
+  const current = openProps(component);
+  if (!type || !current || !/^[A-Za-z][A-Za-z0-9_-]{0,119}$/.test(property)) return false;
+  let nextValue: unknown;
+  try {
+    nextValue = normalizedOpenValue(value);
+  } catch {
+    return false;
+  }
+  const next = { ...current, [property]: nextValue };
+  const serialized = JSON.stringify(next);
+  if (serialized.length > 64 * 1024) return false;
+  const attributes = component.getAttributes({ noStyle: true });
+  const mirroredStringAttribute =
+    ['src', 'alt', 'href', 'target', 'name', 'type', 'placeholder'].includes(property) &&
+    typeof nextValue === 'string'
+      ? property
+      : undefined;
+  const mirroredBooleanAttribute =
+    ['required', 'disabled', 'checked'].includes(property) &&
+    typeof nextValue === 'boolean'
+      ? property
+      : undefined;
+  component.setAttributes({
+    ...attributes,
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: serialized,
+    ...(mirroredStringAttribute ? { [mirroredStringAttribute]: nextValue } : {}),
+    ...(mirroredBooleanAttribute && nextValue === true
+      ? { [mirroredBooleanAttribute]: 'true' }
+      : {}),
+  });
+  if (mirroredBooleanAttribute && nextValue === false) {
+    component.removeAttributes?.(mirroredBooleanAttribute);
+  }
+  if (['text', 'heading', 'label'].includes(type) && property === 'text') {
+    component.set('content', String(nextValue));
+  }
+  if ((type === 'button' || type === 'link') && property === 'label') {
+    component.set('content', String(nextValue));
+  }
+  updateOpenBehaviorForProperty(component, type, property, nextValue);
+  return true;
+}
+
+function updateOpenBehaviorForProperty(
+  component: Component,
+  type: OpenCompositionNodeType,
+  property: string,
+  value: unknown,
+): void {
+  const behaviorField =
+    type === 'form-field' && property === 'required'
+      ? 'required'
+      : (type === 'input' || type === 'textarea' || type === 'select') &&
+          property === 'type'
+        ? 'inputType'
+        : undefined;
+  if (!behaviorField) return;
+  const componentId = component.getAttributes({ noStyle: true })['data-payload-node-id'];
+  if (typeof componentId !== 'string') return;
+  let owner: Component | undefined = component;
+  while (owner) {
+    const raw = owner.getAttributes({ noStyle: true })[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE];
+    if (typeof raw === 'string') {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw) as unknown;
+      } catch {
+        parsed = undefined;
+      }
+      if (Array.isArray(parsed)) {
+        const next = parsed.map((candidate) => {
+          if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+            return candidate;
+          }
+          const behavior = candidate as Record<string, unknown>;
+          const matches =
+            behavior.kind === 'field' &&
+            (behavior.nodeId === componentId || behavior.controlNodeId === componentId);
+          if (!matches) return candidate;
+          if (behaviorField === 'required' && typeof value === 'boolean') {
+            return { ...behavior, required: value };
+          }
+          if (behaviorField === 'inputType' && typeof value === 'string') {
+            const inputType = value === 'tel' ? 'phone' : value;
+            if (
+              [
+                'text',
+                'email',
+                'phone',
+                'textarea',
+                'select',
+                'checkbox',
+                'radio',
+              ].includes(inputType)
+            ) {
+              return { ...behavior, inputType };
+            }
+          }
+          return candidate;
+        });
+        if (JSON.stringify(next) !== JSON.stringify(parsed)) {
+          owner.setAttributes({
+            ...owner.getAttributes({ noStyle: true }),
+            [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify(next),
+          });
+        }
+      }
+    }
+    owner = owner.parent();
+  }
+}
+
+function updateOpenPropertyPreview(
+  component: Component,
+  property: string,
+  value: unknown,
+): boolean {
+  if (!openNodeType(component) || !openProps(component)) return false;
+  if (!/^[A-Za-z][A-Za-z0-9_-]{0,119}$/.test(property)) return false;
+  try {
+    const serialized = JSON.stringify({
+      ...openProps(component),
+      [property]: normalizedOpenValue(value),
+    });
+    return typeof serialized === 'string' && serialized.length <= 64 * 1024;
+  } catch {
+    return false;
+  }
 }
 
 function canRemoveLiveNode(root: Component, node: Component): boolean {
@@ -208,10 +426,42 @@ function canInsertDefinition(
   definition: ComponentDefinition,
   slotName?: string,
 ): boolean {
-  const childType = definitionNodeType(definition);
+  const childType = definitionNodeType(definition) ?? definitionOpenNodeType(definition);
   // `droppable` is presentation behavior; command validation remains domain
   // driven and therefore also applies to Quick Add, Layers and keyboard paths.
   return Boolean(childType && canInsertLiveChild(parent, childType, undefined, slotName));
+}
+
+function isOpenCompositionRoot(root: Component): boolean {
+  return (
+    root.getAttributes({ noStyle: true })[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true'
+  );
+}
+
+/**
+ * Keep legacy pages lazy until an Open Composition recipe is actually used.
+ * This preserves the closed-widget editor contract for existing blocks while
+ * giving the new recipe a valid V8 document to append to.
+ */
+function promoteLegacyRootForOpenInsert(root: Component): boolean {
+  if (isOpenCompositionRoot(root)) return true;
+  try {
+    const legacyPayload = serializeGrapesComponent(root, 'page');
+    if ('documentKind' in legacyPayload || legacyPayload.version === 8) return true;
+    const definition = payloadToEditorComponent(legacyPayload, {
+      openCompositionMode: true,
+    });
+    root.setAttributes(definition.attributes ?? {});
+    const components = Array.isArray(definition.components)
+      ? definition.components
+      : definition.components
+        ? [definition.components]
+        : [];
+    root.components(components);
+    return isOpenCompositionRoot(root);
+  } catch {
+    return false;
+  }
 }
 
 function canInsertLiveType(
@@ -253,6 +503,184 @@ function componentIdentitySnapshot(component: Component): {
       .components()
       .models.map((child) => componentIdentitySnapshot(child)),
   };
+}
+
+function componentNodeId(component: Component): string | undefined {
+  const value = component.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function collectComponentNodeIds(component: Component): Set<string> {
+  const ids = new Set<string>();
+  component.onAll((current) => {
+    const id = componentNodeId(current);
+    if (id) ids.add(id);
+  });
+  return ids;
+}
+
+function isWithinComponent(ancestor: Component, candidate: Component): boolean {
+  let current: Component | undefined = candidate;
+  while (current) {
+    if (current === ancestor) return true;
+    current = current.parent();
+  }
+  return false;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parsedOpenBehaviors(component: Component): unknown[] | undefined {
+  const raw = component.getAttributes({ noStyle: true })[
+    BUILDER_OPEN_BEHAVIORS_ATTRIBUTE
+  ];
+  if (typeof raw !== 'string') return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function collectOpenBehaviors(root: Component): OpenBehaviorEntry[] {
+  const entries: OpenBehaviorEntry[] = [];
+  root.onAll((owner) => {
+    parsedOpenBehaviors(owner)?.forEach((candidate) => {
+      if (isRecord(candidate)) entries.push({ owner, behavior: candidate });
+    });
+  });
+  return entries;
+}
+
+function setOpenBehaviors(component: Component, behaviors: unknown[]): void {
+  component.setAttributes({
+    ...component.getAttributes({ noStyle: true }),
+    [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify(behaviors),
+  });
+}
+
+/** Removes or repairs behavior references after a live subtree is deleted. */
+function pruneOpenBehaviorsAfterRemoval(
+  root: Component,
+  removedNodeIds: ReadonlySet<string>,
+): void {
+  root.onAll((owner) => {
+    const behaviors = parsedOpenBehaviors(owner);
+    if (!behaviors) return;
+    let changed = false;
+    const next = behaviors.flatMap((candidate) => {
+      if (!isRecord(candidate)) return [candidate];
+
+      const nodeId = candidate.nodeId;
+      if (typeof nodeId === 'string' && removedNodeIds.has(nodeId)) {
+        changed = true;
+        return [];
+      }
+
+      if (
+        candidate.kind === 'field' &&
+        typeof candidate.formNodeId === 'string' &&
+        removedNodeIds.has(candidate.formNodeId)
+      ) {
+        changed = true;
+        return [];
+      }
+
+      const repaired = { ...candidate };
+      for (const key of OPEN_BEHAVIOR_REFERENCE_KEYS) {
+        if (key === 'nodeId' || key === 'formNodeId') continue;
+        const value = repaired[key];
+        if (typeof value === 'string' && removedNodeIds.has(value)) {
+          if (
+            key === 'targetNodeId' &&
+            candidate.kind === 'action' &&
+            (candidate.action === 'submit-form' || candidate.action === 'reset-form')
+          ) {
+            changed = true;
+            return [];
+          }
+          delete repaired[key];
+          changed = true;
+        }
+      }
+      return [repaired];
+    });
+    if (changed) setOpenBehaviors(owner, next);
+  });
+}
+
+function definitionChildren(definition: ComponentDefinition): ComponentDefinition[] {
+  const components = definition.components as unknown;
+  if (Array.isArray(components)) return components as ComponentDefinition[];
+  return isRecord(components) ? [components as ComponentDefinition] : [];
+}
+
+function buildComponentDefinitionIdMap(
+  source: Component,
+  definition: ComponentDefinition,
+  idMap: Map<string, string>,
+): void {
+  const sourceId = componentNodeId(source);
+  const definitionId = definition.attributes?.[BUILDER_NODE_ID_ATTRIBUTE];
+  if (sourceId && typeof definitionId === 'string') idMap.set(sourceId, definitionId);
+
+  const children = definitionChildren(definition);
+  source.components().models.forEach((child, index) => {
+    const childDefinition = children[index];
+    if (childDefinition) buildComponentDefinitionIdMap(child, childDefinition, idMap);
+  });
+}
+
+function duplicateOpenBehaviors(
+  root: Component,
+  source: Component,
+  safeDefinition: ComponentDefinition,
+): void {
+  const sourceNodeIds = collectComponentNodeIds(source);
+  if (sourceNodeIds.size === 0) return;
+
+  const idMap = new Map<string, string>();
+  buildComponentDefinitionIdMap(source, safeDefinition, idMap);
+  const entries = collectOpenBehaviors(root);
+  const reservedBehaviorIds = new Set(
+    entries.flatMap(({ behavior }) =>
+      typeof behavior.id === 'string' ? [behavior.id] : [],
+    ),
+  );
+  const cloned: Record<string, unknown>[] = [];
+
+  entries.forEach(({ owner, behavior }) => {
+    // Behaviors stored on the source subtree are already included in the
+    // definition and remapped by remapSubtreeNodeIds. Only clone behaviors
+    // owned by an ancestor/root outside that subtree.
+    if (isWithinComponent(source, owner)) return;
+    if (typeof behavior.nodeId !== 'string' || !sourceNodeIds.has(behavior.nodeId)) {
+      return;
+    }
+    const next = { ...behavior };
+    for (const key of OPEN_BEHAVIOR_REFERENCE_KEYS) {
+      const value = next[key];
+      if (typeof value === 'string') next[key] = idMap.get(value) ?? value;
+    }
+    const behaviorId = generateFreshNodeId('behavior', reservedBehaviorIds);
+    reservedBehaviorIds.add(behaviorId);
+    next.id = behaviorId;
+    cloned.push(next);
+  });
+
+  if (cloned.length === 0) return;
+  const existing = parsedOpenBehaviors(root);
+  if (existing) {
+    setOpenBehaviors(root, [...existing, ...cloned]);
+  } else {
+    // A valid Open Composition root normally has an explicit empty behavior
+    // list. Keeping this fallback makes a duplicate self-healing if an older
+    // editor snapshot omitted that empty list.
+    setOpenBehaviors(root, cloned);
+  }
 }
 
 function definitionFromComponent(component: Component): ComponentDefinition {
@@ -356,6 +784,9 @@ export function createEditorCommandBus(
       if (command.kind === 'set-property') {
         const node = getNode(editor, command.nodeId);
         if (!node) return false;
+        if (openNodeType(node)) {
+          return updateOpenPropertyPreview(node, command.property, command.value);
+        }
         const type = node.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
         if (!isBuilderNodeType(type)) return false;
         try {
@@ -412,6 +843,13 @@ export function executeEditorCommand(
 
   switch (command.kind) {
     case 'insert': {
+      if (
+        definitionOpenNodeType(command.definition) &&
+        !isOpenCompositionRoot(root) &&
+        !promoteLegacyRootForOpenInsert(root)
+      ) {
+        return { changed: false };
+      }
       const hasTarget = command.targetId !== undefined;
       const requestedTarget = command.targetId
         ? getNode(editor, command.targetId)
@@ -484,9 +922,11 @@ export function executeEditorCommand(
     case 'remove': {
       const node = getNode(editor, command.nodeId);
       if (!node || !canRemoveLiveNode(root, node)) return { changed: false };
+      const removedNodeIds = collectComponentNodeIds(node);
       const fallback = node.parent() ?? root;
       editor.select(node);
       editor.runCommand('core:component-delete');
+      pruneOpenBehaviorsAfterRemoval(root, removedNodeIds);
       return { changed: true, selection: fallback };
     }
     case 'duplicate': {
@@ -498,6 +938,7 @@ export function executeEditorCommand(
       const safeDefinition = definitionWithFreshIds(root, sourceDefinition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: node.index() + 1 });
+      duplicateOpenBehaviors(root, node, safeDefinition);
       const selection = created[0];
       if (selection) editor.select(selection);
       groupNewHistoryActions(editor, previousHistoryEntries);
@@ -552,6 +993,12 @@ export function executeEditorCommand(
     case 'set-property': {
       const node = getNode(editor, command.nodeId);
       if (!node) return { changed: false };
+      if (openNodeType(node)) {
+        const previousHistoryEntries = new Set(getHistoryEntries(editor));
+        const changed = updateOpenProperty(node, command.property, command.value);
+        if (changed) groupNewHistoryActions(editor, previousHistoryEntries);
+        return changed ? { changed: true, selection: node } : { changed: false };
+      }
       const type = node.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
       if (!isBuilderNodeType(type)) return { changed: false };
       const update = getComponentEditorCodec(type).resolvePropertyMutation(

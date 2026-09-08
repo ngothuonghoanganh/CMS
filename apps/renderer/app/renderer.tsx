@@ -59,6 +59,7 @@ import {
 import React, { Fragment, type CSSProperties, type ReactElement } from 'react';
 
 import { FormRenderer } from './form-renderer';
+import { OpenCompositionRenderer } from './open-composition-renderer';
 import { CountdownRuntime, ExtensionRuntimeBootstrap } from './extension-runtime';
 import { AccordionRuntime, TabsRuntime } from './core-interactive-runtime';
 import {
@@ -1154,6 +1155,14 @@ export function renderPage(payload: unknown, context: RenderContext = {}): React
   const parsed = PagePayloadSchema.safeParse(payload);
   if (!parsed.success) {
     return <RendererFallback />;
+  }
+
+  if (parsed.data.version === 8) {
+    return (
+      <div className="payload-page" style={resolvePageSurfaceStyle(context.designSystem)}>
+        <OpenCompositionRenderer payload={parsed.data} context={context} />
+      </div>
+    );
   }
 
   return (

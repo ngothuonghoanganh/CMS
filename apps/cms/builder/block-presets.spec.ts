@@ -35,6 +35,7 @@ describe('builder block presets', () => {
       'two-columns',
       'hero',
       'cta',
+      'contact-form',
     ]);
   });
 

@@ -14,8 +14,6 @@ import {
   PagePayloadSchema,
   PaginationSchema,
   normalizePagePath,
-  type FormProps,
-  type AnyPageNode,
   type IntegrationDelivery,
   type IntegrationDeliveryListQuery,
   type IntegrationDeliveryListResponse,
@@ -39,12 +37,12 @@ import type {
   DeliverySubmissionContext,
   IntegrationAdapter,
 } from './integrations/integration.types';
+import { findResolvedForm } from './open-composition-form';
 
 export const INTEGRATION_ADAPTERS = Symbol('INTEGRATION_ADAPTERS');
 export const DELIVERY_MAX_ATTEMPTS = 4;
 const DELIVERY_BATCH_SIZE = 20;
 
-type IntegrationFormNode = { id: string; type: 'form'; props: FormProps };
 const DELIVERY_LEASE_MS = 60_000;
 const RETRY_DELAYS_MS = [0, 30_000, 120_000, 600_000] as const;
 
@@ -363,7 +361,11 @@ export class IntegrationDispatcher implements OnModuleDestroy {
     if (!page || !version) throw new Error('Submission context no longer exists');
     const payload = PagePayloadSchema.safeParse(version.payload);
     const form = payload.success
-      ? findForm(payload.data.root, submission.formNodeId)
+      ? findResolvedForm(
+          payload.data.root,
+          submission.formNodeId,
+          payload.data.version === 8 ? payload.data.behaviors : [],
+        )
       : undefined;
     if (!form) throw new Error('Submission form context is invalid');
     const fieldsById = new Map(form.props.fields.map((field) => [field.id, field]));
@@ -418,18 +420,6 @@ export class IntegrationDispatcher implements OnModuleDestroy {
       updatedAt: record.updatedAt.toISOString(),
     });
   }
-}
-
-function findForm(
-  node: AnyPageNode,
-  formNodeId: string,
-): IntegrationFormNode | undefined {
-  if (node.type === 'form') return node.id === formNodeId ? node : undefined;
-  for (const child of node.children) {
-    const form = findForm(child, formNodeId);
-    if (form) return form;
-  }
-  return undefined;
 }
 
 function sanitizeError(value: string): string {

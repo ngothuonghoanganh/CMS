@@ -14,6 +14,9 @@ const REFERENCE_KEYS = new Set([
   'aria-labelledby',
   'for',
   'nodeId',
+  'formNodeId',
+  'labelNodeId',
+  'controlNodeId',
   'parentId',
   'sourceId',
   'targetId',
@@ -23,6 +26,7 @@ const EXTENSION_PROPS_ATTRIBUTES = new Set([
   'data-payload-countdown-props',
   'data-payload-extension-props',
 ]);
+const OPEN_BEHAVIORS_ATTRIBUTE = 'data-payload-open-behaviors';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -236,6 +240,28 @@ function remapReferences(
       }
     } catch {
       // The adapter will report malformed extension properties later.
+    }
+  }
+  if (typeof value === 'string' && key === OPEN_BEHAVIORS_ATTRIBUTE) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) {
+        const reservedBehaviorIds = new Set(idMap.values());
+        return JSON.stringify(
+          parsed.map((behavior) => {
+            const remapped = remapReferences(behavior, '', idMap);
+            if (!isRecord(remapped)) return remapped;
+            const behaviorId = generateFreshNodeId('behavior', reservedBehaviorIds);
+            reservedBehaviorIds.add(behaviorId);
+            return {
+              ...remapped,
+              id: behaviorId,
+            };
+          }),
+        );
+      }
+    } catch {
+      // The adapter will report malformed behavior metadata later.
     }
   }
   if (typeof value === 'string' && REFERENCE_KEYS.has(key)) {

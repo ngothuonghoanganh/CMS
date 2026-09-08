@@ -22,7 +22,6 @@ import {
   normalizePagePath,
   UpdateSubmissionRequestSchema,
   type FormField,
-  type AnyPageNode,
   type FormProps,
   type FormSubmission,
   type SubmissionListQuery,
@@ -49,26 +48,20 @@ import { IntegrationDispatcher } from './integration-dispatcher';
 import { AnalyticsService } from './analytics.service';
 import { platformLogger } from '../common/logging/platform-logger';
 import { EventBus } from '../extensions/event-bus';
+import { findResolvedForm, type ResolvedFormNode } from './open-composition-form';
 
 type ResolvedForm = {
   site: SiteDocument;
   page: PageDocument;
   version: PageVersionDocument;
-  form: AnyFormNode;
+  form: ResolvedFormNode;
 };
 
 type SubmissionContext = {
   site?: SiteDocument;
   page?: PageDocument;
   version?: PageVersionDocument;
-  form?: AnyFormNode;
-};
-
-type AnyFormNode = {
-  id: string;
-  type: 'form';
-  props: FormProps;
-  children: [];
+  form?: ResolvedFormNode;
 };
 
 type RateBucket = { startedAt: number; count: number };
@@ -349,7 +342,11 @@ export class SubmissionService {
     if (!version) throw this.publicNotFound();
     const payload = PagePayloadSchema.safeParse(version.payload);
     if (!payload.success) throw this.publicNotFound();
-    const form = findForm(payload.data.root, formNodeId);
+    const form = findResolvedForm(
+      payload.data.root,
+      formNodeId,
+      payload.data.version === 8 ? payload.data.behaviors : [],
+    );
     if (!form) throw this.publicNotFound();
     return { site, page: legacyPage, version, form };
   }
@@ -500,26 +497,17 @@ export class SubmissionService {
   }
 }
 
-function findForm(node: AnyPageNode, formNodeId: string): AnyFormNode | null {
-  if (node.type === 'form') {
-    return node.id === formNodeId
-      ? { id: node.id, type: 'form', props: node.props, children: [] }
-      : null;
-  }
-  for (const child of node.children) {
-    const form = findForm(child, formNodeId);
-    if (form) return form;
-  }
-  return null;
-}
-
 function findFormFromVersion(
   version: PageVersionDocument,
   formNodeId: string,
-): AnyFormNode | undefined {
+): ResolvedFormNode | undefined {
   const payload = PagePayloadSchema.safeParse(version.payload);
   return payload.success
-    ? (findForm(payload.data.root, formNodeId) ?? undefined)
+    ? findResolvedForm(
+        payload.data.root,
+        formNodeId,
+        payload.data.version === 8 ? payload.data.behaviors : [],
+      )
     : undefined;
 }
 

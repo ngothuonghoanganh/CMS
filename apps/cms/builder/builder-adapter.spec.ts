@@ -8,6 +8,8 @@ import {
   type PagePayloadV7,
   type ReusableComponentDocument,
   type SiteGlobalPayloadV1,
+  OpenCompositionPayloadSchema,
+  instantiateOpenCompositionRecipe,
 } from '@payload/contracts';
 
 import {
@@ -27,6 +29,8 @@ import {
   BUILDER_GLOBAL_PROPS_ATTRIBUTE,
   BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE,
   BUILDER_IDENTITY_NORMALIZED_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
+  BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   applyEditorPartViewportStyles,
   BuilderAdapterError,
   createBlockDefinition,
@@ -118,6 +122,74 @@ const payload: PagePayloadV1 = {
 };
 
 describe('builder adapter', () => {
+  it('round-trips an Open Composition recipe as real nested canvas nodes', () => {
+    const document = instantiateOpenCompositionRecipe(
+      'contact-form',
+      (source) => `fresh-${source}`,
+    );
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Open form page' },
+      root: document.root,
+      behaviors: document.behaviors,
+    });
+    const definition = payloadToEditorComponent(payload) as Record<string, unknown>;
+    const snapshot = snapshotFromEditorDefinition(definition);
+    const rootAttributes = definition.attributes as Record<string, unknown>;
+    expect(rootAttributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE]).toBe('true');
+    expect(rootAttributes[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]).toContain('submit-form');
+    expect(definition.components as Array<Record<string, unknown>>).toHaveLength(1);
+    expect(serializeEditorSnapshot(snapshot)).toEqual(payload);
+  });
+
+  it('migrates a legacy page to V8 only when page builder mode requests it', () => {
+    const legacy: PagePayloadV7 = {
+      version: 7,
+      metadata: { documentTitle: 'Legacy page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [],
+          },
+        ],
+      },
+    };
+    const definition = payloadToEditorComponent(legacy, { openCompositionMode: true });
+    const attributes = definition.attributes as Record<string, unknown>;
+    expect(attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE]).toBe('8');
+    expect(
+      serializeEditorSnapshot(snapshotFromEditorDefinition(definition)),
+    ).toMatchObject({ version: 8 });
+  });
+
+  it('promotes a new V1 page before an open recipe can be inserted', () => {
+    const legacy: PagePayloadV1 = {
+      version: 1,
+      metadata: { documentTitle: 'New page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [],
+      },
+    };
+    const definition = payloadToEditorComponent(legacy, {
+      openCompositionMode: true,
+    });
+    const attributes = definition.attributes as Record<string, unknown>;
+    expect(attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE]).toBe('true');
+    expect(attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE]).toBe('8');
+    expect(
+      serializeEditorSnapshot(snapshotFromEditorDefinition(definition)),
+    ).toMatchObject({ version: 8, root: { id: 'root', type: 'root' } });
+  });
+
   it('serializes linked instances as leaves while rendering source previews in the editor', () => {
     const reusableId = randomUUID();
     const source: ReusableComponentDocument = {

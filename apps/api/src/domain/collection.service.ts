@@ -30,6 +30,7 @@ import {
   normalizeCollectionSlug,
   queryOperatorsForFieldType,
   PAGE_COMPONENT_REGISTRY,
+  isPageComponentType,
   type Collection,
   type CollectionDefinition,
   type CollectionEntryListQuery,
@@ -1230,7 +1231,8 @@ export class CollectionService {
     visit(parsed.payload.root);
     for (const node of nodesById.values()) {
       if (node.type === 'collection-list') {
-        const query = queryById.get(node.props.queryId);
+        const queryId = (node.props as Record<string, unknown>).queryId;
+        const query = typeof queryId === 'string' ? queryById.get(queryId) : undefined;
         if (!query) {
           throw new BadRequestException({
             code: 'QUERY_NOT_FOUND',
@@ -1303,6 +1305,12 @@ export class CollectionService {
           code: 'BINDING_TARGET_NOT_FOUND',
           message: 'The binding target node was not found in the page composition',
         });
+      if (!isPageComponentType(targetNode.type)) {
+        throw new BadRequestException({
+          code: 'BINDING_TARGET_INVALID',
+          message: `${binding.targetProperty} is not a bindable property on ${targetNode.type}`,
+        });
+      }
       const targetProperty = PAGE_COMPONENT_REGISTRY[
         targetNode.type
       ].propertiesSchema.find((property) => property.key === binding.targetProperty);

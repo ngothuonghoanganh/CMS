@@ -1,10 +1,13 @@
 import type { Component } from 'grapesjs';
 import {
   canInsertIntoSlot,
+  canComposeChild,
+  isOpenCompositionNodeType,
   resolveSlotForChild,
   resolveSlotsForChild,
   type ComponentSlotDefinition,
   type ComponentSlotOccupancy,
+  type OpenCompositionNodeType,
 } from '@payload/contracts';
 
 import {
@@ -36,6 +39,21 @@ export function payloadNodeType(component: Component): BuilderNodeType | undefin
   return isBuilderNodeType(type) ? type : undefined;
 }
 
+/** Returns the V8 node type when the component belongs to an Open Composition tree. */
+export function openPayloadNodeType(
+  component: Component,
+): BuilderNodeType | OpenCompositionNodeType | undefined {
+  const attributes = component.getAttributes({ noStyle: true });
+  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  if (
+    attributes['data-payload-open-composition'] === 'true' &&
+    isOpenCompositionNodeType(type)
+  ) {
+    return type;
+  }
+  return isBuilderNodeType(type) ? type : undefined;
+}
+
 export function liveSlotsForChild(
   parent: Component | undefined,
   childType: BuilderNodeType,
@@ -55,12 +73,19 @@ export { resolveSlotForChild };
 
 export function canInsertLiveChild(
   parent: Component,
-  childType: BuilderNodeType,
+  childType: BuilderNodeType | OpenCompositionNodeType,
   excluded?: Component,
   slotName?: string,
 ): boolean {
+  const parentAttributes = parent.getAttributes({ noStyle: true });
+  if (parentAttributes['data-payload-open-composition'] === 'true') {
+    const parentType = parentAttributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+    return isOpenCompositionNodeType(parentType) && isOpenCompositionNodeType(childType)
+      ? canComposeChild(parentType, childType)
+      : false;
+  }
   const parentType = payloadNodeType(parent);
-  if (!parentType) return false;
+  if (!parentType || !isBuilderNodeType(childType)) return false;
   const slot = slotName
     ? resolveSlotsForChild(parentType, childType).find(
         (candidate) => candidate.name === slotName,

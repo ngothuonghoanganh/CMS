@@ -5,6 +5,12 @@ import {
   PagePayloadSchema,
   PagePayloadV7Schema,
   PagePayloadV1Schema,
+  OpenCompositionPayloadSchema,
+  OPEN_COMPOSITION_REGISTRY,
+  CompositionStyleSchema,
+  migratePagePayloadToOpenComposition,
+  instantiateOpenCompositionRecipe,
+  isOpenCompositionNodeType,
   ReusableComponentDocumentSchema,
   ReusableInstancePropsSchema,
   PageNodePartsStyleV7Schema,
@@ -66,6 +72,10 @@ import {
   type ResolvedNavigationItem,
   type NavigationPagePaths,
   type NavigationItem,
+  type OpenCompositionNode,
+  type OpenCompositionBehavior,
+  type OpenCompositionPayload,
+  type CompositionStyle,
 } from '@payload/contracts';
 import type { Component, ComponentDefinition } from 'grapesjs';
 import { builderExtensionElement } from './builder-extension-registry';
@@ -109,6 +119,9 @@ export const BUILDER_IDENTITY_NORMALIZED_IDS_ATTRIBUTE =
   'data-payload-identity-normalized-ids';
 /** Editor-only slot ownership marker; it is intentionally omitted from payload props. */
 export const BUILDER_NODE_SLOT_ATTRIBUTE = 'data-payload-slot';
+export const BUILDER_OPEN_COMPOSITION_ATTRIBUTE = 'data-payload-open-composition';
+export const BUILDER_OPEN_PROPS_ATTRIBUTE = 'data-payload-open-props';
+export const BUILDER_OPEN_BEHAVIORS_ATTRIBUTE = 'data-payload-open-behaviors';
 
 export type BuilderViewport = 'desktop' | 'tablet' | 'mobile';
 export type BuilderNode =
@@ -1340,19 +1353,150 @@ function componentDefinitionForNode(
   throw new BuilderAdapterError('Unsupported builder node type');
 }
 
+function openCompositionTagName(node: OpenCompositionNode): string {
+  switch (node.type) {
+    case 'root':
+      return 'main';
+    case 'section':
+      return 'section';
+    case 'heading':
+      return `h${Math.min(6, Math.max(1, Number(node.props.level) || 2))}`;
+    case 'text':
+      return 'p';
+    case 'image':
+      return 'img';
+    case 'link':
+      return 'a';
+    case 'button':
+      return 'button';
+    case 'form':
+      return 'form';
+    case 'label':
+      return 'label';
+    case 'input':
+      return 'input';
+    case 'textarea':
+      return 'textarea';
+    case 'select':
+      return 'select';
+    case 'divider':
+      return 'hr';
+    case 'video':
+      return 'video';
+    default:
+      return 'div';
+  }
+}
+
+function openCompositionNodeDefinition(
+  node: OpenCompositionNode,
+  metadata: PagePayloadV1['metadata'] | undefined,
+  payloadVersion: 8,
+  behaviors?: readonly OpenCompositionBehavior[],
+): ComponentDefinition {
+  const props = node.props as Record<string, unknown>;
+  const tagName = openCompositionTagName(node);
+  const attributes: Record<string, string> = {
+    [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
+    [BUILDER_NODE_TYPE_ATTRIBUTE]: node.type,
+    [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: jsonAttribute(props),
+    ...(node.type === 'root'
+      ? {
+          [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: String(payloadVersion),
+          ...(metadata ? { [BUILDER_METADATA_ATTRIBUTE]: jsonAttribute(metadata) } : {}),
+          ...(behaviors
+            ? { [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: jsonAttribute(behaviors) }
+            : {}),
+        }
+      : {}),
+  };
+  if (node.type === 'image') {
+    if (typeof props.src === 'string') attributes.src = props.src;
+    if (typeof props.alt === 'string') attributes.alt = props.alt;
+  }
+  if (node.type === 'link' || node.type === 'button') {
+    if (typeof props.href === 'string') attributes.href = props.href;
+    if (typeof props.target === 'string') attributes.target = props.target;
+  }
+  if (node.type === 'input' || node.type === 'textarea' || node.type === 'select') {
+    if (typeof props.name === 'string') attributes.name = props.name;
+    if (typeof props.type === 'string') attributes.type = props.type;
+    if (typeof props.placeholder === 'string') attributes.placeholder = props.placeholder;
+  }
+  if (node.style) {
+    attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE] = jsonAttribute(node.style);
+  }
+  return {
+    type: node.type === 'text' ? 'text' : node.type === 'image' ? 'image' : 'default',
+    tagName,
+    name: OPEN_COMPOSITION_REGISTRY[node.type].label,
+    attributes,
+    content:
+      node.type === 'text' || node.type === 'heading' || node.type === 'label'
+        ? typeof props.text === 'string'
+          ? props.text
+          : undefined
+        : node.type === 'button' || node.type === 'link'
+          ? typeof props.label === 'string'
+            ? props.label
+            : typeof props.text === 'string'
+              ? props.text
+              : undefined
+          : undefined,
+    ...(tagName === 'img' || tagName === 'input' ? { void: true } : {}),
+    droppable:
+      OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0 ? true : false,
+    draggable: false,
+    removable: node.type !== 'root',
+    copyable: node.type !== 'root',
+    selectable: true,
+    editable: ['text', 'heading', 'label'].includes(node.type),
+    style: node.style
+      ? styleBlockToEditorStyle(node.style.base as PageNodeStyle['base'], undefined)
+      : undefined,
+    components: node.children.map((child) =>
+      openCompositionNodeDefinition(child, undefined, payloadVersion),
+    ),
+  };
+}
+
 export function payloadToEditorComponent(
   payload: PagePayload | SiteGlobalPayloadV1,
   options: {
     reusableRuntime?: readonly ReusableRuntime[];
     designSystem?: SiteDesignSystem;
     projectionContext?: BuilderProjectionContext;
+    /** Migrate legacy closed Form widgets into the V8 composition graph on hydration. */
+    openCompositionMode?: boolean;
   } = {},
 ): ComponentDefinition {
-  const repaired = repairDuplicatePersistedNodeIdsWithReport(payload);
+  if (!('documentKind' in payload) && payload.version === 8) {
+    return openCompositionNodeDefinition(
+      payload.root,
+      payload.metadata,
+      8,
+      payload.behaviors,
+    );
+  }
+  if (!('documentKind' in payload) && options.openCompositionMode) {
+    const migrated = migratePagePayloadToOpenComposition(
+      payload as unknown as Parameters<typeof migratePagePayloadToOpenComposition>[0],
+    );
+    return openCompositionNodeDefinition(
+      migrated.root,
+      migrated.metadata,
+      8,
+      migrated.behaviors,
+    );
+  }
+  const legacyPayload = payload as
+    Exclude<PagePayload, { version: 8 }> | SiteGlobalPayloadV1;
+  const repaired = repairDuplicatePersistedNodeIdsWithReport(legacyPayload);
   const definition = componentDefinitionForNode(
-    repaired.value.root,
+    repaired.value.root as BuilderNode,
     repaired.value.metadata,
-    repaired.value.version,
+    repaired.value.version as 1 | 2 | 3 | 4 | 5 | 6 | 7,
     options.reusableRuntime ?? [],
     options.designSystem,
     options.projectionContext,
@@ -1364,6 +1508,28 @@ export function payloadToEditorComponent(
       ...(definition.attributes ?? {}),
       [BUILDER_IDENTITY_NORMALIZED_ATTRIBUTE]: 'true',
       [BUILDER_IDENTITY_NORMALIZED_IDS_ATTRIBUTE]: JSON.stringify(repaired.duplicateIds),
+    },
+  };
+}
+
+/**
+ * Creates a fresh, fully composable recipe subtree. Recipe behaviors are kept
+ * on the subtree until it is inserted; the serializer folds them into the
+ * page root behavior list without exposing editor metadata as node props.
+ */
+export function openCompositionRecipeToEditorDefinition(
+  recipeId: string,
+): ComponentDefinition {
+  const document = instantiateOpenCompositionRecipe(recipeId);
+  const firstChild = document.root.children[0];
+  if (!firstChild)
+    throw new BuilderAdapterError(`Recipe "${recipeId}" has no root child`);
+  const definition = openCompositionNodeDefinition(firstChild, undefined, 8);
+  return {
+    ...definition,
+    attributes: {
+      ...(definition.attributes ?? {}),
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: jsonAttribute(document.behaviors),
     },
   };
 }
@@ -2164,6 +2330,9 @@ function nodeFromSnapshotInternal(
     BUILDER_NODE_TYPE_ATTRIBUTE,
     path,
   );
+  if (snapshot.attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true') {
+    return openCompositionNodeFromSnapshot(snapshot, path, id, type);
+  }
   const style = readNodeStyle(snapshot, path);
 
   if (!isPageNodeType(type)) {
@@ -2613,6 +2782,98 @@ function nodeFromSnapshotInternal(
   throw new BuilderAdapterError('Unsupported editor node type');
 }
 
+function readOpenNodeStyle(
+  snapshot: BuilderEditorSnapshot,
+  path: string[],
+): CompositionStyle | undefined {
+  const raw = snapshot.attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE];
+  if (raw !== undefined && raw !== '') {
+    if (typeof raw !== 'string') {
+      throw new BuilderAdapterError('Open composition style metadata must be JSON text', [
+        ...path,
+        BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
+      ]);
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(raw) as unknown;
+    } catch {
+      throw new BuilderAdapterError('Open composition style metadata is not valid JSON', [
+        ...path,
+        BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
+      ]);
+    }
+    const parsed = CompositionStyleSchema.safeParse(value);
+    if (!parsed.success) {
+      throw new BuilderAdapterError(
+        parsed.error.issues.map((issue) => issue.message).join('; '),
+        [...path, 'style'],
+      );
+    }
+    return parsed.data;
+  }
+  const base = editorStyleToPayloadStyle(snapshot.style, path);
+  const definedBase = Object.fromEntries(
+    Object.entries(base).filter(([, value]) => value !== undefined),
+  ) as CompositionStyle['base'];
+  return Object.keys(definedBase).length > 0 ? { base: definedBase } : undefined;
+}
+
+function openCompositionNodeFromSnapshot(
+  snapshot: BuilderEditorSnapshot,
+  path: string[],
+  id: string,
+  type: string,
+): Record<string, unknown> {
+  if (!isOpenCompositionNodeType(type)) {
+    throw new BuilderAdapterError(`Unsupported open composition node type "${type}"`, [
+      ...path,
+      'type',
+    ]);
+  }
+  const rawProps = readJsonAttribute(
+    snapshot.attributes,
+    BUILDER_OPEN_PROPS_ATTRIBUTE,
+    path,
+  );
+  if (!isObject(rawProps)) {
+    throw new BuilderAdapterError('Open composition node props must be an object', [
+      ...path,
+      'props',
+    ]);
+  }
+  const props = { ...rawProps };
+  if (type === 'text' || type === 'heading' || type === 'label') {
+    props.text = sanitizeInlineText(snapshot.content);
+  }
+  if ((type === 'button' || type === 'link') && snapshot.children.length === 0) {
+    const content = sanitizeInlineText(snapshot.content);
+    if (content) props.label = content;
+  }
+  if (type === 'image') {
+    props.src = readStringAttribute(snapshot.attributes, 'src', path);
+    props.alt = readStringAttribute(snapshot.attributes, 'alt', path, false) ?? '';
+  }
+  if (type === 'input' || type === 'textarea' || type === 'select') {
+    const name = readStringAttribute(snapshot.attributes, 'name', path, false);
+    const inputType = readStringAttribute(snapshot.attributes, 'type', path, false);
+    const placeholder = readStringAttribute(
+      snapshot.attributes,
+      'placeholder',
+      path,
+      false,
+    );
+    if (name) props.name = name;
+    if (inputType) props.type = inputType;
+    if (placeholder) props.placeholder = placeholder;
+  }
+  const style = readOpenNodeStyle(snapshot, path);
+  const children = snapshot.children.map((child, index) =>
+    nodeFromSnapshot(child, [...path, 'children', String(index)]),
+  );
+  return { id, type, props, ...(style ? { style } : {}), children };
+}
+
 function readNodePartsStyle(
   snapshot: BuilderEditorSnapshot,
   type: BuilderNodeType,
@@ -2850,7 +3111,68 @@ export function normalizeLegacyBuiltInPresetStyles(payload: PagePayload): PagePa
   return root === payload.root ? payload : ({ ...payload, root } as PagePayload);
 }
 
+function serializeOpenCompositionSnapshot(
+  snapshot: BuilderEditorSnapshot,
+): OpenCompositionPayload {
+  const root = nodeFromSnapshot(snapshot, ['root']);
+  try {
+    assertUniquePersistedNodeIds(root);
+  } catch (error) {
+    throw new BuilderAdapterError(
+      error instanceof Error ? error.message : 'Persisted node identity is invalid',
+      ['root'],
+    );
+  }
+  const behaviorCandidates: unknown[] = [];
+  let behaviorAttributeFound = false;
+  const collectBehaviors = (current: BuilderEditorSnapshot): void => {
+    const raw = current.attributes[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE];
+    if (typeof raw === 'string') {
+      behaviorAttributeFound = true;
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) behaviorCandidates.push(...parsed);
+      } catch {
+        throw new BuilderAdapterError('Open composition behaviors are not valid JSON', [
+          'root',
+          'behaviors',
+        ]);
+      }
+    }
+    current.children.forEach(collectBehaviors);
+  };
+  collectBehaviors(snapshot);
+  if (!behaviorAttributeFound) {
+    throw new BuilderAdapterError('Open composition behaviors are missing', [
+      'root',
+      'behaviors',
+    ]);
+  }
+  const parsed = OpenCompositionPayloadSchema.safeParse({
+    version: 8,
+    metadata: readMetadata(snapshot.attributes),
+    root,
+    behaviors: behaviorCandidates,
+  });
+  if (!parsed.success) {
+    throw new BuilderAdapterError(
+      parsed.error.issues
+        .map((issue) => `${issue.path.join('.') || 'payload'}: ${issue.message}`)
+        .join('; '),
+      ['payload'],
+    );
+  }
+  return parsed.data;
+}
+
 export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePayload {
+  if (
+    snapshot.attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' ||
+    snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE] === '8' ||
+    snapshot.attributes[BUILDER_PAYLOAD_VERSION_ATTRIBUTE] === 8
+  ) {
+    return serializeOpenCompositionSnapshot(snapshot);
+  }
   const root = nodeFromSnapshot(snapshot, ['root']);
   try {
     assertUniquePersistedNodeIds(root);

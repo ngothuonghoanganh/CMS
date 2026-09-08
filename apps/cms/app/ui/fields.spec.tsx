@@ -20,5 +20,6 @@ describe('shared field metadata', () => {
     expect(markup).toContain('ui-field-required');
     expect(markup).toContain('ui-field-recommended');
     expect(markup).toContain('required=""');
+    expect(markup).toContain('aria-label="Button text"');
   });
 });

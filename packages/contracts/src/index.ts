@@ -20,6 +20,11 @@ import {
   PageQuerySchema,
   dynamicPathBase,
 } from './collections';
+import {
+  OpenCompositionPayloadSchema,
+  type OpenCompositionNode,
+  type OpenCompositionPayload,
+} from './open-composition';
 
 export const apiVersion = 'v1' as const;
 
@@ -4334,7 +4339,16 @@ export function resolvePageStyleValue(
 }
 
 export type AnyPageNode =
-  PageNode | PageNodeV2 | PageNodeV3 | PageNodeV4 | PageNodeV5 | PageNodeV6 | PageNodeV7;
+  | PageNode
+  | PageNodeV2
+  | PageNodeV3
+  | PageNodeV4
+  | PageNodeV5
+  | PageNodeV6
+  | PageNodeV7
+  | OpenCompositionNode;
+export const PagePayloadV8Schema = OpenCompositionPayloadSchema;
+export type PagePayloadV8 = OpenCompositionPayload;
 export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV1Schema,
   PagePayloadV2Schema,
@@ -4343,6 +4357,7 @@ export const PagePayloadSchema = z.discriminatedUnion('version', [
   PagePayloadV5Schema,
   PagePayloadV6Schema,
   PagePayloadV7Schema,
+  PagePayloadV8Schema,
 ]);
 export type PagePayload = z.infer<typeof PagePayloadSchema>;
 
@@ -4805,6 +4820,7 @@ export const PagePreviewReadyMessageSchema = z
   .strict();
 
 export * from './component-registry';
+export * from './open-composition';
 export * from './page-runtime';
 export * from './style-registry';
 

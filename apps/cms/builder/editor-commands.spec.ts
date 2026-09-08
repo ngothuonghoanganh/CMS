@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
+  BUILDER_OPEN_PROPS_ATTRIBUTE,
+  BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
 } from './builder-adapter';
 import {
@@ -46,12 +49,14 @@ class FakeComponent {
             )
             .map((child) => fromDefinition(child))
         : [];
-      return new FakeComponent(
+      const created = new FakeComponent(
         String(attributes[BUILDER_NODE_ID_ATTRIBUTE]),
         String(attributes[BUILDER_NODE_TYPE_ATTRIBUTE]),
         children,
         String(value.content ?? ''),
       );
+      created.setAttributes(attributes);
+      return created;
     };
     const child =
       definition instanceof FakeComponent ? definition : fromDefinition(definition);
@@ -189,6 +194,113 @@ function ids(parent: FakeComponent): string[] {
 }
 
 describe('editor command boundary', () => {
+  it('updates Open Composition props through the command bus', () => {
+    const root = new FakeComponent('root', 'root');
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({}),
+      'data-payload-open-behaviors': JSON.stringify([
+        {
+          id: 'field-behavior',
+          kind: 'field',
+          nodeId: 'field',
+          formNodeId: 'form',
+          fieldKey: 'email',
+          inputType: 'email',
+          required: true,
+        },
+      ]),
+    });
+    const text = new FakeComponent('text', 'text', [], 'Original');
+    text.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: 'Original' }),
+    });
+    root.append(text);
+    const field = new FakeComponent('field', 'form-field');
+    field.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ required: true }),
+    });
+    root.append(field);
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'text',
+        property: 'text',
+        value: 'Updated',
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(text.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE] as string),
+    ).toEqual({
+      text: 'Updated',
+    });
+    expect(text.get('content')).toBe('Updated');
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'field',
+        property: 'required',
+        value: false,
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(root.getAttributes()['data-payload-open-behaviors'] as string)[0],
+    ).toMatchObject({ required: false });
+  });
+
+  it('updates behavior metadata stored on an inserted recipe subtree', () => {
+    const form = new FakeComponent('form', 'form');
+    form.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ formKey: 'contact' }),
+    });
+    const field = new FakeComponent('field', 'form-field');
+    field.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ required: true }),
+    });
+    form.append(field);
+    const recipeRoot = new FakeComponent('recipe', 'section', [form]);
+    recipeRoot.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        {
+          id: 'field-behavior',
+          kind: 'field',
+          nodeId: 'field',
+          formNodeId: 'form',
+          fieldKey: 'email',
+          inputType: 'email',
+          required: true,
+        },
+      ]),
+    });
+    const root = new FakeComponent('root', 'root', [recipeRoot]);
+    root.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'field',
+        property: 'required',
+        value: false,
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(
+        recipeRoot.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string,
+      )[0],
+    ).toMatchObject({ required: false });
+  });
+
   it('inserts before and after a target through the command bus', () => {
     const first = new FakeComponent('first', 'text');
     const second = new FakeComponent('second', 'text');
@@ -291,6 +403,102 @@ describe('editor command boundary', () => {
       duplicate?.children[0]?.children[0]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
     ).not.toBe('text-source');
     expect(editor.getSelected()).toBe(duplicate);
+  });
+
+  it('prunes Open Composition behavior references when a node is removed', () => {
+    const label = new FakeComponent('label', 'label');
+    label.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const control = new FakeComponent('control', 'input');
+    control.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const field = new FakeComponent('field', 'form-field', [label, control]);
+    field.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const form = new FakeComponent('form', 'form', [field]);
+    form.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root', 'root', [form]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        {
+          id: 'field-behavior',
+          kind: 'field',
+          nodeId: 'field',
+          formNodeId: 'form',
+          fieldKey: 'email',
+          inputType: 'email',
+          required: true,
+          labelNodeId: 'label',
+          controlNodeId: 'control',
+        },
+      ]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.dispatch({ kind: 'remove', nodeId: 'label' }).changed).toBe(true);
+    expect(
+      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string)[0],
+    ).toMatchObject({
+      nodeId: 'field',
+      formNodeId: 'form',
+      controlNodeId: 'control',
+    });
+    expect(
+      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string)[0]
+        .labelNodeId,
+    ).toBeUndefined();
+
+    expect(bus.dispatch({ kind: 'remove', nodeId: 'control' }).changed).toBe(true);
+    expect(
+      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string)[0]
+        .controlNodeId,
+    ).toBeUndefined();
+
+    expect(bus.dispatch({ kind: 'remove', nodeId: 'field' }).changed).toBe(true);
+    expect(
+      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string),
+    ).toEqual([]);
+  });
+
+  it('duplicates Open Composition behaviors for a duplicated subtree', () => {
+    const button = new FakeComponent('source-button', 'button');
+    button.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ label: 'Toggle' }),
+    });
+    const section = new FakeComponent('section', 'section', [button]);
+    section.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        {
+          id: 'toggle-behavior',
+          kind: 'action',
+          nodeId: 'source-button',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'source-button',
+        },
+      ]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.dispatch({ kind: 'duplicate', nodeId: 'source-button' }).changed).toBe(
+      true,
+    );
+    const duplicate = section.children[1];
+    expect(duplicate).toBeDefined();
+    const duplicateId = duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE];
+    const behaviors = JSON.parse(
+      root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string,
+    ) as Array<Record<string, unknown>>;
+    expect(behaviors).toHaveLength(2);
+    expect(behaviors[1]).toMatchObject({
+      nodeId: duplicateId,
+      targetNodeId: duplicateId,
+    });
+    expect(behaviors[1]?.id).not.toBe('toggle-behavior');
   });
 
   it('applies a global preset inside the existing global root', () => {

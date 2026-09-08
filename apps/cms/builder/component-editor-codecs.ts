@@ -18,7 +18,9 @@ import {
   NavigationViewPropsSchema,
   SiteBrandPropsSchema,
   ReusableInstancePropsSchema,
+  isOpenCompositionNodeType,
   type FormProps,
+  type OpenCompositionNodeType,
   type PageComponentType,
   type PageNodeStyle,
   type PageNodeStyleV7,
@@ -42,6 +44,8 @@ import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
+  BUILDER_OPEN_PROPS_ATTRIBUTE,
   readEditorPartsStyle,
   readEditorResponsiveStyle,
   sanitizeInlineText,
@@ -65,6 +69,8 @@ export type ComponentSelectionSnapshot = {
   partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7>;
   form?: FormProps;
   countdown?: { targetAt: string; label: string };
+  /** Present when the live component is part of the V8 Open Composition graph. */
+  openComposition?: { nodeType: OpenCompositionNodeType };
 };
 
 export type ComponentEditorCodec = {
@@ -95,6 +101,21 @@ function parsedJson<T>(
     return result.success ? result.data : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function openCompositionPropsFromAttributes(
+  attributes: Record<string, string>,
+): Record<string, unknown> {
+  const raw = attributes[BUILDER_OPEN_PROPS_ATTRIBUTE];
+  if (typeof raw !== 'string') return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
   }
 }
 
@@ -517,6 +538,75 @@ export function selectionFromComponentCodec(
   const attributes = component.getAttributes({ noStyle: true });
   const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
   const id = attributes[BUILDER_NODE_ID_ATTRIBUTE];
+  if (
+    attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    typeof type === 'string' &&
+    isOpenCompositionNodeType(type) &&
+    typeof id === 'string'
+  ) {
+    const props = openCompositionPropsFromAttributes(attributes);
+    const content = sanitizeInlineText(
+      component.getEl()?.textContent ?? String(component.get('content') ?? ''),
+    );
+    if (type === 'text' || type === 'heading' || type === 'label') props.text = content;
+    if (
+      (type === 'button' || type === 'link') &&
+      content &&
+      component.components().models.length === 0
+    ) {
+      props.label = content;
+    }
+    const children = component.components().models.flatMap((child) => {
+      const childAttributes = child.getAttributes({ noStyle: true });
+      const childType = childAttributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+      const childId = childAttributes[BUILDER_NODE_ID_ATTRIBUTE];
+      if (
+        typeof childType !== 'string' ||
+        !isOpenCompositionNodeType(childType) ||
+        typeof childId !== 'string'
+      ) {
+        return [];
+      }
+      const knownLegacyType = Object.prototype.hasOwnProperty.call(
+        PAGE_COMPONENT_REGISTRY,
+        childType,
+      );
+      return [
+        {
+          id: childId,
+          type: knownLegacyType
+            ? (childType as PageComponentType)
+            : ('extension' as const),
+          label: knownLegacyType
+            ? PAGE_COMPONENT_REGISTRY[childType as PageComponentType].label
+            : childType
+                .split('-')
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(' '),
+        },
+      ];
+    });
+    const knownLegacyType = Object.prototype.hasOwnProperty.call(
+      PAGE_COMPONENT_REGISTRY,
+      type,
+    );
+    const componentType = knownLegacyType
+      ? (type as PageComponentType)
+      : ('extension' as const);
+    const responsiveStyle = readEditorResponsiveStyle(component);
+    return {
+      id,
+      type: componentType,
+      props,
+      children,
+      ...(type === 'text' || type === 'heading' || type === 'label'
+        ? { text: content }
+        : {}),
+      ...(type === 'button' || type === 'link' ? { label: content } : {}),
+      ...(responsiveStyle ? { style: responsiveStyle } : {}),
+      openComposition: { nodeType: type },
+    };
+  }
   if (
     typeof type !== 'string' ||
     !Object.prototype.hasOwnProperty.call(PAGE_COMPONENT_REGISTRY, type) ||

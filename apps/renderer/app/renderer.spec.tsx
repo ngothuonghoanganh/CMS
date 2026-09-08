@@ -9,6 +9,8 @@ import {
   SITE_GLOBAL_COMPONENT_TYPES,
   type SiteGlobalPayloadV1,
   type PagePayloadV1,
+  OpenCompositionPayloadSchema,
+  instantiateOpenCompositionRecipe,
 } from '@payload/contracts';
 
 import { PAGE_RENDERER_REGISTRY, renderLayoutExtension, renderPage } from './renderer';
@@ -72,6 +74,26 @@ function createPayload(): PagePayloadV1 {
 }
 
 describe('PagePayloadV1 renderer', () => {
+  it('renders Open Composition nodes and keeps form fields as real controls', () => {
+    const document = instantiateOpenCompositionRecipe(
+      'contact-form',
+      (source) => `fresh-${source}`,
+    );
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Open form page' },
+      root: document.root,
+      behaviors: document.behaviors,
+    });
+    const markup = renderToStaticMarkup(renderPage(payload));
+    expect(markup).toContain('data-payload-node-type="form-field"');
+    expect(markup).toContain('name="name"');
+    expect(markup).toContain('name="email"');
+    expect(markup).toContain('<textarea');
+    expect(markup).toContain('data-payload-node-type="button"');
+    expect(markup).toContain('Submit');
+  });
+
   it('has an exhaustive production renderer for every registered component', () => {
     expect(Object.keys(PAGE_RENDERER_REGISTRY).sort()).toEqual(
       Object.keys(PAGE_COMPONENT_REGISTRY).sort(),

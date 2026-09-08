@@ -3,6 +3,8 @@
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_GROUPS,
+  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  OPEN_COMPOSITION_REGISTRY,
   isComponentPropertyVisible,
   type Asset,
   type Collection,
@@ -12,6 +14,7 @@ import {
   type PageCompositionFields,
   type Page,
   type PageQuery,
+  type OpenCompositionNodeType,
   type SiteDesignSystem,
   type StyleTokenReference,
   queryOperatorsForFieldType,
@@ -91,6 +94,225 @@ type BuilderInspectorProps = {
   allowCurrentEntry?: boolean | undefined;
   contentOnly?: boolean;
 };
+
+function openCompositionNodeLabel(type: OpenCompositionNodeType): string {
+  return OPEN_COMPOSITION_REGISTRY[type].label;
+}
+
+function OpenCompositionInspector({
+  selected,
+  viewport,
+  inspectorTab,
+  onInspectorTabChange,
+  updateSelectedProperty,
+  updateSelectedStyle,
+  resetSelectedStyle,
+  onSelectNode,
+  onRemoveStructuralChild,
+  onMoveStructuralChild,
+  onDuplicateStructuralChild,
+  openSections,
+  onToggleSection,
+  contentOnly,
+}: Pick<
+  BuilderInspectorProps,
+  | 'selected'
+  | 'viewport'
+  | 'inspectorTab'
+  | 'onInspectorTabChange'
+  | 'updateSelectedProperty'
+  | 'updateSelectedStyle'
+  | 'resetSelectedStyle'
+  | 'onSelectNode'
+  | 'onRemoveStructuralChild'
+  | 'onMoveStructuralChild'
+  | 'onDuplicateStructuralChild'
+  | 'openSections'
+  | 'onToggleSection'
+  | 'contentOnly'
+>) {
+  const nodeType = selected.openComposition?.nodeType;
+  if (!nodeType) return null;
+  const identityProps = new Set(
+    nodeType === 'form' ? ['formKey'] : nodeType === 'form-field' ? ['fieldKey'] : [],
+  );
+  const primitiveProps = Object.entries(selected.props)
+    .filter(([, value]) => {
+      return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+    })
+    .filter(([property]) => !identityProps.has(property));
+  const styleProperties = Object.entries(PAGE_STYLE_PROPERTY_BY_EDITOR_KEY);
+
+  return (
+    <div className="builder-inspector">
+      <div aria-label="Inspector tabs" className="builder-inspector-tabs" role="tablist">
+        {(['content', 'style', 'settings'] as const).map((tab) => (
+          <button
+            aria-label={
+              tab === 'settings' ? 'Settings' : tab === 'style' ? 'Style' : 'Content'
+            }
+            aria-selected={inspectorTab === tab}
+            className={inspectorTab === tab ? 'is-active' : ''}
+            key={tab}
+            onClick={() => onInspectorTabChange(tab)}
+            role="tab"
+            type="button"
+          >
+            {tab === 'style' ? 'Style' : tab === 'settings' ? 'Settings' : 'Content'}
+          </button>
+        ))}
+      </div>
+
+      {inspectorTab === 'content' ? (
+        <>
+          <InspectorSection
+            label={openCompositionNodeLabel(nodeType)}
+            onToggle={(open) => onToggleSection('content', open)}
+            open={openSections.content}
+          >
+            {primitiveProps.length > 0 ? (
+              <div className="builder-inspector-fields">
+                {primitiveProps.map(([property, value]) => (
+                  <label className="builder-inspector-field" key={property}>
+                    <span>{property}</span>
+                    {typeof value === 'boolean' ? (
+                      <input
+                        checked={value}
+                        onChange={(event) =>
+                          updateSelectedProperty(property, event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                    ) : (
+                      <input
+                        onChange={(event) =>
+                          updateSelectedProperty(
+                            property,
+                            typeof value === 'number'
+                              ? Number(event.target.value)
+                              : event.target.value,
+                          )
+                        }
+                        type={typeof value === 'number' ? 'number' : 'text'}
+                        value={value === null ? '' : String(value)}
+                      />
+                    )}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="muted small">This node has no scalar properties.</p>
+            )}
+          </InspectorSection>
+          {selected.children.length > 0 ? (
+            <InspectorSection label="Structure" onToggle={() => undefined} open>
+              <div className="builder-structural-editor">
+                {selected.children.map((child, index) => (
+                  <div className="builder-structure-item" key={child.id}>
+                    <button
+                      className="button button-ghost button-small"
+                      onClick={() => onSelectNode(child.id)}
+                      type="button"
+                    >
+                      {child.label}
+                    </button>
+                    <span className="builder-structure-item-actions">
+                      <button
+                        aria-label={`Move ${child.label} up`}
+                        className="button button-ghost button-small"
+                        disabled={index === 0}
+                        onClick={() => onMoveStructuralChild(child.id, 'up')}
+                        type="button"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        aria-label={`Move ${child.label} down`}
+                        className="button button-ghost button-small"
+                        disabled={index === selected.children.length - 1}
+                        onClick={() => onMoveStructuralChild(child.id, 'down')}
+                        type="button"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        aria-label={`Duplicate ${child.label}`}
+                        className="button button-ghost button-small"
+                        onClick={() => onDuplicateStructuralChild(child.id)}
+                        type="button"
+                      >
+                        Copy
+                      </button>
+                      <button
+                        aria-label={`Remove ${child.label}`}
+                        className="button button-ghost button-small"
+                        onClick={() => onRemoveStructuralChild(child.id)}
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </InspectorSection>
+          ) : null}
+        </>
+      ) : null}
+
+      {!contentOnly && inspectorTab === 'style' ? (
+        <InspectorSection
+          label="Style"
+          onToggle={(open) => onToggleSection('layout', open)}
+          open={openSections.layout}
+        >
+          <div className="builder-inspector-fields">
+            {styleProperties.map(([property, definition]) => {
+              const resolved = resolveInspectorStyleValue(
+                selected.style,
+                property,
+                viewport,
+                undefined,
+              );
+              const value = resolved.effectiveValue ?? '';
+              return (
+                <label className="builder-inspector-field" key={property}>
+                  <span>{definition.payloadKey}</span>
+                  <input
+                    onChange={(event) =>
+                      updateSelectedStyle(property, event.target.value)
+                    }
+                    value={value}
+                  />
+                  {resolved.authoredValue !== undefined ? (
+                    <button
+                      aria-label={`Reset ${definition.payloadKey}`}
+                      className="button button-small button-ghost builder-reset-override"
+                      onClick={() => resetSelectedStyle(property)}
+                      type="button"
+                    >
+                      Reset
+                    </button>
+                  ) : null}
+                </label>
+              );
+            })}
+          </div>
+        </InspectorSection>
+      ) : null}
+
+      {!contentOnly && inspectorTab === 'settings' ? (
+        <InspectorSection label="Advanced" onToggle={() => undefined} open>
+          <div className="builder-inspector-advanced">
+            <span className="muted small">Node ID</span>
+            <code>{selected.id}</code>
+            <span className="muted small">Open Composition node: {nodeType}</span>
+          </div>
+        </InspectorSection>
+      ) : null}
+    </div>
+  );
+}
 
 const inspectorStyleSections: readonly InspectorStyleSection[] = (
   Object.entries(PAGE_STYLE_PROPERTY_GROUPS) as Array<
@@ -716,7 +938,7 @@ function BindingEditor({
   );
 }
 
-export function BuilderInspector({
+function LegacyBuilderInspector({
   workspaceId,
   selected,
   viewport,
@@ -1208,4 +1430,28 @@ export function BuilderInspector({
       ) : null}
     </div>
   );
+}
+
+export function BuilderInspector(props: BuilderInspectorProps) {
+  if (props.selected.openComposition) {
+    return (
+      <OpenCompositionInspector
+        contentOnly={props.contentOnly ?? false}
+        inspectorTab={props.inspectorTab}
+        onDuplicateStructuralChild={props.onDuplicateStructuralChild}
+        onInspectorTabChange={props.onInspectorTabChange}
+        onMoveStructuralChild={props.onMoveStructuralChild}
+        onRemoveStructuralChild={props.onRemoveStructuralChild}
+        onSelectNode={props.onSelectNode}
+        onToggleSection={props.onToggleSection}
+        openSections={props.openSections}
+        resetSelectedStyle={props.resetSelectedStyle}
+        selected={props.selected}
+        updateSelectedProperty={props.updateSelectedProperty}
+        updateSelectedStyle={props.updateSelectedStyle}
+        viewport={props.viewport}
+      />
+    );
+  }
+  return <LegacyBuilderInspector {...props} />;
 }

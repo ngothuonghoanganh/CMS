@@ -4,6 +4,7 @@ import {
   BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
 } from './builder-adapter';
 import {
   moveNodeByIntent,
@@ -115,6 +116,28 @@ describe('builder placement engine', () => {
     expect(
       resolveNodePlacement(asComponent(root), intent('child', 'parent', 'inside')).valid,
     ).toBe(expected);
+  });
+
+  it('uses the Open Composition registry for primitive node movement', () => {
+    const root = new FakeComponent('root', 'root');
+    root.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const stack = new FakeComponent('stack', 'stack');
+    stack.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const first = new FakeComponent('first', 'text');
+    first.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const second = new FakeComponent('second', 'heading');
+    second.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    root.append(stack);
+    stack.append(first);
+    stack.append(second);
+
+    expect(
+      moveNodeByIntent(asComponent(root), intent('second', 'first', 'before')).valid,
+    ).toBe(true);
+    expect(stack.children.map((node) => node.attrs[BUILDER_NODE_ID_ATTRIBUTE])).toEqual([
+      'second',
+      'first',
+    ]);
   });
 
   it('moves siblings after the intended target without index shifting', () => {

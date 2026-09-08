@@ -8,7 +8,6 @@ import {
   UpdateFormIntegrationBindingRequestSchema,
   type FormIntegrationBinding,
   type FormIntegrationBindingListResponse,
-  type AnyPageNode,
   type UpdateFormIntegrationBindingRequest,
 } from '@payload/contracts';
 import { randomUUID } from 'node:crypto';
@@ -20,6 +19,7 @@ import {
 import { IntegrationRecord } from '../persistence/schemas/integration.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import { findResolvedForm } from './open-composition-form';
 
 @Injectable()
 export class FormIntegrationBindingService {
@@ -64,7 +64,14 @@ export class FormIntegrationBindingService {
       })
       .exec();
     const payload = version ? PagePayloadSchema.safeParse(version.payload) : null;
-    if (!payload?.success || !findForm(payload.data.root, formNodeId)) {
+    if (
+      !payload?.success ||
+      !findResolvedForm(
+        payload.data.root,
+        formNodeId,
+        payload.data.version === 8 ? payload.data.behaviors : [],
+      )
+    ) {
       throw new NotFoundException({
         code: 'FORM_NOT_FOUND',
         message: 'The form is not present in the current draft',
@@ -119,9 +126,4 @@ export class FormIntegrationBindingService {
       updatedAt: record.updatedAt.toISOString(),
     });
   }
-}
-
-function findForm(node: AnyPageNode, formNodeId: string): boolean {
-  if (node.type === 'form') return node.id === formNodeId;
-  return node.children.some((child) => findForm(child, formNodeId));
 }

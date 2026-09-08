@@ -7,6 +7,8 @@ import {
   BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
   BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
+  type BuilderNodeType,
 } from './builder-adapter';
 import {
   canInsertNode,
@@ -20,6 +22,7 @@ import {
   resolveNodePlacement,
   type MoveNodeIntent,
 } from './builder-placement';
+import { canInsertLiveChild, openPayloadNodeType } from './builder-structural-domain';
 import { resolveSlotsForChild } from '@payload/contracts';
 
 export { isBuilderNodeType } from './builder-adapter';
@@ -79,7 +82,7 @@ export function isEditorOnlyPreview(component: Component): boolean {
 export function payloadAncestor(component: Component | undefined): Component | undefined {
   let current = component;
   while (current) {
-    if (payloadNodeType(current)) return current;
+    if (openPayloadNodeType(current)) return current;
     current = current.parent();
   }
   return undefined;
@@ -120,18 +123,29 @@ export function selectedMoveIntent(
   direction: SelectedMoveDirection,
 ): MoveNodeIntent | undefined {
   const sourceId = payloadNodeId(selected);
-  const sourceType = payloadNodeType(selected);
+  const sourceType = openPayloadNodeType(selected);
   if (!sourceId || !sourceType || sourceType === 'root') return undefined;
 
   const parent = selected.parent();
   if (!parent) return undefined;
-  const parentType = payloadNodeType(parent);
+  const parentType = openPayloadNodeType(parent);
+  const sourceIsOpen =
+    selected.getAttributes({ noStyle: true })[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] ===
+    'true';
+  const parentIsOpen =
+    parent.getAttributes({ noStyle: true })[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] ===
+    'true';
   const structuralSlot =
     parentType &&
-    resolveSlotsForChild(parentType, sourceType).find((slot) => slot.structural);
+    !parentIsOpen &&
+    !sourceIsOpen &&
+    resolveSlotsForChild(
+      parentType as BuilderNodeType,
+      sourceType as BuilderNodeType,
+    ).find((slot) => slot.structural);
   const siblings = parent
     .components()
-    .models.filter((item) => Boolean(payloadNodeType(item)));
+    .models.filter((item) => Boolean(openPayloadNodeType(item)));
   const slotSiblings = structuralSlot
     ? siblings.filter((item) => {
         const ownedSlot = item.getAttributes({ noStyle: true })[
@@ -164,7 +178,18 @@ export function selectedMoveIntent(
 
   const previous = slotSiblings[sourceIndex - 1];
   const previousId = previous && payloadNodeId(previous);
-  if (!previousId || !canInsertNode(payloadNodeType(previous) ?? 'text', sourceType)) {
+  const previousType = previous && openPayloadNodeType(previous);
+  const canIndent =
+    sourceIsOpen && parentIsOpen
+      ? Boolean(previous && canInsertLiveChild(previous, sourceType))
+      : Boolean(
+          previousType &&
+          canInsertNode(
+            previousType as Parameters<typeof canInsertNode>[0],
+            sourceType as Parameters<typeof canInsertNode>[1],
+          ),
+        );
+  if (!previousId || !canIndent) {
     return undefined;
   }
   return { nodeId: sourceId, targetNodeId: previousId, position: 'inside' };

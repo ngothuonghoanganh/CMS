@@ -80,6 +80,61 @@ describe('builder node identity service', () => {
     expect(props.attachmentId).not.toBe('44444444-4444-4444-8444-444444444444');
   });
 
+  it('remaps open behavior references and identities with a cloned subtree', () => {
+    const value = {
+      id: 'section-source',
+      type: 'section',
+      attributes: {
+        'data-payload-open-behaviors': JSON.stringify([
+          {
+            id: 'behavior-source',
+            kind: 'field',
+            nodeId: 'field-source',
+            formNodeId: 'form-source',
+            fieldKey: 'email',
+            inputType: 'email',
+            required: true,
+            labelNodeId: 'label-source',
+            controlNodeId: 'input-source',
+          },
+        ]),
+      },
+      children: [
+        {
+          id: 'form-source',
+          type: 'form',
+          children: [
+            {
+              id: 'field-source',
+              type: 'form-field',
+              children: [
+                { id: 'label-source', type: 'label', children: [] },
+                { id: 'input-source', type: 'input', children: [] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const remapped = remapSubtreeNodeIds(value, new Set());
+    const behavior = JSON.parse(
+      remapped.attributes['data-payload-open-behaviors'],
+    )[0] as {
+      id: string;
+      nodeId: string;
+      formNodeId: string;
+      labelNodeId: string;
+      controlNodeId: string;
+    };
+
+    expect(behavior.id).not.toBe('behavior-source');
+    expect(behavior.nodeId).toBe(remapped.children[0]?.children[0]?.id);
+    expect(behavior.formNodeId).not.toBe('form-source');
+    expect(behavior.labelNodeId).not.toBe('label-source');
+    expect(behavior.controlNodeId).not.toBe('input-source');
+    assertUniquePersistedNodeIds(remapped);
+  });
+
   it('repairs duplicate hydrated IDs while preserving the first node and references', () => {
     const value = {
       id: 'root',

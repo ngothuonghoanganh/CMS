@@ -1,7 +1,11 @@
 import type { ComponentDefinition } from 'grapesjs';
 import type { ComponentBuilderPreview } from '@payload/contracts';
 
-import { createBlockDefinition, type BuilderBlockType } from './builder-adapter';
+import {
+  createBlockDefinition,
+  openCompositionRecipeToEditorDefinition,
+  type BuilderBlockType,
+} from './builder-adapter';
 import { resolveBuilderPreview } from './builder-preview-model';
 
 export type BlockPresetId =
@@ -10,7 +14,8 @@ export type BlockPresetId =
   | 'vertical-stack'
   | 'two-columns'
   | 'hero'
-  | 'cta';
+  | 'cta'
+  | 'contact-form';
 
 export type GlobalPresetId =
   | 'header-brand-menu-cta'
@@ -35,7 +40,7 @@ export type BuilderBlockDefinition =
       kind: 'preset';
       id: BlockPresetId;
       label: string;
-      category: 'layout';
+      category: 'layout' | 'content' | 'conversion';
       keywords: readonly string[];
       description: string;
       preview: ComponentBuilderPreview;
@@ -128,6 +133,10 @@ function createCta(): ComponentDefinition {
   ]);
 }
 
+function createContactForm(): ComponentDefinition {
+  return openCompositionRecipeToEditorDefinition('contact-form');
+}
+
 export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
   BuilderBlockDefinition,
   { kind: 'preset' }
@@ -191,6 +200,16 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     description: 'A focused conversion section with supporting copy and a button.',
     preview: resolveBuilderPreview(createCta(), 'cta'),
     create: createCta,
+  },
+  {
+    kind: 'preset',
+    id: 'contact-form',
+    label: 'Contact Form',
+    category: 'conversion',
+    keywords: ['form', 'contact', 'fields', 'conversion', 'recipe'],
+    description: 'A composable form with editable fields and a submit action.',
+    preview: resolveBuilderPreview(createContactForm(), 'contact-form'),
+    create: createContactForm,
   },
 ];
 

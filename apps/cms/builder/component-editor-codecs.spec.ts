@@ -5,6 +5,8 @@ import {
   BUILDER_GLOBAL_PROPS_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
+  BUILDER_OPEN_PROPS_ATTRIBUTE,
   BUILDER_QUOTE_PROPS_ATTRIBUTE,
   BUILDER_RESPONSIVE_STYLE_ATTRIBUTE,
 } from './builder-adapter';
@@ -133,6 +135,35 @@ describe('component editor codecs', () => {
         asComponent(new FakeComponent(attrs('unknown', 'unknown'))),
       ),
     ).toBeNull();
+  });
+
+  it('exposes V8 primitive nodes to the shared inspector selection codec', () => {
+    const input = new FakeComponent(
+      attrs('email-control', 'input', {
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+          name: 'email',
+          type: 'email',
+          required: true,
+        }),
+      }),
+    );
+    const field = new FakeComponent(
+      attrs('email-field', 'form-field', {
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ fieldKey: 'email' }),
+      }),
+      '',
+      [input],
+    );
+
+    expect(selectionFromComponentCodec(asComponent(field))).toMatchObject({
+      id: 'email-field',
+      type: 'extension',
+      openComposition: { nodeType: 'form-field' },
+      props: { fieldKey: 'email' },
+      children: [{ id: 'email-control', type: 'extension', label: 'Input' }],
+    });
   });
 
   it('promotes V6 accessibility edits and normalizes one-open accordions atomically', () => {

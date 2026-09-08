@@ -634,8 +634,15 @@ function cloneTemplateSnapshot(
       props:
         node.type === 'collection-list'
           ? {
-              ...node.props,
-              queryId: queryIds.get(node.props.queryId) ?? node.props.queryId,
+              ...(node.props as Record<string, unknown>),
+              ...(typeof (node.props as Record<string, unknown>).queryId === 'string'
+                ? {
+                    queryId:
+                      queryIds.get(
+                        (node.props as Record<string, unknown>).queryId as string,
+                      ) ?? (node.props as Record<string, unknown>).queryId,
+                  }
+                : {}),
             }
           : node.props,
       children: node.children.map(remapNode),

@@ -24,15 +24,24 @@ function extensionPlacements(root: AnyPageNode): Placement[] {
   while (pending.length > 0) {
     const node = pending.pop();
     if (!node) continue;
+    const props = node.props as Record<string, unknown>;
     if (node.type === 'countdown') {
       result.push({
         extensionId: ExtensionIds.DemoBuilder,
-        ...(node.props.attachmentId ? { attachmentId: node.props.attachmentId } : {}),
+        ...(typeof props.attachmentId === 'string'
+          ? { attachmentId: props.attachmentId }
+          : {}),
       });
     } else if (node.type === 'extension') {
+      if (typeof props.extensionId !== 'string') {
+        pending.push(...node.children);
+        continue;
+      }
       result.push({
-        extensionId: node.props.extensionId,
-        ...(node.props.attachmentId ? { attachmentId: node.props.attachmentId } : {}),
+        extensionId: props.extensionId,
+        ...(typeof props.attachmentId === 'string'
+          ? { attachmentId: props.attachmentId }
+          : {}),
       });
     }
     pending.push(...node.children);
