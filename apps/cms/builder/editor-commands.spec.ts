@@ -7,13 +7,13 @@ import {
   BUILDER_OPEN_PROPS_ATTRIBUTE,
   BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   createEditorCommandBus,
   executeEditorCommand,
   type EditorCommand,
 } from './editor-commands';
-import { createGlobalPresetDefinition } from './block-presets';
+import { createGlobalPresetDefinition } from './builder-block/block-presets';
 import {
   assertUniquePersistedNodeIds,
   collectPersistedNodeIds,

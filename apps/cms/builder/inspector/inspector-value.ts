@@ -7,7 +7,7 @@ import {
   type StyleTokenReference,
 } from '@payload/contracts';
 
-import type { BuilderViewport } from '../builder-adapter';
+import type { BuilderViewport } from '../builder-block/builder-adapter';
 
 /** The value shown by an Inspector control for a responsive property. */
 export type ResolvedInspectorValue = {

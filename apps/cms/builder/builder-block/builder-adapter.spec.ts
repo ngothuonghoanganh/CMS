@@ -51,12 +51,12 @@ import {
   sanitizeInlineText,
   snapshotFromEditorDefinition,
 } from './builder-adapter';
-import { isBuilderNodeType } from './builder-interaction';
+import { isBuilderNodeType } from '../builder-interaction';
 import {
   assertUniquePersistedNodeIds,
   collectPersistedNodeIds,
   remapSubtreeNodeIds,
-} from './builder-node-identity';
+} from '../builder-node-identity';
 
 const payload: PagePayloadV1 = {
   version: 1 as const,

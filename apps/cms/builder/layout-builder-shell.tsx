@@ -44,9 +44,9 @@ import {
   GLOBAL_FOOTER_PRESET_REGISTRY,
   GLOBAL_HEADER_PRESET_REGISTRY,
   type BuilderInsertable,
-} from './block-presets';
-import { BuilderBlockCard } from './builder-block-catalog';
-import { type BuilderViewport } from './builder-adapter';
+} from './builder-block/block-presets';
+import { BuilderBlockCard } from './builder-block/builder-block-catalog';
+import { type BuilderViewport } from './builder-block/builder-adapter';
 import {
   BUILDER_VIEWPORTS,
   GrapesEditor,

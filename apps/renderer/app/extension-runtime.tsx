@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, type CSSProperties } from 'react';
 
 type CountdownRuntimeProps = {
   label: string;
+  labelStyle?: CSSProperties | undefined;
   targetAt: string;
+  timerStyle?: CSSProperties | undefined;
 };
 
 export function ExtensionRuntimeBootstrap({
@@ -24,7 +26,12 @@ export function ExtensionRuntimeBootstrap({
   return null;
 }
 
-export function CountdownRuntime({ label, targetAt }: CountdownRuntimeProps) {
+export function CountdownRuntime({
+  label,
+  labelStyle,
+  targetAt,
+  timerStyle,
+}: CountdownRuntimeProps) {
   const [remaining, setRemaining] = useState(() => formatRemaining(targetAt));
 
   useEffect(() => {
@@ -36,7 +43,12 @@ export function CountdownRuntime({ label, targetAt }: CountdownRuntimeProps) {
 
   return (
     <div data-extension-runtime="countdown.runtime">
-      <span>{label}</span> <time dateTime={targetAt}>{remaining}</time>
+      <span data-payload-part="label" style={labelStyle}>
+        {label}
+      </span>{' '}
+      <time data-payload-part="timer" dateTime={targetAt} style={timerStyle}>
+        {remaining}
+      </time>
     </div>
   );
 }

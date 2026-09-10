@@ -36,7 +36,7 @@ import {
   BUILDER_COLLECTION_LIST_PROPS_ATTRIBUTE,
   sanitizeInlineText,
 } from './builder-adapter';
-import type { EditorCommand } from './editor-commands';
+import type { EditorCommand } from '../editor-commands';
 
 /** The intentionally small set of editor operations understood by the command bus. */
 export type EditorPropertyUpdate =

@@ -5,7 +5,7 @@ import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   moveNodeByIntent,
   resolveNodePlacement,

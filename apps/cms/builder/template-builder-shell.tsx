@@ -32,9 +32,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { templatePath } from '../app/cms-routes';
 import { ApiClientError, api } from '../app/lib/api';
 import { useConfirm } from '../app/ui/surfaces';
-import { type BuilderInsertable } from './block-presets';
+import { type BuilderInsertable } from './builder-block/block-presets';
 import { BUILT_IN_TEMPLATE_REGISTRY } from './template-registry';
-import { BuilderBlockCard } from './builder-block-catalog';
+import { BuilderBlockCard } from './builder-block/builder-block-catalog';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
 import {
   BuilderInspector,
@@ -58,7 +58,7 @@ import {
   type SelectedBuilderNode,
 } from './grapes-editor';
 import { PageMinimap, type BuilderCanvasState } from './builder-minimap';
-import type { BuilderViewport } from './builder-adapter';
+import type { BuilderViewport } from './builder-block/builder-adapter';
 
 type TemplateBuilderShellProps = {
   workspaceId: string;

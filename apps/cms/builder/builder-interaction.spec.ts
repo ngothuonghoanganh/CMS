@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
-import { isEditableTarget } from './builder-interaction';
+import { BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE } from './builder-block/builder-adapter';
+import { isEditableTarget, isEditorOnlyPreview } from './builder-interaction';
+
+type ComponentStub = {
+  getAttributes: () => Record<string, unknown>;
+  parent: () => ComponentStub | undefined;
+};
+
+function component(
+  attributes: Record<string, unknown>,
+  parent?: ComponentStub,
+): ComponentStub {
+  return {
+    getAttributes: () => attributes,
+    parent: () => parent,
+  };
+}
 
 describe('builder keyboard target guard', () => {
   it('recognizes native form controls and semantic textboxes', () => {
@@ -38,5 +54,16 @@ describe('builder keyboard target guard', () => {
     } as unknown as EventTarget;
 
     expect(isEditableTarget(element)).toBe(false);
+  });
+
+  it('keeps persisted children inside semantic preview wrappers visible to Layers', () => {
+    const tabPanelPreview = component({ [BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE]: 'true' });
+    const nestedButton = component(
+      { 'data-payload-node-type': 'button', 'data-payload-node-id': 'cta' },
+      tabPanelPreview,
+    );
+
+    expect(isEditorOnlyPreview(tabPanelPreview as never)).toBe(true);
+    expect(isEditorOnlyPreview(nestedButton as never)).toBe(false);
   });
 });

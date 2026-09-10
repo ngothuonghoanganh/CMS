@@ -36,16 +36,16 @@ import {
   type BuilderViewport,
   type BuilderBlockType,
   type BuilderNodeType,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   applyEditorPropertyUpdate,
   getComponentEditorCodec,
-} from './component-editor-codecs';
+} from './builder-block/component-editor-codecs';
 import {
   canInsertLiveChild,
   liveSlotForChild,
   liveSlotOccupancy,
-} from './builder-structural-domain';
+} from './builder-block/builder-structural-domain';
 import {
   assertUniquePersistedNodeIds,
   collectPersistedNodeIds,

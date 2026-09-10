@@ -89,7 +89,7 @@ import {
   editorPageDocumentToReusableDocument,
   type BuilderBlockType,
   type BuilderViewport,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   BUILDER_PANEL_DEFAULT_WIDTHS,
   normalizePanelWidths,
@@ -106,15 +106,23 @@ import {
   type BlockPresetId,
   type GlobalPresetId,
   type BuilderInsertable,
-} from './block-presets';
-import { isBuilderExtensionAvailableForPage } from './builder-extension-registry';
+} from './builder-block/block-presets';
+import { isBuilderExtensionAvailableForPage } from './builder-block/builder-extension-registry';
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
 import { saveStatusAfterAcknowledgement } from './builder-save';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
 import { QuickAddOverlay } from './canvas/quick-add-overlay';
-import { BuilderBlockCard, BuilderBlockPreview } from './builder-block-catalog';
+import {
+  BuilderBlockCard,
+  BuilderBlockPreview,
+} from './builder-block/builder-block-catalog';
+import {
+  isSelectedStyleTarget,
+  styleTargetsForComponent,
+  type BuilderStyleTarget,
+} from './builder-block/component-parts';
 import { BUILT_IN_TEMPLATE_REGISTRY } from './template-registry';
-import { resolveBuilderPreview } from './builder-preview-model';
+import { resolveBuilderPreview } from './builder-block/builder-preview-model';
 import { pageDocumentSignature } from './page-composition';
 import {
   BuilderInspector,
@@ -296,8 +304,11 @@ function renderLayerNodes(
   visibleNodeIds: ReadonlySet<string> | null,
   parentId: string | undefined,
   selectedId: string | undefined,
+  selectedStyleTarget: BuilderStyleTarget | null,
   onSelect: (id: string) => void,
+  onSelectStyleTarget: (nodeId: string, partName?: string) => void,
   onToggle: (id: string) => void,
+  onToggleStyleTargets: (id: string) => void,
   onKeyDown: (
     node: BuilderCanvasNode,
     event: ReactKeyboardEvent<HTMLButtonElement>,
@@ -307,36 +318,56 @@ function renderLayerNodes(
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => void,
   collapsedIds: Set<string>,
+  expandedStyleTargetNodeIds: Set<string>,
   draggingId: string | null,
   dropIntent: MoveNodeIntent | null,
   dropInvalid: boolean,
   invalidNodeIds: ReadonlySet<string>,
   focusableId: string | undefined,
+  stylePartQuery: string,
 ): ReactNode {
   return (childrenByParent.get(parentId) ?? [])
     .filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id))
     .map((node) => {
-      const hasChildren = (childrenByParent.get(node.id) ?? []).some(
+      const structuralChildren = (childrenByParent.get(node.id) ?? []).some(
         (child) => !visibleNodeIds || visibleNodeIds.has(child.id),
       );
+      const normalizedPartQuery = stylePartQuery.trim().toLowerCase();
+      const styleTargets = styleTargetsForComponent(node.type).filter(
+        (target) =>
+          !normalizedPartQuery ||
+          node.label.toLowerCase().includes(normalizedPartQuery) ||
+          node.type.toLowerCase().includes(normalizedPartQuery) ||
+          target.label.toLowerCase().includes(normalizedPartQuery) ||
+          (target.partName ?? 'block').toLowerCase().includes(normalizedPartQuery),
+      );
+      const hasChildren = structuralChildren || styleTargets.length > 0;
+      const isExpanded = !collapsedIds.has(node.id) || Boolean(normalizedPartQuery);
+      const styleTargetsExpanded =
+        expandedStyleTargetNodeIds.has(node.id) || Boolean(normalizedPartQuery);
       const children =
-        hasChildren && !collapsedIds.has(node.id)
+        structuralChildren && isExpanded
           ? renderLayerNodes(
               nodes,
               childrenByParent,
               visibleNodeIds,
               node.id,
               selectedId,
+              selectedStyleTarget,
               onSelect,
+              onSelectStyleTarget,
               onToggle,
+              onToggleStyleTargets,
               onKeyDown,
               onDragStart,
               collapsedIds,
+              expandedStyleTargetNodeIds,
               draggingId,
               dropIntent,
               dropInvalid,
               invalidNodeIds,
               focusableId,
+              stylePartQuery,
             )
           : null;
       const dropClass =
@@ -405,6 +436,54 @@ function renderLayerNodes(
               ) : null}
             </button>
           </div>
+          {isExpanded && styleTargets.length > 0 ? (
+            <div className="builder-layer-style-targets" role="group">
+              <button
+                aria-expanded={styleTargetsExpanded}
+                aria-label={`${styleTargetsExpanded ? 'Collapse' : 'Expand'} style targets for ${node.label}`}
+                className="builder-layer-style-toggle"
+                onClick={() => onToggleStyleTargets(node.id)}
+                style={{ paddingInlineStart: (node.depth + 1) * 12 + 24 }}
+                type="button"
+              >
+                <Icon
+                  name={styleTargetsExpanded ? 'chevronDown' : 'chevronRight'}
+                  size={12}
+                />
+                <span>Styles</span>
+                <span className="builder-layer-style-count">{styleTargets.length}</span>
+              </button>
+              {styleTargetsExpanded
+                ? styleTargets.map((target) => {
+                    const targetIsSelected = isSelectedStyleTarget(
+                      selectedStyleTarget,
+                      node.id,
+                      target.partName,
+                    );
+                    return (
+                      <button
+                        aria-label={`Style ${target.label} in ${node.label}`}
+                        aria-selected={targetIsSelected}
+                        className={`builder-layer-style-target${
+                          targetIsSelected ? ' selected' : ''
+                        }`}
+                        key={target.partName ?? 'block'}
+                        onClick={() => onSelectStyleTarget(node.id, target.partName)}
+                        role="treeitem"
+                        style={{ paddingInlineStart: (node.depth + 1) * 12 + 42 }}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="builder-layer-style-icon">
+                          ◌
+                        </span>
+                        <span className="builder-layer-style-label">{target.label}</span>
+                        <span className="builder-layer-style-badge">Style</span>
+                      </button>
+                    );
+                  })
+                : null}
+            </div>
+          ) : null}
           {children ? <div className="builder-layer-children">{children}</div> : null}
         </div>
       );
@@ -496,6 +575,8 @@ export default function BuilderShell({
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [focusPartName, setFocusPartName] = useState<string | undefined>(undefined);
+  const [selectedStyleTarget, setSelectedStyleTarget] =
+    useState<BuilderStyleTarget | null>(null);
   const [canvasState, setCanvasState] = useState<BuilderCanvasState | null>(null);
   const [viewport, setViewport] = useState<BuilderViewport>('desktop');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('content');
@@ -522,6 +603,9 @@ export default function BuilderShell({
   const [collapsedLayerIds, setCollapsedLayerIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [expandedStyleTargetNodeIds, setExpandedStyleTargetNodeIds] = useState<
+    Set<string>
+  >(() => new Set());
   const [layerDraggingId, setLayerDraggingId] = useState<string | null>(null);
   const [layerDropIntent, setLayerDropIntent] = useState<MoveNodeIntent | null>(null);
   const [layerDropValidation, setLayerDropValidation] = useState<{
@@ -561,6 +645,7 @@ export default function BuilderShell({
   const validationCoordinatorRef = useRef<BuilderValidationCoordinator | null>(null);
   const documentKindRef = useRef<BuilderDocumentKind>('page');
   const editingReusableIdRef = useRef<string | null>(initialReusableId ?? null);
+  const selectedStyleTargetRef = useRef<BuilderStyleTarget | null>(null);
   documentKindRef.current = documentKind;
   editingReusableIdRef.current = editingReusableId;
   validationIssuesRef.current = validationIssues;
@@ -618,6 +703,12 @@ export default function BuilderShell({
   const activePayload = isEditingReusable
     ? reusableEditorDocument?.payload
     : pageDocument?.payload;
+  const activeStyleTargetLabel =
+    selected && selectedStyleTarget && selectedStyleTarget.nodeId === selected.id
+      ? styleTargetsForComponent(selected.type).find(
+          (target) => target.partName === selectedStyleTarget.partName,
+        )?.label
+      : undefined;
 
   const isDirty =
     saveStatus === 'unsaved' ||
@@ -740,10 +831,16 @@ export default function BuilderShell({
     const byId = new Map(canvasState.nodes.map((node) => [node.id, node]));
     const visible = new Set<string>();
     for (const node of canvasState.nodes) {
+      const matchesStylePart = styleTargetsForComponent(node.type).some(
+        (target) =>
+          target.label.toLowerCase().includes(query) ||
+          (target.partName ?? 'block').toLowerCase().includes(query),
+      );
       if (
         !node.label.toLowerCase().includes(query) &&
         !node.type.toLowerCase().includes(query) &&
-        !node.id.toLowerCase().includes(query)
+        !node.id.toLowerCase().includes(query) &&
+        !matchesStylePart
       ) {
         continue;
       }
@@ -820,8 +917,38 @@ export default function BuilderShell({
     });
   }
 
-  function focusLayer(id: string) {
+  function toggleStyleTargets(id: string) {
+    setExpandedStyleTargetNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function clearSelectedStyleTarget() {
+    selectedStyleTargetRef.current = null;
+    setSelectedStyleTarget(null);
+    setFocusPartName(undefined);
+  }
+
+  function selectBuilderNode(id: string) {
+    clearSelectedStyleTarget();
     editorRef.current?.selectNode(id);
+  }
+
+  function selectStyleTarget(nodeId: string, partName?: string) {
+    const target = { nodeId, partName };
+    selectedStyleTargetRef.current = target;
+    setSelectedStyleTarget(target);
+    setFocusPartName(partName);
+    setInspectorTab('style');
+    setRightPanelCollapsed(false);
+    editorRef.current?.selectNode(nodeId);
+  }
+
+  function focusLayer(id: string) {
+    selectBuilderNode(id);
     window.requestAnimationFrame(() => {
       const button = Array.from(
         layerTreeRef.current?.querySelectorAll<HTMLButtonElement>(
@@ -1004,7 +1131,7 @@ export default function BuilderShell({
           else if (validation?.reason) setNotice(validation.reason);
         }
       } else {
-        editorRef.current?.selectNode(node.id);
+        selectBuilderNode(node.id);
       }
       cleanup();
     };
@@ -1894,7 +2021,7 @@ export default function BuilderShell({
       },
       navigation: {
         openInspector: openValidationInspector,
-        selectNode: (nodeId) => editorRef.current?.selectNode(nodeId),
+        selectNode: selectBuilderNode,
         switchDocument: switchValidationDocument,
         switchViewport: changeViewport,
       },
@@ -2708,11 +2835,15 @@ export default function BuilderShell({
                         visibleLayerIds,
                         undefined,
                         selectedNodeId ?? undefined,
-                        (id) => editorRef.current?.selectNode(id),
+                        selectedStyleTarget,
+                        selectBuilderNode,
+                        selectStyleTarget,
                         toggleLayer,
+                        toggleStyleTargets,
                         handleLayerKeyDown,
                         startLayerDrag,
                         collapsedLayerIds,
+                        expandedStyleTargetNodeIds,
                         layerDraggingId,
                         layerDropIntent,
                         layerDropValidation?.valid === false,
@@ -2722,6 +2853,7 @@ export default function BuilderShell({
                             .map((issue) => issue.nodeId as string),
                         ),
                         focusableLayerId,
+                        layerQuery,
                       )
                     ) : (
                       <span className="muted small">Preparing layers…</span>
@@ -2858,6 +2990,11 @@ export default function BuilderShell({
                 )
               }
               onSelectionChange={(nextSelection) => {
+                if (selectedStyleTargetRef.current?.nodeId !== nextSelection?.id) {
+                  selectedStyleTargetRef.current = null;
+                  setSelectedStyleTarget(null);
+                  setFocusPartName(undefined);
+                }
                 setSelectedNodeId(nextSelection?.id ?? null);
                 setSelected(nextSelection);
               }}
@@ -2866,7 +3003,7 @@ export default function BuilderShell({
             <PageMinimap
               onFitPage={() => editorRef.current?.fitCanvas()}
               onNavigate={(x, y) => editorRef.current?.scrollToCanvasPoint(x, y)}
-              onSelectNode={(id) => editorRef.current?.selectNode(id)}
+              onSelectNode={selectBuilderNode}
               onZoomChange={(zoom) => editorRef.current?.setCanvasZoom(zoom)}
               selectedId={selectedNodeId ?? undefined}
               state={canvasState}
@@ -2896,7 +3033,10 @@ export default function BuilderShell({
                 <div className="builder-properties-heading-row">
                   <div className="builder-panel-heading">
                     <span className="eyebrow">Properties</span>
-                    <strong>{selectedNodeLabel(selected)}</strong>
+                    <strong>
+                      {selectedNodeLabel(selected)}
+                      {activeStyleTargetLabel ? ` · ${activeStyleTargetLabel}` : ''}
+                    </strong>
                   </div>
                   <button
                     aria-label="Collapse inspector"
@@ -2909,9 +3049,15 @@ export default function BuilderShell({
                 </div>
                 <p
                   className="builder-properties-summary"
-                  title={inspectorNodeSummary(selected)}
+                  title={
+                    activeStyleTargetLabel
+                      ? `Editing styles for ${activeStyleTargetLabel}`
+                      : inspectorNodeSummary(selected)
+                  }
                 >
-                  {inspectorNodeSummary(selected)}
+                  {activeStyleTargetLabel
+                    ? `Editing styles for ${activeStyleTargetLabel}`
+                    : inspectorNodeSummary(selected)}
                 </p>
                 {canvasState ? (
                   <nav className="builder-breadcrumb" aria-label="Selection path">
@@ -2921,7 +3067,7 @@ export default function BuilderShell({
                           <button
                             aria-label={`Navigate to ${node.label}`}
                             className="builder-breadcrumb-button"
-                            onClick={() => editorRef.current?.selectNode(node.id)}
+                            onClick={() => selectBuilderNode(node.id)}
                             type="button"
                           >
                             {node.label}
@@ -2971,7 +3117,7 @@ export default function BuilderShell({
                     position,
                   })
                 }
-                onSelectNode={(nodeId) => editorRef.current?.selectNode(nodeId)}
+                onSelectNode={selectBuilderNode}
                 onToggleSection={toggleInspectorSection}
                 openSections={openInspectorSections}
                 onValidationIssue={updateValidationIssue}
@@ -2989,6 +3135,11 @@ export default function BuilderShell({
                   Boolean(editingReusableId),
                 )}
                 focusPartName={focusPartName}
+                styleTargetPartName={
+                  selectedStyleTarget?.nodeId === selected.id
+                    ? (selectedStyleTarget.partName ?? null)
+                    : undefined
+                }
                 usableAssets={usableAssets}
                 designSystem={designSystem}
                 navigationPages={navigationPages}

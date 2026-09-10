@@ -1,6 +1,6 @@
 'use client';
 
-import type { BuilderNodeType } from './builder-adapter';
+import type { BuilderNodeType } from './builder-block/builder-adapter';
 import {
   useRef,
   type CSSProperties,

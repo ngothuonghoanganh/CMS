@@ -9,7 +9,7 @@ import {
   BUILDER_NODE_SLOT_ATTRIBUTE,
   BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
   type BuilderNodeType,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   canInsertNode,
   canMoveNode,
@@ -22,10 +22,13 @@ import {
   resolveNodePlacement,
   type MoveNodeIntent,
 } from './builder-placement';
-import { canInsertLiveChild, openPayloadNodeType } from './builder-structural-domain';
+import {
+  canInsertLiveChild,
+  openPayloadNodeType,
+} from './builder-block/builder-structural-domain';
 import { resolveSlotsForChild } from '@payload/contracts';
 
-export { isBuilderNodeType } from './builder-adapter';
+export { isBuilderNodeType } from './builder-block/builder-adapter';
 export {
   canInsertNode,
   canMoveNode,
@@ -62,6 +65,11 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function isEditorOnlyPreview(component: Component): boolean {
+  // Compound components (for example a Tab panel) use an editor-only wrapper
+  // around real persisted children. The child remains a Payload node and must
+  // participate in Layers, selection, and drag/drop even though one of its
+  // ancestors is only a preview projection.
+  if (openPayloadNodeType(component)) return false;
   let current: Component | undefined = component;
   while (current) {
     const attributes = current.getAttributes({ noStyle: true });

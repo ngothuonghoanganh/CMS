@@ -281,6 +281,28 @@ function renderChildren(node: RenderableNode, context: RenderContext): ReactElem
   ));
 }
 
+/**
+ * Gallery owns the image-part style, while every image stays a normal
+ * persisted child. Clone the rendered child only to attach that style scope;
+ * no content-tree shape is introduced by the renderer.
+ */
+function renderPartChild(
+  parent: RenderableNode,
+  child: RenderableNode,
+  part: string,
+  context: RenderContext,
+): ReactElement {
+  const partStyle = nodePartStyle(parent, part, context);
+  const rendered = renderNode(child, context) as React.ReactElement<{
+    'data-payload-part'?: string;
+    style?: CSSProperties;
+  }>;
+  return React.cloneElement(rendered, {
+    'data-payload-part': part,
+    style: { ...rendered.props.style, ...partStyle },
+  });
+}
+
 function renderRoot(node: RootRenderableNode, context: RenderContext): ReactElement {
   return (
     <main {...nodeAttributes(node)} style={nodeStyle(node, context)}>
@@ -418,7 +440,13 @@ function renderList(node: ListNode, context: RenderContext): ReactElement {
   return (
     <Tag {...nodeAttributes(node)} style={nodeStyle(node, context)}>
       {node.props.items.map((item) => (
-        <li key={item.id}>{item.text}</li>
+        <li
+          data-payload-part="item"
+          key={item.id}
+          style={nodePartStyle(node, 'item', context)}
+        >
+          {item.text}
+        </li>
       ))}
     </Tag>
   );
@@ -446,8 +474,17 @@ function renderVideo(node: VideoNode, context: RenderContext): ReactElement {
 function renderQuote(node: QuoteNodeV5, context: RenderContext): ReactElement {
   return (
     <blockquote {...nodeAttributes(node)} style={nodeStyle(node, context)}>
-      <p>{node.props.text}</p>
-      {node.props.cite?.trim() ? <cite>{node.props.cite}</cite> : null}
+      <p data-payload-part="content" style={nodePartStyle(node, 'content', context)}>
+        {node.props.text}
+      </p>
+      {node.props.cite?.trim() ? (
+        <cite
+          data-payload-part="citation"
+          style={nodePartStyle(node, 'citation', context)}
+        >
+          {node.props.cite}
+        </cite>
+      ) : null}
     </blockquote>
   );
 }
@@ -546,7 +583,11 @@ function renderGallery(
         ...nodeStyle(node, context),
       }}
     >
-      {renderChildren(node, context)}
+      {node.children.map((child) => (
+        <Fragment key={child.id}>
+          {renderPartChild(node, child, 'image', context)}
+        </Fragment>
+      ))}
     </div>
   );
 }
@@ -601,14 +642,27 @@ function renderCountdown(node: CountdownNode, context: RenderContext): ReactElem
         data-extension="demo-builder-countdown"
         style={nodeStyle(node, context)}
       >
-        <CountdownRuntime label={node.props.label} targetAt={node.props.targetAt} />
+        <CountdownRuntime
+          label={node.props.label}
+          labelStyle={nodePartStyle(node, 'label', context)}
+          targetAt={node.props.targetAt}
+          timerStyle={nodePartStyle(node, 'timer', context)}
+        />
       </div>
     );
   }
   return (
     <div {...nodeAttributes(node)} style={nodeStyle(node, context)}>
-      <span>{node.props.label}</span>{' '}
-      <time dateTime={node.props.targetAt}>{node.props.targetAt}</time>
+      <span data-payload-part="label" style={nodePartStyle(node, 'label', context)}>
+        {node.props.label}
+      </span>{' '}
+      <time
+        data-payload-part="timer"
+        dateTime={node.props.targetAt}
+        style={nodePartStyle(node, 'timer', context)}
+      >
+        {node.props.targetAt}
+      </time>
     </div>
   );
 }

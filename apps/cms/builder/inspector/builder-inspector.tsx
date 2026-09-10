@@ -19,13 +19,13 @@ import {
   type StyleTokenReference,
   queryOperatorsForFieldType,
 } from '@payload/contracts';
-import { useEffect, useState, type ReactNode } from 'react';
-import { newBuilderUuid, type BuilderViewport } from '../builder-adapter';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { newBuilderUuid, type BuilderViewport } from '../builder-block/builder-adapter';
 import type { SelectedBuilderNode } from '../grapes-editor';
 import { resolveInspectorStyleValue } from './inspector-value';
 import { CUSTOM_PROPERTY_EDITORS } from './custom-property-editors';
 import { PropertyControlRenderer } from './property-control-renderer';
-import { StructureEditor } from './structure-editor/structure-editor';
+import { StructureEditor } from '../builder-block/structure-editor/structure-editor';
 import type { LayoutSelection } from '../../app/ui/fields';
 import {
   type BuilderValidationIssue,
@@ -86,6 +86,8 @@ type BuilderInspectorProps = {
   onValidationIssue?:
     ((issue: BuilderValidationIssue | null, issueId?: string) => void) | undefined;
   focusPartName?: string | undefined;
+  /** `null` targets the block itself; a name scopes the Inspector to that part. */
+  styleTargetPartName?: string | null | undefined;
   collections?: readonly Collection[];
   composition?: PageCompositionFields;
   onUpdateBinding?: (binding: PageBinding | null) => void;
@@ -964,6 +966,7 @@ function LegacyBuilderInspector({
   validationScope = 'page',
   onValidationIssue,
   focusPartName,
+  styleTargetPartName,
   collections = [],
   composition,
   onUpdateBinding,
@@ -974,8 +977,20 @@ function LegacyBuilderInspector({
 }: BuilderInspectorProps) {
   const [contentSectionsOpen, setContentSectionsOpen] = useState(openSections.content);
   const definition = PAGE_COMPONENT_REGISTRY[selected.type];
-  const partNames = Object.keys(definition.componentParts);
+  const partNames = useMemo(
+    () => Object.keys(definition.componentParts),
+    [selected.type],
+  );
   const [selectedPart, setSelectedPart] = useState(partNames[0] ?? '');
+  const focusedPartName =
+    (typeof styleTargetPartName === 'string'
+      ? styleTargetPartName
+      : styleTargetPartName === undefined
+        ? focusPartName
+        : undefined) ?? undefined;
+  const isPartStyleScope =
+    focusedPartName !== undefined && partNames.includes(focusedPartName);
+  const isBlockStyleScope = styleTargetPartName === null;
 
   useEffect(() => setContentSectionsOpen(openSections.content), [openSections.content]);
   useEffect(
@@ -986,9 +1001,8 @@ function LegacyBuilderInspector({
     [selected.type],
   );
   useEffect(() => {
-    if (focusPartName && partNames.includes(focusPartName))
-      setSelectedPart(focusPartName);
-  }, [focusPartName, partNames]);
+    if (isPartStyleScope) setSelectedPart(focusedPartName);
+  }, [focusedPartName, isPartStyleScope]);
 
   const contentProperties = definition.propertiesSchema.filter(
     (property) =>
@@ -1214,19 +1228,28 @@ function LegacyBuilderInspector({
     );
     return (
       <InspectorSection label="Component part" onToggle={() => undefined} open>
-        <label className="builder-inspector-field">
-          <span>Target</span>
-          <select
-            onChange={(event) => setSelectedPart(event.target.value)}
-            value={selectedPart}
-          >
+        <div className="builder-component-part-picker">
+          <span className="builder-component-part-picker-label">Style target</span>
+          <div aria-label="Style target" className="builder-component-part-targets">
             {partNames.map((name) => (
-              <option key={name} value={name}>
+              <button
+                aria-pressed={selectedPart === name}
+                className={`button button-small builder-component-part-target${
+                  selectedPart === name ? ' is-active' : ''
+                }`}
+                key={name}
+                onClick={() => setSelectedPart(name)}
+                type="button"
+              >
                 {definition.componentParts[name]?.label ?? name}
-              </option>
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+          <p className="muted small">
+            These styles apply only to every matching {part.label.toLowerCase()} in this{' '}
+            {definition.label.toLowerCase()}.
+          </p>
+        </div>
         <div className="builder-inspector-fields">
           {visibleFields.map((field) => {
             const resolved = resolveInspectorStyleValue(
@@ -1387,8 +1410,10 @@ function LegacyBuilderInspector({
 
       {inspectorTab === 'style' ? (
         <>
-          {inspectorStyleSections.map((section) => renderStyleSection(section))}
-          {partNames.length > 0 ? renderPartStyleEditor() : null}
+          {!isPartStyleScope
+            ? inspectorStyleSections.map((section) => renderStyleSection(section))
+            : null}
+          {!isBlockStyleScope && partNames.length > 0 ? renderPartStyleEditor() : null}
         </>
       ) : null}
 

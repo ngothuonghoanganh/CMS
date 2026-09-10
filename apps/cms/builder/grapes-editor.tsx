@@ -30,7 +30,7 @@ import {
   serializeReusableSubtree,
   snapshotFromGrapesComponent,
   siteGlobalDocumentToEditorDefinition,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   findPayloadComponent,
   isEditableTarget,
@@ -50,7 +50,7 @@ import {
   type EditorCommand,
   type EditorCommandResult,
 } from './editor-commands';
-import { createEditorPropertyCommand } from './component-editor-bindings';
+import { createEditorPropertyCommand } from './builder-block/component-editor-bindings';
 import { BuilderSelection } from './builder-selection';
 import {
   BUILDER_BLOCK_PRESET_REGISTRY,
@@ -60,7 +60,7 @@ import {
   type BlockPresetId,
   type GlobalPresetId,
   type BuilderInsertable,
-} from './block-presets';
+} from './builder-block/block-presets';
 import type { BuilderCanvasNode, BuilderCanvasState } from './builder-minimap';
 import { forwardRef, useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import {
@@ -91,8 +91,11 @@ import {
 import {
   selectionFromComponentCodec,
   type ComponentSelectionSnapshot,
-} from './component-editor-codecs';
-import { canInsertLiveChild, openPayloadNodeType } from './builder-structural-domain';
+} from './builder-block/component-editor-codecs';
+import {
+  canInsertLiveChild,
+  openPayloadNodeType,
+} from './builder-block/builder-structural-domain';
 import { collectPersistedNodeIds, remapSubtreeNodeIds } from './builder-node-identity';
 import {
   scopeForDocumentKind,
@@ -1072,32 +1075,38 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     )
       return;
 
+    // Structure is model-driven, not geometry-driven. A component nested in a
+    // collapsed runtime panel (or mounted between canvas frames) can lack a
+    // live iframe element temporarily, but it must still remain visible in
+    // Layers. Geometry can safely fall back to zero until the next refresh.
+    let position = { left: 0, top: 0, width: 0, height: 0 };
     const element = component.getEl();
-    if (!element) return;
-
-    try {
-      const position = editor.Canvas.getElementPos(element, {
-        avoidFrameOffset: true,
-        avoidFrameZoom: true,
-      });
-      const parent = component.parent();
-      const parentId = parent?.getAttributes({ noStyle: true })[
-        BUILDER_NODE_ID_ATTRIBUTE
-      ];
-      nodes.push({
-        id,
-        type: type as BuilderNodeType,
-        label: canvasNodeLabel(component, type as BuilderNodeType),
-        ...(typeof parentId === 'string' ? { parentId } : {}),
-        depth: canvasNodeDepth(component),
-        x: position.left,
-        y: position.top,
-        width: Math.max(position.width, 0),
-        height: Math.max(position.height, 0),
-      });
-    } catch {
-      // GrapesJS can briefly expose a component before its iframe element is laid out.
+    if (element) {
+      try {
+        position = editor.Canvas.getElementPos(element, {
+          avoidFrameOffset: true,
+          avoidFrameZoom: true,
+        });
+      } catch {
+        // GrapesJS can briefly expose a component before its iframe element is laid out.
+      }
     }
+    // Some compound previews insert non-persisted DOM wrappers. Resolve the
+    // nearest Payload ancestor so a child is indexed below its real block,
+    // instead of being orphaned from the Structure tree.
+    const parent = payloadAncestor(component.parent());
+    const parentId = parent ? payloadNodeId(parent) : undefined;
+    nodes.push({
+      id,
+      type: type as BuilderNodeType,
+      label: canvasNodeLabel(component, type as BuilderNodeType),
+      ...(parentId ? { parentId } : {}),
+      depth: canvasNodeDepth(component),
+      x: position.left,
+      y: position.top,
+      width: Math.max(position.width, 0),
+      height: Math.max(position.height, 0),
+    });
   });
 
   const rootNode = nodes.find((node) => node.type === 'root');

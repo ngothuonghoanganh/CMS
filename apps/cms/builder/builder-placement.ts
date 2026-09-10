@@ -8,7 +8,7 @@ import {
   BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
   BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
   type BuilderNodeType,
-} from './builder-adapter';
+} from './builder-block/builder-adapter';
 import {
   canInsertChild,
   canRemoveFromSlot,
@@ -21,7 +21,7 @@ import {
   openPayloadNodeType,
   payloadNodeType,
   resolveSlotForChild,
-} from './builder-structural-domain';
+} from './builder-block/builder-structural-domain';
 
 /** The three insertion semantics shared by Canvas, Layers and Quick Add. */
 export type DropPosition = 'before' | 'inside' | 'after';
@@ -54,7 +54,7 @@ export function canInsertNode(
 
 export { liveSlotForChild, liveSlotOccupancy };
 
-export { payloadNodeType } from './builder-structural-domain';
+export { payloadNodeType } from './builder-block/builder-structural-domain';
 
 function isEditorOnlyComponent(component: Component): boolean {
   let current: Component | undefined = component;

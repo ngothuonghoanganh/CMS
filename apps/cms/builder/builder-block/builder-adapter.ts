@@ -84,7 +84,7 @@ import {
   generateFreshNodeId,
   repairDuplicatePersistedNodeIds,
   repairDuplicatePersistedNodeIdsWithReport,
-} from './builder-node-identity';
+} from '../builder-node-identity';
 
 export const BUILDER_NODE_ID_ATTRIBUTE = 'data-payload-node-id';
 export const BUILDER_NODE_TYPE_ATTRIBUTE = 'data-payload-node-type';
@@ -137,6 +137,7 @@ export function listPreviewComponents(props: ListProps): ComponentDefinition[] {
     attributes: {
       [BUILDER_LIST_PREVIEW_ATTRIBUTE]: 'true',
       'data-payload-list-item-id': item.id,
+      'data-payload-part': 'item',
     },
     copyable: false,
     draggable: false,
@@ -642,12 +643,19 @@ export function countdownPreviewComponents(props: {
       tagName: 'div',
       attributes: { 'data-extension-runtime': 'countdown.runtime' },
       components: [
-        { tagName: 'span', content: props.label },
+        {
+          tagName: 'span',
+          content: props.label,
+          attributes: { 'data-payload-part': 'label' },
+        },
         { tagName: 'span', content: ' ' },
         {
           tagName: 'time',
           content: formatCountdownRemaining(props.targetAt),
-          attributes: { dateTime: props.targetAt },
+          attributes: {
+            dateTime: props.targetAt,
+            'data-payload-part': 'timer',
+          },
         },
       ],
     }),
@@ -662,7 +670,10 @@ export function quotePreviewComponents(props: {
     {
       tagName: 'p',
       content: sanitizeInlineText(props.text),
-      attributes: { [BUILDER_QUOTE_PREVIEW_ATTRIBUTE]: 'text' },
+      attributes: {
+        [BUILDER_QUOTE_PREVIEW_ATTRIBUTE]: 'text',
+        'data-payload-part': 'content',
+      },
       copyable: false,
       draggable: false,
       droppable: false,
@@ -674,7 +685,10 @@ export function quotePreviewComponents(props: {
           {
             tagName: 'cite',
             content: sanitizeInlineText(props.cite),
-            attributes: { [BUILDER_QUOTE_PREVIEW_ATTRIBUTE]: 'cite' },
+            attributes: {
+              [BUILDER_QUOTE_PREVIEW_ATTRIBUTE]: 'cite',
+              'data-payload-part': 'citation',
+            },
             copyable: false,
             draggable: false,
             droppable: false,
@@ -1206,13 +1220,16 @@ function componentDefinitionForNode(
         tagName: 'div',
         attributes,
         components: node.children.map((child) =>
-          componentDefinitionForNode(
-            child,
-            undefined,
-            payloadVersion,
-            reusableRuntime,
-            designSystem,
-            projectionContext,
+          markEditorPart(
+            componentDefinitionForNode(
+              child,
+              undefined,
+              payloadVersion,
+              reusableRuntime,
+              designSystem,
+              projectionContext,
+            ),
+            'image',
           ),
         ),
       };

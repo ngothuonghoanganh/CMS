@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { BuilderInsertable } from '../block-presets';
+import type { BuilderInsertable } from '../builder-block/block-presets';
 import type { DropPosition } from '../builder-interaction';
 
 export type QuickAddOption = {

@@ -5,7 +5,7 @@ import {
   createBlockPresetDefinition,
   getBlockPreset,
   type BlockPresetId,
-} from './block-presets';
+} from './builder-block/block-presets';
 
 export type TemplateDefinition = {
   id: string;

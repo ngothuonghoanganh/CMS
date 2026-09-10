@@ -857,7 +857,7 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('rel="noopener noreferrer"');
     expect(markup).toContain('<hr');
     expect(markup).toContain('<ol');
-    expect(markup).toContain('<li>One</li>');
+    expect(markup).toContain('<li data-payload-part="item">One</li>');
     expect(markup).toContain('<video');
     expect(markup).toContain('poster="/assets/poster.png"');
     expect(markup).toContain('playsInline');
@@ -950,7 +950,7 @@ describe('PagePayloadV1 renderer', () => {
     );
 
     expect(markup).toContain('<blockquote');
-    expect(markup).toContain('<cite>Team</cite>');
+    expect(markup).toContain('<cite data-payload-part="citation">Team</cite>');
     expect(markup).toContain('class="payload-accordion"');
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('aria-controls="accordion-panel-item-1"');
@@ -1062,6 +1062,10 @@ describe('PagePayloadV1 renderer', () => {
                   label: 'Registry countdown',
                   targetAt: '2030-01-01T00:00:00.000Z',
                 },
+                partsStyle: {
+                  label: { base: { color: '#123456' } },
+                  timer: { base: {}, mobile: { color: '#654321' } },
+                },
                 children: [],
               },
               {
@@ -1090,6 +1094,7 @@ describe('PagePayloadV1 renderer', () => {
                   ordered: false,
                   items: [{ id: 'registry-item', text: 'Registry item' }],
                 },
+                partsStyle: { item: { base: { color: '#8b1d4f' } } },
                 children: [],
               },
               {
@@ -1109,6 +1114,7 @@ describe('PagePayloadV1 renderer', () => {
                 id: 'quote',
                 type: 'quote',
                 props: { text: 'Registry quote', cite: 'Registry author' },
+                partsStyle: { content: { base: { color: '#245f9e' } } },
                 children: [],
               },
               {
@@ -1141,6 +1147,7 @@ describe('PagePayloadV1 renderer', () => {
                 id: 'gallery',
                 type: 'gallery',
                 props: {},
+                partsStyle: { image: { base: { borderRadius: '12px' } } },
                 children: [
                   {
                     id: 'gallery-image',
@@ -1196,6 +1203,13 @@ describe('PagePayloadV1 renderer', () => {
       expect(markup).toContain(`data-payload-node-type="${type}"`);
     }
     expect(markup).not.toContain('This page component is not supported.');
+    expect(markup).toContain('data-payload-part="label" style="color:#123456"');
+    expect(markup).toContain('data-payload-part="item" style="color:#8b1d4f"');
+    expect(markup).toContain('data-payload-part="content" style="color:#245f9e"');
+    expect(markup).toContain('style="border-radius:12px" data-payload-part="image"');
+    expect(markup).toContain(
+      '[data-payload-node-id="countdown"] [data-payload-part="timer"]{color:#654321!important}',
+    );
   });
 
   it('renders a tenant custom extension from its declarative runtime definition', () => {

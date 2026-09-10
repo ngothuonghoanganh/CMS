@@ -36,7 +36,7 @@ import {
 } from '../../app/ui/fields';
 import { normalizeHexColor, parseCssDimension } from '../../app/ui/field-utils';
 import { AssetPicker } from '../../app/collections/collection-field-controls';
-import type { BuilderViewport } from '../builder-adapter';
+import type { BuilderViewport } from '../builder-block/builder-adapter';
 import {
   createBuilderValidationIssue,
   validationDomId,

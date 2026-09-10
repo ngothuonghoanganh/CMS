@@ -1271,6 +1271,18 @@ const rawPageComponentRegistry = {
     category: 'extension',
     editorTagName: 'div',
     defaultProps: {},
+    componentParts: {
+      label: {
+        name: 'label',
+        label: 'Label',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES.text,
+      },
+      timer: {
+        name: 'timer',
+        label: 'Timer',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES.text,
+      },
+    },
     propertiesSchema: content([
       {
         key: 'label',
@@ -1426,6 +1438,13 @@ const rawPageComponentRegistry = {
         { id: 'item-2', text: 'Second item' },
       ],
     },
+    componentParts: {
+      item: {
+        name: 'item',
+        label: 'List item',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES.text,
+      },
+    },
     propertiesSchema: content([
       {
         key: 'ordered',
@@ -1523,6 +1542,18 @@ const rawPageComponentRegistry = {
     editorTagName: 'blockquote',
     defaultProps: { text: 'A thoughtful quote', cite: '' },
     slots: [],
+    componentParts: {
+      content: {
+        name: 'content',
+        label: 'Quote text',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES.text,
+      },
+      citation: {
+        name: 'citation',
+        label: 'Citation',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES.text,
+      },
+    },
     propertiesSchema: content([
       {
         key: 'text',
@@ -1927,6 +1958,13 @@ const rawPageComponentRegistry = {
     editorTagName: 'div',
     defaultProps: {},
     builder: { group: 'media' },
+    componentParts: {
+      image: {
+        name: 'image',
+        label: 'Gallery image',
+        styleCapabilities: PAGE_COMPONENT_STYLE_CAPABILITIES.image,
+      },
+    },
     slots: [
       {
         name: 'images',

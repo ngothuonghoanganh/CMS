@@ -17,7 +17,7 @@ import {
 } from '@payload/contracts';
 import { SelectField, TextAreaField, TextField } from '../../app/ui/fields';
 import { useRef, useState, type ReactNode } from 'react';
-import { newBuilderUuid } from '../builder-adapter';
+import { newBuilderUuid } from '../builder-block/builder-adapter';
 import {
   duplicateNavigationItem,
   findNavigationItem,
