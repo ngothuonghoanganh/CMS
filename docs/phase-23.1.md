@@ -1,6 +1,7 @@
 # Phase 23.1 — Release Stabilization, Authoring Completeness & Security Closure
 
-**Status:** In progress on `ao/cms-4/phase-23.1-release-stabilization`.
+**Status:** Release candidate committed and in PR review; merge is blocked by
+external GitHub CI billing infrastructure.
 
 ## Starting state
 

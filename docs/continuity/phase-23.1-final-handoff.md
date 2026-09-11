@@ -35,17 +35,22 @@
 
 ## Final release record
 
-This section is intentionally completed from actual Git/CI output after the
-feature commit, push, PR, merge, and post-merge verification. No SHA is
-invented here.
+This section is completed from actual Git and CI output. The merge remains
+pending because GitHub did not start the required check.
 
-- Final feature branch SHA: pending final commit
-- Pull request: pending creation
-- CI: pending final run
+- Final feature branch SHA: `21456274d68d86524ae1e906cbce306734523415`
+- Pull request: [#1](https://github.com/ngothuonghoanganh/CMS/pull/1),
+  `ao/cms-4/phase-23.1-release-stabilization` → `main`
+- CI: Foundation CI run
+  [34620498814](https://github.com/ngothuonghoanganh/CMS/actions/runs/34620498814)
+  failed before starting; GitHub annotation says the account is locked due to
+  a billing issue.
 - Merge commit: pending merge
 - Final `main` SHA: pending post-merge verification
 
 ## Remaining issues
 
-- None expected for Phase 23.1 once the required local gates and PR CI are
-  green. Unrelated future enhancements remain outside this closure phase.
+- Local release gates are green, including 108 Playwright tests with 0
+  failures. The only remaining blocker is external: GitHub billing must be
+  restored before CI can run and the PR can be merged. Unrelated future
+  enhancements remain outside this closure phase.
