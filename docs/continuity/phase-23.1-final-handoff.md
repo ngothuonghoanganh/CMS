@@ -38,13 +38,15 @@
 This section is completed from actual Git and CI output. The merge remains
 pending because GitHub did not start the required check.
 
-- Final feature branch SHA: `21456274d68d86524ae1e906cbce306734523415`
+- Final feature branch SHA: `2fa2f4e` (`docs: record phase 23.1 release blocker`)
 - Pull request: [#1](https://github.com/ngothuonghoanganh/CMS/pull/1),
   `ao/cms-4/phase-23.1-release-stabilization` → `main`
 - CI: Foundation CI run
   [34620498814](https://github.com/ngothuonghoanganh/CMS/actions/runs/34620498814)
   failed before starting; GitHub annotation says the account is locked due to
-  a billing issue.
+  a billing issue. The follow-up run
+  [34620766111](https://github.com/ngothuonghoanganh/CMS/actions/runs/34620766111)
+  was blocked by the same account billing condition.
 - Merge commit: pending merge
 - Final `main` SHA: pending post-merge verification
 
