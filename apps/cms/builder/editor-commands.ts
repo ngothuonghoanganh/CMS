@@ -26,6 +26,7 @@ import {
   BUILDER_OPEN_PROPS_ATTRIBUTE,
   BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
+  createOpenCompositionNodeDefinition,
   isBuilderNodeType,
   payloadToEditorComponent,
   sanitizeInlineText,
@@ -110,14 +111,14 @@ export type EditorCommand =
       kind: 'insert-child';
       parentId: string;
       slotName: string;
-      childType: BuilderBlockType;
+      childType: BuilderBlockType | OpenCompositionNodeType;
       index?: number;
     }
   /** @deprecated Kept as a compatibility shim for older callers. */
   | {
       kind: 'insert-structural-child';
       parentId: string;
-      childType: BuilderBlockType;
+      childType: BuilderBlockType | OpenCompositionNodeType;
       slotName?: string;
     }
   | { kind: 'undo' }
@@ -466,11 +467,16 @@ function promoteLegacyRootForOpenInsert(root: Component): boolean {
 
 function canInsertLiveType(
   parent: Component,
-  childType: BuilderNodeType,
+  childType: BuilderNodeType | OpenCompositionNodeType,
   slotName?: string,
 ): boolean {
+  if (openNodeType(parent)) {
+    return isOpenCompositionNodeType(childType)
+      ? canInsertLiveChild(parent, childType, undefined, slotName)
+      : false;
+  }
   const parentType = payloadNodeType(parent);
-  if (!parentType) return false;
+  if (!parentType || !isBuilderNodeType(childType)) return false;
   const slot = slotName
     ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
         (candidate) => candidate.name === slotName,
@@ -751,8 +757,14 @@ export function createEditorCommandBus(
       if (command.kind === 'insert-child' || command.kind === 'insert-structural-child') {
         const parent = getNode(editor, command.parentId);
         if (!parent) return false;
+        if (openNodeType(parent)) {
+          return (
+            isOpenCompositionNodeType(command.childType) &&
+            canInsertLiveChild(parent, command.childType, undefined, command.slotName)
+          );
+        }
         const parentType = payloadNodeType(parent);
-        if (!parentType) return false;
+        if (!parentType || !isBuilderNodeType(command.childType)) return false;
         const slotName =
           command.slotName ?? resolveSlotForChild(parentType, command.childType)?.name;
         const slot = slotName
@@ -883,11 +895,21 @@ export function executeEditorCommand(
       if (!parent || !canInsertLiveType(parent, command.childType, command.slotName)) {
         return { changed: false };
       }
-      const definition = createBlockDefinition(command.childType);
-      definition.attributes = {
-        ...(definition.attributes ?? {}),
-        [BUILDER_NODE_SLOT_ATTRIBUTE]: command.slotName,
-      };
+      const openParentType = openNodeType(parent);
+      const definition = openParentType
+        ? createOpenCompositionNodeDefinition(
+            command.childType as OpenCompositionNodeType,
+            {
+              ...(openParentType === 'form' ? { formNodeId: command.parentId } : {}),
+            },
+          )
+        : createBlockDefinition(command.childType as BuilderBlockType);
+      if (!openParentType) {
+        definition.attributes = {
+          ...(definition.attributes ?? {}),
+          [BUILDER_NODE_SLOT_ATTRIBUTE]: command.slotName,
+        };
+      }
       const safeDefinition = definitionWithFreshIds(root, definition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: command.index });
@@ -899,8 +921,18 @@ export function executeEditorCommand(
     }
     case 'insert-structural-child': {
       const parent = getNode(editor, command.parentId);
+      if (parent && openNodeType(parent)) {
+        return executeEditorCommand(editor, {
+          kind: 'insert-child',
+          parentId: command.parentId,
+          slotName: command.slotName ?? '',
+          childType: command.childType,
+        });
+      }
       const parentType = parent && payloadNodeType(parent);
-      if (!parent || !parentType) return { changed: false };
+      if (!parent || !parentType || !isBuilderNodeType(command.childType)) {
+        return { changed: false };
+      }
       const slot = command.slotName
         ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
             (candidate) => candidate.name === command.slotName,

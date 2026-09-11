@@ -333,7 +333,9 @@ function renderLayerNodes(
         (child) => !visibleNodeIds || visibleNodeIds.has(child.id),
       );
       const normalizedPartQuery = stylePartQuery.trim().toLowerCase();
-      const styleTargets = styleTargetsForComponent(node.type).filter(
+      const styleTargets = (
+        node.openComposition ? [] : styleTargetsForComponent(node.type)
+      ).filter(
         (target) =>
           !normalizedPartQuery ||
           node.label.toLowerCase().includes(normalizedPartQuery) ||
@@ -573,7 +575,9 @@ export default function BuilderShell({
     null,
   );
   const [selected, setSelected] = useState<SelectedBuilderNode | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // The selected snapshot is the single React selection source. Canvas, Layers,
+  // breadcrumbs, and the Inspector all derive their id from this value.
+  const selectedNodeId = selected?.id ?? null;
   const [focusPartName, setFocusPartName] = useState<string | undefined>(undefined);
   const [selectedStyleTarget, setSelectedStyleTarget] =
     useState<BuilderStyleTarget | null>(null);
@@ -704,7 +708,10 @@ export default function BuilderShell({
     ? reusableEditorDocument?.payload
     : pageDocument?.payload;
   const activeStyleTargetLabel =
-    selected && selectedStyleTarget && selectedStyleTarget.nodeId === selected.id
+    selected &&
+    !selected.openComposition &&
+    selectedStyleTarget &&
+    selectedStyleTarget.nodeId === selected.id
       ? styleTargetsForComponent(selected.type).find(
           (target) => target.partName === selectedStyleTarget.partName,
         )?.label
@@ -1938,7 +1945,6 @@ export default function BuilderShell({
     setReusableEditorDocument(editorDocument.document);
     setReusableEditorWrappedSource(editorDocument.wrappedSource);
     setSelected(null);
-    setSelectedNodeId(null);
     setCanvasState(null);
     setHistory({ canUndo: false, canRedo: false });
     setAddPanelTab('layouts');
@@ -1964,7 +1970,6 @@ export default function BuilderShell({
     setEditingReusableId(null);
     setReusableEditorDocument(null);
     setSelected(null);
-    setSelectedNodeId(null);
     setCanvasState(null);
     setHistory({ canUndo: false, canRedo: false });
     setSaveStatus('initializing');
@@ -2521,6 +2526,23 @@ export default function BuilderShell({
                     value={blockQuery}
                   />
                 </label>
+                {canvasState &&
+                !canvasState.nodes.some((node) => node.type !== 'root') ? (
+                  <div className="builder-empty-state" role="status">
+                    <strong>Start building your page</strong>
+                    <p className="muted small">
+                      Add a section first, then place headings, images, buttons, and forms
+                      inside it.
+                    </p>
+                    <button
+                      className="button button-small button-primary"
+                      onClick={() => editorRef.current?.addBlock('section')}
+                      type="button"
+                    >
+                      Add section
+                    </button>
+                  </div>
+                ) : null}
                 {addPanelTab === 'saved' &&
                 documentKind === 'page' &&
                 !isEditingReusable ? (
@@ -2995,7 +3017,6 @@ export default function BuilderShell({
                   setSelectedStyleTarget(null);
                   setFocusPartName(undefined);
                 }
-                setSelectedNodeId(nextSelection?.id ?? null);
                 setSelected(nextSelection);
               }}
               ref={editorRef}
@@ -3095,10 +3116,7 @@ export default function BuilderShell({
                 onInspectorTabChange={setInspectorTab}
                 onAddStructuralChild={(slotName, childType) =>
                   childType && childType !== 'root' && childType !== 'reusable-instance'
-                    ? editorRef.current?.addStructuralChild(
-                        slotName,
-                        childType as BuilderBlockType,
-                      )
+                    ? editorRef.current?.addStructuralChild(slotName, childType)
                     : undefined
                 }
                 onMoveStructuralChild={(nodeId, direction) =>

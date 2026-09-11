@@ -4,6 +4,7 @@ import {
   openCanonicalBuilder,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 test('tracks a public page view, CTA click and form conversion in CMS Analytics', async ({
   browser,
@@ -37,7 +38,7 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
-  const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
+  const publicPage = await browser.newPage({ baseURL: E2E_RENDERER_ORIGIN });
   await publicPage.goto(
     `/${siteSlug}/${pageSlug}?utm_source=e2e&utm_medium=test&utm_campaign=analytics`,
   );

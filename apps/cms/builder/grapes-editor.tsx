@@ -70,6 +70,7 @@ import {
   PAGE_RUNTIME_BASELINE_CSS,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
+  OPEN_COMPOSITION_REGISTRY,
   isOpenCompositionNodeType,
   createPageDocument,
   resolveSlotsForChild,
@@ -163,7 +164,10 @@ export type GrapesEditorHandle = {
     type: BuilderInsertable,
     placement?: { targetNodeId: string; position: DropPosition },
   ) => boolean;
-  addStructuralChild: (slotName?: string, childType?: BuilderBlockType) => boolean;
+  addStructuralChild: (
+    slotName?: string,
+    childType?: BuilderBlockType | OpenCompositionNodeType,
+  ) => boolean;
   removeStructuralChild: (nodeId: string) => boolean;
   moveStructuralChild: (nodeId: string, direction: 'up' | 'down') => boolean;
   duplicateStructuralChild: (nodeId: string) => boolean;
@@ -1009,16 +1013,16 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   'collection-item': 'Collection item template',
 };
 
-function canvasNodeLabel(component: Component, type: BuilderNodeType): string {
+function canvasNodeLabel(component: Component, type: string): string {
   const content = String(component.get('content') ?? '')
     .replace(/\s+/g, ' ')
     .trim();
+  const knownLabel = canvasNodeLabels[type as BuilderNodeType];
   if ((type === 'text' || type === 'button') && content) {
-    return `${canvasNodeLabels[type]}: ${content.slice(0, 28)}${content.length > 28 ? '…' : ''}`;
+    return `${knownLabel ?? type}: ${content.slice(0, 28)}${content.length > 28 ? '…' : ''}`;
   }
   return (
-    canvasNodeLabels[type] ??
-    `${type.slice(0, 1).toUpperCase()}${type.slice(1).replace(/-/g, ' ')}`
+    knownLabel ?? `${type.slice(0, 1).toUpperCase()}${type.slice(1).replace(/-/g, ' ')}`
   );
 }
 
@@ -1098,8 +1102,9 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     const parentId = parent ? payloadNodeId(parent) : undefined;
     nodes.push({
       id,
-      type: type as BuilderNodeType,
-      label: canvasNodeLabel(component, type as BuilderNodeType),
+      type: type as BuilderNodeType | OpenCompositionNodeType,
+      ...(isOpenCompositionNodeType(type) ? { openComposition: true } : {}),
+      label: canvasNodeLabel(component, type),
       ...(parentId ? { parentId } : {}),
       depth: canvasNodeDepth(component),
       x: position.left,
@@ -2447,8 +2452,33 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!editor) return false;
         const parent = getSelectedComponent(editor);
         if (!parent) return false;
+        const openParentType = openPayloadNodeType(parent);
+        if (openParentType && isOpenCompositionNodeType(openParentType)) {
+          const childType =
+            requestedChildType ??
+            OPEN_COMPOSITION_REGISTRY[openParentType].allowedChildren.find((candidate) =>
+              canInsertIntoComponent(parent, candidate),
+            );
+          if (
+            !childType ||
+            !isOpenCompositionNodeType(childType) ||
+            !canInsertIntoComponent(parent, childType)
+          ) {
+            return false;
+          }
+          return commitEditorCommand(editor, {
+            kind: 'insert-child',
+            parentId: payloadNodeId(parent) ?? '',
+            slotName: slotName ?? '',
+            childType,
+          });
+        }
         const parentType = payloadNodeType(parent);
         if (!parentType) return false;
+        const requestedLegacyChildType =
+          requestedChildType && isBuilderNodeType(requestedChildType)
+            ? requestedChildType
+            : undefined;
         const slot = slotName
           ? PAGE_COMPONENT_REGISTRY[parentType].slots.find(
               (candidate) => candidate.name === slotName && candidate.structural,
@@ -2460,7 +2490,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
                   canInsertIntoComponent(parent, candidateType),
                 ),
             );
-        const childType = requestedChildType ?? slot?.accepts[0];
+        const childType = requestedLegacyChildType ?? slot?.accepts[0];
         if (!childType || childType === 'root' || childType === 'reusable-instance')
           return false;
         if (

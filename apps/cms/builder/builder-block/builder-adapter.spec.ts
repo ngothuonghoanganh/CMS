@@ -15,6 +15,7 @@ import {
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
+  BUILDER_METADATA_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
@@ -34,6 +35,7 @@ import {
   applyEditorPartViewportStyles,
   BuilderAdapterError,
   createBlockDefinition,
+  createOpenCompositionNodeDefinition,
   createReusableInstanceDefinition,
   editorPageDocumentToReusableDocument,
   formatCountdownRemaining,
@@ -122,6 +124,56 @@ const payload: PagePayloadV1 = {
 };
 
 describe('builder adapter', () => {
+  it('creates usable Open Composition children with semantic field behavior', () => {
+    const root = createOpenCompositionNodeDefinition('root');
+    const section = createOpenCompositionNodeDefinition('section');
+    const form = createOpenCompositionNodeDefinition('form');
+    const formId = String(form.attributes?.[BUILDER_NODE_ID_ATTRIBUTE]);
+    const field = createOpenCompositionNodeDefinition('form-field', {
+      formNodeId: formId,
+    });
+    form.attributes = {
+      ...(form.attributes ?? {}),
+      [BUILDER_PARTS_STYLE_ATTRIBUTE]: JSON.stringify({
+        submit: { base: { backgroundColor: '#112233' } },
+      }),
+    };
+    root.attributes = {
+      ...(root.attributes ?? {}),
+      [BUILDER_METADATA_ATTRIBUTE]: JSON.stringify({ documentTitle: 'Test page' }),
+    };
+    form.components = [field];
+    section.components = [form];
+    root.components = [section];
+
+    const snapshot = snapshotFromEditorDefinition(root);
+    expect(snapshot.attributes[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('root');
+    expect(snapshot.children[0]?.attributes[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('section');
+    const payload = serializeEditorSnapshot(snapshot);
+    expect(payload.version).toBe(8);
+    if (payload.version !== 8) throw new Error('Expected an Open Composition payload');
+    expect(payload.root.children[0]?.type).toBe('section');
+    expect(payload.root.children[0]?.children[0]?.type).toBe('form');
+    expect(payload.root.children[0]?.children[0]?.partsStyle).toEqual({
+      submit: { base: { backgroundColor: '#112233' } },
+    });
+    expect(payload.root.children[0]?.children[0]?.children[0]?.type).toBe('form-field');
+    expect(
+      payload.root.children[0]?.children[0]?.children[0]?.children.map(
+        (child) => child.type,
+      ),
+    ).toEqual(['label', 'input']);
+    expect(payload.behaviors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'field',
+          formNodeId: formId,
+          controlNodeId: expect.any(String),
+        }),
+      ]),
+    );
+  });
+
   it('round-trips an Open Composition recipe as real nested canvas nodes', () => {
     const document = instantiateOpenCompositionRecipe(
       'contact-form',

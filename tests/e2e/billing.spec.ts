@@ -1,11 +1,12 @@
 import { expect, request, test } from '@playwright/test';
+import { E2E_API_ORIGIN } from './fixtures/urls';
 
 test('@tenancy provisions a default plan and enforces a tenant-scoped workspace quota', async ({
   page,
 }) => {
   test.setTimeout(60_000);
   const api = await request.newContext({
-    baseURL: 'http://127.0.0.1:3001',
+    baseURL: E2E_API_ORIGIN,
   });
   const suffix = Date.now().toString();
   const tenantSlug = `billing-${suffix}`;

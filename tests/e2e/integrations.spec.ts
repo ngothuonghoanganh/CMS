@@ -7,6 +7,7 @@ import {
   switchCanonicalBrowserContext,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
@@ -110,7 +111,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
-  const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
+  const publicPage = await browser.newPage({ baseURL: E2E_RENDERER_ORIGIN });
   await publicPage.goto(`/${siteSlug}/${pageSlug}`);
   await publicPage.getByLabel('Name').fill('Integration visitor');
   await publicPage.getByLabel('Email').fill('visitor@example.com');

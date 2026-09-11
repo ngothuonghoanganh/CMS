@@ -86,6 +86,11 @@ These are architectural advantages. Builder V2 should improve the authoring surf
 
 ## 3. Product principles
 
+The current Phase 23 implementation applies these principles to Open
+Composition authoring: the Inspector uses explicit authoring metadata and
+semantic controls, Layers remains a content tree, and responsive values expose
+inheritance/reset behavior instead of requiring media-query knowledge.
+
 ### 3.1 Pages is a website structure tool, not a record table
 
 A user should think:

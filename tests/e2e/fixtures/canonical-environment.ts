@@ -6,8 +6,9 @@ import {
   type Page as PlaywrightPage,
 } from '@playwright/test';
 import { createDefaultSiteDesignSystem } from '@payload/contracts';
+import { E2E_API_BASE_URL } from './urls';
 
-const apiBase = process.env.E2E_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
+const apiBase = E2E_API_BASE_URL;
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
 

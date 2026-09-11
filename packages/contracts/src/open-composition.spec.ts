@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   OPEN_COMPOSITION_REGISTRY,
+  OPEN_COMPOSITION_AUTHORING_REGISTRY,
   OPEN_COMPOSITION_RECIPE_REGISTRY,
   OpenCompositionDocumentSchema,
   canComposeChild,
   instantiateOpenCompositionRecipe,
+  getOpenCompositionAuthoringDefinition,
+  getOpenCompositionAuthoringProperty,
   migratePagePayloadToOpenComposition,
   migratePagePayloadV7ToOpenComposition,
   type OpenCompositionNode,
@@ -47,6 +50,39 @@ describe('Open Composition contract', () => {
     }
     expect(OPEN_COMPOSITION_REGISTRY.input.allowedParents).toContain('form-field');
     expect(OPEN_COMPOSITION_REGISTRY.input.allowedParents).not.toContain('form');
+  });
+
+  it('provides explicit no-code authoring metadata instead of inferring controls from props', () => {
+    const heading = getOpenCompositionAuthoringDefinition('heading');
+    const field = getOpenCompositionAuthoringDefinition('form-field');
+    const grid = getOpenCompositionAuthoringDefinition('grid');
+
+    expect(heading.properties.map((property) => property.label)).toEqual([
+      'Heading text',
+      'Heading level',
+    ]);
+    expect(getOpenCompositionAuthoringProperty('button', 'href')).toEqual(
+      expect.objectContaining({ label: 'Link', control: 'link' }),
+    );
+    expect(getOpenCompositionAuthoringProperty('button', 'formKey')).toBeUndefined();
+    expect(field.properties).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'required',
+          label: 'Required field',
+          control: 'toggle',
+        }),
+      ]),
+    );
+    expect(grid.styleGroups.map((group) => group.label)).toContain('Layout');
+    expect(
+      grid.styleGroups
+        .flatMap((group) => group.properties)
+        .find((property) => property.key === 'grid-template-columns'),
+    ).toEqual(expect.objectContaining({ label: 'Columns', control: 'segmented' }));
+    expect(Object.keys(OPEN_COMPOSITION_AUTHORING_REGISTRY)).toHaveLength(
+      Object.keys(OPEN_COMPOSITION_REGISTRY).length,
+    );
   });
 
   it('ships Contact Form as a normal editable composition with semantic references', () => {

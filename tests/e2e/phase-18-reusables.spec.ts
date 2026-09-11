@@ -1,25 +1,29 @@
 import { expect, type Page } from '@playwright/test';
 import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_API_ORIGIN } from './fixtures/urls';
 
 async function apiRequest(
   page: Page,
   input: { path: string; method?: string; body?: unknown },
 ): Promise<{ status: number; body: unknown }> {
-  return page.evaluate(async ({ path, method, body }) => {
-    const response = await fetch(`http://127.0.0.1:3001/api/v1${path}`, {
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      credentials: 'include',
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      method: method ?? 'GET',
-    });
-    let responseBody: unknown;
-    try {
-      responseBody = await response.json();
-    } catch {
-      responseBody = undefined;
-    }
-    return { body: responseBody, status: response.status };
-  }, input);
+  return page.evaluate(
+    async ({ path, method, body, apiBase }) => {
+      const response = await fetch(`${apiBase}${path}`, {
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        credentials: 'include',
+        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+        method: method ?? 'GET',
+      });
+      let responseBody: unknown;
+      try {
+        responseBody = await response.json();
+      } catch {
+        responseBody = undefined;
+      }
+      return { body: responseBody, status: response.status };
+    },
+    { ...input, apiBase: E2E_API_BASE_URL },
+  );
 }
 
 function reusableDocument(text: string) {
@@ -142,7 +146,7 @@ test('linked reusables propagate published source updates and survive archive', 
   expect(sitePublish.status, JSON.stringify(sitePublish.body)).toBe(201);
 
   const publicPath = `/api/v1/public/sites/${siteSlug}/pages/${pageSlug}`;
-  const firstPublic = await page.request.get(`http://127.0.0.1:3001${publicPath}`);
+  const firstPublic = await page.request.get(`${E2E_API_ORIGIN}${publicPath}`);
   expect(firstPublic.status()).toBe(200);
   expect(
     (await firstPublic.json()).reusables[0].document.root.children[0].props.text,
@@ -155,7 +159,7 @@ test('linked reusables propagate published source updates and survive archive', 
   });
   expect(updateResponse.status).toBe(200);
 
-  const unchangedPublic = await page.request.get(`http://127.0.0.1:3001${publicPath}`);
+  const unchangedPublic = await page.request.get(`${E2E_API_ORIGIN}${publicPath}`);
   expect(
     (await unchangedPublic.json()).reusables[0].document.root.children[0].props.text,
   ).toBe('Shared heading v1');
@@ -166,7 +170,7 @@ test('linked reusables propagate published source updates and survive archive', 
     path: `/workspaces/${workspaceId}/sites/${siteId}/publish`,
   });
   expect(updatedSitePublish.status, JSON.stringify(updatedSitePublish.body)).toBe(201);
-  const updatedPublic = await page.request.get(`http://127.0.0.1:3001${publicPath}`);
+  const updatedPublic = await page.request.get(`${E2E_API_ORIGIN}${publicPath}`);
   expect(
     (await updatedPublic.json()).reusables[0].document.root.children[0].props.text,
   ).toBe('Shared heading v2');
@@ -186,7 +190,7 @@ test('linked reusables propagate published source updates and survive archive', 
     ),
   ).toBe(false);
 
-  const archivedPublic = await page.request.get(`http://127.0.0.1:3001${publicPath}`);
+  const archivedPublic = await page.request.get(`${E2E_API_ORIGIN}${publicPath}`);
   expect(archivedPublic.status()).toBe(200);
   expect(
     (await archivedPublic.json()).reusables[0].document.root.children[0].props.text,

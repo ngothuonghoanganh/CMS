@@ -6,6 +6,7 @@ import {
   switchCanonicalBrowserContext,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_CMS_ORIGIN } from './fixtures/urls';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
@@ -13,7 +14,7 @@ const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
 test('creates, publishes, enables and executes a manual workflow exactly once', async ({
   request,
 }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const login = await request.post(`${baseUrl}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',
@@ -87,7 +88,7 @@ test('creates, publishes, enables and executes a manual workflow exactly once', 
 test('renders the workflow builder without horizontal overflow across viewports', async ({
   page,
 }) => {
-  await page.goto('http://127.0.0.1:3000/');
+  await page.goto(`${E2E_CMS_ORIGIN}/`);
   await expect(page).toHaveURL(/\/login$/);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);

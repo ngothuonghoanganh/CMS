@@ -2,6 +2,7 @@ import {
   PAGE_COMPONENT_REGISTRY,
   type ComponentPartDefinition,
   type PageComponentType,
+  isPageComponentType,
 } from '@payload/contracts';
 
 /** A transient Layers selection. An omitted part targets the block's own style. */
@@ -21,8 +22,9 @@ export type BuilderStyleTargetDefinition = {
  * by the persisted builder node and its normal Style inspector.
  */
 export function styleableComponentParts(
-  type: PageComponentType,
+  type: string,
 ): readonly ComponentPartDefinition[] {
+  if (!isPageComponentType(type)) return [];
   return Object.values(PAGE_COMPONENT_REGISTRY[type].componentParts).filter(
     (part) => part.name !== 'root' && part.styleCapabilities.length > 0,
   );
@@ -35,7 +37,7 @@ export function styleableComponentParts(
  * making the available style scope discoverable from Layers.
  */
 export function styleTargetsForComponent(
-  type: PageComponentType,
+  type: string,
 ): readonly BuilderStyleTargetDefinition[] {
   return [
     { label: 'Block' },

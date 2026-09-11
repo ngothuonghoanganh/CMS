@@ -6,6 +6,7 @@ import {
   switchCanonicalBrowserContext,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 async function openPages(page: Page, siteName?: string) {
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
@@ -48,7 +49,7 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
-  const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
+  const publicPage = await browser.newPage({ baseURL: E2E_RENDERER_ORIGIN });
   const publicUrl = `/${siteSlug}/${pageSlug}`;
   await publicPage.goto(publicUrl);
   await expect(publicPage.getByText('Published content A')).toBeVisible();
@@ -79,7 +80,7 @@ test('publishes, isolates a newer draft, republishes, and unpublishes', async ({
   await page.getByRole('button', { name: 'Unpublish' }).click();
   await expect(page.getByRole('status')).toContainText('Page unpublished');
   const unpublishedResponse = await request.get(
-    `http://127.0.0.1:3001/api/v1/public/sites/${siteSlug}/pages/${pageSlug}`,
+    `${E2E_API_BASE_URL}/public/sites/${siteSlug}/pages/${pageSlug}`,
   );
   expect(unpublishedResponse.status()).toBe(404);
   const rendererResponse = await publicPage.goto(`${publicUrl}?refresh=${Date.now()}`);
@@ -115,6 +116,6 @@ test('publishes a site after its homepage is published', async ({
   }
   await expect(siteRow.getByRole('button', { name: 'Published' })).toBeDisabled();
   await request.post(
-    `http://127.0.0.1:3001/api/v1/pages/${canonicalEnvironment.pageId}/unpublish`,
+    `${E2E_API_BASE_URL}/pages/${canonicalEnvironment.pageId}/unpublish`,
   );
 });

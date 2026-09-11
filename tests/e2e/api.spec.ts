@@ -1,8 +1,9 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { E2E_API_BASE_URL, E2E_CMS_ORIGIN, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 test('API liveness is reachable', async ({ request }) => {
-  const response = await request.get('http://127.0.0.1:3001/api/v1/health/live');
+  const response = await request.get(`${E2E_API_BASE_URL}/health/live`);
   expect(response.ok()).toBeTruthy();
   expect((await response.json()) as { status: string }).toMatchObject({ status: 'ok' });
 });
@@ -10,7 +11,7 @@ test('API liveness is reachable', async ({ request }) => {
 test('uploaded local assets are reachable through the CMS and renderer proxies', async ({
   request,
 }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const loginResponse = await request.post(`${baseUrl}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',
@@ -47,7 +48,7 @@ test('uploaded local assets are reachable through the CMS and renderer proxies',
     assetId = asset.id;
     expect(asset.publicUrl).toMatch(/^\/api\/v1\/public\/assets\//);
 
-    for (const origin of ['http://127.0.0.1:3000', 'http://127.0.0.1:3002']) {
+    for (const origin of [E2E_CMS_ORIGIN, E2E_RENDERER_ORIGIN]) {
       const proxiedResponse = await request.get(`${origin}${asset.publicUrl}`);
       expect(proxiedResponse.status(), `${origin} asset proxy`).toBe(200);
       expect(proxiedResponse.headers()['content-type']).toContain('image/png');
@@ -67,11 +68,11 @@ test('management API requires authentication and supports session lifecycle', as
   request,
 }) => {
   const workspaceResponse = await request.get(
-    'http://127.0.0.1:3001/api/v1/workspaces/not-authorized',
+    `${E2E_API_BASE_URL}/workspaces/not-authorized`,
   );
   expect(workspaceResponse.status()).toBe(401);
 
-  const loginResponse = await request.post('http://127.0.0.1:3001/api/v1/auth/login', {
+  const loginResponse = await request.post(`${E2E_API_BASE_URL}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',
       password: process.env.AUTH_PASSWORD ?? 'change-me-in-development',
@@ -79,19 +80,19 @@ test('management API requires authentication and supports session lifecycle', as
   });
   expect(loginResponse.status()).toBe(200);
 
-  const meResponse = await request.get('http://127.0.0.1:3001/api/v1/auth/me');
+  const meResponse = await request.get(`${E2E_API_BASE_URL}/auth/me`);
   expect(meResponse.status()).toBe(200);
   expect(
     ((await meResponse.json()) as { workspace: { id: string } }).workspace.id,
   ).toMatch(/^[0-9a-f-]{36}$/);
 
-  const logoutResponse = await request.post('http://127.0.0.1:3001/api/v1/auth/logout');
+  const logoutResponse = await request.post(`${E2E_API_BASE_URL}/auth/logout`);
   expect(logoutResponse.status()).toBe(204);
-  expect((await request.get('http://127.0.0.1:3001/api/v1/auth/me')).status()).toBe(401);
+  expect((await request.get(`${E2E_API_BASE_URL}/auth/me`)).status()).toBe(401);
 });
 
 test('refresh tokens rotate once and stale tokens are rejected', async ({ request }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const accessCookieName =
     process.env.AUTH_ACCESS_TOKEN_COOKIE_NAME ?? 'payload_access_token';
   const refreshCookieName =
@@ -152,7 +153,7 @@ test('refresh tokens rotate once and stale tokens are rejected', async ({ reques
 test('tenant RBAC exposes effective permissions and audits role changes', async ({
   request,
 }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const loginResponse = await request.post(`${baseUrl}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',
@@ -204,7 +205,7 @@ test('tenant RBAC exposes effective permissions and audits role changes', async 
 test('@tenancy tenant extensions are registry-backed, tenant-scoped and auditable', async ({
   request,
 }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const loginResponse = await request.post(`${baseUrl}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',
@@ -401,7 +402,7 @@ test('@tenancy tenant extensions are registry-backed, tenant-scoped and auditabl
 test('@tenancy extension disable contract distinguishes draft-only and published page usage', async ({
   request,
 }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const loginResponse = await request.post(`${baseUrl}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',
@@ -526,7 +527,7 @@ test('@tenancy extension disable contract distinguishes draft-only and published
 test('tenant user management enforces lifecycle, session revocation and safe access data', async ({
   request,
 }) => {
-  const baseUrl = 'http://127.0.0.1:3001/api/v1';
+  const baseUrl = E2E_API_BASE_URL;
   const ownerLogin = await request.post(`${baseUrl}/auth/login`, {
     data: {
       email: process.env.AUTH_EMAIL ?? 'admin@example.com',

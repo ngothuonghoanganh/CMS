@@ -631,4 +631,47 @@ describe('editor command boundary', () => {
       'accordion-item',
     );
   });
+
+  it('inserts Open Composition children through the shared structural command', () => {
+    const form = new FakeComponent('form', 'form');
+    form.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+        formKey: 'contact',
+      }),
+    });
+    const root = new FakeComponent('root', 'root', [form]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.canDispatch({
+        kind: 'insert-child',
+        parentId: 'form',
+        slotName: '',
+        childType: 'form-field',
+      }),
+    ).toBe(true);
+    const result = bus.dispatch({
+      kind: 'insert-child',
+      parentId: 'form',
+      slotName: '',
+      childType: 'form-field',
+    });
+    expect(result.changed).toBe(true);
+    expect(form.children).toHaveLength(1);
+    expect(form.children[0]?.children).toHaveLength(2);
+    expect(
+      form.children[0]?.children[0]?.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE],
+    ).toBe('label');
+    expect(
+      JSON.parse(
+        String(form.children[0]?.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+      ),
+    ).toEqual([expect.objectContaining({ kind: 'field', formNodeId: 'form' })]);
+  });
 });

@@ -6,8 +6,9 @@ import {
   type PagePayload,
 } from '@payload/contracts';
 import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
-const rendererOrigin = 'http://127.0.0.1:3002';
+const rendererOrigin = E2E_RENDERER_ORIGIN;
 
 const computedProperties = [
   ...new Set([
@@ -708,25 +709,19 @@ test('Builder, draft review, and published renderer retain visual parity', async
     fixture,
   );
   const enabledExtension = await page.evaluate(
-    async ({ id, extensionId }) => {
-      const tenantResponse = await fetch(
-        `http://127.0.0.1:3001/api/v1/extensions/${extensionId}/enable`,
-        {
-          body: JSON.stringify({}),
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          method: 'POST',
-        },
-      );
-      const response = await fetch(
-        `http://127.0.0.1:3001/api/v1/pages/${id}/extensions/${extensionId}`,
-        {
-          body: JSON.stringify({ enabled: true }),
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          method: 'PUT',
-        },
-      );
+    async ({ id, extensionId, apiBase }) => {
+      const tenantResponse = await fetch(`${apiBase}/extensions/${extensionId}/enable`, {
+        body: JSON.stringify({}),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      const response = await fetch(`${apiBase}/pages/${id}/extensions/${extensionId}`, {
+        body: JSON.stringify({ enabled: true }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PUT',
+      });
       return {
         body: await response.json(),
         status: response.status,
@@ -734,15 +729,15 @@ test('Builder, draft review, and published renderer retain visual parity', async
         tenantStatus: tenantResponse.status,
       };
     },
-    { extensionId: ExtensionIds.DemoBuilder, id: pageId! },
+    { apiBase: E2E_API_BASE_URL, extensionId: ExtensionIds.DemoBuilder, id: pageId! },
   );
   expect(enabledExtension.tenantStatus, JSON.stringify(enabledExtension.tenantBody)).toBe(
     201,
   );
   expect(enabledExtension.status, JSON.stringify(enabledExtension.body)).toBe(200);
   const saved = await page.evaluate(
-    async ({ id, payload }) => {
-      const response = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/versions`, {
+    async ({ id, payload, apiBase }) => {
+      const response = await fetch(`${apiBase}/pages/${id}/versions`, {
         body: JSON.stringify({ expectedVersionNumber: 1, payload }),
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -750,7 +745,7 @@ test('Builder, draft review, and published renderer retain visual parity', async
       });
       return { body: await response.json(), status: response.status };
     },
-    { id: pageId!, payload: fixture },
+    { apiBase: E2E_API_BASE_URL, id: pageId!, payload: fixture },
   );
   expect(saved.status, JSON.stringify(saved.body)).toBe(201);
 
@@ -776,20 +771,23 @@ test('Builder, draft review, and published renderer retain visual parity', async
     ).__payloadBuilderDebug;
     return debug?.getPayload();
   });
-  const draftPayloads = await page.evaluate(async (id) => {
-    const [versions, preview] = await Promise.all([
-      fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/versions?limit=1`, {
-        credentials: 'include',
-      }),
-      fetch(`http://127.0.0.1:3001/api/v1/preview/pages/${id}`, {
-        credentials: 'include',
-      }),
-    ]);
-    return {
-      preview: await preview.json(),
-      versions: await versions.json(),
-    };
-  }, pageId!);
+  const draftPayloads = await page.evaluate(
+    async ({ id, apiBase }) => {
+      const [versions, preview] = await Promise.all([
+        fetch(`${apiBase}/pages/${id}/versions?limit=1`, {
+          credentials: 'include',
+        }),
+        fetch(`${apiBase}/preview/pages/${id}`, {
+          credentials: 'include',
+        }),
+      ]);
+      return {
+        preview: await preview.json(),
+        versions: await versions.json(),
+      };
+    },
+    { apiBase: E2E_API_BASE_URL, id: pageId! },
+  );
   expect(builderPayload).toEqual(fixture);
   expect(draftPayloads.versions.items[0].payload).toEqual(fixture);
   expect(draftPayloads.preview.payload).toEqual(fixture);
@@ -806,18 +804,21 @@ test('Builder, draft review, and published renderer retain visual parity', async
   // fixture is seeded through the draft-version API above, so publishing it via
   // the API keeps this test focused on the cross-surface rendering contract
   // rather than GrapesJS's asynchronous initial-hydration dirty acknowledgement.
-  const publishedResponse = await page.evaluate(async (id) => {
-    const response = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/publish`, {
-      body: JSON.stringify({}),
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    return { body: await response.json(), status: response.status };
-  }, pageId!);
+  const publishedResponse = await page.evaluate(
+    async ({ id, apiBase }) => {
+      const response = await fetch(`${apiBase}/pages/${id}/publish`, {
+        body: JSON.stringify({}),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      return { body: await response.json(), status: response.status };
+    },
+    { apiBase: E2E_API_BASE_URL, id: pageId! },
+  );
   expect(publishedResponse.status, JSON.stringify(publishedResponse.body)).toBe(201);
   const publicPayloadResponse = await page.request.get(
-    `http://127.0.0.1:3001/api/v1/public/sites/${siteSlug}/pages/${pageSlug}`,
+    `${E2E_API_BASE_URL}/public/sites/${siteSlug}/pages/${pageSlug}`,
   );
   expect(publicPayloadResponse.status()).toBe(200);
   expect((await publicPayloadResponse.json()).payload).toEqual(fixture);
@@ -947,26 +948,26 @@ test('Builder, draft review, and published renderer retain visual parity', async
   }
 
   const cleanup = await page.evaluate(
-    async ({ id, extensionId }) => {
+    async ({ id, extensionId, apiBase }) => {
       const extensionResponse = await fetch(
-        `http://127.0.0.1:3001/api/v1/pages/${id}/extensions/${extensionId}`,
+        `${apiBase}/pages/${id}/extensions/${extensionId}`,
         { credentials: 'include', method: 'DELETE' },
       );
-      const pageResponse = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}`, {
+      const pageResponse = await fetch(`${apiBase}/pages/${id}`, {
         credentials: 'include',
         method: 'DELETE',
       });
-      const tenantResponse = await fetch(
-        `http://127.0.0.1:3001/api/v1/extensions/${extensionId}/disable`,
-        { credentials: 'include', method: 'POST' },
-      );
+      const tenantResponse = await fetch(`${apiBase}/extensions/${extensionId}/disable`, {
+        credentials: 'include',
+        method: 'POST',
+      });
       return {
         extensionStatus: extensionResponse.status,
         pageStatus: pageResponse.status,
         tenantStatus: tenantResponse.status,
       };
     },
-    { extensionId: ExtensionIds.DemoBuilder, id: pageId! },
+    { apiBase: E2E_API_BASE_URL, extensionId: ExtensionIds.DemoBuilder, id: pageId! },
   );
   expect(cleanup.extensionStatus).toBe(200);
   expect([200, 204]).toContain(cleanup.pageStatus);

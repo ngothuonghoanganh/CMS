@@ -1,12 +1,10 @@
 import { expect } from '@playwright/test';
 
 import { loginToCanonicalBuilder, test } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
-const apiBase = process.env.E2E_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
-const rendererBase =
-  process.env.E2E_RENDERER_BASE_URL ??
-  process.env.NEXT_PUBLIC_RENDERER_BASE_URL ??
-  'http://127.0.0.1:3002';
+const apiBase = E2E_API_BASE_URL;
+const rendererBase = E2E_RENDERER_ORIGIN;
 
 test('Phase 20.1 collection management and dynamic page flow works in the browser @phase20.1', async ({
   page,

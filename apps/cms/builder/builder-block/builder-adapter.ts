@@ -73,6 +73,7 @@ import {
   type NavigationPagePaths,
   type NavigationItem,
   type OpenCompositionNode,
+  type OpenCompositionNodeType,
   type OpenCompositionBehavior,
   type OpenCompositionPayload,
   type CompositionStyle,
@@ -1444,6 +1445,9 @@ function openCompositionNodeDefinition(
   if (node.style) {
     attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE] = jsonAttribute(node.style);
   }
+  if (node.partsStyle) {
+    attributes[BUILDER_PARTS_STYLE_ATTRIBUTE] = jsonAttribute(node.partsStyle);
+  }
   return {
     type: node.type === 'text' ? 'text' : node.type === 'image' ? 'image' : 'default',
     tagName,
@@ -1476,6 +1480,104 @@ function openCompositionNodeDefinition(
       openCompositionNodeDefinition(child, undefined, payloadVersion),
     ),
   };
+}
+
+/**
+ * Creates one safe, immediately usable Open Composition child for structural
+ * Add actions. The authoring surface supplies the node type; defaults live in
+ * the adapter so Quick Add, Layers, and Inspector all create the same shape.
+ */
+export function createOpenCompositionNodeDefinition(
+  type: OpenCompositionNodeType,
+  options: { formNodeId?: string } = {},
+): ComponentDefinition {
+  const id = type === 'root' ? 'root' : newNodeId(type);
+  const child = (childType: OpenCompositionNodeType, props: Record<string, unknown>) =>
+    ({
+      id: newNodeId(childType),
+      type: childType,
+      props,
+      children: [],
+    }) satisfies OpenCompositionNode;
+
+  let node: OpenCompositionNode = { id, type, props: {}, children: [] };
+  let behaviors: OpenCompositionBehavior[] = [];
+
+  switch (type) {
+    case 'heading':
+      node.props = { text: 'Your heading', level: 2 };
+      break;
+    case 'text':
+      node.props = { text: 'Add your text here' };
+      break;
+    case 'label':
+      node.props = { text: 'Label' };
+      break;
+    case 'image':
+      node.props = { src: '/assets/placeholder.png', alt: 'Image' };
+      break;
+    case 'button':
+      node.props = { label: 'Button', href: '/', target: '_self' };
+      break;
+    case 'link':
+      node.props = { label: 'Link', href: '/', target: '_self' };
+      break;
+    case 'input':
+    case 'textarea':
+    case 'select': {
+      node.props = {
+        type: type === 'textarea' ? 'textarea' : type === 'select' ? 'select' : 'text',
+        name: 'field',
+        placeholder: '',
+      };
+      break;
+    }
+    case 'form-field': {
+      const fieldKey = `field-${id}`;
+      const label = child('label', { text: 'Field label' });
+      const controlType: OpenCompositionNodeType = 'input';
+      const control = child(controlType, {
+        fieldKey,
+        type: 'text',
+        name: fieldKey,
+        placeholder: '',
+      });
+      node.props = { fieldKey, required: false };
+      node.children = [label, control];
+      const behavior = {
+        id: `${id}-behavior`,
+        kind: 'field',
+        nodeId: id,
+        formNodeId: options.formNodeId ?? id,
+        fieldKey,
+        inputType: 'text',
+        required: false,
+        labelNodeId: label.id,
+        controlNodeId: control.id,
+      } satisfies OpenCompositionBehavior;
+      behaviors = [behavior];
+      break;
+    }
+    case 'form':
+      node.props = {
+        formKey: `form-${id}`,
+        successMessage: 'Thanks — we will be in touch soon.',
+      };
+      break;
+    default:
+      break;
+  }
+
+  const definition = openCompositionNodeDefinition(node, undefined, 8);
+  return behaviors.length > 0
+    ? {
+        ...definition,
+        attributes: {
+          ...(definition.attributes ?? {}),
+          [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: jsonAttribute(behaviors),
+        },
+      }
+    : definition;
 }
 
 export function payloadToEditorComponent(
@@ -2836,6 +2938,41 @@ function readOpenNodeStyle(
   return Object.keys(definedBase).length > 0 ? { base: definedBase } : undefined;
 }
 
+function readOpenNodePartsStyle(
+  snapshot: BuilderEditorSnapshot,
+  path: string[],
+): Record<string, CompositionStyle> | undefined {
+  const raw = snapshot.attributes[BUILDER_PARTS_STYLE_ATTRIBUTE];
+  if (raw === undefined || raw === '') return undefined;
+  if (typeof raw !== 'string') {
+    throw new BuilderAdapterError('Open composition part styles must be JSON text', path);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch {
+    throw new BuilderAdapterError(
+      'Open composition part styles are not valid JSON',
+      path,
+    );
+  }
+  if (!isObject(value)) {
+    throw new BuilderAdapterError('Open composition part styles must be an object', path);
+  }
+  const result: Record<string, CompositionStyle> = {};
+  for (const [partName, partValue] of Object.entries(value)) {
+    const parsed = CompositionStyleSchema.safeParse(partValue);
+    if (!parsed.success || !parsed.data) {
+      throw new BuilderAdapterError(
+        `Open composition part style "${partName}" is invalid`,
+        [...path, 'partsStyle', partName],
+      );
+    }
+    result[partName] = parsed.data;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function openCompositionNodeFromSnapshot(
   snapshot: BuilderEditorSnapshot,
   path: string[],
@@ -2885,10 +3022,18 @@ function openCompositionNodeFromSnapshot(
     if (placeholder) props.placeholder = placeholder;
   }
   const style = readOpenNodeStyle(snapshot, path);
+  const partsStyle = readOpenNodePartsStyle(snapshot, path);
   const children = snapshot.children.map((child, index) =>
     nodeFromSnapshot(child, [...path, 'children', String(index)]),
   );
-  return { id, type, props, ...(style ? { style } : {}), children };
+  return {
+    id,
+    type,
+    props,
+    ...(style ? { style } : {}),
+    ...(partsStyle ? { partsStyle } : {}),
+    children,
+  };
 }
 
 function readNodePartsStyle(

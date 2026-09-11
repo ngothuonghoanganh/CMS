@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 test('renderer shell loads', async ({ browser }) => {
-  const page = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
+  const page = await browser.newPage({ baseURL: E2E_RENDERER_ORIGIN });
   const navigationRequests: string[] = [];
   page.on('request', (request) => {
     if (request.isNavigationRequest()) navigationRequests.push(request.url());

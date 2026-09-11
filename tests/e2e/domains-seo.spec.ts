@@ -6,6 +6,7 @@ import {
   switchCanonicalBrowserContext,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 test('configures SEO, verifies a custom domain and renders its public metadata', async ({
   browser,
@@ -71,7 +72,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
-  const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
+  const publicPage = await browser.newPage({ baseURL: E2E_RENDERER_ORIGIN });
   await publicPage.setExtraHTTPHeaders({ 'x-forwarded-host': hostname });
   await publicPage.goto('/');
   await expect(publicPage.locator('.public-page')).toBeVisible();

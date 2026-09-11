@@ -120,6 +120,16 @@ function nodeStyle(
   return authored;
 }
 
+function partStyle(
+  owner: OpenCompositionNode | undefined,
+  partName: string,
+  context: OpenCompositionRendererProps['context'],
+): CSSProperties {
+  return owner?.partsStyle?.[partName]
+    ? styleBlockToProperties(owner.partsStyle[partName], context?.designSystem)
+    : {};
+}
+
 function attributes(node: OpenCompositionNode) {
   return {
     'data-payload-node-id': node.id,
@@ -132,26 +142,45 @@ function responsiveCss(
   viewport: 'tablet' | 'mobile',
   designSystem: SiteDesignSystem | undefined,
 ): string {
+  function declarationsFor(block: Record<string, unknown>): string[] {
+    return Object.entries(block).flatMap(([property, value]) => {
+      const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
+      if (!definition || (typeof value !== 'string' && typeof value !== 'object')) {
+        return [];
+      }
+      const resolved = resolvePageStyleValue(
+        value as string | { kind: 'token'; tokenId: string },
+        designSystem,
+        definition.key,
+      );
+      return resolved && isSafePageStyleValue(resolved)
+        ? `${definition.cssProperty}:${resolved}!important`
+        : [];
+    });
+  }
+
   return flatten(root)
     .flatMap((node) => {
+      const rules: string[] = [];
       const block = node.style?.[viewport];
-      if (!block) return [];
-      const declarations = Object.entries(block).flatMap(([property, value]) => {
-        const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
-        if (!definition || (typeof value !== 'string' && typeof value !== 'object'))
-          return [];
-        const resolved = resolvePageStyleValue(
-          value as string | { kind: 'token'; tokenId: string },
-          designSystem,
-          definition.key,
-        );
-        return resolved && isSafePageStyleValue(resolved)
-          ? `${definition.cssProperty}:${resolved}!important`
-          : [];
-      });
-      return declarations.length
-        ? [`[data-payload-node-id="${node.id}"]{${declarations.join(';')}}`]
-        : [];
+      if (block) {
+        const declarations = declarationsFor(block);
+        if (declarations.length) {
+          rules.push(`[data-payload-node-id="${node.id}"]{${declarations.join(';')}}`);
+        }
+      }
+      for (const [partName, style] of Object.entries(node.partsStyle ?? {})) {
+        const partBlock = style[viewport];
+        if (!partBlock) continue;
+        const declarations = declarationsFor(partBlock);
+        if (!declarations.length) continue;
+        const selector =
+          partName === 'root'
+            ? `[data-payload-node-id="${node.id}"]`
+            : `[data-payload-node-id="${node.id}"] [data-payload-part="${partName}"]`;
+        rules.push(`${selector}{${declarations.join(';')}}`);
+      }
+      return rules;
     })
     .join('');
 }
@@ -209,6 +238,7 @@ function renderControl(
   runtime: OpenFormRuntime,
 ): ReactElement {
   const field = fieldForControl(node, runtime);
+  const form = field ? runtime.byId.get(field.formNodeId) : undefined;
   const fieldKey = field?.fieldKey ?? textProp(node, 'fieldKey', node.id);
   const inputType = field?.inputType ?? textProp(node, 'type', 'text');
   const value = runtime.values[fieldKey] ?? (inputType === 'checkbox' ? false : '');
@@ -218,7 +248,11 @@ function renderControl(
     required: field?.required ?? booleanProp(node, 'required'),
     'data-payload-node-id': node.id,
     'data-payload-node-type': node.type,
-    style: nodeStyle(node, context),
+    'data-payload-part': 'input',
+    style: {
+      ...nodeStyle(node, context),
+      ...partStyle(form, 'input', context),
+    },
   };
   const onValue = (next: FormValue) => runtime.setValue(fieldKey, next);
 
@@ -313,12 +347,17 @@ function renderFormField(
   context: OpenCompositionRendererProps['context'],
   runtime: OpenFormRuntime,
 ): ReactElement {
+  const fieldBehavior = runtime.behaviors.find(
+    (behavior): behavior is Extract<OpenCompositionBehavior, { kind: 'field' }> =>
+      behavior.kind === 'field' && behavior.nodeId === node.id,
+  );
+  const form = fieldBehavior ? runtime.byId.get(fieldBehavior.formNodeId) : undefined;
   return (
     <div
       {...attributes(node)}
       className={PAGE_RUNTIME_CLASS_NAMES.formField}
       data-payload-part="field"
-      style={nodeStyle(node, context)}
+      style={{ ...nodeStyle(node, context), ...partStyle(form, 'field', context) }}
     >
       {OpenNodeContent({ node, context, runtime })}
     </div>
@@ -425,7 +464,12 @@ function renderOpenNode(
               ? 'submit'
               : 'button'
           }
-          style={style}
+          data-payload-part={targetNode?.type === 'form' ? 'submit' : undefined}
+          style={
+            targetNode?.type === 'form'
+              ? { ...style, ...partStyle(targetNode, 'submit', context) }
+              : style
+          }
         >
           {content}
         </button>
@@ -452,7 +496,15 @@ function renderOpenNode(
         <label
           {...attributes(node)}
           htmlFor={field?.controlNodeId ? `payload-form-${field.fieldKey}` : undefined}
-          style={style}
+          data-payload-part="label"
+          style={{
+            ...style,
+            ...partStyle(
+              field ? runtime.byId.get(field.formNodeId) : undefined,
+              'label',
+              context,
+            ),
+          }}
         >
           {textProp(node, 'text', 'Label')}
           {field?.required ? <span aria-hidden="true"> *</span> : null}
@@ -476,6 +528,7 @@ function renderOpenNode(
             className={PAGE_RUNTIME_CLASS_NAMES.formSuccess}
             data-payload-part="success"
             role="status"
+            style={partStyle(node, 'success', context)}
           >
             {textProp(node, 'successMessage', 'Thanks — we will be in touch soon.')}
           </div>
@@ -487,11 +540,16 @@ function renderOpenNode(
           className={PAGE_RUNTIME_CLASS_NAMES.form}
           data-payload-part="root"
           onSubmit={(event) => runtime.submit(event, node)}
-          style={style}
+          style={{ ...style, ...partStyle(node, 'root', context) }}
         >
           {OpenNodeContent({ node, context, runtime })}
           {runtime.errors[node.id] ? (
-            <p aria-live="polite" data-payload-part="error" role="alert">
+            <p
+              aria-live="polite"
+              data-payload-part="error"
+              role="alert"
+              style={partStyle(node, 'error', context)}
+            >
               {runtime.errors[node.id]}
             </p>
           ) : null}

@@ -1,6 +1,7 @@
 'use client';
 
 import type { BuilderNodeType } from './builder-block/builder-adapter';
+import type { OpenCompositionNodeType } from '@payload/contracts';
 import {
   useRef,
   type CSSProperties,
@@ -11,7 +12,8 @@ import {
 
 export type BuilderCanvasNode = {
   id: string;
-  type: BuilderNodeType;
+  type: BuilderNodeType | OpenCompositionNodeType;
+  openComposition?: boolean;
   label: string;
   parentId?: string;
   depth: number;

@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { isSafePageStyleValue } from './style-registry';
+import type { ComponentPropertyDefinition } from './component-registry';
+import {
+  isSafePageStyleValue,
+  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  type PageStylePropertyKey,
+} from './style-registry';
 
 /**
  * Open Composition is the forward-looking authoring model for the builder.
@@ -546,6 +551,430 @@ export const OPEN_COMPOSITION_REGISTRY = Object.fromEntries(
     { ...node, allowedParents: derivedAllowedParents[type as OpenCompositionNodeType] },
   ]),
 ) as { [K in OpenCompositionNodeType]: OpenCompositionNodeDefinition };
+
+export type OpenCompositionAuthoringStyleGroup = {
+  key: 'layout' | 'size' | 'spacing' | 'typography' | 'background' | 'border' | 'effects';
+  label: string;
+  description?: string;
+  properties: readonly ComponentPropertyDefinition[];
+};
+
+export type OpenCompositionAuthoringDefinition = {
+  type: OpenCompositionNodeType;
+  label: string;
+  description: string;
+  /** Explicit content controls. Runtime props are never used to infer these. */
+  properties: readonly ComponentPropertyDefinition[];
+  /** Explicit style capabilities grouped for progressive disclosure. */
+  styleGroups: readonly OpenCompositionAuthoringStyleGroup[];
+};
+
+const openContentProperty = (
+  property: Omit<ComponentPropertyDefinition, 'group'>,
+): ComponentPropertyDefinition => ({
+  ...property,
+  group: 'content',
+});
+
+const openStyleProperty = (
+  key: PageStylePropertyKey,
+  overrides: Partial<ComponentPropertyDefinition> = {},
+): ComponentPropertyDefinition => {
+  const property = PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[key];
+  return {
+    ...property,
+    ...overrides,
+    key,
+    label: overrides.label ?? property?.label ?? key,
+    control: overrides.control ?? property?.control ?? 'text',
+    group: 'style',
+  };
+};
+
+const OPEN_COMPOSITION_STYLE_GROUPS: readonly OpenCompositionAuthoringStyleGroup[] = [
+  {
+    key: 'layout',
+    label: 'Layout',
+    description: 'Choose how this content is arranged.',
+    properties: [
+      openStyleProperty('display', {
+        label: 'Layout',
+        description: 'Stack content vertically, place it in a row, or use columns.',
+      }),
+      openStyleProperty('flex-direction', { label: 'Direction' }),
+      openStyleProperty('justify-content', { label: 'Distribution' }),
+      openStyleProperty('align-items', { label: 'Content alignment' }),
+      openStyleProperty('flex-wrap', { label: 'Wrapping' }),
+      openStyleProperty('grid-template-columns', {
+        label: 'Columns',
+        control: 'segmented',
+        options: [
+          { label: '1', value: 'minmax(0, 1fr)' },
+          { label: '2', value: 'repeat(2, minmax(0, 1fr))' },
+          { label: '3', value: 'repeat(3, minmax(0, 1fr))' },
+          { label: '4', value: 'repeat(4, minmax(0, 1fr))' },
+        ],
+        description: 'Choose how many columns this grid has.',
+      }),
+    ],
+  },
+  {
+    key: 'size',
+    label: 'Size',
+    properties: [
+      openStyleProperty('width', { label: 'Width' }),
+      openStyleProperty('height', { label: 'Height' }),
+      openStyleProperty('max-width', { label: 'Maximum width' }),
+      openStyleProperty('max-height', { label: 'Maximum height' }),
+    ],
+  },
+  {
+    key: 'spacing',
+    label: 'Spacing',
+    properties: [
+      openStyleProperty('padding', {
+        label: 'Inside spacing',
+        description: 'Add space inside the edges of this element.',
+      }),
+      openStyleProperty('margin', {
+        label: 'Outside spacing',
+        description: 'Add space around this element.',
+      }),
+      openStyleProperty('gap', {
+        label: 'Space between items',
+        description: 'Set the space between items in a stack, row, or grid.',
+      }),
+    ],
+  },
+  {
+    key: 'typography',
+    label: 'Typography',
+    properties: [
+      openStyleProperty('font-family', { label: 'Font' }),
+      openStyleProperty('font-size', { label: 'Size' }),
+      openStyleProperty('font-weight', { label: 'Weight' }),
+      openStyleProperty('line-height', { label: 'Line height' }),
+      openStyleProperty('text-align', { label: 'Text alignment' }),
+      openStyleProperty('color', { label: 'Text color' }),
+      openStyleProperty('text-decoration', { label: 'Text decoration' }),
+    ],
+  },
+  {
+    key: 'background',
+    label: 'Background',
+    properties: [openStyleProperty('background-color', { label: 'Background color' })],
+  },
+  {
+    key: 'border',
+    label: 'Border',
+    properties: [
+      openStyleProperty('border-style', { label: 'Border style' }),
+      openStyleProperty('border-width', { label: 'Border width' }),
+      openStyleProperty('border-color', { label: 'Border color' }),
+      openStyleProperty('border-radius', { label: 'Corner radius' }),
+    ],
+  },
+  {
+    key: 'effects',
+    label: 'Effects',
+    properties: [
+      openStyleProperty('opacity', { label: 'Opacity' }),
+      openStyleProperty('box-shadow', { label: 'Shadow' }),
+    ],
+  },
+] as const;
+
+const openStyleGroupsFor = (
+  keys: readonly PageStylePropertyKey[],
+): readonly OpenCompositionAuthoringStyleGroup[] => {
+  const allowed = new Set(keys);
+  return OPEN_COMPOSITION_STYLE_GROUPS.flatMap((group) => {
+    const properties = group.properties.filter((property) =>
+      allowed.has(property.key as PageStylePropertyKey),
+    );
+    return properties.length > 0 ? [{ ...group, properties }] : [];
+  });
+};
+
+const OPEN_LAYOUT_STYLE_KEYS = [
+  'display',
+  'flex-direction',
+  'justify-content',
+  'align-items',
+  'flex-wrap',
+  'grid-template-columns',
+  'width',
+  'max-width',
+  'padding',
+  'margin',
+  'gap',
+  'background-color',
+  'border-style',
+  'border-width',
+  'border-color',
+  'border-radius',
+  'box-shadow',
+] as const satisfies readonly PageStylePropertyKey[];
+const OPEN_CONTENT_STYLE_KEYS = [
+  'width',
+  'height',
+  'max-width',
+  'max-height',
+  'padding',
+  'margin',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'line-height',
+  'text-align',
+  'color',
+  'text-decoration',
+  'background-color',
+  'border-style',
+  'border-width',
+  'border-color',
+  'border-radius',
+  'box-shadow',
+] as const satisfies readonly PageStylePropertyKey[];
+
+const OPEN_FORM_STYLE_KEYS = [
+  'width',
+  'max-width',
+  'padding',
+  'margin',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'line-height',
+  'color',
+  'background-color',
+  'border-style',
+  'border-width',
+  'border-color',
+  'border-radius',
+  'box-shadow',
+] as const satisfies readonly PageStylePropertyKey[];
+
+const openAuthoringDefinition = (
+  type: OpenCompositionNodeType,
+  properties: readonly ComponentPropertyDefinition[],
+  styleKeys: readonly PageStylePropertyKey[] = [],
+): OpenCompositionAuthoringDefinition => ({
+  type,
+  label: OPEN_COMPOSITION_REGISTRY[type].label,
+  description: OPEN_COMPOSITION_REGISTRY[type].description,
+  properties,
+  styleGroups: openStyleGroupsFor(styleKeys),
+});
+
+const openTextProperties = [
+  openContentProperty({
+    key: 'text',
+    label: 'Text',
+    control: 'textarea',
+    required: true,
+    placeholder: 'Add your text here',
+    defaultValue: '',
+    help: { text: 'Write the words visitors should see.' },
+  }),
+];
+
+const openLinkProperties = [
+  openContentProperty({
+    key: 'label',
+    label: 'Link text',
+    control: 'text',
+    required: true,
+    placeholder: 'Learn more',
+    defaultValue: 'Link',
+  }),
+  openContentProperty({
+    key: 'href',
+    label: 'Link',
+    control: 'link',
+    placeholder: '/',
+    defaultValue: '/',
+    normalization: ['trim', 'url'],
+  }),
+  openContentProperty({
+    key: 'target',
+    label: 'Open link in',
+    control: 'select',
+    defaultValue: '_self',
+    options: [
+      { label: 'This tab', value: '_self' },
+      { label: 'New tab', value: '_blank' },
+    ],
+  }),
+];
+
+const openControlProperties = [
+  openContentProperty({
+    key: 'type',
+    label: 'Field type',
+    control: 'select',
+    defaultValue: 'text',
+    options: [
+      { label: 'Text', value: 'text' },
+      { label: 'Email', value: 'email' },
+      { label: 'Phone', value: 'phone' },
+      { label: 'Checkbox', value: 'checkbox' },
+      { label: 'Multiple choice', value: 'radio' },
+      { label: 'Dropdown', value: 'select' },
+    ],
+  }),
+  openContentProperty({
+    key: 'placeholder',
+    label: 'Placeholder',
+    control: 'text',
+    allowEmpty: true,
+    placeholder: 'Optional hint',
+  }),
+];
+
+const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
+  openAuthoringDefinition('root', [], OPEN_LAYOUT_STYLE_KEYS),
+  ...(['section', 'container', 'stack', 'row', 'grid', 'card'] as const).map((type) =>
+    openAuthoringDefinition(type, [], OPEN_LAYOUT_STYLE_KEYS),
+  ),
+  openAuthoringDefinition('text', openTextProperties, OPEN_CONTENT_STYLE_KEYS),
+  openAuthoringDefinition(
+    'heading',
+    [
+      openContentProperty({
+        key: 'text',
+        label: 'Heading text',
+        control: 'textarea',
+        required: true,
+        placeholder: 'Your heading',
+        defaultValue: 'Your heading',
+      }),
+      openContentProperty({
+        key: 'level',
+        label: 'Heading level',
+        control: 'select',
+        defaultValue: 2,
+        options: [1, 2, 3, 4, 5, 6].map((level) => ({
+          label: `Heading ${level}`,
+          value: String(level),
+        })),
+      }),
+    ],
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition(
+    'image',
+    [
+      openContentProperty({
+        key: 'src',
+        label: 'Image',
+        control: 'asset',
+        assetKind: 'image',
+        required: true,
+      }),
+      openContentProperty({
+        key: 'alt',
+        label: 'Description for screen readers',
+        control: 'text',
+        placeholder: 'Describe this image',
+        defaultValue: '',
+      }),
+    ],
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition(
+    'icon',
+    [
+      openContentProperty({
+        key: 'name',
+        label: 'Icon',
+        control: 'select',
+        defaultValue: 'arrow-right',
+        options: ['arrow-right', 'check', 'mail', 'phone', 'star', 'heart'].map(
+          (name) => ({
+            label: name.replace('-', ' '),
+            value: name,
+          }),
+        ),
+      }),
+    ],
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition(
+    'button',
+    [
+      openContentProperty({
+        key: 'label',
+        label: 'Button text',
+        control: 'text',
+        required: true,
+        placeholder: 'Button',
+        defaultValue: 'Button',
+      }),
+      ...openLinkProperties.slice(1),
+    ],
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition('link', openLinkProperties, OPEN_CONTENT_STYLE_KEYS),
+  openAuthoringDefinition(
+    'form',
+    [
+      openContentProperty({
+        key: 'successMessage',
+        label: 'Message after sending',
+        control: 'textarea',
+        placeholder: 'Thanks — we will be in touch soon.',
+        defaultValue: 'Thanks — we will be in touch soon.',
+      }),
+    ],
+    OPEN_FORM_STYLE_KEYS,
+  ),
+  openAuthoringDefinition(
+    'form-field',
+    [
+      openContentProperty({
+        key: 'required',
+        label: 'Required field',
+        control: 'toggle',
+        defaultValue: false,
+      }),
+    ],
+    OPEN_FORM_STYLE_KEYS,
+  ),
+  openAuthoringDefinition('label', openTextProperties, OPEN_CONTENT_STYLE_KEYS),
+  ...(['input', 'textarea', 'select'] as const).map((type) =>
+    openAuthoringDefinition(type, openControlProperties, OPEN_CONTENT_STYLE_KEYS),
+  ),
+];
+
+const openCompositionAuthoringFallbacks = Object.keys(OPEN_COMPOSITION_REGISTRY).map(
+  (type) => {
+    const nodeType = type as OpenCompositionNodeType;
+    return (
+      openCompositionAuthoringEntries.find((entry) => entry.type === nodeType) ??
+      openAuthoringDefinition(nodeType, [], [])
+    );
+  },
+);
+
+export const OPEN_COMPOSITION_AUTHORING_REGISTRY = Object.fromEntries(
+  openCompositionAuthoringFallbacks.map((entry) => [entry.type, entry]),
+) as { [K in OpenCompositionNodeType]: OpenCompositionAuthoringDefinition };
+
+export function getOpenCompositionAuthoringDefinition(
+  type: OpenCompositionNodeType,
+): OpenCompositionAuthoringDefinition {
+  return OPEN_COMPOSITION_AUTHORING_REGISTRY[type];
+}
+
+export function getOpenCompositionAuthoringProperty(
+  type: OpenCompositionNodeType,
+  property: string,
+): ComponentPropertyDefinition | undefined {
+  return OPEN_COMPOSITION_AUTHORING_REGISTRY[type].properties.find(
+    (candidate) => candidate.key === property,
+  );
+}
 
 export function isOpenCompositionNodeType(
   value: unknown,

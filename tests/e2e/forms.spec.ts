@@ -4,6 +4,7 @@ import {
   openCanonicalBuilder,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 async function openPages(page: Page, siteName?: string) {
   await page.getByRole('button', { name: 'Pages', exact: true }).click();
@@ -101,7 +102,7 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await page.getByRole('button', { name: 'Publish version' }).click();
   await expect(page.getByRole('status')).toContainText('Page published');
 
-  const publicPage = await browser.newPage({ baseURL: 'http://127.0.0.1:3002' });
+  const publicPage = await browser.newPage({ baseURL: E2E_RENDERER_ORIGIN });
   await publicPage.goto(`/${siteSlug}/${pageSlug}`);
   await publicPage.getByLabel('Name').fill('Jane Visitor');
   await publicPage.getByLabel('Email').fill('jane.e2e@example.com');

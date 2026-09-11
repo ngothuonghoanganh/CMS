@@ -5,6 +5,7 @@ import {
   type APIRequestContext,
 } from '@playwright/test';
 import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_CMS_ORIGIN } from './fixtures/urls';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
@@ -108,10 +109,7 @@ test('valid login and logout protect the CMS shell', async ({ page }) => {
 test('CMS bootstrap settles after the authenticated shell is ready', async ({ page }) => {
   const apiRequests: string[] = [];
   page.on('request', (request) => {
-    if (
-      request.url().startsWith('http://127.0.0.1:3001/api/v1/') &&
-      request.method() === 'GET'
-    ) {
+    if (request.url().startsWith(`${E2E_API_BASE_URL}/`) && request.method() === 'GET') {
       apiRequests.push(request.url());
     }
   });
@@ -283,7 +281,7 @@ test('extension management settles without a request loop and stays responsive',
 });
 
 test('opens a Header extension in the Extensions drawer', async ({ page }) => {
-  const apiBase = 'http://127.0.0.1:3001/api/v1';
+  const apiBase = E2E_API_BASE_URL;
   let layoutId: string | undefined;
   let siteId: string | undefined;
   await login(page);
@@ -341,9 +339,14 @@ test('opens a Header extension in the Extensions drawer', async ({ page }) => {
       .last()
       .getByRole('button', { name: 'Delete', exact: true })
       .click();
-    const deleteDialog = page.getByRole('dialog', { name: 'Delete layout?', exact: true });
+    const deleteDialog = page.getByRole('dialog', {
+      name: 'Delete layout?',
+      exact: true,
+    });
     await expect(deleteDialog).toBeVisible();
-    await deleteDialog.getByRole('button', { name: 'Delete layout', exact: true }).click();
+    await deleteDialog
+      .getByRole('button', { name: 'Delete layout', exact: true })
+      .click();
     await expect(drawer.locator('.list-row')).toHaveCount(initialMenuCount);
 
     await drawer
@@ -372,7 +375,7 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   const siteSlug = `countdown-site-${suffix}`;
   const pageSlug = `countdown-page-${suffix}`;
   const pageName = `Countdown Page ${suffix}`;
-  const apiBase = 'http://127.0.0.1:3001/api/v1';
+  const apiBase = E2E_API_BASE_URL;
 
   await login(page);
   const organizationResponse = await page.request.post(`${apiBase}/organizations`, {
@@ -520,14 +523,14 @@ test('stale auth cookies do not redirect login back into a loop', async ({ brows
     if (request.isNavigationRequest()) navigationRequests.push(request.url());
   });
 
-  await page.goto('http://127.0.0.1:3000/login');
+  await page.goto(`${E2E_CMS_ORIGIN}/login`);
   await expect(
     page.getByRole('heading', { name: 'Sign in to your workspace' }),
   ).toBeVisible();
   const requestsAtReady = navigationRequests.length;
   await page.waitForTimeout(750);
 
-  expect(page.url()).toBe('http://127.0.0.1:3000/login');
+  expect(page.url()).toBe(`${E2E_CMS_ORIGIN}/login`);
   expect(navigationRequests.slice(requestsAtReady)).toEqual([]);
   await context.close();
 });
@@ -1513,22 +1516,25 @@ test('shows a conflict when another draft is saved first', async ({
   await page.getByRole('button', { name: /^Section/ }).click();
   const pageId = page.url().match(/\/pages\/([^/]+)\/builder$/)?.[1];
   expect(pageId).toBeTruthy();
-  const externalSave = await page.evaluate(async (id) => {
-    const response = await fetch(`http://127.0.0.1:3001/api/v1/pages/${id}/versions`, {
-      body: JSON.stringify({
-        expectedVersionNumber: 1,
-        payload: {
-          version: 1,
-          metadata: { documentTitle: 'External draft' },
-          root: { id: 'root', type: 'root', props: {}, children: [] },
-        },
-      }),
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    return response.status;
-  }, pageId);
+  const externalSave = await page.evaluate(
+    async ({ id, apiBase }) => {
+      const response = await fetch(`${apiBase}/pages/${id}/versions`, {
+        body: JSON.stringify({
+          expectedVersionNumber: 1,
+          payload: {
+            version: 1,
+            metadata: { documentTitle: 'External draft' },
+            root: { id: 'root', type: 'root', props: {}, children: [] },
+          },
+        }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      return response.status;
+    },
+    { apiBase: E2E_API_BASE_URL, id: pageId },
+  );
   expect(externalSave).toBe(201);
 
   await page.getByRole('button', { name: 'Save draft' }).click();

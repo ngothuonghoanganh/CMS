@@ -94,6 +94,43 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('Submit');
   });
 
+  it('renders Open Composition part styles in the same node/part cascade', () => {
+    const document = instantiateOpenCompositionRecipe(
+      'contact-form',
+      (source) => `styled-${source}`,
+    );
+    const find = (
+      type: string,
+      node = document.root,
+    ): typeof document.root | undefined => {
+      if (node.type === type) return node;
+      for (const child of node.children) {
+        const found = find(type, child);
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const form = find('form');
+    if (!form) throw new Error('Expected form node');
+    form.partsStyle = {
+      root: { base: { backgroundColor: '#112233' } },
+      submit: { base: { backgroundColor: '#224466' }, mobile: { padding: '8px' } },
+    };
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Styled open form' },
+      root: document.root,
+      behaviors: document.behaviors,
+    });
+    const markup = renderToStaticMarkup(renderPage(payload));
+    expect(markup).toContain('data-payload-part="submit"');
+    expect(markup).toContain('background-color:#112233');
+    expect(markup).toContain('background-color:#224466');
+    expect(markup).toContain(
+      '[data-payload-node-id="styled-form"] [data-payload-part="submit"]{padding:8px!important}',
+    );
+  });
+
   it('has an exhaustive production renderer for every registered component', () => {
     expect(Object.keys(PAGE_RENDERER_REGISTRY).sort()).toEqual(
       Object.keys(PAGE_COMPONENT_REGISTRY).sort(),

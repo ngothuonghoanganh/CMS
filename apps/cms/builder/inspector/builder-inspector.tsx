@@ -3,7 +3,7 @@
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_GROUPS,
-  PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  getOpenCompositionAuthoringDefinition,
   OPEN_COMPOSITION_REGISTRY,
   isComponentPropertyVisible,
   type Asset,
@@ -15,6 +15,7 @@ import {
   type Page,
   type PageQuery,
   type OpenCompositionNodeType,
+  type OpenCompositionAuthoringStyleGroup,
   type SiteDesignSystem,
   type StyleTokenReference,
   queryOperatorsForFieldType,
@@ -69,7 +70,10 @@ type BuilderInspectorProps = {
   ) => void;
   resetSelectedPartStyle: (partName: string, property: string) => void;
   onSelectNode: (nodeId: string) => void;
-  onAddStructuralChild: (slotName?: string, childType?: PageComponentType) => void;
+  onAddStructuralChild: (
+    slotName?: string,
+    childType?: PageComponentType | OpenCompositionNodeType,
+  ) => void;
   onRemoveStructuralChild: (nodeId: string) => void;
   onMoveStructuralChild: (nodeId: string, direction: 'up' | 'down') => void;
   onReorderStructuralChild: (
@@ -97,11 +101,8 @@ type BuilderInspectorProps = {
   contentOnly?: boolean;
 };
 
-function openCompositionNodeLabel(type: OpenCompositionNodeType): string {
-  return OPEN_COMPOSITION_REGISTRY[type].label;
-}
-
 function OpenCompositionInspector({
+  workspaceId,
   selected,
   viewport,
   inspectorTab,
@@ -113,12 +114,20 @@ function OpenCompositionInspector({
   onRemoveStructuralChild,
   onMoveStructuralChild,
   onDuplicateStructuralChild,
+  onAddStructuralChild,
+  usableAssets,
+  designSystem,
+  navigationPages = [],
+  validationIssues = [],
+  validationScope = 'page',
+  onValidationIssue,
   openSections,
   onToggleSection,
   contentOnly,
 }: Pick<
   BuilderInspectorProps,
   | 'selected'
+  | 'workspaceId'
   | 'viewport'
   | 'inspectorTab'
   | 'onInspectorTabChange'
@@ -129,21 +138,167 @@ function OpenCompositionInspector({
   | 'onRemoveStructuralChild'
   | 'onMoveStructuralChild'
   | 'onDuplicateStructuralChild'
+  | 'onAddStructuralChild'
+  | 'usableAssets'
+  | 'designSystem'
+  | 'navigationPages'
+  | 'validationIssues'
+  | 'validationScope'
+  | 'onValidationIssue'
   | 'openSections'
   | 'onToggleSection'
   | 'contentOnly'
 >) {
   const nodeType = selected.openComposition?.nodeType;
   if (!nodeType) return null;
-  const identityProps = new Set(
-    nodeType === 'form' ? ['formKey'] : nodeType === 'form-field' ? ['fieldKey'] : [],
+  const definition = getOpenCompositionAuthoringDefinition(nodeType);
+  const [addType, setAddType] = useState<OpenCompositionNodeType | ''>('');
+  const contentProperties = definition.properties.filter((property) =>
+    isComponentPropertyVisible(property, selected.props),
   );
-  const primitiveProps = Object.entries(selected.props)
-    .filter(([, value]) => {
-      return value === null || ['string', 'number', 'boolean'].includes(typeof value);
-    })
-    .filter(([property]) => !identityProps.has(property));
-  const styleProperties = Object.entries(PAGE_STYLE_PROPERTY_BY_EDITOR_KEY);
+  const addableChildren = OPEN_COMPOSITION_REGISTRY[nodeType].allowedChildren.filter(
+    (type) =>
+      !['root', 'reusable-instance'].includes(type) &&
+      [
+        'form-field',
+        'label',
+        'input',
+        'textarea',
+        'select',
+        'text',
+        'heading',
+        'button',
+        'container',
+        'stack',
+        'row',
+        'grid',
+        'image',
+      ].includes(type),
+  );
+  const styleValues = Object.fromEntries(
+    definition.styleGroups.flatMap((group) =>
+      group.properties.map((property) => [
+        property.key,
+        resolveInspectorStyleValue(selected.style, property.key, viewport, designSystem)
+          .effectiveValue ?? '',
+      ]),
+    ),
+  );
+
+  function contentIssue(property: ComponentPropertyDefinition) {
+    return validationIssues.find(
+      (candidate) =>
+        candidate.nodeId === selected.id &&
+        candidate.field === property.key &&
+        candidate.tab === 'content' &&
+        candidate.scope === validationScope &&
+        candidate.viewport === viewport,
+    );
+  }
+
+  function renderContentProperty(property: ComponentPropertyDefinition) {
+    return (
+      <PropertyControlRenderer
+        assets={usableAssets}
+        definition={property}
+        navigationPages={navigationPages}
+        nodeId={selected.id}
+        onChange={(value) => updateSelectedProperty(property.key, value)}
+        onValidationIssue={onValidationIssue}
+        propertyValues={selected.props}
+        scope={validationScope}
+        tab="content"
+        value={selected.props[property.key]}
+        viewport={viewport}
+        workspaceId={workspaceId}
+        issue={contentIssue(property)}
+      />
+    );
+  }
+
+  function renderStyleGroup(group: OpenCompositionAuthoringStyleGroup) {
+    const fields = group.properties.filter(
+      (property) =>
+        !contentOnly &&
+        isComponentPropertyVisible(property, { ...selected.props, ...styleValues }),
+    );
+    if (fields.length === 0) return null;
+    return (
+      <InspectorSection
+        key={group.key}
+        label={group.label}
+        onToggle={(open) => onToggleSection(group.key, open)}
+        open={openSections[group.key]}
+      >
+        {group.description ? <p className="muted small">{group.description}</p> : null}
+        <div className="builder-inspector-fields">
+          {fields.map((property) => {
+            const resolved = resolveInspectorStyleValue(
+              selected.style,
+              property.key,
+              viewport,
+              designSystem,
+            );
+            const issue = validationIssues.find(
+              (candidate) =>
+                candidate.nodeId === selected.id &&
+                candidate.field === property.key &&
+                candidate.tab === 'style' &&
+                candidate.scope === validationScope &&
+                candidate.viewport === viewport &&
+                candidate.section === group.key,
+            );
+            return (
+              <div className="builder-inspector-field-stack" key={property.key}>
+                <PropertyControlRenderer
+                  definition={property}
+                  description={
+                    resolved.inherited && resolved.sourceViewport
+                      ? `Inherited from ${resolved.sourceViewport.charAt(0).toUpperCase()}${resolved.sourceViewport.slice(1)}`
+                      : property.description
+                  }
+                  layoutDirection={
+                    property.control === 'layout'
+                      ? String(styleValues['flex-direction'] ?? '')
+                      : undefined
+                  }
+                  nodeId={selected.id}
+                  onChange={(value) => {
+                    if (property.control === 'layout' && isLayoutSelection(value)) {
+                      updateSelectedStyle('display', value.display);
+                      updateSelectedStyle('flex-direction', value.flexDirection ?? '');
+                    } else {
+                      updateSelectedStyle(property.key, String(value ?? ''));
+                    }
+                  }}
+                  onValidationIssue={onValidationIssue}
+                  propertyValues={{ ...selected.props, ...styleValues }}
+                  scope={validationScope}
+                  section={group.key}
+                  tab="style"
+                  value={resolved.effectiveValue ?? ''}
+                  viewport={viewport}
+                  issue={issue}
+                />
+                {resolved.authoredValue !== undefined ? (
+                  <button
+                    aria-label={`Reset ${property.label} override`}
+                    className="button button-small button-ghost builder-reset-override"
+                    onClick={() => resetSelectedStyle(property.key)}
+                    type="button"
+                  >
+                    Reset override
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </InspectorSection>
+    );
+  }
+
+  const structure = selected.children.length > 0 || addableChildren.length > 0;
 
   return (
     <div className="builder-inspector">
@@ -168,46 +323,59 @@ function OpenCompositionInspector({
       {inspectorTab === 'content' ? (
         <>
           <InspectorSection
-            label={openCompositionNodeLabel(nodeType)}
+            label="Content"
             onToggle={(open) => onToggleSection('content', open)}
             open={openSections.content}
           >
-            {primitiveProps.length > 0 ? (
+            {contentProperties.length > 0 ? (
               <div className="builder-inspector-fields">
-                {primitiveProps.map(([property, value]) => (
-                  <label className="builder-inspector-field" key={property}>
-                    <span>{property}</span>
-                    {typeof value === 'boolean' ? (
-                      <input
-                        checked={value}
-                        onChange={(event) =>
-                          updateSelectedProperty(property, event.target.checked)
-                        }
-                        type="checkbox"
-                      />
-                    ) : (
-                      <input
-                        onChange={(event) =>
-                          updateSelectedProperty(
-                            property,
-                            typeof value === 'number'
-                              ? Number(event.target.value)
-                              : event.target.value,
-                          )
-                        }
-                        type={typeof value === 'number' ? 'number' : 'text'}
-                        value={value === null ? '' : String(value)}
-                      />
-                    )}
-                  </label>
-                ))}
+                {definition.properties
+                  .filter((property) =>
+                    isComponentPropertyVisible(property, selected.props),
+                  )
+                  .map((property) => (
+                    <div key={property.key}>{renderContentProperty(property)}</div>
+                  ))}
               </div>
             ) : (
-              <p className="muted small">This node has no scalar properties.</p>
+              <p className="muted small">
+                This {definition.label.toLowerCase()} is ready. Add content inside it
+                using the structure below.
+              </p>
             )}
           </InspectorSection>
-          {selected.children.length > 0 ? (
+          {structure ? (
             <InspectorSection label="Structure" onToggle={() => undefined} open>
+              {addableChildren.length > 0 ? (
+                <div className="builder-inspector-inline-row">
+                  <select
+                    aria-label={`Add content to ${definition.label}`}
+                    onChange={(event) =>
+                      setAddType(event.target.value as OpenCompositionNodeType | '')
+                    }
+                    value={addType}
+                  >
+                    <option value="">Choose content to add</option>
+                    {addableChildren.map((type) => (
+                      <option key={type} value={type}>
+                        {OPEN_COMPOSITION_REGISTRY[type].label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="button button-small button-secondary"
+                    disabled={!addType}
+                    onClick={() => {
+                      if (!addType) return;
+                      onAddStructuralChild(undefined, addType);
+                      setAddType('');
+                    }}
+                    type="button"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : null}
               <div className="builder-structural-editor">
                 {selected.children.map((child, index) => (
                   <div className="builder-structure-item" key={child.id}>
@@ -262,53 +430,20 @@ function OpenCompositionInspector({
         </>
       ) : null}
 
-      {!contentOnly && inspectorTab === 'style' ? (
-        <InspectorSection
-          label="Style"
-          onToggle={(open) => onToggleSection('layout', open)}
-          open={openSections.layout}
-        >
-          <div className="builder-inspector-fields">
-            {styleProperties.map(([property, definition]) => {
-              const resolved = resolveInspectorStyleValue(
-                selected.style,
-                property,
-                viewport,
-                undefined,
-              );
-              const value = resolved.effectiveValue ?? '';
-              return (
-                <label className="builder-inspector-field" key={property}>
-                  <span>{definition.payloadKey}</span>
-                  <input
-                    onChange={(event) =>
-                      updateSelectedStyle(property, event.target.value)
-                    }
-                    value={value}
-                  />
-                  {resolved.authoredValue !== undefined ? (
-                    <button
-                      aria-label={`Reset ${definition.payloadKey}`}
-                      className="button button-small button-ghost builder-reset-override"
-                      onClick={() => resetSelectedStyle(property)}
-                      type="button"
-                    >
-                      Reset
-                    </button>
-                  ) : null}
-                </label>
-              );
-            })}
-          </div>
-        </InspectorSection>
-      ) : null}
+      {!contentOnly && inspectorTab === 'style'
+        ? definition.styleGroups.map(renderStyleGroup)
+        : null}
 
       {!contentOnly && inspectorTab === 'settings' ? (
-        <InspectorSection label="Advanced" onToggle={() => undefined} open>
+        <InspectorSection
+          label="Advanced"
+          onToggle={(open) => onToggleSection('advanced', open)}
+          open={openSections.advanced}
+        >
           <div className="builder-inspector-advanced">
-            <span className="muted small">Node ID</span>
+            <span className="muted small">Stable element ID</span>
             <code>{selected.id}</code>
-            <span className="muted small">Open Composition node: {nodeType}</span>
+            <span className="muted small">Internal type: {nodeType}</span>
           </div>
         </InspectorSection>
       ) : null}
@@ -1462,19 +1597,27 @@ export function BuilderInspector(props: BuilderInspectorProps) {
     return (
       <OpenCompositionInspector
         contentOnly={props.contentOnly ?? false}
+        {...(props.designSystem ? { designSystem: props.designSystem } : {})}
         inspectorTab={props.inspectorTab}
+        {...(props.navigationPages ? { navigationPages: props.navigationPages } : {})}
+        onAddStructuralChild={props.onAddStructuralChild}
         onDuplicateStructuralChild={props.onDuplicateStructuralChild}
         onInspectorTabChange={props.onInspectorTabChange}
         onMoveStructuralChild={props.onMoveStructuralChild}
         onRemoveStructuralChild={props.onRemoveStructuralChild}
         onSelectNode={props.onSelectNode}
+        onValidationIssue={props.onValidationIssue}
         onToggleSection={props.onToggleSection}
         openSections={props.openSections}
         resetSelectedStyle={props.resetSelectedStyle}
         selected={props.selected}
         updateSelectedProperty={props.updateSelectedProperty}
         updateSelectedStyle={props.updateSelectedStyle}
+        usableAssets={props.usableAssets}
+        {...(props.validationIssues ? { validationIssues: props.validationIssues } : {})}
+        validationScope={props.validationScope ?? 'page'}
         viewport={props.viewport}
+        workspaceId={props.workspaceId}
       />
     );
   }

@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { E2E_API_BASE_URL } from './fixtures/urls';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
 const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
-const apiBase = 'http://127.0.0.1:3001/api/v1';
+const apiBase = E2E_API_BASE_URL;
 
 test('creates organizations and keeps workspace resources isolated after context switching @tenancy', async ({
   request,

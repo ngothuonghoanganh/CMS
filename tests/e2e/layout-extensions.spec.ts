@@ -7,10 +7,10 @@ import {
   switchCanonicalBrowserContext,
   test,
 } from './fixtures/canonical-environment';
+import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
-const rendererBaseUrl =
-  process.env.NEXT_PUBLIC_RENDERER_BASE_URL ?? 'http://127.0.0.1:3002';
+const apiBaseUrl = E2E_API_BASE_URL;
+const rendererBaseUrl = E2E_RENDERER_ORIGIN;
 
 type BuilderNode = {
   id: string;
