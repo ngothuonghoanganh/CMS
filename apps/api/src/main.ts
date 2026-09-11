@@ -47,9 +47,15 @@ async function bootstrap(): Promise<void> {
       whitelist: true,
     }),
   );
+  const corsOrigins = env.CORS_ORIGIN.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
     credentials: true,
-    origin: env.CORS_ORIGIN.split(',').map((origin) => origin.trim()),
+    // `Access-Control-Allow-Origin: *` is invalid for credentialed requests.
+    // `true` makes the cors package reflect the request origin, allowing all
+    // origins while keeping cookie-based authentication functional.
+    origin: corsOrigins.includes('*') ? true : corsOrigins,
   });
   app.enableShutdownHooks();
 
