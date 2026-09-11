@@ -131,6 +131,7 @@ export type GrapesEditorHandle = {
   redo: () => void;
   getDocument: () => PageDocument | SiteGlobalPayloadV1;
   serialize: () => PagePayload | SiteGlobalPayloadV1;
+  hasUnsavedChanges: () => boolean;
   acknowledgeSaved: (
     payload: PagePayload | SiteGlobalPayloadV1,
     composition?: PageCompositionFields,
@@ -1947,6 +1948,18 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       serialize() {
         const document = serializeDocument();
         return 'schemaVersion' in document ? document.payload : document;
+      },
+      hasUnsavedChanges() {
+        try {
+          return (
+            pageDocumentSignature(serializeDocument()) !==
+            initialPersistedSignatureRef.current
+          );
+        } catch {
+          // A save can race with editor teardown during navigation. Treat an
+          // unreadable document as dirty so a user never loses an edit.
+          return true;
+        }
       },
       acknowledgeSaved(payload, composition) {
         const savedDocument =
