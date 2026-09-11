@@ -19,7 +19,7 @@ const allowedRawColorFiles = [
 // Hero/CTA signature it removes. Keep this scoped to that value so new theme
 // literals in the adapter still fail the guardrail.
 const allowedRawColorValues = new Map([
-  ['builder/builder-adapter.ts', new Set(['#eff6ff'])],
+  ['builder/builder-block/builder-adapter.ts', new Set(['#eff6ff'])],
 ]);
 
 async function collectFiles(directory) {

@@ -6,7 +6,7 @@ test('authenticated root bootstraps to the canonical workspace overview', async 
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
   await page.goto('/');
   await expect(page).toHaveURL(`/workspaces/${canonicalEnvironment.workspaceId}`);
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
@@ -16,7 +16,7 @@ test('legacy root collection bookmarks convert to canonical routes', async ({
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
   await page.goto(
     `/?view=collections&siteId=${encodeURIComponent(canonicalEnvironment.siteId)}`,
   );
@@ -32,7 +32,7 @@ test('legacy navigation bookmarks redirect to the Design System surface', async 
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
   const workspacePath = `/workspaces/${canonicalEnvironment.workspaceId}`;
   const sitePath = `${workspacePath}/sites/${canonicalEnvironment.siteId}`;
 

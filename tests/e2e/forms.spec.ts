@@ -106,7 +106,12 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await publicPage.goto(`/${siteSlug}/${pageSlug}`);
   await publicPage.getByLabel('Name').fill('Jane Visitor');
   await publicPage.getByLabel('Email').fill('jane.e2e@example.com');
+  const submissionResponsePromise = publicPage.waitForResponse((response) =>
+    response.url().includes('/submissions'),
+  );
   await publicPage.getByRole('button', { name: 'Submit' }).click();
+  const submissionResponse = await submissionResponsePromise;
+  expect(submissionResponse.ok(), await submissionResponse.text()).toBeTruthy();
   await expect(publicPage.getByRole('status')).toContainText('Thanks');
 
   await page.getByRole('button', { name: 'Open Builder' }).click();

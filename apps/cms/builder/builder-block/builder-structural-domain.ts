@@ -2,6 +2,7 @@ import type { Component } from 'grapesjs';
 import {
   canInsertIntoSlot,
   canComposeChild,
+  OPEN_COMPOSITION_REGISTRY,
   isOpenCompositionNodeType,
   resolveSlotForChild,
   resolveSlotsForChild,
@@ -81,7 +82,8 @@ export function canInsertLiveChild(
   if (parentAttributes['data-payload-open-composition'] === 'true') {
     const parentType = parentAttributes[BUILDER_NODE_TYPE_ATTRIBUTE];
     return isOpenCompositionNodeType(parentType) && isOpenCompositionNodeType(childType)
-      ? canComposeChild(parentType, childType)
+      ? canComposeChild(parentType, childType) &&
+          OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert
       : false;
   }
   const parentType = payloadNodeType(parent);

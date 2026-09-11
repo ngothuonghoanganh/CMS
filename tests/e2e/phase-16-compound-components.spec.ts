@@ -163,18 +163,66 @@ test('Phase 18.2 paints responsive component-part styles before save and after r
   canonicalEnvironment,
 }) => {
   test.setTimeout(120_000);
-  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-18-2-parts');
+  await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-18-2-parts', {
+    version: 7,
+    metadata: { documentTitle: 'Phase 18.2 legacy parts' },
+    root: {
+      id: 'root',
+      type: 'root',
+      props: {},
+      children: [
+        {
+          id: 'section',
+          type: 'section',
+          props: {},
+          children: [
+            {
+              id: 'accordion',
+              type: 'accordion',
+              props: { allowMultiple: false },
+              children: [
+                {
+                  id: 'accordion-item',
+                  type: 'accordion-item',
+                  props: { title: 'Details', defaultOpen: true },
+                  children: [
+                    {
+                      id: 'accordion-copy',
+                      type: 'text',
+                      props: { text: 'Edit this panel content' },
+                      children: [],
+                    },
+                  ],
+                },
+                {
+                  id: 'accordion-item-2',
+                  type: 'accordion-item',
+                  props: { title: 'More details', defaultOpen: false },
+                  children: [
+                    {
+                      id: 'accordion-copy-2',
+                      type: 'text',
+                      props: { text: 'Edit this panel content' },
+                      children: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  });
   const canvas = page.frameLocator('iframe.gjs-frame');
 
-  await page.getByRole('button', { name: 'Accordion add', exact: true }).click();
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page.getByRole('treeitem', { name: 'Select Accordion', exact: true }).click();
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page
-    .locator('.builder-inspector-field')
-    .filter({ hasText: /^Target/ })
-    .locator('select')
-    .selectOption('trigger');
+    .getByLabel('Style target', { exact: true })
+    .getByRole('button', { name: 'Trigger', exact: true })
+    .click();
 
   const partStyleSection = page
     .locator('details.builder-inspector-section')
@@ -289,7 +337,7 @@ test('Phase 16 quote uses the generic content and style inspector', async ({
   await page.getByLabel('Citation', { exact: true }).fill('The team');
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   await page.getByText('Typography', { exact: true }).click();
-  await page.getByLabel('Font size', { exact: true }).fill('28');
+  await page.getByLabel('Font size', { exact: true }).first().fill('28');
 
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });

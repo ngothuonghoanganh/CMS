@@ -343,6 +343,23 @@ export async function resetCanonicalEnvironment(
     }
   }
 
+  const collections = await json<Array<{ id: string; name: string }>>(
+    await request.get(
+      `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/collections`,
+    ),
+  );
+  for (const collection of collections) {
+    if (!collection.name.startsWith('__e2e__')) continue;
+    const response = await request.delete(
+      `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}/collections/${collection.id}`,
+    );
+    if (!response.ok() && response.status() !== 404) {
+      throw new Error(
+        `Could not archive temporary collection ${collection.id}: ${response.status()}`,
+      );
+    }
+  }
+
   const integrations = await json<{
     items: Array<{ id: string; name: string }>;
   }>(
@@ -462,7 +479,10 @@ export async function createTemporaryPage(
   };
 }
 
-export async function loginToCanonicalBuilder(page: import('@playwright/test').Page) {
+export async function loginToCanonicalBuilder(
+  page: import('@playwright/test').Page,
+  environment?: Pick<CanonicalEnvironment, 'organizationId' | 'workspaceId'>,
+) {
   await page.goto('/');
   if (new URL(page.url()).pathname === '/login') {
     await page.getByLabel('Email').fill(email);
@@ -470,6 +490,7 @@ export async function loginToCanonicalBuilder(page: import('@playwright/test').P
     await page.getByRole('button', { name: 'Sign in' }).click();
   }
   await expect(page).toHaveURL(/\/workspaces\/[^/]+$/);
+  if (environment) await switchCanonicalBrowserContext(page, environment);
 }
 
 export async function switchCanonicalBrowserContext(
@@ -485,7 +506,7 @@ export async function switchCanonicalBrowserContext(
   if (!response.ok()) {
     throw new Error(`Canonical browser context switch failed with ${response.status()}`);
   }
-  await page.reload();
+  await page.goto(`/workspaces/${environment.workspaceId}`);
 }
 
 export async function openCanonicalBuilder(

@@ -1,8 +1,8 @@
 # Phase 23 — No-Code Builder UX & Open Composition Authoring
 
-**Status: PARTIAL** — Phase 23 implementation and focused journeys are
-complete, while the repository-wide Playwright gate still contains failures in
-older route/auth/legacy-component journeys outside this phase.
+**Status: CLOSED by Phase 23.1 stabilization** — Phase 23 authoring UX is
+implemented and its repository-wide regressions are tracked and closed by the
+Phase 23.1 release branch.
 
 ## Scope
 
@@ -21,8 +21,9 @@ model and the renderer remains independent from Builder code.
 - Style groups expose Layout, Size, Spacing, Typography, Background, Border,
   and Effects. Common controls use semantic values such as Vertical,
   Horizontal, Center, Full width, and inherited responsive values.
-- Open Composition insertion uses `OPEN_COMPOSITION_REGISTRY` and the same
-  structural command boundary for Add, Inspector, and canvas insertion.
+- Open Composition insertion uses `OPEN_COMPOSITION_REGISTRY`, explicit
+  authoring dispositions, and the same structural command boundary for Add,
+  Inspector, and canvas insertion.
 - Builder selection is derived from the selected node object; the old duplicate
   `selectedNodeId` state was removed. Open Composition Layers show content
   nodes only, while style editing stays in the Inspector.
@@ -51,14 +52,10 @@ The final verification record is maintained in
 
 Playwright supports `E2E_API_PORT`, `E2E_CMS_PORT`, `E2E_RENDERER_PORT`, and
 `E2E_API_BASE_URL` so the suite can run in an isolated port range when the AO
-workspace service already owns a default port.
+workspace service already owns a default port. Phase 23.1 adds browser gates
+for V7→V8 promotion, published V8 Contact Forms, and rapid no-code editing.
 
-## Known remaining condition
-
-The completed repository-wide Playwright run (99 tests at that point) reported
-75 passing and 24 failing tests. The failures are concentrated in existing CMS
-routing, auth/context, legacy component, integration, workflow, and
-publishing journeys. The current suite adds one more Phase 23 structural test;
-the Phase 23 file now passes 3/3 in its focused run, and the V8 renderer parity
-journey passes. The original formatter issue in `tests/e2e/cms.spec.ts` was
-normalized while parameterizing E2E URLs, so the final format gate passes.
+The original Phase 23 full-suite failures were caused by stale locators,
+canonical fixture context, renderer API routing, missing deterministic data
+seeds, and tenant selection in custom-user auth flows. Those closures are
+recorded in `docs/phase-23.1.md`.

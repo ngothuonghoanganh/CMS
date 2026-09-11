@@ -8,6 +8,7 @@ describe('parseEnvironment', () => {
       MONGODB_URI: 'mongodb://127.0.0.1:27018/payload_landing_platform',
       NODE_ENV: 'development',
       PORT: 3001,
+      CORS_ORIGIN: '',
     });
   });
 
@@ -38,5 +39,20 @@ describe('parseEnvironment', () => {
         NODE_ENV: 'production',
       }),
     ).toThrow('Fake domain verification is not allowed in production');
+  });
+
+  it('rejects wildcard CORS in production', () => {
+    expect(() => parseEnvironment({ CORS_ORIGIN: '*', NODE_ENV: 'production' })).toThrow(
+      'Wildcard CORS origins are not allowed in production',
+    );
+  });
+
+  it('accepts explicit production CORS origins', () => {
+    expect(
+      parseEnvironment({
+        CORS_ORIGIN: 'https://cms.example.com,https://preview.example.com',
+        NODE_ENV: 'production',
+      }).CORS_ORIGIN,
+    ).toBe('https://cms.example.com,https://preview.example.com');
   });
 });

@@ -40,7 +40,7 @@ export default defineConfig({
     {
       // Next 16's Turbopack dev HMR currently panics while rewriting this
       // optional catch-all route; production builds still use Turbopack.
-      command: `RENDERER_API_BASE_URL=${apiOrigin}/api/v1 TRUST_PROXY=true pnpm --filter @payload/renderer exec next dev --webpack -p ${rendererPort}`,
+      command: `RENDERER_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_CMS_BASE_URL=${cmsOrigin} TRUST_PROXY=true pnpm --filter @payload/renderer exec next dev --webpack -p ${rendererPort}`,
       url: rendererOrigin,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

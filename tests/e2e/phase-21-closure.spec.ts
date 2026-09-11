@@ -206,7 +206,7 @@ test('Phase 21 closure rejects a direct design mutation from a content-only API 
     expect(
       (
         await userRequest.post(`${apiBase}/auth/login`, {
-          data: { email, password },
+          data: { email, password, tenantSlug: canonicalEnvironment.organizationSlug },
         })
       ).status(),
     ).toBe(200);
@@ -298,6 +298,9 @@ test('Phase 21 content mode saves editorial copy without exposing design control
 
     await contentPage.goto('/login');
     await contentPage.getByLabel('Email').fill(email);
+    await contentPage
+      .getByLabel('Tenant slug')
+      .fill(canonicalEnvironment.organizationSlug);
     await contentPage.getByLabel('Password').fill(password);
     await contentPage.getByRole('button', { name: 'Sign in' }).click();
     await expect(contentPage).toHaveURL(/\/workspaces\/[^/]+$/);

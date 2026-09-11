@@ -64,11 +64,7 @@ const environmentSchema = z
     DOMAIN_VERIFICATION_PROVIDER: z.enum(['dns', 'fake']).default('dns'),
     PUBLIC_PLATFORM_ORIGIN: z.string().url().default('http://127.0.0.1:3002'),
     TRUST_PROXY: z.coerce.boolean().default(false),
-    CORS_ORIGIN: z
-      .string()
-      .default(
-        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002',
-      ),
+    CORS_ORIGIN: z.string().default(''),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
       .default('info'),
@@ -123,6 +119,17 @@ const environmentSchema = z
         code: 'custom',
         path: ['DOMAIN_VERIFICATION_PROVIDER'],
         message: 'Fake domain verification is not allowed in production',
+      });
+    }
+
+    if (
+      config.NODE_ENV === 'production' &&
+      config.CORS_ORIGIN.split(',').some((origin) => origin.trim() === '*')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['CORS_ORIGIN'],
+        message: 'Wildcard CORS origins are not allowed in production',
       });
     }
   });

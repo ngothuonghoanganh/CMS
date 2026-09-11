@@ -115,6 +115,7 @@ test('CMS bootstrap settles after the authenticated shell is ready', async ({ pa
   });
 
   await login(page);
+  await expect(page.locator('[aria-busy="true"]')).toBeHidden();
   const requestsAtReady = apiRequests.length;
   await page.waitForTimeout(750);
 
@@ -1211,10 +1212,13 @@ test('applies multiple inspector properties immediately and persists them after 
   const textAlignment = page.getByRole('group', { name: 'Text alignment' });
   await textAlignment.getByRole('button', { name: 'Center', exact: true }).click();
   await page.getByLabel('Width', { exact: true }).fill('320');
+  await page.locator('summary').filter({ hasText: 'Spacing' }).click();
   const spacing = page
     .locator('.builder-inspector-section')
     .filter({ hasText: 'Spacing' });
-  const marginField = spacing.locator('.ui-field').filter({ hasText: /^Margin/ });
+  const marginField = spacing
+    .locator('.ui-field')
+    .filter({ hasText: /^Outside spacing/ });
   await marginField.getByRole('button', { name: 'Linked', exact: true }).click();
   await spacing.getByLabel('Top', { exact: true }).fill('12');
   await spacing.getByLabel('Right', { exact: true }).fill('0');
@@ -1292,7 +1296,7 @@ test('applies multiple inspector properties immediately and persists them after 
   await expect(reloadedSpacing.getByLabel('Top', { exact: true })).toHaveValue('12');
   await expect(reloadedSpacing.getByLabel('Right', { exact: true })).toHaveValue('0');
   await page.locator('summary').filter({ hasText: 'Background' }).click();
-  await expect(page.getByLabel('Background hex value')).toHaveValue('#fef3c7');
+  await expect(page.getByLabel('Background hex value')).toHaveValue('#FEF3C7');
   await expect
     .poll(() =>
       reloadedText.evaluate((element) => {
@@ -1324,7 +1328,7 @@ test('applies multiple inspector properties immediately and persists them after 
                   width: '320px',
                   margin: '12px 0px',
                   textAlign: 'center',
-                  backgroundColor: '#fef3c7',
+                  backgroundColor: '#FEF3C7',
                 },
               },
             },
@@ -1369,7 +1373,7 @@ test('supports duplicate, delete, undo and redo for a selected component', async
       .locator('p')
       .filter({ hasText: 'Action component' }),
   ).toHaveCount(1);
-  await page.getByRole('button', { name: 'Undo' }).click();
+  await page.getByLabel('Undo', { exact: true }).click();
   await expect(
     page
       .frameLocator('iframe.gjs-frame')

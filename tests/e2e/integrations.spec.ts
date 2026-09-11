@@ -1,16 +1,13 @@
 import { createServer, type Server } from 'node:http';
 
-import { expect, type Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
   canonicalEnvironmentNames,
+  loginToCanonicalBuilder,
   openCanonicalBuilder,
-  switchCanonicalBrowserContext,
   test,
 } from './fixtures/canonical-environment';
 import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
-
-const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
-const password = process.env.AUTH_PASSWORD ?? 'change-me-in-development';
 
 let webhookServer: Server;
 const webhookRequests: Array<{
@@ -39,15 +36,6 @@ test.afterAll(async () => {
   );
 });
 
-async function login(page: Page) {
-  await page.goto('/');
-  await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
-}
-
 test('configures integrations, binds them to a form and records deliveries', async ({
   browser,
   page,
@@ -58,8 +46,7 @@ test('configures integrations, binds them to a form and records deliveries', asy
   const emailIntegrationName = `__e2e__ Sales email ${suffix}`;
   const webhookIntegrationName = `__e2e__ CRM webhook ${suffix}`;
 
-  await login(page);
-  await switchCanonicalBrowserContext(page, canonicalEnvironment);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
   await page.getByRole('button', { name: 'Integrations', exact: true }).click();
   await page.getByRole('button', { name: 'Add integration', exact: true }).click();
   await page.getByLabel('Name').fill(emailIntegrationName);
