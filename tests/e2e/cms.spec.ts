@@ -4,7 +4,11 @@ import {
   type Page,
   type APIRequestContext,
 } from '@playwright/test';
-import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
+import {
+  loginToCanonicalBuilder,
+  openCanonicalBuilder,
+  test,
+} from './fixtures/canonical-environment';
 import { E2E_API_BASE_URL, E2E_CMS_ORIGIN } from './fixtures/urls';
 
 const email = process.env.AUTH_EMAIL ?? 'admin@example.com';
@@ -281,23 +285,20 @@ test('extension management settles without a request loop and stays responsive',
   }
 });
 
-test('opens a Header extension in the Extensions drawer', async ({ page }) => {
+test('opens a Header extension in the Extensions drawer', async ({
+  page,
+  canonicalEnvironment,
+}) => {
   const apiBase = E2E_API_BASE_URL;
   let layoutId: string | undefined;
-  let siteId: string | undefined;
-  await login(page);
+  const siteId = canonicalEnvironment.siteId;
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   try {
     const sessionResponse = await page.request.get(`${apiBase}/auth/me`);
     expect(sessionResponse.ok()).toBeTruthy();
     const session = (await sessionResponse.json()) as { workspace: { id: string } };
-    const sitesResponse = await page.request.get(
-      `${apiBase}/workspaces/${session.workspace.id}/sites?limit=1&offset=0`,
-    );
-    expect(sitesResponse.ok()).toBeTruthy();
-    const sites = (await sitesResponse.json()) as { items: Array<{ id: string }> };
-    siteId = sites.items[0]?.id;
-    expect(siteId).toBeTruthy();
+    expect(session.workspace.id).toBe(canonicalEnvironment.workspaceId);
 
     const name = `Drawer Header ${Date.now()}`;
     const createResponse = await page.request.post(

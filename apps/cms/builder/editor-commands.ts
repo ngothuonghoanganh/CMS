@@ -293,7 +293,18 @@ function updateOpenProperty(
     component.set('content', String(nextValue));
   }
   if ((type === 'button' || type === 'link') && property === 'label') {
-    component.set('content', String(nextValue));
+    const textChild = component
+      .components()
+      .models.find((child) => openNodeType(child) === 'text');
+    if (textChild) {
+      // Composed buttons/links render their label through a real text child so
+      // an icon and the label can be authored independently. Keep that child
+      // in sync with the semantic label instead of setting parent content,
+      // which GrapesJS ignores while the component has children.
+      updateOpenProperty(textChild, 'text', String(nextValue));
+    } else {
+      component.set('content', String(nextValue));
+    }
   }
   updateOpenBehaviorForProperty(component, type, property, nextValue);
   return true;

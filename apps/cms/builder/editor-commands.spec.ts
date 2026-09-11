@@ -254,6 +254,45 @@ describe('editor command boundary', () => {
     ).toMatchObject({ required: false });
   });
 
+  it('keeps a composed button label synchronized with its text child', () => {
+    const icon = new FakeComponent('icon', 'icon');
+    icon.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const text = new FakeComponent('button-text', 'text', [], 'Submit');
+    text.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: 'Submit' }),
+    });
+    const button = new FakeComponent('button', 'button', [icon, text]);
+    button.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ label: 'Submit' }),
+    });
+    const root = new FakeComponent('root', 'root', [button]);
+    root.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'button',
+        property: 'label',
+        value: 'Send message',
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(String(button.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])),
+    ).toEqual({
+      label: 'Send message',
+    });
+    expect(
+      JSON.parse(String(text.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])),
+    ).toEqual({
+      text: 'Send message',
+    });
+    expect(text.get('content')).toBe('Send message');
+  });
+
   it('updates behavior metadata stored on an inserted recipe subtree', () => {
     const form = new FakeComponent('form', 'form');
     form.setAttributes({
