@@ -4,9 +4,9 @@
 
 - Repository: `ngothuonghoanganh/CMS`
 - Working tree: `/Users/hoanganh211288/.ao/data/worktrees/cms/cms-4`
-- Starting HEAD: `b159dfd` (`feat(builder): add scoped block styling`)
-- This handoff describes the current working tree. No commit, push, or remote
-  operation was performed by the Phase 23 worker.
+- Phase 23 was originally implemented on top of the scoped block styling work.
+- The current stabilization source of truth is the Phase 23.1 branch and
+  `docs/continuity/phase-23.1-final-handoff.md`.
 
 ## Changes
 
@@ -52,17 +52,12 @@ Focused browser checks pass:
 - Builder/renderer parity: 1 passed.
 - Reusable and conflict regressions affected by E2E URL isolation: 2 passed.
 
-The completed repository-wide Playwright run (99 tests before the final
-structural Phase 23 case was added) reported 75 passed and 24 failed. The
-failures are in older CMS routing, auth/context, legacy component, integration,
-workflow, and publishing journeys. A fresh Mongo run reproduced the early
-routing failures, which confirms they are not caused by the V8 authoring
-changes. The current Phase 23 file passes 3/3 in a focused run and the V8
-parity test passes.
-
-The earlier formatter failure in `tests/e2e/cms.spec.ts` was pre-existing; the
-file was formatted as part of the required E2E URL parameterization and the
-final `format:check` now passes.
+The initial Phase 23.1 baseline was recorded as 105 repository-wide browser
+tests with 81 passing and 24 failing. Phase 23.1 closes those failures through
+canonical fixture isolation, renderer API URL wiring, tenant-aware auth
+fixtures, deterministic collection seeds, and current Layers/Inspector
+locators. The final release-gate result is maintained in the Phase 23.1
+handoff.
 
 ## Follow-up risks
 

@@ -10,6 +10,7 @@ import { json } from 'express';
 import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import { PlatformLogger, platformLogger } from './common/logging/platform-logger';
 import { requestIdMiddleware } from './common/middleware/request-id.middleware';
+import { resolveCorsPolicy } from './config/cors';
 import { env } from './config/env';
 import { AppModule } from './app.module';
 
@@ -47,16 +48,7 @@ async function bootstrap(): Promise<void> {
       whitelist: true,
     }),
   );
-  const corsOrigins = env.CORS_ORIGIN.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  app.enableCors({
-    credentials: true,
-    // `Access-Control-Allow-Origin: *` is invalid for credentialed requests.
-    // `true` makes the cors package reflect the request origin, allowing all
-    // origins while keeping cookie-based authentication functional.
-    origin: corsOrigins.includes('*') ? true : corsOrigins,
-  });
+  app.enableCors(resolveCorsPolicy(env));
   app.enableShutdownHooks();
 
   await app.listen(env.PORT, '0.0.0.0');

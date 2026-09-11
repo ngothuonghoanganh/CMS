@@ -9,6 +9,7 @@ import {
   instantiateOpenCompositionRecipe,
   getOpenCompositionAuthoringDefinition,
   getOpenCompositionAuthoringProperty,
+  openCompositionInsertableChildren,
   migratePagePayloadToOpenComposition,
   migratePagePayloadV7ToOpenComposition,
   type OpenCompositionNode,
@@ -83,6 +84,30 @@ describe('Open Composition contract', () => {
     expect(Object.keys(OPEN_COMPOSITION_AUTHORING_REGISTRY)).toHaveLength(
       Object.keys(OPEN_COMPOSITION_REGISTRY).length,
     );
+  });
+
+  it('assigns an explicit authoring disposition to every node type', () => {
+    for (const [type, registryDefinition] of Object.entries(OPEN_COMPOSITION_REGISTRY)) {
+      const authoring = getOpenCompositionAuthoringDefinition(
+        type as keyof typeof OPEN_COMPOSITION_REGISTRY,
+      );
+      expect(['authorable', 'read-only', 'internal']).toContain(
+        registryDefinition.authoring.disposition,
+      );
+      expect(authoring.disposition).toBe(registryDefinition.authoring.disposition);
+      expect(authoring.insertable).toBe(registryDefinition.authoring.insertable);
+      if (authoring.disposition === 'authorable') {
+        expect(
+          authoring.styleGroups.length + authoring.properties.length,
+        ).toBeGreaterThan(0);
+      } else {
+        expect(authoring.insertable).toBe(false);
+      }
+    }
+
+    expect(openCompositionInsertableChildren('form')).toContain('form-field');
+    expect(openCompositionInsertableChildren('form')).not.toContain('reusable-instance');
+    expect(openCompositionInsertableChildren('root')).not.toContain('root');
   });
 
   it('ships Contact Form as a normal editable composition with semantic references', () => {

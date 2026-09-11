@@ -79,6 +79,15 @@ export type OpenCompositionNodeType = z.infer<typeof OpenCompositionNodeTypeSche
 
 export type OpenCompositionNodeKind = 'primitive' | 'semantic';
 
+export type OpenCompositionAuthoringDisposition = 'authorable' | 'read-only' | 'internal';
+
+export type OpenCompositionAuthoringCapability = {
+  disposition: OpenCompositionAuthoringDisposition;
+  insertable: boolean;
+  directInsert: boolean;
+  message?: string;
+};
+
 export type OpenCompositionNodeDefinition = {
   type: OpenCompositionNodeType;
   kind: OpenCompositionNodeKind;
@@ -87,9 +96,115 @@ export type OpenCompositionNodeDefinition = {
   allowedParents: readonly OpenCompositionNodeType[];
   allowedChildren: readonly OpenCompositionNodeType[];
   behaviors: readonly OpenCompositionBehaviorKind[];
+  authoring: OpenCompositionAuthoringCapability;
 };
 
 export type OpenCompositionBehaviorKind = 'field' | 'action' | 'state-binding';
+
+const authoringCapability = (
+  disposition: OpenCompositionAuthoringDisposition,
+  options: Partial<Omit<OpenCompositionAuthoringCapability, 'disposition'>> = {},
+): OpenCompositionAuthoringCapability => ({
+  disposition,
+  insertable: disposition === 'authorable',
+  directInsert: disposition === 'authorable',
+  ...options,
+});
+
+/**
+ * Every V8 node has an explicit authoring disposition. This is intentionally
+ * separate from the structural registry so compatibility nodes can remain
+ * renderable without appearing in normal Add/Structure surfaces.
+ */
+const OPEN_COMPOSITION_AUTHORING_CAPABILITIES = {
+  root: authoringCapability('internal', {
+    message: 'The page root is managed by the builder.',
+  }),
+  section: authoringCapability('authorable'),
+  container: authoringCapability('authorable'),
+  stack: authoringCapability('authorable'),
+  row: authoringCapability('authorable'),
+  grid: authoringCapability('authorable'),
+  card: authoringCapability('authorable'),
+  text: authoringCapability('authorable'),
+  heading: authoringCapability('authorable'),
+  image: authoringCapability('authorable'),
+  icon: authoringCapability('authorable'),
+  button: authoringCapability('authorable'),
+  link: authoringCapability('authorable'),
+  form: authoringCapability('authorable'),
+  'form-field': authoringCapability('authorable'),
+  label: authoringCapability('authorable'),
+  input: authoringCapability('authorable'),
+  textarea: authoringCapability('authorable'),
+  select: authoringCapability('authorable'),
+  disclosure: authoringCapability('read-only', {
+    message: 'This disclosure is managed by the legacy component editor.',
+  }),
+  'disclosure-item': authoringCapability('read-only', {
+    message: 'This disclosure item is managed by the legacy component editor.',
+  }),
+  'disclosure-panel': authoringCapability('read-only', {
+    message: 'This disclosure panel is managed by the legacy component editor.',
+  }),
+  tabs: authoringCapability('read-only', {
+    message: 'This tabs block is managed by the legacy component editor.',
+  }),
+  'tab-list': authoringCapability('read-only', {
+    message: 'This tab list is managed by the legacy component editor.',
+  }),
+  'tab-trigger': authoringCapability('read-only', {
+    message: 'This tab trigger is managed by the legacy component editor.',
+  }),
+  'tab-panel': authoringCapability('read-only', {
+    message: 'This tab panel is managed by the legacy component editor.',
+  }),
+  countdown: authoringCapability('read-only', {
+    message: 'This countdown is managed by its extension settings.',
+  }),
+  extension: authoringCapability('read-only', {
+    message: 'This extension is managed by the Extensions settings.',
+  }),
+  divider: authoringCapability('authorable'),
+  list: authoringCapability('read-only', {
+    message: 'This list is managed by the legacy component editor.',
+  }),
+  video: authoringCapability('authorable'),
+  quote: authoringCapability('authorable'),
+  accordion: authoringCapability('read-only', {
+    message: 'This accordion is managed by the legacy component editor.',
+  }),
+  'accordion-item': authoringCapability('read-only', {
+    message: 'This accordion item is managed by the legacy component editor.',
+  }),
+  'tab-item': authoringCapability('read-only', {
+    message: 'This tab item is managed by the legacy component editor.',
+  }),
+  gallery: authoringCapability('read-only', {
+    message: 'This gallery is managed by the legacy component editor.',
+  }),
+  'collection-list': authoringCapability('read-only', {
+    message: 'This collection list is managed by its data source settings.',
+  }),
+  'collection-item': authoringCapability('read-only', {
+    message: 'This collection item is managed by its collection template.',
+  }),
+  'global-header': authoringCapability('read-only', {
+    message: 'This header is managed from the site layout settings.',
+  }),
+  'global-footer': authoringCapability('read-only', {
+    message: 'This footer is managed from the site layout settings.',
+  }),
+  'navigation-view': authoringCapability('read-only', {
+    message: 'This navigation is managed from the Navigation settings.',
+  }),
+  'site-brand': authoringCapability('read-only', {
+    message: 'This site brand is managed from the Brand & styles settings.',
+  }),
+  'reusable-instance': authoringCapability('read-only', {
+    message: 'This reusable block is managed from its source component.',
+  }),
+} satisfies Record<OpenCompositionNodeType, OpenCompositionAuthoringCapability>;
 
 const contentChildren = [
   'section',
@@ -218,6 +333,7 @@ function definition(
     allowedParents: [],
     allowedChildren,
     behaviors,
+    authoring: OPEN_COMPOSITION_AUTHORING_CAPABILITIES[type],
   };
 }
 
@@ -563,6 +679,10 @@ export type OpenCompositionAuthoringDefinition = {
   type: OpenCompositionNodeType;
   label: string;
   description: string;
+  disposition: OpenCompositionAuthoringDisposition;
+  insertable: boolean;
+  directInsert: boolean;
+  readOnlyMessage?: string;
   /** Explicit content controls. Runtime props are never used to infer these. */
   properties: readonly ComponentPropertyDefinition[];
   /** Explicit style capabilities grouped for progressive disclosure. */
@@ -759,13 +879,20 @@ const openAuthoringDefinition = (
   type: OpenCompositionNodeType,
   properties: readonly ComponentPropertyDefinition[],
   styleKeys: readonly PageStylePropertyKey[] = [],
-): OpenCompositionAuthoringDefinition => ({
-  type,
-  label: OPEN_COMPOSITION_REGISTRY[type].label,
-  description: OPEN_COMPOSITION_REGISTRY[type].description,
-  properties,
-  styleGroups: openStyleGroupsFor(styleKeys),
-});
+): OpenCompositionAuthoringDefinition => {
+  const capability = OPEN_COMPOSITION_REGISTRY[type].authoring;
+  return {
+    type,
+    label: OPEN_COMPOSITION_REGISTRY[type].label,
+    description: OPEN_COMPOSITION_REGISTRY[type].description,
+    disposition: capability.disposition,
+    insertable: capability.insertable,
+    directInsert: capability.directInsert,
+    ...(capability.message ? { readOnlyMessage: capability.message } : {}),
+    properties,
+    styleGroups: openStyleGroupsFor(styleKeys),
+  };
+};
 
 const openTextProperties = [
   openContentProperty({
@@ -945,15 +1072,70 @@ const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
   ...(['input', 'textarea', 'select'] as const).map((type) =>
     openAuthoringDefinition(type, openControlProperties, OPEN_CONTENT_STYLE_KEYS),
   ),
+  openAuthoringDefinition('divider', [], ['width', 'margin', 'background-color']),
+  openAuthoringDefinition(
+    'video',
+    [
+      openContentProperty({
+        key: 'src',
+        label: 'Video',
+        control: 'asset',
+        assetKind: 'video',
+        required: true,
+      }),
+      openContentProperty({
+        key: 'poster',
+        label: 'Poster image',
+        control: 'asset',
+        assetKind: 'image',
+        allowEmpty: true,
+      }),
+      openContentProperty({
+        key: 'controls',
+        label: 'Show controls',
+        control: 'toggle',
+        defaultValue: true,
+      }),
+    ],
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition(
+    'quote',
+    [
+      openContentProperty({
+        key: 'text',
+        label: 'Quote',
+        control: 'textarea',
+        required: true,
+        placeholder: 'Add a quote',
+        defaultValue: 'Add a quote',
+      }),
+      openContentProperty({
+        key: 'citation',
+        label: 'Attribution',
+        control: 'text',
+        allowEmpty: true,
+        placeholder: 'Who said this?',
+      }),
+    ],
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
 ];
+
+const openCompositionAuthoringEntriesByType = new Map(
+  openCompositionAuthoringEntries.map((entry) => [entry.type, entry]),
+);
 
 const openCompositionAuthoringFallbacks = Object.keys(OPEN_COMPOSITION_REGISTRY).map(
   (type) => {
     const nodeType = type as OpenCompositionNodeType;
-    return (
-      openCompositionAuthoringEntries.find((entry) => entry.type === nodeType) ??
-      openAuthoringDefinition(nodeType, [], [])
-    );
+    const existing = openCompositionAuthoringEntriesByType.get(nodeType);
+    if (existing) return existing;
+    const capability = OPEN_COMPOSITION_REGISTRY[nodeType].authoring;
+    if (capability.disposition === 'authorable') {
+      throw new Error(`Missing authoring metadata for ${nodeType}`);
+    }
+    return openAuthoringDefinition(nodeType, [], []);
   },
 );
 
@@ -987,6 +1169,14 @@ export function canComposeChild(
   childType: OpenCompositionNodeType,
 ): boolean {
   return OPEN_COMPOSITION_REGISTRY[parentType].allowedChildren.includes(childType);
+}
+
+export function openCompositionInsertableChildren(
+  parentType: OpenCompositionNodeType,
+): readonly OpenCompositionNodeType[] {
+  return OPEN_COMPOSITION_REGISTRY[parentType].allowedChildren.filter(
+    (childType) => OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert,
+  );
 }
 
 export const CompositionStyleValueSchema = z.union([

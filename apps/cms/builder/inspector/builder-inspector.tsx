@@ -4,6 +4,7 @@ import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_GROUPS,
   getOpenCompositionAuthoringDefinition,
+  openCompositionInsertableChildren,
   OPEN_COMPOSITION_REGISTRY,
   isComponentPropertyVisible,
   type Asset,
@@ -171,25 +172,7 @@ function OpenCompositionInspector({
   const contentProperties = definition.properties.filter((property) =>
     isComponentPropertyVisible(property, selected.props),
   );
-  const addableChildren = OPEN_COMPOSITION_REGISTRY[nodeType].allowedChildren.filter(
-    (type) =>
-      !['root', 'reusable-instance'].includes(type) &&
-      [
-        'form-field',
-        'label',
-        'input',
-        'textarea',
-        'select',
-        'text',
-        'heading',
-        'button',
-        'container',
-        'stack',
-        'row',
-        'grid',
-        'image',
-      ].includes(type),
-  );
+  const addableChildren = openCompositionInsertableChildren(nodeType);
   const styleValues = Object.fromEntries(
     definition.styleGroups.flatMap((group) =>
       group.properties.map((property) => [
@@ -310,6 +293,17 @@ function OpenCompositionInspector({
           })}
         </div>
       </InspectorSection>
+    );
+  }
+
+  if (definition.disposition !== 'authorable') {
+    return (
+      <div className="builder-inspector-empty" role="status">
+        <strong>{definition.label}</strong>
+        <p className="muted small">
+          {definition.readOnlyMessage ?? 'This block is managed by another editor.'}
+        </p>
+      </div>
     );
   }
 

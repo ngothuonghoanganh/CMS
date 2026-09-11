@@ -6,7 +6,7 @@ test('major CMS modules are independently deep-linkable and refresh-safe', async
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   const workspacePath = `/workspaces/${canonicalEnvironment.workspaceId}`;
   const sitePath = `${workspacePath}/sites/${canonicalEnvironment.siteId}`;
@@ -51,7 +51,7 @@ test('CMS resource routes are deep-linkable and overlays require intent', async 
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   const pagesRoute = `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/pages`;
   const detailRoute = `${pagesRoute}/${canonicalEnvironment.pageId}`;
@@ -102,7 +102,7 @@ test('create routes keep resource lists quiet until the primary action is chosen
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   const workspacePath = `/workspaces/${canonicalEnvironment.workspaceId}`;
   const sitePath = `${workspacePath}/sites`;
@@ -166,7 +166,7 @@ test('brand styles show website impact without changing the CMS chrome', async (
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   const sitePath = `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}`;
   await page.setViewportSize({ height: 900, width: 1440 });

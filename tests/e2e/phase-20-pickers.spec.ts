@@ -25,7 +25,7 @@ test('Phase 20 asset and reference pickers search, paginate, save, and reload @p
   const assetIds: string[] = [];
 
   try {
-    await loginToCanonicalBuilder(page);
+    await loginToCanonicalBuilder(page, canonicalEnvironment);
     const categories = await readJson<{ id: string }>(
       await request.post(`${siteScope}/collections`, {
         data: {

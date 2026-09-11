@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 import { loginToCanonicalBuilder, test } from './fixtures/canonical-environment';
 import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
@@ -6,11 +7,284 @@ import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 const apiBase = E2E_API_BASE_URL;
 const rendererBase = E2E_RENDERER_ORIGIN;
 
+type ProductScenario = {
+  collectionKey: string;
+  cleanup: () => Promise<void>;
+};
+let cleanupProductScenario: (() => Promise<void>) | undefined;
+
+test.afterEach(async () => {
+  await cleanupProductScenario?.();
+  cleanupProductScenario = undefined;
+});
+
+async function seedCanonicalProductsScenario(
+  page: import('@playwright/test').Page,
+  environment: {
+    workspaceId: string;
+    pageId: string;
+    pageSlug: string;
+    siteId: string;
+    siteSlug: string;
+  },
+): Promise<ProductScenario> {
+  const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
+  const collectionKey = `products-${suffix}`;
+  const scope = `${apiBase}/workspaces/${environment.workspaceId}/sites/${environment.siteId}`;
+  const queryId = randomUUID();
+  const listHeadingId = `heading-${randomUUID()}`;
+  const listButtonId = `button-${randomUUID()}`;
+  const dynamicHeadingId = `heading-${randomUUID()}`;
+  const collectionResponse = await page.request.post(`${scope}/collections`, {
+    data: {
+      key: collectionKey,
+      name: `__e2e__ Products ${suffix}`,
+      singularName: 'Product',
+      titleFieldKey: 'name',
+      fields: [
+        { key: 'name', label: 'Name', type: 'text', required: true },
+        { key: 'slug', label: 'Slug', type: 'slug', required: true, unique: true },
+        { key: 'image', label: 'Image', type: 'image', required: false },
+        { key: 'price', label: 'Price', type: 'number', required: true },
+        { key: 'description', label: 'Description', type: 'long-text', required: false },
+        { key: 'featured', label: 'Featured', type: 'boolean', required: true },
+      ],
+    },
+  });
+  expect(collectionResponse.ok()).toBeTruthy();
+  const collection = (await collectionResponse.json()) as { id: string };
+  const values = {
+    name: 'Product A',
+    slug: `product-a-${suffix}`,
+    image: '/assets/a.png',
+    price: 100,
+    description: 'Product A',
+    featured: true,
+  };
+  const entryResponse = await page.request.post(
+    `${scope}/collections/${collection.id}/entries`,
+    { data: { values } },
+  );
+  expect(entryResponse.ok()).toBeTruthy();
+  const entry = (await entryResponse.json()) as { id: string };
+  const publishEntryResponse = await page.request.post(
+    `${scope}/collections/${collection.id}/entries/${entry.id}/publish`,
+  );
+  expect(publishEntryResponse.ok()).toBeTruthy();
+
+  const listPayload = {
+    version: 7 as const,
+    metadata: { documentTitle: 'Products' },
+    root: {
+      id: 'root',
+      type: 'root' as const,
+      props: {},
+      children: [
+        {
+          id: 'products',
+          type: 'collection-list' as const,
+          props: { queryId, emptyMessage: 'No products' },
+          children: [
+            {
+              id: 'item-template',
+              type: 'collection-item' as const,
+              props: {},
+              children: [
+                {
+                  id: listHeadingId,
+                  type: 'heading' as const,
+                  props: { text: 'Product', level: 2 as const },
+                  children: [],
+                },
+                {
+                  id: listButtonId,
+                  type: 'button' as const,
+                  props: {
+                    label: 'View product',
+                    href: '/products',
+                    target: '_blank' as const,
+                  },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const query = {
+    filters: [{ field: 'featured', operator: 'equals', value: true }],
+    sort: [{ field: 'price', direction: 'desc' as const }],
+    limit: 100,
+    offset: 0,
+  };
+  const listComposition = {
+    payload: listPayload,
+    attachments: [],
+    layoutAttachments: [],
+    bindings: [
+      {
+        id: randomUUID(),
+        targetNodeId: listHeadingId,
+        targetProperty: 'text',
+        source: { type: 'query-item' as const, sourceId: queryId, path: 'name' },
+        fallback: 'Product',
+      },
+      {
+        id: randomUUID(),
+        targetNodeId: listButtonId,
+        targetProperty: 'href',
+        source: {
+          type: 'query-item' as const,
+          sourceId: queryId,
+          path: 'slug',
+          template: '/products/{value}',
+        },
+        fallback: '/products',
+      },
+    ],
+    actions: [],
+    resources: [],
+    queries: [
+      {
+        id: queryId,
+        source: { type: 'collection' as const, collectionId: collection.id },
+        ...query,
+      },
+    ],
+  };
+  const listPageResponse = await page.request.patch(
+    `${apiBase}/pages/${environment.pageId}`,
+    {
+      data: {
+        name: '__e2e__ Phase 20.1 Products catalog',
+        path: '/',
+        slug: environment.pageSlug,
+        payload: listPayload,
+        composition: listComposition,
+      },
+    },
+  );
+  expect(listPageResponse.ok()).toBeTruthy();
+  const publishListResponse = await page.request.post(
+    `${apiBase}/pages/${environment.pageId}/publish`,
+    { data: {} },
+  );
+  expect(publishListResponse.ok()).toBeTruthy();
+
+  const dynamicPayload = {
+    version: 7 as const,
+    metadata: { documentTitle: 'Product detail' },
+    root: {
+      id: 'root',
+      type: 'root' as const,
+      props: {},
+      children: [
+        {
+          id: 'section',
+          type: 'section' as const,
+          props: {},
+          children: [
+            {
+              id: dynamicHeadingId,
+              type: 'heading' as const,
+              props: { text: 'Product', level: 1 as const },
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const dynamicPageResponse = await page.request.post(
+    `${apiBase}/sites/${environment.siteId}/pages`,
+    {
+      data: {
+        name: `__e2e__ Phase 20.1 Product detail ${suffix}`,
+        slug: `phase20-product-detail-${suffix}`,
+        kind: 'dynamic',
+        collectionId: collection.id,
+        pathPattern: '/products/{slug}',
+        lookupField: 'slug',
+        payload: dynamicPayload,
+        composition: {
+          payload: dynamicPayload,
+          attachments: [],
+          layoutAttachments: [],
+          bindings: [
+            {
+              id: randomUUID(),
+              targetNodeId: dynamicHeadingId,
+              targetProperty: 'text',
+              source: { type: 'current-entry' as const, path: 'name' },
+              fallback: 'Product',
+            },
+          ],
+          actions: [],
+          resources: [],
+          queries: [],
+        },
+      },
+    },
+  );
+  expect(dynamicPageResponse.ok()).toBeTruthy();
+  const dynamicPage = (await dynamicPageResponse.json()) as { id: string };
+  const publishDynamicResponse = await page.request.post(
+    `${apiBase}/pages/${dynamicPage.id}/publish`,
+    { data: {} },
+  );
+  expect(publishDynamicResponse.ok()).toBeTruthy();
+
+  return {
+    collectionKey,
+    cleanup: async () => {
+      await page.request
+        .post(`${apiBase}/pages/${environment.pageId}/unpublish`)
+        .catch(() => undefined);
+      await page.request
+        .delete(`${apiBase}/pages/${dynamicPage.id}`)
+        .catch(() => undefined);
+      const baselinePayload = {
+        version: 1 as const,
+        metadata: { documentTitle: 'E2E Home' },
+        root: { id: 'root', type: 'root' as const, props: {}, children: [] },
+      };
+      await page.request
+        .patch(`${apiBase}/pages/${environment.pageId}`, {
+          data: {
+            name: 'E2E Home',
+            path: '/',
+            slug: environment.pageSlug,
+            kind: 'standard',
+            payload: baselinePayload,
+            composition: {
+              payload: baselinePayload,
+              attachments: [],
+              layoutAttachments: [],
+              bindings: [],
+              actions: [],
+              resources: [],
+              queries: [],
+            },
+          },
+        })
+        .catch(() => undefined);
+      await page.request
+        .delete(`${scope}/collections/${collection.id}/entries/${entry.id}`)
+        .catch(() => undefined);
+      await page.request
+        .delete(`${scope}/collections/${collection.id}`)
+        .catch(() => undefined);
+    },
+  };
+}
+
 test('Phase 20.1 collection management and dynamic page flow works in the browser @phase20.1', async ({
   page,
   canonicalEnvironment,
 }) => {
-  await loginToCanonicalBuilder(page);
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   const sitesResponse = await page.request.get(
     `${apiBase}/workspaces/${canonicalEnvironment.workspaceId}/sites?limit=100&offset=0`,
@@ -21,6 +295,7 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
   };
   let productsSiteId: string | undefined;
   let productsSiteSlug: string | undefined;
+  let productsCollectionKey = 'products';
   let collectionsResponse: Awaited<ReturnType<typeof page.request.get>> | undefined;
   for (const site of sites.items) {
     const response = await page.request.get(
@@ -35,9 +310,22 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
       break;
     }
   }
+  if (!productsSiteId) {
+    productsSiteId = canonicalEnvironment.siteId;
+    productsSiteSlug = canonicalEnvironment.siteSlug;
+    const seededScenario = await seedCanonicalProductsScenario(page, {
+      ...canonicalEnvironment,
+      pageSlug: canonicalEnvironment.pageSlug,
+    });
+    productsCollectionKey = seededScenario.collectionKey;
+    cleanupProductScenario = seededScenario.cleanup;
+    collectionsResponse = await page.request.get(
+      `${apiBase}/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/collections`,
+    );
+  }
   expect(
     productsSiteId,
-    'A site with the canonical Products collection must be seeded',
+    'A site with the Products collection must be available',
   ).toBeTruthy();
   expect(productsSiteSlug).toBeTruthy();
   expect(collectionsResponse).toBeTruthy();
@@ -47,8 +335,10 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
     key: string;
     fields: Array<{ key: string }>;
   }>;
-  const products = collections.find((collection) => collection.key === 'products');
-  expect(products, 'The canonical Products collection must be seeded').toBeTruthy();
+  const products = collections.find(
+    (collection) => collection.key === productsCollectionKey,
+  );
+  expect(products, 'The Products collection must be available').toBeTruthy();
 
   await page.goto(
     `/workspaces/${canonicalEnvironment.workspaceId}/sites/${productsSiteId}/collections`,
@@ -56,7 +346,7 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
   await expect(page.locator('h1', { hasText: 'Collections' })).toBeVisible();
   const collectionCard = page
     .locator('.collection-library-item')
-    .filter({ hasText: products!.name });
+    .filter({ has: page.getByText(products!.key, { exact: true }) });
   await expect(collectionCard).toBeVisible();
   await collectionCard.click();
   await expect(page.getByText(/entries · page 1/)).toBeVisible();
