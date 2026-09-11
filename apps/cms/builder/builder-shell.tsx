@@ -586,7 +586,7 @@ export default function BuilderShell({
     content: true,
     layout: true,
     size: true,
-    spacing: true,
+    spacing: false,
     typography: false,
     background: false,
     border: false,
@@ -599,6 +599,10 @@ export default function BuilderShell({
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeAction, setNoticeAction] = useState<{
+    label: string;
+    onClick: () => void;
+  } | null>(null);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('select');
   const [collapsedLayerIds, setCollapsedLayerIds] = useState<Set<string>>(
     () => new Set(),
@@ -703,6 +707,9 @@ export default function BuilderShell({
   const activePayload = isEditingReusable
     ? reusableEditorDocument?.payload
     : pageDocument?.payload;
+  const canvasIsEmpty = Boolean(
+    canvasState && !canvasState.nodes.some((node) => node.type !== 'root'),
+  );
   const activeStyleTargetLabel =
     selected && selectedStyleTarget && selectedStyleTarget.nodeId === selected.id
       ? styleTargetsForComponent(selected.type).find(
@@ -1629,6 +1636,11 @@ export default function BuilderShell({
     if (!editorRef.current || saveInFlightRef.current) {
       return false;
     }
+    if (saveStatus === 'saved' && !editorRef.current.hasUnsavedChanges()) {
+      setError(null);
+      setNotice('Everything is already saved.');
+      return true;
+    }
     const blockingIssue = validationIssuesRef.current.find(
       (issue) => issue.severity === 'error',
     );
@@ -2256,9 +2268,9 @@ export default function BuilderShell({
   const builderTools = designEnabled
     ? ([
         ['add', '＋', 'Add', 'Add blocks'],
-        ['layers', '▤', 'Structure', 'Layers'],
-        ['assets', '▧', 'Assets', 'Assets'],
-        ['settings', '⚙', 'Advanced', 'Page settings'],
+        ['layers', '▤', 'Layers', 'Layers'],
+        ['assets', '▧', 'Media', 'Assets'],
+        ['settings', '⚙', 'Page settings', 'Page settings'],
       ] as const)
     : ([['assets', '▧', 'Assets', 'Assets']] as const);
 
@@ -2417,7 +2429,16 @@ export default function BuilderShell({
         ) : null}
         {notice ? (
           <div className="builder-alert alert-success" role="status">
-            {notice}
+            <span>{notice}</span>
+            {noticeAction && notice.startsWith('Deleted ') ? (
+              <button
+                className="button button-small button-ghost builder-notice-action"
+                onClick={noticeAction.onClick}
+                type="button"
+              >
+                {noticeAction.label}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -2683,8 +2704,8 @@ export default function BuilderShell({
                   </p>
                 ) : null}
                 <p className="muted small builder-help">
-                  Start with a quick section, then select anything on the canvas to edit
-                  its content. More technical options are available under Advanced.
+                  Start with a section, then select anything on the page to edit it. You
+                  can find optional page features in Page settings.
                 </p>
               </>
             ) : null}
@@ -2809,15 +2830,15 @@ export default function BuilderShell({
               <>
                 <div className="builder-layers-section">
                   <div className="builder-panel-heading">
-                    <span className="eyebrow">Structure</span>
-                    <strong>Page sections</strong>
+                    <span className="eyebrow">Layers</span>
+                    <strong>Page content</strong>
                   </div>
                   <label className="builder-layer-search">
-                    <span className="sr-only">Search layers</span>
+                    <span className="sr-only">Search page content</span>
                     <input
-                      aria-label="Search layers"
+                      aria-label="Search page content"
                       onChange={(event) => setLayerQuery(event.target.value)}
-                      placeholder="Search layers"
+                      placeholder="Find content"
                       type="search"
                       value={layerQuery}
                     />
@@ -2907,12 +2928,34 @@ export default function BuilderShell({
               >
                 ✋ Hand
               </button>
-              <span className="muted small">V/H · Space + drag · middle drag</span>
+              <span
+                className="muted small"
+                title="Use the Hand tool to move around the page"
+              >
+                Move around the page
+              </span>
             </div>
           </div>
           <div className="builder-editor-shell">
             <BuilderContextToolbar
-              onDelete={() => editorRef.current?.deleteSelected()}
+              onDelete={() => {
+                if (!selected) return;
+                const label = selectedNodeLabel(selected);
+                editorRef.current?.deleteSelected();
+                const undo = () => {
+                  editorRef.current?.undo();
+                  setNoticeAction(null);
+                  setNotice(`Restored ${label}.`);
+                };
+                // GrapesJS emits a follow-up dirty event after the command
+                // returns. Render the toast on the next turn so that event
+                // cannot immediately clear the recovery action.
+                window.setTimeout(() => {
+                  setNotice(`Deleted ${label}.`);
+                  setNoticeAction({ label: 'Undo', onClick: undo });
+                }, 0);
+                window.setTimeout(() => setNoticeAction(null), 8_000);
+              }}
               onDuplicate={() => editorRef.current?.duplicateSelected()}
               onMoveDown={() => editorRef.current?.moveSelected('down')}
               onMoveUp={() => editorRef.current?.moveSelected('up')}
@@ -3000,14 +3043,41 @@ export default function BuilderShell({
               }}
               ref={editorRef}
             />
-            <PageMinimap
-              onFitPage={() => editorRef.current?.fitCanvas()}
-              onNavigate={(x, y) => editorRef.current?.scrollToCanvasPoint(x, y)}
-              onSelectNode={selectBuilderNode}
-              onZoomChange={(zoom) => editorRef.current?.setCanvasZoom(zoom)}
-              selectedId={selectedNodeId ?? undefined}
-              state={canvasState}
-            />
+            {canvasIsEmpty ? (
+              <div
+                aria-label="Empty page"
+                className="builder-canvas-empty"
+                data-builder-empty-state
+              >
+                <span className="eyebrow">Start here</span>
+                <h2>This page is empty</h2>
+                <p>
+                  Add a section to create your first area, then place text, images, and
+                  buttons inside it.
+                </p>
+                <button
+                  aria-label="Add your first section"
+                  className="button button-primary"
+                  onClick={() => {
+                    setActiveTool('add');
+                    editorRef.current?.addBlock('section');
+                  }}
+                  type="button"
+                >
+                  + Add section
+                </button>
+              </div>
+            ) : null}
+            {!canvasIsEmpty ? (
+              <PageMinimap
+                onFitPage={() => editorRef.current?.fitCanvas()}
+                onNavigate={(x, y) => editorRef.current?.scrollToCanvasPoint(x, y)}
+                onSelectNode={selectBuilderNode}
+                onZoomChange={(zoom) => editorRef.current?.setCanvasZoom(zoom)}
+                selectedId={selectedNodeId ?? undefined}
+                state={canvasState}
+              />
+            ) : null}
           </div>
         </section>
 
@@ -3166,7 +3236,7 @@ export default function BuilderShell({
               <div className="builder-properties-heading-row">
                 <div className="builder-panel-heading">
                   <span className="eyebrow">Properties</span>
-                  <strong>Nothing selected</strong>
+                  <strong>Select something to edit</strong>
                 </div>
                 <button
                   aria-label="Collapse inspector"
@@ -3178,7 +3248,8 @@ export default function BuilderShell({
                 </button>
               </div>
               <p className="muted small">
-                Select an element on the canvas or in Layers to edit its properties.
+                Click a section or piece of content on the page. Its editing options will
+                appear here.
               </p>
             </div>
           )}

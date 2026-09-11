@@ -8898,3 +8898,150 @@ body {
     display: none;
   }
 }
+
+/* Empty pages should explain the first action instead of looking broken. */
+.builder-canvas-empty {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 2rem;
+  color: var(--cms-text-primary);
+  background:
+    radial-gradient(circle at 50% 38%, var(--cms-bg-surface) 0, transparent 34%),
+    var(--cms-bg-canvas);
+  text-align: center;
+}
+
+.builder-canvas-empty .eyebrow {
+  color: var(--cms-primary);
+}
+
+.builder-canvas-empty h2,
+.builder-canvas-empty p {
+  max-width: 30rem;
+  margin: 0;
+}
+
+.builder-canvas-empty h2 {
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  letter-spacing: -0.03em;
+}
+
+.builder-canvas-empty p {
+  color: var(--cms-text-secondary);
+  line-height: 1.55;
+}
+
+.builder-canvas-empty .button {
+  margin-top: 0.35rem;
+}
+
+.builder-notice-action {
+  margin-left: 0.65rem;
+  border-color: currentColor;
+  color: inherit;
+}
+
+.builder-context-toolbar-danger {
+  color: var(--cms-danger);
+}
+
+.builder-title > div {
+  min-width: 0;
+}
+
+.builder-title h1 {
+  max-width: min(32rem, 42vw);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 820px) {
+  .builder-workspace-v2 {
+    min-height: 0;
+  }
+
+  .builder-editor-shell {
+    min-height: clamp(26rem, 70dvh, 48rem);
+  }
+
+  .builder-canvas-empty {
+    padding: 1.25rem;
+  }
+
+  .builder-context-toolbar {
+    max-width: calc(100% - 1rem);
+    overflow-x: auto;
+    justify-content: flex-start;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .builder-topbar {
+    padding: 0.7rem;
+  }
+
+  .builder-title {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .builder-title h1 {
+    max-width: calc(100vw - 5.5rem);
+    font-size: 1rem;
+  }
+
+  .builder-actions {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .builder-editing-mode,
+  .builder-topbar-viewport {
+    flex: 0 0 auto;
+  }
+
+  .builder-save-status {
+    flex: 1 1 100%;
+  }
+
+  .builder-actions > .button {
+    min-height: 2.35rem;
+  }
+
+  .builder-workspace-v2 {
+    padding: 0.4rem;
+  }
+
+  .builder-left-dock {
+    top: 0.4rem;
+    bottom: 0.4rem;
+    left: 0.4rem;
+    width: min(78vw, 340px);
+  }
+
+  .builder-properties-panel {
+    top: 0.4rem;
+    right: 0.4rem;
+    bottom: 0.4rem;
+    width: min(380px, calc(100% - 0.8rem));
+    max-width: calc(100% - 0.8rem);
+  }
+
+  .builder-viewport-toolbar {
+    padding: 0.5rem;
+  }
+
+  .builder-canvas-empty h2 {
+    font-size: 1.35rem;
+  }
+}

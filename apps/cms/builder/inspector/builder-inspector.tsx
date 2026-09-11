@@ -34,6 +34,21 @@ import {
 
 export type InspectorTab = 'content' | 'style' | 'settings';
 
+const friendlyStyleLabels: Readonly<Record<string, string>> = {
+  'align-items': 'Vertical alignment',
+  gap: 'Space between items',
+  'justify-content': 'Horizontal alignment',
+  margin: 'Outside spacing',
+  padding: 'Inside spacing',
+};
+
+function friendlyStyleDefinition(
+  definition: ComponentPropertyDefinition,
+): ComponentPropertyDefinition {
+  const label = friendlyStyleLabels[definition.key];
+  return label ? { ...definition, label } : definition;
+}
+
 export type InspectorSectionKey =
   | 'content'
   | 'layout'
@@ -160,7 +175,7 @@ function OpenCompositionInspector({
             role="tab"
             type="button"
           >
-            {tab === 'style' ? 'Style' : tab === 'settings' ? 'Settings' : 'Content'}
+            {tab === 'style' ? 'Appearance' : tab === 'settings' ? 'Advanced' : 'Content'}
           </button>
         ))}
       </div>
@@ -1061,7 +1076,15 @@ function LegacyBuilderInspector({
           workspaceId={workspaceId}
           viewport={viewport}
         />
-        {!contentOnly && property.bindable && onUpdateBinding ? (
+        {!contentOnly &&
+        property.bindable &&
+        onUpdateBinding &&
+        (allowCurrentEntry ||
+          composition?.bindings.some(
+            (binding) =>
+              binding.targetNodeId === selected.id &&
+              binding.targetProperty === property.key,
+          )) ? (
           <BindingEditor
             binding={composition?.bindings.find(
               (binding) =>
@@ -1138,6 +1161,7 @@ function LegacyBuilderInspector({
               designSystem,
             );
             const hasOverride = resolved.authoredValue !== undefined;
+            const friendlyField = friendlyStyleDefinition(field);
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
                 {designSystem && tokenCategoryForProperty(field.key) ? (
@@ -1150,7 +1174,7 @@ function LegacyBuilderInspector({
                   />
                 ) : null}
                 <PropertyControlRenderer
-                  definition={field}
+                  definition={friendlyField}
                   description={inheritedDescription(field, resolved)}
                   propertyValues={{ ...selected.props, ...styleValues }}
                   layoutDirection={
@@ -1189,7 +1213,7 @@ function LegacyBuilderInspector({
                 />
                 {hasOverride ? (
                   <button
-                    aria-label={`Reset ${field.label} override`}
+                    aria-label={`Reset ${friendlyField.label} override`}
                     className="button button-small button-ghost builder-reset-override"
                     onClick={() => resetSelectedStyle(field.key)}
                     type="button"
@@ -1259,6 +1283,7 @@ function LegacyBuilderInspector({
               designSystem,
             );
             const hasOverride = resolved.authoredValue !== undefined;
+            const friendlyField = friendlyStyleDefinition(field);
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
                 {designSystem && tokenCategoryForProperty(field.key) ? (
@@ -1273,7 +1298,7 @@ function LegacyBuilderInspector({
                   />
                 ) : null}
                 <PropertyControlRenderer
-                  definition={field}
+                  definition={friendlyField}
                   description={inheritedDescription(field, resolved)}
                   propertyValues={{ ...selected.props, ...partStyleValues }}
                   layoutDirection={
@@ -1330,7 +1355,7 @@ function LegacyBuilderInspector({
                 />
                 {hasOverride ? (
                   <button
-                    aria-label={`Reset ${field.label} override`}
+                    aria-label={`Reset ${friendlyField.label} override`}
                     className="button button-small button-ghost builder-reset-override"
                     onClick={() => resetSelectedPartStyle(selectedPart, field.key)}
                     type="button"
@@ -1361,7 +1386,7 @@ function LegacyBuilderInspector({
             role="tab"
             type="button"
           >
-            {tab === 'style' ? 'Style' : tab === 'settings' ? 'Settings' : 'Content'}
+            {tab === 'style' ? 'Appearance' : tab === 'settings' ? 'Advanced' : 'Content'}
           </button>
         ))}
       </div>
