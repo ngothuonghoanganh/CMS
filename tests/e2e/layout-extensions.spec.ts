@@ -1045,13 +1045,20 @@ test('custom extensions persist inside both Header and Footer layouts', async ({
       await page
         .getByRole('button', { name: `${extensionName} add`, exact: true })
         .click();
-      const draftDocument = await page.evaluate(() => {
-        const debug = (
-          window as Window & { __payloadBuilderDebug?: { getPayload: () => unknown } }
-        ).__payloadBuilderDebug;
-        return debug?.getPayload();
-      });
-      expect(JSON.stringify(draftDocument)).toContain(extensionId);
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              const debug = (
+                window as Window & {
+                  __payloadBuilderDebug?: { getPayload: () => unknown };
+                }
+              ).__payloadBuilderDebug;
+              return JSON.stringify(debug?.getPayload() ?? '');
+            }),
+          { timeout: 15_000 },
+        )
+        .toContain(extensionId);
       await page.getByRole('button', { name: 'Save draft', exact: true }).click();
       await expect(page.getByText('Draft · Not published', { exact: true })).toBeVisible({
         timeout: 15_000,

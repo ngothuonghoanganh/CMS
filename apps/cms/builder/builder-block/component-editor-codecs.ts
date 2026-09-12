@@ -549,12 +549,20 @@ export function selectionFromComponentCodec(
       component.getEl()?.textContent ?? String(component.get('content') ?? ''),
     );
     if (type === 'text' || type === 'heading' || type === 'label') props.text = content;
-    if (
-      (type === 'button' || type === 'link') &&
-      content &&
-      component.components().models.length === 0
-    ) {
-      props.label = content;
+    let composedLabel = content;
+    if (type === 'button' || type === 'link') {
+      const textChild = component.components().models.find((child) => {
+        const childType = child.getAttributes({ noStyle: true })[
+          BUILDER_NODE_TYPE_ATTRIBUTE
+        ];
+        return childType === 'text';
+      });
+      if (textChild) {
+        composedLabel = sanitizeInlineText(
+          textChild.getEl()?.textContent ?? String(textChild.get('content') ?? ''),
+        );
+      }
+      if (composedLabel) props.label = composedLabel;
     }
     const children = component.components().models.flatMap((child) => {
       const childAttributes = child.getAttributes({ noStyle: true });
@@ -602,7 +610,7 @@ export function selectionFromComponentCodec(
       ...(type === 'text' || type === 'heading' || type === 'label'
         ? { text: content }
         : {}),
-      ...(type === 'button' || type === 'link' ? { label: content } : {}),
+      ...(type === 'button' || type === 'link' ? { label: composedLabel } : {}),
       ...(responsiveStyle ? { style: responsiveStyle } : {}),
       openComposition: { nodeType: type },
     };

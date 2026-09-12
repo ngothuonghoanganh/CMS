@@ -6,6 +6,7 @@ import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   type PageStylePropertyKey,
 } from './style-registry';
+import { canonicalizeOpenCompositionPayload } from './open-composition-semantic-integrity';
 
 /**
  * Open Composition is the forward-looking authoring model for the builder.
@@ -132,12 +133,27 @@ const OPEN_COMPOSITION_AUTHORING_CAPABILITIES = {
   icon: authoringCapability('authorable'),
   button: authoringCapability('authorable'),
   link: authoringCapability('authorable'),
-  form: authoringCapability('authorable'),
+  form: authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Add a form recipe so fields and its submit action are created together.',
+  }),
   'form-field': authoringCapability('authorable'),
-  label: authoringCapability('authorable'),
-  input: authoringCapability('authorable'),
-  textarea: authoringCapability('authorable'),
-  select: authoringCapability('authorable'),
+  label: authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Add a complete Form Field to create its label and control together.',
+  }),
+  input: authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Change the Form Field type instead of adding a loose control.',
+  }),
+  textarea: authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Change the Form Field type instead of adding a loose control.',
+  }),
+  select: authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Change the Form Field type instead of adding a loose control.',
+  }),
   disclosure: authoringCapability('read-only', {
     message: 'This disclosure is managed by the legacy component editor.',
   }),
@@ -957,6 +973,18 @@ const openControlProperties = [
     allowEmpty: true,
     placeholder: 'Optional hint',
   }),
+  openContentProperty({
+    key: 'options',
+    label: 'Options',
+    control: 'custom',
+    customEditor: 'options',
+    visibleWhen: {
+      property: 'type',
+      operator: 'equals',
+      value: ['select', 'radio'],
+    },
+    help: { text: 'Add the choices visitors can select.' },
+  }),
 ];
 
 const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
@@ -1111,7 +1139,7 @@ const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
         defaultValue: 'Add a quote',
       }),
       openContentProperty({
-        key: 'citation',
+        key: 'cite',
         label: 'Attribution',
         control: 'text',
         allowEmpty: true,
@@ -1174,6 +1202,7 @@ export function canComposeChild(
 export function openCompositionInsertableChildren(
   parentType: OpenCompositionNodeType,
 ): readonly OpenCompositionNodeType[] {
+  if (parentType === 'form-field') return [];
   return OPEN_COMPOSITION_REGISTRY[parentType].allowedChildren.filter(
     (childType) => OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert,
   );
@@ -1733,12 +1762,13 @@ export function migratePagePayloadToOpenComposition(
   }
   const behaviors: OpenCompositionBehavior[] = [];
   const root = migrateLegacyNode(payload.root, behaviors);
-  return OpenCompositionPayloadSchema.parse({
+  const migrated = OpenCompositionPayloadSchema.parse({
     version: 8,
     metadata: payload.metadata,
     root,
     behaviors,
   });
+  return canonicalizeOpenCompositionPayload(migrated);
 }
 
 /** Backward-compatible name for callers that explicitly migrate V7. */
@@ -1865,6 +1895,7 @@ const contactFormRecipe: OpenCompositionRecipe = {
                           type: 'textarea',
                           props: {
                             fieldKey: 'message',
+                            type: 'textarea',
                             name: 'message',
                             placeholder: 'How can we help?',
                           },

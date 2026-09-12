@@ -16,6 +16,7 @@ import {
   DuplicatePageRequestSchema,
   PageSchema,
   PagePayloadSchema,
+  canonicalizeOpenCompositionPayload,
   SiteGlobalsSchema,
   PageLayoutAttachmentsSchema,
   PageLayoutUpdateRequestSchema,
@@ -1506,7 +1507,9 @@ export class PageService {
       });
     }
 
-    return result.data;
+    return result.data.version === 8
+      ? canonicalizeOpenCompositionPayload(result.data)
+      : result.data;
   }
 
   private async validateInlineNavigationDocument(

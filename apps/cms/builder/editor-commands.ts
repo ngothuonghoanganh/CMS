@@ -9,6 +9,7 @@ import {
   type SiteDesignSystem,
   type OpenCompositionNodeType,
   type StyleTokenReference,
+  canonicalizeOpenCompositionOptions,
 } from '@payload/contracts';
 
 import {
@@ -27,6 +28,7 @@ import {
   BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
   createOpenCompositionNodeDefinition,
+  quotePreviewComponents,
   isBuilderNodeType,
   payloadToEditorComponent,
   sanitizeInlineText,
@@ -250,81 +252,53 @@ function normalizedOpenValue(value: unknown, depth = 0): unknown {
   throw new Error('Open Composition properties must be JSON values');
 }
 
-function updateOpenProperty(
-  component: Component,
-  property: string,
-  value: unknown,
-): boolean {
-  const type = openNodeType(component);
-  const current = openProps(component);
-  if (!type || !current || !/^[A-Za-z][A-Za-z0-9_-]{0,119}$/.test(property)) return false;
-  let nextValue: unknown;
-  try {
-    nextValue = normalizedOpenValue(value);
-  } catch {
-    return false;
-  }
-  const next = { ...current, [property]: nextValue };
-  const serialized = JSON.stringify(next);
-  if (serialized.length > 64 * 1024) return false;
-  const attributes = component.getAttributes({ noStyle: true });
-  const mirroredStringAttribute =
-    ['src', 'alt', 'href', 'target', 'name', 'type', 'placeholder'].includes(property) &&
-    typeof nextValue === 'string'
-      ? property
-      : undefined;
-  const mirroredBooleanAttribute =
-    ['required', 'disabled', 'checked'].includes(property) &&
-    typeof nextValue === 'boolean'
-      ? property
-      : undefined;
+const OPEN_INPUT_TYPES = new Set([
+  'text',
+  'email',
+  'phone',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
+]);
+
+function setOpenProps(component: Component, props: Record<string, unknown>): void {
   component.setAttributes({
-    ...attributes,
-    [BUILDER_OPEN_PROPS_ATTRIBUTE]: serialized,
-    ...(mirroredStringAttribute ? { [mirroredStringAttribute]: nextValue } : {}),
-    ...(mirroredBooleanAttribute && nextValue === true
-      ? { [mirroredBooleanAttribute]: 'true' }
-      : {}),
+    ...component.getAttributes({ noStyle: true }),
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify(props),
   });
-  if (mirroredBooleanAttribute && nextValue === false) {
-    component.removeAttributes?.(mirroredBooleanAttribute);
-  }
-  if (['text', 'heading', 'label'].includes(type) && property === 'text') {
-    component.set('content', String(nextValue));
-  }
-  if ((type === 'button' || type === 'link') && property === 'label') {
-    const textChild = component
-      .components()
-      .models.find((child) => openNodeType(child) === 'text');
-    if (textChild) {
-      // Composed buttons/links render their label through a real text child so
-      // an icon and the label can be authored independently. Keep that child
-      // in sync with the semantic label instead of setting parent content,
-      // which GrapesJS ignores while the component has children.
-      updateOpenProperty(textChild, 'text', String(nextValue));
-    } else {
-      component.set('content', String(nextValue));
-    }
-  }
-  updateOpenBehaviorForProperty(component, type, property, nextValue);
-  return true;
 }
 
-function updateOpenBehaviorForProperty(
+function syncComposedTextChild(component: Component, label: string): void {
+  const textChild = component
+    .components()
+    .models.find((child) => openNodeType(child) === 'text');
+  if (!textChild) {
+    component.set('content', label);
+    return;
+  }
+  const childProps = openProps(textChild);
+  if (childProps) setOpenProps(textChild, { ...childProps, text: label });
+  textChild.set('content', label);
+}
+
+function syncComposedParentLabel(component: Component, label: string): void {
+  const parent = component.parent();
+  const parentType = parent && openNodeType(parent);
+  if (!parent || (parentType !== 'button' && parentType !== 'link')) return;
+  const parentProps = openProps(parent);
+  if (parentProps) setOpenProps(parent, { ...parentProps, label });
+  parent.set('content', label);
+}
+
+function updateOpenFieldBehavior(
   component: Component,
-  type: OpenCompositionNodeType,
   property: string,
   value: unknown,
 ): void {
-  const behaviorField =
-    type === 'form-field' && property === 'required'
-      ? 'required'
-      : (type === 'input' || type === 'textarea' || type === 'select') &&
-          property === 'type'
-        ? 'inputType'
-        : undefined;
-  if (!behaviorField) return;
-  const componentId = component.getAttributes({ noStyle: true })['data-payload-node-id'];
+  const componentId = component.getAttributes({ noStyle: true })[
+    BUILDER_NODE_ID_ATTRIBUTE
+  ];
   if (typeof componentId !== 'string') return;
   let owner: Component | undefined = component;
   while (owner) {
@@ -342,30 +316,21 @@ function updateOpenBehaviorForProperty(
             return candidate;
           }
           const behavior = candidate as Record<string, unknown>;
-          const matches =
-            behavior.kind === 'field' &&
-            (behavior.nodeId === componentId || behavior.controlNodeId === componentId);
-          if (!matches) return candidate;
-          if (behaviorField === 'required' && typeof value === 'boolean') {
+          if (
+            behavior.kind !== 'field' ||
+            (behavior.nodeId !== componentId && behavior.controlNodeId !== componentId)
+          ) {
+            return candidate;
+          }
+          if (property === 'required' && typeof value === 'boolean') {
             return { ...behavior, required: value };
           }
-          if (behaviorField === 'inputType' && typeof value === 'string') {
-            const inputType = value === 'tel' ? 'phone' : value;
-            if (
-              [
-                'text',
-                'email',
-                'phone',
-                'textarea',
-                'select',
-                'checkbox',
-                'radio',
-              ].includes(inputType)
-            ) {
-              return { ...behavior, inputType };
-            }
-          }
-          return candidate;
+          const inputType = value === 'tel' ? 'phone' : value;
+          return property === 'type' &&
+            typeof inputType === 'string' &&
+            OPEN_INPUT_TYPES.has(inputType)
+            ? { ...behavior, inputType }
+            : candidate;
         });
         if (JSON.stringify(next) !== JSON.stringify(parsed)) {
           owner.setAttributes({
@@ -377,6 +342,102 @@ function updateOpenBehaviorForProperty(
     }
     owner = owner.parent();
   }
+}
+
+function updateOpenControlType(component: Component, value: string): string {
+  const inputType = value === 'tel' ? 'phone' : value;
+  if (!OPEN_INPUT_TYPES.has(inputType)) return value;
+  const nodeType: OpenCompositionNodeType =
+    inputType === 'textarea' ? 'textarea' : inputType === 'select' ? 'select' : 'input';
+  component.setAttributes({
+    ...component.getAttributes({ noStyle: true }),
+    [BUILDER_NODE_TYPE_ATTRIBUTE]: nodeType,
+  });
+  component.set('tagName', nodeType);
+  component.set('void', nodeType === 'input');
+  return inputType;
+}
+
+function updateOpenProperty(
+  component: Component,
+  property: string,
+  value: unknown,
+): boolean {
+  const type = openNodeType(component);
+  const current = openProps(component);
+  if (!type || !current || !/^[A-Za-z][A-Za-z0-9_-]{0,119}$/.test(property)) return false;
+  let nextValue: unknown;
+  try {
+    nextValue = normalizedOpenValue(value);
+  } catch {
+    return false;
+  }
+  const canonicalValue =
+    property === 'options'
+      ? canonicalizeOpenCompositionOptions(nextValue)
+      : property === 'type' && typeof nextValue === 'string'
+        ? updateOpenControlType(component, nextValue)
+        : nextValue;
+  const next = { ...current, [property]: canonicalValue };
+  if (property === 'type') {
+    if (['select', 'radio'].includes(String(canonicalValue))) {
+      next.options = canonicalizeOpenCompositionOptions(next.options);
+    } else {
+      delete next.options;
+    }
+  } else if (property === 'options' && !['select', 'radio'].includes(String(next.type))) {
+    delete next.options;
+  }
+  const serialized = JSON.stringify(next);
+  if (serialized.length > 64 * 1024) return false;
+  const attributes = component.getAttributes({ noStyle: true });
+  const mirroredStringAttribute =
+    ['src', 'alt', 'href', 'target', 'name', 'type', 'placeholder'].includes(property) &&
+    typeof canonicalValue === 'string'
+      ? property
+      : undefined;
+  const mirroredBooleanAttribute =
+    ['required', 'disabled', 'checked', 'controls'].includes(property) &&
+    typeof canonicalValue === 'boolean'
+      ? property
+      : undefined;
+  component.setAttributes({
+    ...attributes,
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: serialized,
+    ...(mirroredStringAttribute ? { [mirroredStringAttribute]: canonicalValue } : {}),
+    ...(mirroredBooleanAttribute && canonicalValue === true
+      ? { [mirroredBooleanAttribute]: 'true' }
+      : {}),
+  });
+  if (mirroredBooleanAttribute && canonicalValue === false) {
+    component.removeAttributes?.(mirroredBooleanAttribute);
+  }
+  if (['text', 'heading', 'label'].includes(type) && property === 'text') {
+    component.set('content', String(canonicalValue));
+    syncComposedParentLabel(component, String(canonicalValue));
+  }
+  if ((type === 'button' || type === 'link') && property === 'label') {
+    // The child owns visual text. The parent label is a derived compatibility
+    // projection retained for existing Inspector consumers.
+    syncComposedTextChild(component, String(canonicalValue));
+  }
+  if (type === 'quote' && (property === 'text' || property === 'cite')) {
+    component.components(
+      quotePreviewComponents({
+        text: typeof next.text === 'string' ? next.text : '',
+        ...(typeof next.cite === 'string' ? { cite: next.cite } : {}),
+      }),
+    );
+  }
+  if (type === 'form-field' && property === 'required') {
+    updateOpenFieldBehavior(component, property, canonicalValue);
+  } else if (
+    (type === 'input' || type === 'textarea' || type === 'select') &&
+    property === 'type'
+  ) {
+    updateOpenFieldBehavior(component, property, canonicalValue);
+  }
+  return true;
 }
 
 function updateOpenPropertyPreview(
@@ -400,6 +461,17 @@ function updateOpenPropertyPreview(
 function canRemoveLiveNode(root: Component, node: Component): boolean {
   if (node === root) return false;
   const parent = node.parent();
+  const openParentType = parent && openNodeType(parent);
+  const openChildType = openNodeType(node);
+  if (
+    openParentType === 'form-field' &&
+    (openChildType === 'label' ||
+      openChildType === 'input' ||
+      openChildType === 'textarea' ||
+      openChildType === 'select')
+  ) {
+    return false;
+  }
   const parentType = parent && payloadNodeType(parent);
   const nodeType = payloadNodeType(node);
   if (!parent || !parentType || !nodeType) return true;
@@ -626,6 +698,65 @@ function pruneOpenBehaviorsAfterRemoval(
       return [repaired];
     });
     if (changed) setOpenBehaviors(owner, next);
+  });
+}
+
+function openFormAncestor(component: Component): Component | undefined {
+  let current: Component | undefined = component;
+  while (current) {
+    if (openNodeType(current) === 'form') return current;
+    current = current.parent();
+  }
+  return undefined;
+}
+
+/** Rebinds form-owned behavior projections after a valid live reparent. */
+function repairOpenBehaviorsAfterMove(root: Component): void {
+  if (!isOpenCompositionRoot(root)) return;
+  const nodes = new Map<string, Component>();
+  root.onAll((component) => {
+    const id = componentNodeId(component);
+    if (id) nodes.set(id, component);
+  });
+  collectOpenBehaviors(root).forEach(({ owner, behavior }) => {
+    if (!isRecord(behavior)) return;
+    const source =
+      typeof behavior.nodeId === 'string' ? nodes.get(behavior.nodeId) : undefined;
+    let next: Record<string, unknown> | undefined;
+    let shouldDrop = false;
+    if (behavior.kind === 'field') {
+      const form =
+        source && openNodeType(source) === 'form-field'
+          ? openFormAncestor(source)
+          : undefined;
+      const formId = form && componentNodeId(form);
+      if (!formId) {
+        shouldDrop = true;
+      } else if (behavior.formNodeId !== formId) {
+        next = { ...behavior, formNodeId: formId };
+      }
+    } else if (
+      behavior.kind === 'action' &&
+      (behavior.action === 'submit-form' || behavior.action === 'reset-form')
+    ) {
+      const form = source && openFormAncestor(source);
+      const formId = form && componentNodeId(form);
+      if (!formId) {
+        shouldDrop = true;
+      } else if (behavior.targetNodeId !== formId) {
+        next = { ...behavior, targetNodeId: formId };
+      }
+    }
+    if (!shouldDrop && next === undefined) return;
+    const current = parsedOpenBehaviors(owner);
+    if (!current) return;
+    const updated = current.flatMap((candidate) => {
+      if (!isRecord(candidate) || candidate.id !== behavior.id) return [candidate];
+      if (shouldDrop) return [];
+      return [next];
+    });
+    if (JSON.stringify(updated) !== JSON.stringify(current))
+      setOpenBehaviors(owner, updated);
   });
 }
 
@@ -958,8 +1089,11 @@ export function executeEditorCommand(
       });
     }
     case 'move': {
+      const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const result = moveNodeByIntent(root, command.intent);
       if (!result.valid) return { changed: false };
+      repairOpenBehaviorsAfterMove(root);
+      groupNewHistoryActions(editor, previousHistoryEntries);
       return { changed: true, selection: result.source };
     }
     case 'remove': {

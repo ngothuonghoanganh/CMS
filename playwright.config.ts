@@ -26,13 +26,13 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `PORT=${apiPort} CORS_ORIGIN=${cmsOrigin},http://localhost:${cmsPort},${rendererOrigin},http://localhost:${rendererPort} PUBLIC_PLATFORM_ORIGIN=${rendererOrigin} INTEGRATION_EMAIL_PROVIDER=fake INTEGRATION_ALLOW_HTTP_WEBHOOKS=true INTEGRATION_ALLOW_LOCAL_WEBHOOKS=true DOMAIN_VERIFICATION_PROVIDER=fake TRUST_PROXY=true pnpm --filter @payload/api dev`,
+      command: `PORT=${apiPort} CORS_ORIGIN=${cmsOrigin},http://localhost:${cmsPort},${rendererOrigin},http://localhost:${rendererPort} PUBLIC_PLATFORM_ORIGIN=${rendererOrigin} INTEGRATION_EMAIL_PROVIDER=fake INTEGRATION_ALLOW_HTTP_WEBHOOKS=true INTEGRATION_ALLOW_LOCAL_WEBHOOKS=true DOMAIN_VERIFICATION_PROVIDER=fake TRUST_PROXY=true corepack pnpm --filter @payload/api dev`,
       url: `${apiOrigin}/api/v1/health/live`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
     {
-      command: `NEXT_PUBLIC_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_RENDERER_BASE_URL=${rendererOrigin} pnpm --filter @payload/cms exec next dev --turbopack -p ${cmsPort}`,
+      command: `NEXT_PUBLIC_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_RENDERER_BASE_URL=${rendererOrigin} corepack pnpm --filter @payload/cms exec next dev --turbopack -p ${cmsPort}`,
       url: cmsOrigin,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
@@ -40,7 +40,7 @@ export default defineConfig({
     {
       // Next 16's Turbopack dev HMR currently panics while rewriting this
       // optional catch-all route; production builds still use Turbopack.
-      command: `RENDERER_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_CMS_BASE_URL=${cmsOrigin} TRUST_PROXY=true pnpm --filter @payload/renderer exec next dev --webpack -p ${rendererPort}`,
+      command: `RENDERER_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_API_BASE_URL=${apiOrigin}/api/v1 NEXT_PUBLIC_CMS_BASE_URL=${cmsOrigin} TRUST_PROXY=true corepack pnpm --filter @payload/renderer exec next dev --webpack -p ${rendererPort}`,
       url: rendererOrigin,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

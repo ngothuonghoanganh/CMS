@@ -444,7 +444,7 @@ describe('editor command boundary', () => {
     expect(editor.getSelected()).toBe(duplicate);
   });
 
-  it('prunes Open Composition behavior references when a node is removed', () => {
+  it('prevents removing a field-owned label or control', () => {
     const label = new FakeComponent('label', 'label');
     label.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
     const control = new FakeComponent('control', 'input');
@@ -473,24 +473,11 @@ describe('editor command boundary', () => {
     const editor = new FakeEditor(root);
     const bus = createEditorCommandBus(asEditor(editor));
 
-    expect(bus.dispatch({ kind: 'remove', nodeId: 'label' }).changed).toBe(true);
-    expect(
-      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string)[0],
-    ).toMatchObject({
-      nodeId: 'field',
-      formNodeId: 'form',
-      controlNodeId: 'control',
-    });
-    expect(
-      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string)[0]
-        .labelNodeId,
-    ).toBeUndefined();
-
-    expect(bus.dispatch({ kind: 'remove', nodeId: 'control' }).changed).toBe(true);
-    expect(
-      JSON.parse(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string)[0]
-        .controlNodeId,
-    ).toBeUndefined();
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'label' })).toBe(false);
+    expect(bus.dispatch({ kind: 'remove', nodeId: 'label' }).changed).toBe(false);
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'control' })).toBe(false);
+    expect(bus.dispatch({ kind: 'remove', nodeId: 'control' }).changed).toBe(false);
+    expect(field.children).toHaveLength(2);
 
     expect(bus.dispatch({ kind: 'remove', nodeId: 'field' }).changed).toBe(true);
     expect(

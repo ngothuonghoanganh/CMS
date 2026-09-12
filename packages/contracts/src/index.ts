@@ -25,6 +25,7 @@ import {
   type OpenCompositionNode,
   type OpenCompositionPayload,
 } from './open-composition';
+import { canonicalizeOpenCompositionPayload } from './open-composition-semantic-integrity';
 
 export const apiVersion = 'v1' as const;
 
@@ -4821,6 +4822,7 @@ export const PagePreviewReadyMessageSchema = z
 
 export * from './component-registry';
 export * from './open-composition';
+export * from './open-composition-semantic-integrity';
 export * from './page-runtime';
 export * from './style-registry';
 
@@ -4900,7 +4902,8 @@ export const PublishedPageBundleSchema = z
 export type PublishedPageBundle = z.infer<typeof PublishedPageBundleSchema>;
 
 export function parsePagePayload(input: unknown): PagePayload {
-  return PagePayloadSchema.parse(input);
+  const payload = PagePayloadSchema.parse(input);
+  return payload.version === 8 ? canonicalizeOpenCompositionPayload(payload) : payload;
 }
 
 export function serializePagePayload(payload: PagePayload): string {

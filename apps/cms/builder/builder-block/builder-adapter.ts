@@ -6,6 +6,8 @@ import {
   PagePayloadV7Schema,
   PagePayloadV1Schema,
   OpenCompositionPayloadSchema,
+  OpenCompositionBehaviorSchema,
+  canonicalizeOpenCompositionPayload,
   OPEN_COMPOSITION_REGISTRY,
   CompositionStyleSchema,
   migratePagePayloadToOpenComposition,
@@ -1442,6 +1444,11 @@ function openCompositionNodeDefinition(
     if (typeof props.type === 'string') attributes.type = props.type;
     if (typeof props.placeholder === 'string') attributes.placeholder = props.placeholder;
   }
+  if (node.type === 'video') {
+    if (typeof props.src === 'string') attributes.src = props.src;
+    if (typeof props.poster === 'string') attributes.poster = props.poster;
+    if (typeof props.controls === 'boolean') attributes.controls = String(props.controls);
+  }
   if (node.style) {
     attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE] = jsonAttribute(node.style);
   }
@@ -1461,10 +1468,10 @@ function openCompositionNodeDefinition(
         : node.type === 'button' || node.type === 'link'
           ? typeof props.label === 'string'
             ? props.label
-            : typeof props.text === 'string'
-              ? props.text
-              : undefined
-          : undefined,
+            : undefined
+          : node.type === 'icon'
+            ? '→'
+            : undefined,
     ...(tagName === 'img' || tagName === 'input' ? { void: true } : {}),
     droppable:
       OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0 ? true : false,
@@ -1476,9 +1483,15 @@ function openCompositionNodeDefinition(
     style: node.style
       ? styleBlockToEditorStyle(node.style.base as PageNodeStyle['base'], undefined)
       : undefined,
-    components: node.children.map((child) =>
-      openCompositionNodeDefinition(child, undefined, payloadVersion),
-    ),
+    components:
+      node.type === 'quote'
+        ? quotePreviewComponents({
+            text: typeof props.text === 'string' ? props.text : '',
+            ...(typeof props.cite === 'string' ? { cite: props.cite } : {}),
+          })
+        : node.children.map((child) =>
+            openCompositionNodeDefinition(child, undefined, payloadVersion),
+          ),
   };
 }
 
@@ -1492,13 +1505,15 @@ export function createOpenCompositionNodeDefinition(
   options: { formNodeId?: string } = {},
 ): ComponentDefinition {
   const id = type === 'root' ? 'root' : newNodeId(type);
-  const child = (childType: OpenCompositionNodeType, props: Record<string, unknown>) =>
-    ({
-      id: newNodeId(childType),
-      type: childType,
-      props,
-      children: [],
-    }) satisfies OpenCompositionNode;
+  const child = (
+    childType: OpenCompositionNodeType,
+    props: Record<string, unknown>,
+  ): OpenCompositionNode => ({
+    id: newNodeId(childType),
+    type: childType,
+    props,
+    children: [],
+  });
 
   let node: OpenCompositionNode = { id, type, props: {}, children: [] };
   let behaviors: OpenCompositionBehavior[] = [];
@@ -1517,10 +1532,27 @@ export function createOpenCompositionNodeDefinition(
       node.props = { src: '/assets/placeholder.png', alt: 'Image' };
       break;
     case 'button':
-      node.props = { label: 'Button', href: '/', target: '_self' };
+      node.props = options.formNodeId
+        ? { label: 'Submit' }
+        : { label: 'Button', href: '/', target: '_self' };
+      node.children = [child('text', { text: 'Button' })];
+      if (options.formNodeId) {
+        node.children[0] = child('text', { text: 'Submit' });
+        behaviors = [
+          {
+            id: `${id}-behavior`,
+            kind: 'action',
+            nodeId: id,
+            event: 'click',
+            action: 'submit-form',
+            targetNodeId: options.formNodeId,
+          },
+        ];
+      }
       break;
     case 'link':
       node.props = { label: 'Link', href: '/', target: '_self' };
+      node.children = [child('text', { text: 'Link' })];
       break;
     case 'input':
     case 'textarea':
@@ -1529,6 +1561,14 @@ export function createOpenCompositionNodeDefinition(
         type: type === 'textarea' ? 'textarea' : type === 'select' ? 'select' : 'text',
         name: 'field',
         placeholder: '',
+        ...(type === 'select'
+          ? {
+              options: [
+                { label: 'Option 1', value: 'option-1' },
+                { label: 'Option 2', value: 'option-2' },
+              ],
+            }
+          : {}),
       };
       break;
     }
@@ -1563,6 +1603,63 @@ export function createOpenCompositionNodeDefinition(
         formKey: `form-${id}`,
         successMessage: 'Thanks — we will be in touch soon.',
       };
+      {
+        const field = child('form-field', {
+          fieldKey: `${id}-field`,
+          required: false,
+        });
+        const label = child('label', { text: 'Field label' });
+        const control = child('input', {
+          fieldKey: `${id}-field`,
+          type: 'text',
+          name: `${id}-field`,
+          placeholder: '',
+        });
+        field.children = [label, control];
+        const submit = child('button', { label: 'Submit' });
+        submit.children = [child('text', { text: 'Submit' })];
+        node.children = [field, submit];
+        behaviors = [
+          {
+            id: `${field.id}-behavior`,
+            kind: 'field',
+            nodeId: field.id,
+            formNodeId: id,
+            fieldKey: `${id}-field`,
+            inputType: 'text',
+            required: false,
+            labelNodeId: label.id,
+            controlNodeId: control.id,
+          },
+          {
+            id: `${submit.id}-behavior`,
+            kind: 'action',
+            nodeId: submit.id,
+            event: 'click',
+            action: 'submit-form',
+            targetNodeId: id,
+          },
+        ];
+      }
+      break;
+    case 'video':
+      node.props = { src: '/assets/placeholder.mp4', controls: true };
+      break;
+    case 'quote':
+      node.props = { text: 'Add a quote', cite: '' };
+      break;
+    case 'divider':
+      break;
+    case 'icon':
+      node.props = { name: 'arrow-right' };
+      break;
+    case 'section':
+    case 'container':
+    case 'stack':
+    case 'row':
+    case 'grid':
+    case 'card':
+      node.children = [child('text', { text: 'Add your text here' })];
       break;
     default:
       break;
@@ -1591,16 +1688,19 @@ export function payloadToEditorComponent(
   } = {},
 ): ComponentDefinition {
   if (!('documentKind' in payload) && payload.version === 8) {
+    const canonical = canonicalizeOpenCompositionPayload(payload);
     return openCompositionNodeDefinition(
-      payload.root,
-      payload.metadata,
+      canonical.root,
+      canonical.metadata,
       8,
-      payload.behaviors,
+      canonical.behaviors,
     );
   }
   if (!('documentKind' in payload) && options.openCompositionMode) {
-    const migrated = migratePagePayloadToOpenComposition(
-      payload as unknown as Parameters<typeof migratePagePayloadToOpenComposition>[0],
+    const migrated = canonicalizeOpenCompositionPayload(
+      migratePagePayloadToOpenComposition(
+        payload as unknown as Parameters<typeof migratePagePayloadToOpenComposition>[0],
+      ),
     );
     return openCompositionNodeDefinition(
       migrated.root,
@@ -3021,11 +3121,19 @@ function openCompositionNodeFromSnapshot(
     if (inputType) props.type = inputType;
     if (placeholder) props.placeholder = placeholder;
   }
+  if (type === 'video') {
+    const src = readStringAttribute(snapshot.attributes, 'src', path, false);
+    const poster = readStringAttribute(snapshot.attributes, 'poster', path, false);
+    const controls = readStringAttribute(snapshot.attributes, 'controls', path, false);
+    if (src) props.src = src;
+    if (poster) props.poster = poster;
+    if (controls) props.controls = controls !== 'false';
+  }
   const style = readOpenNodeStyle(snapshot, path);
   const partsStyle = readOpenNodePartsStyle(snapshot, path);
-  const children = snapshot.children.map((child, index) =>
-    nodeFromSnapshot(child, [...path, 'children', String(index)]),
-  );
+  const children = snapshot.children
+    .filter((child) => !isEditorOnlySnapshot(child))
+    .map((child, index) => nodeFromSnapshot(child, [...path, 'children', String(index)]));
   return {
     id,
     type,
@@ -3310,11 +3418,49 @@ function serializeOpenCompositionSnapshot(
       'behaviors',
     ]);
   }
+  const persistedNodeTypes = new Map<string, string>();
+  const collectNodeTypes = (current: Record<string, unknown>): void => {
+    const attrs = isObject(current.attributes) ? current.attributes : current;
+    const currentId = attrs[BUILDER_NODE_ID_ATTRIBUTE];
+    const currentType = attrs[BUILDER_NODE_TYPE_ATTRIBUTE];
+    if (typeof currentId === 'string' && typeof currentType === 'string') {
+      persistedNodeTypes.set(currentId, currentType);
+    }
+    if (Array.isArray(current.children)) {
+      current.children.forEach((child) => {
+        if (isObject(child)) collectNodeTypes(child);
+      });
+    }
+  };
+  collectNodeTypes(snapshot as unknown as Record<string, unknown>);
+  const validBehaviorIds = new Set<string>();
+  const canonicalBehaviorCandidates = behaviorCandidates.flatMap((candidate) => {
+    const parsed = OpenCompositionBehaviorSchema.safeParse(candidate);
+    if (!parsed.success || validBehaviorIds.has(parsed.data.id)) return [];
+    if (!persistedNodeTypes.has(parsed.data.nodeId)) return [];
+    if (
+      parsed.data.kind === 'field' &&
+      (!persistedNodeTypes.has(parsed.data.formNodeId) ||
+        persistedNodeTypes.get(parsed.data.formNodeId) !== 'form' ||
+        persistedNodeTypes.get(parsed.data.nodeId) !== 'form-field')
+    ) {
+      return [];
+    }
+    if (
+      parsed.data.kind === 'action' &&
+      parsed.data.targetNodeId &&
+      !persistedNodeTypes.has(parsed.data.targetNodeId)
+    ) {
+      return [];
+    }
+    validBehaviorIds.add(parsed.data.id);
+    return [parsed.data];
+  });
   const parsed = OpenCompositionPayloadSchema.safeParse({
     version: 8,
     metadata: readMetadata(snapshot.attributes),
     root,
-    behaviors: behaviorCandidates,
+    behaviors: canonicalBehaviorCandidates,
   });
   if (!parsed.success) {
     throw new BuilderAdapterError(
@@ -3324,7 +3470,17 @@ function serializeOpenCompositionSnapshot(
       ['payload'],
     );
   }
-  return parsed.data;
+  const canonical = canonicalizeOpenCompositionPayload(parsed.data);
+  const canonicalParsed = OpenCompositionPayloadSchema.safeParse(canonical);
+  if (!canonicalParsed.success) {
+    throw new BuilderAdapterError(
+      canonicalParsed.error.issues
+        .map((issue) => `${issue.path.join('.') || 'payload'}: ${issue.message}`)
+        .join('; '),
+      ['payload'],
+    );
+  }
+  return canonicalParsed.data;
 }
 
 export function serializeEditorSnapshot(snapshot: BuilderEditorSnapshot): PagePayload {

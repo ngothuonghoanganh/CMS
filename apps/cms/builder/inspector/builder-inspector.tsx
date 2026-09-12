@@ -195,6 +195,17 @@ function OpenCompositionInspector({
   }
 
   function renderContentProperty(property: ComponentPropertyDefinition) {
+    if (property.control === 'custom' && property.customEditor) {
+      const Editor = CUSTOM_PROPERTY_EDITORS[property.customEditor];
+      return (
+        <Editor
+          definition={property}
+          navigationPages={navigationPages}
+          onChange={(value) => updateSelectedProperty(property.key, value)}
+          value={selected.props}
+        />
+      );
+    }
     return (
       <PropertyControlRenderer
         assets={usableAssets}
