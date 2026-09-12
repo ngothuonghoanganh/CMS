@@ -1,7 +1,7 @@
 # Phase 23.1 — Release Stabilization, Authoring Completeness & Security Closure
 
-**Status:** Release candidate committed and in PR review; merge is blocked by
-external GitHub CI billing infrastructure.
+**Status:** CLOSED — PR #1 was merged to `main`; the follow-up builder editing
+fix and stabilization merge are also on `main`.
 
 ## Starting state
 
@@ -30,5 +30,4 @@ external GitHub CI billing infrastructure.
 ## Verification
 
 The final quality-gate and merge record is maintained in
-`docs/continuity/phase-23.1-final-handoff.md` and is updated only with SHAs
-read from Git after each real Git operation.
+`docs/continuity/phase-23.1-final-handoff.md`.

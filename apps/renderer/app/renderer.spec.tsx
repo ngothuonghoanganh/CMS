@@ -94,6 +94,109 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('Submit');
   });
 
+  it('renders canonical Open Composition content, attribution, poster and choices', () => {
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Semantic parity' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'button',
+                type: 'button',
+                props: { label: 'Stale', href: '/send' },
+                children: [
+                  {
+                    id: 'button-text',
+                    type: 'text',
+                    props: { text: 'Send now' },
+                    children: [],
+                  },
+                ],
+              },
+              {
+                id: 'video',
+                type: 'video',
+                props: {
+                  src: '/assets/video.mp4',
+                  poster: '/assets/poster.png',
+                  controls: false,
+                },
+                children: [],
+              },
+              {
+                id: 'quote',
+                type: 'quote',
+                props: { text: 'Make it clear', citation: 'Team' },
+                children: [],
+              },
+              {
+                id: 'form',
+                type: 'form',
+                props: { formKey: 'choices' },
+                children: [
+                  {
+                    id: 'field',
+                    type: 'form-field',
+                    props: { fieldKey: 'plan', required: true },
+                    children: [
+                      {
+                        id: 'label',
+                        type: 'label',
+                        props: { text: 'Plan' },
+                        children: [],
+                      },
+                      {
+                        id: 'control',
+                        type: 'input',
+                        props: {
+                          type: 'radio',
+                          options: [
+                            { label: 'Basic', value: 'basic' },
+                            { label: 'Pro', value: 'pro' },
+                          ],
+                        },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [
+        {
+          id: 'field-behavior',
+          kind: 'field',
+          nodeId: 'field',
+          formNodeId: 'form',
+          fieldKey: 'plan',
+          inputType: 'radio',
+          required: true,
+          labelNodeId: 'label',
+          controlNodeId: 'control',
+        },
+      ],
+    });
+    const markup = renderToStaticMarkup(renderPage(payload));
+    expect(markup).toContain('Send now');
+    expect(markup).not.toContain('Stale');
+    expect(markup).toContain('poster="/assets/poster.png"');
+    expect(markup).not.toContain('controls=""');
+    expect(markup).toContain('<cite>Team</cite>');
+    expect(markup).toContain('Basic');
+    expect(markup).toContain('value="pro"');
+  });
+
   it('renders Open Composition part styles in the same node/part cascade', () => {
     const document = instantiateOpenCompositionRecipe(
       'contact-form',

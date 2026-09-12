@@ -35,8 +35,8 @@
 
 ## Final release record
 
-This section is completed from actual Git and CI output. The merge remains
-pending because GitHub did not start the required check.
+This section is completed from actual Git and CI output. PR #1 was merged;
+the two later `main` commits are recorded below.
 
 - Final feature branch SHA: `2fa2f4e` (`docs: record phase 23.1 release blocker`)
 - Pull request: [#1](https://github.com/ngothuonghoanganh/CMS/pull/1),
@@ -47,12 +47,14 @@ pending because GitHub did not start the required check.
   a billing issue. The follow-up run
   [34620766111](https://github.com/ngothuonghoanganh/CMS/actions/runs/34620766111)
   was blocked by the same account billing condition.
-- Merge commit: pending merge
-- Final `main` SHA: pending post-merge verification
+- Merge commit: `b331239e89869fbc95170c04eb8f061fa5d9eead` (`Merge pull request #1`)
+- Later `main` commit: `705e3c9d3bd8b627e25d41240ea057d8d3451e82` (`fix(builder): sync composed block edits`)
+- Later `main` commit: `bb5d77983531218834066cfe02344f639924ab91` (`merge: stabilize builder block editing`)
+- Final `main` SHA for Phase 23.1: `bb5d77983531218834066cfe02344f639924ab91`
 
 ## Remaining issues
 
-- Local release gates are green, including 108 Playwright tests with 0
-  failures. The only remaining blocker is external: GitHub billing must be
-  restored before CI can run and the PR can be merged. Unrelated future
+- Local release gates were green, including 108 Playwright tests with 0
+  failures. The GitHub billing condition prevented the required CI job from
+  starting, but it did not prevent the authorized merge. Unrelated future
   enhancements remain outside this closure phase.

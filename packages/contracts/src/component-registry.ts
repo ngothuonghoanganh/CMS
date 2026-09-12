@@ -75,7 +75,7 @@ export type ComponentPropertyDefinition = {
   max?: number;
   step?: number;
   options?: readonly ComponentPropertyOption[];
-  customEditor?: 'form' | 'list' | 'navigation';
+  customEditor?: 'form' | 'list' | 'navigation' | 'options';
   assetKind?: 'image' | 'video';
   /** Allows the Phase 20 binding editor to offer this property as a target. */
   bindable?: boolean;
@@ -99,9 +99,13 @@ export function propertyConditionMatches(
   const value = props[condition.property];
   switch (condition.operator) {
     case 'equals':
-      return value === condition.value;
+      return Array.isArray(condition.value)
+        ? condition.value.includes(value)
+        : value === condition.value;
     case 'notEquals':
-      return value !== condition.value;
+      return Array.isArray(condition.value)
+        ? !condition.value.includes(value)
+        : value !== condition.value;
     case 'isEmpty':
       return isEmptyPropertyValue(value) === (condition.value ?? true);
     case 'isNotEmpty':

@@ -12,8 +12,13 @@ import {
   openCompositionInsertableChildren,
   migratePagePayloadToOpenComposition,
   migratePagePayloadV7ToOpenComposition,
+  OpenCompositionPayloadSchema,
   type OpenCompositionNode,
 } from './open-composition';
+import {
+  canonicalizeOpenCompositionOptions,
+  canonicalizeOpenCompositionPayload,
+} from './open-composition-semantic-integrity';
 
 function findNode(
   root: OpenCompositionNode,
@@ -106,6 +111,9 @@ describe('Open Composition contract', () => {
     }
 
     expect(openCompositionInsertableChildren('form')).toContain('form-field');
+    expect(openCompositionInsertableChildren('form')).not.toContain('input');
+    expect(openCompositionInsertableChildren('form-field')).toEqual([]);
+    expect(OPEN_COMPOSITION_REGISTRY.form.authoring.directInsert).toBe(false);
     expect(openCompositionInsertableChildren('form')).not.toContain('reusable-instance');
     expect(openCompositionInsertableChildren('root')).not.toContain('root');
   });
@@ -285,5 +293,211 @@ describe('Open Composition contract', () => {
     });
     expect(migrated.version).toBe(8);
     expect(migrated.root).toMatchObject({ id: 'root', type: 'root', children: [] });
+  });
+
+  it('canonicalizes composed labels and preserves legacy attribution', () => {
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Canonical content' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'button',
+                type: 'button',
+                props: { label: 'Stale label', href: '/send' },
+                children: [
+                  { id: 'icon', type: 'icon', props: { name: 'mail' }, children: [] },
+                  {
+                    id: 'button-text',
+                    type: 'text',
+                    props: { text: 'Send now' },
+                    children: [],
+                  },
+                ],
+              },
+              {
+                id: 'link',
+                type: 'link',
+                props: { text: 'Legacy link', href: '/docs' },
+                children: [],
+              },
+              {
+                id: 'quote',
+                type: 'quote',
+                props: { text: 'A quote', citation: 'An author' },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [],
+    });
+    const canonical = canonicalizeOpenCompositionPayload(payload);
+    const button = findNode(canonical.root, 'button');
+    const link = findNode(canonical.root, 'link');
+    const quote = findNode(canonical.root, 'quote');
+    expect(button?.props).toMatchObject({ label: 'Send now' });
+    expect(button?.props.text).toBeUndefined();
+    expect(button?.children.map((child) => child.type)).toEqual(['icon', 'text']);
+    expect(link?.props).toMatchObject({ label: 'Legacy link' });
+    expect(link?.children[0]?.props.text).toBe('Legacy link');
+    expect(quote?.props).toMatchObject({ cite: 'An author' });
+    expect(quote?.props.citation).toBeUndefined();
+  });
+
+  it('repairs form field ownership and makes choice options canonical', () => {
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Canonical form' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: { formKey: 'contact' },
+            children: [
+              {
+                id: 'form',
+                type: 'form',
+                props: { formKey: 'contact' },
+                children: [
+                  {
+                    id: 'field',
+                    type: 'form-field',
+                    props: { fieldKey: 'choice', required: false },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [],
+    });
+    const field = findNode(payload.root, 'field');
+    if (!field) throw new Error('Expected field');
+    field.children = [
+      { id: 'label', type: 'label', props: { text: 'Choice' }, children: [] },
+      {
+        id: 'control',
+        type: 'input',
+        props: {
+          type: 'radio',
+          name: 'stale-name',
+          options: [
+            { label: 'One', value: 'same' },
+            { label: 'Two', value: 'same' },
+          ],
+        },
+        children: [],
+      },
+    ];
+    const canonical = canonicalizeOpenCompositionPayload(payload);
+    const canonicalField = findNode(canonical.root, 'field');
+    const control = findNode(canonical.root, 'control');
+    const behavior = canonical.behaviors.find(
+      (candidate) => candidate.kind === 'field' && candidate.nodeId === 'field',
+    );
+    expect(canonicalField?.props).toMatchObject({ fieldKey: 'choice', required: false });
+    expect(control?.type).toBe('input');
+    expect(control?.props).toMatchObject({
+      fieldKey: 'choice',
+      name: 'choice',
+      type: 'radio',
+    });
+    expect(control?.props.options).toEqual([
+      { label: 'One', value: 'same' },
+      { label: 'Two', value: 'same-2' },
+    ]);
+    expect(behavior).toMatchObject({
+      kind: 'field',
+      formNodeId: 'form',
+      controlNodeId: 'control',
+      inputType: 'radio',
+    });
+    expect(OpenCompositionPayloadSchema.parse(canonical)).toEqual(canonical);
+  });
+
+  it('adds exactly one label and control when a legacy field is empty', () => {
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Empty field' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'form',
+                type: 'form',
+                props: { formKey: 'empty' },
+                children: [{ id: 'field', type: 'form-field', props: {}, children: [] }],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [],
+    });
+
+    const canonical = canonicalizeOpenCompositionPayload(payload);
+    const field = findNode(canonical.root, 'field');
+    expect(field?.children.map((child) => child.type)).toEqual(['label', 'input']);
+    expect(
+      canonical.behaviors.filter(
+        (behavior) => behavior.kind === 'field' && behavior.nodeId === 'field',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('provides bounded defaults for invalid choice option drafts', () => {
+    expect(canonicalizeOpenCompositionOptions(['', { label: '', value: '' }])).toEqual([
+      { label: 'Option 1', value: 'option-1' },
+      { label: 'Option 2', value: 'option-2' },
+    ]);
+  });
+
+  it('deduplicates semantic behaviors during canonicalization', () => {
+    const document = instantiateOpenCompositionRecipe('contact-form', (sourceId) =>
+      sourceId === 'root' ? 'root' : `behavior-${sourceId}`,
+    );
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Behavior ownership' },
+      root: document.root,
+      behaviors: document.behaviors,
+    });
+    const fieldBehavior = payload.behaviors.find((behavior) => behavior.kind === 'field');
+    if (!fieldBehavior) throw new Error('Expected a field behavior');
+    payload.behaviors.push({ ...fieldBehavior, id: 'duplicate-field-behavior' });
+
+    const canonical = canonicalizeOpenCompositionPayload(payload);
+    expect(
+      canonical.behaviors.filter(
+        (behavior) =>
+          behavior.kind === 'field' && behavior.nodeId === fieldBehavior.nodeId,
+      ),
+    ).toHaveLength(1);
+    expect(new Set(canonical.behaviors.map((behavior) => behavior.id)).size).toBe(
+      canonical.behaviors.length,
+    );
   });
 });

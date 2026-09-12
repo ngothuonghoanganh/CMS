@@ -8,7 +8,9 @@ import {
   type PagePayloadV7,
   type ReusableComponentDocument,
   type SiteGlobalPayloadV1,
+  OPEN_COMPOSITION_AUTHORING_REGISTRY,
   OpenCompositionPayloadSchema,
+  type OpenCompositionNodeType,
   instantiateOpenCompositionRecipe,
 } from '@payload/contracts';
 
@@ -124,6 +126,44 @@ const payload: PagePayloadV1 = {
 };
 
 describe('builder adapter', () => {
+  it('creates parseable defaults for every directly insertable authorable node', () => {
+    for (const [type, authoring] of Object.entries(OPEN_COMPOSITION_AUTHORING_REGISTRY)) {
+      if (!authoring.directInsert) continue;
+
+      const root = createOpenCompositionNodeDefinition('root');
+      const section = createOpenCompositionNodeDefinition('section');
+      if (type === 'form-field') {
+        const form = createOpenCompositionNodeDefinition('form');
+        const formId = String(form.attributes?.[BUILDER_NODE_ID_ATTRIBUTE]);
+        const field = createOpenCompositionNodeDefinition('form-field', {
+          formNodeId: formId,
+        });
+        const existingChildren = Array.isArray(form.components)
+          ? form.components
+          : form.components
+            ? [form.components]
+            : [];
+        form.components = [...existingChildren, field];
+        section.components = [form];
+      } else {
+        section.components = [
+          createOpenCompositionNodeDefinition(type as OpenCompositionNodeType),
+        ];
+      }
+      root.components = [section];
+      root.attributes = {
+        ...(root.attributes ?? {}),
+        [BUILDER_METADATA_ATTRIBUTE]: JSON.stringify({ documentTitle: 'Direct insert' }),
+        [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: '[]',
+      };
+
+      const payload = OpenCompositionPayloadSchema.parse(
+        serializeEditorSnapshot(snapshotFromEditorDefinition(root)),
+      );
+      expect(payload.version).toBe(8);
+    }
+  });
+
   it('creates usable Open Composition children with semantic field behavior', () => {
     const root = createOpenCompositionNodeDefinition('root');
     const section = createOpenCompositionNodeDefinition('section');

@@ -7,6 +7,9 @@ import {
   NavigationItemsSchema,
   NavigationViewPropsSchema,
   NAVIGATION_MAX_NODES,
+  OPEN_COMPOSITION_MAX_OPTIONS,
+  canonicalizeOpenCompositionOptions,
+  type OpenCompositionOption,
   validateNavigationItems,
   type NavigationItem,
   type ComponentPropertyDefinition,
@@ -44,6 +47,119 @@ function newItemId(): string {
 function newFieldId(): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   return `field-${(uuid ?? `${Date.now()}-${Math.random()}`).replace(/[^A-Za-z0-9_-]/g, '')}`;
+}
+
+function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
+  const props =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const options = canonicalizeOpenCompositionOptions(props.options);
+
+  function updateOptions(next: OpenCompositionOption[]) {
+    onChange(canonicalizeOpenCompositionOptions(next));
+  }
+
+  return (
+    <div className="builder-options-editor">
+      <div className="builder-property-control">
+        <span className="builder-property-label">Options</span>
+        <button
+          className="button button-secondary button-small"
+          disabled={options.length >= OPEN_COMPOSITION_MAX_OPTIONS}
+          onClick={() =>
+            updateOptions([
+              ...options,
+              {
+                label: `Option ${options.length + 1}`,
+                value: `option-${options.length + 1}`,
+              },
+            ])
+          }
+          type="button"
+        >
+          + Add option
+        </button>
+      </div>
+      {options.map((option, index) => (
+        <div className="builder-options-item" key={`${option.value}-${index}`}>
+          <TextField
+            compact
+            label={`Option ${index + 1} label`}
+            onChange={(event) => {
+              const label = event.target.value.trim() || `Option ${index + 1}`;
+              updateOptions(
+                options.map((current, currentIndex) =>
+                  currentIndex === index ? { ...current, label } : current,
+                ),
+              );
+            }}
+            value={option.label}
+          />
+          <TextField
+            compact
+            label={`Option ${index + 1} value`}
+            onChange={(event) => {
+              const rawValue = event.target.value.trim() || option.label;
+              updateOptions(
+                options.map((current, currentIndex) =>
+                  currentIndex === index ? { ...current, value: rawValue } : current,
+                ),
+              );
+            }}
+            value={option.value}
+          />
+          <div className="row-actions">
+            <button
+              aria-label={`Move option ${index + 1} up`}
+              className="button button-ghost button-small"
+              disabled={index === 0}
+              onClick={() => {
+                const next = [...options];
+                const current = next[index];
+                const previous = next[index - 1];
+                if (!current || !previous) return;
+                next[index - 1] = current;
+                next[index] = previous;
+                updateOptions(next);
+              }}
+              type="button"
+            >
+              ↑
+            </button>
+            <button
+              aria-label={`Move option ${index + 1} down`}
+              className="button button-ghost button-small"
+              disabled={index === options.length - 1}
+              onClick={() => {
+                const next = [...options];
+                const current = next[index];
+                const following = next[index + 1];
+                if (!current || !following) return;
+                next[index] = following;
+                next[index + 1] = current;
+                updateOptions(next);
+              }}
+              type="button"
+            >
+              ↓
+            </button>
+            <button
+              aria-label={`Remove option ${index + 1}`}
+              className="button button-danger button-small"
+              disabled={options.length <= 1}
+              onClick={() =>
+                updateOptions(options.filter((_, currentIndex) => currentIndex !== index))
+              }
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ListPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
@@ -979,4 +1095,5 @@ export const CUSTOM_PROPERTY_EDITORS = {
   form: FormPropertyEditor,
   list: ListPropertyEditor,
   navigation: NavigationTreeEditor,
+  options: OptionsPropertyEditor,
 } as const;

@@ -7,6 +7,7 @@ import {
   type OpenCompositionPayload,
   isSafePageImageSource,
   isSafePageVideoSource,
+  canonicalizeOpenCompositionPayload,
   isSafePageStyleValue,
   PAGE_RUNTIME_CLASS_NAMES,
   PAGE_RESPONSIVE_BREAKPOINTS,
@@ -601,11 +602,13 @@ function renderOpenNode(
     }
     case 'video': {
       const src = textProp(node, 'src');
+      const poster = textProp(node, 'poster');
       return (
         <video
           {...attributes(node)}
           controls={booleanProp(node, 'controls', true)}
           muted={booleanProp(node, 'muted')}
+          poster={isSafePageImageSource(poster) ? poster : undefined}
           playsInline
           src={isSafePageVideoSource(src) ? src : undefined}
           style={style}
@@ -748,8 +751,9 @@ export function OpenCompositionRenderer({
   payload,
   context = {},
 }: OpenCompositionRendererProps): ReactElement {
-  const tablet = responsiveCss(payload.root, 'tablet', context.designSystem);
-  const mobile = responsiveCss(payload.root, 'mobile', context.designSystem);
+  const canonicalPayload = canonicalizeOpenCompositionPayload(payload);
+  const tablet = responsiveCss(canonicalPayload.root, 'tablet', context.designSystem);
+  const mobile = responsiveCss(canonicalPayload.root, 'mobile', context.designSystem);
   return (
     <div
       className="payload-open-composition"
@@ -767,7 +771,7 @@ export function OpenCompositionRenderer({
           data-payload-open-responsive
         >{`${tablet ? `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.tablet.maxWidth}px){${tablet}}` : ''}${mobile ? `@media (max-width: ${PAGE_RESPONSIVE_BREAKPOINTS.mobile.maxWidth}px){${mobile}}` : ''}`}</style>
       ) : null}
-      <OpenCompositionTree context={context} payload={payload} />
+      <OpenCompositionTree context={context} payload={canonicalPayload} />
     </div>
   );
 }
