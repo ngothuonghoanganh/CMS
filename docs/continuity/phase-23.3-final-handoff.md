@@ -34,13 +34,17 @@
 
 ## Verification record
 
-The values below are filled from the actual commit, push, PR, CI, merge, and
-post-merge `main` verification operations before Phase 23.3 is marked complete.
+The values below are recorded from the actual commit, push, PR, CI, merge, and
+post-merge `main` verification operations.
 
-- Feature final SHA: to be recorded after the final local gates.
-- Pull request: to be recorded after push.
-- CI: to be recorded from the actual GitHub Actions run; a workflow that has
-  `steps: []` is reported as an external infrastructure/account condition, not
-  as a product test pass.
-- Merge commit: to be recorded after the PR is merged.
-- Final `main` SHA: to be recorded after post-merge verification.
+- Feature final SHA: `b480de3ee96fbe9f20650b3ff7d9ce39cde723ec`
+- Pull request: [#4](https://github.com/ngothuonghoanganh/CMS/pull/4)
+- CI: [quality run #34674844899](https://github.com/ngothuonghoanganh/CMS/actions/runs/34674844899)
+  failed before any job step started (`steps: []`), matching the known external
+  GitHub Actions/account condition. It was not treated as a product test pass.
+- Local release gates: Node 24 format, lint, typecheck, CMS design-system check,
+  unit tests, build, and full Playwright regression passed; full Playwright was
+  `112 passed, 0 failed`.
+- Merge commit: `646dcaeebadedf3981bf203c8d9244923bbdba22`
+- Final `main` SHA after the Phase 23.3 implementation merge:
+  `646dcaeebadedf3981bf203c8d9244923bbdba22`
