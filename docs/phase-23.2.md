@@ -1,7 +1,7 @@
 # Phase 23.2 — Semantic Editing Integrity & Single Source of Truth
 
-**Status:** Implemented on the Phase 23.2 feature branch; the final merge
-record is maintained in `docs/continuity/phase-23.2-final-handoff.md`.
+**Status:** CLOSED — merged to `main` in PR #2. The exact merge record is
+maintained in `docs/continuity/phase-23.2-final-handoff.md`.
 
 ## Semantic ownership decisions
 

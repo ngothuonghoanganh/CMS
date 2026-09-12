@@ -35,8 +35,15 @@
 The final values below are filled from the actual push, PR, CI, merge, and
 post-merge `main` verification operations.
 
-- Feature final SHA: pending
-- Pull request: pending
-- CI: pending
-- Merge commit: pending
-- Final `main` SHA: pending
+- Feature final SHA: `7ba2f3f77cc98a52f7768e2633730d14ce710646`
+- Pull request: [#2](https://github.com/ngothuonghoanganh/CMS/pull/2)
+  (`ao/cms-5/phase-23.2-semantic-integrity` → `main`)
+- CI: Foundation CI run [34667387237](https://github.com/ngothuonghoanganh/CMS/actions/runs/34667387237)
+  completed as a failure before any job step started (`steps: []`), an
+  external GitHub Actions runner/account platform condition. `main` has no
+  branch protection configured; local Node 24 release gates passed.
+- Merge commit: `705710cfcf36f46f99772eb2b979b997f18a2749`
+- Final `main` SHA for the Phase 23.2 implementation: `705710cfcf36f46f99772eb2b979b997f18a2749`
+
+The handoff document was finalized in a post-merge documentation commit; the
+implementation merge SHA above is the release commit verified on `main`.
