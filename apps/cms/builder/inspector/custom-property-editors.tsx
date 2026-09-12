@@ -19,7 +19,13 @@ import {
   type Page,
 } from '@payload/contracts';
 import { SelectField, TextAreaField, TextField } from '../../app/ui/fields';
-import { useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FocusEvent as ReactFocusEvent,
+  type ReactNode,
+} from 'react';
 import { newBuilderUuid } from '../builder-block/builder-adapter';
 import {
   duplicateNavigationItem,
@@ -49,15 +55,78 @@ function newFieldId(): string {
   return `field-${(uuid ?? `${Date.now()}-${Math.random()}`).replace(/[^A-Za-z0-9_-]/g, '')}`;
 }
 
+type OptionDraft = OpenCompositionOption & { editorId: string };
+
+function optionDrafts(value: unknown): OptionDraft[] {
+  return canonicalizeOpenCompositionOptions(value).map((option) => ({
+    ...option,
+    editorId: newBuilderUuid(),
+  }));
+}
+
+function persistedOptions(options: OptionDraft[]): OpenCompositionOption[] {
+  return options.map(({ editorId: _editorId, ...option }) => option);
+}
+
 function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
   const props =
     value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
-  const options = canonicalizeOpenCompositionOptions(props.options);
+  const incomingOptions = canonicalizeOpenCompositionOptions(props.options);
+  const incomingSignature = JSON.stringify(incomingOptions);
+  const [options, setOptions] = useState<OptionDraft[]>(() =>
+    optionDrafts(props.options),
+  );
+  const [editing, setEditing] = useState(false);
 
-  function updateOptions(next: OpenCompositionOption[]) {
-    onChange(canonicalizeOpenCompositionOptions(next));
+  useEffect(() => {
+    if (!editing) setOptions(optionDrafts(props.options));
+  }, [editing, incomingSignature, props.options]);
+
+  function commitOptions(next: OptionDraft[]) {
+    const canonical = canonicalizeOpenCompositionOptions(persistedOptions(next));
+    setOptions(optionDrafts(canonical));
+    setEditing(false);
+    onChange(canonical);
+  }
+
+  function updateDraft(index: number, patch: Partial<OpenCompositionOption>) {
+    const next = options.map((option, optionIndex) =>
+      optionIndex === index ? { ...option, ...patch } : option,
+    );
+    setEditing(true);
+    setOptions(next);
+    // Keep the Canvas live while the local draft retains the stable row and
+    // input identity needed for uninterrupted keyboard editing.
+    onChange(persistedOptions(next));
+  }
+
+  function optionError(option: OptionDraft, index: number): string | undefined {
+    if (!option.label.trim()) return 'Add a label for this option.';
+    const normalizedValue = option.value.trim().toLowerCase();
+    if (
+      normalizedValue &&
+      options.some(
+        (candidate, candidateIndex) =>
+          candidateIndex !== index &&
+          candidate.value.trim().toLowerCase() === normalizedValue,
+      )
+    ) {
+      return 'This option already uses that value.';
+    }
+    return undefined;
+  }
+
+  function commitWhenLeavingEditor(event: ReactFocusEvent<HTMLInputElement>): void {
+    const nextTarget = event.relatedTarget;
+    if (
+      nextTarget instanceof HTMLElement &&
+      nextTarget.closest('.builder-options-editor')
+    ) {
+      return;
+    }
+    commitOptions(options);
   }
 
   return (
@@ -68,9 +137,10 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
           className="button button-secondary button-small"
           disabled={options.length >= OPEN_COMPOSITION_MAX_OPTIONS}
           onClick={() =>
-            updateOptions([
+            commitOptions([
               ...options,
               {
+                editorId: newBuilderUuid(),
                 label: `Option ${options.length + 1}`,
                 value: `option-${options.length + 1}`,
               },
@@ -82,33 +152,30 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
         </button>
       </div>
       {options.map((option, index) => (
-        <div className="builder-options-item" key={`${option.value}-${index}`}>
+        <div className="builder-options-item" key={option.editorId}>
           <TextField
             compact
             label={`Option ${index + 1} label`}
             onChange={(event) => {
-              const label = event.target.value.trim() || `Option ${index + 1}`;
-              updateOptions(
-                options.map((current, currentIndex) =>
-                  currentIndex === index ? { ...current, label } : current,
-                ),
-              );
+              updateDraft(index, { label: event.target.value });
             }}
+            onBlur={commitWhenLeavingEditor}
             value={option.label}
           />
           <TextField
             compact
             label={`Option ${index + 1} value`}
             onChange={(event) => {
-              const rawValue = event.target.value.trim() || option.label;
-              updateOptions(
-                options.map((current, currentIndex) =>
-                  currentIndex === index ? { ...current, value: rawValue } : current,
-                ),
-              );
+              updateDraft(index, { value: event.target.value });
             }}
+            onBlur={commitWhenLeavingEditor}
             value={option.value}
           />
+          {optionError(option, index) ? (
+            <p className="ui-field-error" role="alert">
+              {optionError(option, index)}
+            </p>
+          ) : null}
           <div className="row-actions">
             <button
               aria-label={`Move option ${index + 1} up`}
@@ -121,7 +188,7 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
                 if (!current || !previous) return;
                 next[index - 1] = current;
                 next[index] = previous;
-                updateOptions(next);
+                commitOptions(next);
               }}
               type="button"
             >
@@ -138,7 +205,7 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
                 if (!current || !following) return;
                 next[index] = following;
                 next[index + 1] = current;
-                updateOptions(next);
+                commitOptions(next);
               }}
               type="button"
             >
@@ -149,7 +216,7 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
               className="button button-danger button-small"
               disabled={options.length <= 1}
               onClick={() =>
-                updateOptions(options.filter((_, currentIndex) => currentIndex !== index))
+                commitOptions(options.filter((_, currentIndex) => currentIndex !== index))
               }
               type="button"
             >

@@ -65,10 +65,10 @@ test('keeps composed text, field type and choice options canonical through reloa
       })
       .toEqual({ label: 'Send now', childText: 'Send now' });
 
-    const input = page
-      .getByRole('treeitem', { name: 'Select Input', exact: true })
+    const field = page
+      .getByRole('treeitem', { name: 'Select Form field', exact: true })
       .first();
-    await input.click();
+    await field.click();
     await page.getByLabel('Field type', { exact: true }).selectOption('select');
     await expect(
       page.getByRole('button', { name: '+ Add option', exact: true }),

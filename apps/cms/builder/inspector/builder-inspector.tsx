@@ -167,11 +167,14 @@ function OpenCompositionInspector({
 >) {
   const nodeType = selected.openComposition?.nodeType;
   if (!nodeType) return null;
-  const definition = getOpenCompositionAuthoringDefinition(nodeType);
+  const managedByField = selected.semanticOwner;
   const [addType, setAddType] = useState<OpenCompositionNodeType | ''>('');
-  const contentProperties = definition.properties.filter((property) =>
-    isComponentPropertyVisible(property, selected.props),
-  );
+  const definition = getOpenCompositionAuthoringDefinition(nodeType);
+  const contentProperties = managedByField
+    ? []
+    : definition.properties.filter((property) =>
+        isComponentPropertyVisible(property, selected.props),
+      );
   const addableChildren = openCompositionInsertableChildren(nodeType);
   const styleValues = Object.fromEntries(
     definition.styleGroups.flatMap((group) =>
@@ -347,7 +350,22 @@ function OpenCompositionInspector({
             onToggle={(open) => onToggleSection('content', open)}
             open={openSections.content}
           >
-            {contentProperties.length > 0 ? (
+            {managedByField ? (
+              <div>
+                <p className="muted small" role="note">
+                  This control is managed by its Form Field. Edit the field to change its
+                  label, type, placeholder, options, or submission behavior.
+                </p>
+                <button
+                  className="button button-secondary button-small"
+                  onClick={() => onSelectNode(managedByField.id)}
+                  type="button"
+                >
+                  Edit Form Field
+                </button>
+              </div>
+            ) : null}
+            {!managedByField && contentProperties.length > 0 ? (
               <div className="builder-inspector-fields">
                 {definition.properties
                   .filter((property) =>
@@ -357,12 +375,12 @@ function OpenCompositionInspector({
                     <div key={property.key}>{renderContentProperty(property)}</div>
                   ))}
               </div>
-            ) : (
+            ) : !managedByField ? (
               <p className="muted small">
                 This {definition.label.toLowerCase()} is ready. Add content inside it
                 using the structure below.
               </p>
-            )}
+            ) : null}
           </InspectorSection>
           {structure ? (
             <InspectorSection label="Structure" onToggle={() => undefined} open>

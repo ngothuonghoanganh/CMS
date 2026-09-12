@@ -4823,6 +4823,7 @@ export const PagePreviewReadyMessageSchema = z
 export * from './component-registry';
 export * from './open-composition';
 export * from './open-composition-semantic-integrity';
+export * from './open-composition-icons';
 export * from './page-runtime';
 export * from './style-registry';
 

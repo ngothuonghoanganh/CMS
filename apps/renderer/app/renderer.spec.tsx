@@ -122,6 +122,12 @@ describe('PagePayloadV1 renderer', () => {
                 ],
               },
               {
+                id: 'icon',
+                type: 'icon',
+                props: { name: 'check' },
+                children: [],
+              },
+              {
                 id: 'video',
                 type: 'video',
                 props: {
@@ -190,6 +196,8 @@ describe('PagePayloadV1 renderer', () => {
     const markup = renderToStaticMarkup(renderPage(payload));
     expect(markup).toContain('Send now');
     expect(markup).not.toContain('Stale');
+    expect(markup).toContain('data-payload-icon="check"');
+    expect(markup).toContain('M5 12.5 9.5 17 19 7.5');
     expect(markup).toContain('poster="/assets/poster.png"');
     expect(markup).not.toContain('controls=""');
     expect(markup).toContain('<cite>Team</cite>');

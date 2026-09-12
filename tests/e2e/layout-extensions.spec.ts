@@ -1039,6 +1039,23 @@ test('custom extensions persist inside both Header and Footer layouts', async ({
       await page.goto(
         `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/layouts/${kind}/${id}/builder`,
       );
+      await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+        timeout: 15_000,
+      });
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              const debug = (
+                window as Window & {
+                  __payloadBuilderDebug?: { getPayload: () => unknown };
+                }
+              ).__payloadBuilderDebug;
+              return Boolean(debug?.getPayload());
+            }),
+          { timeout: 15_000 },
+        )
+        .toBe(true);
       await expect(
         page.getByRole('button', { name: `${extensionName} add`, exact: true }),
       ).toBeVisible({ timeout: 15_000 });

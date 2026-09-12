@@ -82,7 +82,8 @@ export function canInsertLiveChild(
   if (parentAttributes['data-payload-open-composition'] === 'true') {
     const parentType = parentAttributes[BUILDER_NODE_TYPE_ATTRIBUTE];
     return isOpenCompositionNodeType(parentType) && isOpenCompositionNodeType(childType)
-      ? canComposeChild(parentType, childType) &&
+      ? parentType !== 'form-field' &&
+          canComposeChild(parentType, childType) &&
           OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert
       : false;
   }

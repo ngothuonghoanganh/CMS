@@ -616,6 +616,7 @@ export function PropertyControlRenderer({
               if (definition.allowEmpty) {
                 setDraft('');
                 onValidationIssue?.(null, issueId);
+                onChange('');
               } else {
                 onChange('');
               }
