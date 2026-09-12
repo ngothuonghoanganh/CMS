@@ -79,11 +79,8 @@ test('no-code author can create and edit a Contact Form composition', async ({
     await expect(page.getByLabel('Required field', { exact: true })).toBeVisible();
     await page.getByLabel('Required field', { exact: true }).check();
 
-    const labelLayer = page
-      .getByRole('treeitem', { name: 'Select Label', exact: true })
-      .first();
-    await labelLayer.click();
-    await page.getByLabel('Text', { exact: true }).fill('Full name');
+    await fieldLayer.click();
+    await page.getByLabel('Field label', { exact: true }).fill('Full name');
     await expect
       .poll(async () => findNode((await readPayload(page))!.root, 'label')?.props.text)
       .toBe('Full name');
@@ -206,13 +203,9 @@ test('no-code author can add, duplicate, delete and undo a form field', async ({
       .last();
     await newField.click();
     await page.getByLabel('Required field', { exact: true }).check();
-    const input = page
-      .getByRole('treeitem', { name: 'Select Input', exact: true })
-      .last();
-    await input.click();
+    await newField.click();
     await page.getByLabel('Field type', { exact: true }).selectOption('phone');
 
-    await newField.click();
     await page
       .getByRole('button', { name: 'Clone selected element', exact: true })
       .click();

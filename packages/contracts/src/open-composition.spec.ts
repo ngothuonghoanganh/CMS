@@ -44,6 +44,7 @@ describe('Open Composition contract', () => {
     expect(OPEN_COMPOSITION_REGISTRY.button.behaviors).toContain('action');
     expect(canComposeChild('form', 'form-field')).toBe(true);
     expect(canComposeChild('form-field', 'card')).toBe(false);
+    expect(canComposeChild('form-field', 'text')).toBe(false);
   });
 
   it('derives parent capabilities from the registry without ambiguous ownership', () => {
@@ -56,6 +57,9 @@ describe('Open Composition contract', () => {
     }
     expect(OPEN_COMPOSITION_REGISTRY.input.allowedParents).toContain('form-field');
     expect(OPEN_COMPOSITION_REGISTRY.input.allowedParents).not.toContain('form');
+    expect(OPEN_COMPOSITION_REGISTRY['form-field'].allowedParents).toEqual(['form']);
+    expect(canComposeChild('section', 'form-field')).toBe(false);
+    expect(canComposeChild('container', 'form-field')).toBe(false);
   });
 
   it('provides explicit no-code authoring metadata instead of inferring controls from props', () => {
@@ -216,6 +220,18 @@ describe('Open Composition contract', () => {
     });
     expect(() => OpenCompositionDocumentSchema.parse(valid)).toThrow(
       /form-field cannot contain card/i,
+    );
+
+    const orphan = instantiateOpenCompositionRecipe('contact-form', (sourceId) =>
+      sourceId === 'root' ? 'root' : `orphan-${sourceId}`,
+    );
+    const orphanForm = findNode(orphan.root, 'orphan-form');
+    const orphanField = orphanForm?.children.find((child) => child.type === 'form-field');
+    if (!orphanForm || !orphanField) throw new Error('Expected orphan test fixture');
+    orphanForm.children = orphanForm.children.filter((child) => child !== orphanField);
+    orphan.root.children[0]?.children.push(orphanField);
+    expect(() => OpenCompositionDocumentSchema.parse(orphan)).toThrow(
+      /form-field cannot be placed inside section/i,
     );
   });
 
@@ -499,5 +515,19 @@ describe('Open Composition contract', () => {
     expect(new Set(canonical.behaviors.map((behavior) => behavior.id)).size).toBe(
       canonical.behaviors.length,
     );
+  });
+
+  it('keeps semantic canonicalization idempotent for composed form values', () => {
+    const document = instantiateOpenCompositionRecipe('contact-form', (sourceId) =>
+      sourceId === 'root' ? 'root' : `stable-${sourceId}`,
+    );
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Idempotent semantics' },
+      root: document.root,
+      behaviors: document.behaviors,
+    });
+    const once = canonicalizeOpenCompositionPayload(payload);
+    expect(canonicalizeOpenCompositionPayload(once)).toEqual(once);
   });
 });

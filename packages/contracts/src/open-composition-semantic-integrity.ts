@@ -326,9 +326,20 @@ export function canonicalizeOpenCompositionPayload(
   const fieldKeysByForm = new Map<string, Set<string>>();
   const canonicalFieldNodeIds = new Set<string>();
 
-  const visit = (node: OpenCompositionNode, formNodeId?: string): void => {
+  const visit = (
+    node: OpenCompositionNode,
+    formNodeId?: string,
+    parentType?: OpenCompositionNode['type'],
+  ): void => {
     const nextFormNodeId = node.type === 'form' ? node.id : formNodeId;
-    node.children.forEach((child) => visit(child, nextFormNodeId));
+    // A Form Field is an owned semantic unit, not generic page content. Drop
+    // legacy/orphan placements at the canonicalization boundary so old V8
+    // drafts can be repaired without preserving a visible-but-unsubmittable
+    // control.
+    node.children = node.children.filter(
+      (child) => child.type !== 'form-field' || node.type === 'form',
+    );
+    node.children.forEach((child) => visit(child, nextFormNodeId, node.type));
     if (node.type === 'button' || node.type === 'link') {
       const normalized = normalizeButtonOrLink(node, usedNodeIds);
       node.props = normalized.props;
@@ -344,13 +355,13 @@ export function canonicalizeOpenCompositionPayload(
       : new Set<string>();
     const normalizedField = normalizeField(
       node,
-      nextFormNodeId,
+      node.type === 'form-field' && parentType === 'form' ? nextFormNodeId : undefined,
       fields,
       usedNodeIds,
       usedBehaviorIds,
       fieldKeys,
     );
-    if (node.type === 'form-field' && nextFormNodeId) {
+    if (node.type === 'form-field' && parentType === 'form' && nextFormNodeId) {
       canonicalFieldNodeIds.add(node.id);
     }
     if (nextFormNodeId) fieldKeysByForm.set(nextFormNodeId, fieldKeys);

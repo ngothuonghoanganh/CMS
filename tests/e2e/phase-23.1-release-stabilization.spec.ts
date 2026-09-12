@@ -198,11 +198,11 @@ test('release gate publishes a V8 contact form and stores a real public submissi
     await expect.poll(async () => (await readPayload(page))?.version).toBe(8);
     await page.getByRole('button', { name: 'Layers', exact: true }).click();
     await page.getByRole('treeitem', { name: 'Select Form', exact: true }).click();
-    const nameLabel = page
-      .getByRole('treeitem', { name: 'Select Label', exact: true })
+    const nameField = page
+      .getByRole('treeitem', { name: 'Select Form field', exact: true })
       .first();
-    await nameLabel.click();
-    await page.getByLabel('Text', { exact: true }).fill('Full name');
+    await nameField.click();
+    await page.getByLabel('Field label', { exact: true }).fill('Full name');
 
     const previewPromise = page.waitForEvent('popup');
     await page

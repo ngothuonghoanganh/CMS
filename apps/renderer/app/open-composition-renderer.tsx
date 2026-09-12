@@ -8,6 +8,7 @@ import {
   isSafePageImageSource,
   isSafePageVideoSource,
   canonicalizeOpenCompositionPayload,
+  openCompositionIconPath,
   isSafePageStyleValue,
   PAGE_RUNTIME_CLASS_NAMES,
   PAGE_RESPONSIVE_BREAKPOINTS,
@@ -429,15 +430,32 @@ function renderOpenNode(
         />
       );
     }
-    case 'icon':
+    case 'icon': {
+      const iconName = textProp(node, 'name', 'arrow-right');
       return (
-        <span
+        <svg
           {...attributes(node)}
           aria-hidden="true"
-          data-payload-icon={textProp(node, 'name', 'icon')}
-          style={style}
-        />
+          data-payload-icon={iconName}
+          fill="none"
+          focusable="false"
+          height="16"
+          viewBox="0 0 24 24"
+          width="16"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ ...style, display: 'inline-block', height: '16px', width: '16px' }}
+        >
+          <path
+            d={openCompositionIconPath(iconName)}
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.8"
+          />
+        </svg>
       );
+    }
     case 'button': {
       const action = runtime.behaviors.find(
         (behavior): behavior is Extract<OpenCompositionBehavior, { kind: 'action' }> =>

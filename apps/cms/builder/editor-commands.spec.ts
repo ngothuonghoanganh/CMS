@@ -293,6 +293,196 @@ describe('editor command boundary', () => {
     expect(text.get('content')).toBe('Send message');
   });
 
+  it('updates a Form Field through semantic aggregate properties', () => {
+    const label = new FakeComponent('field-label', 'label', [], 'Name');
+    label.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: 'Name' }),
+    });
+    const control = new FakeComponent('field-control', 'input');
+    control.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+        type: 'text',
+        name: 'name',
+        placeholder: '',
+      }),
+    });
+    const field = new FakeComponent('field', 'form-field', [label, control]);
+    field.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+        fieldKey: 'name',
+        required: false,
+      }),
+    });
+    const form = new FakeComponent('form', 'form', [field]);
+    form.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ formKey: 'contact' }),
+    });
+    const root = new FakeComponent('root', 'root', [form]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        {
+          id: 'field-behavior',
+          kind: 'field',
+          nodeId: 'field',
+          formNodeId: 'form',
+          fieldKey: 'name',
+          inputType: 'text',
+          required: false,
+          labelNodeId: 'field-label',
+          controlNodeId: 'field-control',
+        },
+      ]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'field',
+        property: 'label',
+        value: 'Full name',
+      }).changed,
+    ).toBe(true);
+    expect(label.get('content')).toBe('Full name');
+    expect(
+      JSON.parse(String(label.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])),
+    ).toEqual({
+      text: 'Full name',
+    });
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'field',
+        property: 'type',
+        value: 'radio',
+      }).changed,
+    ).toBe(true);
+    expect(control.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe('input');
+    expect(
+      JSON.parse(String(control.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])),
+    ).toEqual(expect.objectContaining({ type: 'radio' }));
+    expect(
+      JSON.parse(String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]))[0],
+    ).toMatchObject({ inputType: 'radio' });
+
+    bus.dispatch({
+      kind: 'set-property',
+      nodeId: 'field',
+      property: 'options',
+      value: [
+        { label: 'Basic', value: 'basic' },
+        { label: 'Pro', value: 'pro' },
+      ],
+    });
+    expect(control.children).toHaveLength(1);
+    expect(
+      JSON.parse(String(control.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])).options,
+    ).toEqual([
+      { label: 'Basic', value: 'basic' },
+      { label: 'Pro', value: 'pro' },
+    ]);
+  });
+
+  it('moves a field between Forms, rekeys conflicts, and rejects generic parents', () => {
+    const makeField = (id: string, key: string) => {
+      const label = new FakeComponent(`${id}-label`, 'label');
+      label.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: id }),
+      });
+      const control = new FakeComponent(`${id}-control`, 'input');
+      control.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+          type: 'text',
+          name: key,
+          fieldKey: key,
+        }),
+      });
+      const field = new FakeComponent(id, 'form-field', [label, control]);
+      field.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+          fieldKey: key,
+          required: false,
+        }),
+      });
+      return {
+        field,
+        behavior: {
+          id: `${id}-behavior`,
+          kind: 'field',
+          nodeId: id,
+          formNodeId: '',
+          fieldKey: key,
+          inputType: 'text',
+          required: false,
+          labelNodeId: `${id}-label`,
+          controlNodeId: `${id}-control`,
+        },
+      };
+    };
+    const moved = makeField('moved', 'email');
+    const existing = makeField('existing', 'email');
+    const formA = new FakeComponent('form-a', 'form', [moved.field]);
+    const formB = new FakeComponent('form-b', 'form', [existing.field]);
+    formA.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ formKey: 'a' }),
+    });
+    formB.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ formKey: 'b' }),
+    });
+    const section = new FakeComponent('section', 'section', [formA, formB]);
+    section.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        { ...moved.behavior, formNodeId: 'form-a' },
+        { ...existing.behavior, formNodeId: 'form-b' },
+      ]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    const move = {
+      kind: 'move' as const,
+      intent: { nodeId: 'moved', targetNodeId: 'form-b', position: 'inside' as const },
+    };
+    expect(bus.canDispatch(move)).toBe(true);
+    expect(bus.dispatch(move).changed).toBe(true);
+    expect(moved.field.parent()).toBe(formB);
+    const behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(behaviors.find((behavior) => behavior.nodeId === 'moved')).toMatchObject({
+      formNodeId: 'form-b',
+      fieldKey: 'email-2',
+    });
+    expect(
+      JSON.parse(
+        String(moved.field.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+      ),
+    ).toMatchObject({ fieldKey: 'email-2', name: 'email-2' });
+
+    const invalid = {
+      kind: 'move' as const,
+      intent: { nodeId: 'moved', targetNodeId: 'section', position: 'inside' as const },
+    };
+    expect(bus.canDispatch(invalid)).toBe(false);
+    expect(bus.dispatch(invalid).changed).toBe(false);
+    expect(moved.field.parent()).toBe(formB);
+  });
+
   it('updates behavior metadata stored on an inserted recipe subtree', () => {
     const form = new FakeComponent('form', 'form');
     form.setAttributes({
@@ -338,6 +528,55 @@ describe('editor command boundary', () => {
         recipeRoot.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string,
       )[0],
     ).toMatchObject({ required: false });
+  });
+
+  it('updates Icon and Video runtime projections through live property commands', () => {
+    const icon = new FakeComponent('icon', 'icon');
+    icon.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ name: 'arrow-right' }),
+    });
+    const video = new FakeComponent('video', 'video');
+    video.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ src: '/assets/video.mp4' }),
+    });
+    const root = new FakeComponent('root', 'root', [icon, video]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'icon',
+        property: 'name',
+        value: 'check',
+      }).changed,
+    ).toBe(true);
+    expect(icon.children[0]?.getAttributes()['data-payload-icon']).toBe('check');
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'video',
+        property: 'poster',
+        value: '/assets/poster-a.png',
+      }).changed,
+    ).toBe(true);
+    expect(video.getAttributes().poster).toBe('/assets/poster-a.png');
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'video',
+        property: 'poster',
+        value: '',
+      }).changed,
+    ).toBe(true);
+    expect(video.getAttributes().poster).toBeUndefined();
   });
 
   it('inserts before and after a target through the command bus', () => {
@@ -527,6 +766,82 @@ describe('editor command boundary', () => {
     expect(behaviors[1]?.id).not.toBe('toggle-behavior');
   });
 
+  it('duplicates a Form Field with a unique key and remapped control references', () => {
+    const label = new FakeComponent('label-source', 'label');
+    label.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: 'Email' }),
+    });
+    const control = new FakeComponent('input-source', 'input');
+    control.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+        fieldKey: 'email',
+        type: 'email',
+        name: 'email',
+      }),
+    });
+    const field = new FakeComponent('field-source', 'form-field', [label, control]);
+    field.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+        fieldKey: 'email',
+        required: true,
+      }),
+    });
+    const form = new FakeComponent('form', 'form', [field]);
+    form.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ formKey: 'contact' }),
+    });
+    const root = new FakeComponent('root', 'root', [form]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        {
+          id: 'field-source-behavior',
+          kind: 'field',
+          nodeId: 'field-source',
+          formNodeId: 'form',
+          fieldKey: 'email',
+          inputType: 'email',
+          required: true,
+          labelNodeId: 'label-source',
+          controlNodeId: 'input-source',
+        },
+      ]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.dispatch({ kind: 'duplicate', nodeId: 'field-source' }).changed).toBe(
+      true,
+    );
+    const duplicate = form.children[1];
+    expect(duplicate).toBeDefined();
+    const behaviors = JSON.parse(
+      root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE] as string,
+    ) as Array<Record<string, unknown>>;
+    expect(behaviors).toHaveLength(2);
+    expect(behaviors[0]).toMatchObject({
+      nodeId: 'field-source',
+      fieldKey: 'email',
+      labelNodeId: 'label-source',
+      controlNodeId: 'input-source',
+    });
+    expect(behaviors[1]).toMatchObject({
+      nodeId: duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+      fieldKey: 'email-2',
+      labelNodeId: duplicate?.children[0]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+      controlNodeId: duplicate?.children[1]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+    });
+    expect(
+      JSON.parse(
+        String(duplicate?.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+      ),
+    ).toMatchObject({ fieldKey: 'email-2', name: 'email-2' });
+  });
+
   it('applies a global preset inside the existing global root', () => {
     const header = new FakeComponent('header-existing', 'global-header', [
       new FakeComponent('custom-brand', 'site-brand'),
@@ -682,6 +997,14 @@ describe('editor command boundary', () => {
         childType: 'form-field',
       }),
     ).toBe(true);
+    expect(
+      bus.canDispatch({
+        kind: 'insert-child',
+        parentId: 'form',
+        slotName: '',
+        childType: 'input',
+      }),
+    ).toBe(false);
     const result = bus.dispatch({
       kind: 'insert-child',
       parentId: 'form',
@@ -699,5 +1022,38 @@ describe('editor command boundary', () => {
         String(form.children[0]?.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
       ),
     ).toEqual([expect.objectContaining({ kind: 'field', formNodeId: 'form' })]);
+  });
+
+  it('rejects Form Field insertion into generic Open Composition containers', () => {
+    const section = new FakeComponent('section', 'section');
+    section.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({}),
+    });
+    const root = new FakeComponent('root', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.canDispatch({
+        kind: 'insert-child',
+        parentId: 'section',
+        slotName: '',
+        childType: 'form-field',
+      }),
+    ).toBe(false);
+    expect(
+      bus.dispatch({
+        kind: 'insert-child',
+        parentId: 'section',
+        slotName: '',
+        childType: 'form-field',
+      }).changed,
+    ).toBe(false);
+    expect(section.children).toHaveLength(0);
   });
 });

@@ -236,7 +236,6 @@ const contentChildren = [
   'button',
   'link',
   'form',
-  'form-field',
   'disclosure',
   'tabs',
   'countdown',
@@ -279,7 +278,6 @@ const fieldChildren = [
   'input',
   'textarea',
   'select',
-  'text',
 ] as const satisfies readonly OpenCompositionNodeType[];
 
 const interactiveChildren = [
@@ -987,6 +985,57 @@ const openControlProperties = [
   }),
 ];
 
+const openFormFieldProperties = [
+  openContentProperty({
+    key: 'label',
+    label: 'Field label',
+    control: 'text',
+    required: true,
+    placeholder: 'Field label',
+    defaultValue: 'Field label',
+  }),
+  openContentProperty({
+    key: 'type',
+    label: 'Field type',
+    control: 'select',
+    defaultValue: 'text',
+    options: [
+      { label: 'Text', value: 'text' },
+      { label: 'Email', value: 'email' },
+      { label: 'Phone', value: 'phone' },
+      { label: 'Long text', value: 'textarea' },
+      { label: 'Dropdown', value: 'select' },
+      { label: 'Checkbox', value: 'checkbox' },
+      { label: 'Multiple choice', value: 'radio' },
+    ],
+  }),
+  openContentProperty({
+    key: 'required',
+    label: 'Required field',
+    control: 'toggle',
+    defaultValue: false,
+  }),
+  openContentProperty({
+    key: 'placeholder',
+    label: 'Placeholder',
+    control: 'text',
+    allowEmpty: true,
+    placeholder: 'Optional hint',
+  }),
+  openContentProperty({
+    key: 'options',
+    label: 'Options',
+    control: 'custom',
+    customEditor: 'options',
+    visibleWhen: {
+      property: 'type',
+      operator: 'equals',
+      value: ['select', 'radio'],
+    },
+    help: { text: 'Add the choices visitors can select.' },
+  }),
+] as const;
+
 const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
   openAuthoringDefinition('root', [], OPEN_LAYOUT_STYLE_KEYS),
   ...(['section', 'container', 'stack', 'row', 'grid', 'card'] as const).map((type) =>
@@ -1084,18 +1133,7 @@ const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
     ],
     OPEN_FORM_STYLE_KEYS,
   ),
-  openAuthoringDefinition(
-    'form-field',
-    [
-      openContentProperty({
-        key: 'required',
-        label: 'Required field',
-        control: 'toggle',
-        defaultValue: false,
-      }),
-    ],
-    OPEN_FORM_STYLE_KEYS,
-  ),
+  openAuthoringDefinition('form-field', openFormFieldProperties, OPEN_FORM_STYLE_KEYS),
   openAuthoringDefinition('label', openTextProperties, OPEN_CONTENT_STYLE_KEYS),
   ...(['input', 'textarea', 'select'] as const).map((type) =>
     openAuthoringDefinition(type, openControlProperties, OPEN_CONTENT_STYLE_KEYS),
@@ -1395,6 +1433,7 @@ function validateCompositionTree(
     node: OpenCompositionNode;
     path: (string | number)[];
     depth: number;
+    parentType?: OpenCompositionNodeType;
   }> = [{ node: root, path: ['root'], depth: 1 }];
   while (pending.length > 0) {
     const current = pending.pop();
@@ -1416,6 +1455,13 @@ function validateCompositionTree(
     }
     ids.add(current.node.id);
     const definition = OPEN_COMPOSITION_REGISTRY[current.node.type];
+    if (current.parentType && !definition.allowedParents.includes(current.parentType)) {
+      context.addIssue({
+        code: 'custom',
+        path: [...current.path, 'type'],
+        message: `Node type ${current.node.type} cannot be placed inside ${current.parentType}`,
+      });
+    }
     current.node.children.forEach((child, index) => {
       if (!canComposeChild(current.node.type, child.type)) {
         context.addIssue({
@@ -1428,6 +1474,7 @@ function validateCompositionTree(
         node: child,
         path: [...current.path, 'children', index],
         depth: current.depth + 1,
+        parentType: current.node.type,
       });
     });
     if (definition.type === 'form' && !current.node.props.formKey) {

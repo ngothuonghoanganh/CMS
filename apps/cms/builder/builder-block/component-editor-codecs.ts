@@ -19,7 +19,9 @@ import {
   SiteBrandPropsSchema,
   ReusableInstancePropsSchema,
   isOpenCompositionNodeType,
+  canonicalizeOpenCompositionOptions,
   type FormProps,
+  type OpenCompositionBehavior,
   type OpenCompositionNodeType,
   type PageComponentType,
   type PageNodeStyle,
@@ -71,6 +73,8 @@ export type ComponentSelectionSnapshot = {
   countdown?: { targetAt: string; label: string };
   /** Present when the live component is part of the V8 Open Composition graph. */
   openComposition?: { nodeType: OpenCompositionNodeType };
+  /** A nested field child is edited through its owning Form Field surface. */
+  semanticOwner?: { id: string; nodeType: 'form-field' };
 };
 
 export type ComponentEditorCodec = {
@@ -117,6 +121,33 @@ function openCompositionPropsFromAttributes(
   } catch {
     return {};
   }
+}
+
+function openCompositionBehaviorsFromAncestors(
+  component: Component,
+): OpenCompositionBehavior[] {
+  const result: OpenCompositionBehavior[] = [];
+  let current: Component | undefined = component;
+  while (current) {
+    const raw = current.getAttributes({ noStyle: true })['data-payload-open-behaviors'];
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          result.push(
+            ...parsed.filter(
+              (candidate): candidate is OpenCompositionBehavior =>
+                Boolean(candidate) && typeof candidate === 'object',
+            ),
+          );
+        }
+      } catch {
+        // Malformed behavior metadata is reported by the serialization boundary.
+      }
+    }
+    current = (current as Component & { parent?: () => Component }).parent?.();
+  }
+  return result;
 }
 
 type ComponentPropsReadResult = {
@@ -549,6 +580,52 @@ export function selectionFromComponentCodec(
       component.getEl()?.textContent ?? String(component.get('content') ?? ''),
     );
     if (type === 'text' || type === 'heading' || type === 'label') props.text = content;
+    if (type === 'form-field') {
+      const labelChild = component
+        .components()
+        .models.find(
+          (child) =>
+            child.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE] ===
+            'label',
+        );
+      const controlChild = component
+        .components()
+        .models.find((child) =>
+          ['input', 'textarea', 'select'].includes(
+            String(child.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE]),
+          ),
+        );
+      const labelProps = labelChild
+        ? openCompositionPropsFromAttributes(labelChild.getAttributes({ noStyle: true }))
+        : undefined;
+      const controlProps = controlChild
+        ? openCompositionPropsFromAttributes(
+            controlChild.getAttributes({ noStyle: true }),
+          )
+        : undefined;
+      const fieldBehavior = openCompositionBehaviorsFromAncestors(component).find(
+        (behavior) => behavior.kind === 'field' && behavior.nodeId === id,
+      );
+      if (typeof labelProps?.text === 'string') props.label = labelProps.text;
+      const inputType =
+        fieldBehavior?.kind === 'field'
+          ? fieldBehavior.inputType
+          : typeof controlProps?.type === 'string'
+            ? controlProps.type
+            : 'text';
+      props.type = inputType;
+      props.required =
+        fieldBehavior?.kind === 'field'
+          ? fieldBehavior.required
+          : props.required === true;
+      props.placeholder =
+        typeof controlProps?.placeholder === 'string' ? controlProps.placeholder : '';
+      if (inputType === 'select' || inputType === 'radio') {
+        props.options = canonicalizeOpenCompositionOptions(controlProps?.options);
+      } else {
+        delete props.options;
+      }
+    }
     let composedLabel = content;
     if (type === 'button' || type === 'link') {
       const textChild = component.components().models.find((child) => {
@@ -602,6 +679,10 @@ export function selectionFromComponentCodec(
       ? (type as PageComponentType)
       : ('extension' as const);
     const responsiveStyle = readEditorResponsiveStyle(component);
+    const parent = (component as Component & { parent?: () => Component }).parent?.();
+    const parentAttributes = parent?.getAttributes({ noStyle: true });
+    const parentType = parentAttributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
+    const parentId = parentAttributes?.[BUILDER_NODE_ID_ATTRIBUTE];
     return {
       id,
       type: componentType,
@@ -613,6 +694,9 @@ export function selectionFromComponentCodec(
       ...(type === 'button' || type === 'link' ? { label: composedLabel } : {}),
       ...(responsiveStyle ? { style: responsiveStyle } : {}),
       openComposition: { nodeType: type },
+      ...(parentType === 'form-field' && typeof parentId === 'string'
+        ? { semanticOwner: { id: parentId, nodeType: 'form-field' as const } }
+        : {}),
     };
   }
   if (

@@ -29,6 +29,8 @@ import {
   createBlockDefinition,
   createOpenCompositionNodeDefinition,
   quotePreviewComponents,
+  openCompositionControlPreviewComponents,
+  openCompositionIconPreviewComponents,
   isBuilderNodeType,
   payloadToEditorComponent,
   sanitizeInlineText,
@@ -344,6 +346,24 @@ function updateOpenFieldBehavior(
   }
 }
 
+function directOpenFieldChild(
+  field: Component,
+  types: readonly OpenCompositionNodeType[],
+): Component | undefined {
+  return field.components().models.find((child) => {
+    const type = openNodeType(child);
+    return type !== undefined && types.includes(type);
+  });
+}
+
+function refreshOpenControlPreview(component: Component): void {
+  const type = openNodeType(component);
+  if (type !== 'input' && type !== 'textarea' && type !== 'select') return;
+  const props = openProps(component);
+  if (!props) return;
+  component.components(openCompositionControlPreviewComponents({ type, props }));
+}
+
 function updateOpenControlType(component: Component, value: string): string {
   const inputType = value === 'tel' ? 'phone' : value;
   if (!OPEN_INPUT_TYPES.has(inputType)) return value;
@@ -356,6 +376,45 @@ function updateOpenControlType(component: Component, value: string): string {
   component.set('tagName', nodeType);
   component.set('void', nodeType === 'input');
   return inputType;
+}
+
+function updateOpenFormFieldProperty(
+  component: Component,
+  property: string,
+  value: unknown,
+): boolean {
+  const fieldProps = openProps(component);
+  if (!fieldProps) return false;
+
+  if (property === 'label') {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    const label = directOpenFieldChild(component, ['label']);
+    const labelProps = label && openProps(label);
+    if (!label || !labelProps) return false;
+    setOpenProps(label, { ...labelProps, text: value });
+    label.set('content', value);
+    return true;
+  }
+
+  if (property === 'required') {
+    if (typeof value !== 'boolean') return false;
+    setOpenProps(component, { ...fieldProps, required: value });
+    updateOpenFieldBehavior(component, property, value);
+    return true;
+  }
+
+  const control = directOpenFieldChild(component, ['input', 'textarea', 'select']);
+  if (!control) return false;
+  if (property === 'type' || property === 'placeholder') {
+    return updateOpenProperty(control, property, value);
+  }
+  if (property === 'options') {
+    const controlProps = openProps(control);
+    const inputType = controlProps?.type;
+    if (inputType !== 'select' && inputType !== 'radio') return false;
+    return updateOpenProperty(control, property, value);
+  }
+  return false;
 }
 
 function updateOpenProperty(
@@ -371,6 +430,12 @@ function updateOpenProperty(
     nextValue = normalizedOpenValue(value);
   } catch {
     return false;
+  }
+  if (
+    type === 'form-field' &&
+    ['label', 'type', 'required', 'placeholder', 'options'].includes(property)
+  ) {
+    return updateOpenFormFieldProperty(component, property, nextValue);
   }
   const canonicalValue =
     property === 'options'
@@ -392,8 +457,9 @@ function updateOpenProperty(
   if (serialized.length > 64 * 1024) return false;
   const attributes = component.getAttributes({ noStyle: true });
   const mirroredStringAttribute =
-    ['src', 'alt', 'href', 'target', 'name', 'type', 'placeholder'].includes(property) &&
-    typeof canonicalValue === 'string'
+    ['src', 'alt', 'href', 'target', 'name', 'type', 'placeholder', 'poster'].includes(
+      property,
+    ) && typeof canonicalValue === 'string'
       ? property
       : undefined;
   const mirroredBooleanAttribute =
@@ -412,6 +478,9 @@ function updateOpenProperty(
   if (mirroredBooleanAttribute && canonicalValue === false) {
     component.removeAttributes?.(mirroredBooleanAttribute);
   }
+  if (property === 'poster' && canonicalValue === '') {
+    component.removeAttributes?.('poster');
+  }
   if (['text', 'heading', 'label'].includes(type) && property === 'text') {
     component.set('content', String(canonicalValue));
     syncComposedParentLabel(component, String(canonicalValue));
@@ -420,6 +489,15 @@ function updateOpenProperty(
     // The child owns visual text. The parent label is a derived compatibility
     // projection retained for existing Inspector consumers.
     syncComposedTextChild(component, String(canonicalValue));
+  }
+  if (type === 'icon' && property === 'name') {
+    component.components(openCompositionIconPreviewComponents(canonicalValue));
+  }
+  if (
+    (type === 'input' || type === 'textarea' || type === 'select') &&
+    (property === 'type' || property === 'options')
+  ) {
+    refreshOpenControlPreview(component);
   }
   if (type === 'quote' && (property === 'text' || property === 'cite')) {
     component.components(
@@ -710,6 +788,17 @@ function openFormAncestor(component: Component): Component | undefined {
   return undefined;
 }
 
+function liveFieldKey(value: unknown, fallback: string): string {
+  const source = typeof value === 'string' ? value : fallback;
+  const normalized = source
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  if (!normalized) return 'field';
+  return /^[A-Za-z]/.test(normalized) ? normalized : `field-${normalized}`.slice(0, 64);
+}
+
 /** Rebinds form-owned behavior projections after a valid live reparent. */
 function repairOpenBehaviorsAfterMove(root: Component): void {
   if (!isOpenCompositionRoot(root)) return;
@@ -718,46 +807,100 @@ function repairOpenBehaviorsAfterMove(root: Component): void {
     const id = componentNodeId(component);
     if (id) nodes.set(id, component);
   });
-  collectOpenBehaviors(root).forEach(({ owner, behavior }) => {
-    if (!isRecord(behavior)) return;
-    const source =
-      typeof behavior.nodeId === 'string' ? nodes.get(behavior.nodeId) : undefined;
-    let next: Record<string, unknown> | undefined;
-    let shouldDrop = false;
-    if (behavior.kind === 'field') {
-      const form =
-        source && openNodeType(source) === 'form-field'
-          ? openFormAncestor(source)
-          : undefined;
-      const formId = form && componentNodeId(form);
-      if (!formId) {
-        shouldDrop = true;
-      } else if (behavior.formNodeId !== formId) {
-        next = { ...behavior, formNodeId: formId };
-      }
-    } else if (
-      behavior.kind === 'action' &&
-      (behavior.action === 'submit-form' || behavior.action === 'reset-form')
-    ) {
-      const form = source && openFormAncestor(source);
-      const formId = form && componentNodeId(form);
-      if (!formId) {
-        shouldDrop = true;
-      } else if (behavior.targetNodeId !== formId) {
-        next = { ...behavior, targetNodeId: formId };
-      }
+  const usedFieldKeysByForm = new Map<string, Set<string>>();
+  const fieldOrder = new Map<string, number>();
+  let nextFieldOrder = 0;
+  root.onAll((component) => {
+    const id = componentNodeId(component);
+    if (id && openNodeType(component) === 'form-field') {
+      fieldOrder.set(id, nextFieldOrder++);
     }
-    if (!shouldDrop && next === undefined) return;
-    const current = parsedOpenBehaviors(owner);
-    if (!current) return;
-    const updated = current.flatMap((candidate) => {
-      if (!isRecord(candidate) || candidate.id !== behavior.id) return [candidate];
-      if (shouldDrop) return [];
-      return [next];
-    });
-    if (JSON.stringify(updated) !== JSON.stringify(current))
-      setOpenBehaviors(owner, updated);
   });
+  collectOpenBehaviors(root)
+    .sort((left, right) => {
+      const leftOrder =
+        typeof left.behavior.nodeId === 'string'
+          ? (fieldOrder.get(left.behavior.nodeId) ?? Number.MAX_SAFE_INTEGER)
+          : Number.MAX_SAFE_INTEGER;
+      const rightOrder =
+        typeof right.behavior.nodeId === 'string'
+          ? (fieldOrder.get(right.behavior.nodeId) ?? Number.MAX_SAFE_INTEGER)
+          : Number.MAX_SAFE_INTEGER;
+      return leftOrder - rightOrder;
+    })
+    .forEach(({ owner, behavior }) => {
+      if (!isRecord(behavior)) return;
+      const source =
+        typeof behavior.nodeId === 'string' ? nodes.get(behavior.nodeId) : undefined;
+      let next: Record<string, unknown> | undefined;
+      let shouldDrop = false;
+      if (behavior.kind === 'field') {
+        const form =
+          source && openNodeType(source) === 'form-field'
+            ? openFormAncestor(source)
+            : undefined;
+        const formId = form && componentNodeId(form);
+        if (!formId) {
+          shouldDrop = true;
+        } else {
+          const usedKeys = usedFieldKeysByForm.get(formId) ?? new Set<string>();
+          usedFieldKeysByForm.set(formId, usedKeys);
+          const control =
+            typeof behavior.controlNodeId === 'string'
+              ? nodes.get(behavior.controlNodeId)
+              : undefined;
+          const controlProps = control ? openProps(control) : undefined;
+          const baseKey = liveFieldKey(
+            behavior.fieldKey ?? controlProps?.name,
+            `field-${behavior.nodeId ?? 'value'}`,
+          );
+          let fieldKey = baseKey;
+          let suffix = 2;
+          while (usedKeys.has(fieldKey)) {
+            fieldKey = `${baseKey}-${suffix}`.slice(0, 64);
+            suffix += 1;
+          }
+          usedKeys.add(fieldKey);
+          if (behavior.formNodeId !== formId || behavior.fieldKey !== fieldKey) {
+            next = { ...behavior, formNodeId: formId, fieldKey };
+          }
+          const sourceProps = source ? openProps(source) : undefined;
+          if (source && sourceProps && sourceProps.fieldKey !== fieldKey) {
+            setOpenProps(source, { ...sourceProps, fieldKey });
+          }
+          if (control && controlProps) {
+            if (controlProps.fieldKey !== fieldKey || controlProps.name !== fieldKey) {
+              setOpenProps(control, { ...controlProps, fieldKey, name: fieldKey });
+              control.setAttributes({
+                ...control.getAttributes({ noStyle: true }),
+                name: fieldKey,
+              });
+            }
+          }
+        }
+      } else if (
+        behavior.kind === 'action' &&
+        (behavior.action === 'submit-form' || behavior.action === 'reset-form')
+      ) {
+        const form = source && openFormAncestor(source);
+        const formId = form && componentNodeId(form);
+        if (!formId) {
+          shouldDrop = true;
+        } else if (behavior.targetNodeId !== formId) {
+          next = { ...behavior, targetNodeId: formId };
+        }
+      }
+      if (!shouldDrop && next === undefined) return;
+      const current = parsedOpenBehaviors(owner);
+      if (!current) return;
+      const updated = current.flatMap((candidate) => {
+        if (!isRecord(candidate) || candidate.id !== behavior.id) return [candidate];
+        if (shouldDrop) return [];
+        return [next];
+      });
+      if (JSON.stringify(updated) !== JSON.stringify(current))
+        setOpenBehaviors(owner, updated);
+    });
 }
 
 function definitionChildren(definition: ComponentDefinition): ComponentDefinition[] {
@@ -1026,6 +1169,7 @@ export function executeEditorCommand(
         safeDefinition,
         at === undefined ? undefined : { at },
       );
+      if (definitionOpenNodeType(command.definition)) repairOpenBehaviorsAfterMove(root);
       if (safeDefinition.components !== undefined) {
         groupNewHistoryActions(editor, previousHistoryEntries);
       }
@@ -1055,6 +1199,7 @@ export function executeEditorCommand(
       const safeDefinition = definitionWithFreshIds(root, definition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: command.index });
+      repairOpenBehaviorsAfterMove(root);
       if (safeDefinition.components !== undefined) {
         groupNewHistoryActions(editor, previousHistoryEntries);
       }
@@ -1116,6 +1261,7 @@ export function executeEditorCommand(
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: node.index() + 1 });
       duplicateOpenBehaviors(root, node, safeDefinition);
+      repairOpenBehaviorsAfterMove(root);
       const selection = created[0];
       if (selection) editor.select(selection);
       groupNewHistoryActions(editor, previousHistoryEntries);

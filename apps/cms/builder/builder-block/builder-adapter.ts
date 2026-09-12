@@ -8,6 +8,8 @@ import {
   OpenCompositionPayloadSchema,
   OpenCompositionBehaviorSchema,
   canonicalizeOpenCompositionPayload,
+  canonicalizeOpenCompositionOptions,
+  openCompositionIconPath,
   OPEN_COMPOSITION_REGISTRY,
   CompositionStyleSchema,
   migratePagePayloadToOpenComposition,
@@ -1373,7 +1375,118 @@ function componentDefinitionForNode(
   throw new BuilderAdapterError('Unsupported builder node type');
 }
 
+type OpenCompositionControlPreviewNode = Pick<OpenCompositionNode, 'type' | 'props'>;
+
+export function openCompositionControlPreviewComponents(
+  node: OpenCompositionControlPreviewNode,
+): ComponentDefinition[] {
+  const props = node.props as Record<string, unknown>;
+  const inputType =
+    node.type === 'select'
+      ? 'select'
+      : typeof props.type === 'string'
+        ? props.type
+        : node.type;
+  const options = canonicalizeOpenCompositionOptions(props.options);
+  if (inputType === 'select') {
+    return [
+      editorOnlySemanticPreview(
+        {
+          tagName: 'option',
+          content:
+            typeof props.placeholder === 'string' && props.placeholder.trim()
+              ? sanitizeInlineText(props.placeholder)
+              : 'Select an option',
+          attributes: { value: '' },
+        },
+        'placeholder',
+      ),
+      ...options.map((option) =>
+        editorOnlySemanticPreview(
+          {
+            tagName: 'option',
+            content: sanitizeInlineText(option.label),
+            attributes: { value: option.value },
+          },
+          'option',
+        ),
+      ),
+    ];
+  }
+  if (inputType !== 'radio') return [];
+  return [
+    editorOnlySemanticPreview(
+      {
+        tagName: 'div',
+        attributes: { role: 'radiogroup', 'aria-label': 'Options' },
+        components: options.map((option) =>
+          editorOnlySemanticPreview(
+            {
+              tagName: 'label',
+              components: [
+                editorOnlySemanticPreview(
+                  {
+                    tagName: 'input',
+                    attributes: {
+                      type: 'radio',
+                      value: option.value,
+                      disabled: 'true',
+                    },
+                    void: true,
+                  },
+                  'option',
+                ),
+                editorOnlySemanticPreview(
+                  { tagName: 'span', content: sanitizeInlineText(option.label) },
+                  'option',
+                ),
+              ],
+            },
+            'option',
+          ),
+        ),
+      },
+      'options',
+    ),
+  ];
+}
+
+export function openCompositionIconPreviewComponents(
+  name: unknown,
+): ComponentDefinition[] {
+  return [
+    editorOnlySemanticPreview(
+      {
+        tagName: 'svg',
+        attributes: {
+          'data-payload-icon': typeof name === 'string' ? name : 'arrow-right',
+          'aria-hidden': 'true',
+          focusable: 'false',
+          height: '16',
+          viewBox: '0 0 24 24',
+          width: '16',
+          fill: 'none',
+          stroke: 'currentColor',
+          'stroke-width': '1.8',
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          style: 'display: inline-block; height: 16px; width: 16px;',
+        },
+        components: [
+          {
+            tagName: 'path',
+            attributes: { d: openCompositionIconPath(name), fill: 'none' },
+            void: true,
+          },
+        ],
+      },
+      'icon',
+    ),
+  ];
+}
+
 function openCompositionTagName(node: OpenCompositionNode): string {
+  if (node.type === 'input' && node.props.type === 'radio') return 'div';
   switch (node.type) {
     case 'root':
       return 'main';
@@ -1469,9 +1582,7 @@ function openCompositionNodeDefinition(
           ? typeof props.label === 'string'
             ? props.label
             : undefined
-          : node.type === 'icon'
-            ? '→'
-            : undefined,
+          : undefined,
     ...(tagName === 'img' || tagName === 'input' ? { void: true } : {}),
     droppable:
       OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0 ? true : false,
@@ -1489,9 +1600,13 @@ function openCompositionNodeDefinition(
             text: typeof props.text === 'string' ? props.text : '',
             ...(typeof props.cite === 'string' ? { cite: props.cite } : {}),
           })
-        : node.children.map((child) =>
-            openCompositionNodeDefinition(child, undefined, payloadVersion),
-          ),
+        : node.type === 'icon'
+          ? openCompositionIconPreviewComponents(props.name)
+          : node.type === 'input' || node.type === 'select'
+            ? openCompositionControlPreviewComponents(node)
+            : node.children.map((child) =>
+                openCompositionNodeDefinition(child, undefined, payloadVersion),
+              ),
   };
 }
 

@@ -12,6 +12,7 @@ import {
   OpenCompositionPayloadSchema,
   type OpenCompositionNodeType,
   instantiateOpenCompositionRecipe,
+  openCompositionIconPath,
 } from '@payload/contracts';
 
 import {
@@ -38,6 +39,8 @@ import {
   BuilderAdapterError,
   createBlockDefinition,
   createOpenCompositionNodeDefinition,
+  openCompositionControlPreviewComponents,
+  openCompositionIconPreviewComponents,
   createReusableInstanceDefinition,
   editorPageDocumentToReusableDocument,
   formatCountdownRemaining,
@@ -162,6 +165,43 @@ describe('builder adapter', () => {
       );
       expect(payload.version).toBe(8);
     }
+  });
+
+  it('projects choice controls and icons from their semantic props', () => {
+    const selectPreview = openCompositionControlPreviewComponents({
+      type: 'select',
+      props: {
+        type: 'select',
+        options: [
+          { label: 'Basic', value: 'basic' },
+          { label: 'Enterprise', value: 'enterprise' },
+        ],
+      },
+    });
+    expect(selectPreview.map((option) => option.content)).toEqual([
+      'Select an option',
+      'Basic',
+      'Enterprise',
+    ]);
+
+    const radioPreview = openCompositionControlPreviewComponents({
+      type: 'input',
+      props: {
+        type: 'radio',
+        options: [{ label: 'Pro', value: 'pro' }],
+      },
+    });
+    expect(radioPreview[0]?.attributes?.role).toBe('radiogroup');
+    expect(radioPreview[0]?.components).toHaveLength(1);
+
+    const iconPreview = openCompositionIconPreviewComponents('check');
+    const icon = iconPreview[0];
+    const iconPath = Array.isArray(icon?.components) ? icon.components[0] : undefined;
+    const iconPathAttributes =
+      iconPath && typeof iconPath === 'object' ? iconPath.attributes : undefined;
+    expect(icon?.tagName).toBe('svg');
+    expect(iconPathAttributes?.d).toBe(openCompositionIconPath('check'));
+    expect(iconPathAttributes?.d).not.toBe(openCompositionIconPath('arrow-right'));
   });
 
   it('creates usable Open Composition children with semantic field behavior', () => {
