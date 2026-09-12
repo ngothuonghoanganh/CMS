@@ -50,6 +50,11 @@ Run all applications:
 pnpm dev
 ```
 
+The development launcher checks whether the default API port (`3001`) is
+available. If another local service already owns it, the API moves to the first
+free fallback port (`3011`–`3015`) and CMS/renderer are pointed at that port
+automatically. Set `DEV_API_FALLBACK_PORT` to choose a specific fallback.
+
 For a production-style local run, start MongoDB, configure `.env`, then use either
 the root scripts or the global launcher:
 

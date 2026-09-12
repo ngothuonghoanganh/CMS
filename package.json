@@ -9,7 +9,7 @@
     "pnpm": ">=10.15.0"
   },
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "node scripts/dev.mjs",
     "build": "turbo build",
     "start": "turbo start",
     "start:api": "pnpm --filter @payload/api start",
