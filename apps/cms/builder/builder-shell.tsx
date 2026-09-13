@@ -384,27 +384,43 @@ function renderLayerNodes(
           key={node.id}
         >
           <div className="builder-layer-row">
-            <button
-              aria-label={`${collapsedIds.has(node.id) ? 'Expand' : 'Collapse'} ${node.label}`}
-              className="builder-layer-toggle"
-              disabled={!hasChildren}
-              onClick={() => onToggle(node.id)}
-              type="button"
-            >
-              {hasChildren ? (
-                <Icon name={collapsedIds.has(node.id) ? 'chevronRight' : 'chevronDown'} />
-              ) : (
-                <Icon name="grip" size={12} />
-              )}
-            </button>
-            <button
-              aria-label={`Drag ${node.label} layer`}
-              className="builder-layer-drag-handle"
-              onPointerDown={(event) => onDragStart(node, event)}
-              type="button"
-            >
-              <Icon name="grip" />
-            </button>
+            {node.semanticOwner ? (
+              <span aria-hidden="true" className="builder-layer-toggle-placeholder" />
+            ) : (
+              <button
+                aria-label={`${collapsedIds.has(node.id) ? 'Expand' : 'Collapse'} ${node.label}`}
+                className="builder-layer-toggle"
+                disabled={!hasChildren}
+                onClick={() => onToggle(node.id)}
+                type="button"
+              >
+                {hasChildren ? (
+                  <Icon
+                    name={collapsedIds.has(node.id) ? 'chevronRight' : 'chevronDown'}
+                  />
+                ) : (
+                  <Icon name="grip" size={12} />
+                )}
+              </button>
+            )}
+            {node.semanticOwner ? (
+              <span
+                aria-label="Managed by Form Field"
+                className="builder-layer-managed-indicator"
+                title="Managed by Form Field"
+              >
+                Managed
+              </span>
+            ) : (
+              <button
+                aria-label={`Drag ${node.label} layer`}
+                className="builder-layer-drag-handle"
+                onPointerDown={(event) => onDragStart(node, event)}
+                type="button"
+              >
+                <Icon name="grip" />
+              </button>
+            )}
             <button
               aria-label={`Select ${node.label}`}
               aria-expanded={hasChildren ? !collapsedIds.has(node.id) : undefined}
@@ -1091,6 +1107,7 @@ export default function BuilderShell({
     node: BuilderCanvasNode,
     event: ReactPointerEvent<HTMLButtonElement>,
   ) {
+    if (node.semanticOwner) return;
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();

@@ -6,9 +6,11 @@ import {
   OPEN_COMPOSITION_RECIPE_REGISTRY,
   OpenCompositionDocumentSchema,
   canComposeChild,
+  canMutateStructuralNode,
   instantiateOpenCompositionRecipe,
   getOpenCompositionAuthoringDefinition,
   getOpenCompositionAuthoringProperty,
+  isSemanticOwnedFormFieldChild,
   openCompositionInsertableChildren,
   migratePagePayloadToOpenComposition,
   migratePagePayloadV7ToOpenComposition,
@@ -60,6 +62,17 @@ describe('Open Composition contract', () => {
     expect(OPEN_COMPOSITION_REGISTRY['form-field'].allowedParents).toEqual(['form']);
     expect(canComposeChild('section', 'form-field')).toBe(false);
     expect(canComposeChild('container', 'form-field')).toBe(false);
+  });
+
+  it('keeps Form Field label and controls inside the atomic semantic unit', () => {
+    for (const childType of ['label', 'input', 'textarea', 'select'] as const) {
+      expect(isSemanticOwnedFormFieldChild('form-field', childType)).toBe(true);
+      expect(canMutateStructuralNode(childType, 'form-field')).toBe(false);
+      expect(canMutateStructuralNode(childType, 'form')).toBe(true);
+    }
+    expect(isSemanticOwnedFormFieldChild('form-field', 'text')).toBe(false);
+    expect(canMutateStructuralNode('form-field', 'form')).toBe(true);
+    expect(canMutateStructuralNode('form-field', 'section')).toBe(true);
   });
 
   it('provides explicit no-code authoring metadata instead of inferring controls from props', () => {

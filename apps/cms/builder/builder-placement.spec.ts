@@ -11,6 +11,7 @@ import {
   resolveNodePlacement,
   type MoveNodeIntent,
 } from './builder-placement';
+import { selectedMoveIntent } from './builder-interaction';
 
 class FakeComponent {
   private parentNode: FakeComponent | undefined;
@@ -138,6 +139,59 @@ describe('builder placement engine', () => {
       'second',
       'first',
     ]);
+  });
+
+  it('rejects Form Field semantic children as sources or relative targets', () => {
+    const label = new FakeComponent('field-label', 'label');
+    label.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const control = new FakeComponent('field-control', 'input');
+    control.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const field = new FakeComponent('field', 'form-field', [label, control]);
+    field.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const form = new FakeComponent('form', 'form', [field]);
+    form.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const root = new FakeComponent('root', 'root', [form]);
+    root.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+
+    for (const nodeId of ['field-label', 'field-control']) {
+      const result = resolveNodePlacement(
+        asComponent(root),
+        intent(nodeId, 'root', 'inside'),
+      );
+      expect(result).toEqual({
+        valid: false,
+        reason: 'A Form Field label or control is managed by its Form Field.',
+      });
+    }
+
+    expect(
+      resolveNodePlacement(asComponent(root), intent('field', 'field-label', 'before')),
+    ).toEqual({
+      valid: false,
+      reason: 'A Form Field label or control cannot be used as a move target.',
+    });
+    expect(label.parent()).toBe(field);
+    expect(control.parent()).toBe(field);
+  });
+
+  it('does not create keyboard move intents for field-owned children', () => {
+    const label = new FakeComponent('field-label', 'label');
+    label.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const control = new FakeComponent('field-control', 'input');
+    control.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const field = new FakeComponent('field', 'form-field', [label, control]);
+    field.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const form = new FakeComponent('form', 'form', [field]);
+    form.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+    const root = new FakeComponent('root', 'root', [form]);
+    root.attrs[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] = 'true';
+
+    expect(
+      selectedMoveIntent(asComponent(root), asComponent(label), 'up'),
+    ).toBeUndefined();
+    expect(
+      selectedMoveIntent(asComponent(root), asComponent(control), 'outdent'),
+    ).toBeUndefined();
   });
 
   it('moves siblings after the intended target without index shifting', () => {

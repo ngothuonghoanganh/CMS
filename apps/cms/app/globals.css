@@ -3747,6 +3747,11 @@ textarea {
   width: 1.35rem;
   padding: 0;
 }
+.builder-layer-toggle-placeholder {
+  display: block;
+  flex: 0 0 auto;
+  width: 1.35rem;
+}
 .builder-layer-toggle:disabled {
   cursor: default;
   opacity: 0.4;
@@ -3766,6 +3771,15 @@ textarea {
   border-radius: 0.3rem;
   color: var(--cms-success);
   background: var(--cms-accent-surface);
+}
+.builder-layer-managed-indicator {
+  flex: 0 0 auto;
+  min-width: 3.65rem;
+  color: var(--cms-text-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
 }
 .builder-layer-button {
   display: flex;
