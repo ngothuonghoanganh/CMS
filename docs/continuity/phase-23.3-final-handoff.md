@@ -48,3 +48,34 @@ post-merge `main` verification operations.
 - Merge commit: `646dcaeebadedf3981bf203c8d9244923bbdba22`
 - Final `main` SHA after the Phase 23.3 implementation merge:
   `646dcaeebadedf3981bf203c8d9244923bbdba22`
+
+## Phase 23.3.1 closure and hardening
+
+- The closure audit was based on `origin/main` at `b842a87` and verified the
+  current registry, canonicalizer, command boundary, placement, Canvas, Layers,
+  Inspector, renderer, fixtures, and CI workflow before editing.
+- Form Field label/control children are atomic semantic internals. The shared
+  ownership predicate is enforced by the contracts, structural command, move
+  placement, keyboard, Canvas drag, Layers, GrapesJS metadata, and Inspector
+  surfaces. Form Field remains removable and duplicable as one unit.
+- Form-to-Form moves capture destination ownership before mutation. Existing
+  destination field keys are reserved and preserved; moved fields resolve
+  conflicts deterministically, including drop-before and drop-between cases.
+  The same snapshot protects existing keys when a new field is inserted before
+  an existing field. Moving a field back preserves its current key when there
+  is no conflict, avoiding unnecessary identity churn.
+- The dedicated browser release gate is
+  `tests/e2e/phase-23.3.1-release-gate.spec.ts`. It covers sequential option
+  typing, transient blank labels, duplicate values, reorder/remove, focused
+  save, Select/Radio, Icon, Video poster removal/replacement, Save, Reload,
+  Preview, UI Publish, public required validation, and public submission.
+- Final local verification used Node `v24.11.0`: `pnpm format:check`,
+  `pnpm lint`, `pnpm typecheck`, `pnpm check:cms-design-system`, `pnpm test`,
+  `pnpm build`, the old and new targeted Playwright specs, and full Playwright
+  all passed. The full E2E suite was `113 passed, 0 failed`; the final unit
+  suite was `67 passed files / 379 passed tests` with `5 API skipped files / 12
+skipped tests`.
+- GitHub Actions result remains infrastructure-only: quality run
+  `34674844899` never started execution (`steps: []`) because of the known
+  external account/billing condition. Local product gates are not reported as
+  GitHub CI success.

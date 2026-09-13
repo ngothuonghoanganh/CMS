@@ -7,6 +7,7 @@ import {
   BUILDER_OPEN_PROPS_ATTRIBUTE,
   BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
+  createOpenCompositionNodeDefinition,
 } from './builder-block/builder-adapter';
 import {
   createEditorCommandBus,
@@ -191,6 +192,51 @@ function ids(parent: FakeComponent): string[] {
   return parent.children.map(
     (child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE] as string,
   );
+}
+
+function semanticField(id: string, key: string) {
+  const label = new FakeComponent(`${id}-label`, 'label');
+  label.setAttributes({
+    [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: id }),
+  });
+  const control = new FakeComponent(`${id}-control`, 'input');
+  control.setAttributes({
+    [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+      type: 'text',
+      name: key,
+      fieldKey: key,
+    }),
+  });
+  const field = new FakeComponent(id, 'form-field', [label, control]);
+  field.setAttributes({
+    [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ fieldKey: key }),
+  });
+  return {
+    field,
+    behavior: {
+      id: `${id}-behavior`,
+      kind: 'field' as const,
+      nodeId: id,
+      formNodeId: '',
+      fieldKey: key,
+      inputType: 'text' as const,
+      required: false,
+      labelNodeId: `${id}-label`,
+      controlNodeId: `${id}-control`,
+    },
+  };
+}
+
+function openForm(id: string, fields: FakeComponent[]): FakeComponent {
+  const form = new FakeComponent(id, 'form', fields);
+  form.setAttributes({
+    [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({}),
+  });
+  return form;
 }
 
 describe('editor command boundary', () => {
@@ -464,6 +510,10 @@ describe('editor command boundary', () => {
     const behaviors = JSON.parse(
       String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
     ) as Array<Record<string, unknown>>;
+    expect(behaviors.find((behavior) => behavior.nodeId === 'existing')).toMatchObject({
+      formNodeId: 'form-b',
+      fieldKey: 'email',
+    });
     expect(behaviors.find((behavior) => behavior.nodeId === 'moved')).toMatchObject({
       formNodeId: 'form-b',
       fieldKey: 'email-2',
@@ -481,6 +531,266 @@ describe('editor command boundary', () => {
     expect(bus.canDispatch(invalid)).toBe(false);
     expect(bus.dispatch(invalid).changed).toBe(false);
     expect(moved.field.parent()).toBe(formB);
+  });
+
+  it('preserves the destination field key when a conflicting field is dropped before it', () => {
+    const makeField = (id: string, key: string) => {
+      const label = new FakeComponent(`${id}-label`, 'label');
+      label.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ text: id }),
+      });
+      const control = new FakeComponent(`${id}-control`, 'input');
+      control.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+          type: 'text',
+          name: key,
+          fieldKey: key,
+        }),
+      });
+      const field = new FakeComponent(id, 'form-field', [label, control]);
+      field.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({ fieldKey: key }),
+      });
+      return {
+        field,
+        behavior: {
+          id: `${id}-behavior`,
+          kind: 'field' as const,
+          nodeId: id,
+          formNodeId: '',
+          fieldKey: key,
+          inputType: 'text' as const,
+          required: false,
+          labelNodeId: `${id}-label`,
+          controlNodeId: `${id}-control`,
+        },
+      };
+    };
+    const moved = makeField('moved-before', 'email');
+    const existing = makeField('existing-before', 'email');
+    const formA = new FakeComponent('form-before-a', 'form', [moved.field]);
+    const formB = new FakeComponent('form-before-b', 'form', [existing.field]);
+    for (const form of [formA, formB]) {
+      form.setAttributes({
+        [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+        [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({}),
+      });
+    }
+    const section = new FakeComponent('section-before', 'section', [formA, formB]);
+    section.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root-before', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        { ...moved.behavior, formNodeId: 'form-before-a' },
+        { ...existing.behavior, formNodeId: 'form-before-b' },
+      ]),
+    });
+    const bus = createEditorCommandBus(asEditor(new FakeEditor(root)));
+
+    const move = {
+      kind: 'move' as const,
+      intent: {
+        nodeId: 'moved-before',
+        targetNodeId: 'existing-before',
+        position: 'before' as const,
+      },
+    };
+    expect(bus.dispatch(move).changed).toBe(true);
+    expect(
+      formB.children.map((child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]),
+    ).toEqual(['moved-before', 'existing-before']);
+
+    const behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(
+      behaviors.find((behavior) => behavior.nodeId === 'existing-before'),
+    ).toMatchObject({
+      formNodeId: 'form-before-b',
+      fieldKey: 'email',
+    });
+    expect(
+      behaviors.find((behavior) => behavior.nodeId === 'moved-before'),
+    ).toMatchObject({
+      formNodeId: 'form-before-b',
+      fieldKey: 'email-2',
+    });
+  });
+
+  it('keeps a non-conflicting key stable when a field moves out and back', () => {
+    const moved = semanticField('moved-round-trip', 'email');
+    const existing = semanticField('existing-round-trip', 'phone');
+    const formA = openForm('form-round-trip-a', [moved.field]);
+    const formB = openForm('form-round-trip-b', [existing.field]);
+    const section = new FakeComponent('section-round-trip', 'section', [formA, formB]);
+    section.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root-round-trip', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        { ...moved.behavior, formNodeId: 'form-round-trip-a' },
+        { ...existing.behavior, formNodeId: 'form-round-trip-b' },
+      ]),
+    });
+    const bus = createEditorCommandBus(asEditor(new FakeEditor(root)));
+
+    expect(
+      bus.dispatch({
+        kind: 'move',
+        intent: {
+          nodeId: 'moved-round-trip',
+          targetNodeId: 'form-round-trip-b',
+          position: 'inside',
+        },
+      }).changed,
+    ).toBe(true);
+    let behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(
+      behaviors.find((behavior) => behavior.nodeId === 'existing-round-trip'),
+    ).toMatchObject({
+      fieldKey: 'phone',
+    });
+    expect(
+      behaviors.find((behavior) => behavior.nodeId === 'moved-round-trip'),
+    ).toMatchObject({
+      fieldKey: 'email',
+    });
+
+    expect(
+      bus.dispatch({
+        kind: 'move',
+        intent: {
+          nodeId: 'moved-round-trip',
+          targetNodeId: 'form-round-trip-a',
+          position: 'inside',
+        },
+      }).changed,
+    ).toBe(true);
+    behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(
+      behaviors.find((behavior) => behavior.nodeId === 'moved-round-trip'),
+    ).toMatchObject({
+      formNodeId: 'form-round-trip-a',
+      fieldKey: 'email',
+    });
+    expect(
+      JSON.parse(
+        String(moved.field.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+      ),
+    ).toMatchObject({ fieldKey: 'email', name: 'email' });
+  });
+
+  it('keeps an existing field key stable when a new field is inserted before it', () => {
+    const existing = semanticField('existing-insert', 'email');
+    const form = openForm('form-insert', [existing.field]);
+    const section = new FakeComponent('section-insert', 'section', [form]);
+    section.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root-insert', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        { ...existing.behavior, formNodeId: 'form-insert' },
+      ]),
+    });
+    const bus = createEditorCommandBus(asEditor(new FakeEditor(root)));
+
+    expect(
+      bus.dispatch({
+        kind: 'insert',
+        definition: createOpenCompositionNodeDefinition('form-field', {
+          formNodeId: 'form-insert',
+        }),
+        parentId: 'form-insert',
+        targetId: 'existing-insert',
+        position: 'before',
+      }).changed,
+    ).toBe(true);
+
+    const inserted = form.children[0];
+    const behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(
+      behaviors.find((behavior) => behavior.nodeId === 'existing-insert'),
+    ).toMatchObject({ fieldKey: 'email' });
+    const insertedId = inserted?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE];
+    const insertedBehavior = JSON.parse(
+      String(inserted?.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    )[0] as Record<string, unknown> | undefined;
+    expect(insertedBehavior?.nodeId).toBe(insertedId);
+    expect(insertedBehavior).toBeDefined();
+    expect(insertedBehavior?.fieldKey).not.toBe('email');
+    expect(
+      JSON.parse(
+        String(inserted?.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+      ),
+    ).toMatchObject({
+      fieldKey: insertedBehavior?.fieldKey,
+      name: insertedBehavior?.fieldKey,
+    });
+  });
+
+  it('keeps every existing destination key stable when a move lands between fields', () => {
+    const moved = semanticField('moved-between', 'email');
+    const first = semanticField('first-between', 'name');
+    const existing = semanticField('existing-between', 'email');
+    const last = semanticField('last-between', 'phone');
+    const formA = openForm('form-between-a', [moved.field]);
+    const formB = openForm('form-between-b', [first.field, existing.field, last.field]);
+    const section = new FakeComponent('section-between', 'section', [formA, formB]);
+    section.setAttributes({ [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true' });
+    const root = new FakeComponent('root-between', 'root', [section]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        { ...moved.behavior, formNodeId: 'form-between-a' },
+        { ...first.behavior, formNodeId: 'form-between-b' },
+        { ...existing.behavior, formNodeId: 'form-between-b' },
+        { ...last.behavior, formNodeId: 'form-between-b' },
+      ]),
+    });
+    const bus = createEditorCommandBus(asEditor(new FakeEditor(root)));
+
+    expect(
+      bus.dispatch({
+        kind: 'move',
+        intent: {
+          nodeId: 'moved-between',
+          targetNodeId: 'existing-between',
+          position: 'before',
+        },
+      }).changed,
+    ).toBe(true);
+    expect(ids(formB)).toEqual([
+      'first-between',
+      'moved-between',
+      'existing-between',
+      'last-between',
+    ]);
+    const behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(behaviors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ nodeId: 'first-between', fieldKey: 'name' }),
+        expect.objectContaining({ nodeId: 'existing-between', fieldKey: 'email' }),
+        expect.objectContaining({ nodeId: 'last-between', fieldKey: 'phone' }),
+        expect.objectContaining({ nodeId: 'moved-between', fieldKey: 'email-2' }),
+      ]),
+    );
+    expect(
+      JSON.parse(
+        String(existing.field.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+      ),
+    ).toMatchObject({ fieldKey: 'email', name: 'email' });
   });
 
   it('updates behavior metadata stored on an inserted recipe subtree', () => {
@@ -716,6 +1026,42 @@ describe('editor command boundary', () => {
     expect(bus.dispatch({ kind: 'remove', nodeId: 'label' }).changed).toBe(false);
     expect(bus.canDispatch({ kind: 'remove', nodeId: 'control' })).toBe(false);
     expect(bus.dispatch({ kind: 'remove', nodeId: 'control' }).changed).toBe(false);
+    expect(bus.canDispatch({ kind: 'duplicate', nodeId: 'label' })).toBe(false);
+    expect(bus.dispatch({ kind: 'duplicate', nodeId: 'label' }).changed).toBe(false);
+    expect(bus.canDispatch({ kind: 'duplicate', nodeId: 'control' })).toBe(false);
+    expect(bus.dispatch({ kind: 'duplicate', nodeId: 'control' }).changed).toBe(false);
+    expect(field.children).toHaveLength(2);
+
+    const moveLabelOutside = {
+      kind: 'move' as const,
+      intent: { nodeId: 'label', targetNodeId: 'root', position: 'inside' as const },
+    };
+    const moveControlOutside = {
+      kind: 'move' as const,
+      intent: { nodeId: 'control', targetNodeId: 'root', position: 'inside' as const },
+    };
+    expect(bus.canDispatch(moveLabelOutside)).toBe(false);
+    expect(bus.dispatch(moveLabelOutside).changed).toBe(false);
+    expect(bus.canDispatch(moveControlOutside)).toBe(false);
+    expect(bus.dispatch(moveControlOutside).changed).toBe(false);
+    expect(label.parent()).toBe(field);
+    expect(control.parent()).toBe(field);
+
+    const insertRelativeToLabel = {
+      kind: 'move' as const,
+      intent: { nodeId: 'field', targetNodeId: 'label', position: 'before' as const },
+    };
+    expect(bus.canDispatch(insertRelativeToLabel)).toBe(false);
+    expect(bus.dispatch(insertRelativeToLabel).changed).toBe(false);
+
+    const genericInsertRelativeToLabel: EditorCommand = {
+      kind: 'insert',
+      definition: createOpenCompositionNodeDefinition('text'),
+      targetId: 'label',
+      position: 'before',
+    };
+    expect(bus.canDispatch(genericInsertRelativeToLabel)).toBe(false);
+    expect(bus.dispatch(genericInsertRelativeToLabel).changed).toBe(false);
     expect(field.children).toHaveLength(2);
 
     expect(bus.dispatch({ kind: 'remove', nodeId: 'field' }).changed).toBe(true);

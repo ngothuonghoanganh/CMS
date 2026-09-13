@@ -4,6 +4,7 @@ import {
   BUILDER_FORM_PREVIEW_ATTRIBUTE,
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
   BUILDER_QUOTE_PREVIEW_ATTRIBUTE,
   BUILDER_REUSABLE_PREVIEW_ATTRIBUTE,
   BUILDER_RUNTIME_PREVIEW_ATTRIBUTE,
@@ -12,6 +13,8 @@ import {
 import {
   canInsertChild,
   canRemoveFromSlot,
+  canMutateStructuralNode,
+  isOpenCompositionNodeType,
   type ComponentSlotOccupancy,
 } from '@payload/contracts';
 import {
@@ -100,6 +103,15 @@ function invalid(reason: string): PlacementValidation {
   return { valid: false, reason };
 }
 
+function openNodeType(component: Component) {
+  const attributes = component.getAttributes({ noStyle: true });
+  const type = openPayloadNodeType(component);
+  return attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    isOpenCompositionNodeType(type)
+    ? type
+    : undefined;
+}
+
 /** Resolve and validate an intent without mutating the live editor model. */
 export function resolveNodePlacement(
   root: Component,
@@ -114,6 +126,23 @@ export function resolveNodePlacement(
   if (!sourceType || !targetType || sourceType === 'root') {
     return invalid('The page root cannot be moved.');
   }
+
+  const sourceOpenType = openNodeType(source);
+  const sourceParentOpenType = source.parent()
+    ? openNodeType(source.parent() as Component)
+    : undefined;
+  if (sourceOpenType && !canMutateStructuralNode(sourceOpenType, sourceParentOpenType)) {
+    return invalid('A Form Field label or control is managed by its Form Field.');
+  }
+
+  const targetOpenType = openNodeType(target);
+  const targetParentOpenType = target.parent()
+    ? openNodeType(target.parent() as Component)
+    : undefined;
+  if (targetOpenType && !canMutateStructuralNode(targetOpenType, targetParentOpenType)) {
+    return invalid('A Form Field label or control cannot be used as a move target.');
+  }
+
   if (source === target) return invalid('A node cannot be dropped on itself.');
   if (isAncestor(source, target)) {
     return invalid('A node cannot be moved into its own descendant.');

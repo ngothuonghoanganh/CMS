@@ -71,7 +71,9 @@ import {
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_COMPONENT_REGISTRY,
   OPEN_COMPOSITION_REGISTRY,
+  canMutateStructuralNode,
   isOpenCompositionNodeType,
+  isSemanticOwnedFormFieldChild,
   createPageDocument,
   resolveSlotsForChild,
   type FormProps,
@@ -582,7 +584,7 @@ function bindCanvasComponentDrag(
   temporaryPanRef: { current: boolean },
   commitMove: (intent: MoveNodeIntent) => boolean,
   onCanvasKeyDown?: (event: KeyboardEvent) => void,
-  canDrag?: () => boolean,
+  canDrag?: (source: Component) => boolean,
 ): (() => void) | undefined {
   const frame = editor.Canvas.getFrameEl();
   const frameDocument = frame?.contentDocument;
@@ -772,7 +774,7 @@ function bindCanvasComponentDrag(
     const source = componentForCanvasElement(root, targetElement);
     if (!source || source === root) return;
     editor.select(source);
-    if (canDrag && !canDrag()) return;
+    if (canDrag && !canDrag(source)) return;
     state = {
       kind: 'drag',
       source,
@@ -1101,12 +1103,23 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     // instead of being orphaned from the Structure tree.
     const parent = payloadAncestor(component.parent());
     const parentId = parent ? payloadNodeId(parent) : undefined;
+    const parentType = parent?.getAttributes({ noStyle: true })[
+      BUILDER_NODE_TYPE_ATTRIBUTE
+    ];
+    const semanticOwner =
+      parentId &&
+      isOpenCompositionNodeType(type) &&
+      isOpenCompositionNodeType(parentType) &&
+      isSemanticOwnedFormFieldChild(parentType, type)
+        ? { id: parentId, nodeType: 'form-field' as const }
+        : undefined;
     nodes.push({
       id,
       type: type as BuilderNodeType | OpenCompositionNodeType,
       ...(isOpenCompositionNodeType(type) ? { openComposition: true } : {}),
       label: canvasNodeLabel(component, type),
       ...(parentId ? { parentId } : {}),
+      ...(semanticOwner ? { semanticOwner } : {}),
       depth: canvasNodeDepth(component),
       x: position.left,
       y: position.top,
@@ -2947,7 +2960,16 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
             temporaryPanRef,
             (intent) => commitStructuralMove(editor as Editor, intent),
             handleInteractionKeyDown,
-            () => designEnabledRef.current,
+            (source) => {
+              if (!designEnabledRef.current) return false;
+              const sourceType = openPayloadNodeType(source);
+              const parent = source.parent();
+              const parentType = parent ? openPayloadNodeType(parent) : undefined;
+              return isOpenCompositionNodeType(sourceType) &&
+                isOpenCompositionNodeType(parentType)
+                ? canMutateStructuralNode(sourceType, parentType)
+                : true;
+            },
           );
         };
         bindCanvasComponentDragWhenReady();

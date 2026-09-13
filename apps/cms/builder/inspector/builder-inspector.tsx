@@ -6,6 +6,7 @@ import {
   getOpenCompositionAuthoringDefinition,
   openCompositionInsertableChildren,
   OPEN_COMPOSITION_REGISTRY,
+  isOpenCompositionAtomicNodeType,
   isComponentPropertyVisible,
   type Asset,
   type Collection,
@@ -321,7 +322,9 @@ function OpenCompositionInspector({
     );
   }
 
-  const structure = selected.children.length > 0 || addableChildren.length > 0;
+  const structure =
+    !isOpenCompositionAtomicNodeType(nodeType) &&
+    (selected.children.length > 0 || addableChildren.length > 0);
 
   return (
     <div className="builder-inspector">

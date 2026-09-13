@@ -14,6 +14,7 @@ export type BuilderCanvasNode = {
   id: string;
   type: BuilderNodeType | OpenCompositionNodeType;
   openComposition?: boolean;
+  semanticOwner?: { id: string; nodeType: 'form-field' };
   label: string;
   parentId?: string;
   depth: number;

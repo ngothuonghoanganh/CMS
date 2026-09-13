@@ -274,6 +274,52 @@ describe('builder adapter', () => {
     expect(serializeEditorSnapshot(snapshot)).toEqual(payload);
   });
 
+  it('marks Form Field internals as non-structural editor nodes', () => {
+    const document = instantiateOpenCompositionRecipe('contact-form', (source) => source);
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Atomic field internals' },
+      root: document.root,
+      behaviors: document.behaviors,
+    });
+    const definition = payloadToEditorComponent(payload) as Record<string, unknown>;
+    const internals: Record<string, unknown>[] = [];
+    const visit = (current: Record<string, unknown>, parentType?: string): void => {
+      const attributes = current.attributes as Record<string, unknown> | undefined;
+      const type = attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
+      if (
+        parentType === 'form-field' &&
+        (type === 'label' || type === 'input' || type === 'textarea' || type === 'select')
+      ) {
+        internals.push(current);
+      }
+      const components = current.components;
+      const children = Array.isArray(components)
+        ? components
+        : components && typeof components === 'object'
+          ? [components]
+          : [];
+      children.forEach((child) => {
+        if (child && typeof child === 'object' && !Array.isArray(child)) {
+          visit(
+            child as Record<string, unknown>,
+            typeof type === 'string' ? type : undefined,
+          );
+        }
+      });
+    };
+    visit(definition);
+
+    expect(internals.length).toBeGreaterThan(0);
+    internals.forEach((internal) => {
+      expect(internal).toMatchObject({
+        removable: false,
+        copyable: false,
+        editable: false,
+      });
+    });
+  });
+
   it('migrates a legacy page to V8 only when page builder mode requests it', () => {
     const legacy: PagePayloadV7 = {
       version: 7,

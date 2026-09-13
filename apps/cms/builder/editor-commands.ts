@@ -4,6 +4,7 @@ import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   canDuplicateInSlot,
   canRemoveFromSlot,
+  canMutateStructuralNode,
   resolveSlotForChild,
   isOpenCompositionNodeType,
   type SiteDesignSystem,
@@ -17,6 +18,7 @@ import {
   findPayloadComponent,
   moveNodeByIntent,
   payloadNodeType,
+  resolveNodePlacement,
   type MoveNodeIntent,
 } from './builder-interaction';
 import {
@@ -214,6 +216,17 @@ function openNodeType(component: Component): OpenCompositionNodeType | undefined
     isOpenCompositionNodeType(type)
     ? type
     : undefined;
+}
+
+function openNodeTypeForRoot(
+  root: Component,
+  component: Component,
+): OpenCompositionNodeType | undefined {
+  const explicitType = openNodeType(component);
+  if (explicitType) return explicitType;
+  if (!isOpenCompositionRoot(root)) return undefined;
+  const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+  return typeof type === 'string' && isOpenCompositionNodeType(type) ? type : undefined;
 }
 
 function openProps(component: Component): Record<string, unknown> | undefined {
@@ -539,17 +552,13 @@ function updateOpenPropertyPreview(
 function canRemoveLiveNode(root: Component, node: Component): boolean {
   if (node === root) return false;
   const parent = node.parent();
-  const openParentType = parent && openNodeType(parent);
-  const openChildType = openNodeType(node);
-  if (
-    openParentType === 'form-field' &&
-    (openChildType === 'label' ||
-      openChildType === 'input' ||
-      openChildType === 'textarea' ||
-      openChildType === 'select')
-  ) {
-    return false;
+  const rootIsOpen = isOpenCompositionRoot(root);
+  const openChildType = openNodeTypeForRoot(root, node);
+  if (openChildType) {
+    if (!parent) return false;
+    return canMutateStructuralNode(openChildType, openNodeTypeForRoot(root, parent));
   }
+  if (rootIsOpen) return false;
   const parentType = parent && payloadNodeType(parent);
   const nodeType = payloadNodeType(node);
   if (!parent || !parentType || !nodeType) return true;
@@ -568,6 +577,13 @@ function canRemoveLiveNode(root: Component, node: Component): boolean {
 function canDuplicateLiveNode(root: Component, node: Component): boolean {
   if (node === root) return false;
   const parent = node.parent();
+  const rootIsOpen = isOpenCompositionRoot(root);
+  const openChildType = openNodeTypeForRoot(root, node);
+  if (openChildType) {
+    if (!parent) return false;
+    return canMutateStructuralNode(openChildType, openNodeTypeForRoot(root, parent));
+  }
+  if (rootIsOpen) return false;
   const parentType = parent && payloadNodeType(parent);
   const nodeType = payloadNodeType(node);
   if (!parent || !parentType || !nodeType) return true;
@@ -796,111 +812,260 @@ function liveFieldKey(value: unknown, fallback: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 64);
   if (!normalized) return 'field';
-  return /^[A-Za-z]/.test(normalized) ? normalized : `field-${normalized}`.slice(0, 64);
+  const candidate = /^[A-Za-z]/.test(normalized) ? normalized : `field-${normalized}`;
+  return candidate.slice(0, 64);
 }
 
+function fieldKeyWithSuffix(baseKey: string, suffix: number): string {
+  const suffixText = `-${suffix}`;
+  return `${baseKey.slice(0, Math.max(1, 64 - suffixText.length))}${suffixText}`;
+}
+
+function nextAvailableFieldKey(
+  baseKey: string,
+  reservedKeys: ReadonlySet<string>,
+  assignedKeys: ReadonlySet<string>,
+): string {
+  let fieldKey = baseKey;
+  let suffix = 2;
+  while (reservedKeys.has(fieldKey) || assignedKeys.has(fieldKey)) {
+    fieldKey = fieldKeyWithSuffix(baseKey, suffix);
+    suffix += 1;
+  }
+  return fieldKey;
+}
+
+type OpenMoveSemanticSnapshot = {
+  destinationFormId: string;
+  existingDestinationFieldKeys: ReadonlyMap<string, string>;
+  movedFieldNodeIds: ReadonlySet<string>;
+};
+
+/**
+ * Captures destination ownership before a structural mutation. Existing
+ * destination fields are the stable owners of their keys; an inserted or
+ * moved subtree is resolved against that snapshot after GrapesJS changes the
+ * collection order.
+ */
+function captureOpenSemanticState(
+  root: Component,
+  source: Component | undefined,
+  destination: Component,
+): OpenMoveSemanticSnapshot | undefined {
+  const destinationForm = openFormAncestor(destination);
+  const destinationFormId = destinationForm && componentNodeId(destinationForm);
+  if (!destinationForm || !destinationFormId) return undefined;
+
+  const sourceFormId = source && openFormAncestor(source);
+  const sourceFormNodeId = sourceFormId && componentNodeId(sourceFormId);
+  const movedFieldNodeIds = new Set<string>();
+  source?.onAll((component) => {
+    if (openNodeType(component) === 'form-field') {
+      const id = componentNodeId(component);
+      if (id) movedFieldNodeIds.add(id);
+    }
+  });
+
+  const behaviorsByNodeId = new Map<string, Record<string, unknown>>();
+  // The behavior list is the semantic source of truth when a valid snapshot
+  // has one. The node props below remain a compatibility fallback for older
+  // live trees that have not been repaired yet.
+  collectOpenBehaviors(root).forEach(({ behavior }) => {
+    if (behavior.kind !== 'field' || typeof behavior.nodeId !== 'string') return;
+    behaviorsByNodeId.set(behavior.nodeId, behavior);
+  });
+
+  const existingDestinationFieldKeys = new Map<string, string>();
+  destinationForm.onAll((component) => {
+    if (openNodeType(component) !== 'form-field') return;
+    const id = componentNodeId(component);
+    if (!id) return;
+    // A cross-form move cannot already have its source field in the
+    // destination. The exclusion matters for malformed same-form intents and
+    // keeps the snapshot explicit about which subtree is being moved.
+    if (
+      source &&
+      sourceFormNodeId !== destinationFormId &&
+      isWithinComponent(source, component)
+    ) {
+      return;
+    }
+    const behavior = behaviorsByNodeId.get(id);
+    const fieldProps = openProps(component);
+    const control =
+      typeof behavior?.controlNodeId === 'string'
+        ? findPayloadComponent(destinationForm, behavior.controlNodeId)
+        : undefined;
+    const controlProps = control ? openProps(control) : undefined;
+    const requestedKey =
+      behavior?.fieldKey ??
+      fieldProps?.fieldKey ??
+      controlProps?.fieldKey ??
+      controlProps?.name;
+    existingDestinationFieldKeys.set(id, liveFieldKey(requestedKey, `field-${id}`));
+  });
+
+  return {
+    destinationFormId,
+    existingDestinationFieldKeys,
+    movedFieldNodeIds,
+  };
+}
+
+function updateOpenBehaviorEntry(
+  owner: Component,
+  behavior: Record<string, unknown>,
+  next: Record<string, unknown> | undefined,
+  shouldDrop: boolean,
+): void {
+  if (!shouldDrop && next === undefined) return;
+  const current = parsedOpenBehaviors(owner);
+  if (!current) return;
+  const updated = current.flatMap((candidate) => {
+    if (!isRecord(candidate) || candidate.id !== behavior.id) return [candidate];
+    if (shouldDrop) return [];
+    return [next];
+  });
+  if (JSON.stringify(updated) !== JSON.stringify(current)) {
+    setOpenBehaviors(owner, updated);
+  }
+}
+
+type OpenFieldRepairEntry = {
+  owner: Component;
+  behavior: Record<string, unknown>;
+  source: Component;
+  formId: string;
+  nodeId: string;
+};
+
 /** Rebinds form-owned behavior projections after a valid live reparent. */
-function repairOpenBehaviorsAfterMove(root: Component): void {
+function repairOpenBehaviorsAfterMove(
+  root: Component,
+  snapshot?: OpenMoveSemanticSnapshot,
+): void {
   if (!isOpenCompositionRoot(root)) return;
   const nodes = new Map<string, Component>();
   root.onAll((component) => {
     const id = componentNodeId(component);
     if (id) nodes.set(id, component);
   });
-  const usedFieldKeysByForm = new Map<string, Set<string>>();
-  const fieldOrder = new Map<string, number>();
-  let nextFieldOrder = 0;
-  root.onAll((component) => {
-    const id = componentNodeId(component);
-    if (id && openNodeType(component) === 'form-field') {
-      fieldOrder.set(id, nextFieldOrder++);
+
+  const fieldEntries: OpenFieldRepairEntry[] = [];
+  const actionEntries: OpenBehaviorEntry[] = [];
+  collectOpenBehaviors(root).forEach(({ owner, behavior }) => {
+    const source =
+      typeof behavior.nodeId === 'string' ? nodes.get(behavior.nodeId) : undefined;
+    if (behavior.kind === 'field') {
+      const form =
+        source && openNodeType(source) === 'form-field'
+          ? openFormAncestor(source)
+          : undefined;
+      const formId = form && componentNodeId(form);
+      if (!source || !formId || typeof behavior.nodeId !== 'string') {
+        updateOpenBehaviorEntry(owner, behavior, undefined, true);
+        return;
+      }
+      fieldEntries.push({ owner, behavior, source, formId, nodeId: behavior.nodeId });
+      return;
+    }
+    if (
+      behavior.kind === 'action' &&
+      (behavior.action === 'submit-form' || behavior.action === 'reset-form')
+    ) {
+      actionEntries.push({ owner, behavior });
     }
   });
-  collectOpenBehaviors(root)
-    .sort((left, right) => {
-      const leftOrder =
-        typeof left.behavior.nodeId === 'string'
-          ? (fieldOrder.get(left.behavior.nodeId) ?? Number.MAX_SAFE_INTEGER)
-          : Number.MAX_SAFE_INTEGER;
-      const rightOrder =
-        typeof right.behavior.nodeId === 'string'
-          ? (fieldOrder.get(right.behavior.nodeId) ?? Number.MAX_SAFE_INTEGER)
-          : Number.MAX_SAFE_INTEGER;
-      return leftOrder - rightOrder;
-    })
-    .forEach(({ owner, behavior }) => {
-      if (!isRecord(behavior)) return;
-      const source =
-        typeof behavior.nodeId === 'string' ? nodes.get(behavior.nodeId) : undefined;
-      let next: Record<string, unknown> | undefined;
-      let shouldDrop = false;
-      if (behavior.kind === 'field') {
-        const form =
-          source && openNodeType(source) === 'form-field'
-            ? openFormAncestor(source)
-            : undefined;
-        const formId = form && componentNodeId(form);
-        if (!formId) {
-          shouldDrop = true;
-        } else {
-          const usedKeys = usedFieldKeysByForm.get(formId) ?? new Set<string>();
-          usedFieldKeysByForm.set(formId, usedKeys);
-          const control =
-            typeof behavior.controlNodeId === 'string'
-              ? nodes.get(behavior.controlNodeId)
-              : undefined;
-          const controlProps = control ? openProps(control) : undefined;
-          const baseKey = liveFieldKey(
-            behavior.fieldKey ?? controlProps?.name,
-            `field-${behavior.nodeId ?? 'value'}`,
-          );
-          let fieldKey = baseKey;
-          let suffix = 2;
-          while (usedKeys.has(fieldKey)) {
-            fieldKey = `${baseKey}-${suffix}`.slice(0, 64);
-            suffix += 1;
-          }
-          usedKeys.add(fieldKey);
-          if (behavior.formNodeId !== formId || behavior.fieldKey !== fieldKey) {
-            next = { ...behavior, formNodeId: formId, fieldKey };
-          }
-          const sourceProps = source ? openProps(source) : undefined;
-          if (source && sourceProps && sourceProps.fieldKey !== fieldKey) {
-            setOpenProps(source, { ...sourceProps, fieldKey });
-          }
-          if (control && controlProps) {
-            if (controlProps.fieldKey !== fieldKey || controlProps.name !== fieldKey) {
-              setOpenProps(control, { ...controlProps, fieldKey, name: fieldKey });
-              control.setAttributes({
-                ...control.getAttributes({ noStyle: true }),
-                name: fieldKey,
-              });
-            }
-          }
-        }
-      } else if (
-        behavior.kind === 'action' &&
-        (behavior.action === 'submit-form' || behavior.action === 'reset-form')
+
+  const fieldPriority = (entry: OpenFieldRepairEntry): number => {
+    if (!snapshot || entry.formId !== snapshot.destinationFormId) return 1;
+    if (snapshot.existingDestinationFieldKeys.has(entry.nodeId)) return 0;
+    if (snapshot.movedFieldNodeIds.has(entry.nodeId)) return 2;
+    return 1;
+  };
+  fieldEntries.sort((left, right) => {
+    const priorityDifference = fieldPriority(left) - fieldPriority(right);
+    if (priorityDifference !== 0) return priorityDifference;
+    const nodeDifference = left.nodeId.localeCompare(right.nodeId);
+    return nodeDifference !== 0
+      ? nodeDifference
+      : String(left.behavior.id ?? '').localeCompare(String(right.behavior.id ?? ''));
+  });
+
+  const reservedKeysByForm = new Map<string, Set<string>>();
+  if (snapshot) {
+    reservedKeysByForm.set(
+      snapshot.destinationFormId,
+      new Set(snapshot.existingDestinationFieldKeys.values()),
+    );
+  }
+  const assignedKeysByForm = new Map<string, Set<string>>();
+  fieldEntries.forEach(({ owner, behavior, source, formId, nodeId }) => {
+    const assignedKeys = assignedKeysByForm.get(formId) ?? new Set<string>();
+    assignedKeysByForm.set(formId, assignedKeys);
+    const reservedKeys = reservedKeysByForm.get(formId) ?? new Set<string>();
+    const control =
+      typeof behavior.controlNodeId === 'string'
+        ? nodes.get(behavior.controlNodeId)
+        : undefined;
+    const controlProps = control ? openProps(control) : undefined;
+    const sourceProps = openProps(source);
+    const baseKey = liveFieldKey(
+      behavior.fieldKey ?? sourceProps?.fieldKey ?? controlProps?.name,
+      `field-${nodeId}`,
+    );
+    const preservedKey =
+      snapshot?.destinationFormId === formId
+        ? snapshot.existingDestinationFieldKeys.get(nodeId)
+        : undefined;
+    const fieldKey =
+      preservedKey !== undefined && !assignedKeys.has(preservedKey)
+        ? preservedKey
+        : nextAvailableFieldKey(baseKey, reservedKeys, assignedKeys);
+    assignedKeys.add(fieldKey);
+
+    const next =
+      behavior.formNodeId !== formId || behavior.fieldKey !== fieldKey
+        ? { ...behavior, formNodeId: formId, fieldKey }
+        : undefined;
+    if (sourceProps && sourceProps.fieldKey !== fieldKey) {
+      setOpenProps(source, { ...sourceProps, fieldKey });
+    }
+    if (control && controlProps) {
+      const controlAttributes = control.getAttributes({ noStyle: true });
+      if (
+        controlProps.fieldKey !== fieldKey ||
+        controlProps.name !== fieldKey ||
+        controlAttributes.name !== fieldKey
       ) {
-        const form = source && openFormAncestor(source);
-        const formId = form && componentNodeId(form);
-        if (!formId) {
-          shouldDrop = true;
-        } else if (behavior.targetNodeId !== formId) {
-          next = { ...behavior, targetNodeId: formId };
-        }
+        setOpenProps(control, { ...controlProps, fieldKey, name: fieldKey });
+        control.setAttributes({
+          ...control.getAttributes({ noStyle: true }),
+          name: fieldKey,
+        });
       }
-      if (!shouldDrop && next === undefined) return;
-      const current = parsedOpenBehaviors(owner);
-      if (!current) return;
-      const updated = current.flatMap((candidate) => {
-        if (!isRecord(candidate) || candidate.id !== behavior.id) return [candidate];
-        if (shouldDrop) return [];
-        return [next];
-      });
-      if (JSON.stringify(updated) !== JSON.stringify(current))
-        setOpenBehaviors(owner, updated);
-    });
+    }
+    updateOpenBehaviorEntry(owner, behavior, next, false);
+  });
+
+  actionEntries.forEach(({ owner, behavior }) => {
+    const source =
+      typeof behavior.nodeId === 'string' ? nodes.get(behavior.nodeId) : undefined;
+    const form = source && openFormAncestor(source);
+    const formId = form && componentNodeId(form);
+    if (!formId) {
+      updateOpenBehaviorEntry(owner, behavior, undefined, true);
+      return;
+    }
+    updateOpenBehaviorEntry(
+      owner,
+      behavior,
+      behavior.targetNodeId === formId
+        ? undefined
+        : { ...behavior, targetNodeId: formId },
+      false,
+    );
+  });
 }
 
 function definitionChildren(definition: ComponentDefinition): ComponentDefinition[] {
@@ -1165,11 +1330,16 @@ export function executeEditorCommand(
         if (requestedTarget.parent() !== parent) return { changed: false };
         at = requestedTarget.index() + (command.position === 'after' ? 1 : 0);
       }
+      const semanticSnapshot = definitionOpenNodeType(command.definition)
+        ? captureOpenSemanticState(root, undefined, parent)
+        : undefined;
       const created = parent.append(
         safeDefinition,
         at === undefined ? undefined : { at },
       );
-      if (definitionOpenNodeType(command.definition)) repairOpenBehaviorsAfterMove(root);
+      if (definitionOpenNodeType(command.definition)) {
+        repairOpenBehaviorsAfterMove(root, semanticSnapshot);
+      }
       if (safeDefinition.components !== undefined) {
         groupNewHistoryActions(editor, previousHistoryEntries);
       }
@@ -1198,8 +1368,9 @@ export function executeEditorCommand(
       }
       const safeDefinition = definitionWithFreshIds(root, definition);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
+      const semanticSnapshot = captureOpenSemanticState(root, undefined, parent);
       const created = parent.append(safeDefinition, { at: command.index });
-      repairOpenBehaviorsAfterMove(root);
+      repairOpenBehaviorsAfterMove(root, semanticSnapshot);
       if (safeDefinition.components !== undefined) {
         groupNewHistoryActions(editor, previousHistoryEntries);
       }
@@ -1235,9 +1406,16 @@ export function executeEditorCommand(
     }
     case 'move': {
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
+      const placement = resolveNodePlacement(root, command.intent);
+      if (!placement.valid) return { changed: false };
+      const semanticSnapshot = captureOpenSemanticState(
+        root,
+        placement.resolution.source,
+        placement.resolution.destination,
+      );
       const result = moveNodeByIntent(root, command.intent);
       if (!result.valid) return { changed: false };
-      repairOpenBehaviorsAfterMove(root);
+      repairOpenBehaviorsAfterMove(root, semanticSnapshot);
       groupNewHistoryActions(editor, previousHistoryEntries);
       return { changed: true, selection: result.source };
     }
@@ -1258,10 +1436,11 @@ export function executeEditorCommand(
       if (!parent) return { changed: false };
       const sourceDefinition = definitionFromComponent(node);
       const safeDefinition = definitionWithFreshIds(root, sourceDefinition);
+      const semanticSnapshot = captureOpenSemanticState(root, node, parent);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: node.index() + 1 });
       duplicateOpenBehaviors(root, node, safeDefinition);
-      repairOpenBehaviorsAfterMove(root);
+      repairOpenBehaviorsAfterMove(root, semanticSnapshot);
       const selection = created[0];
       if (selection) editor.select(selection);
       groupNewHistoryActions(editor, previousHistoryEntries);

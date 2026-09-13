@@ -1230,6 +1230,43 @@ export function isOpenCompositionNodeType(
   return OpenCompositionNodeTypeSchema.safeParse(value).success;
 }
 
+const FORM_FIELD_SEMANTIC_CHILDREN = new Set<OpenCompositionNodeType>([
+  'label',
+  'input',
+  'textarea',
+  'select',
+]);
+
+/**
+ * Form Field owns its label and control as one semantic authoring unit. This
+ * rule is shared by command, placement, layer and inspector surfaces so a
+ * structural action cannot split the relationship accidentally.
+ */
+export function isSemanticOwnedFormFieldChild(
+  parentType: OpenCompositionNodeType | undefined,
+  childType: OpenCompositionNodeType | undefined,
+): boolean {
+  return (
+    parentType === 'form-field' &&
+    childType !== undefined &&
+    FORM_FIELD_SEMANTIC_CHILDREN.has(childType)
+  );
+}
+
+export function isOpenCompositionAtomicNodeType(
+  type: OpenCompositionNodeType | undefined,
+): type is 'form-field' {
+  return type === 'form-field';
+}
+
+/** Returns whether a live structural mutation may target this node. */
+export function canMutateStructuralNode(
+  nodeType: OpenCompositionNodeType,
+  parentType: OpenCompositionNodeType | undefined,
+): boolean {
+  return !isSemanticOwnedFormFieldChild(parentType, nodeType);
+}
+
 export function canComposeChild(
   parentType: OpenCompositionNodeType,
   childType: OpenCompositionNodeType,
@@ -1240,7 +1277,7 @@ export function canComposeChild(
 export function openCompositionInsertableChildren(
   parentType: OpenCompositionNodeType,
 ): readonly OpenCompositionNodeType[] {
-  if (parentType === 'form-field') return [];
+  if (isOpenCompositionAtomicNodeType(parentType)) return [];
   return OPEN_COMPOSITION_REGISTRY[parentType].allowedChildren.filter(
     (childType) => OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert,
   );

@@ -15,6 +15,7 @@ import {
   migratePagePayloadToOpenComposition,
   instantiateOpenCompositionRecipe,
   isOpenCompositionNodeType,
+  isSemanticOwnedFormFieldChild,
   ReusableComponentDocumentSchema,
   ReusableInstancePropsSchema,
   PageNodePartsStyleV7Schema,
@@ -1526,9 +1527,11 @@ function openCompositionNodeDefinition(
   metadata: PagePayloadV1['metadata'] | undefined,
   payloadVersion: 8,
   behaviors?: readonly OpenCompositionBehavior[],
+  parentType?: OpenCompositionNodeType,
 ): ComponentDefinition {
   const props = node.props as Record<string, unknown>;
   const tagName = openCompositionTagName(node);
+  const semanticOwnedChild = isSemanticOwnedFormFieldChild(parentType, node.type);
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
     [BUILDER_NODE_TYPE_ATTRIBUTE]: node.type,
@@ -1587,10 +1590,10 @@ function openCompositionNodeDefinition(
     droppable:
       OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0 ? true : false,
     draggable: false,
-    removable: node.type !== 'root',
-    copyable: node.type !== 'root',
+    removable: node.type !== 'root' && !semanticOwnedChild,
+    copyable: node.type !== 'root' && !semanticOwnedChild,
     selectable: true,
-    editable: ['text', 'heading', 'label'].includes(node.type),
+    editable: !semanticOwnedChild && ['text', 'heading', 'label'].includes(node.type),
     style: node.style
       ? styleBlockToEditorStyle(node.style.base as PageNodeStyle['base'], undefined)
       : undefined,
@@ -1605,7 +1608,13 @@ function openCompositionNodeDefinition(
           : node.type === 'input' || node.type === 'select'
             ? openCompositionControlPreviewComponents(node)
             : node.children.map((child) =>
-                openCompositionNodeDefinition(child, undefined, payloadVersion),
+                openCompositionNodeDefinition(
+                  child,
+                  undefined,
+                  payloadVersion,
+                  undefined,
+                  node.type,
+                ),
               ),
   };
 }

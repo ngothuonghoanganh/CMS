@@ -19,6 +19,7 @@ import {
   SiteBrandPropsSchema,
   ReusableInstancePropsSchema,
   isOpenCompositionNodeType,
+  isSemanticOwnedFormFieldChild,
   canonicalizeOpenCompositionOptions,
   type FormProps,
   type OpenCompositionBehavior,
@@ -694,7 +695,9 @@ export function selectionFromComponentCodec(
       ...(type === 'button' || type === 'link' ? { label: composedLabel } : {}),
       ...(responsiveStyle ? { style: responsiveStyle } : {}),
       openComposition: { nodeType: type },
-      ...(parentType === 'form-field' && typeof parentId === 'string'
+      ...(isOpenCompositionNodeType(parentType) &&
+      isSemanticOwnedFormFieldChild(parentType, type) &&
+      typeof parentId === 'string'
         ? { semanticOwner: { id: parentId, nodeType: 'form-field' as const } }
         : {}),
     };

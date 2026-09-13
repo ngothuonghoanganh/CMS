@@ -26,7 +26,11 @@ import {
   canInsertLiveChild,
   openPayloadNodeType,
 } from './builder-block/builder-structural-domain';
-import { resolveSlotsForChild } from '@payload/contracts';
+import {
+  canMutateStructuralNode,
+  isOpenCompositionNodeType,
+  resolveSlotsForChild,
+} from '@payload/contracts';
 
 export { isBuilderNodeType } from './builder-block/builder-adapter';
 export {
@@ -136,6 +140,21 @@ export function selectedMoveIntent(
 
   const parent = selected.parent();
   if (!parent) return undefined;
+  const selectedAttributes = selected.getAttributes({ noStyle: true });
+  const selectedOpenType =
+    selectedAttributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    isOpenCompositionNodeType(sourceType)
+      ? sourceType
+      : undefined;
+  const parentAttributes = parent.getAttributes({ noStyle: true });
+  const parentOpenType =
+    parentAttributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    isOpenCompositionNodeType(openPayloadNodeType(parent))
+      ? openPayloadNodeType(parent)
+      : undefined;
+  if (selectedOpenType && !canMutateStructuralNode(selectedOpenType, parentOpenType)) {
+    return undefined;
+  }
   const parentType = openPayloadNodeType(parent);
   const sourceIsOpen =
     selected.getAttributes({ noStyle: true })[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] ===
