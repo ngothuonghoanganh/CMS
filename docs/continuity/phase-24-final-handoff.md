@@ -79,6 +79,9 @@ All static, unit, build, and focused release checks below were run with Node
   responsive Open Composition `1 passed`.
 - Full Playwright release run: `114 passed, 0 failed` on the feature worktree
   during the release validation cycle.
+- That clean full run preceded the final unbound-parent receiver hardening;
+  the hardening was then covered by the focused 132-test suite, the dedicated
+  Phase 24 journey, and independent Phase 16/23 regression reruns below.
 - `git diff --check`: passed.
 - Post-merge `main` quick verification: rebuilt all `5/5` Turbo tasks to
   refresh local package artifacts, reran the focused `5 files / 132 tests`
