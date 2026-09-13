@@ -210,10 +210,20 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       .getByRole('treeitem', { name: 'Select Icon', exact: true })
       .first()
       .click();
+    await expect(
+      canvas.locator(
+        '[data-payload-node-type="icon"] svg[data-payload-icon="arrow-right"]',
+      ),
+    ).toHaveCount(2);
     await page.getByLabel('Icon', { exact: true }).selectOption('check');
     await expect(
       canvas.locator('[data-payload-node-type="icon"] svg[data-payload-icon="check"]'),
-    ).toBeVisible();
+    ).toHaveCount(1);
+    await expect(
+      canvas.locator(
+        '[data-payload-node-type="icon"] svg[data-payload-icon="arrow-right"]',
+      ),
+    ).toHaveCount(1);
 
     await containerLayer.click();
     await addContent.selectOption('video');
