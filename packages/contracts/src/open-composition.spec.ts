@@ -20,6 +20,7 @@ import {
 import {
   canonicalizeOpenCompositionOptions,
   canonicalizeOpenCompositionPayload,
+  normalizeOpenCompositionOptionValue,
 } from './open-composition-semantic-integrity';
 
 function findNode(
@@ -501,6 +502,21 @@ describe('Open Composition contract', () => {
     expect(canonicalizeOpenCompositionOptions(['', { label: '', value: '' }])).toEqual([
       { label: 'Option 1', value: 'option-1' },
       { label: 'Option 2', value: 'option-2' },
+    ]);
+  });
+
+  it('shares the persisted option value normalization rule with authoring validation', () => {
+    expect(normalizeOpenCompositionOptionValue('A B', 'Option A', 0)).toBe('a-b');
+    expect(normalizeOpenCompositionOptionValue(' a b ', 'Option B', 1)).toBe('a-b');
+    expect(normalizeOpenCompositionOptionValue('A/B & C', 'Option C', 2)).toBe('a-b-c');
+    expect(
+      canonicalizeOpenCompositionOptions([
+        { label: 'Option A', value: 'A B' },
+        { label: 'Option B', value: 'a-b' },
+      ]),
+    ).toEqual([
+      { label: 'Option A', value: 'a-b' },
+      { label: 'Option B', value: 'a-b-2' },
     ]);
   });
 

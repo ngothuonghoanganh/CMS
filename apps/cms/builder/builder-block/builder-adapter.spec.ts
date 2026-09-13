@@ -284,9 +284,11 @@ describe('builder adapter', () => {
     });
     const definition = payloadToEditorComponent(payload) as Record<string, unknown>;
     const internals: Record<string, unknown>[] = [];
+    const fields: Record<string, unknown>[] = [];
     const visit = (current: Record<string, unknown>, parentType?: string): void => {
       const attributes = current.attributes as Record<string, unknown> | undefined;
       const type = attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
+      if (type === 'form-field') fields.push(current);
       if (
         parentType === 'form-field' &&
         (type === 'label' || type === 'input' || type === 'textarea' || type === 'select')
@@ -311,8 +313,17 @@ describe('builder adapter', () => {
     visit(definition);
 
     expect(internals.length).toBeGreaterThan(0);
+    expect(fields.length).toBeGreaterThan(0);
+    fields.forEach((field) => {
+      expect(field).toMatchObject({
+        droppable: false,
+        removable: true,
+        copyable: true,
+      });
+    });
     internals.forEach((internal) => {
       expect(internal).toMatchObject({
+        droppable: false,
         removable: false,
         copyable: false,
         editable: false,

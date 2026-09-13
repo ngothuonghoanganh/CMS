@@ -15,6 +15,7 @@ import {
   migratePagePayloadToOpenComposition,
   instantiateOpenCompositionRecipe,
   isOpenCompositionNodeType,
+  isOpenCompositionAtomicNodeType,
   isSemanticOwnedFormFieldChild,
   ReusableComponentDocumentSchema,
   ReusableInstancePropsSchema,
@@ -1588,7 +1589,8 @@ function openCompositionNodeDefinition(
           : undefined,
     ...(tagName === 'img' || tagName === 'input' ? { void: true } : {}),
     droppable:
-      OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0 ? true : false,
+      !isOpenCompositionAtomicNodeType(node.type) &&
+      OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0,
     draggable: false,
     removable: node.type !== 'root' && !semanticOwnedChild,
     copyable: node.type !== 'root' && !semanticOwnedChild,

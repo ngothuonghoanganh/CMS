@@ -9,6 +9,7 @@ import {
   NAVIGATION_MAX_NODES,
   OPEN_COMPOSITION_MAX_OPTIONS,
   canonicalizeOpenCompositionOptions,
+  normalizeOpenCompositionOptionValue,
   type OpenCompositionOption,
   validateNavigationItems,
   type NavigationItem,
@@ -104,13 +105,20 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
 
   function optionError(option: OptionDraft, index: number): string | undefined {
     if (!option.label.trim()) return 'Add a label for this option.';
-    const normalizedValue = option.value.trim().toLowerCase();
+    const normalizedValue = normalizeOpenCompositionOptionValue(
+      option.value,
+      option.label,
+      index,
+    );
     if (
-      normalizedValue &&
       options.some(
         (candidate, candidateIndex) =>
           candidateIndex !== index &&
-          candidate.value.trim().toLowerCase() === normalizedValue,
+          normalizeOpenCompositionOptionValue(
+            candidate.value,
+            candidate.label,
+            candidateIndex,
+          ) === normalizedValue,
       )
     ) {
       return 'This option already uses that value.';

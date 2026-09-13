@@ -90,6 +90,47 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
     await option2Value.pressSequentially('enterprise');
     await expect(option2Value).toBeFocused();
 
+    // Validation compares the same normalized semantic value used by
+    // persistence, while both inputs retain their raw draft text.
+    await option1Value.click();
+    await option1Value.selectText();
+    await option1Value.pressSequentially('A B');
+    await expect(option1Value).toBeFocused();
+    await option2Value.click();
+    await option2Value.selectText();
+    await option2Value.pressSequentially('a-b');
+    await expect(option2Value).toBeFocused();
+    await expect(
+      page.locator('.builder-options-editor [role="alert"]').filter({
+        hasText: 'This option already uses that value.',
+      }),
+    ).toHaveCount(2);
+    await option1Value.selectText();
+    await option1Value.pressSequentially('basic');
+    await option2Value.click();
+    await option2Value.selectText();
+    await option2Value.pressSequentially('enterprise');
+    await expect(option2Value).toBeFocused();
+
+    // Casing-only differences are also conflicts under the canonical rule.
+    await option1Value.click();
+    await option1Value.selectText();
+    await option1Value.pressSequentially('Enterprise');
+    await option2Value.click();
+    await option2Value.selectText();
+    await option2Value.pressSequentially('enterprise');
+    await expect(
+      page.locator('.builder-options-editor [role="alert"]').filter({
+        hasText: 'This option already uses that value.',
+      }),
+    ).toHaveCount(2);
+    await option1Value.selectText();
+    await option1Value.pressSequentially('basic');
+    await option2Value.click();
+    await option2Value.selectText();
+    await option2Value.pressSequentially('enterprise');
+    await expect(option2Value).toBeFocused();
+
     // A transient blank draft keeps its row and focus while the semantic
     // projection reports the authoring issue.
     await option2Label.click();
@@ -126,14 +167,33 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       'Enterprise',
     );
 
-    // Save while the option value still owns focus. The blur/commit and the
-    // editor snapshot must agree without requiring an extra click elsewhere.
+    // Save a genuinely new value while the input still owns focus. The
+    // focused draft must survive the browser's click/blur event order.
     const focusedOptionValue = page.getByLabel('Option 2 value', { exact: true });
     await focusedOptionValue.click();
     await focusedOptionValue.selectText();
-    await focusedOptionValue.pressSequentially('enterprise');
+    await focusedOptionValue.pressSequentially('enterprise-plan');
     await expect(focusedOptionValue).toBeFocused();
+    const saveResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/pages/${temporaryPage.id}/versions`) &&
+        response.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    const saveResponse = await saveResponsePromise;
+    expect(saveResponse.status()).toBe(201);
+    const savedVersion = (await saveResponse.json()) as {
+      payload?: BuilderPayload;
+    };
+    const savedField =
+      savedVersion.payload && findNode(savedVersion.payload.root, 'form-field');
+    const savedControl = savedField?.children.find((child) =>
+      ['input', 'textarea', 'select'].includes(child.type),
+    );
+    expect(savedControl?.props.options).toEqual([
+      { label: 'Basic', value: 'basic' },
+      { label: 'Enterprise', value: 'enterprise-plan' },
+    ]);
     await expect(page.locator('.builder-save-status')).toContainText('Saved', {
       timeout: 15_000,
     });
@@ -149,7 +209,7 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
     expect(control?.type).toBe('select');
     expect(control?.props.options).toEqual([
       { label: 'Basic', value: 'basic' },
-      { label: 'Enterprise', value: 'enterprise' },
+      { label: 'Enterprise', value: 'enterprise-plan' },
     ]);
 
     const canvas = page.frameLocator('iframe.gjs-frame');
@@ -163,6 +223,7 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       'Basic',
       'Enterprise',
     ]);
+    await expect(canvasSelect.locator('option[value="enterprise-plan"]')).toHaveCount(1);
 
     await page.getByLabel('Field type', { exact: true }).selectOption('radio');
     await expect(
@@ -171,6 +232,11 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
     await expect(
       canvas.locator('[data-payload-node-type="input"] [role="radiogroup"]'),
     ).toContainText('Enterprise');
+    await expect(
+      canvas.locator(
+        '[data-payload-node-type="input"] input[type="radio"][value="enterprise-plan"]',
+      ),
+    ).toHaveCount(1);
 
     await fieldLayer.click();
     for (const action of [
@@ -260,7 +326,7 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       type: 'radio',
       options: [
         { label: 'Basic', value: 'basic' },
-        { label: 'Enterprise', value: 'enterprise' },
+        { label: 'Enterprise', value: 'enterprise-plan' },
       ],
     });
     expect(findNode(payload!.root, 'icon')?.props.name).toBe('check');
@@ -286,7 +352,7 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
     );
     expect(control?.props.options).toEqual([
       { label: 'Basic', value: 'basic' },
-      { label: 'Enterprise', value: 'enterprise' },
+      { label: 'Enterprise', value: 'enterprise-plan' },
     ]);
     expect(findNode(payload!.root, 'icon')?.props.name).toBe('check');
     expect(findNode(payload!.root, 'video')?.props.poster).toBe('/assets/poster-b.png');
@@ -296,6 +362,13 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
         .locator('[data-payload-node-type="input"] [role="radiogroup"]')
         .filter({ hasText: 'Enterprise' }),
     ).toBeVisible();
+    await expect(
+      page
+        .frameLocator('iframe.gjs-frame')
+        .locator(
+          '[data-payload-node-type="input"] input[type="radio"][value="enterprise-plan"]',
+        ),
+    ).toHaveCount(1);
     await expect(
       page
         .frameLocator('iframe.gjs-frame')
@@ -347,6 +420,7 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       await expect(
         publicPage.locator('video[poster="/assets/poster-b.png"]'),
       ).toBeVisible();
+      await expect(publicForm.locator('input[value="enterprise-plan"]')).toHaveCount(1);
       const submitButton = publicForm.getByRole('button', {
         name: 'Submit',
         exact: true,
@@ -382,7 +456,7 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       expect(request.postDataJSON()).toEqual(
         expect.objectContaining({
           values: expect.arrayContaining([
-            { fieldId: planFieldKey, value: 'enterprise' },
+            { fieldId: planFieldKey, value: 'enterprise-plan' },
           ]),
         }),
       );

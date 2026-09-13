@@ -79,3 +79,73 @@ skipped tests`.
   `34674844899` never started execution (`steps: []`) because of the known
   external account/billing condition. Local product gates are not reported as
   GitHub CI success.
+
+## Phase 23.3 final cleanup audit
+
+- Latest `main` baseline: `b714bd02b547d9007ecadcf1d2482bf4bef04796`.
+- Working branch: `main`.
+- Node validation: `v24.19.0`, matching `.nvmrc`.
+- P2-A was confirmed in the GrapesJS adapter: `form-field` inherited
+  `droppable: true` from its structural child registry. The command and
+  semantic layers already treated it as atomic, so the fix is limited to
+  adapter metadata and regression coverage. Form Field remains removable,
+  copyable, and manageable through the structural surfaces; its label/control
+  internals remain non-droppable, non-removable, non-copyable, and non-editable.
+- P2-B was confirmed in Options editor validation: it compared only trimmed
+  lower-case strings while persistence also replaced spaces and special
+  characters with hyphens and removed edge hyphens. The shared
+  `normalizeOpenCompositionOptionValue` helper now owns that candidate rule;
+  both editor validation and `canonicalizeOpenCompositionOptions` use it.
+- P2-C was confirmed as a release-test gap: the previous focused-save step
+  typed the already-persisted `enterprise` value. The release gate now types
+  the new `enterprise-plan` value without blur, asserts the version-save
+  response payload, and carries the same value through reload, Canvas,
+  preview, public rendering, and submission. Event order remains immediate
+  `onChange` → command dispatch → live model serialization; no timeout or
+  forced blur was added.
+
+### Source-of-truth audit
+
+| Concern                    | Canonical owner                                      | Draft / projection                                                  |
+| -------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
+| `fieldKey`                 | Field behavior after V8 canonicalization             | Form Field props and control `fieldKey`/`name`                      |
+| `formNodeId`               | Field behavior and Form parent placement             | Form Field tree location                                            |
+| `inputType`                | Field behavior                                       | Control node type and control `props.type`                          |
+| `required`                 | Field behavior                                       | Form Field props and control validation attributes                  |
+| `labelNodeId`              | Field behavior                                       | Owned Label child and aggregate Inspector label                     |
+| `controlNodeId`            | Field behavior                                       | Owned Input/Textarea/Select child                                   |
+| `options`                  | Control `props.options[]` after canonicalization     | Inspector raw draft rows; Canvas/runtime controls                   |
+| Option value normalization | `normalizeOpenCompositionOptionValue` in contracts   | Options editor semantic comparison and persistence canonicalization |
+| Icon name                  | Icon `props.name` plus the shared icon path registry | Canvas/public inline SVG                                            |
+| Video poster               | Video `props.poster`                                 | Canvas `poster` attribute and public `<video poster>`               |
+
+The Options flow is explicitly:
+`Inspector draft → canonical option normalization → control props.options[] →
+Canvas/runtime projection`. Draft row IDs are React-only identities and never
+enter the persisted payload.
+
+### Final cleanup verification
+
+- Targeted contracts: `6 passed files / 89 passed tests`.
+- Targeted CMS: `24 passed files / 164 passed tests`.
+- Phase 23.3 authoring gate: `1 passed`.
+- Phase 23.3.1 release gate: `1 passed`.
+- Full unit suite: contracts `89 passed`, CMS `164 passed`, renderer `29
+passed`, API `98 passed / 12 skipped`; all 5 Turbo tasks succeeded.
+- Full production build: passed.
+- Full Playwright suite: `113 passed, 0 failed`.
+- `format:check`, lint, typecheck, CMS design-system check, and `git diff
+--check`: passed.
+
+### Current GitHub Actions result
+
+- Latest `main` run: [quality run #34738978585](https://github.com/ngothuonghoanganh/CMS/actions/runs/34738978585).
+- Head SHA: `b714bd02b547d9007ecadcf1d2482bf4bef04796`.
+- Job: `quality`, conclusion `failure`.
+- Steps executed: `[]`.
+- GitHub Actions infrastructure failure before job execution. This is not a
+  product test failure and not a CI pass.
+
+The local release gates and release journey are green; the GitHub-hosted
+workflow remains an external infrastructure/account issue and is not claimed
+as a CI success.

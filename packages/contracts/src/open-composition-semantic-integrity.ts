@@ -73,8 +73,19 @@ function fieldKey(value: unknown, fallback: string): string {
   return result.slice(0, 64) || 'field';
 }
 
-function optionValue(value: string, label: string, index: number): string {
-  const source = value.trim() || label;
+/**
+ * Normalizes an option candidate exactly as the persistence canonicalizer does.
+ * The editor uses this for semantic validation while retaining the candidate's
+ * raw draft text in its controlled inputs.
+ */
+export function normalizeOpenCompositionOptionValue(
+  value: unknown,
+  label: unknown = '',
+  index = 0,
+): string {
+  const valueText = typeof value === 'string' ? value : '';
+  const labelText = typeof label === 'string' ? label : '';
+  const source = valueText.trim() || labelText;
   const normalized = source
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')
@@ -105,7 +116,7 @@ export function canonicalizeOpenCompositionOptions(
     if (!label) return;
     const rawValue =
       isObject(candidate) && typeof candidate.value === 'string' ? candidate.value : '';
-    const baseValue = optionValue(rawValue, label, index);
+    const baseValue = normalizeOpenCompositionOptionValue(rawValue, label, index);
     let nextValue = baseValue;
     let suffix = 2;
     while (usedValues.has(nextValue)) {
