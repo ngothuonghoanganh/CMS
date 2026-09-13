@@ -21,6 +21,7 @@ import {
   canonicalizeOpenCompositionOptions,
   canonicalizeOpenCompositionPayload,
   normalizeOpenCompositionOptionValue,
+  withBoundedNumericSuffix,
 } from './open-composition-semantic-integrity';
 
 function findNode(
@@ -518,6 +519,138 @@ describe('Open Composition contract', () => {
       { label: 'Option A', value: 'a-b' },
       { label: 'Option B', value: 'a-b-2' },
     ]);
+  });
+
+  it('reserves suffix space at the semantic value boundary', () => {
+    const long = 'a'.repeat(64);
+
+    expect(withBoundedNumericSuffix('abc', 2, 64)).toBe('abc-2');
+    expect(withBoundedNumericSuffix(long, 2, 64)).toBe(`${'a'.repeat(62)}-2`);
+    expect(withBoundedNumericSuffix(long, 123, 64)).toBe(`${'a'.repeat(60)}-123`);
+  });
+
+  it('deduplicates 64-character option values without a non-progressing loop', () => {
+    const long = 'a'.repeat(64);
+    const options = canonicalizeOpenCompositionOptions(
+      Array.from({ length: 4 }, (_, index) => ({
+        label: `Option ${index + 1}`,
+        value: long,
+      })),
+    );
+    const values = options.map((option) => option.value);
+
+    expect(values).toEqual([
+      long,
+      `${'a'.repeat(62)}-2`,
+      `${'a'.repeat(62)}-3`,
+      `${'a'.repeat(62)}-4`,
+    ]);
+    expect(new Set(values).size).toBe(values.length);
+    expect(values.every((value) => value.length <= 64)).toBe(true);
+  });
+
+  it('keeps multiple option collisions deterministic across suffix digit widths', () => {
+    const options = canonicalizeOpenCompositionOptions(
+      Array.from({ length: 11 }, (_, index) => ({
+        label: `Option ${index + 1}`,
+        value: 'same',
+      })),
+    );
+
+    expect(options.map((option) => option.value)).toEqual([
+      'same',
+      'same-2',
+      'same-3',
+      'same-4',
+      'same-5',
+      'same-6',
+      'same-7',
+      'same-8',
+      'same-9',
+      'same-10',
+      'same-11',
+    ]);
+  });
+
+  it('bounds and synchronizes repeated 64-character field keys', () => {
+    const longFieldKey = `f${'a'.repeat(63)}`;
+    const makeField = (id: string): OpenCompositionNode => ({
+      id,
+      type: 'form-field',
+      props: { fieldKey: longFieldKey },
+      children: [
+        {
+          id: `${id}-label`,
+          type: 'label',
+          props: { text: id },
+          children: [],
+        },
+        {
+          id: `${id}-control`,
+          type: 'input',
+          props: { fieldKey: longFieldKey, name: longFieldKey, type: 'text' },
+          children: [],
+        },
+      ],
+    });
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Long field keys' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'form',
+                type: 'form',
+                props: { formKey: 'long-keys' },
+                children: [
+                  makeField('field-a'),
+                  makeField('field-b'),
+                  makeField('field-c'),
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [],
+    });
+
+    const canonical = canonicalizeOpenCompositionPayload(payload);
+    const form = findNode(canonical.root, 'form');
+    const fields = form?.children.filter((child) => child.type === 'form-field') ?? [];
+    const expectedKeys = [
+      longFieldKey,
+      withBoundedNumericSuffix(longFieldKey, 2, 64),
+      withBoundedNumericSuffix(longFieldKey, 3, 64),
+    ];
+    const fieldBehaviors = canonical.behaviors.filter(
+      (behavior): behavior is Extract<typeof behavior, { kind: 'field' }> =>
+        behavior.kind === 'field',
+    );
+
+    expect(fields).toHaveLength(3);
+    expect(fieldBehaviors.map((behavior) => behavior.fieldKey)).toEqual(expectedKeys);
+    fields.forEach((field, index) => {
+      const control = field.children.find((child) => child.type === 'input');
+      const behavior = fieldBehaviors.find((candidate) => candidate.nodeId === field.id);
+      expect(field.props.fieldKey).toBe(expectedKeys[index]);
+      expect(control?.props).toMatchObject({
+        fieldKey: expectedKeys[index],
+        name: expectedKeys[index],
+      });
+      expect(behavior?.fieldKey).toBe(expectedKeys[index]);
+    });
+    expect(new Set(expectedKeys).size).toBe(3);
+    expect(expectedKeys.every((key) => key.length <= 64)).toBe(true);
+    expect(canonicalizeOpenCompositionPayload(canonical)).toEqual(canonical);
   });
 
   it('deduplicates semantic behaviors during canonicalization', () => {

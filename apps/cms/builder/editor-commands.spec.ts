@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { withBoundedNumericSuffix } from '@payload/contracts';
 
 import {
   BUILDER_NODE_ID_ATTRIBUTE,
@@ -1186,6 +1187,45 @@ describe('editor command boundary', () => {
         String(duplicate?.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
       ),
     ).toMatchObject({ fieldKey: 'email-2', name: 'email-2' });
+  });
+
+  it('uses bounded suffix generation when duplicating a field with a 64-character key', () => {
+    const longFieldKey = `f${'a'.repeat(63)}`;
+    const source = semanticField('field-source', longFieldKey);
+    const form = openForm('form', [source.field]);
+    const root = new FakeComponent('root', 'root', [form]);
+    root.setAttributes({
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify([
+        { ...source.behavior, formNodeId: 'form' },
+      ]),
+    });
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.dispatch({ kind: 'duplicate', nodeId: 'field-source' }).changed).toBe(
+      true,
+    );
+
+    const expectedDuplicateKey = withBoundedNumericSuffix(longFieldKey, 2, 64);
+    const behaviors = JSON.parse(
+      String(root.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    const fieldBehaviors = behaviors.filter((behavior) => behavior.kind === 'field');
+    const duplicate = form.children[1];
+    const duplicateControlProps = JSON.parse(
+      String(duplicate?.children[1]?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+    ) as Record<string, unknown>;
+
+    expect(fieldBehaviors.map((behavior) => behavior.fieldKey)).toEqual([
+      longFieldKey,
+      expectedDuplicateKey,
+    ]);
+    expect(expectedDuplicateKey).toHaveLength(64);
+    expect(duplicateControlProps).toMatchObject({
+      fieldKey: expectedDuplicateKey,
+      name: expectedDuplicateKey,
+    });
   });
 
   it('applies a global preset inside the existing global root', () => {

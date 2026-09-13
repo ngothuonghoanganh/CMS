@@ -6,6 +6,10 @@ import type {
 
 /** The maximum number of choices an author can put in a choice field. */
 export const OPEN_COMPOSITION_MAX_OPTIONS = 50;
+/** The maximum length shared by persisted option values and field keys. */
+export const OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH = 64;
+/** The maximum length used by generated Open Composition node and behavior IDs. */
+const OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH = 128;
 
 export type OpenCompositionOption = {
   label: string;
@@ -38,12 +42,34 @@ function textValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/**
+ * Appends a numeric collision suffix without truncating the suffix itself.
+ * Callers provide a max length that can fit the suffix text.
+ */
+export function withBoundedNumericSuffix(
+  base: string,
+  suffix: number,
+  maxLength: number,
+): string {
+  const suffixText = `-${suffix}`;
+  const baseLength = Math.max(0, maxLength - suffixText.length);
+  return `${base.slice(0, baseLength)}${suffixText}`;
+}
+
 function boundedChildId(prefix: string, suffix: string, usedIds: Set<string>): string {
-  const base = `${prefix}-${suffix}`.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 120);
-  let candidate = /^[A-Za-z]/.test(base) ? base : `node-${base}`;
+  const base = `${prefix}-${suffix}`.replace(/[^A-Za-z0-9_-]/g, '-');
+  const initialCandidate = (/^[A-Za-z]/.test(base) ? base : `node-${base}`).slice(
+    0,
+    OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH,
+  );
+  let candidate = initialCandidate;
   let index = 2;
   while (usedIds.has(candidate)) {
-    candidate = `${base}-${index}`.slice(0, 128);
+    candidate = withBoundedNumericSuffix(
+      initialCandidate,
+      index,
+      OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH,
+    );
     index += 1;
   }
   usedIds.add(candidate);
@@ -51,11 +77,19 @@ function boundedChildId(prefix: string, suffix: string, usedIds: Set<string>): s
 }
 
 function boundedBehaviorId(prefix: string, usedIds: Set<string>): string {
-  const base = `${prefix}-behavior`.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 120);
-  let candidate = /^[A-Za-z]/.test(base) ? base : `behavior-${base}`;
+  const base = `${prefix}-behavior`.replace(/[^A-Za-z0-9_-]/g, '-');
+  const initialCandidate = (/^[A-Za-z]/.test(base) ? base : `behavior-${base}`).slice(
+    0,
+    OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH,
+  );
+  let candidate = initialCandidate;
   let index = 2;
   while (usedIds.has(candidate)) {
-    candidate = `${base}-${index}`.slice(0, 128);
+    candidate = withBoundedNumericSuffix(
+      initialCandidate,
+      index,
+      OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH,
+    );
     index += 1;
   }
   usedIds.add(candidate);
@@ -68,9 +102,9 @@ function fieldKey(value: unknown, fallback: string): string {
     .trim()
     .replace(/[^A-Za-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
+    .slice(0, OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH);
   if (!result || !/^[A-Za-z]/.test(result)) result = `field-${result}`;
-  return result.slice(0, 64) || 'field';
+  return result.slice(0, OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH) || 'field';
 }
 
 /**
@@ -90,7 +124,7 @@ export function normalizeOpenCompositionOptionValue(
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
+    .slice(0, OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH);
   return normalized || `option-${index + 1}`;
 }
 
@@ -120,7 +154,11 @@ export function canonicalizeOpenCompositionOptions(
     let nextValue = baseValue;
     let suffix = 2;
     while (usedValues.has(nextValue)) {
-      nextValue = `${baseValue}-${suffix}`.slice(0, 64);
+      nextValue = withBoundedNumericSuffix(
+        baseValue,
+        suffix,
+        OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH,
+      );
       suffix += 1;
     }
     usedValues.add(nextValue);
@@ -244,7 +282,11 @@ function normalizeField(
   let nextFieldKey = baseKey;
   let fieldSuffix = 2;
   while (fieldKeys.has(nextFieldKey)) {
-    nextFieldKey = `${baseKey}-${fieldSuffix}`.slice(0, 64);
+    nextFieldKey = withBoundedNumericSuffix(
+      baseKey,
+      fieldSuffix,
+      OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH,
+    );
     fieldSuffix += 1;
   }
   fieldKeys.add(nextFieldKey);

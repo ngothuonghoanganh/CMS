@@ -391,6 +391,9 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
       await expect(preview.locator('label').filter({ hasText: 'Plan' })).toBeVisible();
       await expect(preview.getByRole('radio', { name: 'Basic' })).toBeVisible();
       await expect(preview.getByRole('radio', { name: 'Enterprise' })).toBeVisible();
+      await expect(
+        preview.locator('input[type="radio"][value="enterprise-plan"]'),
+      ).toHaveCount(1);
       await expect(preview.locator('svg[data-payload-icon="check"]')).toBeVisible();
       await expect(preview.locator('video[poster="/assets/poster-b.png"]')).toBeVisible();
     } finally {

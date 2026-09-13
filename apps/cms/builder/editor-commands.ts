@@ -11,6 +11,8 @@ import {
   type OpenCompositionNodeType,
   type StyleTokenReference,
   canonicalizeOpenCompositionOptions,
+  OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH,
+  withBoundedNumericSuffix,
 } from '@payload/contracts';
 
 import {
@@ -810,15 +812,10 @@ function liveFieldKey(value: unknown, fallback: string): string {
     .trim()
     .replace(/[^A-Za-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
+    .slice(0, OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH);
   if (!normalized) return 'field';
   const candidate = /^[A-Za-z]/.test(normalized) ? normalized : `field-${normalized}`;
-  return candidate.slice(0, 64);
-}
-
-function fieldKeyWithSuffix(baseKey: string, suffix: number): string {
-  const suffixText = `-${suffix}`;
-  return `${baseKey.slice(0, Math.max(1, 64 - suffixText.length))}${suffixText}`;
+  return candidate.slice(0, OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH);
 }
 
 function nextAvailableFieldKey(
@@ -829,7 +826,11 @@ function nextAvailableFieldKey(
   let fieldKey = baseKey;
   let suffix = 2;
   while (reservedKeys.has(fieldKey) || assignedKeys.has(fieldKey)) {
-    fieldKey = fieldKeyWithSuffix(baseKey, suffix);
+    fieldKey = withBoundedNumericSuffix(
+      baseKey,
+      suffix,
+      OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH,
+    );
     suffix += 1;
   }
   return fieldKey;
