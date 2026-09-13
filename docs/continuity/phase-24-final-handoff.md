@@ -6,8 +6,8 @@
 - Starting main SHA: `64d22e9 docs: record phase 23.3 hardening closure`
 - Feature branch: `ao/cms-7/phase-24-native-open-composition`
 - Feature implementation SHA: `25a663b feat(builder): add native open composition authoring`
-- Feature ending SHA: pending documentation commit
-- Local main merge SHA: pending local merge
+- Feature ending SHA: `8d04939 docs: record phase 24 closure`
+- Local main merge SHA: `cc8026d merge: close phase 24 native open composition`
 - Remote push: **NOT PERFORMED**
 - Node validation: `v24.19.0` (repository `.nvmrc` / engine target)
 - pnpm: `10.15.0`
@@ -111,6 +111,6 @@ accessibility, or Builder/Renderer parity; any such item must be listed here.
 
 - P0: `0`
 - P1: `0`
-- Feature working tree: pending final documentation commit
-- Local `main`: pending `--no-ff` merge and post-merge verification
-- Final status: pending local merge
+- Feature working tree: clean at `8d04939`
+- Local `main`: clean after `--no-ff` merge at `cc8026d`
+- Final status: **READY TO CLOSE PHASE 24**

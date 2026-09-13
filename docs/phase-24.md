@@ -1,7 +1,7 @@
 # Phase 24 — Native Open Composition Parity & Interactive Compound Authoring
 
-**Status: implementation complete on the Phase 24 feature branch; final local
-merge verification is recorded in the continuity handoff.**
+**Status: CLOSED locally after the Phase 24 feature branch was merged into
+`main`; the final verification record is in the continuity handoff.**
 
 ## Purpose
 
