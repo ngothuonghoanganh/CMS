@@ -137,7 +137,7 @@ passed`, API `98 passed / 12 skipped`; all 5 Turbo tasks succeeded.
 - `format:check`, lint, typecheck, CMS design-system check, and `git diff
 --check`: passed.
 
-### Current GitHub Actions result
+### Previous cleanup audit GitHub Actions result (historical)
 
 - Latest `main` run: [quality run #34738978585](https://github.com/ngothuonghoanganh/CMS/actions/runs/34738978585).
 - Head SHA: `b714bd02b547d9007ecadcf1d2482bf4bef04796`.
@@ -149,3 +149,95 @@ passed`, API `98 passed / 12 skipped`; all 5 Turbo tasks succeeded.
 The local release gates and release journey are green; the GitHub-hosted
 workflow remains an external infrastructure/account issue and is not claimed
 as a CI success.
+
+## Phase 23.3 final hardening fix
+
+### Starting point
+
+- Branch: `main`
+- Starting SHA: `9a49114480cf683fda244343165d3a7e0972ff44`
+- Starting commit: `fix(builder): close phase 23.3 cleanup gaps`
+- Node validation: `v24.19.0`, matching `.nvmrc`
+
+### P1 root cause
+
+The collision loops generated a suffix and then truncated the complete result:
+`${base}-${suffix}`.slice(0, 64). When `base` was already 64 characters,
+every candidate remained equal to `base`, so the `while` condition never
+changed and canonicalization could freeze the Builder/API process. The same
+non-progressing pattern existed for canonical Form Field `fieldKey` values.
+The 64-character contract remains unchanged.
+
+### Shared helper
+
+- Location: `packages/contracts/src/open-composition-semantic-integrity.ts`
+- Responsibility: `withBoundedNumericSuffix(base, suffix, maxLength)` reserves
+  the suffix length before truncating the base, preserving `-2`, `-3`, `-10`,
+  and other numeric suffixes within the requested bound.
+- Call sites: option value canonicalization, Form Field key canonicalization,
+  generated child IDs, generated behavior IDs, and live Builder
+  `nextAvailableFieldKey` in `apps/cms/builder/editor-commands.ts`.
+- No duplicated field-key suffix algorithm remains between contracts and the
+  CMS command layer.
+
+### Tests added
+
+- Direct helper coverage for short bases, 64-character bases, and a three-digit
+  suffix.
+- Four duplicate 64-character option values produce the original value and
+  bounded `-2`, `-3`, `-4` values immediately.
+- Eleven repeated option values prove deterministic `-2` through `-11`
+  suffixes across a suffix digit-width boundary.
+- Three identical 64-character field keys remain unique and bounded, with
+  synchronized `behavior.fieldKey`, Form Field props, control `fieldKey`, and
+  control `name` projections.
+- Long-key Form Field duplication in the CMS command layer verifies the shared
+  bounded suffix rule.
+- Canonicalization idempotence is asserted for the long-key field payload.
+- The release gate now asserts Preview contains the exact
+  `input[type="radio"][value="enterprise-plan"]` value.
+
+### Regression verification
+
+The existing Form-to-Form identity tests remain green: destination identity,
+drop-before, drop-between, move out/back, insert-before-existing, and Form
+Field duplication. Existing ownership and placement semantics were not
+changed.
+
+### Release journey
+
+The Phase 23.3.1 journey passed through Builder, Save, Reload, Canvas Select
+and Radio, Preview, Publish, Public renderer, required validation, and
+Submission request/response. Both targeted Phase 23.3 E2E gates passed.
+
+### Full gates
+
+- Targeted contracts: `6 passed files / 93 passed tests`.
+- Targeted CMS: `3 passed files / 90 passed tests`.
+- Full unit suite: contracts `93 passed`, CMS `165 passed`, renderer `29
+passed`, API `98 passed / 12 skipped`; all 5 Turbo tasks succeeded.
+- `format:check`, lint, typecheck, CMS design-system check, production build,
+  and `git diff --check`: passed.
+- Full Playwright: `113 passed, 0 failed`.
+
+### GitHub Actions
+
+- Final hardening product SHA: `df9148cc50b8509df54085b09413e5fe0bbf41cc`.
+- [Quality run #34745280398](https://github.com/ngothuonghoanganh/CMS/actions/runs/34745280398)
+  (`run_number: 60`) matches that exact head SHA.
+- Status: `completed`; conclusion: `failure`.
+- Job: `quality`; steps executed: `[]` (zero).
+- GitHub Actions failed before workflow job execution. This is not a product
+  test failure and is also not a CI pass.
+
+### Remaining issues
+
+- P0: `0`
+- P1: `0`
+- P2: `0`
+- The remaining GitHub-hosted workflow failure is an external
+  infrastructure/account condition, not a Phase 23.3 product blocker.
+
+### Final decision
+
+READY TO CLOSE PHASE 23.3
