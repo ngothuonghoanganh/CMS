@@ -36,6 +36,12 @@ describe('builder block presets', () => {
       'hero',
       'cta',
       'contact-form',
+      'native-list',
+      'faq',
+      'native-tabs',
+      'gallery-2-columns',
+      'gallery-3-columns',
+      'gallery-4-columns',
     ]);
   });
 

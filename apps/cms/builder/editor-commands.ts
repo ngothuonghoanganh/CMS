@@ -11,6 +11,7 @@ import {
   type OpenCompositionNodeType,
   type StyleTokenReference,
   canonicalizeOpenCompositionOptions,
+  canonicalizeOpenCompositionListProps,
   OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH,
   withBoundedNumericSuffix,
 } from '@payload/contracts';
@@ -32,6 +33,7 @@ import {
   BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   createBlockDefinition,
   createOpenCompositionNodeDefinition,
+  listPreviewComponents,
   quotePreviewComponents,
   openCompositionControlPreviewComponents,
   openCompositionIconPreviewComponents,
@@ -122,6 +124,18 @@ export type EditorCommand =
       childType: BuilderBlockType | OpenCompositionNodeType;
       index?: number;
     }
+  | { kind: 'add-disclosure-item'; parentId: string }
+  | { kind: 'remove-disclosure-item'; nodeId: string }
+  | { kind: 'duplicate-disclosure-item'; nodeId: string }
+  | {
+      kind: 'move-disclosure-item';
+      nodeId: string;
+      direction: 'up' | 'down';
+    }
+  | { kind: 'add-tab'; parentId: string }
+  | { kind: 'remove-tab'; nodeId: string }
+  | { kind: 'duplicate-tab'; nodeId: string }
+  | { kind: 'move-tab'; nodeId: string; direction: 'up' | 'down' }
   /** @deprecated Kept as a compatibility shim for older callers. */
   | {
       kind: 'insert-structural-child';
@@ -432,6 +446,191 @@ function updateOpenFormFieldProperty(
   return false;
 }
 
+function directOpenChild(
+  component: Component,
+  type: OpenCompositionNodeType,
+): Component | undefined {
+  return component.components().models.find((child) => openNodeType(child) === type);
+}
+
+function openAncestorOfType(
+  component: Component | undefined,
+  type: OpenCompositionNodeType,
+): Component | undefined {
+  let current = component;
+  while (current) {
+    if (openNodeType(current) === type) return current;
+    current = current.parent();
+  }
+  return undefined;
+}
+
+function openRootFor(component: Component): Component {
+  let current = component;
+  while (current.parent()) current = current.parent() as Component;
+  return current;
+}
+
+function openToggleTarget(root: Component, triggerId: string): Component | undefined {
+  const entry = collectOpenBehaviors(root).find(
+    ({ behavior }) =>
+      behavior.kind === 'action' &&
+      behavior.action === 'toggle' &&
+      behavior.nodeId === triggerId &&
+      typeof behavior.targetNodeId === 'string',
+  );
+  const targetId = entry?.behavior.targetNodeId;
+  return typeof targetId === 'string' ? findPayloadComponent(root, targetId) : undefined;
+}
+
+function disclosureItemParts(item: Component):
+  | {
+      owner: Component;
+      trigger: Component;
+      panel: Component;
+    }
+  | undefined {
+  const owner = item.parent();
+  const trigger = directOpenChild(item, 'button');
+  const panel = directOpenChild(item, 'disclosure-panel');
+  return owner && openNodeType(owner) === 'disclosure' && trigger && panel
+    ? { owner, trigger, panel }
+    : undefined;
+}
+
+function normalizeLiveDisclosureDefaults(owner: Component, preferred?: Component): void {
+  if (openProps(owner)?.allowMultiple === true) return;
+  let kept = false;
+  const items = owner
+    .components()
+    .models.filter((child) => openNodeType(child) === 'disclosure-item');
+  const ordered = preferred
+    ? [preferred, ...items.filter((item) => item !== preferred)]
+    : items;
+  ordered.forEach((item) => {
+    const props = openProps(item);
+    if (!props) return;
+    const nextOpen = props.defaultOpen === true && !kept;
+    if (nextOpen) kept = true;
+    if (props.defaultOpen === true && !nextOpen) {
+      setOpenProps(item, { ...props, defaultOpen: false });
+    }
+  });
+}
+
+function tabOwnerFor(component: Component): Component | undefined {
+  return openAncestorOfType(component, 'tabs');
+}
+
+function tabPanelForTrigger(trigger: Component, owner: Component): Component | undefined {
+  const triggerId = componentNodeId(trigger);
+  if (!triggerId) return undefined;
+  const root = openRootFor(owner);
+  const target = openToggleTarget(root, triggerId);
+  if (target?.parent() === owner && openNodeType(target) === 'tab-panel') return target;
+  const list = directOpenChild(owner, 'tab-list');
+  const triggers = list
+    ?.components()
+    .models.filter((child) => openNodeType(child) === 'tab-trigger');
+  const panels = owner
+    .components()
+    .models.filter((child) => openNodeType(child) === 'tab-panel');
+  const index = triggers?.indexOf(trigger) ?? -1;
+  return index >= 0 ? panels[index] : undefined;
+}
+
+function updateOpenCompoundProperty(
+  component: Component,
+  type: OpenCompositionNodeType,
+  property: string,
+  value: unknown,
+): boolean | undefined {
+  if (type === 'list' && (property === 'ordered' || property === 'items')) {
+    const current = canonicalizeOpenCompositionListProps(openProps(component));
+    const candidate =
+      property === 'items'
+        ? isRecord(value) && Array.isArray(value.items)
+          ? value
+          : { ...current, items: value }
+        : { ...current, ordered: value === true || value === 'true' };
+    const next = canonicalizeOpenCompositionListProps(candidate);
+    setOpenProps(component, next);
+    component.set('tagName', next.ordered ? 'ol' : 'ul');
+    component.components(listPreviewComponents(next));
+    return true;
+  }
+
+  if (type === 'disclosure-item' && property === 'question') {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    const parts = disclosureItemParts(component);
+    const props = openProps(component);
+    if (!parts || !props) return false;
+    const question = value.trim();
+    const next: Record<string, unknown> = { ...props, question };
+    delete next.title;
+    setOpenProps(component, next);
+    const triggerProps = openProps(parts.trigger);
+    if (triggerProps) setOpenProps(parts.trigger, { ...triggerProps, label: question });
+    syncComposedTextChild(parts.trigger, question);
+    return true;
+  }
+
+  if (type === 'disclosure' && property === 'allowMultiple') {
+    if (typeof value !== 'boolean') return false;
+    const props = openProps(component);
+    if (!props) return false;
+    setOpenProps(component, { ...props, allowMultiple: value });
+    if (!value) normalizeLiveDisclosureDefaults(component);
+    return true;
+  }
+
+  if (type === 'disclosure-item' && property === 'defaultOpen') {
+    if (typeof value !== 'boolean') return false;
+    const props = openProps(component);
+    const parts = disclosureItemParts(component);
+    if (!props || !parts) return false;
+    setOpenProps(component, { ...props, defaultOpen: value });
+    if (value) normalizeLiveDisclosureDefaults(parts.owner, component);
+    return true;
+  }
+
+  if (type === 'tab-trigger' && property === 'label') {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    const props = openProps(component);
+    if (!props) return false;
+    const label = value.trim();
+    setOpenProps(component, { ...props, label });
+    syncComposedTextChild(component, label);
+    return true;
+  }
+
+  if (type === 'tab-trigger' && property === 'openInitially') {
+    if (typeof value !== 'boolean') return false;
+    const owner = tabOwnerFor(component);
+    const props = owner && openProps(owner);
+    const panel = owner && tabPanelForTrigger(component, owner);
+    if (!owner || !props || !panel) return false;
+    const panels = owner
+      .components()
+      .models.filter((child) => openNodeType(child) === 'tab-panel');
+    const currentInitial =
+      typeof props.initialTabId === 'string' ? props.initialTabId : undefined;
+    const replacement = panels.find((candidate) => candidate !== panel);
+    const nextInitial = value
+      ? componentNodeId(panel)
+      : currentInitial === componentNodeId(panel)
+        ? replacement
+          ? componentNodeId(replacement)
+          : undefined
+        : currentInitial;
+    if (!nextInitial) return false;
+    setOpenProps(owner, { ...props, initialTabId: nextInitial });
+    return true;
+  }
+
+  return undefined;
+}
+
 function updateOpenProperty(
   component: Component,
   property: string,
@@ -446,6 +645,8 @@ function updateOpenProperty(
   } catch {
     return false;
   }
+  const compoundResult = updateOpenCompoundProperty(component, type, property, nextValue);
+  if (compoundResult !== undefined) return compoundResult;
   if (
     type === 'form-field' &&
     ['label', 'type', 'required', 'placeholder', 'options'].includes(property)
@@ -538,8 +739,25 @@ function updateOpenPropertyPreview(
   property: string,
   value: unknown,
 ): boolean {
-  if (!openNodeType(component) || !openProps(component)) return false;
+  const type = openNodeType(component);
+  if (!type || !openProps(component)) return false;
   if (!/^[A-Za-z][A-Za-z0-9_-]{0,119}$/.test(property)) return false;
+  if (type === 'list' && (property === 'ordered' || property === 'items')) {
+    return true;
+  }
+  if (
+    (type === 'disclosure-item' && property === 'question') ||
+    (type === 'tab-trigger' && property === 'label')
+  ) {
+    return typeof value === 'string' && value.trim().length > 0;
+  }
+  if (
+    (type === 'disclosure' && property === 'allowMultiple') ||
+    (type === 'disclosure-item' && property === 'defaultOpen') ||
+    (type === 'tab-trigger' && property === 'openInitially')
+  ) {
+    return typeof value === 'boolean';
+  }
   try {
     const serialized = JSON.stringify({
       ...openProps(component),
@@ -558,7 +776,12 @@ function canRemoveLiveNode(root: Component, node: Component): boolean {
   const openChildType = openNodeTypeForRoot(root, node);
   if (openChildType) {
     if (!parent) return false;
-    return canMutateStructuralNode(openChildType, openNodeTypeForRoot(root, parent));
+    const grandparent = parent.parent();
+    return canMutateStructuralNode(
+      openChildType,
+      openNodeTypeForRoot(root, parent),
+      grandparent ? openNodeTypeForRoot(root, grandparent) : undefined,
+    );
   }
   if (rootIsOpen) return false;
   const parentType = parent && payloadNodeType(parent);
@@ -583,7 +806,12 @@ function canDuplicateLiveNode(root: Component, node: Component): boolean {
   const openChildType = openNodeTypeForRoot(root, node);
   if (openChildType) {
     if (!parent) return false;
-    return canMutateStructuralNode(openChildType, openNodeTypeForRoot(root, parent));
+    const grandparent = parent.parent();
+    return canMutateStructuralNode(
+      openChildType,
+      openNodeTypeForRoot(root, parent),
+      grandparent ? openNodeTypeForRoot(root, grandparent) : undefined,
+    );
   }
   if (rootIsOpen) return false;
   const parentType = parent && payloadNodeType(parent);
@@ -612,7 +840,7 @@ function canInsertDefinition(
   return Boolean(childType && canInsertLiveChild(parent, childType, undefined, slotName));
 }
 
-function isOpenCompositionRoot(root: Component): boolean {
+export function isOpenCompositionRoot(root: Component): boolean {
   return (
     root.getAttributes({ noStyle: true })[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true'
   );
@@ -623,7 +851,7 @@ function isOpenCompositionRoot(root: Component): boolean {
  * This preserves the closed-widget editor contract for existing blocks while
  * giving the new recipe a valid V8 document to append to.
  */
-function promoteLegacyRootForOpenInsert(root: Component): boolean {
+export function promoteLegacyRootForOpenInsert(root: Component): boolean {
   if (isOpenCompositionRoot(root)) return true;
   try {
     const legacyPayload = serializeGrapesComponent(root, 'page');
@@ -1160,6 +1388,443 @@ function definitionFromComponent(component: Component): ComponentDefinition {
   return toDefinition(snapshotFromGrapesComponent(component));
 }
 
+type LiveTabPair = {
+  owner: Component;
+  list: Component;
+  trigger: Component;
+  panel: Component;
+};
+
+function directOpenChildren(
+  parent: Component,
+  type: OpenCompositionNodeType,
+): Component[] {
+  return parent.components().models.filter((child) => openNodeType(child) === type);
+}
+
+function disclosureItems(owner: Component): Component[] {
+  return directOpenChildren(owner, 'disclosure-item');
+}
+
+function liveDisclosureItem(root: Component, nodeId: string): Component | undefined {
+  const node = findPayloadComponent(root, nodeId);
+  if (!node) return undefined;
+  if (openNodeType(node) === 'disclosure-item') return node;
+  const parent = node.parent();
+  return parent && openNodeType(parent) === 'disclosure-item' ? parent : undefined;
+}
+
+function liveTabPairs(root: Component, owner: Component): LiveTabPair[] {
+  if (openNodeType(owner) !== 'tabs') return [];
+  const list = directOpenChildren(owner, 'tab-list')[0];
+  if (!list || directOpenChildren(owner, 'tab-list').length !== 1) return [];
+  const triggers = directOpenChildren(list, 'tab-trigger');
+  const panels = directOpenChildren(owner, 'tab-panel');
+  if (triggers.length === 0 || triggers.length !== panels.length) return [];
+  const panelsById = new Map(
+    panels
+      .map((panel) => {
+        const id = componentNodeId(panel);
+        return id ? ([id, panel] as const) : undefined;
+      })
+      .filter((entry): entry is readonly [string, Component] => Boolean(entry)),
+  );
+  const usedPanels = new Set<string>();
+  return triggers.flatMap((trigger) => {
+    const triggerId = componentNodeId(trigger);
+    const panel = triggerId ? openToggleTarget(root, triggerId) : undefined;
+    const panelId = panel && componentNodeId(panel);
+    if (!triggerId || !panel || panel.parent() !== owner || !panelId) return [];
+    if (!panelsById.has(panelId) || usedPanels.has(panelId)) return [];
+    usedPanels.add(panelId);
+    return [{ owner, list, trigger, panel }];
+  });
+}
+
+function liveTabPairForNode(root: Component, nodeId: string): LiveTabPair | undefined {
+  const node = findPayloadComponent(root, nodeId);
+  if (!node) return undefined;
+  const owner = tabOwnerFor(node);
+  if (!owner) return undefined;
+  return liveTabPairs(root, owner).find(
+    ({ trigger, panel }) =>
+      componentNodeId(trigger) === nodeId || componentNodeId(panel) === nodeId,
+  );
+}
+
+function componentDefinitionId(definition: ComponentDefinition): string | undefined {
+  const value = definition.attributes?.[BUILDER_NODE_ID_ATTRIBUTE];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function definitionWithBehaviors(
+  definition: ComponentDefinition,
+  behaviors: readonly Record<string, unknown>[],
+): ComponentDefinition {
+  if (behaviors.length === 0) return definition;
+  return {
+    ...definition,
+    attributes: {
+      ...(definition.attributes ?? {}),
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify(behaviors),
+    },
+  };
+}
+
+function removeLiveComponent(
+  editor: Editor,
+  component: Component,
+  allowManaged = false,
+): void {
+  if (allowManaged && component.get('removable') === false) {
+    // Compound commands own the whole semantic unit. GrapesJS still marks its
+    // internal shells as non-removable so the generic canvas toolbar cannot
+    // split them; temporarily permitting the command keeps aggregate removal
+    // inside the same UndoManager boundary.
+    component.set('removable', true, { silent: true });
+  }
+  editor.select(component);
+  editor.runCommand('core:component-delete');
+}
+
+function freshBehaviorId(root: Component): string {
+  const reserved = new Set(
+    collectOpenBehaviors(root).flatMap(({ behavior }) =>
+      typeof behavior.id === 'string' ? [behavior.id] : [],
+    ),
+  );
+  return generateFreshNodeId('behavior', reserved);
+}
+
+function ensureLiveTabToggleBehavior(
+  root: Component,
+  trigger: Component,
+  panel: Component,
+  sourceTrigger?: Component,
+): void {
+  const triggerId = componentNodeId(trigger);
+  const panelId = componentNodeId(panel);
+  if (!triggerId || !panelId) return;
+  const existing = parsedOpenBehaviors(trigger) ?? [];
+  const hasToggle = existing.some(
+    (candidate) =>
+      isRecord(candidate) && candidate.kind === 'action' && candidate.action === 'toggle',
+  );
+  if (hasToggle) return;
+  const sourceId = sourceTrigger && componentNodeId(sourceTrigger);
+  const sourceBehavior = sourceId
+    ? collectOpenBehaviors(root).find(
+        ({ owner, behavior }) =>
+          owner !== trigger &&
+          behavior.kind === 'action' &&
+          behavior.action === 'toggle' &&
+          behavior.nodeId === sourceId,
+      )?.behavior
+    : undefined;
+  setOpenBehaviors(trigger, [
+    ...existing,
+    {
+      ...(sourceBehavior ?? {}),
+      id: freshBehaviorId(root),
+      kind: 'action',
+      nodeId: triggerId,
+      event: 'click',
+      action: 'toggle',
+      targetNodeId: panelId,
+    },
+  ]);
+}
+
+function canAddDisclosureItem(root: Component, parentId: string): boolean {
+  const owner = getNodeFromRoot(root, parentId);
+  return Boolean(
+    owner && openNodeType(owner) === 'disclosure' && disclosureItems(owner).length < 100,
+  );
+}
+
+function canRemoveDisclosureItem(root: Component, nodeId: string): boolean {
+  const item = liveDisclosureItem(root, nodeId);
+  const owner = item?.parent();
+  return Boolean(
+    item &&
+    owner &&
+    openNodeType(owner) === 'disclosure' &&
+    disclosureItems(owner).length > 1 &&
+    disclosureItemParts(item),
+  );
+}
+
+function getNodeFromRoot(root: Component, nodeId: string): Component | undefined {
+  return findPayloadComponent(root, nodeId);
+}
+
+function canDuplicateDisclosureItem(root: Component, nodeId: string): boolean {
+  const item = liveDisclosureItem(root, nodeId);
+  const owner = item?.parent();
+  return Boolean(
+    item &&
+    owner &&
+    openNodeType(owner) === 'disclosure' &&
+    disclosureItems(owner).length < 100,
+  );
+}
+
+function canMoveDisclosureItem(
+  root: Component,
+  nodeId: string,
+  direction: 'up' | 'down',
+): boolean {
+  const item = liveDisclosureItem(root, nodeId);
+  const owner = item?.parent();
+  if (!item || !owner || openNodeType(owner) !== 'disclosure') return false;
+  const items = disclosureItems(owner);
+  const index = items.indexOf(item);
+  return index >= 0 && Boolean(items[index + (direction === 'up' ? -1 : 1)]);
+}
+
+function canAddTab(root: Component, parentId: string): boolean {
+  const owner = getNodeFromRoot(root, parentId);
+  return Boolean(
+    owner && openNodeType(owner) === 'tabs' && liveTabPairs(root, owner).length < 100,
+  );
+}
+
+function canRemoveTab(root: Component, nodeId: string): boolean {
+  const pair = liveTabPairForNode(root, nodeId);
+  return Boolean(pair && liveTabPairs(root, pair.owner).length > 1);
+}
+
+function canDuplicateTab(root: Component, nodeId: string): boolean {
+  const pair = liveTabPairForNode(root, nodeId);
+  return Boolean(pair && liveTabPairs(root, pair.owner).length < 100);
+}
+
+function canMoveTab(root: Component, nodeId: string, direction: 'up' | 'down'): boolean {
+  const pair = liveTabPairForNode(root, nodeId);
+  if (!pair) return false;
+  const pairs = liveTabPairs(root, pair.owner);
+  const index = pairs.findIndex(
+    (candidate) =>
+      componentNodeId(candidate.trigger) === componentNodeId(pair.trigger) &&
+      componentNodeId(candidate.panel) === componentNodeId(pair.panel),
+  );
+  return index >= 0 && Boolean(pairs[index + (direction === 'up' ? -1 : 1)]);
+}
+
+function addDisclosureItem(
+  editor: Editor,
+  root: Component,
+  parentId: string,
+): EditorCommandResult {
+  const owner = getNodeFromRoot(root, parentId);
+  if (!owner || !canAddDisclosureItem(root, parentId)) return { changed: false };
+  const definition = definitionWithFreshIds(
+    root,
+    createOpenCompositionNodeDefinition('disclosure-item'),
+  );
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  const created = owner.append(definition);
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return created[0] ? { changed: true, selection: created[0] } : { changed: false };
+}
+
+function removeDisclosureItem(
+  editor: Editor,
+  root: Component,
+  nodeId: string,
+): EditorCommandResult {
+  const item = liveDisclosureItem(root, nodeId);
+  const owner = item?.parent();
+  if (!item || !owner || !canRemoveDisclosureItem(root, nodeId))
+    return { changed: false };
+  const removedIds = collectComponentNodeIds(item);
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  removeLiveComponent(editor, item, true);
+  pruneOpenBehaviorsAfterRemoval(root, removedIds);
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return { changed: true, selection: owner };
+}
+
+function duplicateDisclosureItem(
+  editor: Editor,
+  root: Component,
+  nodeId: string,
+): EditorCommandResult {
+  const item = liveDisclosureItem(root, nodeId);
+  const owner = item?.parent();
+  if (!item || !owner || !canDuplicateDisclosureItem(root, nodeId)) {
+    return { changed: false };
+  }
+  const sourceDefinition = definitionFromComponent(item);
+  const safeDefinition = definitionWithFreshIds(root, sourceDefinition);
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  const created = owner.append(safeDefinition, { at: item.index() + 1 });
+  duplicateOpenBehaviors(root, item, safeDefinition);
+  const duplicate = created[0];
+  if (duplicate && openProps(owner)?.allowMultiple !== true) {
+    const props = openProps(duplicate);
+    if (props?.defaultOpen === true)
+      setOpenProps(duplicate, { ...props, defaultOpen: false });
+  }
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return duplicate ? { changed: true, selection: duplicate } : { changed: false };
+}
+
+function moveDisclosureItem(
+  editor: Editor,
+  root: Component,
+  nodeId: string,
+  direction: 'up' | 'down',
+): EditorCommandResult {
+  const item = liveDisclosureItem(root, nodeId);
+  const owner = item?.parent();
+  if (!item || !owner || !canMoveDisclosureItem(root, nodeId, direction)) {
+    return { changed: false };
+  }
+  const items = disclosureItems(owner);
+  const target = items[items.indexOf(item) + (direction === 'up' ? -1 : 1)];
+  if (!target) return { changed: false };
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  item.move(owner, { at: target.index() + (direction === 'down' ? 1 : 0) });
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return { changed: true, selection: item };
+}
+
+function addTab(editor: Editor, root: Component, parentId: string): EditorCommandResult {
+  const owner = getNodeFromRoot(root, parentId);
+  if (!owner || !canAddTab(root, parentId)) return { changed: false };
+  const list = directOpenChildren(owner, 'tab-list')[0];
+  if (!list) return { changed: false };
+  const panelDefinition = createOpenCompositionNodeDefinition('tab-panel');
+  const panelId = componentDefinitionId(panelDefinition);
+  if (!panelId) return { changed: false };
+  const triggerDefinition = createOpenCompositionNodeDefinition('tab-trigger', {
+    targetNodeId: panelId,
+  });
+  const safeDefinition = definitionWithFreshIds(root, {
+    components: [triggerDefinition, panelDefinition],
+  });
+  const [safeTrigger, safePanel] = definitionChildren(safeDefinition);
+  if (!safeTrigger || !safePanel) return { changed: false };
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  const createdTrigger = list.append(safeTrigger)[0];
+  const createdPanel = owner.append(safePanel)[0];
+  if (!createdTrigger || !createdPanel) {
+    if (createdTrigger) removeLiveComponent(editor, createdTrigger, true);
+    if (createdPanel) removeLiveComponent(editor, createdPanel, true);
+    return { changed: false };
+  }
+  const ownerProps = openProps(owner);
+  const existingPairs = liveTabPairs(root, owner);
+  if (
+    ownerProps &&
+    (typeof ownerProps.initialTabId !== 'string' ||
+      !existingPairs.some(
+        ({ panel }) => componentNodeId(panel) === ownerProps.initialTabId,
+      ))
+  ) {
+    const firstPanel = existingPairs[0]?.panel ?? createdPanel;
+    const firstPanelId = componentNodeId(firstPanel);
+    if (firstPanelId) setOpenProps(owner, { ...ownerProps, initialTabId: firstPanelId });
+  }
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return { changed: true, selection: createdTrigger };
+}
+
+function removeTab(editor: Editor, root: Component, nodeId: string): EditorCommandResult {
+  const pair = liveTabPairForNode(root, nodeId);
+  if (!pair || !canRemoveTab(root, nodeId)) return { changed: false };
+  const ownerProps = openProps(pair.owner);
+  const removedPanelId = componentNodeId(pair.panel);
+  const removedIds = new Set([
+    ...collectComponentNodeIds(pair.trigger),
+    ...collectComponentNodeIds(pair.panel),
+  ]);
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  removeLiveComponent(editor, pair.panel, true);
+  removeLiveComponent(editor, pair.trigger, true);
+  pruneOpenBehaviorsAfterRemoval(root, removedIds);
+  const remainingPanels = directOpenChildren(pair.owner, 'tab-panel');
+  if (ownerProps && removedPanelId && ownerProps.initialTabId === removedPanelId) {
+    const replacement = remainingPanels[0]
+      ? componentNodeId(remainingPanels[0])
+      : undefined;
+    if (replacement)
+      setOpenProps(pair.owner, { ...ownerProps, initialTabId: replacement });
+  }
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return { changed: true, selection: pair.owner };
+}
+
+function duplicateTab(
+  editor: Editor,
+  root: Component,
+  nodeId: string,
+): EditorCommandResult {
+  const pair = liveTabPairForNode(root, nodeId);
+  if (!pair || !canDuplicateTab(root, nodeId)) return { changed: false };
+  const sourceTriggerDefinition = definitionFromComponent(pair.trigger);
+  const sourcePanelDefinition = definitionFromComponent(pair.panel);
+  const sourceTriggerId = componentNodeId(pair.trigger);
+  const externalBehaviors = sourceTriggerId
+    ? collectOpenBehaviors(root)
+        .filter(
+          ({ owner, behavior }) =>
+            owner !== pair.trigger && behavior.nodeId === sourceTriggerId,
+        )
+        .map(({ behavior }) => behavior)
+    : [];
+  const triggerDefinition = definitionWithBehaviors(
+    sourceTriggerDefinition,
+    externalBehaviors,
+  );
+  const safeDefinition = definitionWithFreshIds(root, {
+    components: [triggerDefinition, sourcePanelDefinition],
+  });
+  const [safeTrigger, safePanel] = definitionChildren(safeDefinition);
+  if (!safeTrigger || !safePanel) return { changed: false };
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  const createdTrigger = pair.list.append(safeTrigger, {
+    at: pair.trigger.index() + 1,
+  })[0];
+  const createdPanel = pair.owner.append(safePanel, { at: pair.panel.index() + 1 })[0];
+  if (!createdTrigger || !createdPanel) {
+    if (createdTrigger) removeLiveComponent(editor, createdTrigger, true);
+    if (createdPanel) removeLiveComponent(editor, createdPanel, true);
+    return { changed: false };
+  }
+  ensureLiveTabToggleBehavior(root, createdTrigger, createdPanel, pair.trigger);
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return { changed: true, selection: createdTrigger };
+}
+
+function moveTab(
+  editor: Editor,
+  root: Component,
+  nodeId: string,
+  direction: 'up' | 'down',
+): EditorCommandResult {
+  const pair = liveTabPairForNode(root, nodeId);
+  if (!pair || !canMoveTab(root, nodeId, direction)) return { changed: false };
+  const pairs = liveTabPairs(root, pair.owner);
+  const index = pairs.findIndex(
+    (candidate) =>
+      componentNodeId(candidate.trigger) === componentNodeId(pair.trigger) &&
+      componentNodeId(candidate.panel) === componentNodeId(pair.panel),
+  );
+  const target = pairs[index + (direction === 'up' ? -1 : 1)];
+  if (!target) return { changed: false };
+  const previousHistoryEntries = new Set(getHistoryEntries(editor));
+  pair.trigger.move(pair.list, {
+    at: target.trigger.index() + (direction === 'down' ? 1 : 0),
+  });
+  pair.panel.move(pair.owner, {
+    at: target.panel.index() + (direction === 'down' ? 1 : 0),
+  });
+  groupNewHistoryActions(editor, previousHistoryEntries);
+  return { changed: true, selection: pair.trigger };
+}
+
 function globalPresetTargetIsValid(
   root: Component,
   node: Component | undefined,
@@ -1183,7 +1848,8 @@ export function createEditorCommandBus(
 ): BuilderCommandBus {
   const bus: BuilderCommandBus = {
     dispatch: (command) => {
-      if (!bus.canDispatch(command)) return { changed: false };
+      const permitted = bus.canDispatch(command);
+      if (!permitted) return { changed: false };
       return executeEditorCommand(editor, command, options);
     },
     canDispatch: (command) => {
@@ -1192,6 +1858,19 @@ export function createEditorCommandBus(
       if (command.kind === 'move') return canMoveNode(root, command.intent);
       if (command.kind === 'undo') return editor.UndoManager.hasUndo();
       if (command.kind === 'redo') return editor.UndoManager.hasRedo();
+      if (command.kind === 'add-disclosure-item')
+        return canAddDisclosureItem(root, command.parentId);
+      if (command.kind === 'remove-disclosure-item')
+        return canRemoveDisclosureItem(root, command.nodeId);
+      if (command.kind === 'duplicate-disclosure-item')
+        return canDuplicateDisclosureItem(root, command.nodeId);
+      if (command.kind === 'move-disclosure-item')
+        return canMoveDisclosureItem(root, command.nodeId, command.direction);
+      if (command.kind === 'add-tab') return canAddTab(root, command.parentId);
+      if (command.kind === 'remove-tab') return canRemoveTab(root, command.nodeId);
+      if (command.kind === 'duplicate-tab') return canDuplicateTab(root, command.nodeId);
+      if (command.kind === 'move-tab')
+        return canMoveTab(root, command.nodeId, command.direction);
       if (command.kind === 'insert') {
         const hasTarget = command.targetId !== undefined;
         const target = hasTarget ? getNode(editor, command.targetId ?? '') : undefined;
@@ -1305,6 +1984,22 @@ export function executeEditorCommand(
   if (!root) return { changed: false };
 
   switch (command.kind) {
+    case 'add-disclosure-item':
+      return addDisclosureItem(editor, root, command.parentId);
+    case 'remove-disclosure-item':
+      return removeDisclosureItem(editor, root, command.nodeId);
+    case 'duplicate-disclosure-item':
+      return duplicateDisclosureItem(editor, root, command.nodeId);
+    case 'move-disclosure-item':
+      return moveDisclosureItem(editor, root, command.nodeId, command.direction);
+    case 'add-tab':
+      return addTab(editor, root, command.parentId);
+    case 'remove-tab':
+      return removeTab(editor, root, command.nodeId);
+    case 'duplicate-tab':
+      return duplicateTab(editor, root, command.nodeId);
+    case 'move-tab':
+      return moveTab(editor, root, command.nodeId, command.direction);
     case 'insert': {
       if (
         definitionOpenNodeType(command.definition) &&

@@ -1,5 +1,7 @@
 import type {
   OpenCompositionBehavior,
+  OpenCompositionListItem,
+  OpenCompositionListProps,
   OpenCompositionNode,
   OpenCompositionPayload,
 } from './open-composition';
@@ -172,6 +174,57 @@ export function canonicalizeOpenCompositionOptions(
   ];
 }
 
+function safeListItemId(value: unknown, index: number, usedIds: Set<string>): string {
+  const raw = typeof value === 'string' ? value.trim() : '';
+  const normalized = raw
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH);
+  const base = /^[A-Za-z]/.test(normalized)
+    ? normalized || `item-${index + 1}`
+    : `item-${normalized || index + 1}`;
+  let candidate = base;
+  let suffix = 2;
+  while (usedIds.has(candidate)) {
+    candidate = withBoundedNumericSuffix(
+      base,
+      suffix,
+      OPEN_COMPOSITION_MAX_GENERATED_ID_LENGTH,
+    );
+    suffix += 1;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
+/**
+ * Canonicalizes native list props while retaining item identities. This is
+ * deliberately separate from the legacy ListPropsSchema: a V8 list is a
+ * primitive whose ordered item records live in its Open Composition props.
+ */
+export function canonicalizeOpenCompositionListProps(
+  value: unknown,
+): OpenCompositionListProps {
+  const candidate = isObject(value) ? value : {};
+  const source = Array.isArray(candidate.items) ? candidate.items : [];
+  const usedIds = new Set<string>();
+  const items: OpenCompositionListItem[] = source.slice(0, 100).map((item, index) => {
+    const record = isObject(item) ? item : {};
+    const text = textValue(record.text)?.trim() || `Item ${index + 1}`;
+    return {
+      id: safeListItemId(record.id, index, usedIds),
+      text: text.slice(0, 1_000),
+    };
+  });
+  if (items.length === 0) {
+    items.push({ id: 'item-1', text: 'First item' });
+  }
+  return {
+    ordered: candidate.ordered === true,
+    items,
+  };
+}
+
 function cloneNode(node: OpenCompositionNode): OpenCompositionNode {
   return {
     ...node,
@@ -230,6 +283,264 @@ function normalizeButtonOrLink(
   const props: Record<string, unknown> = { ...node.props, label };
   delete props.text;
   return { ...node, props, children };
+}
+
+type CompoundRelation = { triggerId: string; panelId: string };
+
+function nodeLabel(node: OpenCompositionNode | undefined, fallback: string): string {
+  if (!node) return fallback;
+  const direct = [
+    node.props.label,
+    node.props.text,
+    node.props.question,
+    node.props.title,
+  ]
+    .map((value) => textValue(value)?.trim() ?? '')
+    .find(Boolean);
+  if (direct) return direct.slice(0, 300);
+  const childText = node.children
+    .filter((child) => child.type === 'text' || child.type === 'heading')
+    .map((child) => textValue(child.props.text)?.trim() ?? '')
+    .find(Boolean);
+  return childText?.slice(0, 300) || fallback;
+}
+
+function textChildForManagedTrigger(
+  ownerId: string,
+  candidate: OpenCompositionNode | undefined,
+  label: string,
+  usedNodeIds: Set<string>,
+): OpenCompositionNode {
+  const existingText =
+    candidate?.type === 'text' || candidate?.type === 'heading'
+      ? candidate
+      : candidate?.children.find((child) => child.type === 'text');
+  if (existingText) {
+    return {
+      ...existingText,
+      type: 'text',
+      props: { ...existingText.props, text: label },
+      children: [],
+    };
+  }
+  return {
+    id: boundedChildId(ownerId, 'text', usedNodeIds),
+    type: 'text',
+    props: { text: label },
+    children: [],
+  };
+}
+
+function normalizeDisclosureTrigger(
+  item: OpenCompositionNode,
+  candidate: OpenCompositionNode | undefined,
+  usedNodeIds: Set<string>,
+): OpenCompositionNode {
+  const label = nodeLabel(candidate, nodeLabel(item, 'Question')) || 'Question';
+  const trigger = candidate?.type === 'button' ? candidate : undefined;
+  const visualChildren = trigger
+    ? trigger.children.filter((child) => child.type === 'icon' || child.type === 'text')
+    : candidate?.type === 'icon'
+      ? [candidate]
+      : [];
+  const textChild = textChildForManagedTrigger(item.id, candidate, label, usedNodeIds);
+  const children = visualChildren.some((child) => child.id === textChild.id)
+    ? visualChildren.map((child) => (child.id === textChild.id ? textChild : child))
+    : [...visualChildren, textChild];
+  return {
+    ...(trigger ?? {
+      id: boundedChildId(item.id, 'trigger', usedNodeIds),
+      type: 'button' as const,
+      props: {},
+      children: [],
+    }),
+    type: 'button',
+    props: { ...(trigger?.props ?? {}), label },
+    children,
+  };
+}
+
+function normalizeTabTrigger(
+  tabsId: string,
+  candidate: OpenCompositionNode | undefined,
+  index: number,
+  usedNodeIds: Set<string>,
+): OpenCompositionNode {
+  const label = nodeLabel(candidate, `Tab ${index + 1}`) || `Tab ${index + 1}`;
+  const trigger = candidate?.type === 'tab-trigger' ? candidate : undefined;
+  const visualChildren = trigger
+    ? trigger.children.filter((child) => child.type === 'icon' || child.type === 'text')
+    : candidate?.type === 'icon'
+      ? [candidate]
+      : [];
+  const textChild = textChildForManagedTrigger(tabsId, candidate, label, usedNodeIds);
+  const children = visualChildren.some((child) => child.id === textChild.id)
+    ? visualChildren.map((child) => (child.id === textChild.id ? textChild : child))
+    : [...visualChildren, textChild];
+  return {
+    ...(trigger ?? {
+      id: boundedChildId(tabsId, `trigger-${index + 1}`, usedNodeIds),
+      type: 'tab-trigger' as const,
+      props: {},
+      children: [],
+    }),
+    type: 'tab-trigger',
+    props: { ...(trigger?.props ?? {}), label },
+    children,
+  };
+}
+
+function canonicalizeDisclosureNode(
+  node: OpenCompositionNode,
+  usedNodeIds: Set<string>,
+  relations: CompoundRelation[],
+): OpenCompositionNode {
+  const itemNodes = node.children.filter((child) => child.type === 'disclosure-item');
+  const sourceItems =
+    itemNodes.length > 0
+      ? itemNodes
+      : [
+          {
+            id: boundedChildId(node.id, 'item', usedNodeIds),
+            type: 'disclosure-item' as const,
+            props: {},
+            children: [],
+          },
+        ];
+  const items = sourceItems.map((item) => {
+    const existingPanel = item.children.find(
+      (child) => child.type === 'disclosure-panel',
+    );
+    const triggerCandidate = item.children.find(
+      (child) =>
+        child.type === 'button' ||
+        child.type === 'heading' ||
+        child.type === 'text' ||
+        child.type === 'icon',
+    );
+    const trigger = normalizeDisclosureTrigger(item, triggerCandidate, usedNodeIds);
+    const panelChildren = item.children
+      .filter((child) => child !== triggerCandidate && child.type !== 'disclosure-panel')
+      .concat(
+        item.children
+          .filter((child) => child.type === 'disclosure-panel' && child !== existingPanel)
+          .flatMap((child) => child.children),
+      );
+    const panel = existingPanel
+      ? { ...existingPanel, children: [...existingPanel.children, ...panelChildren] }
+      : {
+          id: boundedChildId(item.id, 'panel', usedNodeIds),
+          type: 'disclosure-panel' as const,
+          props: {},
+          children: panelChildren,
+        };
+    const question = nodeLabel(trigger, nodeLabel(item, 'Question')) || 'Question';
+    const canonicalItem: OpenCompositionNode = {
+      ...item,
+      props: {
+        ...item.props,
+        question,
+        defaultOpen: item.props.defaultOpen === true,
+      },
+      children: [trigger, panel],
+    };
+    delete canonicalItem.props.title;
+    relations.push({ triggerId: trigger.id, panelId: panel.id });
+    return canonicalItem;
+  });
+  const allowMultiple = node.props.allowMultiple === true;
+  if (!allowMultiple) {
+    let defaultOpenSeen = false;
+    items.forEach((item) => {
+      if (item.props.defaultOpen !== true) return;
+      if (defaultOpenSeen) item.props.defaultOpen = false;
+      else defaultOpenSeen = true;
+    });
+  }
+  return {
+    ...node,
+    props: {
+      ...node.props,
+      allowMultiple,
+      ...(typeof node.props.ariaLabel === 'string'
+        ? { ariaLabel: node.props.ariaLabel }
+        : {}),
+    },
+    children: items,
+  };
+}
+
+function canonicalizeTabsNode(
+  node: OpenCompositionNode,
+  usedNodeIds: Set<string>,
+  relations: CompoundRelation[],
+): OpenCompositionNode {
+  const lists = node.children.filter((child) => child.type === 'tab-list');
+  const existingList = lists[0];
+  const triggerCandidates = [
+    ...lists.flatMap((list) =>
+      list.children.filter((child) => child.type === 'tab-trigger'),
+    ),
+    ...node.children.filter((child) => child.type === 'tab-trigger'),
+  ];
+  const panels = node.children.filter((child) => child.type === 'tab-panel');
+  const looseContent = [
+    ...node.children.filter(
+      (child) =>
+        child.type !== 'tab-list' &&
+        child.type !== 'tab-panel' &&
+        child.type !== 'tab-trigger',
+    ),
+    ...lists
+      .slice(1)
+      .flatMap((list) => list.children.filter((child) => child.type !== 'tab-trigger')),
+  ];
+  const pairCount = Math.max(triggerCandidates.length, panels.length, 1);
+  const canonicalPanels = panels.slice();
+  while (canonicalPanels.length < pairCount) {
+    const index = canonicalPanels.length;
+    canonicalPanels.push({
+      id: boundedChildId(node.id, `panel-${index + 1}`, usedNodeIds),
+      type: 'tab-panel',
+      props: {},
+      children: [],
+    });
+  }
+  if (looseContent.length > 0) {
+    const firstPanel = canonicalPanels[0];
+    if (firstPanel) firstPanel.children = [...firstPanel.children, ...looseContent];
+  }
+  const canonicalTriggers = Array.from({ length: pairCount }, (_, index) =>
+    normalizeTabTrigger(node.id, triggerCandidates[index], index, usedNodeIds),
+  );
+  canonicalTriggers.forEach((trigger, index) => {
+    const panel = canonicalPanels[index];
+    if (panel) relations.push({ triggerId: trigger.id, panelId: panel.id });
+  });
+  const initialTabId =
+    typeof node.props.initialTabId === 'string' &&
+    canonicalPanels.some((panel) => panel.id === node.props.initialTabId)
+      ? node.props.initialTabId
+      : canonicalPanels[0]?.id;
+  const canonicalList = {
+    ...(existingList ?? {
+      id: boundedChildId(node.id, 'list', usedNodeIds),
+      type: 'tab-list' as const,
+      props: {},
+      children: [],
+    }),
+    type: 'tab-list' as const,
+    children: canonicalTriggers,
+  };
+  return {
+    ...node,
+    props: {
+      ...node.props,
+      orientation: node.props.orientation === 'vertical' ? 'vertical' : 'horizontal',
+      ...(initialTabId ? { initialTabId } : {}),
+    },
+    children: [canonicalList, ...canonicalPanels],
+  };
 }
 
 function normalizeInputType(
@@ -368,6 +679,7 @@ export function canonicalizeOpenCompositionPayload(
   const root = cloneNode(payload.root);
   const usedNodeIds = new Set(nodeMap(root).keys());
   const usedBehaviorIds = new Set(payload.behaviors.map((behavior) => behavior.id));
+  const compoundRelations: CompoundRelation[] = [];
   const fields = new Map<string, Extract<OpenCompositionBehavior, { kind: 'field' }>>(
     payload.behaviors
       .filter(
@@ -403,6 +715,22 @@ export function canonicalizeOpenCompositionPayload(
       if (citation !== undefined) node.props.cite = citation;
     }
     if (node.type === 'quote') delete node.props.citation;
+    if (node.type === 'list') {
+      node.props = {
+        ...node.props,
+        ...canonicalizeOpenCompositionListProps(node.props),
+      };
+    }
+    if (node.type === 'disclosure') {
+      const canonical = canonicalizeDisclosureNode(node, usedNodeIds, compoundRelations);
+      node.props = canonical.props;
+      node.children = canonical.children;
+    }
+    if (node.type === 'tabs') {
+      const canonical = canonicalizeTabsNode(node, usedNodeIds, compoundRelations);
+      node.props = canonical.props;
+      node.children = canonical.children;
+    }
     const fieldKeys = nextFormNodeId
       ? (fieldKeysByForm.get(nextFormNodeId) ?? new Set<string>())
       : new Set<string>();
@@ -426,31 +754,75 @@ export function canonicalizeOpenCompositionPayload(
   const nodes = nodeMap(root);
   const canonicalBehaviors: OpenCompositionBehavior[] = [];
   const canonicalBehaviorIds = new Set<string>();
+  const relationByTrigger = new Map(
+    compoundRelations.map((relation) => [relation.triggerId, relation.panelId]),
+  );
+  const relationSources = new Set<string>();
   const appendBehavior = (behavior: OpenCompositionBehavior): void => {
     if (canonicalBehaviorIds.has(behavior.id)) return;
     canonicalBehaviorIds.add(behavior.id);
     canonicalBehaviors.push(behavior);
   };
   for (const behavior of payload.behaviors) {
+    const source = nodes.get(behavior.nodeId);
+    if (!source) continue;
+
     if (behavior.kind === 'field') {
       const field = fields.get(behavior.nodeId);
       if (field && canonicalFieldNodeIds.has(behavior.nodeId)) appendBehavior(field);
       continue;
+    }
+    if (behavior.kind === 'action') {
+      if (behavior.targetNodeId && !nodes.has(behavior.targetNodeId)) continue;
+      // A toggle without a target cannot produce a bounded interactive
+      // projection. Compound triggers receive their target below; unrelated
+      // malformed toggles are dropped at this boundary.
+      if (
+        behavior.action === 'toggle' &&
+        !behavior.targetNodeId &&
+        !relationByTrigger.has(behavior.nodeId)
+      ) {
+        continue;
+      }
     }
     if (
       behavior.kind === 'action' &&
       (behavior.action === 'submit-form' || behavior.action === 'reset-form')
     ) {
       const target = behavior.targetNodeId ? nodes.get(behavior.targetNodeId) : undefined;
-      const source = nodes.get(behavior.nodeId);
       const sourceIsInsideTarget =
         target?.type === 'form' &&
         source !== undefined &&
         (source.type === 'form' || containsNode(target, source.id));
       if (!sourceIsInsideTarget) continue;
     }
+    if (behavior.kind === 'action' && behavior.action === 'toggle') {
+      const panelId = relationByTrigger.get(behavior.nodeId);
+      if (panelId) {
+        if (relationSources.has(behavior.nodeId)) continue;
+        relationSources.add(behavior.nodeId);
+        appendBehavior({
+          ...behavior,
+          event: 'click',
+          targetNodeId: panelId,
+        });
+        continue;
+      }
+    }
     appendBehavior({ ...behavior });
   }
+  compoundRelations.forEach(({ triggerId, panelId }) => {
+    if (relationSources.has(triggerId)) return;
+    const behaviorId = boundedBehaviorId(triggerId, usedBehaviorIds);
+    appendBehavior({
+      id: behaviorId,
+      kind: 'action',
+      nodeId: triggerId,
+      event: 'click',
+      action: 'toggle',
+      targetNodeId: panelId,
+    });
+  });
   for (const field of fields.values()) {
     if (canonicalFieldNodeIds.has(field.nodeId)) appendBehavior(field);
   }

@@ -5,7 +5,9 @@ import {
   canMutateStructuralNode,
   OPEN_COMPOSITION_REGISTRY,
   isOpenCompositionAtomicNodeType,
+  isOpenCompositionManagedContainer,
   isOpenCompositionNodeType,
+  isSemanticOwnedOpenCompositionChild,
   resolveSlotForChild,
   resolveSlotsForChild,
   type ComponentSlotDefinition,
@@ -83,9 +85,17 @@ export function canInsertLiveChild(
   const parentAttributes = parent.getAttributes({ noStyle: true });
   if (parentAttributes['data-payload-open-composition'] === 'true') {
     const parentType = parentAttributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+    const grandparentCandidate = parent.parent()
+      ? openPayloadNodeType(parent.parent() as Component)
+      : undefined;
+    const grandparentType = isOpenCompositionNodeType(grandparentCandidate)
+      ? grandparentCandidate
+      : undefined;
     return isOpenCompositionNodeType(parentType) && isOpenCompositionNodeType(childType)
       ? !isOpenCompositionAtomicNodeType(parentType) &&
-          canMutateStructuralNode(childType, parentType) &&
+          !isOpenCompositionManagedContainer(parentType) &&
+          !isSemanticOwnedOpenCompositionChild(parentType, childType, grandparentType) &&
+          canMutateStructuralNode(childType, parentType, grandparentType) &&
           canComposeChild(parentType, childType) &&
           OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert
       : false;

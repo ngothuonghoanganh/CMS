@@ -21,6 +21,7 @@ const REFERENCE_KEYS = new Set([
   'sourceId',
   'targetId',
   'targetNodeId',
+  'initialTabId',
 ]);
 const EXTENSION_PROPS_ATTRIBUTES = new Set([
   'data-payload-countdown-props',

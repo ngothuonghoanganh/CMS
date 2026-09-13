@@ -5,21 +5,25 @@ import {
   OPEN_COMPOSITION_AUTHORING_REGISTRY,
   OPEN_COMPOSITION_RECIPE_REGISTRY,
   OpenCompositionDocumentSchema,
+  OpenCompositionListPropsSchema,
   canComposeChild,
   canMutateStructuralNode,
   instantiateOpenCompositionRecipe,
   getOpenCompositionAuthoringDefinition,
   getOpenCompositionAuthoringProperty,
   isSemanticOwnedFormFieldChild,
+  isSemanticOwnedOpenCompositionChild,
   openCompositionInsertableChildren,
   migratePagePayloadToOpenComposition,
   migratePagePayloadV7ToOpenComposition,
   OpenCompositionPayloadSchema,
   type OpenCompositionNode,
+  type OpenCompositionPayload,
 } from './open-composition';
 import {
   canonicalizeOpenCompositionOptions,
   canonicalizeOpenCompositionPayload,
+  canonicalizeOpenCompositionListProps,
   normalizeOpenCompositionOptionValue,
   withBoundedNumericSuffix,
 } from './open-composition-semantic-integrity';
@@ -75,6 +79,23 @@ describe('Open Composition contract', () => {
     expect(isSemanticOwnedFormFieldChild('form-field', 'text')).toBe(false);
     expect(canMutateStructuralNode('form-field', 'form')).toBe(true);
     expect(canMutateStructuralNode('form-field', 'section')).toBe(true);
+  });
+
+  it('keeps FAQ and Tabs managed shells as semantic authoring units', () => {
+    expect(isSemanticOwnedOpenCompositionChild('disclosure', 'disclosure-item')).toBe(
+      true,
+    );
+    expect(isSemanticOwnedOpenCompositionChild('disclosure-item', 'button')).toBe(true);
+    expect(
+      isSemanticOwnedOpenCompositionChild('disclosure-item', 'disclosure-panel'),
+    ).toBe(true);
+    expect(isSemanticOwnedOpenCompositionChild('tabs', 'tab-list')).toBe(true);
+    expect(isSemanticOwnedOpenCompositionChild('tabs', 'tab-panel')).toBe(true);
+    expect(isSemanticOwnedOpenCompositionChild('tab-list', 'tab-trigger')).toBe(true);
+    expect(isSemanticOwnedOpenCompositionChild('tab-trigger', 'text', 'tab-list')).toBe(
+      true,
+    );
+    expect(isSemanticOwnedOpenCompositionChild('disclosure-item', 'text')).toBe(false);
   });
 
   it('provides explicit no-code authoring metadata instead of inferring controls from props', () => {
@@ -138,7 +159,7 @@ describe('Open Composition contract', () => {
   });
 
   it('ships Contact Form as a normal editable composition with semantic references', () => {
-    expect(OPEN_COMPOSITION_RECIPE_REGISTRY).toHaveLength(1);
+    expect(OPEN_COMPOSITION_RECIPE_REGISTRY).toHaveLength(4);
     const document = instantiateOpenCompositionRecipe('contact-form', (sourceId) =>
       sourceId === 'root' ? 'root' : `copy-${sourceId}`,
     );
@@ -176,6 +197,21 @@ describe('Open Composition contract', () => {
       collectIds(document.root).length,
     );
     expect(OpenCompositionDocumentSchema.parse(document)).toEqual(document);
+  });
+
+  it('ships gallery recipes as ordinary Grid and Image nodes', () => {
+    for (const columns of [2, 3, 4] as const) {
+      const document = instantiateOpenCompositionRecipe(
+        `gallery-${columns}-columns`,
+        (sourceId) => (sourceId === 'root' ? 'root' : `gallery-${columns}-${sourceId}`),
+      );
+      const grid = document.root.children[0];
+      expect(grid?.type).toBe('grid');
+      expect(grid?.children).toHaveLength(columns === 2 ? 4 : columns === 3 ? 6 : 8);
+      expect(grid?.children.every((child) => child.type === 'image')).toBe(true);
+      expect(findNode(document.root, 'gallery-grid')).toBeUndefined();
+      expect(OpenCompositionDocumentSchema.parse(document)).toEqual(document);
+    }
   });
 
   it('allows visual re-composition without changing form semantics', () => {
@@ -324,6 +360,291 @@ describe('Open Composition contract', () => {
     });
     expect(migrated.version).toBe(8);
     expect(migrated.root).toMatchObject({ id: 'root', type: 'root', children: [] });
+  });
+
+  it('promotes legacy List, Accordion, Tabs and Gallery nodes deterministically', () => {
+    const legacy = {
+      version: 7 as const,
+      metadata: { documentTitle: 'Legacy composition' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            style: { base: { padding: '24px' } },
+            children: [
+              {
+                id: 'legacy-list',
+                type: 'list',
+                props: {
+                  ordered: true,
+                  items: [
+                    { id: 'list-one', text: 'One' },
+                    { id: 'list-two', text: 'Two' },
+                  ],
+                },
+                children: [],
+              },
+              {
+                id: 'legacy-accordion',
+                type: 'accordion',
+                props: { allowMultiple: false, headingLevel: 3, ariaLabel: 'FAQ' },
+                children: [
+                  {
+                    id: 'legacy-question',
+                    type: 'accordion-item',
+                    props: { title: 'Returns', defaultOpen: true },
+                    children: [
+                      {
+                        id: 'legacy-answer',
+                        type: 'text',
+                        props: { text: 'Thirty days.' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'legacy-tabs',
+                type: 'tabs',
+                props: {
+                  orientation: 'vertical',
+                  ariaLabel: 'Product information',
+                  activationMode: 'automatic',
+                },
+                children: [
+                  {
+                    id: 'legacy-overview',
+                    type: 'tab-item',
+                    props: { label: 'Overview' },
+                    children: [
+                      {
+                        id: 'legacy-overview-copy',
+                        type: 'text',
+                        props: { text: 'Summary' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'legacy-gallery',
+                type: 'gallery',
+                props: {},
+                style: { base: { padding: '8px' } },
+                children: [
+                  {
+                    id: 'legacy-image',
+                    type: 'image',
+                    props: { src: '/assets/legacy.png', alt: 'Legacy photo' },
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const source = structuredClone(legacy);
+    const migrated = migratePagePayloadToOpenComposition(legacy);
+    const repeated = migratePagePayloadToOpenComposition(legacy);
+
+    expect(legacy).toEqual(source);
+    expect(migrated).toEqual(repeated);
+    const list = findNode(migrated.root, 'legacy-list');
+    const disclosure = findNode(migrated.root, 'legacy-accordion');
+    const tabs = findNode(migrated.root, 'legacy-tabs');
+    const gallery = findNode(migrated.root, 'legacy-gallery');
+    expect(list?.type).toBe('list');
+    expect(list?.props).toEqual({
+      ordered: true,
+      items: [
+        { id: 'list-one', text: 'One' },
+        { id: 'list-two', text: 'Two' },
+      ],
+    });
+    expect(disclosure?.children.map((child) => child.type)).toEqual(['disclosure-item']);
+    expect(disclosure?.children[0]?.children.map((child) => child.type)).toEqual([
+      'button',
+      'disclosure-panel',
+    ]);
+    expect(tabs?.children.map((child) => child.type)).toEqual(['tab-list', 'tab-panel']);
+    expect(tabs?.children[0]?.children[0]?.type).toBe('tab-trigger');
+    expect(gallery?.type).toBe('grid');
+    expect(gallery?.children.map((child) => child.type)).toEqual(['image']);
+    expect(gallery?.style).toEqual({ base: { padding: '8px' } });
+    expect(gallery?.children[0]?.props).toEqual({
+      src: '/assets/legacy.png',
+      alt: 'Legacy photo',
+    });
+    expect(OpenCompositionPayloadSchema.parse(migrated)).toEqual(migrated);
+  });
+
+  it('canonicalizes native List identity and compound interaction invariants', () => {
+    expect(
+      OpenCompositionListPropsSchema.parse(
+        canonicalizeOpenCompositionListProps({
+          ordered: true,
+          items: [
+            { id: 'item-1', text: 'First' },
+            { id: 'item-1', text: 'Second' },
+          ],
+        }),
+      ),
+    ).toEqual({
+      ordered: true,
+      items: [
+        { id: 'item-1', text: 'First' },
+        { id: 'item-1-2', text: 'Second' },
+      ],
+    });
+
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Compound invariants' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: { allowMultiple: false },
+            children: [
+              {
+                id: 'faq',
+                type: 'disclosure',
+                props: { allowMultiple: false },
+                children: [
+                  {
+                    id: 'faq-one',
+                    type: 'disclosure-item',
+                    props: { title: 'First', defaultOpen: true },
+                    children: [
+                      {
+                        id: 'faq-one-trigger',
+                        type: 'button',
+                        props: { label: 'First' },
+                        children: [],
+                      },
+                      {
+                        id: 'faq-one-panel',
+                        type: 'disclosure-panel',
+                        props: {},
+                        children: [],
+                      },
+                    ],
+                  },
+                  {
+                    id: 'faq-two',
+                    type: 'disclosure-item',
+                    props: { question: 'Second', defaultOpen: true },
+                    children: [
+                      {
+                        id: 'faq-two-copy',
+                        type: 'text',
+                        props: { text: 'Answer' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'tabs',
+                type: 'tabs',
+                props: { orientation: 'vertical', initialTabId: 'missing' },
+                children: [
+                  {
+                    id: 'tabs-list-a',
+                    type: 'tab-list',
+                    props: {},
+                    children: [
+                      {
+                        id: 'tab-trigger-a',
+                        type: 'tab-trigger',
+                        props: { label: 'A' },
+                        children: [],
+                      },
+                    ],
+                  },
+                  {
+                    id: 'tabs-list-b',
+                    type: 'tab-list',
+                    props: {},
+                    children: [
+                      {
+                        id: 'tab-trigger-b',
+                        type: 'tab-trigger',
+                        props: { label: 'B' },
+                        children: [],
+                      },
+                    ],
+                  },
+                  {
+                    id: 'tab-panel-a',
+                    type: 'tab-panel',
+                    props: {},
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [
+        {
+          id: 'faq-toggle',
+          kind: 'action',
+          nodeId: 'faq-one-trigger',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'faq-one-panel',
+        },
+      ],
+    });
+    const canonical = canonicalizeOpenCompositionPayload(payload);
+    const faq = findNode(canonical.root, 'faq');
+    const faqItems = faq?.children ?? [];
+    expect(faqItems).toHaveLength(2);
+    expect(faqItems.map((item) => item.children.map((child) => child.type))).toEqual([
+      ['button', 'disclosure-panel'],
+      ['button', 'disclosure-panel'],
+    ]);
+    expect(faqItems.map((item) => item.props.defaultOpen)).toEqual([true, false]);
+
+    const tabs = findNode(canonical.root, 'tabs');
+    const tabList = tabs?.children.find((child) => child.type === 'tab-list');
+    const tabPanels = tabs?.children.filter((child) => child.type === 'tab-panel') ?? [];
+    expect(tabList?.children).toHaveLength(2);
+    expect(tabPanels).toHaveLength(2);
+    expect(tabs?.props.initialTabId).toBe(tabPanels[0]?.id);
+    expect(canonical.behaviors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 'faq-one-trigger',
+          targetNodeId: 'faq-one-panel',
+        }),
+        expect.objectContaining({
+          nodeId: tabList?.children[0]?.id,
+          targetNodeId: tabPanels[0]?.id,
+        }),
+        expect.objectContaining({
+          nodeId: tabList?.children[1]?.id,
+          targetNodeId: tabPanels[1]?.id,
+        }),
+      ]),
+    );
+    expect(canonicalizeOpenCompositionPayload(canonical)).toEqual(canonical);
   });
 
   it('canonicalizes composed labels and preserves legacy attribution', () => {
@@ -677,6 +998,48 @@ describe('Open Composition contract', () => {
     expect(new Set(canonical.behaviors.map((behavior) => behavior.id)).size).toBe(
       canonical.behaviors.length,
     );
+  });
+
+  it('drops orphan behavior sources and targets without mutating the input', () => {
+    const malformed = {
+      version: 8,
+      metadata: { documentTitle: 'Orphan behavior repair' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [{ id: 'button', type: 'button', props: {}, children: [] }],
+      },
+      behaviors: [
+        {
+          id: 'missing-source',
+          kind: 'action',
+          nodeId: 'missing-button',
+          event: 'click',
+          action: 'navigate',
+          targetNodeId: 'button',
+        },
+        {
+          id: 'missing-target',
+          kind: 'action',
+          nodeId: 'button',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'missing-panel',
+        },
+        {
+          id: 'missing-toggle-target',
+          kind: 'action',
+          nodeId: 'button',
+          event: 'click',
+          action: 'toggle',
+        },
+      ],
+    } as OpenCompositionPayload;
+
+    const canonical = canonicalizeOpenCompositionPayload(malformed);
+    expect(canonical.behaviors).toEqual([]);
+    expect(malformed.behaviors).toHaveLength(3);
   });
 
   it('keeps semantic canonicalization idempotent for composed form values', () => {

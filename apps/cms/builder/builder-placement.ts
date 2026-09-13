@@ -14,6 +14,7 @@ import {
   canInsertChild,
   canRemoveFromSlot,
   canMutateStructuralNode,
+  isSemanticOwnedFormFieldChild,
   isOpenCompositionNodeType,
   type ComponentSlotOccupancy,
 } from '@payload/contracts';
@@ -131,16 +132,46 @@ export function resolveNodePlacement(
   const sourceParentOpenType = source.parent()
     ? openNodeType(source.parent() as Component)
     : undefined;
-  if (sourceOpenType && !canMutateStructuralNode(sourceOpenType, sourceParentOpenType)) {
-    return invalid('A Form Field label or control is managed by its Form Field.');
+  const sourceGrandparentOpenType = source.parent()?.parent()
+    ? openNodeType(source.parent()?.parent() as Component)
+    : undefined;
+  if (
+    sourceOpenType &&
+    !canMutateStructuralNode(
+      sourceOpenType,
+      sourceParentOpenType,
+      sourceGrandparentOpenType,
+    )
+  ) {
+    return invalid(
+      sourceParentOpenType &&
+        isSemanticOwnedFormFieldChild(sourceParentOpenType, sourceOpenType)
+        ? 'A Form Field label or control is managed by its Form Field.'
+        : 'This content is managed by its FAQ question or tab.',
+    );
   }
 
   const targetOpenType = openNodeType(target);
   const targetParentOpenType = target.parent()
     ? openNodeType(target.parent() as Component)
     : undefined;
-  if (targetOpenType && !canMutateStructuralNode(targetOpenType, targetParentOpenType)) {
-    return invalid('A Form Field label or control cannot be used as a move target.');
+  const targetGrandparentOpenType = target.parent()?.parent()
+    ? openNodeType(target.parent()?.parent() as Component)
+    : undefined;
+  if (
+    targetOpenType &&
+    !canMutateStructuralNode(
+      targetOpenType,
+      targetParentOpenType,
+      targetGrandparentOpenType,
+    )
+  ) {
+    return invalid(
+      targetParentOpenType &&
+        isSemanticOwnedFormFieldChild(targetParentOpenType, targetOpenType)
+        ? 'A Form Field label or control cannot be used as a move target.'
+        : 'This managed question or tab part cannot be a move target.',
+    );
   }
 
   if (source === target) return invalid('A node cannot be dropped on itself.');

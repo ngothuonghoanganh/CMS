@@ -6,7 +6,10 @@ import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
   type PageStylePropertyKey,
 } from './style-registry';
-import { canonicalizeOpenCompositionPayload } from './open-composition-semantic-integrity';
+import {
+  canonicalizeOpenCompositionPayload,
+  withBoundedNumericSuffix,
+} from './open-composition-semantic-integrity';
 
 /**
  * Open Composition is the forward-looking authoring model for the builder.
@@ -154,26 +157,27 @@ const OPEN_COMPOSITION_AUTHORING_CAPABILITIES = {
     directInsert: false,
     message: 'Change the Form Field type instead of adding a loose control.',
   }),
-  disclosure: authoringCapability('read-only', {
-    message: 'This disclosure is managed by the legacy component editor.',
+  disclosure: authoringCapability('authorable'),
+  'disclosure-item': authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Add a question from the FAQ editor so its answer stays connected.',
   }),
-  'disclosure-item': authoringCapability('read-only', {
-    message: 'This disclosure item is managed by the legacy component editor.',
+  'disclosure-panel': authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Edit the answer content from its FAQ item.',
   }),
-  'disclosure-panel': authoringCapability('read-only', {
-    message: 'This disclosure panel is managed by the legacy component editor.',
+  tabs: authoringCapability('authorable'),
+  'tab-list': authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Add tabs from the Tabs editor so labels and content stay connected.',
   }),
-  tabs: authoringCapability('read-only', {
-    message: 'This tabs block is managed by the legacy component editor.',
+  'tab-trigger': authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Edit this tab name from its Tabs item.',
   }),
-  'tab-list': authoringCapability('read-only', {
-    message: 'This tab list is managed by the legacy component editor.',
-  }),
-  'tab-trigger': authoringCapability('read-only', {
-    message: 'This tab trigger is managed by the legacy component editor.',
-  }),
-  'tab-panel': authoringCapability('read-only', {
-    message: 'This tab panel is managed by the legacy component editor.',
+  'tab-panel': authoringCapability('authorable', {
+    directInsert: false,
+    message: 'Edit this tab content directly or from its Tabs item.',
   }),
   countdown: authoringCapability('read-only', {
     message: 'This countdown is managed by its extension settings.',
@@ -182,9 +186,7 @@ const OPEN_COMPOSITION_AUTHORING_CAPABILITIES = {
     message: 'This extension is managed by the Extensions settings.',
   }),
   divider: authoringCapability('authorable'),
-  list: authoringCapability('read-only', {
-    message: 'This list is managed by the legacy component editor.',
-  }),
+  list: authoringCapability('authorable'),
   video: authoringCapability('authorable'),
   quote: authoringCapability('authorable'),
   accordion: authoringCapability('read-only', {
@@ -1036,6 +1038,103 @@ const openFormFieldProperties = [
   }),
 ] as const;
 
+const openDisclosureProperties = [
+  openContentProperty({
+    key: 'allowMultiple',
+    label: 'Allow multiple answers to stay open',
+    editingScope: 'design',
+    control: 'toggle',
+    defaultValue: false,
+  }),
+  openContentProperty({
+    key: 'ariaLabel',
+    label: 'FAQ label',
+    editingScope: 'content',
+    control: 'text',
+    allowEmpty: true,
+    defaultValue: 'FAQ',
+  }),
+] as const;
+
+const openDisclosureItemProperties = [
+  openContentProperty({
+    key: 'question',
+    label: 'Question',
+    editingScope: 'content',
+    control: 'text',
+    required: true,
+    defaultValue: 'Question',
+  }),
+  openContentProperty({
+    key: 'defaultOpen',
+    label: 'Open initially',
+    editingScope: 'design',
+    control: 'toggle',
+    defaultValue: false,
+  }),
+] as const;
+
+const openTabsProperties = [
+  openContentProperty({
+    key: 'orientation',
+    label: 'Direction',
+    editingScope: 'design',
+    control: 'select',
+    defaultValue: 'horizontal',
+    options: [
+      { label: 'Horizontal', value: 'horizontal' },
+      { label: 'Vertical', value: 'vertical' },
+    ],
+  }),
+  openContentProperty({
+    key: 'ariaLabel',
+    label: 'Tabs label',
+    editingScope: 'content',
+    control: 'text',
+    allowEmpty: true,
+    defaultValue: 'Tabs',
+  }),
+] as const;
+
+const openTabTriggerProperties = [
+  openContentProperty({
+    key: 'label',
+    label: 'Tab name',
+    editingScope: 'content',
+    control: 'text',
+    required: true,
+    defaultValue: 'Tab',
+  }),
+  openContentProperty({
+    key: 'openInitially',
+    label: 'Open initially',
+    editingScope: 'design',
+    control: 'toggle',
+    defaultValue: false,
+  }),
+] as const;
+
+const openListProperties = [
+  openContentProperty({
+    key: 'ordered',
+    label: 'List type',
+    editingScope: 'content',
+    control: 'select',
+    defaultValue: 'false',
+    options: [
+      { label: 'Bullets', value: 'false' },
+      { label: 'Numbers', value: 'true' },
+    ],
+  }),
+  openContentProperty({
+    key: 'items',
+    label: 'Items',
+    editingScope: 'content',
+    control: 'custom',
+    customEditor: 'list',
+  }),
+] as const;
+
 const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
   openAuthoringDefinition('root', [], OPEN_LAYOUT_STYLE_KEYS),
   ...(['section', 'container', 'stack', 'row', 'grid', 'card'] as const).map((type) =>
@@ -1186,6 +1285,26 @@ const openCompositionAuthoringEntries: OpenCompositionAuthoringDefinition[] = [
     ],
     OPEN_CONTENT_STYLE_KEYS,
   ),
+  openAuthoringDefinition(
+    'disclosure',
+    openDisclosureProperties,
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition(
+    'disclosure-item',
+    openDisclosureItemProperties,
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition('disclosure-panel', [], OPEN_CONTENT_STYLE_KEYS),
+  openAuthoringDefinition('tabs', openTabsProperties, OPEN_CONTENT_STYLE_KEYS),
+  openAuthoringDefinition('tab-list', [], OPEN_CONTENT_STYLE_KEYS),
+  openAuthoringDefinition(
+    'tab-trigger',
+    openTabTriggerProperties,
+    OPEN_CONTENT_STYLE_KEYS,
+  ),
+  openAuthoringDefinition('tab-panel', [], OPEN_CONTENT_STYLE_KEYS),
+  openAuthoringDefinition('list', openListProperties, OPEN_CONTENT_STYLE_KEYS),
 ];
 
 const openCompositionAuthoringEntriesByType = new Map(
@@ -1253,6 +1372,48 @@ export function isSemanticOwnedFormFieldChild(
   );
 }
 
+/**
+ * Compound nodes expose real GrapesJS children, but their semantic shells are
+ * still one authoring unit. This predicate is shared by command, placement,
+ * layer and canvas code so a user cannot split a question or tab pair.
+ */
+export function isSemanticOwnedOpenCompositionChild(
+  parentType: OpenCompositionNodeType | undefined,
+  childType: OpenCompositionNodeType | undefined,
+  grandparentType?: OpenCompositionNodeType,
+): boolean {
+  if (!parentType || !childType) return false;
+  if (isSemanticOwnedFormFieldChild(parentType, childType)) return true;
+  if (
+    (parentType === 'disclosure' && childType === 'disclosure-item') ||
+    (parentType === 'disclosure-item' &&
+      (childType === 'button' || childType === 'disclosure-panel')) ||
+    (parentType === 'tabs' && (childType === 'tab-list' || childType === 'tab-panel')) ||
+    (parentType === 'tab-list' && childType === 'tab-trigger')
+  ) {
+    return true;
+  }
+  return (
+    (parentType === 'button' || parentType === 'tab-trigger') &&
+    (childType === 'icon' || childType === 'text') &&
+    grandparentType !== undefined &&
+    (grandparentType === 'disclosure-item' || grandparentType === 'tab-list')
+  );
+}
+
+/** A parent whose children can only be changed through an aggregate command. */
+export function isOpenCompositionManagedContainer(
+  type: OpenCompositionNodeType | undefined,
+): boolean {
+  return (
+    type === 'disclosure' ||
+    type === 'disclosure-item' ||
+    type === 'tab-list' ||
+    type === 'tab-trigger' ||
+    type === 'tabs'
+  );
+}
+
 export function isOpenCompositionAtomicNodeType(
   type: OpenCompositionNodeType | undefined,
 ): type is 'form-field' {
@@ -1263,8 +1424,9 @@ export function isOpenCompositionAtomicNodeType(
 export function canMutateStructuralNode(
   nodeType: OpenCompositionNodeType,
   parentType: OpenCompositionNodeType | undefined,
+  grandparentType?: OpenCompositionNodeType,
 ): boolean {
-  return !isSemanticOwnedFormFieldChild(parentType, nodeType);
+  return !isSemanticOwnedOpenCompositionChild(parentType, nodeType, grandparentType);
 }
 
 export function canComposeChild(
@@ -1278,6 +1440,7 @@ export function openCompositionInsertableChildren(
   parentType: OpenCompositionNodeType,
 ): readonly OpenCompositionNodeType[] {
   if (isOpenCompositionAtomicNodeType(parentType)) return [];
+  if (isOpenCompositionManagedContainer(parentType)) return [];
   return OPEN_COMPOSITION_REGISTRY[parentType].allowedChildren.filter(
     (childType) => OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert,
   );
@@ -1330,6 +1493,23 @@ export type OpenCompositionNode = {
   partsStyle?: Record<string, CompositionStyle> | undefined;
   children: OpenCompositionNode[];
 };
+
+/** The persisted item record used by a native Open Composition List. */
+export const OpenCompositionListItemSchema = z
+  .object({
+    id: nodeId,
+    text: z.string().trim().min(1).max(1_000),
+  })
+  .strict();
+export type OpenCompositionListItem = z.infer<typeof OpenCompositionListItemSchema>;
+
+export const OpenCompositionListPropsSchema = z
+  .object({
+    ordered: z.boolean(),
+    items: z.array(OpenCompositionListItemSchema).min(1).max(100),
+  })
+  .strict();
+export type OpenCompositionListProps = z.infer<typeof OpenCompositionListPropsSchema>;
 
 const openCompositionPartStyles = z
   .record(compositionId, compositionStyleObjectSchema)
@@ -1668,9 +1848,35 @@ type LegacyPagePayload = {
   root: LegacyCompositionNode;
 };
 
-function boundedCompositionId(prefix: string, source: string): string {
+function boundedCompositionId(
+  prefix: string,
+  source: string,
+  usedIds?: Set<string>,
+): string {
   const value = `${prefix}-${source}`.replace(/[^A-Za-z0-9_-]/g, '-');
-  return /^[A-Za-z]/.test(value) ? value.slice(0, 128) : `node-${value}`.slice(0, 128);
+  const initial = (/^[A-Za-z]/.test(value) ? value : `node-${value}`).slice(0, 128);
+  if (!usedIds) return initial;
+  let candidate = initial;
+  let suffix = 2;
+  while (usedIds.has(candidate)) {
+    candidate = withBoundedNumericSuffix(initial, suffix, 128);
+    suffix += 1;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
+type LegacyMigrationContext = {
+  nodeIds: Set<string>;
+  behaviorIds: Set<string>;
+};
+
+function legacyBehaviorId(
+  prefix: string,
+  source: string,
+  context: LegacyMigrationContext,
+): string {
+  return boundedCompositionId(prefix, source, context.behaviorIds);
 }
 
 function legacyStyle(value: unknown): CompositionStyle | undefined {
@@ -1693,12 +1899,13 @@ function migratedFieldNode(
   field: Record<string, unknown>,
   index: number,
   behaviors: OpenCompositionBehavior[],
+  context?: LegacyMigrationContext,
 ): OpenCompositionNode {
   const fieldId = typeof field.id === 'string' ? field.id : `field-${index + 1}`;
   const fieldType = typeof field.type === 'string' ? field.type : 'text';
-  const fieldNodeId = boundedCompositionId(form.id, `field-${fieldId}`);
-  const labelNodeId = boundedCompositionId(fieldNodeId, 'label');
-  const controlNodeId = boundedCompositionId(fieldNodeId, 'control');
+  const fieldNodeId = boundedCompositionId(form.id, `field-${fieldId}`, context?.nodeIds);
+  const labelNodeId = boundedCompositionId(fieldNodeId, 'label', context?.nodeIds);
+  const controlNodeId = boundedCompositionId(fieldNodeId, 'control', context?.nodeIds);
   const label = typeof field.label === 'string' ? field.label : fieldId;
   const required = field.required === true;
   const controlType = fieldType === 'textarea' ? 'textarea' : 'input';
@@ -1709,7 +1916,9 @@ function migratedFieldNode(
     ...(Array.isArray(field.options) ? { options: field.options } : {}),
   };
   behaviors.push({
-    id: boundedCompositionId(fieldNodeId, 'behavior'),
+    id: context
+      ? legacyBehaviorId(fieldNodeId, 'behavior', context)
+      : boundedCompositionId(fieldNodeId, 'behavior'),
     kind: 'field',
     nodeId: fieldNodeId,
     formNodeId: form.id,
@@ -1763,6 +1972,7 @@ function migratedFieldNode(
 function migrateLegacyNode(
   node: LegacyCompositionNode,
   behaviors: OpenCompositionBehavior[],
+  context?: LegacyMigrationContext,
 ): OpenCompositionNode {
   if (node.type === 'form') {
     const fields = Array.isArray(node.props.fields)
@@ -1772,9 +1982,9 @@ function migrateLegacyNode(
         )
       : [];
     const formChildren = fields.map((field, index) =>
-      migratedFieldNode(node, field, index, behaviors),
+      migratedFieldNode(node, field, index, behaviors, context),
     );
-    const submitNodeId = boundedCompositionId(node.id, 'submit');
+    const submitNodeId = boundedCompositionId(node.id, 'submit', context?.nodeIds);
     const submitLabel =
       typeof node.props.submitLabel === 'string' ? node.props.submitLabel : 'Submit';
     formChildren.push({
@@ -1786,7 +1996,7 @@ function migrateLegacyNode(
         : {}),
       children: [
         {
-          id: boundedCompositionId(submitNodeId, 'text'),
+          id: boundedCompositionId(submitNodeId, 'text', context?.nodeIds),
           type: 'text',
           props: { text: submitLabel },
           children: [],
@@ -1794,7 +2004,9 @@ function migrateLegacyNode(
       ],
     });
     behaviors.push({
-      id: boundedCompositionId(submitNodeId, 'behavior'),
+      id: context
+        ? legacyBehaviorId(submitNodeId, 'behavior', context)
+        : boundedCompositionId(submitNodeId, 'behavior'),
       kind: 'action',
       nodeId: submitNodeId,
       event: 'click',
@@ -1819,6 +2031,188 @@ function migrateLegacyNode(
     };
   }
 
+  if (node.type === 'accordion') {
+    const itemSources = node.children.filter((child) => child.type === 'accordion-item');
+    const sourceItems = itemSources.length
+      ? itemSources
+      : [
+          {
+            id: boundedCompositionId(node.id, 'item', context?.nodeIds),
+            type: 'accordion-item',
+            props: { question: 'Question', defaultOpen: false },
+            children: [],
+          },
+        ];
+    const children = sourceItems.map((item, index) => {
+      const itemId = item.id;
+      const title =
+        typeof item.props.title === 'string' && item.props.title.trim()
+          ? item.props.title
+          : `Question ${index + 1}`;
+      const triggerId = boundedCompositionId(itemId, 'trigger', context?.nodeIds);
+      const panelId = boundedCompositionId(itemId, 'panel', context?.nodeIds);
+      const textId = boundedCompositionId(triggerId, 'text', context?.nodeIds);
+      behaviors.push({
+        id: context
+          ? legacyBehaviorId(triggerId, 'behavior', context)
+          : boundedCompositionId(triggerId, 'behavior'),
+        kind: 'action',
+        nodeId: triggerId,
+        event: 'click',
+        action: 'toggle',
+        targetNodeId: panelId,
+      });
+      return {
+        id: itemId,
+        type: 'disclosure-item' as const,
+        props: {
+          question: title,
+          defaultOpen: item.props.defaultOpen === true,
+        },
+        ...(legacyStyle(item.style) ? { style: legacyStyle(item.style) } : {}),
+        children: [
+          {
+            id: triggerId,
+            type: 'button' as const,
+            props: { label: title },
+            ...(legacyPartStyle(item.partsStyle, 'trigger')
+              ? { style: legacyPartStyle(item.partsStyle, 'trigger') }
+              : {}),
+            children: [
+              { id: textId, type: 'text' as const, props: { text: title }, children: [] },
+            ],
+          },
+          {
+            id: panelId,
+            type: 'disclosure-panel' as const,
+            props: {},
+            ...(legacyPartStyle(item.partsStyle, 'panel')
+              ? { style: legacyPartStyle(item.partsStyle, 'panel') }
+              : {}),
+            children: item.children.map((child) =>
+              migrateLegacyNode(child, behaviors, context),
+            ),
+          },
+        ],
+      } satisfies OpenCompositionNode;
+    });
+    return {
+      id: node.id,
+      type: 'disclosure',
+      props: {
+        allowMultiple: node.props.allowMultiple === true,
+        ...(typeof node.props.ariaLabel === 'string'
+          ? { ariaLabel: node.props.ariaLabel }
+          : {}),
+      },
+      ...(legacyStyle(node.style) ? { style: legacyStyle(node.style) } : {}),
+      ...(node.partsStyle && typeof node.partsStyle === 'object'
+        ? { partsStyle: node.partsStyle as Record<string, CompositionStyle> }
+        : {}),
+      children,
+    };
+  }
+
+  if (node.type === 'tabs') {
+    const tabSources = node.children.filter((child) => child.type === 'tab-item');
+    const sourceItems = tabSources.length
+      ? tabSources
+      : [
+          {
+            id: boundedCompositionId(node.id, 'tab-1', context?.nodeIds),
+            type: 'tab-item',
+            props: { label: 'Tab 1' },
+            children: [],
+          },
+        ];
+    const listId = boundedCompositionId(node.id, 'list', context?.nodeIds);
+    const triggers: OpenCompositionNode[] = [];
+    const panels: OpenCompositionNode[] = [];
+    sourceItems.forEach((item, index) => {
+      const label =
+        typeof item.props.label === 'string' && item.props.label.trim()
+          ? item.props.label
+          : `Tab ${index + 1}`;
+      const triggerId = boundedCompositionId(item.id, 'trigger', context?.nodeIds);
+      const panelId = boundedCompositionId(item.id, 'panel', context?.nodeIds);
+      const textId = boundedCompositionId(triggerId, 'text', context?.nodeIds);
+      behaviors.push({
+        id: context
+          ? legacyBehaviorId(triggerId, 'behavior', context)
+          : boundedCompositionId(triggerId, 'behavior'),
+        kind: 'action',
+        nodeId: triggerId,
+        event: 'click',
+        action: 'toggle',
+        targetNodeId: panelId,
+      });
+      triggers.push({
+        id: triggerId,
+        type: 'tab-trigger',
+        props: { label },
+        ...(legacyPartStyle(item.partsStyle, 'tab')
+          ? { style: legacyPartStyle(item.partsStyle, 'tab') }
+          : {}),
+        children: [{ id: textId, type: 'text', props: { text: label }, children: [] }],
+      });
+      panels.push({
+        id: panelId,
+        type: 'tab-panel',
+        props: {},
+        ...(legacyStyle(item.style) ? { style: legacyStyle(item.style) } : {}),
+        ...(legacyPartStyle(item.partsStyle, 'panel')
+          ? { partsStyle: { root: legacyPartStyle(item.partsStyle, 'panel')! } }
+          : {}),
+        children: item.children.map((child) =>
+          migrateLegacyNode(child, behaviors, context),
+        ),
+      });
+    });
+    return {
+      id: node.id,
+      type: 'tabs',
+      props: {
+        orientation: node.props.orientation === 'vertical' ? 'vertical' : 'horizontal',
+        initialTabId: panels[0]?.id,
+        ...(typeof node.props.ariaLabel === 'string'
+          ? { ariaLabel: node.props.ariaLabel }
+          : {}),
+        ...(node.props.activationMode === 'manual' ||
+        node.props.activationMode === 'automatic'
+          ? { activationMode: node.props.activationMode }
+          : {}),
+      },
+      ...(legacyStyle(node.style) ? { style: legacyStyle(node.style) } : {}),
+      ...(node.partsStyle && typeof node.partsStyle === 'object'
+        ? { partsStyle: node.partsStyle as Record<string, CompositionStyle> }
+        : {}),
+      children: [
+        { id: listId, type: 'tab-list', props: {}, children: triggers },
+        ...panels,
+      ],
+    };
+  }
+
+  if (node.type === 'gallery') {
+    return {
+      id: node.id,
+      type: 'grid',
+      props: {},
+      ...(legacyStyle(node.style) ? { style: legacyStyle(node.style) } : {}),
+      ...(node.partsStyle && typeof node.partsStyle === 'object'
+        ? { partsStyle: node.partsStyle as Record<string, CompositionStyle> }
+        : {}),
+      children: node.children.map((child) => {
+        const migrated = migrateLegacyNode(child, behaviors, context);
+        if (migrated.type !== 'image') return migrated;
+        const imageStyle = legacyPartStyle(node.partsStyle, 'image');
+        return imageStyle && !migrated.style
+          ? { ...migrated, style: imageStyle }
+          : migrated;
+      }),
+    };
+  }
+
   const type = OpenCompositionNodeTypeSchema.safeParse(node.type);
   if (!type.success)
     throw new Error(`Cannot migrate unsupported node type: ${node.type}`);
@@ -1830,7 +2224,7 @@ function migrateLegacyNode(
     ...(node.partsStyle && typeof node.partsStyle === 'object'
       ? { partsStyle: node.partsStyle as Record<string, CompositionStyle> }
       : {}),
-    children: node.children.map((child) => migrateLegacyNode(child, behaviors)),
+    children: node.children.map((child) => migrateLegacyNode(child, behaviors, context)),
   };
 }
 
@@ -1845,7 +2239,14 @@ export function migratePagePayloadToOpenComposition(
     throw new Error('Only legacy PagePayload versions 1 through 7 can be migrated');
   }
   const behaviors: OpenCompositionBehavior[] = [];
-  const root = migrateLegacyNode(payload.root, behaviors);
+  const nodeIds = new Set<string>();
+  const collectIds = (node: LegacyCompositionNode): void => {
+    nodeIds.add(node.id);
+    node.children.forEach(collectIds);
+  };
+  collectIds(payload.root);
+  const context: LegacyMigrationContext = { nodeIds, behaviorIds: new Set<string>() };
+  const root = migrateLegacyNode(payload.root, behaviors, context);
   const migrated = OpenCompositionPayloadSchema.parse({
     version: 8,
     metadata: payload.metadata,
@@ -2073,8 +2474,55 @@ const contactFormRecipe: OpenCompositionRecipe = {
   },
 };
 
+function galleryRecipe(columns: 2 | 3 | 4): OpenCompositionRecipe {
+  const images = Array.from(
+    { length: columns === 2 ? 4 : columns === 3 ? 6 : 8 },
+    (_, index) => ({
+      id: `image-${index + 1}`,
+      type: 'image' as const,
+      props: {
+        src: '/assets/placeholder.svg',
+        alt: `Gallery image ${index + 1}`,
+      },
+      children: [],
+    }),
+  );
+  return {
+    id: `gallery-${columns}-columns`,
+    name: `Gallery · ${columns} columns`,
+    category: 'content',
+    description: `A ${columns}-column gallery made from an editable Grid and Image nodes.`,
+    document: {
+      schemaVersion: OPEN_COMPOSITION_SCHEMA_VERSION,
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'gallery-grid',
+            type: 'grid',
+            props: {},
+            style: {
+              base: {
+                display: 'grid',
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              },
+            },
+            children: images,
+          },
+        ],
+      },
+      behaviors: [],
+    },
+  };
+}
+
 export const OPEN_COMPOSITION_RECIPE_REGISTRY: readonly OpenCompositionRecipe[] = [
   contactFormRecipe,
+  galleryRecipe(2),
+  galleryRecipe(3),
+  galleryRecipe(4),
 ];
 
 export function getOpenCompositionRecipe(id: string): OpenCompositionRecipe | undefined {
@@ -2099,12 +2547,17 @@ function remapNodeIds(
 ): OpenCompositionNode {
   const id = createId(node.id);
   map.set(node.id, id);
+  const children = node.children.map((child) => remapNodeIds(child, map, createId));
+  const props = { ...node.props };
+  if (node.type === 'tabs' && typeof props.initialTabId === 'string') {
+    props.initialTabId = map.get(props.initialTabId) ?? props.initialTabId;
+  }
   return {
     ...node,
     id,
-    props: { ...node.props },
+    props,
     ...(node.style ? { style: { ...node.style } } : {}),
-    children: node.children.map((child) => remapNodeIds(child, map, createId)),
+    children,
   };
 }
 

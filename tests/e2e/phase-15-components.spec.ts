@@ -171,7 +171,12 @@ test('Phase 15 list editor supports stable item operations with undo/redo and re
   await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-15-list');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Hero add' }).click();
-  await page.getByRole('button', { name: 'List add' }).click();
+  // Keep this Phase 15 journey on the immutable legacy List contract. The
+  // Phase 24 native List intentionally has the same user-facing label.
+  await page
+    .locator('.builder-block-card[data-block-type="list"]')
+    .getByRole('button', { name: 'List add', exact: true })
+    .click();
 
   await page.getByLabel('Ordered list', { exact: true }).check();
   await expect(canvas.locator('ol[data-payload-node-type="list"]')).toHaveCount(1);

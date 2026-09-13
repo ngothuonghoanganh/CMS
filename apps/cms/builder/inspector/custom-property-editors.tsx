@@ -44,6 +44,7 @@ export type CustomPropertyEditorProps = {
   value: unknown;
   onChange: (value: unknown) => void;
   navigationPages?: readonly Pick<Page, 'id' | 'name' | 'path' | 'anchors'>[];
+  contentOnly?: boolean | undefined;
 };
 
 function newItemId(): string {
@@ -237,13 +238,50 @@ function OptionsPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
   );
 }
 
-export function ListPropertyEditor({ value, onChange }: CustomPropertyEditorProps) {
+export function ListPropertyEditor({
+  value,
+  onChange,
+  contentOnly = false,
+}: CustomPropertyEditorProps) {
+  const [draftTextById, setDraftTextById] = useState<Record<string, string>>({});
   const parsed = ListPropsSchema.safeParse(value);
-  if (!parsed.success) return null;
-  const list = parsed.data;
+  const list = parsed.success
+    ? parsed.data
+    : (() => {
+        const candidate =
+          value && typeof value === 'object' && !Array.isArray(value)
+            ? (value as Record<string, unknown>)
+            : {};
+        const items = Array.isArray(candidate.items)
+          ? candidate.items.flatMap((item, index) => {
+              if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+              const record = item as Record<string, unknown>;
+              return [
+                {
+                  id: typeof record.id === 'string' ? record.id : `item-${index + 1}`,
+                  text:
+                    typeof record.text === 'string' ? record.text : `Item ${index + 1}`,
+                },
+              ];
+            })
+          : [];
+        return {
+          ordered: candidate.ordered === true,
+          items:
+            items.length > 0
+              ? items.slice(0, 100)
+              : [{ id: 'item-1', text: 'First item' }],
+        } as ListProps;
+      })();
+
+  const materializedItems = () =>
+    list.items.map((item) => ({
+      ...item,
+      text: draftTextById[item.id] ?? item.text,
+    }));
 
   function update(patch: Partial<ListProps>) {
-    onChange({ ...list, ...patch });
+    onChange({ ...list, items: materializedItems(), ...patch });
   }
 
   return (
@@ -252,9 +290,11 @@ export function ListPropertyEditor({ value, onChange }: CustomPropertyEditorProp
         <span className="builder-property-label">Items</span>
         <button
           className="button button-secondary button-small"
-          disabled={list.items.length >= 100}
+          disabled={contentOnly || list.items.length >= 100}
           onClick={() =>
-            update({ items: [...list.items, { id: newItemId(), text: 'New item' }] })
+            update({
+              items: [...materializedItems(), { id: newItemId(), text: 'New item' }],
+            })
           }
           type="button"
         >
@@ -266,24 +306,24 @@ export function ListPropertyEditor({ value, onChange }: CustomPropertyEditorProp
           <TextField
             compact
             label={`Item ${index + 1}`}
-            onChange={(event) =>
+            onChange={(event) => {
+              const text = event.target.value;
+              setDraftTextById((current) => ({ ...current, [item.id]: text }));
               update({
-                items: list.items.map((current) =>
-                  current.id === item.id
-                    ? { ...current, text: event.target.value }
-                    : current,
+                items: materializedItems().map((current) =>
+                  current.id === item.id ? { ...current, text } : current,
                 ),
-              })
-            }
-            value={item.text}
+              });
+            }}
+            value={draftTextById[item.id] ?? item.text}
           />
           <div className="row-actions">
             <button
               aria-label={`Move item ${index + 1} up`}
               className="button button-ghost button-small"
-              disabled={index === 0}
+              disabled={contentOnly || index === 0}
               onClick={() => {
-                const items = [...list.items];
+                const items = [...materializedItems()];
                 const current = items[index];
                 const previous = items[index - 1];
                 if (!current || !previous) return;
@@ -298,9 +338,9 @@ export function ListPropertyEditor({ value, onChange }: CustomPropertyEditorProp
             <button
               aria-label={`Move item ${index + 1} down`}
               className="button button-ghost button-small"
-              disabled={index === list.items.length - 1}
+              disabled={contentOnly || index === list.items.length - 1}
               onClick={() => {
-                const items = [...list.items];
+                const items = [...materializedItems()];
                 const current = items[index];
                 const next = items[index + 1];
                 if (!current || !next) return;
@@ -315,9 +355,11 @@ export function ListPropertyEditor({ value, onChange }: CustomPropertyEditorProp
             <button
               aria-label={`Remove item ${index + 1}`}
               className="button button-danger button-small"
-              disabled={list.items.length <= 1}
+              disabled={contentOnly || list.items.length <= 1}
               onClick={() =>
-                update({ items: list.items.filter((current) => current.id !== item.id) })
+                update({
+                  items: materializedItems().filter((current) => current.id !== item.id),
+                })
               }
               type="button"
             >

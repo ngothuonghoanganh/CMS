@@ -99,6 +99,14 @@ type BuilderInspectorProps = {
     position: 'before' | 'after',
   ) => void;
   onDuplicateStructuralChild: (nodeId: string) => void;
+  onAddDisclosureItem?: (parentId: string) => void;
+  onRemoveDisclosureItem?: (nodeId: string) => void;
+  onDuplicateDisclosureItem?: (nodeId: string) => void;
+  onMoveDisclosureItem?: (nodeId: string, direction: 'up' | 'down') => void;
+  onAddTab?: (parentId: string) => void;
+  onRemoveTab?: (nodeId: string) => void;
+  onDuplicateTab?: (nodeId: string) => void;
+  onMoveTab?: (nodeId: string, direction: 'up' | 'down') => void;
   usableAssets: Asset[];
   designSystem?: SiteDesignSystem;
   navigationPages?: readonly Pick<Page, 'id' | 'name' | 'path' | 'anchors'>[];
@@ -132,6 +140,14 @@ function OpenCompositionInspector({
   onMoveStructuralChild,
   onDuplicateStructuralChild,
   onAddStructuralChild,
+  onAddDisclosureItem,
+  onRemoveDisclosureItem,
+  onDuplicateDisclosureItem,
+  onMoveDisclosureItem,
+  onAddTab,
+  onRemoveTab,
+  onDuplicateTab,
+  onMoveTab,
   usableAssets,
   designSystem,
   navigationPages = [],
@@ -156,6 +172,14 @@ function OpenCompositionInspector({
   | 'onMoveStructuralChild'
   | 'onDuplicateStructuralChild'
   | 'onAddStructuralChild'
+  | 'onAddDisclosureItem'
+  | 'onRemoveDisclosureItem'
+  | 'onDuplicateDisclosureItem'
+  | 'onMoveDisclosureItem'
+  | 'onAddTab'
+  | 'onRemoveTab'
+  | 'onDuplicateTab'
+  | 'onMoveTab'
   | 'usableAssets'
   | 'designSystem'
   | 'navigationPages'
@@ -168,14 +192,29 @@ function OpenCompositionInspector({
 >) {
   const nodeType = selected.openComposition?.nodeType;
   if (!nodeType) return null;
-  const managedByField = selected.semanticOwner;
+  const managedBy = selected.semanticOwner;
+  const managedByField = managedBy?.nodeType === 'form-field' ? managedBy : undefined;
+  const managedVisualChild = Boolean(
+    managedBy &&
+    ['button', 'text', 'heading', 'icon'].includes(nodeType) &&
+    nodeType !== 'tab-trigger',
+  );
+  const aggregateType =
+    nodeType === 'disclosure' ||
+    nodeType === 'disclosure-item' ||
+    nodeType === 'tabs' ||
+    nodeType === 'tab-list' ||
+    nodeType === 'tab-trigger';
   const [addType, setAddType] = useState<OpenCompositionNodeType | ''>('');
   const definition = getOpenCompositionAuthoringDefinition(nodeType);
-  const contentProperties = managedByField
-    ? []
-    : definition.properties.filter((property) =>
-        isComponentPropertyVisible(property, selected.props),
-      );
+  const contentProperties =
+    managedByField || managedVisualChild
+      ? []
+      : definition.properties.filter(
+          (property) =>
+            (!contentOnly || property.editingScope === 'content') &&
+            isComponentPropertyVisible(property, selected.props),
+        );
   const addableChildren = openCompositionInsertableChildren(nodeType);
   const styleValues = Object.fromEntries(
     definition.styleGroups.flatMap((group) =>
@@ -203,6 +242,7 @@ function OpenCompositionInspector({
       const Editor = CUSTOM_PROPERTY_EDITORS[property.customEditor];
       return (
         <Editor
+          contentOnly={contentOnly}
           definition={property}
           navigationPages={navigationPages}
           onChange={(value) => updateSelectedProperty(property.key, value)}
@@ -311,6 +351,88 @@ function OpenCompositionInspector({
     );
   }
 
+  function renderSemanticItems(kind: 'faq' | 'tab'): ReactNode {
+    const items = selected.semanticItems ?? [];
+    const onAdd = kind === 'faq' ? onAddDisclosureItem : onAddTab;
+    const onRemove = kind === 'faq' ? onRemoveDisclosureItem : onRemoveTab;
+    const onDuplicate = kind === 'faq' ? onDuplicateDisclosureItem : onDuplicateTab;
+    const onMove = kind === 'faq' ? onMoveDisclosureItem : onMoveTab;
+    const ownerLabel = kind === 'faq' ? 'FAQ' : 'Tabs';
+    const itemLabel = kind === 'faq' ? 'Question' : 'Tab';
+    return (
+      <InspectorSection
+        label={kind === 'faq' ? 'Questions' : 'Tabs'}
+        onToggle={() => undefined}
+        open
+      >
+        <div
+          className="builder-structural-editor"
+          aria-label={`${ownerLabel} ${itemLabel.toLowerCase()}s`}
+        >
+          {items.map((item, index) => (
+            <div className="builder-structure-item" key={item.id}>
+              <button
+                className="button button-ghost button-small"
+                onClick={() => onSelectNode(item.id)}
+                type="button"
+              >
+                {item.label}
+              </button>
+              <span className="builder-structure-item-actions">
+                <button
+                  aria-label={`Move ${item.label} up`}
+                  className="button button-ghost button-small"
+                  disabled={contentOnly || index === 0 || !onMove}
+                  onClick={() => onMove?.(item.id, 'up')}
+                  type="button"
+                >
+                  ↑
+                </button>
+                <button
+                  aria-label={`Move ${item.label} down`}
+                  className="button button-ghost button-small"
+                  disabled={contentOnly || index === items.length - 1 || !onMove}
+                  onClick={() => onMove?.(item.id, 'down')}
+                  type="button"
+                >
+                  ↓
+                </button>
+                <button
+                  aria-label={`Duplicate ${item.label}`}
+                  className="button button-ghost button-small"
+                  disabled={contentOnly || !onDuplicate}
+                  onClick={() => onDuplicate?.(item.id)}
+                  type="button"
+                >
+                  Copy
+                </button>
+                <button
+                  aria-label={`Remove ${item.label}`}
+                  className="button button-ghost button-small"
+                  disabled={contentOnly || items.length <= 1 || !onRemove}
+                  onClick={() => onRemove?.(item.id)}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+        <button
+          className="button button-secondary button-small"
+          disabled={contentOnly || !onAdd}
+          onClick={() => onAdd?.(selected.id)}
+          type="button"
+        >
+          + Add {itemLabel.toLowerCase()}
+        </button>
+      </InspectorSection>
+    );
+  }
+
+  const activeTab = contentOnly ? 'content' : inspectorTab;
+
   if (definition.disposition !== 'authorable') {
     return (
       <div className="builder-inspector-empty" role="status">
@@ -329,7 +451,10 @@ function OpenCompositionInspector({
   return (
     <div className="builder-inspector">
       <div aria-label="Inspector tabs" className="builder-inspector-tabs" role="tablist">
-        {(['content', 'style', 'settings'] as const).map((tab) => (
+        {(contentOnly
+          ? (['content'] as const)
+          : (['content', 'style', 'settings'] as const)
+        ).map((tab) => (
           <button
             aria-label={
               tab === 'settings' ? 'Settings' : tab === 'style' ? 'Style' : 'Content'
@@ -346,7 +471,7 @@ function OpenCompositionInspector({
         ))}
       </div>
 
-      {inspectorTab === 'content' ? (
+      {activeTab === 'content' ? (
         <>
           <InspectorSection
             label="Content"
@@ -368,24 +493,61 @@ function OpenCompositionInspector({
                 </button>
               </div>
             ) : null}
-            {!managedByField && contentProperties.length > 0 ? (
-              <div className="builder-inspector-fields">
-                {definition.properties
-                  .filter((property) =>
-                    isComponentPropertyVisible(property, selected.props),
-                  )
-                  .map((property) => (
-                    <div key={property.key}>{renderContentProperty(property)}</div>
-                  ))}
+            {managedVisualChild ? (
+              <div>
+                <p className="muted small" role="note">
+                  This control is managed by its{' '}
+                  {managedBy?.nodeType === 'disclosure-item' ? 'FAQ item' : 'tab'}.
+                </p>
+                {managedBy ? (
+                  <button
+                    className="button button-secondary button-small"
+                    onClick={() => onSelectNode(managedBy.id)}
+                    type="button"
+                  >
+                    Edit {managedBy.nodeType === 'disclosure-item' ? 'question' : 'tab'}
+                  </button>
+                ) : null}
               </div>
-            ) : !managedByField ? (
+            ) : null}
+            {!managedByField && !managedVisualChild && contentProperties.length > 0 ? (
+              <div className="builder-inspector-fields">
+                {contentProperties.map((property) => (
+                  <div key={property.key}>{renderContentProperty(property)}</div>
+                ))}
+              </div>
+            ) : !managedByField && !managedVisualChild ? (
               <p className="muted small">
                 This {definition.label.toLowerCase()} is ready. Add content inside it
                 using the structure below.
               </p>
             ) : null}
           </InspectorSection>
-          {structure ? (
+          {nodeType === 'disclosure' ? renderSemanticItems('faq') : null}
+          {nodeType === 'tabs' ? renderSemanticItems('tab') : null}
+          {nodeType === 'disclosure-item' && selected.managedPanelId ? (
+            <InspectorSection label="Answer content" onToggle={() => undefined} open>
+              <button
+                className="button button-secondary button-small"
+                onClick={() => onSelectNode(selected.managedPanelId!)}
+                type="button"
+              >
+                Edit answer
+              </button>
+            </InspectorSection>
+          ) : null}
+          {nodeType === 'tab-trigger' && selected.managedPanelId ? (
+            <InspectorSection label="Tab content" onToggle={() => undefined} open>
+              <button
+                className="button button-secondary button-small"
+                onClick={() => onSelectNode(selected.managedPanelId!)}
+                type="button"
+              >
+                Edit tab content
+              </button>
+            </InspectorSection>
+          ) : null}
+          {structure && !aggregateType ? (
             <InspectorSection label="Structure" onToggle={() => undefined} open>
               {addableChildren.length > 0 ? (
                 <div className="builder-inspector-inline-row">
@@ -1200,6 +1362,7 @@ function LegacyBuilderInspector({
       const Editor = CUSTOM_PROPERTY_EDITORS[property.customEditor];
       return (
         <Editor
+          contentOnly={contentOnly}
           definition={property}
           key={property.key}
           navigationPages={navigationPages}
@@ -1652,10 +1815,26 @@ export function BuilderInspector(props: BuilderInspectorProps) {
         inspectorTab={props.inspectorTab}
         {...(props.navigationPages ? { navigationPages: props.navigationPages } : {})}
         onAddStructuralChild={props.onAddStructuralChild}
+        {...(props.onAddDisclosureItem
+          ? { onAddDisclosureItem: props.onAddDisclosureItem }
+          : {})}
+        {...(props.onAddTab ? { onAddTab: props.onAddTab } : {})}
+        {...(props.onDuplicateDisclosureItem
+          ? { onDuplicateDisclosureItem: props.onDuplicateDisclosureItem }
+          : {})}
         onDuplicateStructuralChild={props.onDuplicateStructuralChild}
+        {...(props.onDuplicateTab ? { onDuplicateTab: props.onDuplicateTab } : {})}
         onInspectorTabChange={props.onInspectorTabChange}
+        {...(props.onMoveDisclosureItem
+          ? { onMoveDisclosureItem: props.onMoveDisclosureItem }
+          : {})}
         onMoveStructuralChild={props.onMoveStructuralChild}
+        {...(props.onMoveTab ? { onMoveTab: props.onMoveTab } : {})}
+        {...(props.onRemoveDisclosureItem
+          ? { onRemoveDisclosureItem: props.onRemoveDisclosureItem }
+          : {})}
         onRemoveStructuralChild={props.onRemoveStructuralChild}
+        {...(props.onRemoveTab ? { onRemoveTab: props.onRemoveTab } : {})}
         onSelectNode={props.onSelectNode}
         onValidationIssue={props.onValidationIssue}
         onToggleSection={props.onToggleSection}

@@ -405,9 +405,9 @@ function renderLayerNodes(
             )}
             {node.semanticOwner ? (
               <span
-                aria-label="Managed by Form Field"
+                aria-label={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
                 className="builder-layer-managed-indicator"
-                title="Managed by Form Field"
+                title={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
               >
                 Managed
               </span>
@@ -509,7 +509,16 @@ function renderLayerNodes(
 }
 
 function inspectorNodeLabel(type: string): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
+  const labels: Record<string, string> = {
+    disclosure: 'FAQ',
+    'disclosure-item': 'Question',
+    'disclosure-panel': 'Answer',
+    'tab-list': 'Tab navigation',
+    'tab-trigger': 'Tab',
+    'tab-panel': 'Tab content',
+    'form-field': 'Form field',
+  };
+  return labels[type] ?? type.charAt(0).toUpperCase() + type.slice(1).replace(/-/g, ' ');
 }
 
 function selectedNodeLabel(selected: SelectedBuilderNode): string {
@@ -684,7 +693,7 @@ export default function BuilderShell({
     (overrides?: Partial<PagePreviewSnapshot>) => void
   >(() => undefined);
   const canDesign = permissions.includes('page.design');
-  const designEnabled = canDesign;
+  const designEnabled = canDesign && editorMode === 'design';
 
   useEffect(() => {
     const restorePanelPreferences = () => {
@@ -708,7 +717,7 @@ export default function BuilderShell({
   }, [panelPreferencesReady, panelWidths]);
 
   useEffect(() => {
-    if (!canDesign) {
+    if (!canDesign || editorMode === 'content') {
       if (editorMode !== 'content') setEditorMode('content');
       if (activeTool !== 'assets') setActiveTool('assets');
     }
@@ -1301,6 +1310,10 @@ export default function BuilderShell({
         if (!nextPermissions.includes('page.design')) {
           setEditorMode('content');
         } else {
+          // Designers retain the established authoring entry point. They can
+          // opt into Content mode explicitly, while content-only users remain
+          // locked to the copy-safe surface above.
+          setEditorMode('design');
           setActiveTool((currentTool) =>
             currentTool === 'assets' ? 'add' : currentTool,
           );
@@ -3215,6 +3228,24 @@ export default function BuilderShell({
                 onDuplicateStructuralChild={(nodeId) =>
                   editorRef.current?.duplicateStructuralChild(nodeId)
                 }
+                onAddDisclosureItem={(parentId) =>
+                  editorRef.current?.addDisclosureItem(parentId)
+                }
+                onRemoveDisclosureItem={(nodeId) =>
+                  editorRef.current?.removeDisclosureItem(nodeId)
+                }
+                onDuplicateDisclosureItem={(nodeId) =>
+                  editorRef.current?.duplicateDisclosureItem(nodeId)
+                }
+                onMoveDisclosureItem={(nodeId, direction) =>
+                  editorRef.current?.moveDisclosureItem(nodeId, direction)
+                }
+                onAddTab={(parentId) => editorRef.current?.addTab(parentId)}
+                onRemoveTab={(nodeId) => editorRef.current?.removeTab(nodeId)}
+                onDuplicateTab={(nodeId) => editorRef.current?.duplicateTab(nodeId)}
+                onMoveTab={(nodeId, direction) =>
+                  editorRef.current?.moveTab(nodeId, direction)
+                }
                 onReorderStructuralChild={(sourceId, targetId, position) =>
                   editorRef.current?.moveNode({
                     nodeId: sourceId,
@@ -3263,7 +3294,7 @@ export default function BuilderShell({
                 onUpdateBinding={updatePageBinding}
                 onUpdateQuery={updatePageQuery}
                 viewport={viewport}
-                contentOnly={false}
+                contentOnly={editorMode === 'content'}
               />
             </div>
           ) : (

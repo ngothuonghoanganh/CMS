@@ -8,6 +8,7 @@ import {
   isSafePageImageSource,
   isSafePageVideoSource,
   canonicalizeOpenCompositionPayload,
+  canonicalizeOpenCompositionListProps,
   openCompositionIconPath,
   isSafePageStyleValue,
   PAGE_RUNTIME_CLASS_NAMES,
@@ -28,6 +29,8 @@ import React, {
 } from 'react';
 
 import { getAnalyticsSessionId } from './analytics-client';
+import { AccordionRuntime } from './runtime/accordion-runtime';
+import { TabsRuntime } from './runtime/tabs-runtime';
 
 type OpenCompositionRendererProps = {
   payload: OpenCompositionPayload;
@@ -366,6 +369,43 @@ function renderFormField(
   );
 }
 
+function childOfType(
+  node: OpenCompositionNode,
+  type: OpenCompositionNode['type'],
+): OpenCompositionNode | undefined {
+  return node.children.find((child) => child.type === type);
+}
+
+function composedText(node: OpenCompositionNode | undefined, fallback: string): string {
+  if (!node) return fallback;
+  const direct = [
+    node.props.label,
+    node.props.text,
+    node.props.question,
+    node.props.title,
+  ].find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+  if (direct) return direct.trim();
+  const text = node.children.find(
+    (child) => child.type === 'text' || child.type === 'heading',
+  );
+  return text ? textProp(text, 'text', fallback) : fallback;
+}
+
+function toggleTargetIdFor(
+  trigger: OpenCompositionNode,
+  behaviors: readonly OpenCompositionBehavior[],
+): string | undefined {
+  return behaviors.find(
+    (candidate): candidate is Extract<OpenCompositionBehavior, { kind: 'action' }> =>
+      candidate.kind === 'action' &&
+      candidate.action === 'toggle' &&
+      candidate.nodeId === trigger.id &&
+      typeof candidate.targetNodeId === 'string',
+  )?.targetNodeId;
+}
+
 function renderOpenNode(
   node: OpenCompositionNode,
   context: OpenCompositionRendererProps['context'],
@@ -425,7 +465,7 @@ function renderOpenNode(
           alt={textProp(node, 'alt')}
           decoding="async"
           loading="lazy"
-          src={isSafePageImageSource(src) ? src : '/assets/placeholder.png'}
+          src={isSafePageImageSource(src) ? src : '/assets/placeholder.svg'}
           style={style}
         />
       );
@@ -575,23 +615,107 @@ function renderOpenNode(
         </form>
       );
     }
-    case 'disclosure':
-    case 'disclosure-item':
+    case 'disclosure': {
+      const items = node.children
+        .filter((item) => item.type === 'disclosure-item')
+        .map((item) => {
+          const trigger = childOfType(item, 'button');
+          const panel = childOfType(item, 'disclosure-panel');
+          return {
+            id: item.id,
+            title: composedText(trigger, textProp(item, 'question', 'Question')),
+            defaultOpen: booleanProp(item, 'defaultOpen'),
+            content: panel
+              ? OpenNodeContent({ node: panel, context, runtime })
+              : OpenNodeContent({ node: item, context, runtime }),
+            style: nodeStyle(item, context),
+            ...(trigger ? { triggerId: trigger.id } : {}),
+            ...(panel ? { panelId: panel.id } : {}),
+          };
+        });
+      return (
+        <AccordionRuntime
+          allowMultiple={booleanProp(node, 'allowMultiple')}
+          ariaLabel={textProp(node, 'ariaLabel', 'FAQ')}
+          headingLevel={3}
+          id={node.id}
+          items={items}
+          itemNodeType="disclosure-item"
+          panelNodeType="disclosure-panel"
+          partsStyle={{
+            root: partStyle(node, 'root', context),
+            item: partStyle(node, 'item', context),
+            trigger: partStyle(node, 'trigger', context),
+            panel: partStyle(node, 'panel', context),
+            icon: partStyle(node, 'icon', context),
+          }}
+          rootNodeType="disclosure"
+          style={style}
+        />
+      );
+    }
+    case 'disclosure-item': {
+      const trigger = childOfType(node, 'button');
+      const panel = childOfType(node, 'disclosure-panel');
       return (
         <details
           {...attributes(node)}
           open={booleanProp(node, 'defaultOpen')}
           style={style}
         >
-          <summary>{textProp(node, 'title', textProp(node, 'label', 'Details'))}</summary>
-          {OpenNodeContent({ node, context, runtime })}
+          <summary>
+            {composedText(trigger, textProp(node, 'question', 'Question'))}
+          </summary>
+          {panel
+            ? OpenNodeContent({ node: panel, context, runtime })
+            : OpenNodeContent({ node, context, runtime })}
         </details>
       );
+    }
+    case 'tabs': {
+      const list = childOfType(node, 'tab-list');
+      const panels = node.children.filter((child) => child.type === 'tab-panel');
+      const triggers =
+        list?.children.filter((child) => child.type === 'tab-trigger') ?? [];
+      const items = triggers.map((trigger, index) => {
+        const targetId = toggleTargetIdFor(trigger, runtime.behaviors);
+        const panel = targetId
+          ? panels.find((candidate) => candidate.id === targetId)
+          : panels[index];
+        return {
+          id: trigger.id,
+          label: composedText(trigger, `Tab ${index + 1}`),
+          content: panel ? OpenNodeContent({ node: panel, context, runtime }) : null,
+          triggerId: trigger.id,
+          ...(panel ? { style: nodeStyle(panel, context), panelId: panel.id } : {}),
+        };
+      });
+      return (
+        <TabsRuntime
+          activationMode={node.props.activationMode === 'manual' ? 'manual' : 'automatic'}
+          ariaLabel={textProp(node, 'ariaLabel', 'Tabs')}
+          id={node.id}
+          initialId={textProp(node, 'initialTabId')}
+          items={items}
+          orientation={node.props.orientation === 'vertical' ? 'vertical' : 'horizontal'}
+          panelNodeType="tab-panel"
+          partsStyle={{
+            root: partStyle(node, 'root', context),
+            list: partStyle(node, 'list', context),
+            tab: partStyle(node, 'tab', context),
+            activeTab: partStyle(node, 'activeTab', context),
+            panel: partStyle(node, 'panel', context),
+          }}
+          rootNodeType="tabs"
+          style={style}
+          {...(list ? { listNodeId: list.id } : {})}
+        />
+      );
+    }
     case 'disclosure-panel':
     case 'tab-panel':
     case 'tab-list':
     case 'tab-trigger':
-    case 'tabs':
     case 'accordion':
     case 'accordion-item':
     case 'tab-item':
@@ -603,19 +727,24 @@ function renderOpenNode(
     case 'divider':
       return <hr {...attributes(node)} style={style} />;
     case 'list': {
-      const items = Array.isArray(node.props.items) ? node.props.items : [];
+      const list = canonicalizeOpenCompositionListProps(node.props);
       return (
-        <ul {...attributes(node)} style={style}>
-          {items.map((item, index) => (
-            <li key={index}>
-              {typeof item === 'string'
-                ? item
-                : typeof item === 'object' && item !== null && 'text' in item
-                  ? String(item.text)
-                  : ''}
-            </li>
-          ))}
-        </ul>
+        <>
+          {/* Native list semantics are owned by the ordered flag. */}
+          {list.ordered ? (
+            <ol {...attributes(node)} style={style}>
+              {list.items.map((item) => (
+                <li key={item.id}>{item.text}</li>
+              ))}
+            </ol>
+          ) : (
+            <ul {...attributes(node)} style={style}>
+              {list.items.map((item) => (
+                <li key={item.id}>{item.text}</li>
+              ))}
+            </ul>
+          )}
+        </>
       );
     }
     case 'video': {
