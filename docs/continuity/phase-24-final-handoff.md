@@ -80,6 +80,9 @@ All static, unit, build, and focused release checks below were run with Node
 - Full Playwright release run: `114 passed, 0 failed` on the feature worktree
   during the release validation cycle.
 - `git diff --check`: passed.
+- Post-merge `main` quick verification: rebuilt all `5/5` Turbo tasks to
+  refresh local package artifacts, reran the focused `5 files / 132 tests`
+  suite, reran `format:check`, and confirmed `git diff --check`; all passed.
 
 Two later full-suite confirmation attempts were not used to downgrade the
 product result: one reused a stateful database and reported an intermittent
