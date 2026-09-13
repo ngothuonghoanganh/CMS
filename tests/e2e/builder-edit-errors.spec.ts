@@ -84,9 +84,15 @@ test('builder block content and design edits stay error-free', async ({
         .first()
         .click();
       await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
-      await page
-        .getByRole('button', { name: `${element.label} add`, exact: true })
-        .click();
+      const addButton =
+        element.label === 'List' || element.label === 'Tabs'
+          ? page
+              .locator(
+                `.builder-block-card[data-block-type="${element.label.toLowerCase()}"]`,
+              )
+              .getByRole('button', { name: `${element.label} add`, exact: true })
+          : page.getByRole('button', { name: `${element.label} add`, exact: true });
+      await addButton.click();
       try {
         if (element.content) {
           await page.getByRole('tab', { name: 'Content', exact: true }).click();

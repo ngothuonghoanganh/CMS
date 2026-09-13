@@ -3,6 +3,7 @@ import type { ComponentBuilderPreview } from '@payload/contracts';
 
 import {
   createBlockDefinition,
+  createOpenCompositionNodeDefinition,
   openCompositionRecipeToEditorDefinition,
   type BuilderBlockType,
 } from './builder-adapter';
@@ -15,7 +16,13 @@ export type BlockPresetId =
   | 'two-columns'
   | 'hero'
   | 'cta'
-  | 'contact-form';
+  | 'contact-form'
+  | 'native-list'
+  | 'faq'
+  | 'native-tabs'
+  | 'gallery-2-columns'
+  | 'gallery-3-columns'
+  | 'gallery-4-columns';
 
 export type GlobalPresetId =
   | 'header-brand-menu-cta'
@@ -137,6 +144,22 @@ function createContactForm(): ComponentDefinition {
   return openCompositionRecipeToEditorDefinition('contact-form');
 }
 
+function createNativeList(): ComponentDefinition {
+  return createOpenCompositionNodeDefinition('list');
+}
+
+function createFaq(): ComponentDefinition {
+  return createOpenCompositionNodeDefinition('disclosure');
+}
+
+function createTabs(): ComponentDefinition {
+  return createOpenCompositionNodeDefinition('tabs');
+}
+
+function createGallery(columns: 2 | 3 | 4): ComponentDefinition {
+  return openCompositionRecipeToEditorDefinition(`gallery-${columns}-columns`);
+}
+
 export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
   BuilderBlockDefinition,
   { kind: 'preset' }
@@ -210,6 +233,67 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
     description: 'A composable form with editable fields and a submit action.',
     preview: resolveBuilderPreview(createContactForm(), 'contact-form'),
     create: createContactForm,
+  },
+  {
+    kind: 'preset',
+    id: 'native-list',
+    label: 'List',
+    category: 'content',
+    keywords: ['list', 'bullets', 'numbers', 'content'],
+    description: 'Add an editable list with bullets or numbers.',
+    preview: resolveBuilderPreview(createNativeList(), 'native-list'),
+    create: createNativeList,
+  },
+  {
+    kind: 'preset',
+    id: 'faq',
+    label: 'FAQ',
+    category: 'content',
+    keywords: ['faq', 'accordion', 'questions', 'answers', 'disclosure'],
+    description:
+      'Add connected questions and answers with accessible disclosure behavior.',
+    preview: resolveBuilderPreview(createFaq(), 'faq'),
+    create: createFaq,
+  },
+  {
+    kind: 'preset',
+    id: 'native-tabs',
+    label: 'Tabs',
+    category: 'content',
+    keywords: ['tabs', 'tabbed content', 'interactive'],
+    description: 'Add connected tab navigation and editable tab panels.',
+    preview: resolveBuilderPreview(createTabs(), 'native-tabs'),
+    create: createTabs,
+  },
+  {
+    kind: 'preset',
+    id: 'gallery-2-columns',
+    label: 'Gallery · 2 columns',
+    category: 'content',
+    keywords: ['gallery', 'images', 'grid', 'two columns'],
+    description: 'Add an editable two-column image grid.',
+    preview: resolveBuilderPreview(createGallery(2), 'gallery-2-columns'),
+    create: () => createGallery(2),
+  },
+  {
+    kind: 'preset',
+    id: 'gallery-3-columns',
+    label: 'Gallery · 3 columns',
+    category: 'content',
+    keywords: ['gallery', 'images', 'grid', 'three columns'],
+    description: 'Add an editable three-column image grid.',
+    preview: resolveBuilderPreview(createGallery(3), 'gallery-3-columns'),
+    create: () => createGallery(3),
+  },
+  {
+    kind: 'preset',
+    id: 'gallery-4-columns',
+    label: 'Gallery · 4 columns',
+    category: 'content',
+    keywords: ['gallery', 'images', 'grid', 'four columns'],
+    description: 'Add an editable four-column image grid.',
+    preview: resolveBuilderPreview(createGallery(4), 'gallery-4-columns'),
+    create: () => createGallery(4),
   },
 ];
 

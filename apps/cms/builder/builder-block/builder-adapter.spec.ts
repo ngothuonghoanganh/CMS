@@ -39,6 +39,7 @@ import {
   BuilderAdapterError,
   createBlockDefinition,
   createOpenCompositionNodeDefinition,
+  openCompositionRecipeToEditorDefinition,
   openCompositionControlPreviewComponents,
   openCompositionIconPreviewComponents,
   createReusableInstanceDefinition,
@@ -165,6 +166,50 @@ describe('builder adapter', () => {
       );
       expect(payload.version).toBe(8);
     }
+  });
+
+  it('round-trips native List, FAQ, Tabs and Gallery recipes through the live adapter', () => {
+    const root = createOpenCompositionNodeDefinition('root');
+    const section = createOpenCompositionNodeDefinition('section');
+    section.components = [
+      createOpenCompositionNodeDefinition('list'),
+      createOpenCompositionNodeDefinition('disclosure'),
+      createOpenCompositionNodeDefinition('tabs'),
+      openCompositionRecipeToEditorDefinition('gallery-3-columns'),
+    ];
+    root.components = [section];
+    root.attributes = {
+      ...(root.attributes ?? {}),
+      [BUILDER_METADATA_ATTRIBUTE]: JSON.stringify({ documentTitle: 'Native compounds' }),
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: '[]',
+    };
+
+    const saved = OpenCompositionPayloadSchema.parse(
+      serializeEditorSnapshot(snapshotFromEditorDefinition(root)),
+    );
+    const savedTypes = saved.root.children[0]?.children.map((child) => child.type);
+    expect(savedTypes).toEqual(['list', 'disclosure', 'tabs', 'grid']);
+    const savedList = saved.root.children[0]?.children.find(
+      (child) => child.type === 'list',
+    );
+    expect(savedList?.props).toEqual({
+      ordered: false,
+      items: [{ id: 'item-1', text: 'First item' }],
+    });
+    const savedGallery = saved.root.children[0]?.children.find(
+      (child) => child.type === 'grid',
+    );
+    expect(savedGallery?.children).toHaveLength(6);
+    expect(savedGallery?.children.every((child) => child.type === 'image')).toBe(true);
+    expect(
+      saved.root.children[0]?.children.some((child) => child.type === 'gallery'),
+    ).toBe(false);
+
+    const reloaded = payloadToEditorComponent(saved);
+    const savedAgain = OpenCompositionPayloadSchema.parse(
+      serializeEditorSnapshot(snapshotFromEditorDefinition(reloaded)),
+    );
+    expect(savedAgain).toEqual(saved);
   });
 
   it('projects choice controls and icons from their semantic props', () => {

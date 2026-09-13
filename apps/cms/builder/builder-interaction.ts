@@ -152,7 +152,17 @@ export function selectedMoveIntent(
     isOpenCompositionNodeType(openPayloadNodeType(parent))
       ? openPayloadNodeType(parent)
       : undefined;
-  if (selectedOpenType && !canMutateStructuralNode(selectedOpenType, parentOpenType)) {
+  const grandparent = parent.parent();
+  const grandparentAttributes = grandparent?.getAttributes({ noStyle: true });
+  const grandparentOpenType =
+    grandparentAttributes?.[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    isOpenCompositionNodeType(openPayloadNodeType(grandparent as Component))
+      ? openPayloadNodeType(grandparent as Component)
+      : undefined;
+  if (
+    selectedOpenType &&
+    !canMutateStructuralNode(selectedOpenType, parentOpenType, grandparentOpenType)
+  ) {
     return undefined;
   }
   const parentType = openPayloadNodeType(parent);

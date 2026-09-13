@@ -13,11 +13,14 @@ function domId(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
-type TabItem = {
+export type TabItem = {
   id: string;
   label: string;
   content: ReactNode;
   style?: CSSProperties;
+  /** Persisted trigger/panel ids used by the Open Composition projection. */
+  triggerId?: string;
+  panelId?: string;
 };
 
 export type TabsPartStyles = {
@@ -36,6 +39,10 @@ export function TabsRuntime({
   orientation,
   partsStyle,
   style,
+  initialId,
+  listNodeId,
+  panelNodeType = 'tab-item',
+  rootNodeType = 'tabs',
 }: {
   activationMode?: 'manual' | 'automatic';
   ariaLabel?: string;
@@ -44,9 +51,19 @@ export function TabsRuntime({
   orientation: 'horizontal' | 'vertical';
   partsStyle?: TabsPartStyles;
   style?: CSSProperties;
+  initialId?: string;
+  listNodeId?: string;
+  panelNodeType?: string;
+  rootNodeType?: string;
 }): ReactElement {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const initialIndex = Math.max(
+    0,
+    initialId
+      ? items.findIndex((item) => item.id === initialId || item.panelId === initialId)
+      : 0,
+  );
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [focusedIndex, setFocusedIndex] = useState(initialIndex);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const safeId = domId(id);
 
@@ -89,12 +106,14 @@ export function TabsRuntime({
     <div
       className={`payload-tabs payload-tabs-${orientation}`}
       data-payload-node-id={id}
-      data-payload-node-type="tabs"
+      data-payload-node-type={rootNodeType}
       style={{ ...style, ...partsStyle?.root }}
     >
       <div
         aria-label={ariaLabel}
         aria-orientation={orientation}
+        {...(listNodeId ? { 'data-payload-node-id': listNodeId } : {})}
+        {...(listNodeId ? { 'data-payload-node-type': 'tab-list' } : {})}
         data-payload-part="list"
         role="tablist"
         style={partsStyle?.list}
@@ -109,6 +128,8 @@ export function TabsRuntime({
               aria-selected={index === activeIndex}
               id={tabId}
               key={item.id}
+              {...(item.triggerId ? { 'data-payload-node-id': item.triggerId } : {})}
+              {...(item.triggerId ? { 'data-payload-node-type': 'tab-trigger' } : {})}
               onClick={() => {
                 setFocusedIndex(index);
                 setActiveIndex(index);
@@ -139,8 +160,8 @@ export function TabsRuntime({
         return (
           <div
             aria-labelledby={tabId}
-            data-payload-node-id={item.id}
-            data-payload-node-type="tab-item"
+            data-payload-node-id={item.panelId ?? item.id}
+            data-payload-node-type={panelNodeType}
             hidden={index !== activeIndex}
             id={panelId}
             key={item.id}

@@ -20,6 +20,7 @@ import {
   ReusableInstancePropsSchema,
   isOpenCompositionNodeType,
   isSemanticOwnedFormFieldChild,
+  isSemanticOwnedOpenCompositionChild,
   canonicalizeOpenCompositionOptions,
   type FormProps,
   type OpenCompositionBehavior,
@@ -75,7 +76,16 @@ export type ComponentSelectionSnapshot = {
   /** Present when the live component is part of the V8 Open Composition graph. */
   openComposition?: { nodeType: OpenCompositionNodeType };
   /** A nested field child is edited through its owning Form Field surface. */
-  semanticOwner?: { id: string; nodeType: 'form-field' };
+  semanticOwner?: { id: string; nodeType: OpenCompositionNodeType };
+  /** Logical children shown by aggregate compound inspectors. */
+  semanticItems?: Array<{
+    id: string;
+    label: string;
+    panelId?: string;
+    triggerId?: string;
+  }>;
+  /** The managed panel edited by a disclosure question or tab trigger. */
+  managedPanelId?: string;
 };
 
 export type ComponentEditorCodec = {
@@ -146,9 +156,130 @@ function openCompositionBehaviorsFromAncestors(
         // Malformed behavior metadata is reported by the serialization boundary.
       }
     }
-    current = (current as Component & { parent?: () => Component }).parent?.();
+    current = componentParent(current);
   }
   return result;
+}
+
+function openNodeTypeOf(
+  component: Component | undefined,
+): OpenCompositionNodeType | undefined {
+  if (!component) return undefined;
+  const attributes = component.getAttributes({ noStyle: true });
+  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  return attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    isOpenCompositionNodeType(type)
+    ? type
+    : undefined;
+}
+
+function directOpenChild(
+  component: Component,
+  type: OpenCompositionNodeType,
+): Component | undefined {
+  return component.components().models.find((child) => openNodeTypeOf(child) === type);
+}
+
+function componentText(component: Component | undefined): string {
+  if (!component) return '';
+  const child = component.components().models.find((candidate) => {
+    const type = openNodeTypeOf(candidate);
+    return type === 'text' || type === 'heading';
+  });
+  return sanitizeInlineText(
+    child?.getEl()?.textContent ??
+      String(child?.get('content') ?? component.get('content') ?? ''),
+  ).trim();
+}
+
+function managedLabel(component: Component | undefined, fallback: string): string {
+  if (!component) return fallback;
+  const props = openCompositionPropsFromAttributes(
+    component.getAttributes({ noStyle: true }),
+  );
+  const candidate = [
+    props.label,
+    props.question,
+    props.text,
+    componentText(component),
+  ].find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+  return candidate?.trim().slice(0, 300) || fallback;
+}
+
+function openToggleTargetId(component: Component): string | undefined {
+  const id = component.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
+  if (typeof id !== 'string') return undefined;
+  return openCompositionBehaviorsFromAncestors(component).find(
+    (behavior): behavior is Extract<OpenCompositionBehavior, { kind: 'action' }> =>
+      behavior.kind === 'action' &&
+      behavior.action === 'toggle' &&
+      behavior.nodeId === id &&
+      typeof behavior.targetNodeId === 'string',
+  )?.targetNodeId;
+}
+
+function openAncestorOfType(
+  component: Component | undefined,
+  type: OpenCompositionNodeType,
+): Component | undefined {
+  let current = component ? componentParent(component) : undefined;
+  while (current) {
+    if (openNodeTypeOf(current) === type) return current;
+    current = componentParent(current);
+  }
+  return undefined;
+}
+
+function componentParent(component: Component | undefined): Component | undefined {
+  if (!component) return undefined;
+  const parent = (component as Component & { parent?: unknown }).parent;
+  if (typeof parent !== 'function') return undefined;
+  try {
+    // Keep the GrapesJS model as `this`; calling the extracted method without
+    // its receiver makes Component.parent() lose access to its collection.
+    return (parent as (this: Component) => Component | undefined).call(component);
+  } catch {
+    // GrapesJS can emit a selection/update event while a newly added model is
+    // still being attached. Its parent() implementation assumes a collection
+    // already exists, so treat that transient state as an unattached node.
+    return undefined;
+  }
+}
+
+function semanticOwnerForOpenNode(
+  component: Component,
+  type: OpenCompositionNodeType,
+): { id: string; nodeType: OpenCompositionNodeType } | undefined {
+  let current: Component | undefined = component;
+  while (current) {
+    const parent = componentParent(current);
+    if (!parent) break;
+    const parentType = openNodeTypeOf(parent);
+    const grandparentType = openNodeTypeOf(componentParent(parent));
+    if (isSemanticOwnedOpenCompositionChild(parentType, type, grandparentType)) {
+      let owner = parent;
+      const ownerType = openNodeTypeOf(owner);
+      if (
+        ownerType === 'button' ||
+        ownerType === 'tab-trigger' ||
+        ownerType === 'tab-list'
+      ) {
+        owner = componentParent(owner) ?? owner;
+      }
+      if (openNodeTypeOf(owner) === 'tab-list') {
+        owner = componentParent(owner) ?? owner;
+      }
+      const ownerId = owner.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
+      const ownerNodeType = openNodeTypeOf(owner);
+      if (typeof ownerId === 'string' && ownerNodeType) {
+        return { id: ownerId, nodeType: ownerNodeType };
+      }
+    }
+    current = parent;
+  }
+  return undefined;
 }
 
 type ComponentPropsReadResult = {
@@ -627,6 +758,82 @@ export function selectionFromComponentCodec(
         delete props.options;
       }
     }
+    let semanticItems: ComponentSelectionSnapshot['semanticItems'];
+    let managedPanelId: string | undefined;
+    if (type === 'disclosure') {
+      semanticItems = component
+        .components()
+        .models.filter((item) => openNodeTypeOf(item) === 'disclosure-item')
+        .flatMap((item) => {
+          const itemId = item.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
+          const panel = directOpenChild(item, 'disclosure-panel');
+          const panelId = panel?.getAttributes({ noStyle: true })[
+            BUILDER_NODE_ID_ATTRIBUTE
+          ];
+          return typeof itemId === 'string'
+            ? [
+                {
+                  id: itemId,
+                  label: managedLabel(item, 'Question'),
+                  ...(typeof panelId === 'string' ? { panelId } : {}),
+                },
+              ]
+            : [];
+        });
+    } else if (type === 'disclosure-item') {
+      const trigger = directOpenChild(component, 'button');
+      const panel = directOpenChild(component, 'disclosure-panel');
+      const question = managedLabel(trigger, managedLabel(component, 'Question'));
+      props.question = question;
+      managedPanelId = panel?.getAttributes({ noStyle: true })[BUILDER_NODE_ID_ATTRIBUTE];
+    } else if (type === 'tabs') {
+      const list = directOpenChild(component, 'tab-list');
+      const panels = component
+        .components()
+        .models.filter((child) => openNodeTypeOf(child) === 'tab-panel');
+      semanticItems = list
+        ? list
+            .components()
+            .models.filter((trigger) => openNodeTypeOf(trigger) === 'tab-trigger')
+            .flatMap((trigger, index) => {
+              const triggerId = trigger.getAttributes({ noStyle: true })[
+                BUILDER_NODE_ID_ATTRIBUTE
+              ];
+              const targetId = openToggleTargetId(trigger);
+              const panel = targetId
+                ? panels.find(
+                    (candidate) =>
+                      candidate.getAttributes({ noStyle: true })[
+                        BUILDER_NODE_ID_ATTRIBUTE
+                      ] === targetId,
+                  )
+                : panels[index];
+              const panelId = panel?.getAttributes({ noStyle: true })[
+                BUILDER_NODE_ID_ATTRIBUTE
+              ];
+              return typeof triggerId === 'string'
+                ? [
+                    {
+                      id: triggerId,
+                      label: managedLabel(trigger, `Tab ${index + 1}`),
+                      ...(typeof panelId === 'string' ? { panelId } : {}),
+                    },
+                  ]
+                : [];
+            })
+        : [];
+    } else if (type === 'tab-trigger') {
+      const owner = openAncestorOfType(component, 'tabs');
+      const targetId = openToggleTargetId(component);
+      const label = managedLabel(component, 'Tab');
+      props.label = label;
+      props.openInitially =
+        Boolean(owner) &&
+        typeof targetId === 'string' &&
+        openCompositionPropsFromAttributes(owner!.getAttributes({ noStyle: true }))
+          .initialTabId === targetId;
+      managedPanelId = targetId;
+    }
     let composedLabel = content;
     if (type === 'button' || type === 'link') {
       const textChild = component.components().models.find((child) => {
@@ -680,10 +887,11 @@ export function selectionFromComponentCodec(
       ? (type as PageComponentType)
       : ('extension' as const);
     const responsiveStyle = readEditorResponsiveStyle(component);
-    const parent = (component as Component & { parent?: () => Component }).parent?.();
+    const parent = componentParent(component);
     const parentAttributes = parent?.getAttributes({ noStyle: true });
     const parentType = parentAttributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
     const parentId = parentAttributes?.[BUILDER_NODE_ID_ATTRIBUTE];
+    const semanticOwner = semanticOwnerForOpenNode(component, type);
     return {
       id,
       type: componentType,
@@ -695,11 +903,15 @@ export function selectionFromComponentCodec(
       ...(type === 'button' || type === 'link' ? { label: composedLabel } : {}),
       ...(responsiveStyle ? { style: responsiveStyle } : {}),
       openComposition: { nodeType: type },
-      ...(isOpenCompositionNodeType(parentType) &&
-      isSemanticOwnedFormFieldChild(parentType, type) &&
-      typeof parentId === 'string'
-        ? { semanticOwner: { id: parentId, nodeType: 'form-field' as const } }
-        : {}),
+      ...(semanticItems ? { semanticItems } : {}),
+      ...(typeof managedPanelId === 'string' ? { managedPanelId } : {}),
+      ...(semanticOwner
+        ? { semanticOwner }
+        : isOpenCompositionNodeType(parentType) &&
+            isSemanticOwnedFormFieldChild(parentType, type) &&
+            typeof parentId === 'string'
+          ? { semanticOwner: { id: parentId, nodeType: 'form-field' as const } }
+          : {}),
     };
   }
   if (

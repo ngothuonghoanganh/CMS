@@ -7,6 +7,7 @@ import {
   BUILDER_NODE_ID_ATTRIBUTE,
   BUILDER_NODE_TYPE_ATTRIBUTE,
   BUILDER_NODE_SLOT_ATTRIBUTE,
+  BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
   BUILDER_PAYLOAD_VERSION_ATTRIBUTE,
   BUILDER_FORM_PROPS_ATTRIBUTE,
   BUILDER_COUNTDOWN_PROPS_ATTRIBUTE,
@@ -18,6 +19,7 @@ import {
   applyEditorComponentDefaultStyle,
   applyEditorPageSurfaceStyle,
   createBlockDefinition,
+  createOpenCompositionNodeDefinition,
   createExtensionBlockDefinition,
   createReusableInstanceDefinition,
   reusableDocumentToEditorDefinition,
@@ -47,6 +49,8 @@ import {
 import {
   createEditorCommandBus,
   executeEditorCommand,
+  isOpenCompositionRoot,
+  promoteLegacyRootForOpenInsert,
   type EditorCommand,
   type EditorCommandResult,
 } from './editor-commands';
@@ -72,8 +76,9 @@ import {
   PAGE_COMPONENT_REGISTRY,
   OPEN_COMPOSITION_REGISTRY,
   canMutateStructuralNode,
+  getOpenCompositionAuthoringProperty,
   isOpenCompositionNodeType,
-  isSemanticOwnedFormFieldChild,
+  isSemanticOwnedOpenCompositionChild,
   createPageDocument,
   resolveSlotsForChild,
   type FormProps,
@@ -174,6 +179,14 @@ export type GrapesEditorHandle = {
   removeStructuralChild: (nodeId: string) => boolean;
   moveStructuralChild: (nodeId: string, direction: 'up' | 'down') => boolean;
   duplicateStructuralChild: (nodeId: string) => boolean;
+  addDisclosureItem: (parentId: string) => boolean;
+  removeDisclosureItem: (nodeId: string) => boolean;
+  duplicateDisclosureItem: (nodeId: string) => boolean;
+  moveDisclosureItem: (nodeId: string, direction: 'up' | 'down') => boolean;
+  addTab: (parentId: string) => boolean;
+  removeTab: (nodeId: string) => boolean;
+  duplicateTab: (nodeId: string) => boolean;
+  moveTab: (nodeId: string, direction: 'up' | 'down') => boolean;
   validateMove: (intent: MoveNodeIntent) => { valid: boolean; reason?: string };
   scrollToCanvasPoint: (x: number, y: number) => void;
   setCanvasZoom: (zoom: number) => void;
@@ -820,12 +833,24 @@ function createInsertableDefinition(type: BuilderInsertable): ComponentDefinitio
 
 function insertableNodeType(
   definition: ComponentDefinition,
-): BuilderBlockType | undefined {
+): BuilderBlockType | OpenCompositionNodeType | undefined {
   const type = definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
   return typeof type === 'string' &&
-    isBuilderNodeType(type) &&
+    (isBuilderNodeType(type) || isOpenCompositionNodeType(type)) &&
     type !== 'root' &&
     type !== 'reusable-instance'
+    ? type
+    : undefined;
+}
+
+function openDefinitionNodeType(
+  definition: ComponentDefinition,
+): OpenCompositionNodeType | undefined {
+  const attributes = definition.attributes ?? {};
+  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  return attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' &&
+    typeof type === 'string' &&
+    isOpenCompositionNodeType(type)
     ? type
     : undefined;
 }
@@ -844,10 +869,24 @@ function dropDefinitionAtPoint(
   if (!root) return undefined;
   const childType = insertableNodeType(definition);
   if (!childType) return undefined;
-  const rootAcceptsDirectly =
-    PAGE_COMPONENT_REGISTRY.root.allowedChildren.includes(childType);
-  const canWrapInSection =
-    PAGE_COMPONENT_REGISTRY[childType].allowedParents.includes('section');
+  const openDefinitionType = openDefinitionNodeType(definition);
+  if (
+    openDefinitionType &&
+    !isOpenCompositionRoot(root) &&
+    !promoteLegacyRootForOpenInsert(root)
+  ) {
+    return undefined;
+  }
+  const rootAcceptsDirectly = openDefinitionType
+    ? OPEN_COMPOSITION_REGISTRY.root.allowedChildren.includes(childType)
+    : PAGE_COMPONENT_REGISTRY.root.allowedChildren.includes(
+        childType as BuilderBlockType,
+      );
+  const canWrapInSection = openDefinitionType
+    ? OPEN_COMPOSITION_REGISTRY[openDefinitionType].allowedParents.includes('section')
+    : PAGE_COMPONENT_REGISTRY[childType as BuilderBlockType].allowedParents.includes(
+        'section',
+      );
 
   const frameRect = frame.getBoundingClientRect();
   const frameDocument = frame.contentDocument;
@@ -898,7 +937,9 @@ function dropDefinitionAtPoint(
   if (target === root && !rootAcceptsDirectly && canWrapInSection) {
     const sectionResult = commit({
       kind: 'insert',
-      definition: createBlockDefinition('section'),
+      definition: openDefinitionType
+        ? createOpenCompositionNodeDefinition('section')
+        : createBlockDefinition('section'),
       parentId: payloadNodeId(root),
     });
     if (!sectionResult.changed) return undefined;
@@ -916,7 +957,7 @@ function dropDefinitionAtPoint(
 
 function findAppendTarget(
   root: Component,
-  childType: BuilderBlockType,
+  childType: BuilderBlockType | OpenCompositionNodeType,
 ): Component | null {
   let target: Component | null = null;
   root.onAll((component) => {
@@ -986,7 +1027,7 @@ function createBlockManagerDefinitions(
     }));
 }
 
-const canvasNodeLabels: Record<BuilderNodeType, string> = {
+const canvasNodeLabels: Record<string, string> = {
   root: 'Page',
   section: 'Section',
   container: 'Container',
@@ -1014,6 +1055,22 @@ const canvasNodeLabels: Record<BuilderNodeType, string> = {
   'reusable-instance': 'Linked reusable',
   'collection-list': 'Collection list',
   'collection-item': 'Collection item template',
+  disclosure: 'FAQ',
+  'disclosure-item': 'Question',
+  'disclosure-panel': 'Answer',
+  'tab-list': 'Tab navigation',
+  'tab-trigger': 'Tab name',
+  'tab-panel': 'Tab content',
+  stack: 'Stack',
+  row: 'Row',
+  grid: 'Grid',
+  card: 'Card',
+  icon: 'Icon',
+  'form-field': 'Form field',
+  label: 'Label',
+  input: 'Input',
+  textarea: 'Textarea',
+  select: 'Select',
 };
 
 function canvasNodeLabel(component: Component, type: string): string {
@@ -1106,13 +1163,45 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     const parentType = parent?.getAttributes({ noStyle: true })[
       BUILDER_NODE_TYPE_ATTRIBUTE
     ];
-    const semanticOwner =
+    const grandparent = parent?.parent();
+    const grandparentType = grandparent?.getAttributes({ noStyle: true })[
+      BUILDER_NODE_TYPE_ATTRIBUTE
+    ];
+    let semanticOwner: { id: string; nodeType: OpenCompositionNodeType } | undefined;
+    if (
       parentId &&
+      parent &&
       isOpenCompositionNodeType(type) &&
       isOpenCompositionNodeType(parentType) &&
-      isSemanticOwnedFormFieldChild(parentType, type)
-        ? { id: parentId, nodeType: 'form-field' as const }
-        : undefined;
+      isSemanticOwnedOpenCompositionChild(
+        parentType,
+        type,
+        isOpenCompositionNodeType(grandparentType) ? grandparentType : undefined,
+      )
+    ) {
+      let owner = parent;
+      const ownerType = isOpenCompositionNodeType(parentType) ? parentType : undefined;
+      if (
+        ownerType === 'button' ||
+        ownerType === 'tab-trigger' ||
+        ownerType === 'tab-list'
+      ) {
+        owner = owner.parent() ?? owner;
+      }
+      if (
+        isOpenCompositionNodeType(
+          owner.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE],
+        ) &&
+        owner.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE] === 'tab-list'
+      ) {
+        owner = owner.parent() ?? owner;
+      }
+      const ownerId = payloadNodeId(owner);
+      const ownerNodeType = openPayloadNodeType(owner);
+      if (ownerId && isOpenCompositionNodeType(ownerNodeType)) {
+        semanticOwner = { id: ownerId, nodeType: ownerNodeType };
+      }
+    }
     nodes.push({
       id,
       type: type as BuilderNodeType | OpenCompositionNodeType,
@@ -1286,6 +1375,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       case 'apply-global-preset':
       case 'insert-child':
       case 'insert-structural-child':
+      case 'add-disclosure-item':
+      case 'remove-disclosure-item':
+      case 'duplicate-disclosure-item':
+      case 'move-disclosure-item':
+      case 'add-tab':
+      case 'remove-tab':
+      case 'duplicate-tab':
+      case 'move-tab':
       case 'set-style':
       case 'set-responsive-style':
       case 'set-part-responsive-style':
@@ -1299,6 +1396,17 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         return false;
       case 'set-property': {
         const node = findPayloadComponent(getRoot(editor), command.nodeId);
+        const nodeAttributes = node?.getAttributes({ noStyle: true });
+        const openType =
+          node && nodeAttributes?.[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true'
+            ? openPayloadNodeType(node)
+            : undefined;
+        if (openType && isOpenCompositionNodeType(openType)) {
+          return (
+            getOpenCompositionAuthoringProperty(openType, command.property)
+              ?.editingScope !== 'content'
+          );
+        }
         const type = node && payloadNodeType(node);
         const descriptor = type
           ? PAGE_COMPONENT_REGISTRY[type].propertiesSchema.find(
@@ -1601,7 +1709,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         property,
         value,
       );
-      if (command) commitEditorCommand(editor, command);
+      if (command) {
+        commitEditorCommandResult(editor, command);
+      }
     });
   }
 
@@ -1744,9 +1854,19 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return;
+        const openDefinitionType = openDefinitionNodeType(definition);
+        const root = getRoot(editor);
+        if (
+          openDefinitionType &&
+          !isOpenCompositionRoot(root) &&
+          !promoteLegacyRootForOpenInsert(root)
+        ) {
+          return;
+        }
         if (
           documentKind !== 'page' &&
-          (isGlobalRootForDocument(documentKind, childType) ||
+          ((isBuilderNodeType(childType) &&
+            isGlobalRootForDocument(documentKind, childType)) ||
             isGlobalBuilderPresetId(type))
         ) {
           // A Header/Footer document must keep exactly one global root child.
@@ -1769,7 +1889,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         } else if (!parent) {
           // Wrapper creation and the first child are one authored compound
           // insertion, so Undo removes the complete subtree in one step.
-          const sectionDefinition = createBlockDefinition('section');
+          const sectionDefinition = openDefinitionType
+            ? createOpenCompositionNodeDefinition('section')
+            : createBlockDefinition('section');
           sectionDefinition.components = [definition];
           const sectionResult = commitEditorCommandResult(editor, {
             kind: 'insert',
@@ -2269,9 +2391,19 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return false;
+        const openDefinitionType = openDefinitionNodeType(definition);
+        const root = getRoot(editor);
+        if (
+          openDefinitionType &&
+          !isOpenCompositionRoot(root) &&
+          !promoteLegacyRootForOpenInsert(root)
+        ) {
+          return false;
+        }
         if (
           documentKind !== 'page' &&
-          (isGlobalRootForDocument(documentKind, childType) ||
+          ((isBuilderNodeType(childType) &&
+            isGlobalRootForDocument(documentKind, childType)) ||
             isGlobalBuilderPresetId(type))
         ) {
           return applyGlobalPreset(editor, definition);
@@ -2279,12 +2411,14 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (placement) {
           if (placement.position === 'inside') {
             const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
-            const targetType = target && payloadNodeType(target);
+            const targetType = target && openPayloadNodeType(target);
             if (
               targetType === 'root' &&
               (!target || !canInsertIntoComponent(target, childType))
             ) {
-              const sectionDefinition = createBlockDefinition('section');
+              const sectionDefinition = openDefinitionType
+                ? createOpenCompositionNodeDefinition('section')
+                : createBlockDefinition('section');
               sectionDefinition.components = [definition];
               const result = commitEditorCommandResult(editor, {
                 kind: 'insert',
@@ -2321,7 +2455,9 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!parent && (childType === 'section' || childType === 'container'))
           parent = getRoot(editor);
         if (!parent) {
-          const sectionDefinition = createBlockDefinition('section');
+          const sectionDefinition = openDefinitionType
+            ? createOpenCompositionNodeDefinition('section')
+            : createBlockDefinition('section');
           sectionDefinition.components = [definition];
           const result = commitEditorCommandResult(editor, {
             kind: 'insert',
@@ -2347,17 +2483,28 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         const definition = createInsertableDefinition(type);
         const childType = insertableNodeType(definition);
         if (!childType) return false;
+        const openDefinitionType = openDefinitionNodeType(definition);
+        const root = getRoot(editor);
+        if (openDefinitionType && !isOpenCompositionRoot(root)) {
+          return placement
+            ? Boolean(findPayloadComponent(root, placement.targetNodeId))
+            : true;
+        }
         if (placement) {
           const target = findPayloadComponent(getRoot(editor), placement.targetNodeId);
           if (!target) return false;
           if (placement.position === 'inside') {
             if (canInsertIntoComponent(target, childType)) return true;
-            const targetType = payloadNodeType(target);
+            const targetType = openPayloadNodeType(target);
             return Boolean(
               targetType === 'root' &&
               childType !== 'section' &&
               canInsertIntoComponent(target, 'section') &&
-              PAGE_COMPONENT_REGISTRY[childType].allowedParents.includes('section'),
+              (openDefinitionType
+                ? OPEN_COMPOSITION_REGISTRY[childType].allowedParents.includes('section')
+                : PAGE_COMPONENT_REGISTRY[
+                    childType as BuilderBlockType
+                  ].allowedParents.includes('section')),
             );
           }
           const parent = target.parent();
@@ -2599,6 +2746,82 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         return editor
           ? commitEditorCommand(editor, { kind: 'duplicate', nodeId })
           : false;
+      },
+      addDisclosureItem(parentId) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'add-disclosure-item',
+          parentId,
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      removeDisclosureItem(nodeId) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'remove-disclosure-item',
+          nodeId,
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      duplicateDisclosureItem(nodeId) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'duplicate-disclosure-item',
+          nodeId,
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      moveDisclosureItem(nodeId, direction) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'move-disclosure-item',
+          nodeId,
+          direction,
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      addTab(parentId) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, { kind: 'add-tab', parentId });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      removeTab(nodeId) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, { kind: 'remove-tab', nodeId });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      duplicateTab(nodeId) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'duplicate-tab',
+          nodeId,
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
+      },
+      moveTab(nodeId, direction) {
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const result = commitEditorCommandResult(editor, {
+          kind: 'move-tab',
+          nodeId,
+          direction,
+        });
+        if (result.selection) selectionRef.current.select(editor, result.selection);
+        return result.changed;
       },
       validateMove(intent) {
         const editor = editorRef.current;

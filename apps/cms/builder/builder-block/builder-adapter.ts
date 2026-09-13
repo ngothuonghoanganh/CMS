@@ -9,6 +9,7 @@ import {
   OpenCompositionBehaviorSchema,
   canonicalizeOpenCompositionPayload,
   canonicalizeOpenCompositionOptions,
+  canonicalizeOpenCompositionListProps,
   openCompositionIconPath,
   OPEN_COMPOSITION_REGISTRY,
   CompositionStyleSchema,
@@ -16,7 +17,8 @@ import {
   instantiateOpenCompositionRecipe,
   isOpenCompositionNodeType,
   isOpenCompositionAtomicNodeType,
-  isSemanticOwnedFormFieldChild,
+  isSemanticOwnedOpenCompositionChild,
+  isOpenCompositionManagedContainer,
   ReusableComponentDocumentSchema,
   ReusableInstancePropsSchema,
   PageNodePartsStyleV7Schema,
@@ -1506,6 +1508,19 @@ function openCompositionTagName(node: OpenCompositionNode): string {
       return 'button';
     case 'form':
       return 'form';
+    case 'disclosure-item':
+      return 'section';
+    case 'disclosure-panel':
+    case 'tab-list':
+    case 'tab-panel':
+    case 'tabs':
+      return 'div';
+    case 'tab-trigger':
+      return 'button';
+    case 'disclosure':
+      return 'section';
+    case 'list':
+      return node.props.ordered === true ? 'ol' : 'ul';
     case 'label':
       return 'label';
     case 'input':
@@ -1529,10 +1544,15 @@ function openCompositionNodeDefinition(
   payloadVersion: 8,
   behaviors?: readonly OpenCompositionBehavior[],
   parentType?: OpenCompositionNodeType,
+  grandparentType?: OpenCompositionNodeType,
 ): ComponentDefinition {
   const props = node.props as Record<string, unknown>;
   const tagName = openCompositionTagName(node);
-  const semanticOwnedChild = isSemanticOwnedFormFieldChild(parentType, node.type);
+  const semanticOwnedChild = isSemanticOwnedOpenCompositionChild(
+    parentType,
+    node.type,
+    grandparentType,
+  );
   const attributes: Record<string, string> = {
     [BUILDER_NODE_ID_ATTRIBUTE]: node.id,
     [BUILDER_NODE_TYPE_ATTRIBUTE]: node.type,
@@ -1590,6 +1610,7 @@ function openCompositionNodeDefinition(
     ...(tagName === 'img' || tagName === 'input' ? { void: true } : {}),
     droppable:
       !isOpenCompositionAtomicNodeType(node.type) &&
+      !isOpenCompositionManagedContainer(node.type) &&
       OPEN_COMPOSITION_REGISTRY[node.type].allowedChildren.length > 0,
     draggable: false,
     removable: node.type !== 'root' && !semanticOwnedChild,
@@ -1609,15 +1630,18 @@ function openCompositionNodeDefinition(
           ? openCompositionIconPreviewComponents(props.name)
           : node.type === 'input' || node.type === 'select'
             ? openCompositionControlPreviewComponents(node)
-            : node.children.map((child) =>
-                openCompositionNodeDefinition(
-                  child,
-                  undefined,
-                  payloadVersion,
-                  undefined,
-                  node.type,
+            : node.type === 'list'
+              ? listPreviewComponents(canonicalizeOpenCompositionListProps(props))
+              : node.children.map((child) =>
+                  openCompositionNodeDefinition(
+                    child,
+                    undefined,
+                    payloadVersion,
+                    undefined,
+                    node.type,
+                    parentType,
+                  ),
                 ),
-              ),
   };
 }
 
@@ -1628,7 +1652,7 @@ function openCompositionNodeDefinition(
  */
 export function createOpenCompositionNodeDefinition(
   type: OpenCompositionNodeType,
-  options: { formNodeId?: string } = {},
+  options: { formNodeId?: string; targetNodeId?: string } = {},
 ): ComponentDefinition {
   const id = type === 'root' ? 'root' : newNodeId(type);
   const child = (
@@ -1655,7 +1679,7 @@ export function createOpenCompositionNodeDefinition(
       node.props = { text: 'Label' };
       break;
     case 'image':
-      node.props = { src: '/assets/placeholder.png', alt: 'Image' };
+      node.props = { src: '/assets/placeholder.svg', alt: 'Image' };
       break;
     case 'button':
       node.props = options.formNodeId
@@ -1672,6 +1696,18 @@ export function createOpenCompositionNodeDefinition(
             event: 'click',
             action: 'submit-form',
             targetNodeId: options.formNodeId,
+          },
+        ];
+      }
+      if (options.targetNodeId) {
+        behaviors = [
+          {
+            id: `${id}-behavior`,
+            kind: 'action',
+            nodeId: id,
+            event: 'click',
+            action: 'toggle',
+            targetNodeId: options.targetNodeId,
           },
         ];
       }
@@ -1767,6 +1803,104 @@ export function createOpenCompositionNodeDefinition(
           },
         ];
       }
+      break;
+    case 'disclosure': {
+      const item = child('disclosure-item', {
+        question: 'Question',
+        defaultOpen: false,
+      });
+      const trigger = child('button', { label: 'Question' });
+      trigger.children = [child('text', { text: 'Question' })];
+      const panel = child('disclosure-panel', {});
+      panel.children = [child('text', { text: 'Add your answer here' })];
+      item.children = [trigger, panel];
+      node.props = { allowMultiple: false, ariaLabel: 'FAQ' };
+      node.children = [item];
+      behaviors = [
+        {
+          id: `${trigger.id}-behavior`,
+          kind: 'action',
+          nodeId: trigger.id,
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: panel.id,
+        },
+      ];
+      break;
+    }
+    case 'disclosure-item': {
+      const trigger = child('button', { label: 'Question' });
+      trigger.children = [child('text', { text: 'Question' })];
+      const panel = child('disclosure-panel', {});
+      panel.children = [child('text', { text: 'Add your answer here' })];
+      node.props = { question: 'Question', defaultOpen: false };
+      node.children = [trigger, panel];
+      behaviors = [
+        {
+          id: `${trigger.id}-behavior`,
+          kind: 'action',
+          nodeId: trigger.id,
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: panel.id,
+        },
+      ];
+      break;
+    }
+    case 'disclosure-panel':
+      node.children = [child('text', { text: 'Add your answer here' })];
+      break;
+    case 'tabs': {
+      const list = child('tab-list', {});
+      const trigger = child('tab-trigger', { label: 'Overview' });
+      trigger.children = [child('text', { text: 'Overview' })];
+      const panel = child('tab-panel', {});
+      panel.children = [child('text', { text: 'Add your tab content here' })];
+      list.children = [trigger];
+      node.props = {
+        orientation: 'horizontal',
+        ariaLabel: 'Tabs',
+        initialTabId: panel.id,
+      };
+      node.children = [list, panel];
+      behaviors = [
+        {
+          id: `${trigger.id}-behavior`,
+          kind: 'action',
+          nodeId: trigger.id,
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: panel.id,
+        },
+      ];
+      break;
+    }
+    case 'tab-list':
+      break;
+    case 'tab-trigger':
+      node.props = { label: 'Tab' };
+      node.children = [child('text', { text: 'Tab' })];
+      if (options.targetNodeId) {
+        behaviors = [
+          {
+            id: `${id}-behavior`,
+            kind: 'action',
+            nodeId: id,
+            event: 'click',
+            action: 'toggle',
+            targetNodeId: options.targetNodeId,
+          },
+        ];
+      }
+      break;
+    case 'tab-panel':
+      node.children = [child('text', { text: 'Add your tab content here' })];
+      break;
+    case 'list':
+      node.props = {
+        ordered: false,
+        items: [{ id: 'item-1', text: 'First item' }],
+      };
       break;
     case 'video':
       node.props = { src: '/assets/placeholder.mp4', controls: true };
@@ -2659,6 +2793,7 @@ function isEditorOnlySnapshot(snapshot: BuilderEditorSnapshot): boolean {
   return (
     attributes[BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE] !== undefined ||
     attributes[BUILDER_FORM_PREVIEW_ATTRIBUTE] !== undefined ||
+    attributes[BUILDER_LIST_PREVIEW_ATTRIBUTE] !== undefined ||
     attributes[BUILDER_RUNTIME_PREVIEW_ATTRIBUTE] !== undefined ||
     attributes[BUILDER_QUOTE_PREVIEW_ATTRIBUTE] !== undefined ||
     attributes[BUILDER_REUSABLE_PREVIEW_ATTRIBUTE] !== undefined

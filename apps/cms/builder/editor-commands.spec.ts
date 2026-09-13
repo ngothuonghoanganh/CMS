@@ -240,6 +240,145 @@ function openForm(id: string, fields: FakeComponent[]): FakeComponent {
   return form;
 }
 
+function openNode(
+  id: string,
+  type: string,
+  props: Record<string, unknown> = {},
+  children: FakeComponent[] = [],
+): FakeComponent {
+  const node = new FakeComponent(id, type, children);
+  node.setAttributes({
+    [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify(props),
+  });
+  return node;
+}
+
+function openRoot(
+  children: FakeComponent[],
+  behaviors: Record<string, unknown>[] = [],
+): FakeComponent {
+  const root = openNode('root', 'root', {}, children);
+  root.setAttributes({
+    [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify(behaviors),
+  });
+  return root;
+}
+
+function disclosureFixture(): {
+  root: FakeComponent;
+  faq: FakeComponent;
+  first: FakeComponent;
+  second: FakeComponent;
+} {
+  const firstTrigger = openNode('faq-trigger-1', 'button', { label: 'First question' }, [
+    openNode('faq-trigger-text-1', 'text', { text: 'First question' }),
+  ]);
+  const firstPanel = openNode('faq-panel-1', 'disclosure-panel', {}, [
+    openNode('faq-answer-1', 'text', { text: 'First answer' }),
+  ]);
+  const first = openNode(
+    'faq-item-1',
+    'disclosure-item',
+    { question: 'First question', defaultOpen: true },
+    [firstTrigger, firstPanel],
+  );
+  const secondTrigger = openNode(
+    'faq-trigger-2',
+    'button',
+    { label: 'Second question' },
+    [openNode('faq-trigger-text-2', 'text', { text: 'Second question' })],
+  );
+  const secondPanel = openNode('faq-panel-2', 'disclosure-panel', {}, [
+    openNode('faq-answer-2', 'text', { text: 'Second answer' }),
+  ]);
+  const second = openNode(
+    'faq-item-2',
+    'disclosure-item',
+    { question: 'Second question', defaultOpen: false },
+    [secondTrigger, secondPanel],
+  );
+  const faq = openNode('faq', 'disclosure', { allowMultiple: false, ariaLabel: 'FAQ' }, [
+    first,
+    second,
+  ]);
+  const root = openRoot(
+    [openNode('section', 'section', {}, [faq])],
+    [
+      {
+        id: 'faq-toggle-1',
+        kind: 'action',
+        nodeId: 'faq-trigger-1',
+        event: 'click',
+        action: 'toggle',
+        targetNodeId: 'faq-panel-1',
+      },
+      {
+        id: 'faq-toggle-2',
+        kind: 'action',
+        nodeId: 'faq-trigger-2',
+        event: 'click',
+        action: 'toggle',
+        targetNodeId: 'faq-panel-2',
+      },
+    ],
+  );
+  return { root, faq, first, second };
+}
+
+function tabsFixture(): {
+  root: FakeComponent;
+  tabs: FakeComponent;
+  list: FakeComponent;
+  triggers: FakeComponent[];
+  panels: FakeComponent[];
+} {
+  const triggers = [1, 2].map((index) =>
+    openNode(
+      `tab-trigger-${index}`,
+      'tab-trigger',
+      { label: index === 1 ? 'Overview' : 'Features' },
+      [
+        openNode(`tab-label-${index}`, 'text', {
+          text: index === 1 ? 'Overview' : 'Features',
+        }),
+      ],
+    ),
+  );
+  const panels = [1, 2].map((index) =>
+    openNode(`tab-panel-${index}`, 'tab-panel', {}, [
+      openNode(`tab-copy-${index}`, 'text', {
+        text: index === 1 ? 'Overview content' : 'Features content',
+      }),
+    ]),
+  );
+  const list = openNode('tab-list', 'tab-list', {}, triggers);
+  const tabs = openNode(
+    'tabs',
+    'tabs',
+    {
+      orientation: 'horizontal',
+      ariaLabel: 'Product tabs',
+      initialTabId: panels[0]!.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+    },
+    [list, ...panels],
+  );
+  const root = openRoot([openNode('section', 'section', {}, [tabs])]);
+  root.setAttributes({
+    [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: JSON.stringify(
+      triggers.map((trigger, index) => ({
+        id: `tab-toggle-${index + 1}`,
+        kind: 'action',
+        nodeId: trigger.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+        event: 'click',
+        action: 'toggle',
+        targetNodeId: panels[index]!.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+      })),
+    ),
+  });
+  return { root, tabs, list, triggers, panels };
+}
+
 describe('editor command boundary', () => {
   it('updates Open Composition props through the command bus', () => {
     const root = new FakeComponent('root', 'root');
@@ -1302,6 +1441,290 @@ describe('editor command boundary', () => {
       items: [{ id: 'item-1', text: 'One' }],
     });
     expect(list.children).toHaveLength(1);
+  });
+
+  it('authors native List items with stable ids and a minimum of one item', () => {
+    const list = openNode('native-list', 'list', {
+      ordered: false,
+      items: [
+        { id: 'first-item', text: 'First' },
+        { id: 'second-item', text: 'Second' },
+      ],
+    });
+    const root = openRoot([openNode('section', 'section', {}, [list])]);
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'native-list',
+        property: 'items',
+        value: {
+          ordered: false,
+          items: [
+            { id: 'second-item', text: 'Second updated' },
+            { id: 'first-item', text: 'First updated' },
+            { id: 'second-item', text: 'Duplicate' },
+          ],
+        },
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(String(list.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])),
+    ).toEqual({
+      ordered: false,
+      items: [
+        { id: 'second-item', text: 'Second updated' },
+        { id: 'first-item', text: 'First updated' },
+        { id: 'second-item-2', text: 'Duplicate' },
+      ],
+    });
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'native-list',
+        property: 'ordered',
+        value: 'true',
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(String(list.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])),
+    ).toEqual(expect.objectContaining({ ordered: true }));
+
+    expect(
+      bus.dispatch({
+        kind: 'set-property',
+        nodeId: 'native-list',
+        property: 'items',
+        value: [],
+      }).changed,
+    ).toBe(true);
+    expect(
+      JSON.parse(String(list.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE])).items,
+    ).toEqual([{ id: 'item-1', text: 'First item' }]);
+  });
+
+  it('authors FAQ items only through aggregate commands and repairs managed references', () => {
+    const { root, faq, first, second } = disclosureFixture();
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'faq-trigger-1' })).toBe(false);
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'faq-panel-1' })).toBe(false);
+    expect(
+      bus.canDispatch({
+        kind: 'insert-child',
+        parentId: 'faq',
+        slotName: '',
+        childType: 'disclosure-item',
+      }),
+    ).toBe(false);
+
+    const added = bus.dispatch({ kind: 'add-disclosure-item', parentId: 'faq' });
+    expect(added.changed).toBe(true);
+    const addedItem = added.selection as unknown as FakeComponent | undefined;
+    expect(addedItem).toBeDefined();
+    expect(addedItem?.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE]).toBe(
+      'disclosure-item',
+    );
+    expect(addedItem?.children).toHaveLength(2);
+    const addedPanel = addedItem?.children[1];
+    const addedBehavior = JSON.parse(
+      String(addedItem?.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(addedBehavior).toEqual([
+      expect.objectContaining({
+        nodeId: addedItem?.children[0]?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+        targetNodeId: addedPanel?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+        action: 'toggle',
+      }),
+    ]);
+
+    const duplicated = bus.dispatch({
+      kind: 'duplicate-disclosure-item',
+      nodeId: 'faq-item-1',
+    });
+    expect(duplicated.changed).toBe(true);
+    const duplicate = duplicated.selection as unknown as FakeComponent | undefined;
+    expect(duplicate).toBeDefined();
+    expect(duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]).not.toBe('faq-item-1');
+    expect(
+      duplicate?.children.map(
+        (child) => child.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE],
+      ),
+    ).toEqual(['button', 'disclosure-panel']);
+    const duplicateProps = JSON.parse(
+      String(duplicate?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+    ) as Record<string, unknown>;
+    expect(duplicateProps.defaultOpen).toBe(false);
+
+    expect(
+      bus.dispatch({
+        kind: 'move-disclosure-item',
+        nodeId: String(duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]),
+        direction: 'up',
+      }).changed,
+    ).toBe(true);
+    expect(ids(faq)).toEqual([
+      duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+      'faq-item-1',
+      'faq-item-2',
+      addedItem?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE],
+    ]);
+
+    expect(
+      bus.dispatch({
+        kind: 'remove-disclosure-item',
+        nodeId: String(duplicate?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]),
+      }).changed,
+    ).toBe(true);
+    expect(faq.children).not.toContain(duplicate);
+
+    expect(
+      bus.dispatch({ kind: 'remove-disclosure-item', nodeId: 'faq-item-1' }).changed,
+    ).toBe(true);
+    expect(
+      bus.dispatch({
+        kind: 'remove-disclosure-item',
+        nodeId: String(addedItem?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]),
+      }).changed,
+    ).toBe(true);
+    expect(
+      bus.canDispatch({ kind: 'remove-disclosure-item', nodeId: 'faq-item-2' }),
+    ).toBe(false);
+    expect(faq.children).toHaveLength(1);
+    expect(first.parent()).toBe(faq);
+    expect(second.parent()).toBe(faq);
+  });
+
+  it('authors Tabs as atomic trigger/panel pairs with exact target remapping', () => {
+    const { root, tabs, list } = tabsFixture();
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'tab-trigger-1' })).toBe(false);
+    expect(bus.canDispatch({ kind: 'remove', nodeId: 'tab-panel-1' })).toBe(false);
+    expect(
+      bus.canDispatch({
+        kind: 'insert-child',
+        parentId: 'tabs',
+        slotName: '',
+        childType: 'tab-list',
+      }),
+    ).toBe(false);
+
+    const added = bus.dispatch({ kind: 'add-tab', parentId: 'tabs' });
+    expect(added.changed).toBe(true);
+    expect(list.children).toHaveLength(3);
+    expect(
+      tabs.children.filter(
+        (child) => child.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE] === 'tab-panel',
+      ),
+    ).toHaveLength(3);
+
+    const addedTrigger = added.selection;
+    const addedTriggerId = addedTrigger?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE];
+    const addedTriggerBehavior = JSON.parse(
+      String(addedTrigger?.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    expect(addedTriggerBehavior).toEqual([
+      expect.objectContaining({
+        nodeId: addedTriggerId,
+        action: 'toggle',
+      }),
+    ]);
+    const addedPanelId = addedTriggerBehavior[0]?.targetNodeId;
+    expect(
+      tabs.children.some(
+        (child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE] === addedPanelId,
+      ),
+    ).toBe(true);
+
+    const duplicated = bus.dispatch({
+      kind: 'duplicate-tab',
+      nodeId: 'tab-trigger-1',
+    });
+    expect(duplicated.changed).toBe(true);
+    const duplicateTrigger = duplicated.selection;
+    const duplicateTriggerId =
+      duplicateTrigger?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE];
+    const duplicateBehavior = JSON.parse(
+      String(duplicateTrigger?.getAttributes()[BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]),
+    ) as Array<Record<string, unknown>>;
+    const duplicatePanelId = duplicateBehavior[0]?.targetNodeId;
+    expect(duplicateTriggerId).not.toBe('tab-trigger-1');
+    expect(duplicatePanelId).not.toBe('tab-panel-1');
+    expect(
+      tabs.children
+        .filter(
+          (child) => child.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE] === 'tab-panel',
+        )
+        .some(
+          (child) =>
+            child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE] === duplicatePanelId,
+        ),
+    ).toBe(true);
+
+    expect(
+      bus.dispatch({ kind: 'move-tab', nodeId: 'tab-trigger-2', direction: 'down' })
+        .changed,
+    ).toBe(true);
+    expect(ids(list)).toEqual([
+      'tab-trigger-1',
+      duplicateTriggerId,
+      addedTriggerId,
+      'tab-trigger-2',
+    ]);
+    const panelIds = tabs.children
+      .filter(
+        (child) => child.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE] === 'tab-panel',
+      )
+      .map((child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]);
+    expect(panelIds).toEqual([
+      'tab-panel-1',
+      duplicatePanelId,
+      addedPanelId,
+      'tab-panel-2',
+    ]);
+
+    expect(bus.dispatch({ kind: 'remove-tab', nodeId: 'tab-panel-1' }).changed).toBe(
+      true,
+    );
+    expect(
+      list.children.some(
+        (child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE] === 'tab-trigger-1',
+      ),
+    ).toBe(false);
+    expect(
+      tabs.children.some(
+        (child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE] === 'tab-panel-1',
+      ),
+    ).toBe(false);
+    expect(bus.canDispatch({ kind: 'remove-tab', nodeId: 'tab-trigger-2' })).toBe(true);
+    expect(bus.dispatch({ kind: 'remove-tab', nodeId: 'tab-trigger-2' }).changed).toBe(
+      true,
+    );
+    expect(bus.canDispatch({ kind: 'remove-tab', nodeId: String(addedTriggerId) })).toBe(
+      true,
+    );
+    expect(
+      bus.dispatch({ kind: 'remove-tab', nodeId: String(addedTriggerId) }).changed,
+    ).toBe(true);
+    expect(
+      bus.canDispatch({ kind: 'remove-tab', nodeId: String(duplicateTriggerId) }),
+    ).toBe(false);
+    expect(list.children).toHaveLength(1);
+    expect(
+      tabs.children.filter(
+        (child) => child.getAttributes()[BUILDER_NODE_TYPE_ATTRIBUTE] === 'tab-panel',
+      ),
+    ).toHaveLength(1);
+    expect(ids(list)).not.toContain('tab-trigger-1');
+    expect(
+      tabs.children.map((child) => child.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]),
+    ).not.toContain('tab-panel-1');
   });
 
   it('rejects removal of the last required compound child', () => {

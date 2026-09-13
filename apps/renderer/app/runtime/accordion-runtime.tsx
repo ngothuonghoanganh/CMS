@@ -11,12 +11,15 @@ function domId(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
-type AccordionItem = {
+export type AccordionItem = {
   id: string;
   title: string;
   defaultOpen: boolean;
   content: ReactNode;
   style?: CSSProperties;
+  /** Persisted managed ids used by the Open Composition projection. */
+  triggerId?: string;
+  panelId?: string;
 };
 
 export type AccordionPartStyles = {
@@ -35,6 +38,9 @@ export function AccordionRuntime({
   items,
   partsStyle,
   style,
+  itemNodeType = 'accordion-item',
+  panelNodeType,
+  rootNodeType = 'accordion',
 }: {
   allowMultiple: boolean;
   ariaLabel?: string;
@@ -43,6 +49,9 @@ export function AccordionRuntime({
   items: AccordionItem[];
   partsStyle?: AccordionPartStyles;
   style?: CSSProperties;
+  itemNodeType?: string;
+  panelNodeType?: string;
+  rootNodeType?: string;
 }): ReactElement {
   const [openIds, setOpenIds] = useState<Set<string>>(() => {
     const defaults = items.filter((item) => item.defaultOpen).map((item) => item.id);
@@ -63,7 +72,7 @@ export function AccordionRuntime({
     <div
       aria-label={ariaLabel}
       data-payload-node-id={id}
-      data-payload-node-type="accordion"
+      data-payload-node-type={rootNodeType}
       className="payload-accordion"
       style={{ ...style, ...partsStyle?.root }}
     >
@@ -76,7 +85,7 @@ export function AccordionRuntime({
           <section
             data-payload-part="item"
             data-payload-node-id={item.id}
-            data-payload-node-type="accordion-item"
+            data-payload-node-type={itemNodeType}
             key={item.id}
             style={{ ...item.style, ...partsStyle?.item }}
           >
@@ -85,6 +94,8 @@ export function AccordionRuntime({
                 aria-controls={panelId}
                 aria-expanded={open}
                 id={triggerId}
+                {...(item.triggerId ? { 'data-payload-node-id': item.triggerId } : {})}
+                {...(item.triggerId ? { 'data-payload-node-type': 'button' } : {})}
                 onClick={() => toggle(item.id)}
                 style={partsStyle?.trigger}
                 data-payload-part="trigger"
@@ -102,7 +113,9 @@ export function AccordionRuntime({
             </HeadingTag>
             <div
               aria-labelledby={triggerId}
-              data-payload-panel={item.id}
+              data-payload-panel={item.panelId ?? item.id}
+              {...(item.panelId ? { 'data-payload-node-id': item.panelId } : {})}
+              {...(item.panelId ? { 'data-payload-node-type': panelNodeType } : {})}
               hidden={!open}
               id={panelId}
               role="region"

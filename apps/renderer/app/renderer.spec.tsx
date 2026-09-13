@@ -94,6 +94,255 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('Submit');
   });
 
+  it('renders native List, FAQ and Tabs semantics from the persisted V8 graph', () => {
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Native interactive composition' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'list',
+                type: 'list',
+                props: {
+                  ordered: true,
+                  items: [
+                    { id: 'list-first', text: 'First item' },
+                    { id: 'list-second', text: 'Second item' },
+                  ],
+                },
+                children: [],
+              },
+              {
+                id: 'faq',
+                type: 'disclosure',
+                props: { allowMultiple: false, ariaLabel: 'Frequently asked questions' },
+                children: [
+                  {
+                    id: 'faq-item-1',
+                    type: 'disclosure-item',
+                    props: { question: 'Returns?', defaultOpen: true },
+                    children: [
+                      {
+                        id: 'faq-trigger-1',
+                        type: 'button',
+                        props: { label: 'Returns?' },
+                        children: [
+                          {
+                            id: 'faq-trigger-text-1',
+                            type: 'text',
+                            props: { text: 'Returns?' },
+                            children: [],
+                          },
+                        ],
+                      },
+                      {
+                        id: 'faq-panel-1',
+                        type: 'disclosure-panel',
+                        props: {},
+                        children: [
+                          {
+                            id: 'faq-answer-1',
+                            type: 'text',
+                            props: { text: 'Thirty days.' },
+                            children: [],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    id: 'faq-item-2',
+                    type: 'disclosure-item',
+                    props: { question: 'Shipping?', defaultOpen: false },
+                    children: [
+                      {
+                        id: 'faq-trigger-2',
+                        type: 'button',
+                        props: { label: 'Shipping?' },
+                        children: [
+                          {
+                            id: 'faq-trigger-text-2',
+                            type: 'text',
+                            props: { text: 'Shipping?' },
+                            children: [],
+                          },
+                        ],
+                      },
+                      {
+                        id: 'faq-panel-2',
+                        type: 'disclosure-panel',
+                        props: {},
+                        children: [
+                          {
+                            id: 'faq-answer-2',
+                            type: 'text',
+                            props: { text: 'Ships tomorrow.' },
+                            children: [],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'tabs',
+                type: 'tabs',
+                props: {
+                  orientation: 'vertical',
+                  ariaLabel: 'Product information',
+                  initialTabId: 'tab-panel-features',
+                },
+                children: [
+                  {
+                    id: 'tab-list',
+                    type: 'tab-list',
+                    props: {},
+                    children: [
+                      {
+                        id: 'tab-trigger-overview',
+                        type: 'tab-trigger',
+                        props: { label: 'Overview' },
+                        children: [
+                          {
+                            id: 'tab-text-overview',
+                            type: 'text',
+                            props: { text: 'Overview' },
+                            children: [],
+                          },
+                        ],
+                      },
+                      {
+                        id: 'tab-trigger-features',
+                        type: 'tab-trigger',
+                        props: { label: 'Features' },
+                        children: [
+                          {
+                            id: 'tab-text-features',
+                            type: 'text',
+                            props: { text: 'Features' },
+                            children: [],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                  {
+                    id: 'tab-panel-overview',
+                    type: 'tab-panel',
+                    props: {},
+                    children: [
+                      {
+                        id: 'tab-copy-overview',
+                        type: 'text',
+                        props: { text: 'Summary' },
+                        children: [],
+                      },
+                    ],
+                  },
+                  {
+                    id: 'tab-panel-features',
+                    type: 'tab-panel',
+                    props: {},
+                    children: [
+                      {
+                        id: 'tab-copy-features',
+                        type: 'text',
+                        props: { text: 'Details' },
+                        children: [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [
+        {
+          id: 'faq-toggle-1',
+          kind: 'action',
+          nodeId: 'faq-trigger-1',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'faq-panel-1',
+        },
+        {
+          id: 'faq-toggle-2',
+          kind: 'action',
+          nodeId: 'faq-trigger-2',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'faq-panel-2',
+        },
+        {
+          id: 'tab-toggle-overview',
+          kind: 'action',
+          nodeId: 'tab-trigger-overview',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'tab-panel-overview',
+        },
+        {
+          id: 'tab-toggle-features',
+          kind: 'action',
+          nodeId: 'tab-trigger-features',
+          event: 'click',
+          action: 'toggle',
+          targetNodeId: 'tab-panel-features',
+        },
+      ],
+    });
+    const markup = renderToStaticMarkup(renderPage(payload));
+
+    expect(markup).toContain('<ol data-payload-node-id="list"');
+    expect(markup).toContain('<li>First item</li><li>Second item</li>');
+    expect(markup).not.toContain('<ul data-payload-node-id="list"');
+
+    expect(markup).toContain('aria-label="Frequently asked questions"');
+    expect(markup).toContain(
+      'data-payload-node-id="faq" data-payload-node-type="disclosure"',
+    );
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('role="region"');
+    expect(markup).toContain('data-payload-node-type="disclosure-panel"');
+
+    expect(markup).toContain('role="tablist"');
+    expect(markup).toContain('aria-orientation="vertical"');
+    expect(markup).toContain('role="tab"');
+    expect(markup).toContain('aria-selected="true"');
+    expect(markup).toContain('role="tabpanel"');
+    expect(markup).toContain('aria-controls="tabs-tabpanel-tab-trigger-features"');
+    expect(markup).toContain('aria-labelledby="tabs-tab-tab-trigger-features"');
+  });
+
+  it('renders a Gallery recipe only as normal Grid and Image primitives', () => {
+    const recipe = instantiateOpenCompositionRecipe('gallery-2-columns', (sourceId) =>
+      sourceId === 'root' ? 'root' : `public-${sourceId}`,
+    );
+    const payload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Gallery recipe' },
+      root: recipe.root,
+      behaviors: recipe.behaviors,
+    });
+    const markup = renderToStaticMarkup(renderPage(payload));
+
+    expect(markup).toContain('data-payload-node-type="grid"');
+    expect(markup).toContain('data-payload-node-type="image"');
+    expect(markup).not.toContain('data-payload-node-type="gallery"');
+    expect(markup.match(/data-payload-node-type="image"/g)).toHaveLength(4);
+  });
+
   it('renders canonical Open Composition content, attribution, poster and choices', () => {
     const payload = OpenCompositionPayloadSchema.parse({
       version: 8,

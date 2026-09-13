@@ -118,7 +118,12 @@ test('Phase 16 tabs expose ARIA runtime semantics and keyboard activation', asyn
 }) => {
   test.setTimeout(120_000);
   await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-16-tabs');
-  await page.getByRole('button', { name: 'Tabs add', exact: true }).click();
+  // Select the legacy V7 Tabs card explicitly; the native V8 Tabs preset uses
+  // the same user-facing name and is covered by the Phase 24 journey.
+  await page
+    .locator('.builder-block-card[data-block-category="content"][data-block-type="tabs"]')
+    .getByRole('button', { name: 'Tabs add', exact: true })
+    .click();
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
   await page
     .getByRole('treeitem', { name: 'Select Tab Item', exact: true })

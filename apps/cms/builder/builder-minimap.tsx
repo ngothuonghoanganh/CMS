@@ -14,7 +14,7 @@ export type BuilderCanvasNode = {
   id: string;
   type: BuilderNodeType | OpenCompositionNodeType;
   openComposition?: boolean;
-  semanticOwner?: { id: string; nodeType: 'form-field' };
+  semanticOwner?: { id: string; nodeType: OpenCompositionNodeType };
   label: string;
   parentId?: string;
   depth: number;
@@ -61,7 +61,7 @@ function percent(value: number, total: number): string {
 }
 
 function nodeLabel(node: BuilderCanvasNode): string {
-  return `${node.label} (${node.id})`;
+  return node.label;
 }
 
 export function PageMinimap({
