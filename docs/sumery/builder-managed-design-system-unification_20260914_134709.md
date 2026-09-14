@@ -3,7 +3,7 @@
 ## Repository state
 
 - Starting commit SHA: `bbae4a3f30741c10067485055ea96b68579d5e32`
-- Final commit SHA: not applicable; no commit was created.
+- Final commit SHA: pending follow-up Managed-state correction commit.
 - Working branch: `ao/cms-8/root`
 - Runtime used for validation: Node `v24.19.0`, pnpm `10.15.0`
 - MongoDB E2E substrate: `cms-8-phase24-mongodb`, exposed on `127.0.0.1:27018`, labeled for this AO session.
@@ -28,7 +28,7 @@ Gallery preset columns -> recipe image count
 ## Architecture after
 
 ```text
-Persisted node metadata -> Builder Managed
+Managed field           -> inactive compatibility label
 Semantic ownership      -> structural restrictions only
 
 Design Style Target registry
@@ -45,11 +45,11 @@ Gallery catalog entry -> Grid composition -> independent Image children
 
 ## Managed state and semantic ownership
 
-- Added `isBuilderManagedNode`, derived from persisted Payload node identity/type and excluding editor-only projections.
-- Canvas state marks each persisted node `managed: true`; this is derived state rather than a new persisted boolean.
-- Layers now displays Managed for ordinary and semantic-owned persisted nodes alike.
-- `semanticOwner` remains an explicit relationship used for non-structural/aggregate restrictions. It is not used to decide Managed state.
-- Direct interaction tests cover ordinary nodes, semantic Form children, projection nodes, and the existing structural restrictions.
+- Removed the derived `isBuilderManagedNode` path and the canvas `managed` field.
+- Layers is restored to the pre-activation behavior: only actual semantic-owned children show the muted Managed label.
+- The Managed label has no active badge/data state; ordinary persisted nodes do not receive it.
+- `semanticOwner` remains only for actual semantic relationships and their structural restrictions.
+- Direct interaction tests continue to cover semantic preview projection and structural restrictions without promoting ordinary nodes to Managed.
 
 ## Design System resolution architecture
 
@@ -111,8 +111,8 @@ Gallery catalog entry -> Grid composition -> independent Image children
 - `apps/cms/builder/builder-block/builder-adapter.ts` — Open metadata, shared style painting, semantic parts, responsive/reset handling, and safe Grid normalization.
 - `apps/cms/builder/builder-block/block-presets.ts` — one Gallery catalog item.
 - `apps/cms/builder/builder-block/builder-preview-model.ts` and `builder-block-catalog.tsx` — representative preview behavior without Gallery authoring unions.
-- `apps/cms/builder/builder-block/builder-structural-domain.ts`, `editor-commands.ts`, `builder-interaction.ts` — Open/legacy discrimination, promotion, structural rules, and Managed derivation.
-- `apps/cms/builder/grapes-editor.tsx`, `builder-shell.tsx`, `inspector/builder-inspector.tsx`, `inspector/inspector-value.ts` — initial/live Design System projection, Layers state, inherited Inspector values, parts, and reset controls.
+- `apps/cms/builder/builder-block/builder-structural-domain.ts`, `editor-commands.ts`, `builder-interaction.ts` — Open/legacy discrimination, promotion, and structural rules.
+- `apps/cms/builder/grapes-editor.tsx`, `builder-shell.tsx`, `inspector/builder-inspector.tsx`, `inspector/inspector-value.ts` — initial/live Design System projection, inactive Layers label, inherited Inspector values, parts, and reset controls.
 - `apps/renderer/app/renderer.tsx` and `open-composition-renderer.tsx` — shared effective styling and responsive/part parity.
 - `tests/e2e/phase-24-native-open-composition.spec.ts` — real Phase 24 Builder journey.
 - `tests/e2e/builder-renderer-parity.spec.ts` — V8 and legacy parity coverage.
@@ -121,7 +121,7 @@ Gallery catalog entry -> Grid composition -> independent Image children
 
 ## Tests added/updated
 
-- Managed state is independent from semantic ownership and excludes projections.
+- Managed compatibility label remains inactive and is limited to semantic-owned children.
 - Design Style Target mapping, responsive inheritance, local override/reset, and legacy full-default compatibility.
 - Open Form semantic part projection, submit behavior, and responsive input reset.
 - Numeric Grid/Gallery columns and raw CSS rejection.
@@ -133,7 +133,7 @@ Gallery catalog entry -> Grid composition -> independent Image children
 
 Executed the real application journey with MongoDB and Playwright:
 
-- `tests/e2e/phase-24-native-open-composition.spec.ts` — **1 passed**. Covers custom Design System, Layers Managed state, legacy→V8 promotion, Contact Form parts, responsive reset, FAQ/Tabs, one Gallery entry, columns 1/2/4/5/8/12, image independence, save/reload, review, publish, and public rendering.
+- `tests/e2e/phase-24-native-open-composition.spec.ts` — **1 passed**. Covers custom Design System, inactive Layers Managed label, legacy→V8 promotion, Contact Form parts, responsive reset, FAQ/Tabs, one Gallery entry, columns 1/2/4/5/8/12, image independence, save/reload, review, publish, and public rendering.
 - `tests/e2e/builder-renderer-parity.spec.ts` — **2 passed**. Covers legacy parity and V8 Builder/review/published parity at desktop/tablet/mobile.
 - `tests/e2e/phase-16-compound-components.spec.ts` — **5 passed**. Covers compound compatibility and composition-based Gallery behavior.
 
@@ -160,15 +160,16 @@ All commands below used Node `v24.19.0` through the task-specific PATH and pnpm 
 | `corepack pnpm format:check`                                                                                                                                                | PASS                                                                   |
 | `corepack pnpm lint`                                                                                                                                                        | PASS — 4 package tasks                                                 |
 | `corepack pnpm typecheck`                                                                                                                                                   | PASS — 5 package tasks                                                 |
-| `corepack pnpm test`                                                                                                                                                        | PASS — contracts 102, CMS 173, renderer 31, API 98 passed / 12 skipped |
+| `corepack pnpm test`                                                                                                                                                        | PASS — contracts 102, CMS 172, renderer 31, API 98 passed / 12 skipped |
 | `corepack pnpm build`                                                                                                                                                       | PASS — 5 package tasks                                                 |
 | `corepack pnpm verify`                                                                                                                                                      | PASS — all aggregate gates                                             |
 | `corepack pnpm exec playwright test tests/e2e/phase-24-native-open-composition.spec.ts --workers=1`                                                                         | PASS — 1 test                                                          |
+| `corepack pnpm exec playwright test tests/e2e/phase-23.3.1-release-gate.spec.ts --workers=1`                                                                               | PASS — 1 test                                                          |
 | `corepack pnpm exec playwright test tests/e2e/builder-renderer-parity.spec.ts --workers=1`                                                                                  | PASS — 2 tests                                                         |
 | `corepack pnpm exec playwright test tests/e2e/phase-16-compound-components.spec.ts --workers=1`                                                                             | PASS — 5 tests                                                         |
 | `git diff --check`                                                                                                                                                          | PASS                                                                   |
 
-Repository preparation also included `git status`, branch/SHA/log inspection, and `git fetch origin`. The requested `git fetch --ff-only origin` form was not supported by the installed Git client, so the non-destructive plain fetch was used successfully. No history rewrite, cleanup, commit, or push was performed.
+Repository preparation also included `git status`, branch/SHA/log inspection, and `git fetch origin`. The requested `git fetch --ff-only origin` form was not supported by the installed Git client, so the non-destructive plain fetch was used successfully. The initial implementation was committed, then the Managed activation was corrected in a follow-up commit and merged locally into `main`; no remote push was performed.
 
 ## Known remaining risks
 

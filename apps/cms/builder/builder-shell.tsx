@@ -329,11 +329,6 @@ function renderLayerNodes(
   return (childrenByParent.get(parentId) ?? [])
     .filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id))
     .map((node) => {
-      // Managed means this row represents a real persisted Builder node. It
-      // is deliberately independent from semantic ownership: semanticOwner
-      // only controls the special structural restrictions of internal parts.
-      const isManaged = node.managed;
-      const isSemanticOwned = Boolean(node.semanticOwner);
       const structuralChildren = (childrenByParent.get(node.id) ?? []).some(
         (child) => !visibleNodeIds || visibleNodeIds.has(child.id),
       );
@@ -384,13 +379,12 @@ function renderLayerNodes(
       const hasValidationIssue = invalidNodeIds.has(node.id);
       return (
         <div
-          className={`builder-layer-node${isManaged ? ' is-managed' : ''}${draggingId === node.id ? ' dragging' : ''}${hasValidationIssue ? ' has-validation-issue' : ''}${dropClass}`}
-          data-builder-layer-managed={isManaged ? 'active' : undefined}
+          className={`builder-layer-node${draggingId === node.id ? ' dragging' : ''}${hasValidationIssue ? ' has-validation-issue' : ''}${dropClass}`}
           data-builder-layer-row-id={node.id}
           key={node.id}
         >
           <div className="builder-layer-row">
-            {isSemanticOwned ? (
+            {node.semanticOwner ? (
               <span aria-hidden="true" className="builder-layer-toggle-placeholder" />
             ) : (
               <button
@@ -409,7 +403,15 @@ function renderLayerNodes(
                 )}
               </button>
             )}
-            {!isSemanticOwned ? (
+            {node.semanticOwner ? (
+              <span
+                aria-label={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
+                className="builder-layer-managed-indicator"
+                title={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
+              >
+                Managed
+              </span>
+            ) : (
               <button
                 aria-label={`Drag ${node.label} layer`}
                 className="builder-layer-drag-handle"
@@ -418,25 +420,7 @@ function renderLayerNodes(
               >
                 <Icon name="grip" />
               </button>
-            ) : null}
-            {isManaged ? (
-              <span
-                aria-label={
-                  node.semanticOwner
-                    ? `Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`
-                    : 'Managed Builder node'
-                }
-                className="builder-layer-managed-indicator is-active"
-                data-builder-layer-managed-state="active"
-                title={
-                  node.semanticOwner
-                    ? `Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`
-                    : 'Managed Builder node'
-                }
-              >
-                Managed
-              </span>
-            ) : null}
+            )}
             <button
               aria-label={`Select ${node.label}`}
               aria-expanded={hasChildren ? !collapsedIds.has(node.id) : undefined}

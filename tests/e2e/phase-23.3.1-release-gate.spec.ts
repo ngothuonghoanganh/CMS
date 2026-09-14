@@ -55,11 +55,12 @@ test('passes the Phase 23.3.1 Builder-to-public release journey', async ({
     await page.getByRole('button', { name: 'Layers', exact: true }).click();
     const managedLayerIndicators = page.locator('.builder-layer-managed-indicator');
     await expect.poll(async () => managedLayerIndicators.count()).toBeGreaterThan(0);
-    await expect(
-      page.locator(
-        '.builder-layer-managed-indicator:not([data-builder-layer-managed-state="active"])',
-      ),
-    ).toHaveCount(0);
+    await expect(page.locator('.builder-layer-managed-indicator.is-active')).toHaveCount(
+      0,
+    );
+    await expect(page.locator('[data-builder-layer-managed-state="active"]')).toHaveCount(
+      0,
+    );
 
     const fieldLayer = page
       .getByRole('treeitem', { name: 'Select Form field', exact: true })

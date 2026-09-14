@@ -45,12 +45,6 @@ function findNodes(root: BuilderNode, type: string): BuilderNode[] {
   ];
 }
 
-function countPersistedNodes(node: BuilderNode): number {
-  return (
-    1 + node.children.reduce((count, child) => count + countPersistedNodes(child), 0)
-  );
-}
-
 function customPhase24DesignSystem() {
   const base = createDefaultSiteDesignSystem();
   const grid = base.componentDefaults?.grid;
@@ -194,15 +188,9 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
 
     await addPreset(page, 'blank-section');
     await selectLayers(page);
-    const activeManagedLayers = page.locator(
-      '[data-builder-layer-managed="active"] .builder-layer-managed-indicator[data-builder-layer-managed-state="active"]',
+    await expect(page.locator('.builder-layer-managed-indicator.is-active')).toHaveCount(
+      0,
     );
-    await expect
-      .poll(async () => {
-        const payload = await readPayload(page);
-        return payload ? await activeManagedLayers.count() : 0;
-      })
-      .toBe(countPersistedNodes((await readPayload(page))!.root));
     const promotedSectionId = findNode((await readPayload(page))!.root, 'section')?.id;
     expect(promotedSectionId).toBeTruthy();
     const promotedSection = page
@@ -237,9 +225,6 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
         }),
       )
       .toEqual(sectionStylesBeforePromotion);
-    await expect
-      .poll(async () => activeManagedLayers.count())
-      .toBe(countPersistedNodes((await readPayload(page))!.root));
     await listLayer.click();
 
     const firstItem = page.getByLabel('Item 1', { exact: true });
@@ -282,9 +267,9 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
 
     await addPreset(page, 'contact-form');
     await selectLayers(page);
-    await expect
-      .poll(async () => activeManagedLayers.count())
-      .toBe(countPersistedNodes((await readPayload(page))!.root));
+    await expect(page.locator('.builder-layer-managed-indicator.is-active')).toHaveCount(
+      0,
+    );
     const contactForm = page
       .frameLocator('iframe.gjs-frame')
       .locator('form[data-payload-node-type="form"]')
@@ -381,9 +366,9 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
 
     await addPreset(page, 'faq');
     await selectLayers(page);
-    await expect
-      .poll(async () => activeManagedLayers.count())
-      .toBe(countPersistedNodes((await readPayload(page))!.root));
+    await expect(page.locator('.builder-layer-managed-indicator.is-active')).toHaveCount(
+      0,
+    );
     const faqLayer = page.getByRole('treeitem', { name: 'Select FAQ', exact: true });
     await expect(faqLayer).toBeVisible();
     await faqLayer.click();
@@ -443,13 +428,16 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
     const managedLayer = page.locator('.builder-layer-managed-indicator').first();
     await expect(managedLayer).toBeVisible();
     await expect(managedLayer).toHaveText('Managed');
+    await expect(page.locator('.builder-layer-managed-indicator.is-active')).toHaveCount(
+      0,
+    );
 
     await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
     await addPreset(page, 'native-tabs');
     await selectLayers(page);
-    await expect
-      .poll(async () => activeManagedLayers.count())
-      .toBe(countPersistedNodes((await readPayload(page))!.root));
+    await expect(page.locator('.builder-layer-managed-indicator.is-active')).toHaveCount(
+      0,
+    );
     const tabsLayer = page.getByRole('treeitem', { name: 'Select Tabs', exact: true });
     await expect(tabsLayer).toBeVisible();
     await tabsLayer.click();

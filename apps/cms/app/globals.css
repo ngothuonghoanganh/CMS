@@ -3773,10 +3773,6 @@ textarea {
   background: var(--cms-accent-surface);
 }
 .builder-layer-managed-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.22rem;
   flex: 0 0 auto;
   min-width: 3.65rem;
   color: var(--cms-text-muted);
@@ -3784,20 +3780,6 @@ textarea {
   font-weight: 600;
   line-height: 1;
   text-align: center;
-}
-.builder-layer-managed-indicator.is-active {
-  border: 1px solid color-mix(in srgb, var(--cms-primary) 35%, var(--cms-border-default));
-  border-radius: 0.3rem;
-  padding: 0.2rem 0.3rem;
-  color: var(--cms-primary);
-  background: color-mix(in srgb, var(--cms-primary) 10%, transparent);
-}
-.builder-layer-managed-indicator.is-active::before {
-  width: 0.35rem;
-  height: 0.35rem;
-  border-radius: 50%;
-  background: var(--cms-primary);
-  content: '';
 }
 .builder-layer-button {
   display: flex;

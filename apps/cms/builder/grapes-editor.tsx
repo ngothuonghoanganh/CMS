@@ -35,7 +35,6 @@ import {
 } from './builder-block/builder-adapter';
 import {
   findPayloadComponent,
-  isBuilderManagedNode,
   isEditableTarget,
   isEditorOnlyPreview,
   payloadAncestor,
@@ -380,7 +379,7 @@ function syncValidationIndicators(
 function componentForCanvasElement(root: Component, element: Element): Component | null {
   let match: Component | undefined;
   root.onAll((component) => {
-    if (!isBuilderManagedNode(component)) return;
+    if (isEditorOnlyPreview(component)) return;
     const componentElement = component.getEl();
     if (!componentElement || !componentElement.contains(element)) return;
     if (!match || (match.getEl()?.contains(componentElement) ?? false)) {
@@ -1206,10 +1205,6 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     nodes.push({
       id,
       type: type as BuilderNodeType | OpenCompositionNodeType,
-      // This list is built only from real persisted Payload components. A
-      // projection node returned above is skipped, so every entry here is
-      // Builder-managed regardless of semantic ownership.
-      managed: true,
       ...(isOpenCompositionNodeType(type) ? { openComposition: true } : {}),
       label: canvasNodeLabel(component, type),
       ...(parentId ? { parentId } : {}),

@@ -135,9 +135,9 @@ Journey này kiểm tra:
 
 - List: thêm preset, sửa nhiều item, thêm/xóa/reorder, Bullets ↔ Numbers,
   Undo/Redo và giữ stable item IDs.
-- FAQ: sửa question và answer, thêm/duplicate/reorder/remove question, managed
-  layers luôn active ngay sau khi insert block (không cần thêm layout child) và
-  semantic trigger/panel structure.
+- FAQ: sửa question và answer, thêm/duplicate/reorder/remove question, giữ
+  Managed indicator ở trạng thái inactive và kiểm tra semantic trigger/panel
+  structure.
 - Tabs: rename, thêm/duplicate/reorder/remove tab, sửa panel content và đổi
   hướng horizontal/vertical.
 - Gallery: thêm recipe 3 cột, kiểm tra Grid + Image primitives, sửa image
@@ -180,9 +180,9 @@ Nếu cần review bằng mắt ngoài assertion tự động, xác nhận các 
 
 - UI gọi là FAQ/Question/Answer, không lộ node ID hoặc target ID.
 - Một Question luôn bao gồm managed question control và answer panel.
-- Các dòng Managed xuất hiện và ở trạng thái active ngay khi insert compound
-  block; trạng thái này là dẫn xuất từ semantic owner, không phụ thuộc việc
-  dùng thêm layout block.
+- Các dòng Managed của semantic child vẫn xuất hiện ở trạng thái inactive; đây
+  là nhãn tham chiếu của semantic owner, không phải trạng thái Builder Managed
+  áp dụng cho mọi persisted node.
 - Có thể sửa nội dung bên trong Answer như content bình thường.
 - Không thể xóa, reparent hoặc move riêng trigger/panel shell qua Layers hoặc
   command boundary.
