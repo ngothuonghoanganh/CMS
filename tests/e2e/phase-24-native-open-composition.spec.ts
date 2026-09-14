@@ -146,6 +146,12 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
     await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
     await addPreset(page, 'faq');
     await selectLayers(page);
+    const activeManagedLayers = page.locator(
+      '[data-builder-layer-managed="active"] .builder-layer-managed-indicator[data-builder-layer-managed-state="active"]',
+    );
+    // Managed internals are available immediately after inserting the
+    // compound block; they do not depend on adding a layout child first.
+    await expect(activeManagedLayers).toHaveCount(4);
     const faqLayer = page.getByRole('treeitem', { name: 'Select FAQ', exact: true });
     await expect(faqLayer).toBeVisible();
     await faqLayer.click();
@@ -208,6 +214,7 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
     await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
     await addPreset(page, 'native-tabs');
     await selectLayers(page);
+    await expect(activeManagedLayers).toHaveCount(12);
     const tabsLayer = page.getByRole('treeitem', { name: 'Select Tabs', exact: true });
     await expect(tabsLayer).toBeVisible();
     await tabsLayer.click();
