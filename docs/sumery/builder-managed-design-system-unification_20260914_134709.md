@@ -3,7 +3,7 @@
 ## Repository state
 
 - Starting commit SHA: `bbae4a3f30741c10067485055ea96b68579d5e32`
-- Final commit SHA: pending follow-up Managed-state correction commit.
+- Final commit SHA: `ed7d9ed` (`fix(builder): deactivate managed layer state`).
 - Working branch: `ao/cms-8/root`
 - Runtime used for validation: Node `v24.19.0`, pnpm `10.15.0`
 - MongoDB E2E substrate: `cms-8-phase24-mongodb`, exposed on `127.0.0.1:27018`, labeled for this AO session.
@@ -164,7 +164,7 @@ All commands below used Node `v24.19.0` through the task-specific PATH and pnpm 
 | `corepack pnpm build`                                                                                                                                                       | PASS — 5 package tasks                                                 |
 | `corepack pnpm verify`                                                                                                                                                      | PASS — all aggregate gates                                             |
 | `corepack pnpm exec playwright test tests/e2e/phase-24-native-open-composition.spec.ts --workers=1`                                                                         | PASS — 1 test                                                          |
-| `corepack pnpm exec playwright test tests/e2e/phase-23.3.1-release-gate.spec.ts --workers=1`                                                                               | PASS — 1 test                                                          |
+| `corepack pnpm exec playwright test tests/e2e/phase-23.3.1-release-gate.spec.ts --workers=1`                                                                                | PASS — 1 test                                                          |
 | `corepack pnpm exec playwright test tests/e2e/builder-renderer-parity.spec.ts --workers=1`                                                                                  | PASS — 2 tests                                                         |
 | `corepack pnpm exec playwright test tests/e2e/phase-16-compound-components.spec.ts --workers=1`                                                                             | PASS — 5 tests                                                         |
 | `git diff --check`                                                                                                                                                          | PASS                                                                   |
