@@ -329,6 +329,10 @@ function renderLayerNodes(
   return (childrenByParent.get(parentId) ?? [])
     .filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id))
     .map((node) => {
+      // A managed layer is active as soon as its semantic owner exists. This
+      // is derived from the authoritative GrapesJS model rather than from
+      // layout usage or a second React-owned state machine.
+      const isManaged = Boolean(node.semanticOwner);
       const structuralChildren = (childrenByParent.get(node.id) ?? []).some(
         (child) => !visibleNodeIds || visibleNodeIds.has(child.id),
       );
@@ -379,7 +383,8 @@ function renderLayerNodes(
       const hasValidationIssue = invalidNodeIds.has(node.id);
       return (
         <div
-          className={`builder-layer-node${draggingId === node.id ? ' dragging' : ''}${hasValidationIssue ? ' has-validation-issue' : ''}${dropClass}`}
+          className={`builder-layer-node${isManaged ? ' is-managed' : ''}${draggingId === node.id ? ' dragging' : ''}${hasValidationIssue ? ' has-validation-issue' : ''}${dropClass}`}
+          data-builder-layer-managed={isManaged ? 'active' : undefined}
           data-builder-layer-row-id={node.id}
           key={node.id}
         >
@@ -406,7 +411,8 @@ function renderLayerNodes(
             {node.semanticOwner ? (
               <span
                 aria-label={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
-                className="builder-layer-managed-indicator"
+                className="builder-layer-managed-indicator is-active"
+                data-builder-layer-managed-state="active"
                 title={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
               >
                 Managed
