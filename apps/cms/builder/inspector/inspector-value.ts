@@ -1,6 +1,8 @@
 import {
   PAGE_STYLE_PROPERTY_BY_EDITOR_KEY,
+  resolveEffectiveNodeAppearance,
   resolvePageStyleValue,
+  type ResponsiveStyleSource,
   type PageNodeStyle,
   type PageNodeStyleV7,
   type SiteDesignSystem,
@@ -29,10 +31,15 @@ export type ResolvedInspectorValue = {
  * affordances use `authoredValue` to distinguish inherited values.
  */
 export function resolveInspectorStyleValue(
-  style: PageNodeStyle | PageNodeStyleV7 | undefined,
+  style: ResponsiveStyleSource | PageNodeStyle | PageNodeStyleV7 | undefined,
   property: string,
   viewport: BuilderViewport,
   designSystem?: SiteDesignSystem,
+  context?: {
+    type?: string | undefined;
+    props?: Record<string, unknown> | undefined;
+    part?: string | undefined;
+  },
 ): ResolvedInspectorValue {
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
@@ -40,8 +47,20 @@ export function resolveInspectorStyleValue(
     ];
   const payloadKey = definition?.payloadKey ?? property;
   const activeKey = viewport === 'desktop' ? 'base' : viewport;
-  const authoredBlock = style?.[activeKey];
-  const authoredValue = authoredBlock?.[payloadKey as keyof typeof authoredBlock];
+  const sourceStyle = style as ResponsiveStyleSource | undefined;
+  const valueAt = (
+    key: 'base' | 'tablet' | 'mobile',
+  ): string | StyleTokenReference | undefined => {
+    const value = sourceStyle?.[key]?.[payloadKey];
+    return typeof value === 'string' ||
+      (typeof value === 'object' &&
+        value !== null &&
+        'kind' in value &&
+        value.kind === 'token')
+      ? (value as string | StyleTokenReference)
+      : undefined;
+  };
+  const authoredValue = valueAt(activeKey);
 
   const candidates: Array<{
     viewport: BuilderViewport;
@@ -51,56 +70,69 @@ export function resolveInspectorStyleValue(
       ? [
           {
             viewport: 'desktop',
-            value: style?.base?.[payloadKey as keyof typeof style.base],
+            value: valueAt('base'),
           },
         ]
       : viewport === 'tablet'
         ? [
             {
               viewport: 'tablet',
-              value:
-                style?.tablet?.[payloadKey as keyof NonNullable<typeof style.tablet>],
+              value: valueAt('tablet'),
             },
             {
               viewport: 'desktop',
-              value: style?.base?.[payloadKey as keyof typeof style.base],
+              value: valueAt('base'),
             },
           ]
         : [
             {
               viewport: 'mobile',
-              value:
-                style?.mobile?.[payloadKey as keyof NonNullable<typeof style.mobile>],
+              value: valueAt('mobile'),
             },
             {
               viewport: 'tablet',
-              value:
-                style?.tablet?.[payloadKey as keyof NonNullable<typeof style.tablet>],
+              value: valueAt('tablet'),
             },
             {
               viewport: 'desktop',
-              value: style?.base?.[payloadKey as keyof typeof style.base],
+              value: valueAt('base'),
             },
           ];
 
-  const isStyleValue = (
-    value: string | StyleTokenReference | undefined,
-  ): value is string | StyleTokenReference =>
+  const isStyleValue = (value: unknown): value is string | StyleTokenReference =>
     typeof value === 'string' ||
-    (typeof value === 'object' && value !== null && value.kind === 'token');
+    (typeof value === 'object' &&
+      value !== null &&
+      'kind' in value &&
+      value.kind === 'token');
   const source = candidates.find(({ value }) => isStyleValue(value));
   const sourceValue = source?.value;
-  const effectiveValue = isStyleValue(sourceValue)
-    ? resolvePageStyleValue(sourceValue, designSystem, payloadKey)
+  const effectiveBlock = context?.type
+    ? resolveEffectiveNodeAppearance(
+        designSystem,
+        { type: context.type, props: context.props, part: context.part },
+        style,
+        viewport === 'desktop' ? 'base' : viewport,
+      )
+    : undefined;
+  const effectiveRawValue = effectiveBlock?.[payloadKey];
+  const effectiveCandidate = isStyleValue(effectiveRawValue)
+    ? effectiveRawValue
+    : sourceValue;
+  const effectiveValue = isStyleValue(effectiveCandidate)
+    ? resolvePageStyleValue(effectiveCandidate, designSystem, payloadKey)
     : undefined;
   const authoredStyleValue = isStyleValue(authoredValue) ? authoredValue : undefined;
   return {
     ...(authoredStyleValue !== undefined ? { authoredValue: authoredStyleValue } : {}),
-    ...(source && effectiveValue !== undefined
-      ? { effectiveValue, sourceViewport: source.viewport }
+    ...(effectiveValue !== undefined
+      ? {
+          effectiveValue,
+          ...(source ? { sourceViewport: source.viewport } : {}),
+        }
       : {}),
-    ...(typeof sourceValue === 'object' && isStyleValue(sourceValue)
-      ? { effectiveRawValue: sourceValue }
+    ...(typeof effectiveCandidate === 'object' && isStyleValue(effectiveCandidate)
+      ? { effectiveRawValue: effectiveCandidate }
       : {}),
     inherited:
       viewport !== 'desktop' && source !== undefined && source.viewport !== viewport,

@@ -268,7 +268,7 @@ test('Phase 18.2 paints responsive component-part styles before save and after r
   ).toHaveCSS('padding', '20px');
 });
 
-test('Phase 16 gallery enforces image-only structure and responsive authored styles', async ({
+test('Phase 16 gallery uses a composable grid and responsive authored styles', async ({
   page,
   request,
   canonicalEnvironment,
@@ -277,55 +277,54 @@ test('Phase 16 gallery enforces image-only structure and responsive authored sty
   await openCanonicalBuilder(page, request, canonicalEnvironment, 'phase-16-gallery');
   const canvas = page.frameLocator('iframe.gjs-frame');
   await page.getByRole('button', { name: 'Gallery add', exact: true }).click();
-  await expect(canvas.locator('[data-payload-node-type="gallery"]')).toHaveCount(1);
-  expect(findNodes(await readBuilderModel(page), 'image')).toHaveLength(3);
+  await expect(canvas.locator('[data-payload-node-type="grid"]')).toHaveCount(1);
+  expect(findNodes(await readBuilderModel(page), 'image')).toHaveLength(6);
 
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
-  await page.getByRole('treeitem', { name: 'Select Gallery', exact: true }).click();
+  await page.getByRole('treeitem', { name: 'Select Grid', exact: true }).click();
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
-  await page
-    .getByLabel('Grid columns', { exact: true })
-    .fill('repeat(3, minmax(0, 1fr))');
+  await page.getByLabel('Columns', { exact: true }).fill('3');
+  await page.getByLabel('Columns', { exact: true }).blur();
   await page.getByRole('button', { name: 'Tablet', exact: true }).click();
-  await page
-    .getByLabel('Grid columns', { exact: true })
-    .fill('repeat(2, minmax(0, 1fr))');
+  await page.getByLabel('Columns', { exact: true }).fill('2');
+  await page.getByLabel('Columns', { exact: true }).blur();
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
-  await page.getByLabel('Grid columns', { exact: true }).fill('minmax(0, 1fr)');
+  await page.getByLabel('Columns', { exact: true }).fill('1');
+  await page.getByLabel('Columns', { exact: true }).blur();
 
   await page.getByRole('tab', { name: 'Content', exact: true }).click();
-  await page.getByRole('button', { name: '+ Add Image', exact: true }).click();
-  const gallery = findNode(await readBuilderModel(page), 'gallery');
-  expect(gallery?.children).toHaveLength(4);
+  const addImage = page.getByLabel('Add content to Grid', { exact: true });
+  await addImage.selectOption('image');
+  await addImage.locator('..').getByRole('button', { name: 'Add', exact: true }).click();
+  const gallery = findNode(await readBuilderModel(page), 'grid');
+  expect(gallery?.children).toHaveLength(7);
   // The structural command selects the inserted child. Return to the parent
   // through Layers before continuing to exercise its slot controls.
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
-  await page.getByRole('treeitem', { name: 'Select Gallery', exact: true }).click();
+  await page.getByRole('treeitem', { name: 'Select Grid', exact: true }).click();
   await page.getByRole('tab', { name: 'Content', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: '+ Add Image', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByLabel('Add content to Grid', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Button add', exact: true }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Button add', exact: true }).click();
-  expect(findNode(await readBuilderModel(page), 'gallery')?.children).toHaveLength(4);
+  expect(findNode(await readBuilderModel(page), 'grid')?.children).toHaveLength(8);
 
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.reload();
-  await expect(canvas.locator('[data-payload-node-type="gallery"]')).toHaveCount(1, {
+  await expect(canvas.locator('[data-payload-node-type="grid"]')).toHaveCount(1, {
     timeout: 15_000,
   });
-  const reloaded = findNode(await readBuilderModel(page), 'gallery');
-  expect(reloaded?.children).toHaveLength(4);
+  const reloaded = findNode(await readBuilderModel(page), 'grid');
+  expect(reloaded?.children).toHaveLength(8);
   expect(reloaded?.style).toMatchObject({
     base: { gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' },
     tablet: { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
-    mobile: { gridTemplateColumns: 'minmax(0, 1fr)' },
+    mobile: { gridTemplateColumns: 'repeat(1, minmax(0, 1fr))' },
   });
-  expect(canvas.locator('img[data-payload-node-type="image"]')).toHaveCount(4);
+  expect(canvas.locator('img[data-payload-node-type="image"]')).toHaveCount(7);
 });
 
 test('Phase 16 quote uses the generic content and style inspector', async ({

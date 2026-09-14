@@ -743,14 +743,12 @@ const OPEN_COMPOSITION_STYLE_GROUPS: readonly OpenCompositionAuthoringStyleGroup
       openStyleProperty('flex-wrap', { label: 'Wrapping' }),
       openStyleProperty('grid-template-columns', {
         label: 'Columns',
-        control: 'segmented',
-        options: [
-          { label: '1', value: 'minmax(0, 1fr)' },
-          { label: '2', value: 'repeat(2, minmax(0, 1fr))' },
-          { label: '3', value: 'repeat(3, minmax(0, 1fr))' },
-          { label: '4', value: 'repeat(4, minmax(0, 1fr))' },
-        ],
-        description: 'Choose how many columns this grid has.',
+        control: 'number',
+        min: 1,
+        max: 999,
+        step: 1,
+        defaultValue: 3,
+        description: 'Enter a positive whole number of columns.',
       }),
     ],
   },
@@ -2474,24 +2472,26 @@ const contactFormRecipe: OpenCompositionRecipe = {
   },
 };
 
-function galleryRecipe(columns: 2 | 3 | 4): OpenCompositionRecipe {
-  const images = Array.from(
-    { length: columns === 2 ? 4 : columns === 3 ? 6 : 8 },
-    (_, index) => ({
-      id: `image-${index + 1}`,
-      type: 'image' as const,
-      props: {
-        src: '/assets/placeholder.svg',
-        alt: `Gallery image ${index + 1}`,
-      },
-      children: [],
-    }),
-  );
+function galleryRecipe(
+  id: string,
+  name: string,
+  columns: number,
+  imageCount: number,
+): OpenCompositionRecipe {
+  const images = Array.from({ length: imageCount }, (_, index) => ({
+    id: `image-${index + 1}`,
+    type: 'image' as const,
+    props: {
+      src: '/assets/placeholder.svg',
+      alt: `Gallery image ${index + 1}`,
+    },
+    children: [],
+  }));
   return {
-    id: `gallery-${columns}-columns`,
-    name: `Gallery · ${columns} columns`,
+    id,
+    name,
     category: 'content',
-    description: `A ${columns}-column gallery made from an editable Grid and Image nodes.`,
+    description: 'An editable image gallery made from a Grid and Image nodes.',
     document: {
       schemaVersion: OPEN_COMPOSITION_SCHEMA_VERSION,
       root: {
@@ -2520,9 +2520,13 @@ function galleryRecipe(columns: 2 | 3 | 4): OpenCompositionRecipe {
 
 export const OPEN_COMPOSITION_RECIPE_REGISTRY: readonly OpenCompositionRecipe[] = [
   contactFormRecipe,
-  galleryRecipe(2),
-  galleryRecipe(3),
-  galleryRecipe(4),
+  // One user-facing Gallery recipe owns the product entry. The historical
+  // identifiers remain parseable aliases so old saved insert commands and
+  // fixtures continue to resolve without rewriting existing documents.
+  galleryRecipe('gallery', 'Gallery', 3, 6),
+  galleryRecipe('gallery-2-columns', 'Gallery · 2 columns', 2, 4),
+  galleryRecipe('gallery-3-columns', 'Gallery · 3 columns', 3, 6),
+  galleryRecipe('gallery-4-columns', 'Gallery · 4 columns', 4, 8),
 ];
 
 export function getOpenCompositionRecipe(id: string): OpenCompositionRecipe | undefined {

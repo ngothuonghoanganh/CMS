@@ -39,9 +39,7 @@ describe('builder block presets', () => {
       'native-list',
       'faq',
       'native-tabs',
-      'gallery-2-columns',
-      'gallery-3-columns',
-      'gallery-4-columns',
+      'gallery',
     ]);
   });
 

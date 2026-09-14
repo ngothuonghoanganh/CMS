@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  type CompositionStyle,
   type OpenCompositionBehavior,
   type OpenCompositionNode,
   type OpenCompositionPayload,
@@ -15,6 +14,9 @@ import {
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   pageStyleReactProperty,
+  resolveEffectiveNodeAppearance,
+  resolveEffectivePartAppearance,
+  designStylePartNamesForNodeType,
   resolveDesignSystemColorRole,
   resolvePageStyleValue,
   type SiteDesignSystem,
@@ -81,11 +83,11 @@ function booleanProp(node: OpenCompositionNode, key: string, fallback = false): 
 }
 
 function styleBlockToProperties(
-  style: CompositionStyle | undefined,
+  style: Record<string, unknown> | undefined,
   designSystem: SiteDesignSystem | undefined,
 ): CSSProperties {
   const result: CSSProperties = {};
-  for (const [property, value] of Object.entries(style?.base ?? {})) {
+  for (const [property, value] of Object.entries(style ?? {})) {
     const definition = PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY[property];
     if (!definition || (typeof value !== 'string' && typeof value !== 'object')) continue;
     const resolved = resolvePageStyleValue(
@@ -103,25 +105,24 @@ function nodeStyle(
   node: OpenCompositionNode,
   context: OpenCompositionRendererProps['context'],
 ): CSSProperties {
-  const authored = styleBlockToProperties(node.style, context?.designSystem);
+  const effective = resolveEffectiveNodeAppearance(
+    context?.designSystem,
+    { type: node.type, props: node.props },
+    node.style,
+    'base',
+  );
+  const authored = styleBlockToProperties(effective, context?.designSystem);
+  // These are primitive display invariants. Visual defaults such as gap,
+  // alignment, surfaces, and radius come from the shared Design System.
   if (node.type === 'stack' && !authored.display) {
     authored.display = 'flex';
     authored.flexDirection = 'column';
-    authored.gap = '16px';
   }
   if (node.type === 'row' && !authored.display) {
     authored.display = 'flex';
     authored.flexWrap = 'wrap';
-    authored.gap = '16px';
-    authored.alignItems = 'center';
   }
-  if (node.type === 'grid' && !authored.display) {
-    authored.display = 'grid';
-    authored.gap = '16px';
-  }
-  if (node.type === 'card' && !authored.borderRadius) {
-    authored.borderRadius = '8px';
-  }
+  if (node.type === 'grid' && !authored.display) authored.display = 'grid';
   return authored;
 }
 
@@ -130,9 +131,17 @@ function partStyle(
   partName: string,
   context: OpenCompositionRendererProps['context'],
 ): CSSProperties {
-  return owner?.partsStyle?.[partName]
-    ? styleBlockToProperties(owner.partsStyle[partName], context?.designSystem)
-    : {};
+  if (!owner) return {};
+  return styleBlockToProperties(
+    resolveEffectivePartAppearance(
+      context?.designSystem,
+      { type: owner.type, props: owner.props },
+      partName,
+      owner.partsStyle?.[partName],
+      'base',
+    ),
+    context?.designSystem,
+  );
 }
 
 function attributes(node: OpenCompositionNode) {
@@ -167,16 +176,28 @@ function responsiveCss(
   return flatten(root)
     .flatMap((node) => {
       const rules: string[] = [];
-      const block = node.style?.[viewport];
-      if (block) {
-        const declarations = declarationsFor(block);
-        if (declarations.length) {
-          rules.push(`[data-payload-node-id="${node.id}"]{${declarations.join(';')}}`);
-        }
+      const block = resolveEffectiveNodeAppearance(
+        designSystem,
+        { type: node.type, props: node.props },
+        node.style,
+        viewport,
+      );
+      const declarations = declarationsFor(block);
+      if (declarations.length) {
+        rules.push(`[data-payload-node-id="${node.id}"]{${declarations.join(';')}}`);
       }
-      for (const [partName, style] of Object.entries(node.partsStyle ?? {})) {
-        const partBlock = style[viewport];
-        if (!partBlock) continue;
+      const partNames = new Set([
+        ...designStylePartNamesForNodeType(node.type),
+        ...Object.keys(node.partsStyle ?? {}),
+      ]);
+      for (const partName of partNames) {
+        const partBlock = resolveEffectivePartAppearance(
+          designSystem,
+          { type: node.type, props: node.props },
+          partName,
+          node.partsStyle?.[partName],
+          viewport,
+        );
         const declarations = declarationsFor(partBlock);
         if (!declarations.length) continue;
         const selector =

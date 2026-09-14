@@ -3,6 +3,7 @@
 import {
   PAGE_COMPONENT_REGISTRY,
   PAGE_STYLE_PROPERTY_GROUPS,
+  designStylePartNamesForNodeType,
   getOpenCompositionAuthoringDefinition,
   openCompositionInsertableChildren,
   OPEN_COMPOSITION_REGISTRY,
@@ -44,6 +45,12 @@ const friendlyStyleLabels: Readonly<Record<string, string>> = {
   margin: 'Outside spacing',
   padding: 'Inside spacing',
 };
+
+function inspectorStyleValue(property: string, value: string | undefined): string {
+  if (property !== 'grid-template-columns' || !value) return value ?? '';
+  const match = value.match(/repeat\(\s*(\d+)\s*,\s*minmax\(\s*0\s*,\s*1fr\s*\)\s*\)/i);
+  return match?.[1] ?? (value === 'minmax(0, 1fr)' ? '1' : value);
+}
 
 function friendlyStyleDefinition(
   definition: ComponentPropertyDefinition,
@@ -135,6 +142,8 @@ function OpenCompositionInspector({
   updateSelectedProperty,
   updateSelectedStyle,
   resetSelectedStyle,
+  updateSelectedPartStyle,
+  resetSelectedPartStyle,
   onSelectNode,
   onRemoveStructuralChild,
   onMoveStructuralChild,
@@ -167,6 +176,8 @@ function OpenCompositionInspector({
   | 'updateSelectedProperty'
   | 'updateSelectedStyle'
   | 'resetSelectedStyle'
+  | 'updateSelectedPartStyle'
+  | 'resetSelectedPartStyle'
   | 'onSelectNode'
   | 'onRemoveStructuralChild'
   | 'onMoveStructuralChild'
@@ -206,6 +217,9 @@ function OpenCompositionInspector({
     nodeType === 'tab-list' ||
     nodeType === 'tab-trigger';
   const [addType, setAddType] = useState<OpenCompositionNodeType | ''>('');
+  const partNames = useMemo(() => designStylePartNamesForNodeType(nodeType), [nodeType]);
+  const [selectedPart, setSelectedPart] = useState(partNames[0] ?? '');
+  useEffect(() => setSelectedPart(partNames[0] ?? ''), [partNames]);
   const definition = getOpenCompositionAuthoringDefinition(nodeType);
   const contentProperties =
     managedByField || managedVisualChild
@@ -220,8 +234,16 @@ function OpenCompositionInspector({
     definition.styleGroups.flatMap((group) =>
       group.properties.map((property) => [
         property.key,
-        resolveInspectorStyleValue(selected.style, property.key, viewport, designSystem)
-          .effectiveValue ?? '',
+        inspectorStyleValue(
+          property.key,
+          resolveInspectorStyleValue(
+            selected.style,
+            property.key,
+            viewport,
+            designSystem,
+            { type: nodeType, props: selected.props },
+          ).effectiveValue,
+        ),
       ]),
     ),
   );
@@ -291,6 +313,7 @@ function OpenCompositionInspector({
               property.key,
               viewport,
               designSystem,
+              { type: nodeType, props: selected.props },
             );
             const issue = validationIssues.find(
               (candidate) =>
@@ -329,7 +352,7 @@ function OpenCompositionInspector({
                   scope={validationScope}
                   section={group.key}
                   tab="style"
-                  value={resolved.effectiveValue ?? ''}
+                  value={inspectorStyleValue(property.key, resolved.effectiveValue)}
                   viewport={viewport}
                   issue={issue}
                 />
@@ -338,6 +361,100 @@ function OpenCompositionInspector({
                     aria-label={`Reset ${property.label} override`}
                     className="button button-small button-ghost builder-reset-override"
                     onClick={() => resetSelectedStyle(property.key)}
+                    type="button"
+                  >
+                    Reset override
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </InspectorSection>
+    );
+  }
+
+  function renderPartStyleEditor() {
+    if (!selectedPart || !updateSelectedPartStyle || !resetSelectedPartStyle) return null;
+    const properties = Array.from(
+      new Map(
+        definition.styleGroups
+          .flatMap((group) => group.properties)
+          .map((property) => [property.key, property]),
+      ).values(),
+    );
+    if (properties.length === 0) return null;
+    const partStyleValues = Object.fromEntries(
+      properties.map((property) => [
+        property.key,
+        inspectorStyleValue(
+          property.key,
+          resolveInspectorStyleValue(
+            selected.partsStyle?.[selectedPart],
+            property.key,
+            viewport,
+            designSystem,
+            { type: nodeType, props: selected.props, part: selectedPart },
+          ).effectiveValue,
+        ),
+      ]),
+    );
+    return (
+      <InspectorSection label="Component part" onToggle={() => undefined} open>
+        <div className="builder-component-part-picker">
+          <span className="builder-component-part-picker-label">Style target</span>
+          <div aria-label="Style target" className="builder-component-part-targets">
+            {partNames.map((partName) => (
+              <button
+                aria-pressed={selectedPart === partName}
+                className={`button button-small builder-component-part-target${selectedPart === partName ? ' is-active' : ''}`}
+                key={partName}
+                onClick={() => setSelectedPart(partName)}
+                type="button"
+              >
+                {partName}
+              </button>
+            ))}
+          </div>
+          <p className="muted small">
+            These styles inherit from the Design System and apply to this semantic part.
+          </p>
+        </div>
+        <div className="builder-inspector-fields">
+          {properties.map((property) => {
+            const resolved = resolveInspectorStyleValue(
+              selected.partsStyle?.[selectedPart],
+              property.key,
+              viewport,
+              designSystem,
+              { type: nodeType, props: selected.props, part: selectedPart },
+            );
+            return (
+              <div className="builder-inspector-field-stack" key={property.key}>
+                <PropertyControlRenderer
+                  definition={friendlyStyleDefinition(property)}
+                  description={inheritedDescription(property, resolved)}
+                  nodeId={selected.id}
+                  onChange={(value) =>
+                    updateSelectedPartStyle(
+                      selectedPart,
+                      property.key,
+                      String(value ?? ''),
+                    )
+                  }
+                  onValidationIssue={onValidationIssue}
+                  propertyValues={{ ...selected.props, ...partStyleValues }}
+                  scope={validationScope}
+                  section="component-part"
+                  tab="style"
+                  value={inspectorStyleValue(property.key, resolved.effectiveValue)}
+                  viewport={viewport}
+                />
+                {resolved.authoredValue !== undefined ? (
+                  <button
+                    aria-label={`Reset ${property.label} override`}
+                    className="button button-small button-ghost builder-reset-override"
+                    onClick={() => resetSelectedPartStyle(selectedPart, property.key)}
                     type="button"
                   >
                     Reset override
@@ -633,9 +750,12 @@ function OpenCompositionInspector({
         </>
       ) : null}
 
-      {!contentOnly && inspectorTab === 'style'
-        ? definition.styleGroups.map(renderStyleGroup)
-        : null}
+      {!contentOnly && inspectorTab === 'style' ? (
+        <>
+          {definition.styleGroups.map(renderStyleGroup)}
+          {partNames.length > 0 ? renderPartStyleEditor() : null}
+        </>
+      ) : null}
 
       {!contentOnly && inspectorTab === 'settings' ? (
         <InspectorSection
@@ -1840,9 +1960,11 @@ export function BuilderInspector(props: BuilderInspectorProps) {
         onToggleSection={props.onToggleSection}
         openSections={props.openSections}
         resetSelectedStyle={props.resetSelectedStyle}
+        resetSelectedPartStyle={props.resetSelectedPartStyle}
         selected={props.selected}
         updateSelectedProperty={props.updateSelectedProperty}
         updateSelectedStyle={props.updateSelectedStyle}
+        updateSelectedPartStyle={props.updateSelectedPartStyle}
         usableAssets={props.usableAssets}
         {...(props.validationIssues ? { validationIssues: props.validationIssues } : {})}
         validationScope={props.validationScope ?? 'page'}

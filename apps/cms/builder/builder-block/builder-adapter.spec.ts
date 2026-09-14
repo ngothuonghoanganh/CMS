@@ -212,6 +212,33 @@ describe('builder adapter', () => {
     expect(savedAgain).toEqual(saved);
   });
 
+  it('marks behavior-owned Form submit buttons as semantic parts at any composition depth', () => {
+    const definition = openCompositionRecipeToEditorDefinition('contact-form');
+    const find = (candidate: unknown): Record<string, unknown> | undefined => {
+      if (!candidate || typeof candidate !== 'object') return undefined;
+      const value = candidate as Record<string, unknown>;
+      if (
+        (value.attributes as Record<string, unknown> | undefined)?.[
+          'data-payload-part'
+        ] === 'submit'
+      ) {
+        return value;
+      }
+      const children = Array.isArray(value.components)
+        ? value.components
+        : value.components && typeof value.components === 'object'
+          ? [value.components]
+          : [];
+      for (const child of children) {
+        const match = find(child);
+        if (match) return match;
+      }
+      return undefined;
+    };
+
+    expect(find(definition)).toBeDefined();
+  });
+
   it('projects choice controls and icons from their semantic props', () => {
     const selectPreview = openCompositionControlPreviewComponents({
       type: 'select',
@@ -688,6 +715,78 @@ describe('builder adapter', () => {
     expect(
       JSON.parse(String(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE])).base.opacity,
     ).toBe('0');
+  });
+
+  it('removes Open Composition local node and part overrides on reset', () => {
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'form-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'form',
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+      [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: JSON.stringify({
+        base: { borderRadius: '26px' },
+      }),
+      [BUILDER_PARTS_STYLE_ATTRIBUTE]: JSON.stringify({
+        input: { base: { borderRadius: '26px' } },
+      }),
+    };
+    const component = {
+      getAttributes: () => attrs,
+      setAttributes: (next: Record<string, unknown>) => Object.assign(attrs, next),
+      removeAttributes: (name: string) => delete attrs[name],
+      setStyle: () => undefined,
+    } as never;
+
+    expect(updateEditorViewportStyle(component, 'desktop', 'border-radius', '')).toBe(
+      true,
+    );
+    expect(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]).toBeUndefined();
+
+    expect(
+      updateEditorPartViewportStyle(
+        component,
+        'form',
+        'input',
+        'desktop',
+        'border-radius',
+        '',
+      ),
+    ).toBe(true);
+    expect(attrs[BUILDER_PARTS_STYLE_ATTRIBUTE]).toBeUndefined();
+  });
+
+  it('accepts arbitrary positive Gallery/Grid column counts without raw CSS', () => {
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'grid-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'grid',
+      [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
+    };
+    const component = {
+      getAttributes: () => attrs,
+      setAttributes: (next: Record<string, unknown>) => Object.assign(attrs, next),
+      removeAttributes: (name: string) => delete attrs[name],
+      setStyle: () => undefined,
+    } as never;
+
+    for (const count of [1, 2, 4, 5, 8, 12]) {
+      updateEditorViewportStyle(
+        component,
+        'desktop',
+        'grid-template-columns',
+        String(count),
+      );
+      expect(
+        JSON.parse(String(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE])).base
+          .gridTemplateColumns,
+      ).toBe(`repeat(${count}, minmax(0, 1fr))`);
+    }
+    expect(() =>
+      updateEditorViewportStyle(
+        component,
+        'desktop',
+        'grid-template-columns',
+        'repeat(1fr, minmax(0, 1fr))',
+      ),
+    ).toThrow('positive whole number');
   });
 
   it('persists component part values instead of silently dropping them', () => {

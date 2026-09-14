@@ -28,6 +28,7 @@ import {
   type PageComponentType,
   type PageNodeStyle,
   type PageNodeStyleV7,
+  type CompositionStyle,
 } from '@payload/contracts';
 import {
   resolveEditorPropertyUpdate,
@@ -51,6 +52,7 @@ import {
   BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
   BUILDER_OPEN_PROPS_ATTRIBUTE,
   readEditorPartsStyle,
+  readOpenNodePartsStyle,
   readEditorResponsiveStyle,
   sanitizeInlineText,
   listPreviewComponents,
@@ -69,8 +71,8 @@ export type ComponentSelectionSnapshot = {
   src?: string;
   alt?: string;
   align?: 'left' | 'center' | 'right';
-  style?: PageNodeStyle | PageNodeStyleV7;
-  partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7>;
+  style?: PageNodeStyle | PageNodeStyleV7 | CompositionStyle;
+  partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7 | CompositionStyle>;
   form?: FormProps;
   countdown?: { targetAt: string; label: string };
   /** Present when the live component is part of the V8 Open Composition graph. */
@@ -892,6 +894,7 @@ export function selectionFromComponentCodec(
     const parentType = parentAttributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
     const parentId = parentAttributes?.[BUILDER_NODE_ID_ATTRIBUTE];
     const semanticOwner = semanticOwnerForOpenNode(component, type);
+    const partsStyle = readOpenNodePartsStyle(component);
     return {
       id,
       type: componentType,
@@ -902,6 +905,7 @@ export function selectionFromComponentCodec(
         : {}),
       ...(type === 'button' || type === 'link' ? { label: composedLabel } : {}),
       ...(responsiveStyle ? { style: responsiveStyle } : {}),
+      ...(partsStyle ? { partsStyle } : {}),
       openComposition: { nodeType: type },
       ...(semanticItems ? { semanticItems } : {}),
       ...(typeof managedPanelId === 'string' ? { managedPanelId } : {}),

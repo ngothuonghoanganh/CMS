@@ -91,6 +91,17 @@ export function isEditorOnlyPreview(component: Component): boolean {
   return false;
 }
 
+/**
+ * Builder-managed is a persistence fact, not a semantic ownership fact. This
+ * predicate is intentionally shared with the Canvas/Layers projection so an
+ * editor-only preview can never become an independent managed node while a
+ * semantic child remains a normal persisted node.
+ */
+export function isBuilderManagedNode(component: Component): boolean {
+  if (isEditorOnlyPreview(component)) return false;
+  return Boolean(payloadNodeId(component) && openPayloadNodeType(component));
+}
+
 export function payloadAncestor(component: Component | undefined): Component | undefined {
   let current = component;
   while (current) {

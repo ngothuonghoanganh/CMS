@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE } from './builder-block/builder-adapter';
-import { isEditableTarget, isEditorOnlyPreview } from './builder-interaction';
+import {
+  isBuilderManagedNode,
+  isEditableTarget,
+  isEditorOnlyPreview,
+} from './builder-interaction';
 
 type ComponentStub = {
   getAttributes: () => Record<string, unknown>;
@@ -65,5 +69,25 @@ describe('builder keyboard target guard', () => {
 
     expect(isEditorOnlyPreview(tabPanelPreview as never)).toBe(true);
     expect(isEditorOnlyPreview(nestedButton as never)).toBe(false);
+  });
+
+  it('derives Builder Managed from persistence rather than semantic ownership', () => {
+    const ordinaryNode = component({
+      'data-payload-node-id': 'text-1',
+      'data-payload-node-type': 'text',
+    });
+    const semanticFieldLabel = component({
+      'data-payload-node-id': 'field-label',
+      'data-payload-node-type': 'label',
+      'data-payload-open-composition': 'true',
+      'data-semantic-owner': 'field-1',
+    });
+    const projection = component({
+      [BUILDER_SEMANTIC_PREVIEW_ATTRIBUTE]: 'true',
+    });
+
+    expect(isBuilderManagedNode(ordinaryNode as never)).toBe(true);
+    expect(isBuilderManagedNode(semanticFieldLabel as never)).toBe(true);
+    expect(isBuilderManagedNode(projection as never)).toBe(false);
   });
 });

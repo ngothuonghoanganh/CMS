@@ -34,6 +34,7 @@ import {
   CreateOrganizationRequestSchema,
   SwitchAuthContextRequestSchema,
   type PageNode,
+  type SiteDesignSystem,
   PageExtensionInstanceSchema,
   PageCapabilityGraphSchema,
   PublishedPageBundleSchema,
@@ -62,10 +63,14 @@ import {
   ReusableComponentDocumentSchema,
   SiteDesignSystemSchema,
   createDefaultSiteDesignSystem,
+  DESIGN_STYLE_TARGET_REGISTRY,
   mergeSiteDesignSystems,
   normalizeSiteDesignSystemOverride,
   resolveDesignSystemComponentDefaults,
   resolveDesignSystemAppearance,
+  resolveDesignStyleTarget,
+  resolveEffectiveNodeAppearance,
+  resolveEffectivePartAppearance,
   resolveDesignSystemColorRole,
   resolvePageStyleValue,
 } from './index';
@@ -262,6 +267,93 @@ describe('foundation contracts', () => {
     ).toEqual({ kind: 'token', tokenId: 'type-small' });
   });
 
+  it('resolves Open Composition targets through the shared responsive cascade', () => {
+    const base = createDefaultSiteDesignSystem();
+    const system = SiteDesignSystemSchema.parse({
+      ...base,
+      componentDefaults: {
+        ...base.componentDefaults,
+        stack: {
+          style: {
+            base: { gap: '7px' },
+            tablet: { gap: '11px' },
+            mobile: { gap: '13px' },
+          },
+        },
+        form: {
+          ...base.componentDefaults?.form,
+          partsStyle: {
+            ...base.componentDefaults?.form?.partsStyle,
+            input: {
+              base: { color: '#111111' },
+              tablet: { color: '#222222' },
+              mobile: { color: '#333333' },
+            },
+          },
+        },
+      },
+    });
+
+    expect(resolveDesignStyleTarget({ type: 'form-field' })).toEqual({
+      componentType: 'form',
+      part: 'field',
+    });
+    expect(resolveDesignStyleTarget({ type: 'input' })).toEqual({
+      componentType: 'form',
+      part: 'input',
+    });
+    expect(resolveDesignStyleTarget({ type: 'heading', props: { level: 1 } })).toEqual({
+      componentType: 'heading',
+      variant: 'heading-1',
+    });
+    expect(DESIGN_STYLE_TARGET_REGISTRY['form-field']).toEqual({
+      componentType: 'form',
+      part: 'field',
+    });
+
+    expect(
+      resolveEffectiveNodeAppearance(system, { type: 'stack' }, undefined, 'mobile'),
+    ).toEqual({
+      gap: '13px',
+    });
+    expect(
+      resolveEffectiveNodeAppearance(
+        system,
+        { type: 'stack' },
+        { base: { gap: '21px' }, tablet: { gap: '31px' } },
+        'mobile',
+      ),
+    ).toEqual({ gap: '31px' });
+
+    const input = resolveEffectivePartAppearance(
+      system,
+      { type: 'form' },
+      'input',
+      { base: { padding: '99px' }, tablet: { padding: '101px' } },
+      'mobile',
+    );
+    expect(input).toMatchObject({ color: '#333333', padding: '101px' });
+    expect(
+      resolveEffectivePartAppearance(
+        system,
+        { type: 'form' },
+        'input',
+        undefined,
+        'mobile',
+      ),
+    ).toMatchObject({ color: '#333333' });
+    expect(
+      resolveDesignSystemAppearance(system, { type: 'form', part: 'root' })?.style,
+    ).toEqual(system.componentDefaults?.form?.style);
+  });
+
+  it('gives directly authored Open primitives explicit Design System targets', () => {
+    const system = createDefaultSiteDesignSystem();
+    for (const type of ['icon', 'divider', 'list', 'video', 'quote']) {
+      expect(resolveDesignSystemAppearance(system, { type })?.style?.base).toBeDefined();
+    }
+  });
+
   it('keeps page surfaces separate from transparent layout primitives', () => {
     const system = createDefaultSiteDesignSystem();
     expect(resolveDesignSystemColorRole(system, 'pageBackground')).toBe('#ffffff');
@@ -290,6 +382,51 @@ describe('foundation contracts', () => {
     expect(resolveDesignSystemColorRole(effective, 'pageBackground')).toBe('#ffffff');
     const sparse = normalizeSiteDesignSystemOverride(workspace, effective!);
     expect(sparse.semanticRoles).toEqual({ primary: sitePrimary.id });
+  });
+
+  it('does not let a legacy full default snapshot mask workspace inheritance', () => {
+    const workspace = SiteDesignSystemSchema.parse({
+      ...createDefaultSiteDesignSystem(),
+      colors: createDefaultSiteDesignSystem().colors.map((token) =>
+        token.id === 'color-surface' ? { ...token, value: '#fff7ed' } : token,
+      ),
+    });
+    const effective = mergeSiteDesignSystems(workspace, createDefaultSiteDesignSystem());
+    expect(effective?.colors.find((token) => token.id === 'color-surface')?.value).toBe(
+      '#fff7ed',
+    );
+  });
+
+  it('recognizes the pre-Open-Composition full default snapshot as inherited', () => {
+    const workspace = SiteDesignSystemSchema.parse({
+      ...createDefaultSiteDesignSystem(),
+      colors: createDefaultSiteDesignSystem().colors.map((token) =>
+        token.id === 'color-surface' ? { ...token, value: '#ecfeff' } : token,
+      ),
+    });
+    const legacy = JSON.parse(
+      JSON.stringify(createDefaultSiteDesignSystem()),
+    ) as SiteDesignSystem;
+    for (const componentType of ['stack', 'row', 'grid', 'card']) {
+      delete legacy.componentDefaults?.[componentType];
+    }
+    for (const componentType of [
+      'button',
+      'button-primary',
+      'button-secondary',
+      'button-ghost',
+    ]) {
+      const base = legacy.componentDefaults?.[componentType]?.style?.base as
+        Record<string, unknown> | undefined;
+      delete base?.fontFamily;
+      delete base?.fontSize;
+      delete base?.lineHeight;
+    }
+
+    const effective = mergeSiteDesignSystems(workspace, legacy);
+    expect(effective?.colors.find((token) => token.id === 'color-surface')?.value).toBe(
+      '#ecfeff',
+    );
   });
 
   it('keeps page-runtime baseline and opacity control semantics centralized', () => {

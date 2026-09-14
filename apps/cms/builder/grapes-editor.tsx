@@ -35,6 +35,7 @@ import {
 } from './builder-block/builder-adapter';
 import {
   findPayloadComponent,
+  isBuilderManagedNode,
   isEditableTarget,
   isEditorOnlyPreview,
   payloadAncestor,
@@ -379,7 +380,7 @@ function syncValidationIndicators(
 function componentForCanvasElement(root: Component, element: Element): Component | null {
   let match: Component | undefined;
   root.onAll((component) => {
-    if (isEditorOnlyPreview(component)) return;
+    if (!isBuilderManagedNode(component)) return;
     const componentElement = component.getEl();
     if (!componentElement || !componentElement.contains(element)) return;
     if (!match || (match.getEl()?.contains(componentElement) ?? false)) {
@@ -984,14 +985,14 @@ function applyAllViewportStyles(
   root.onAll((component) => {
     components.push(component);
     applyEditorViewportStyle(component, viewport, designSystem);
-    const type = payloadNodeType(component);
+    const type = payloadNodeType(component) ?? openPayloadNodeType(component);
     if (type) applyEditorComponentDefaultStyle(component, type, viewport, designSystem);
   });
   // Part presentation is a second pass so a parent compound part cannot be
   // overwritten by the ordinary inline style of its projected child. Reverse
   // order also lets a global wrapper part win over a child component root part.
   [...components].reverse().forEach((component) => {
-    const type = payloadNodeType(component);
+    const type = payloadNodeType(component) ?? openPayloadNodeType(component);
     if (type) applyEditorPartViewportStyles(component, type, viewport, designSystem);
   });
   applyEditorPageSurfaceStyle(root, viewport, designSystem);
@@ -1205,6 +1206,10 @@ function canvasStateFromEditor(editor: Editor): BuilderCanvasState {
     nodes.push({
       id,
       type: type as BuilderNodeType | OpenCompositionNodeType,
+      // This list is built only from real persisted Payload components. A
+      // projection node returned above is skipped, so every entry here is
+      // Builder-managed regardless of semantic ownership.
+      managed: true,
       ...(isOpenCompositionNodeType(type) ? { openComposition: true } : {}),
       label: canvasNodeLabel(component, type),
       ...(parentId ? { parentId } : {}),
@@ -1859,7 +1864,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (
           openDefinitionType &&
           !isOpenCompositionRoot(root) &&
-          !promoteLegacyRootForOpenInsert(root)
+          !promoteLegacyRootForOpenInsert(root, designSystemRef.current)
         ) {
           return;
         }
@@ -2162,7 +2167,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
           }
           editor
             .getModel()
-            .skip(() => applyAllViewportStyles(root, viewport, designSystem));
+            .skip(() => applyAllViewportStyles(root, viewport, designSystemRef.current));
         } finally {
           // GrapesJS model events are synchronous for these presentation
           // updates. Restore the previous command state immediately so a user
@@ -2252,7 +2257,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!editor) return;
         mutateAfterInlineEdit(editor, () => {
           const selected = getSelectedComponent(editor);
-          const type = selected && payloadNodeType(selected);
+          const type =
+            selected && (payloadNodeType(selected) ?? openPayloadNodeType(selected));
           if (!selected || !type) return;
           internalChangeRef.current = true;
           commitEditorCommand(editor, {
@@ -2273,7 +2279,8 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (!editor) return;
         mutateAfterInlineEdit(editor, () => {
           const selected = getSelectedComponent(editor);
-          const type = selected && payloadNodeType(selected);
+          const type =
+            selected && (payloadNodeType(selected) ?? openPayloadNodeType(selected));
           if (!selected || !type) return;
           internalChangeRef.current = true;
           commitEditorCommand(editor, {
@@ -2396,7 +2403,7 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
         if (
           openDefinitionType &&
           !isOpenCompositionRoot(root) &&
-          !promoteLegacyRootForOpenInsert(root)
+          !promoteLegacyRootForOpenInsert(root, designSystemRef.current)
         ) {
           return false;
         }
@@ -2876,6 +2883,30 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
     if (!editor) return;
     syncValidationIndicators(getRoot(editor), validationIssues);
   }, [validationIssues]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    commandBusRef.current = createEditorCommandBus(
+      editor,
+      designSystem ? { designSystem } : {},
+    );
+    const previousInternalChange = internalChangeRef.current;
+    internalChangeRef.current = true;
+    try {
+      editor
+        .getModel()
+        .skip(() =>
+          applyAllViewportStyles(
+            getRoot(editor),
+            viewportRef.current,
+            designSystemRef.current,
+          ),
+        );
+    } finally {
+      internalChangeRef.current = previousInternalChange;
+    }
+  }, [designSystem]);
 
   useEffect(() => {
     let disposed = false;

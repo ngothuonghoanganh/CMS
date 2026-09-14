@@ -188,18 +188,27 @@ function PreviewNode({ node }: { node: BuilderPreviewNode }): ReactElement {
           <span className="builder-preview-tab-panel" />
         </span>
       );
-    case 'gallery':
+    case 'gallery': {
+      // Catalog previews are representative thumbnails, not authoring state.
+      // Clamp only the preview render so malformed registry data cannot create
+      // an unbounded thumbnail tree; persisted Grid columns remain uncapped by
+      // this presentation safeguard.
+      const columns = Math.min(
+        12,
+        Math.max(1, Math.trunc(Number.isFinite(node.columns) ? (node.columns ?? 3) : 3)),
+      );
       return (
         <span
           className={className}
           data-preview-node-kind={node.kind}
-          style={{ gridTemplateColumns: `repeat(${node.columns ?? 3}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         >
-          {Array.from({ length: (node.columns ?? 3) * 2 }, (_, index) => (
+          {Array.from({ length: columns * 2 }, (_, index) => (
             <span className="builder-preview-gallery-image" key={index} />
           ))}
         </span>
       );
+    }
   }
 
   return <span className={className} />;

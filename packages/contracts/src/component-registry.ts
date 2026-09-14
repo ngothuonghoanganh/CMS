@@ -172,7 +172,7 @@ export type BuilderPreviewNode =
   | { kind: 'countdown' }
   | { kind: 'accordion'; itemCount?: 2 | 3 }
   | { kind: 'tabs'; tabCount?: 2 | 3 }
-  | { kind: 'gallery'; columns?: 2 | 3 };
+  | { kind: 'gallery'; columns?: number };
 
 export type ComponentBuilderPreview = {
   kind: 'composition';
@@ -1961,7 +1961,11 @@ const rawPageComponentRegistry = {
     category: 'content',
     editorTagName: 'div',
     defaultProps: {},
-    builder: { group: 'media' },
+    // Legacy Gallery remains renderable/editable for compatibility, but new
+    // pages use the single composition-based Gallery recipe from the builder
+    // catalog. Keeping this entry non-insertable prevents two products with
+    // the same label from appearing in Add Blocks.
+    builder: { group: 'media', insertable: false },
     componentParts: {
       image: {
         name: 'image',

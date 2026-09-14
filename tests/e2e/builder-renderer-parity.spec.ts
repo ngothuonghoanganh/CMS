@@ -1,9 +1,15 @@
 import { expect, type Locator, type TestInfo } from '@playwright/test';
 import {
+  createDefaultSiteDesignSystem,
   ExtensionIds,
+  instantiateOpenCompositionRecipe,
+  OpenCompositionPayloadSchema,
   PAGE_RESPONSIVE_BREAKPOINTS,
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PagePayload,
+  SiteDesignSystemSchema,
+  type OpenCompositionNode,
+  type OpenCompositionPayload,
 } from '@payload/contracts';
 import { openCanonicalBuilder, test } from './fixtures/canonical-environment';
 import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
@@ -235,6 +241,172 @@ function parityFixture(): PagePayload {
       ],
     },
   };
+}
+
+function v8ParityDesignSystem() {
+  const base = createDefaultSiteDesignSystem();
+  const tokenValue = (id: string, value: string) =>
+    base.colors.map((token) => (token.id === id ? { ...token, value } : token));
+  const bodyTypography = base.typography.map((token) =>
+    token.id === 'type-body'
+      ? { ...token, fontFamily: 'Georgia, serif', fontSize: '18px' }
+      : token,
+  );
+  const radii = base.radii.map((token) =>
+    token.id === 'radius-md' ? { ...token, value: '14px' } : token,
+  );
+  const componentDefaults = base.componentDefaults ?? {};
+  return SiteDesignSystemSchema.parse({
+    ...base,
+    colors: tokenValue('color-surface', '#e0f2fe')
+      .map((token) =>
+        token.id === 'color-primary' ? { ...token, value: '#be123c' } : token,
+      )
+      .map((token) =>
+        token.id === 'color-text' ? { ...token, value: '#0f172a' } : token,
+      )
+      .map((token) =>
+        token.id === 'color-border' ? { ...token, value: '#0369a1' } : token,
+      ),
+    typography: bodyTypography,
+    radii,
+    componentDefaults: {
+      ...componentDefaults,
+      stack: {
+        ...componentDefaults.stack,
+        style: {
+          ...(componentDefaults.stack?.style ?? { base: {} }),
+          base: { ...(componentDefaults.stack?.style?.base ?? {}), gap: '17px' },
+        },
+      },
+      row: {
+        ...componentDefaults.row,
+        style: {
+          ...(componentDefaults.row?.style ?? { base: {} }),
+          base: { ...(componentDefaults.row?.style?.base ?? {}), gap: '15px' },
+        },
+      },
+      grid: {
+        ...componentDefaults.grid,
+        style: {
+          ...(componentDefaults.grid?.style ?? { base: {} }),
+          base: { ...(componentDefaults.grid?.style?.base ?? {}), gap: '23px' },
+          tablet: { ...(componentDefaults.grid?.style?.tablet ?? {}), gap: '27px' },
+          mobile: { ...(componentDefaults.grid?.style?.mobile ?? {}), gap: '31px' },
+        },
+      },
+    },
+  });
+}
+
+function v8ParityFixture(): OpenCompositionPayload {
+  const document = instantiateOpenCompositionRecipe('contact-form', (sourceId) =>
+    sourceId === 'root' ? 'root' : `v8-${sourceId}`,
+  );
+  const section = document.root.children.find((child) => child.type === 'section');
+  if (!section) throw new Error('Contact form recipe section is missing');
+
+  const stack: OpenCompositionNode = {
+    id: 'v8-stack',
+    type: 'stack',
+    props: {},
+    children: [
+      {
+        id: 'v8-stack-heading',
+        type: 'heading',
+        props: { level: 1, text: 'Composable launch system' },
+        children: [],
+      },
+      {
+        id: 'v8-stack-text',
+        type: 'text',
+        props: { role: 'small', text: 'Inherited typography and spacing.' },
+        children: [],
+      },
+      {
+        id: 'v8-card',
+        type: 'card',
+        props: {},
+        children: [
+          {
+            id: 'v8-card-text',
+            type: 'text',
+            props: { text: 'A card surface supplied by the Design System.' },
+            children: [],
+          },
+          {
+            id: 'v8-card-button',
+            type: 'button',
+            props: { label: 'Explore', variant: 'primary' },
+            children: [],
+          },
+        ],
+      },
+    ],
+  };
+  const grid: OpenCompositionNode = {
+    id: 'v8-grid',
+    type: 'grid',
+    props: {},
+    style: {
+      base: { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
+      tablet: { gridTemplateColumns: 'repeat(1, minmax(0, 1fr))' },
+    },
+    children: [
+      {
+        id: 'v8-grid-image-1',
+        type: 'image',
+        props: { src: `${rendererOrigin}/assets/parity-fixture.svg`, alt: 'First' },
+        children: [],
+      },
+      {
+        id: 'v8-grid-image-2',
+        type: 'image',
+        props: { src: `${rendererOrigin}/assets/parity-fixture.svg`, alt: 'Second' },
+        children: [],
+      },
+    ],
+  };
+  section.children.push(stack, grid);
+
+  const form = section.children
+    .flatMap((child) => child.children)
+    .find((child) => child.type === 'form');
+  if (!form) throw new Error('Contact form recipe form is missing');
+  form.partsStyle = {
+    input: {
+      base: { borderRadius: '26px' },
+      tablet: { borderRadius: '28px' },
+    },
+  };
+  return OpenCompositionPayloadSchema.parse({
+    version: 8,
+    metadata: { documentTitle: 'V8 Builder renderer parity fixture' },
+    root: document.root,
+    behaviors: document.behaviors,
+  });
+}
+
+function expectSelectedStyleParity(
+  expected: VisualSnapshot,
+  actual: VisualSnapshot,
+  ids: readonly string[],
+  properties: readonly string[],
+  comparison: string,
+): void {
+  const expectedById = new Map(expected.nodes.map((node) => [node.id, node]));
+  const actualById = new Map(actual.nodes.map((node) => [node.id, node]));
+  for (const id of ids) {
+    const expectedNode = expectedById.get(id);
+    const actualNode = actualById.get(id);
+    expect(expectedNode, `${comparison}: missing expected ${id}`).toBeDefined();
+    expect(actualNode, `${comparison}: missing actual ${id}`).toBeDefined();
+    for (const property of properties) {
+      expect(actualNode?.style[property], `${comparison}: ${id}.${property}`).toBe(
+        expectedNode?.style[property],
+      );
+    }
+  }
 }
 
 function assertFixtureStyleCoverage(payload: PagePayload): void {
@@ -975,4 +1147,180 @@ test('Builder, draft review, and published renderer retain visual parity', async
 
   await review.close();
   await published.close();
+});
+
+test('V8 Open Composition inherits one Design System across Builder, review, and published', async ({
+  browser,
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  test.setTimeout(180_000);
+  const fixture = v8ParityFixture();
+  const designSystem = v8ParityDesignSystem();
+  const workspaceDraft = await request.patch(
+    `${E2E_API_BASE_URL}/workspaces/${canonicalEnvironment.workspaceId}/design-system`,
+    { data: designSystem },
+  );
+  expect(workspaceDraft.ok(), await workspaceDraft.text()).toBe(true);
+  const workspacePublish = await request.post(
+    `${E2E_API_BASE_URL}/workspaces/${canonicalEnvironment.workspaceId}/design-system/publish`,
+    { data: { designSystem } },
+  );
+  expect(workspacePublish.ok(), await workspacePublish.text()).toBe(true);
+  const siteReset = await request.patch(
+    `${E2E_API_BASE_URL}/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/design-system`,
+    { data: { override: { version: 1 } } },
+  );
+  expect(siteReset.ok(), await siteReset.text()).toBe(true);
+  const sitePublish = await request.post(
+    `${E2E_API_BASE_URL}/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/design-system/publish`,
+    { data: { designSystem } },
+  );
+  expect(sitePublish.ok(), await sitePublish.text()).toBe(true);
+
+  const temporaryPage = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'phase-24-v8-renderer-parity',
+    fixture,
+  );
+  const review = await page.context().newPage();
+  const published = await browser.newPage({ baseURL: rendererOrigin });
+  try {
+    const saved = await page.evaluate(
+      async ({ id, payload, apiBase }) => {
+        const response = await fetch(`${apiBase}/pages/${id}/versions`, {
+          body: JSON.stringify({ expectedVersionNumber: 1, payload }),
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        });
+        return { body: await response.json(), status: response.status };
+      },
+      { apiBase: E2E_API_BASE_URL, id: temporaryPage.id, payload: fixture },
+    );
+    expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+    await page.reload();
+    await page.setViewportSize({ width: 1965, height: 1000 });
+
+    const builderRoot = page
+      .frameLocator('iframe.gjs-frame')
+      .locator('main[data-payload-node-id="root"]');
+    await waitForPageSurface(builderRoot);
+    await review.goto(`${rendererOrigin}/preview/${temporaryPage.id}`);
+    const reviewRoot = review.locator('.payload-page');
+    await waitForPageSurface(reviewRoot);
+
+    const publishResponse = await page.evaluate(
+      async ({ id, apiBase }) => {
+        const response = await fetch(`${apiBase}/pages/${id}/publish`, {
+          body: JSON.stringify({}),
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        });
+        return { body: await response.json(), status: response.status };
+      },
+      { apiBase: E2E_API_BASE_URL, id: temporaryPage.id },
+    );
+    expect(publishResponse.status, JSON.stringify(publishResponse.body)).toBe(201);
+    await published.goto(`/${temporaryPage.siteSlug}/${temporaryPage.slug}`);
+    const publishedRoot = published.locator('.payload-page');
+    await waitForPageSurface(publishedRoot);
+
+    const ids = [
+      'root',
+      'v8-section',
+      'v8-stack',
+      'v8-stack-heading',
+      'v8-card',
+      'v8-grid',
+      'v8-form',
+      'v8-name-field',
+      'v8-name-label',
+      'v8-name-input',
+      'v8-submit',
+    ] as const;
+    const properties = [
+      'background-color',
+      'color',
+      'font-family',
+      'font-size',
+      'gap',
+      'padding',
+      'border-color',
+      'border-radius',
+      'grid-template-columns',
+    ] as const;
+
+    await page.evaluate(() => {
+      const debug = (
+        window as Window & {
+          __payloadBuilderDebug?: { setCanvasZoom: (zoom: number) => void };
+        }
+      ).__payloadBuilderDebug;
+      debug?.setCanvasZoom(100);
+    });
+    for (const viewport of ['desktop', 'tablet', 'mobile'] as const) {
+      if (viewport !== 'desktop') {
+        await page
+          .locator('.builder-topbar-viewport')
+          .getByRole('button', { name: new RegExp(`^${viewport}$`, 'i') })
+          .click();
+        await page.waitForTimeout(500);
+      }
+      await waitForPageSurface(builderRoot);
+      const bounds = await builderRoot.boundingBox();
+      expect(bounds).toBeTruthy();
+      const width =
+        viewport === 'desktop'
+          ? Math.round(bounds?.width ?? 0)
+          : Number.parseInt(PAGE_RESPONSIVE_BREAKPOINTS[viewport].canvasWidth, 10);
+      const height = Math.round(bounds?.height ?? 0);
+      await review.setViewportSize({ width, height });
+      await published.setViewportSize({ width, height });
+      await waitForPageSurface(reviewRoot);
+      await waitForPageSurface(publishedRoot);
+      const [builderSnapshot, reviewSnapshot, publishedSnapshot] = await Promise.all([
+        collectVisualSnapshot(builderRoot),
+        collectVisualSnapshot(reviewRoot),
+        collectVisualSnapshot(publishedRoot),
+      ]);
+      expectSelectedStyleParity(
+        builderSnapshot,
+        reviewSnapshot,
+        ids,
+        properties,
+        `V8 Builder ↔ Review (${viewport})`,
+      );
+      expectSelectedStyleParity(
+        reviewSnapshot,
+        publishedSnapshot,
+        ids,
+        properties,
+        `V8 Review ↔ Published (${viewport})`,
+      );
+      expectSelectedStyleParity(
+        builderSnapshot,
+        publishedSnapshot,
+        ids,
+        properties,
+        `V8 Builder ↔ Published (${viewport})`,
+      );
+      const reviewById = new Map(reviewSnapshot.nodes.map((node) => [node.id, node]));
+      expect(reviewById.get('v8-card')?.style['background-color']).toBe(
+        'rgb(224, 242, 254)',
+      );
+      expect(reviewById.get('v8-stack')?.style.gap).toBe('17px');
+      expect(reviewById.get('v8-name-input')?.style['border-radius']).toBe(
+        viewport === 'desktop' ? '26px' : '28px',
+      );
+    }
+  } finally {
+    await review.close();
+    await published.close();
+    await temporaryPage.dispose();
+  }
 });

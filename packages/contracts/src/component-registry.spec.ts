@@ -174,7 +174,9 @@ describe('component style capabilities', () => {
     expect(PAGE_COMPONENT_REGISTRY.accordion.builder.insertable).toBe(true);
     expect(PAGE_COMPONENT_REGISTRY['accordion-item'].builder.insertable).toBe(false);
     expect(PAGE_COMPONENT_REGISTRY['tab-item'].builder.insertable).toBe(false);
-    expect(PAGE_COMPONENT_REGISTRY.gallery.builder.insertable).toBe(true);
+    // Legacy Gallery remains renderable/editable, but the public Add Blocks
+    // catalog exposes the composition recipe instead of this closed widget.
+    expect(PAGE_COMPONENT_REGISTRY.gallery.builder.insertable).toBe(false);
 
     expect(findAcceptingSlot('accordion', 'accordion-item', 0)).toMatchObject({
       minChildren: 1,

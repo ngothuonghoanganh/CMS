@@ -3512,14 +3512,53 @@ export type DesignSystemAppearanceContext = {
   viewport?: 'base' | 'tablet' | 'mobile' | undefined;
 };
 
-/** Resolve the semantic recipe before node-local styles are merged. */
-export function resolveDesignSystemAppearance(
-  system: SiteDesignSystem | undefined,
+/**
+ * The semantic target used to look up a Design System recipe. This registry is
+ * deliberately independent from the legacy Page Component registry: Open
+ * Composition primitives and semantic children need the same inheritance
+ * contract without becoming legacy components.
+ */
+export type DesignStyleTarget = {
+  componentType: string;
+  variant?: string | undefined;
+  part?: string | undefined;
+};
+
+/**
+ * Stable authored-node mappings shared by Builder and every renderer. The
+ * fallback target for a new primitive is its own type; entries are only
+ * needed when a node intentionally inherits another component's recipe or a
+ * semantic part recipe.
+ */
+export const DESIGN_STYLE_TARGET_REGISTRY: Readonly<
+  Record<string, Omit<DesignStyleTarget, 'variant'>>
+> = {
+  'form-field': { componentType: 'form', part: 'field' },
+  label: { componentType: 'form', part: 'label' },
+  input: { componentType: 'form', part: 'input' },
+  textarea: { componentType: 'form', part: 'input' },
+  select: { componentType: 'form', part: 'input' },
+  disclosure: { componentType: 'accordion' },
+  'disclosure-item': { componentType: 'accordion', part: 'item' },
+  'accordion-item': { componentType: 'accordion', part: 'item' },
+  'disclosure-panel': { componentType: 'accordion', part: 'panel' },
+  'tab-list': { componentType: 'tabs', part: 'list' },
+  'tab-trigger': { componentType: 'tabs', part: 'tab' },
+  'tab-panel': { componentType: 'tabs', part: 'panel' },
+  'tab-item': { componentType: 'tabs', part: 'panel' },
+  tabs: { componentType: 'tabs' },
+};
+
+/**
+ * Resolve authored node semantics to a Design System target before any local
+ * styles are considered. New authored node types belong here rather than in a
+ * renderer-specific conditional or a Page Component type guard.
+ */
+export function resolveDesignStyleTarget(
   context: DesignSystemAppearanceContext,
-): ComponentDefaultAppearance | undefined {
-  if (!system?.componentDefaults) return undefined;
+): DesignStyleTarget {
   const props = context.props ?? {};
-  const semanticVariant =
+  const inferredVariant =
     context.variant ??
     (context.type === 'heading' && typeof props.level === 'number'
       ? `heading-${props.level}`
@@ -3528,14 +3567,117 @@ export function resolveDesignSystemAppearance(
         : context.type === 'text' && typeof props.role === 'string'
           ? `text-${props.role}`
           : undefined);
+
+  const mapped: DesignStyleTarget =
+    context.type === 'tab-trigger' && props.active === true
+      ? { componentType: 'tabs', part: 'activeTab' }
+      : (DESIGN_STYLE_TARGET_REGISTRY[context.type] ?? {
+          // Layout primitives intentionally have explicit targets. Their
+          // structural invariants remain renderer-owned, while visual
+          // defaults such as gap, surfaces, and radius live in these recipes.
+          componentType: context.type,
+        });
+
+  return {
+    ...mapped,
+    ...(inferredVariant ? { variant: inferredVariant } : {}),
+    ...(context.part !== undefined ? { part: context.part } : {}),
+  };
+}
+
+/** Resolve the semantic recipe before node-local styles are merged. */
+export function resolveDesignSystemAppearance(
+  system: SiteDesignSystem | undefined,
+  context: DesignSystemAppearanceContext,
+): ComponentDefaultAppearance | undefined {
+  if (!system?.componentDefaults) return undefined;
+  const target = resolveDesignStyleTarget(context);
   const key =
-    semanticVariant && system.componentDefaults[semanticVariant]
-      ? semanticVariant
-      : context.type;
+    target.variant && system.componentDefaults[target.variant]
+      ? target.variant
+      : target.componentType;
   const appearance = system.componentDefaults[key];
-  if (!appearance || !context.part) return appearance;
-  const part = appearance.partsStyle?.[context.part];
-  return part ? { style: part } : undefined;
+  if (!appearance || !target.part) return appearance;
+  const part = appearance.partsStyle?.[target.part];
+  // `root` is the component's own visual surface. A dedicated root part can
+  // refine it, but an absent root part must not erase the component recipe.
+  return part ? { style: part } : target.part === 'root' ? appearance : undefined;
+}
+
+export type ResponsiveStyleSource = {
+  base?: Record<string, unknown> | undefined;
+  tablet?: Record<string, unknown> | undefined;
+  mobile?: Record<string, unknown> | undefined;
+};
+
+/** Resolve the inherited base/tablet/mobile style cascade for one viewport. */
+export function resolveResponsiveStyleBlock(
+  style: ResponsiveStyleSource | undefined,
+  viewport: 'base' | 'tablet' | 'mobile' = 'base',
+): Record<string, unknown> {
+  if (!style) return {};
+  return {
+    ...(style.base ?? {}),
+    ...(viewport === 'base' ? {} : (style.tablet ?? {})),
+    ...(viewport === 'mobile' ? (style.mobile ?? {}) : {}),
+  };
+}
+
+/**
+ * Resolve one authored node using the canonical Design System < local style
+ * cascade. The returned object is still in persisted payload-key form; each
+ * rendering environment owns only the final CSS conversion.
+ */
+export function resolveEffectiveNodeAppearance(
+  system: SiteDesignSystem | undefined,
+  context: DesignSystemAppearanceContext,
+  localStyle?: ResponsiveStyleSource,
+  viewport: 'base' | 'tablet' | 'mobile' = 'base',
+): Record<string, unknown> {
+  const defaults = resolveDesignSystemAppearance(system, {
+    ...context,
+    viewport,
+  });
+  return {
+    ...resolveResponsiveStyleBlock(defaults?.style, viewport),
+    ...resolveResponsiveStyleBlock(localStyle, viewport),
+  };
+}
+
+/** Resolve one semantic part using the same Design System < local cascade. */
+export function resolveEffectivePartAppearance(
+  system: SiteDesignSystem | undefined,
+  owner: DesignSystemAppearanceContext,
+  part: string,
+  localStyle?: ResponsiveStyleSource,
+  viewport: 'base' | 'tablet' | 'mobile' = 'base',
+): Record<string, unknown> {
+  return resolveEffectiveNodeAppearance(system, { ...owner, part }, localStyle, viewport);
+}
+
+/** Parts that have stable semantic targets in the shared authoring model. */
+export function designStylePartNamesForNodeType(type: string): readonly string[] {
+  switch (type) {
+    case 'form':
+      return ['root', 'field', 'label', 'input', 'option', 'submit', 'error', 'success'];
+    case 'disclosure':
+    case 'accordion':
+      return ['root', 'item', 'trigger', 'panel', 'icon'];
+    case 'tabs':
+      return ['root', 'list', 'tab', 'activeTab', 'panel'];
+    case 'quote':
+      return ['content', 'citation'];
+    case 'navigation-view':
+      return ['list', 'link', 'activeLink', 'mobilePanel'];
+    case 'global-header':
+      return ['root', 'brand', 'navigation', 'actions'];
+    case 'global-footer':
+      return ['root', 'content'];
+    case 'site-brand':
+      return ['root', 'logo', 'text'];
+    default:
+      return [];
+  }
 }
 
 function mergeDesignTokens<T extends { id: string }>(
@@ -3602,12 +3744,135 @@ function mergeComponentDefaultAppearance(
   };
 }
 
+const legacyDefaultComponentTypes = new Set([
+  'stack',
+  'row',
+  'grid',
+  'card',
+  'icon',
+  'divider',
+  'list',
+  'video',
+  'quote',
+]);
+const legacyDefaultOptionalProperties = new Set([
+  'componentDefaults.button.style.base.fontFamily',
+  'componentDefaults.button.style.base.fontSize',
+  'componentDefaults.button.style.base.lineHeight',
+  'componentDefaults.button-primary.style.base.fontFamily',
+  'componentDefaults.button-primary.style.base.fontSize',
+  'componentDefaults.button-primary.style.base.lineHeight',
+  'componentDefaults.button-secondary.style.base.fontFamily',
+  'componentDefaults.button-secondary.style.base.fontSize',
+  'componentDefaults.button-secondary.style.base.lineHeight',
+  'componentDefaults.button-ghost.style.base.fontFamily',
+  'componentDefaults.button-ghost.style.base.fontSize',
+  'componentDefaults.button-ghost.style.base.lineHeight',
+]);
+
+function matchesLegacyDefaultValue(
+  value: unknown,
+  baseline: unknown,
+  path: string,
+): boolean {
+  if (sameJson(value, baseline)) return true;
+  if (
+    value === null ||
+    baseline === null ||
+    typeof value !== 'object' ||
+    typeof baseline !== 'object' ||
+    Array.isArray(value) ||
+    Array.isArray(baseline)
+  ) {
+    return false;
+  }
+  const valueRecord = value as Record<string, unknown>;
+  const baselineRecord = baseline as Record<string, unknown>;
+  for (const key of Object.keys(valueRecord)) {
+    if (!(key in baselineRecord)) return false;
+    if (
+      !matchesLegacyDefaultValue(valueRecord[key], baselineRecord[key], `${path}.${key}`)
+    ) {
+      return false;
+    }
+  }
+  for (const key of Object.keys(baselineRecord)) {
+    if (key in valueRecord) continue;
+    if (!legacyDefaultOptionalProperties.has(`${path}.${key}`)) return false;
+  }
+  return true;
+}
+
+function isLegacyDefaultSiteDesignSystem(
+  value: SiteDesignSystem,
+  baseline: SiteDesignSystem,
+): boolean {
+  for (const category of designSystemTokenCategories) {
+    const valueById = new Map(value[category].map((token) => [token.id, token]));
+    const baselineById = new Map(baseline[category].map((token) => [token.id, token]));
+    if (valueById.size !== baselineById.size) return false;
+    for (const [tokenId, baselineToken] of baselineById) {
+      if (!sameJson(valueById.get(tokenId), baselineToken)) return false;
+    }
+  }
+  if (!sameJson(value.semanticRoles, baseline.semanticRoles)) return false;
+
+  const valueDefaults = value.componentDefaults ?? {};
+  const baselineDefaults = baseline.componentDefaults ?? {};
+  for (const componentType of Object.keys(valueDefaults)) {
+    if (!(componentType in baselineDefaults)) return false;
+    if (
+      !matchesLegacyDefaultValue(
+        valueDefaults[componentType],
+        baselineDefaults[componentType],
+        `componentDefaults.${componentType}`,
+      )
+    ) {
+      return false;
+    }
+  }
+  for (const componentType of Object.keys(baselineDefaults)) {
+    if (
+      componentType in valueDefaults ||
+      legacyDefaultComponentTypes.has(componentType)
+    ) {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
 /** Merge a site snapshot over workspace defaults without leaking workspace drafts. */
 export function mergeSiteDesignSystems(
   workspaceSystem: SiteDesignSystem | undefined,
   siteSystem: SiteDesignSystem | SiteDesignSystemOverride | undefined,
 ): SiteDesignSystem | undefined {
   if (!siteSystem) return workspaceSystem;
+  // V1 site records stored a complete design-system snapshot. The sparse
+  // override schema is intentionally permissive enough to validate that
+  // shape, so detect the complete form first and reduce it against the
+  // current workspace baseline. Otherwise an old default snapshot would
+  // silently mask every later workspace update.
+  const fullSiteSystem = SiteDesignSystemSchema.safeParse(siteSystem);
+  if (fullSiteSystem.success) {
+    if (!workspaceSystem) return fullSiteSystem.data;
+    // Sites created before sparse inheritance was introduced could persist a
+    // complete copy of the platform default. That snapshot is not a site
+    // choice and must remain transparent to a newer workspace baseline.
+    if (
+      isLegacyDefaultSiteDesignSystem(
+        fullSiteSystem.data,
+        createDefaultSiteDesignSystem(),
+      )
+    ) {
+      return workspaceSystem;
+    }
+    return mergeSiteDesignSystems(
+      workspaceSystem,
+      normalizeSiteDesignSystemOverride(workspaceSystem, fullSiteSystem.data),
+    );
+  }
   if (!workspaceSystem) {
     const sparse = SiteDesignSystemOverrideSchema.safeParse(siteSystem);
     return sparse.success
@@ -3660,36 +3925,7 @@ export function mergeSiteDesignSystems(
       ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
     });
   }
-  const fullSiteSystem = SiteDesignSystemSchema.parse(siteSystem);
-  const componentDefaults = {
-    ...(workspaceSystem.componentDefaults ?? {}),
-    ...(fullSiteSystem.componentDefaults ?? {}),
-  };
-  for (const componentType of new Set([
-    ...Object.keys(workspaceSystem.componentDefaults ?? {}),
-    ...Object.keys(fullSiteSystem.componentDefaults ?? {}),
-  ])) {
-    const merged = mergeComponentDefaultAppearance(
-      workspaceSystem.componentDefaults?.[componentType],
-      fullSiteSystem.componentDefaults?.[componentType],
-    );
-    if (merged) componentDefaults[componentType] = merged;
-  }
-  return SiteDesignSystemSchema.parse({
-    ...workspaceSystem,
-    ...fullSiteSystem,
-    colors: mergeDesignTokens(workspaceSystem.colors, fullSiteSystem.colors),
-    typography: mergeDesignTokens(workspaceSystem.typography, fullSiteSystem.typography),
-    spacing: mergeDesignTokens(workspaceSystem.spacing, fullSiteSystem.spacing),
-    radii: mergeDesignTokens(workspaceSystem.radii, fullSiteSystem.radii),
-    shadows: mergeDesignTokens(workspaceSystem.shadows, fullSiteSystem.shadows),
-    containerWidths: mergeDesignTokens(
-      workspaceSystem.containerWidths,
-      fullSiteSystem.containerWidths,
-    ),
-    semanticRoles: { ...workspaceSystem.semanticRoles, ...fullSiteSystem.semanticRoles },
-    ...(Object.keys(componentDefaults).length ? { componentDefaults } : {}),
-  });
+  return SiteDesignSystemSchema.parse(siteSystem);
 }
 
 const designSystemTokenCategories = [
@@ -3887,6 +4123,41 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
           },
         },
       },
+      // Open Composition primitives have explicit targets so their visual
+      // defaults inherit from the Design System just like legacy nodes. The
+      // editor/renderer still own only the structural display invariants.
+      stack: {
+        style: { base: { gap: token('space-2') } },
+      },
+      row: {
+        style: {
+          base: {
+            gap: token('space-2'),
+            alignItems: 'center',
+          },
+        },
+      },
+      grid: {
+        style: {
+          base: {
+            gap: token('space-2'),
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          },
+        },
+      },
+      card: {
+        style: {
+          base: {
+            padding: token('space-2'),
+            backgroundColor: token('color-surface'),
+            borderColor: token('color-border'),
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderRadius: token('radius-md'),
+            boxShadow: token('shadow-card'),
+          },
+        },
+      },
       text: {
         style: {
           base: {
@@ -4004,6 +4275,9 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
             backgroundColor: token('color-primary'),
             color: token('color-on-primary'),
             borderRadius: token('radius-md'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
           },
         },
       },
@@ -4015,6 +4289,9 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
             backgroundColor: token('color-primary'),
             color: token('color-on-primary'),
             borderRadius: token('radius-md'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
           },
         },
       },
@@ -4029,6 +4306,9 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
             borderWidth: '1px',
             borderStyle: 'solid',
             borderRadius: token('radius-md'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
           },
         },
       },
@@ -4040,6 +4320,9 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
             backgroundColor: 'transparent',
             color: token('color-primary'),
             borderRadius: token('radius-md'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
           },
         },
       },
@@ -4050,6 +4333,41 @@ export function createDefaultSiteDesignSystem(): SiteDesignSystem {
       },
       image: {
         style: { base: { borderRadius: token('radius-md') } },
+      },
+      icon: {
+        style: { base: { color: token('color-primary') } },
+      },
+      divider: {
+        style: {
+          base: {
+            borderColor: token('color-border'),
+            borderWidth: '1px',
+            borderStyle: 'solid',
+          },
+        },
+      },
+      list: {
+        style: {
+          base: {
+            color: token('color-text'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
+          },
+        },
+      },
+      video: {
+        style: { base: { borderRadius: token('radius-md') } },
+      },
+      quote: {
+        style: {
+          base: {
+            color: token('color-text'),
+            fontFamily: token('type-body'),
+            fontSize: token('type-body'),
+            lineHeight: token('type-body'),
+          },
+        },
       },
       form: {
         style: {

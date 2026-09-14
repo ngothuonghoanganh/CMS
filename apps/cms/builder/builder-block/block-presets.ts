@@ -20,9 +20,7 @@ export type BlockPresetId =
   | 'native-list'
   | 'faq'
   | 'native-tabs'
-  | 'gallery-2-columns'
-  | 'gallery-3-columns'
-  | 'gallery-4-columns';
+  | 'gallery';
 
 export type GlobalPresetId =
   | 'header-brand-menu-cta'
@@ -156,8 +154,8 @@ function createTabs(): ComponentDefinition {
   return createOpenCompositionNodeDefinition('tabs');
 }
 
-function createGallery(columns: 2 | 3 | 4): ComponentDefinition {
-  return openCompositionRecipeToEditorDefinition(`gallery-${columns}-columns`);
+function createGallery(): ComponentDefinition {
+  return openCompositionRecipeToEditorDefinition('gallery');
 }
 
 export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
@@ -267,33 +265,13 @@ export const BUILDER_BLOCK_PRESET_REGISTRY: readonly Extract<
   },
   {
     kind: 'preset',
-    id: 'gallery-2-columns',
-    label: 'Gallery · 2 columns',
+    id: 'gallery',
+    label: 'Gallery',
     category: 'content',
-    keywords: ['gallery', 'images', 'grid', 'two columns'],
-    description: 'Add an editable two-column image grid.',
-    preview: resolveBuilderPreview(createGallery(2), 'gallery-2-columns'),
-    create: () => createGallery(2),
-  },
-  {
-    kind: 'preset',
-    id: 'gallery-3-columns',
-    label: 'Gallery · 3 columns',
-    category: 'content',
-    keywords: ['gallery', 'images', 'grid', 'three columns'],
-    description: 'Add an editable three-column image grid.',
-    preview: resolveBuilderPreview(createGallery(3), 'gallery-3-columns'),
-    create: () => createGallery(3),
-  },
-  {
-    kind: 'preset',
-    id: 'gallery-4-columns',
-    label: 'Gallery · 4 columns',
-    category: 'content',
-    keywords: ['gallery', 'images', 'grid', 'four columns'],
-    description: 'Add an editable four-column image grid.',
-    preview: resolveBuilderPreview(createGallery(4), 'gallery-4-columns'),
-    create: () => createGallery(4),
+    keywords: ['gallery', 'images', 'grid', 'columns'],
+    description: 'Add an editable image gallery with independent grid columns.',
+    preview: resolveBuilderPreview(createGallery(), 'gallery'),
+    create: createGallery,
   },
 ];
 

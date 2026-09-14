@@ -40,7 +40,13 @@ export function liveSlotOccupancy(
 }
 
 export function payloadNodeType(component: Component): BuilderNodeType | undefined {
-  const type = component.getAttributes({ noStyle: true })[BUILDER_NODE_TYPE_ATTRIBUTE];
+  const attributes = component.getAttributes({ noStyle: true });
+  // Legacy and V8 share several type names (form, button, grid, …). The
+  // explicit Open marker is the authoritative discriminator; allowing an
+  // Open node through this legacy helper makes the style/command pipelines
+  // silently select the legacy path.
+  if (attributes['data-payload-open-composition'] === 'true') return undefined;
+  const type = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
   return isBuilderNodeType(type) ? type : undefined;
 }
 

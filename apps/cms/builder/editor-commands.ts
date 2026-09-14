@@ -14,6 +14,7 @@ import {
   canonicalizeOpenCompositionListProps,
   OPEN_COMPOSITION_MAX_SEMANTIC_VALUE_LENGTH,
   withBoundedNumericSuffix,
+  designStylePartNamesForNodeType,
 } from '@payload/contracts';
 
 import {
@@ -851,13 +852,17 @@ export function isOpenCompositionRoot(root: Component): boolean {
  * This preserves the closed-widget editor contract for existing blocks while
  * giving the new recipe a valid V8 document to append to.
  */
-export function promoteLegacyRootForOpenInsert(root: Component): boolean {
+export function promoteLegacyRootForOpenInsert(
+  root: Component,
+  designSystem?: SiteDesignSystem,
+): boolean {
   if (isOpenCompositionRoot(root)) return true;
   try {
     const legacyPayload = serializeGrapesComponent(root, 'page');
     if ('documentKind' in legacyPayload || legacyPayload.version === 8) return true;
     const definition = payloadToEditorComponent(legacyPayload, {
       openCompositionMode: true,
+      ...(designSystem ? { designSystem } : {}),
     });
     root.setAttributes(definition.attributes ?? {});
     const components = Array.isArray(definition.components)
@@ -1848,6 +1853,17 @@ export function createEditorCommandBus(
 ): BuilderCommandBus {
   const bus: BuilderCommandBus = {
     dispatch: (command) => {
+      if (command.kind === 'insert' && definitionOpenNodeType(command.definition)) {
+        const root = getRoot(editor);
+        if (root && !isOpenCompositionRoot(root)) {
+          // Direct command callers may not have gone through the React insert
+          // affordance. Promotion is still structural and sparse: it retains
+          // ids/local styles and does not materialize Design System values.
+          if (!promoteLegacyRootForOpenInsert(root, options.designSystem)) {
+            return { changed: false };
+          }
+        }
+      }
       const permitted = bus.canDispatch(command);
       if (!permitted) return { changed: false };
       return executeEditorCommand(editor, command, options);
@@ -1947,12 +1963,23 @@ export function createEditorCommandBus(
       if (command.kind === 'set-part-responsive-style') {
         const node = getNode(editor, command.nodeId);
         const type = node && payloadNodeType(node);
+        const openType = node && openNodeType(node);
         const part =
           type && PAGE_COMPONENT_REGISTRY[type].componentParts[command.partName];
         const styleDefinition =
           PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
             command.property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
           ];
+        if (openType) {
+          return Boolean(
+            node &&
+            styleDefinition &&
+            // The shared target registry is the source for Open Composition
+            // part authoring; arbitrary CSS property names remain rejected by
+            // the page style registry above.
+            designStylePartNamesForNodeType(openType).includes(command.partName),
+          );
+        }
         return Boolean(
           node &&
           type &&
@@ -2004,7 +2031,7 @@ export function executeEditorCommand(
       if (
         definitionOpenNodeType(command.definition) &&
         !isOpenCompositionRoot(root) &&
-        !promoteLegacyRootForOpenInsert(root)
+        !promoteLegacyRootForOpenInsert(root, options.designSystem)
       ) {
         return { changed: false };
       }
@@ -2271,7 +2298,7 @@ export function executeEditorCommand(
     case 'set-part-responsive-style': {
       const node = getNode(editor, command.nodeId);
       if (!node) return { changed: false };
-      const type = payloadNodeType(node);
+      const type = payloadNodeType(node) ?? openNodeType(node);
       if (!type) return { changed: false };
       const changed = updateEditorPartViewportStyle(
         node,

@@ -1,10 +1,12 @@
 import {
   builderPreviewForComponent,
   isPageComponentType,
+  isOpenCompositionNodeType,
   type BuilderPreviewAlign,
   type BuilderPreviewNode,
   type ComponentBuilderPreview,
   type PageComponentType,
+  type OpenCompositionNodeType,
 } from '@payload/contracts';
 import type { ComponentDefinition } from 'grapesjs';
 
@@ -15,9 +17,14 @@ import {
 
 type DefinitionStyle = Record<string, unknown>;
 
-function definitionType(definition: ComponentDefinition): PageComponentType | undefined {
+function definitionType(
+  definition: ComponentDefinition,
+): PageComponentType | OpenCompositionNodeType | undefined {
   const value = definition.attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
-  return typeof value === 'string' && isPageComponentType(value) ? value : undefined;
+  return typeof value === 'string' &&
+    (isPageComponentType(value) || isOpenCompositionNodeType(value))
+    ? value
+    : undefined;
 }
 
 function definitionChildren(definition: ComponentDefinition): ComponentDefinition[] {
@@ -50,10 +57,11 @@ function alignValue(value: string | undefined): BuilderPreviewAlign | undefined 
   return undefined;
 }
 
-function galleryColumns(definition: ComponentDefinition): 2 | 3 {
+function galleryColumns(definition: ComponentDefinition): number {
   const template = styleValue(definition, 'gridTemplateColumns', 'grid-template-columns');
-  const match = template?.match(/repeat\(\s*([23])\s*,/);
-  return match?.[1] === '2' ? 2 : 3;
+  const match = template?.match(/repeat\(\s*(\d+)\s*,/);
+  const columns = Number(match?.[1]);
+  return Number.isInteger(columns) && columns > 0 ? Math.min(columns, 12) : 3;
 }
 
 function nodeForDefinition(definition: ComponentDefinition): BuilderPreviewNode {
@@ -129,6 +137,10 @@ function nodeForDefinition(definition: ComponentDefinition): BuilderPreviewNode 
     return { kind: 'gallery', columns: galleryColumns(definition) };
   }
 
+  if (type === 'grid') {
+    return { kind: 'gallery', columns: 3 };
+  }
+
   if (type === 'accordion') {
     const count = Math.min(3, Math.max(2, children.length)) as 2 | 3;
     return { kind: 'accordion', itemCount: count };
@@ -139,6 +151,13 @@ function nodeForDefinition(definition: ComponentDefinition): BuilderPreviewNode 
     return { kind: 'tabs', tabCount: count };
   }
 
+  if (!isPageComponentType(type)) {
+    return {
+      kind: 'box',
+      role: 'panel',
+      children: children.map(nodeForDefinition),
+    };
+  }
   const registeredPreview = builderPreviewForComponent(type).tree;
   if (type === 'accordion-item' || type === 'tab-item') {
     return {

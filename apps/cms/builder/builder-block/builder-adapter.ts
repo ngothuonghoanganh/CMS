@@ -49,7 +49,10 @@ import {
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   isSafePageStyleValue,
   resolveSiteDesignToken,
-  resolveDesignSystemAppearance,
+  resolveEffectiveNodeAppearance,
+  resolveEffectivePartAppearance,
+  resolveResponsiveStyleBlock,
+  designStylePartNamesForNodeType,
   resolveDesignSystemColorRole,
   type CustomExtensionNodeProps,
   type FormField,
@@ -67,6 +70,7 @@ import {
   type PageNodeStyleV7,
   type StyleTokenReference,
   type SiteDesignSystem,
+  type ResponsiveStyleSource,
   type ButtonVariant,
   type TextRole,
   type PagePayload,
@@ -138,6 +142,7 @@ export type BuilderNode =
 export type BuilderNodeType = PageComponentType;
 export type BuilderBlockType = Exclude<BuilderNodeType, 'root' | 'reusable-instance'>;
 type PayloadViewport = 'base' | 'tablet' | 'mobile';
+type EditorResponsiveStyle = PageNodeStyle | PageNodeStyleV7 | CompositionStyle;
 
 export function listPreviewComponents(props: ListProps): ComponentDefinition[] {
   return props.items.map((item) => ({
@@ -756,15 +761,10 @@ function payloadViewport(viewport: BuilderViewport): PayloadViewport {
  * before painting a GrapesJS device so mobile inherits tablet overrides.
  */
 export function resolveViewportStyle(
-  style: PageNodeStyle | PageNodeStyleV7 | undefined,
+  style: EditorResponsiveStyle | undefined,
   viewport: BuilderViewport,
-): PageNodeStyle['base'] | PageNodeStyleV7['base'] {
-  if (!style) return {};
-  return {
-    ...style.base,
-    ...(viewport === 'desktop' ? {} : style.tablet),
-    ...(viewport === 'mobile' ? style.mobile : {}),
-  };
+): Record<string, unknown> {
+  return resolveResponsiveStyleBlock(style, payloadViewport(viewport));
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -787,6 +787,15 @@ function editorSemanticProps(component: Component): Record<string, unknown> {
       if (isObject(parsed)) Object.assign(props, parsed);
     } catch {
       // Invalid editor-only projection props are rejected during serialization.
+    }
+  }
+  const rawOpenProps = attributes[BUILDER_OPEN_PROPS_ATTRIBUTE];
+  if (typeof rawOpenProps === 'string') {
+    try {
+      const parsed = JSON.parse(rawOpenProps) as unknown;
+      if (isObject(parsed)) Object.assign(props, parsed);
+    } catch {
+      // Invalid Open Composition props are rejected during serialization.
     }
   }
   return props;
@@ -863,7 +872,8 @@ function editorStyleToPayloadStyle(
 function parseResponsiveStyle(
   value: unknown,
   path: string[],
-): PageNodeStyle | PageNodeStyleV7 | undefined {
+  format: 'legacy' | 'open' = 'legacy',
+): EditorResponsiveStyle | undefined {
   if (value === undefined || value === '') {
     return undefined;
   }
@@ -878,15 +888,21 @@ function parseResponsiveStyle(
     throw new BuilderAdapterError('Responsive style metadata is not valid JSON', path);
   }
 
-  const parsed = PageNodeStyleV7Schema.safeParse(parsedJson);
-  if (!parsed.success) {
+  const parsed =
+    format === 'open'
+      ? CompositionStyleSchema.safeParse(parsedJson)
+      : PageNodeStyleV7Schema.safeParse(parsedJson);
+  if (!parsed.success || !parsed.data) {
     throw new BuilderAdapterError(
-      parsed.error.issues.map((issue) => issue.message).join('; '),
+      parsed.success
+        ? 'Responsive style metadata must contain a base style block'
+        : parsed.error.issues.map((issue) => issue.message).join('; '),
       path,
     );
   }
 
-  for (const [viewport, block] of Object.entries(parsed.data)) {
+  const data = parsed.data;
+  for (const [viewport, block] of Object.entries(data)) {
     for (const [property, styleValue] of Object.entries(block ?? {})) {
       if (typeof styleValue === 'string' && !isSafePageStyleValue(styleValue)) {
         throw new BuilderAdapterError(
@@ -897,7 +913,7 @@ function parseResponsiveStyle(
     }
   }
 
-  return parsed.data;
+  return data;
 }
 
 function attributesForNode(
@@ -1538,6 +1554,47 @@ function openCompositionTagName(node: OpenCompositionNode): string {
   }
 }
 
+function openCompositionPartName(
+  node: OpenCompositionNode,
+  parentType: OpenCompositionNodeType | undefined,
+  grandparentType: OpenCompositionNodeType | undefined,
+  behaviors: readonly OpenCompositionBehavior[] | undefined,
+): string | undefined {
+  if (node.type === 'root' || node.type === 'form') return 'root';
+  if (parentType === 'form' && node.type === 'form-field') return 'field';
+  if (
+    parentType === 'form-field' &&
+    ['label', 'input', 'textarea', 'select'].includes(node.type)
+  ) {
+    return node.type === 'label' ? 'label' : 'input';
+  }
+  if (
+    node.type === 'button' &&
+    behaviors?.some(
+      (behavior) =>
+        behavior.kind === 'action' &&
+        behavior.action === 'submit-form' &&
+        behavior.nodeId === node.id,
+    )
+  ) {
+    return 'submit';
+  }
+  if (node.type === 'disclosure') return 'root';
+  if (parentType === 'disclosure' && node.type === 'disclosure-item') return 'item';
+  if (parentType === 'disclosure-item' && node.type === 'button') return 'trigger';
+  if (parentType === 'disclosure-item' && node.type === 'disclosure-panel')
+    return 'panel';
+  if (node.type === 'tabs') return 'root';
+  if (parentType === 'tabs' && node.type === 'tab-list') return 'list';
+  if (parentType === 'tab-list' && node.type === 'tab-trigger') return 'tab';
+  if (parentType === 'tabs' && node.type === 'tab-panel') return 'panel';
+  // The grandparent argument is intentionally part of the helper's contract:
+  // it keeps future nested semantic projections from accidentally assigning a
+  // part to an unrelated visual child.
+  void grandparentType;
+  return undefined;
+}
+
 function openCompositionNodeDefinition(
   node: OpenCompositionNode,
   metadata: PagePayloadV1['metadata'] | undefined,
@@ -1545,6 +1602,7 @@ function openCompositionNodeDefinition(
   behaviors?: readonly OpenCompositionBehavior[],
   parentType?: OpenCompositionNodeType,
   grandparentType?: OpenCompositionNodeType,
+  designSystem?: SiteDesignSystem,
 ): ComponentDefinition {
   const props = node.props as Record<string, unknown>;
   const tagName = openCompositionTagName(node);
@@ -1558,6 +1616,16 @@ function openCompositionNodeDefinition(
     [BUILDER_NODE_TYPE_ATTRIBUTE]: node.type,
     [BUILDER_OPEN_COMPOSITION_ATTRIBUTE]: 'true',
     [BUILDER_OPEN_PROPS_ATTRIBUTE]: jsonAttribute(props),
+    ...(openCompositionPartName(node, parentType, grandparentType, behaviors)
+      ? {
+          'data-payload-part': openCompositionPartName(
+            node,
+            parentType,
+            grandparentType,
+            behaviors,
+          )!,
+        }
+      : {}),
     ...(node.type === 'root'
       ? {
           [BUILDER_PAYLOAD_VERSION_ATTRIBUTE]: String(payloadVersion),
@@ -1618,7 +1686,7 @@ function openCompositionNodeDefinition(
     selectable: true,
     editable: !semanticOwnedChild && ['text', 'heading', 'label'].includes(node.type),
     style: node.style
-      ? styleBlockToEditorStyle(node.style.base as PageNodeStyle['base'], undefined)
+      ? styleBlockToEditorStyle(node.style.base as PageNodeStyle['base'], designSystem)
       : undefined,
     components:
       node.type === 'quote'
@@ -1637,9 +1705,10 @@ function openCompositionNodeDefinition(
                     child,
                     undefined,
                     payloadVersion,
-                    undefined,
+                    behaviors,
                     node.type,
                     parentType,
+                    designSystem,
                   ),
                 ),
   };
@@ -1925,7 +1994,7 @@ export function createOpenCompositionNodeDefinition(
       break;
   }
 
-  const definition = openCompositionNodeDefinition(node, undefined, 8);
+  const definition = openCompositionNodeDefinition(node, undefined, 8, behaviors);
   return behaviors.length > 0
     ? {
         ...definition,
@@ -1954,6 +2023,9 @@ export function payloadToEditorComponent(
       canonical.metadata,
       8,
       canonical.behaviors,
+      undefined,
+      undefined,
+      options.designSystem,
     );
   }
   if (!('documentKind' in payload) && options.openCompositionMode) {
@@ -1967,6 +2039,9 @@ export function payloadToEditorComponent(
       migrated.metadata,
       8,
       migrated.behaviors,
+      undefined,
+      undefined,
+      options.designSystem,
     );
   }
   const legacyPayload = payload as
@@ -2003,7 +2078,12 @@ export function openCompositionRecipeToEditorDefinition(
   const firstChild = document.root.children[0];
   if (!firstChild)
     throw new BuilderAdapterError(`Recipe "${recipeId}" has no root child`);
-  const definition = openCompositionNodeDefinition(firstChild, undefined, 8);
+  const definition = openCompositionNodeDefinition(
+    firstChild,
+    undefined,
+    8,
+    document.behaviors,
+  );
   return {
     ...definition,
     attributes: {
@@ -2777,6 +2857,7 @@ function readNodeStyle(
   const responsive = parseResponsiveStyle(
     snapshot.attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
     [...path, BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
+    'legacy',
   );
   const baseFromEditor = editorStyleToPayloadStyle(snapshot.style, path);
 
@@ -3299,7 +3380,7 @@ function readOpenNodeStyle(
   return Object.keys(definedBase).length > 0 ? { base: definedBase } : undefined;
 }
 
-function readOpenNodePartsStyle(
+function readOpenPartsStyleFromSnapshot(
   snapshot: BuilderEditorSnapshot,
   path: string[],
 ): Record<string, CompositionStyle> | undefined {
@@ -3391,7 +3472,7 @@ function openCompositionNodeFromSnapshot(
     if (controls) props.controls = controls !== 'false';
   }
   const style = readOpenNodeStyle(snapshot, path);
-  const partsStyle = readOpenNodePartsStyle(snapshot, path);
+  const partsStyle = readOpenPartsStyleFromSnapshot(snapshot, path);
   const children = snapshot.children
     .filter((child) => !isEditorOnlySnapshot(child))
     .map((child, index) => nodeFromSnapshot(child, [...path, 'children', String(index)]));
@@ -3995,11 +4076,13 @@ export function serializeGrapesComponent(
 
 export function readEditorResponsiveStyle(
   component: Component,
-): PageNodeStyle | PageNodeStyleV7 | undefined {
+): EditorResponsiveStyle | undefined {
+  const attributes = component.getAttributes({ noStyle: true });
   return parseResponsiveStyle(
-    component.getAttributes({ noStyle: true })[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
+    attributes[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
     [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE],
-  ) as PageNodeStyle | PageNodeStyleV7 | undefined;
+    attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' ? 'open' : 'legacy',
+  );
 }
 
 export function readEditorPartsStyle(
@@ -4059,38 +4142,68 @@ export function readEditorPartsStyle(
   }
 }
 
+/** Read the sparse part overrides stored on an Open Composition node. */
+export function readOpenNodePartsStyle(
+  component: Component,
+): Record<string, CompositionStyle> | undefined {
+  const raw = component.getAttributes({ noStyle: true })[BUILDER_PARTS_STYLE_ATTRIBUTE];
+  if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isObject(parsed)) return undefined;
+    const result: Record<string, CompositionStyle> = {};
+    for (const [partName, partValue] of Object.entries(parsed)) {
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(partName)) continue;
+      const part = CompositionStyleSchema.safeParse(partValue);
+      if (part.success && part.data) result[partName] = part.data;
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const appliedEditorPartProperties = new WeakMap<object, Map<string, Set<string>>>();
 
 /** Paints the persisted component-part cascade onto the live Canvas DOM. */
 export function applyEditorPartViewportStyles(
   component: Component,
-  type: BuilderNodeType,
+  type: BuilderNodeType | OpenCompositionNodeType,
   viewport: BuilderViewport,
   designSystem?: SiteDesignSystem,
 ): void {
   const element = component.getEl?.() as HTMLElement | undefined;
   if (!element) return;
-  const parts = PAGE_COMPONENT_REGISTRY[type].componentParts;
-  const persisted = readEditorPartsStyle(component, type) ?? {};
+  const isOpen =
+    component.getAttributes({ noStyle: true })[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] ===
+    'true';
+  const partNames = isOpen
+    ? new Set([
+        ...designStylePartNamesForNodeType(type),
+        ...Object.keys(readOpenNodePartsStyle(component) ?? {}),
+      ])
+    : new Set(
+        Object.keys(PAGE_COMPONENT_REGISTRY[type as BuilderNodeType].componentParts),
+      );
+  const persisted = isOpen
+    ? (readOpenNodePartsStyle(component) ?? {})
+    : (readEditorPartsStyle(component, type as BuilderNodeType) ?? {});
 
-  for (const partName of Object.keys(parts)) {
+  for (const partName of partNames) {
     const targets =
       partName === 'root'
         ? [element]
         : Array.from(
             element.querySelectorAll<HTMLElement>(`[data-payload-part="${partName}"]`),
           );
-    const defaults = resolveDesignSystemAppearance(designSystem, {
-      type,
-      props: editorSemanticProps(component),
-      part: partName,
-      viewport: payloadViewport(viewport),
-    });
     const effective = styleBlockToEditorStyle(
-      {
-        ...resolveViewportStyle(defaults?.style, viewport),
-        ...resolveViewportStyle(persisted[partName], viewport),
-      },
+      resolveEffectivePartAppearance(
+        designSystem,
+        { type, props: editorSemanticProps(component) },
+        partName,
+        persisted[partName],
+        payloadViewport(viewport),
+      ),
       designSystem,
     );
     const cssStyles = Object.entries(effective).flatMap(([editorProperty, value]) => {
@@ -4123,6 +4236,16 @@ function sameStyleValues(
   return leftKeys.every((key) => left[key] === right[key]);
 }
 
+function hasResponsiveStyleProperties(style: ResponsiveStyleSource | undefined): boolean {
+  return Boolean(
+    style &&
+    ['base', 'tablet', 'mobile'].some(
+      (viewport) =>
+        Object.keys(style[viewport as keyof ResponsiveStyleSource] ?? {}).length > 0,
+    ),
+  );
+}
+
 export function applyEditorViewportStyle(
   component: Component,
   viewport: BuilderViewport,
@@ -4151,12 +4274,13 @@ export function applyEditorPageSurfaceStyle(
 ): void {
   const body = (root.getEl?.() as HTMLElement | undefined)?.ownerDocument?.body;
   if (!body) return;
-  const defaults = resolveDesignSystemAppearance(designSystem, {
-    type: 'root',
-    viewport: payloadViewport(viewport),
-  });
   const inherited = styleBlockToEditorStyle(
-    resolveViewportStyle(defaults?.style, viewport),
+    resolveEffectiveNodeAppearance(
+      designSystem,
+      { type: 'root' },
+      readEditorResponsiveStyle(root),
+      payloadViewport(viewport),
+    ),
     designSystem,
   );
   const local = root.getStyle() as Record<string, unknown>;
@@ -4178,22 +4302,34 @@ export function applyEditorPageSurfaceStyle(
 /** Paints inherited Design System defaults without adding them to the saved node style. */
 export function applyEditorComponentDefaultStyle(
   component: Component,
-  type: BuilderNodeType,
+  type: BuilderNodeType | OpenCompositionNodeType,
   viewport: BuilderViewport,
   designSystem?: SiteDesignSystem,
 ): void {
   const element = component.getEl?.() as HTMLElement | undefined;
   if (!element) return;
-  const defaults = resolveDesignSystemAppearance(designSystem, {
-    type,
-    props: editorSemanticProps(component),
-    viewport: payloadViewport(viewport),
-  });
+  const localResponsive = readEditorResponsiveStyle(component);
+  // GrapesJS exposes the current viewport's authored style using editor CSS
+  // keys. It is intentionally kept separate from the effective payload block
+  // so inherited Design System values are never mistaken for local authorship.
+  const local = { ...component.getStyle() } as Record<string, unknown>;
   const effective = styleBlockToEditorStyle(
-    resolveViewportStyle(defaults?.style, viewport),
+    resolveEffectiveNodeAppearance(
+      designSystem,
+      { type, props: editorSemanticProps(component) },
+      localResponsive,
+      payloadViewport(viewport),
+    ),
     designSystem,
   );
-  const local = component.getStyle() as Record<string, unknown>;
+  const structuralFallback: Record<string, string> =
+    isOpenCompositionNodeType(type) && type === 'stack'
+      ? { display: 'flex', 'flex-direction': 'column' }
+      : isOpenCompositionNodeType(type) && type === 'row'
+        ? { display: 'flex', 'flex-wrap': 'wrap' }
+        : isOpenCompositionNodeType(type) && type === 'grid'
+          ? { display: 'grid' }
+          : {};
   const previous = appliedEditorDefaultProperties.get(element) ?? new Set<string>();
   previous.forEach((property) => {
     if (local[property] === undefined) element.style.removeProperty(property);
@@ -4207,6 +4343,11 @@ export function applyEditorComponentDefaultStyle(
     if (!definition || local[editorProperty] !== undefined) continue;
     element.style.setProperty(definition.cssProperty, value);
     applied.add(definition.cssProperty);
+  }
+  for (const [property, value] of Object.entries(structuralFallback)) {
+    if (local[property] !== undefined || effective[property] !== undefined) continue;
+    element.style.setProperty(property, value);
+    applied.add(property);
   }
   appliedEditorDefaultProperties.set(element, applied);
 }
@@ -4223,6 +4364,26 @@ function normalizeEditorStyleValue(
   return String(Math.min(1, Math.max(0, numericValue)));
 }
 
+function normalizeOpenGridColumns(
+  value: string | StyleTokenReference,
+): string | StyleTokenReference {
+  if (typeof value !== 'string') {
+    throw new BuilderAdapterError('Grid columns must be a positive whole number');
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') return '';
+  const numeric = /^(?:0*[1-9][0-9]{0,2})$/.exec(trimmed);
+  const repeat =
+    /^repeat\(\s*(?:0*[1-9][0-9]{0,2})\s*,\s*minmax\(\s*0\s*,\s*1fr\s*\)\s*\)$/i.exec(
+      trimmed,
+    );
+  const count = Number(numeric?.[0] ?? repeat?.[0].match(/repeat\(\s*(\d+)/i)?.[1]);
+  if (!Number.isInteger(count) || count < 1 || count > 999) {
+    throw new BuilderAdapterError('Grid columns must be a positive whole number');
+  }
+  return `repeat(${count}, minmax(0, 1fr))`;
+}
+
 export function updateEditorViewportStyle(
   component: Component,
   viewport: BuilderViewport,
@@ -4237,7 +4398,12 @@ export function updateEditorViewportStyle(
   if (!definition) {
     throw new BuilderAdapterError(`Unsupported editor style property "${property}"`);
   }
-  const normalizedValue = normalizeEditorStyleValue(definition.payloadKey, value);
+  const attributes = component.getAttributes({ noStyle: true });
+  const isOpen = attributes[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true';
+  const normalizedValue =
+    isOpen && definition.payloadKey === 'gridTemplateColumns'
+      ? normalizeOpenGridColumns(value)
+      : normalizeEditorStyleValue(definition.payloadKey, value);
   if (
     typeof normalizedValue === 'string' &&
     definition.payloadKey === 'opacity' &&
@@ -4275,10 +4441,16 @@ export function updateEditorViewportStyle(
   }
 
   const hasValue = typeof normalizedValue !== 'string' || normalizedValue.trim() !== '';
-  const effectiveStyle = resolveViewportStyle(current, viewport) as Record<
-    string,
-    unknown
-  >;
+  const nodeType = attributes[BUILDER_NODE_TYPE_ATTRIBUTE];
+  const effectiveStyle =
+    isOpen && typeof nodeType === 'string'
+      ? resolveEffectiveNodeAppearance(
+          designSystem,
+          { type: nodeType, props: editorSemanticProps(component) },
+          current,
+          payloadViewport(viewport),
+        )
+      : resolveViewportStyle(current, viewport);
   const resolvedStyleValue = (key: string): string | undefined => {
     const candidate = effectiveStyle[key];
     if (typeof candidate === 'string') return candidate;
@@ -4311,9 +4483,6 @@ export function updateEditorViewportStyle(
   ) {
     nextBlock.borderStyle = 'solid';
   }
-  const nodeType = component.getAttributes({ noStyle: true })[
-    BUILDER_NODE_TYPE_ATTRIBUTE
-  ];
   if (
     hasValue &&
     (nodeType === 'button' || nodeType === 'link') &&
@@ -4323,17 +4492,24 @@ export function updateEditorViewportStyle(
     nextBlock.display = 'inline-block';
   }
   current[payloadViewportKey] = nextBlock;
-  const parsed = PageNodeStyleV7Schema.safeParse(current);
+  const parsed = isOpen
+    ? CompositionStyleSchema.safeParse(current)
+    : PageNodeStyleV7Schema.safeParse(current);
   if (!parsed.success) {
     throw new BuilderAdapterError(
       parsed.error.issues.map((issue) => issue.message).join('; '),
       ['style', property],
     );
   }
-  component.setAttributes({
-    ...component.getAttributes({ noStyle: true }),
-    [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
-  });
+  const nextAttributes = component.getAttributes({ noStyle: true });
+  if (hasResponsiveStyleProperties(parsed.data)) {
+    component.setAttributes({
+      ...nextAttributes,
+      [BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
+    });
+  } else {
+    component.removeAttributes(BUILDER_RESPONSIVE_STYLE_ATTRIBUTE);
+  }
   component.setStyle(
     styleBlockToEditorStyle(resolveViewportStyle(parsed.data, viewport), designSystem),
   );
@@ -4342,14 +4518,78 @@ export function updateEditorViewportStyle(
 
 export function updateEditorPartViewportStyle(
   component: Component,
-  type: BuilderNodeType,
+  type: BuilderNodeType | OpenCompositionNodeType,
   partName: string,
   viewport: BuilderViewport,
   property: string,
   value: string | StyleTokenReference,
   designSystem?: SiteDesignSystem,
 ): boolean {
-  const part = PAGE_COMPONENT_REGISTRY[type].componentParts[partName];
+  if (isOpenCompositionNodeType(type)) {
+    const definition =
+      PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
+        property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
+      ];
+    if (!designStylePartNamesForNodeType(type).includes(partName) || !definition) {
+      throw new BuilderAdapterError(
+        `Style property "${property}" is not allowed for ${type}.${partName}`,
+      );
+    }
+    const normalizedValue = normalizeEditorStyleValue(definition.payloadKey, value);
+    if (
+      typeof normalizedValue === 'string' &&
+      definition.payloadKey === 'opacity' &&
+      normalizedValue.trim() !== '' &&
+      !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(normalizedValue.trim())
+    ) {
+      throw new BuilderAdapterError('Opacity must be a number between 0 and 1');
+    }
+    if (
+      typeof normalizedValue === 'string' &&
+      normalizedValue.trim() !== '' &&
+      !isSafePageStyleValue(normalizedValue)
+    ) {
+      throw new BuilderAdapterError('Component part style contains an unsafe CSS value');
+    }
+    const current = readOpenNodePartsStyle(component) ?? {};
+    const partStyle = current[partName] ?? { base: {} };
+    const viewportKey = payloadViewport(viewport);
+    const nextBlock = { ...(partStyle[viewportKey] ?? {}) } as Record<string, unknown>;
+    const previousValue = nextBlock[definition.payloadKey];
+    if (
+      (typeof value === 'string' && value.trim() === '' && previousValue === undefined) ||
+      JSON.stringify(previousValue) === JSON.stringify(normalizedValue)
+    ) {
+      return false;
+    }
+    if (typeof value === 'string' && value.trim() === '') {
+      delete nextBlock[definition.payloadKey];
+    } else {
+      nextBlock[definition.payloadKey] = normalizedValue;
+    }
+    const nextPartStyle = { ...partStyle, [viewportKey]: nextBlock };
+    const parsed = CompositionStyleSchema.safeParse(nextPartStyle);
+    if (!parsed.success) {
+      throw new BuilderAdapterError(
+        parsed.error.issues.map((issue) => issue.message).join('; '),
+        ['partsStyle', partName, property],
+      );
+    }
+    const nextParts = { ...current, [partName]: parsed.data };
+    if (!hasResponsiveStyleProperties(parsed.data)) delete nextParts[partName];
+    if (Object.keys(nextParts).length > 0) {
+      component.setAttributes({
+        ...component.getAttributes({ noStyle: true }),
+        [BUILDER_PARTS_STYLE_ATTRIBUTE]: jsonAttribute(nextParts),
+      });
+    } else {
+      component.removeAttributes(BUILDER_PARTS_STYLE_ATTRIBUTE);
+    }
+    applyEditorPartViewportStyles(component, type, viewport, designSystem);
+    return true;
+  }
+  const legacyType = type as BuilderNodeType;
+  const part = PAGE_COMPONENT_REGISTRY[legacyType].componentParts[partName];
   const definition =
     PAGE_STYLE_PROPERTY_BY_EDITOR_KEY[
       property as keyof typeof PAGE_STYLE_PROPERTY_BY_EDITOR_KEY
@@ -4402,10 +4642,14 @@ export function updateEditorPartViewportStyle(
       ['partsStyle', partName, property],
     );
   }
-  component.setAttributes({
-    ...component.getAttributes({ noStyle: true }),
-    [BUILDER_PARTS_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
-  });
+  if (Object.keys(parsed.data).length > 0) {
+    component.setAttributes({
+      ...component.getAttributes({ noStyle: true }),
+      [BUILDER_PARTS_STYLE_ATTRIBUTE]: jsonAttribute(parsed.data),
+    });
+  } else {
+    component.removeAttributes(BUILDER_PARTS_STYLE_ATTRIBUTE);
+  }
   applyEditorPartViewportStyles(component, type, viewport, designSystem);
   return true;
 }

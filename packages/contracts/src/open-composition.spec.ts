@@ -125,7 +125,14 @@ describe('Open Composition contract', () => {
       grid.styleGroups
         .flatMap((group) => group.properties)
         .find((property) => property.key === 'grid-template-columns'),
-    ).toEqual(expect.objectContaining({ label: 'Columns', control: 'segmented' }));
+    ).toEqual(
+      expect.objectContaining({
+        label: 'Columns',
+        control: 'number',
+        min: 1,
+        max: 999,
+      }),
+    );
     expect(Object.keys(OPEN_COMPOSITION_AUTHORING_REGISTRY)).toHaveLength(
       Object.keys(OPEN_COMPOSITION_REGISTRY).length,
     );
@@ -159,7 +166,7 @@ describe('Open Composition contract', () => {
   });
 
   it('ships Contact Form as a normal editable composition with semantic references', () => {
-    expect(OPEN_COMPOSITION_RECIPE_REGISTRY).toHaveLength(4);
+    expect(OPEN_COMPOSITION_RECIPE_REGISTRY).toHaveLength(5);
     const document = instantiateOpenCompositionRecipe('contact-form', (sourceId) =>
       sourceId === 'root' ? 'root' : `copy-${sourceId}`,
     );

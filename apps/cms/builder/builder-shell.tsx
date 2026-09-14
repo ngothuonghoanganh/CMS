@@ -329,10 +329,11 @@ function renderLayerNodes(
   return (childrenByParent.get(parentId) ?? [])
     .filter((node) => !visibleNodeIds || visibleNodeIds.has(node.id))
     .map((node) => {
-      // A managed layer is active as soon as its semantic owner exists. This
-      // is derived from the authoritative GrapesJS model rather than from
-      // layout usage or a second React-owned state machine.
-      const isManaged = Boolean(node.semanticOwner);
+      // Managed means this row represents a real persisted Builder node. It
+      // is deliberately independent from semantic ownership: semanticOwner
+      // only controls the special structural restrictions of internal parts.
+      const isManaged = node.managed;
+      const isSemanticOwned = Boolean(node.semanticOwner);
       const structuralChildren = (childrenByParent.get(node.id) ?? []).some(
         (child) => !visibleNodeIds || visibleNodeIds.has(child.id),
       );
@@ -389,7 +390,7 @@ function renderLayerNodes(
           key={node.id}
         >
           <div className="builder-layer-row">
-            {node.semanticOwner ? (
+            {isSemanticOwned ? (
               <span aria-hidden="true" className="builder-layer-toggle-placeholder" />
             ) : (
               <button
@@ -408,16 +409,7 @@ function renderLayerNodes(
                 )}
               </button>
             )}
-            {node.semanticOwner ? (
-              <span
-                aria-label={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
-                className="builder-layer-managed-indicator is-active"
-                data-builder-layer-managed-state="active"
-                title={`Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`}
-              >
-                Managed
-              </span>
-            ) : (
+            {!isSemanticOwned ? (
               <button
                 aria-label={`Drag ${node.label} layer`}
                 className="builder-layer-drag-handle"
@@ -426,7 +418,25 @@ function renderLayerNodes(
               >
                 <Icon name="grip" />
               </button>
-            )}
+            ) : null}
+            {isManaged ? (
+              <span
+                aria-label={
+                  node.semanticOwner
+                    ? `Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`
+                    : 'Managed Builder node'
+                }
+                className="builder-layer-managed-indicator is-active"
+                data-builder-layer-managed-state="active"
+                title={
+                  node.semanticOwner
+                    ? `Managed by ${inspectorNodeLabel(node.semanticOwner.nodeType)}`
+                    : 'Managed Builder node'
+                }
+              >
+                Managed
+              </span>
+            ) : null}
             <button
               aria-label={`Select ${node.label}`}
               aria-expanded={hasChildren ? !collapsedIds.has(node.id) : undefined}
@@ -1295,6 +1305,13 @@ export default function BuilderShell({
         // endpoint is the canonical CAS/editing snapshot.
         const nextVersion = PageVersionSchema.parse(currentVersionResponse);
         const nextPayload = PagePayloadSchema.parse(nextVersion.payload);
+        // Resolve the visual source before exposing the document to GrapesJS.
+        // Loading the page first causes the editor to paint the default system
+        // and then retain that presentation on newly inserted nodes while the
+        // site-scoped inherited system arrives.
+        const nextDesignSystem = designSystemResponseRaw
+          ? SiteDesignSystemResponseSchema.parse(designSystemResponseRaw).draft
+          : createDefaultSiteDesignSystem();
         setPage(nextPage);
         setSiteContext({
           name: nextSite.name,
@@ -1302,6 +1319,7 @@ export default function BuilderShell({
         });
         const parsedVersion = PageVersionSchema.parse(nextVersion);
         setVersion(parsedVersion);
+        setDesignSystem(nextDesignSystem);
         setPageDocument(
           createPageDocument(nextPayload, compositionFieldsFromVersion(parsedVersion)),
         );
@@ -1406,11 +1424,6 @@ export default function BuilderShell({
           setReusableEditorDocument(editorDocument.document);
           setReusableEditorWrappedSource(editorDocument.wrappedSource);
         }
-        setDesignSystem(
-          designSystemResponseRaw
-            ? SiteDesignSystemResponseSchema.parse(designSystemResponseRaw).draft
-            : createDefaultSiteDesignSystem(),
-        );
         const layoutResources = [
           ...(headerLayoutsResponseRaw
             ? LayoutExtensionListResponseSchema.parse(headerLayoutsResponseRaw).items

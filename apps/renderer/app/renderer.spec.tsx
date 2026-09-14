@@ -326,7 +326,7 @@ describe('PagePayloadV1 renderer', () => {
   });
 
   it('renders a Gallery recipe only as normal Grid and Image primitives', () => {
-    const recipe = instantiateOpenCompositionRecipe('gallery-2-columns', (sourceId) =>
+    const recipe = instantiateOpenCompositionRecipe('gallery', (sourceId) =>
       sourceId === 'root' ? 'root' : `public-${sourceId}`,
     );
     const payload = OpenCompositionPayloadSchema.parse({
@@ -340,7 +340,7 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('data-payload-node-type="grid"');
     expect(markup).toContain('data-payload-node-type="image"');
     expect(markup).not.toContain('data-payload-node-type="gallery"');
-    expect(markup.match(/data-payload-node-type="image"/g)).toHaveLength(4);
+    expect(markup.match(/data-payload-node-type="image"/g)).toHaveLength(6);
   });
 
   it('renders canonical Open Composition content, attribution, poster and choices', () => {
@@ -487,7 +487,7 @@ describe('PagePayloadV1 renderer', () => {
     expect(markup).toContain('background-color:#112233');
     expect(markup).toContain('background-color:#224466');
     expect(markup).toContain(
-      '[data-payload-node-id="styled-form"] [data-payload-part="submit"]{padding:8px!important}',
+      '[data-payload-node-id="styled-form"] [data-payload-part="submit"]{background-color:#224466!important;padding:8px!important}',
     );
   });
 

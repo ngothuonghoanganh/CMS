@@ -13,6 +13,8 @@ import {
 export type BuilderCanvasNode = {
   id: string;
   type: BuilderNodeType | OpenCompositionNodeType;
+  /** Derived from a real persisted Builder node, never from semantic ownership. */
+  managed: boolean;
   openComposition?: boolean;
   semanticOwner?: { id: string; nodeType: OpenCompositionNodeType };
   label: string;

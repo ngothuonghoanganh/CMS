@@ -50,7 +50,9 @@ import {
   pageStyleReactProperty,
   PAGE_STYLE_PROPERTY_BY_PAYLOAD_KEY,
   resolvePageStyleValue,
-  resolveDesignSystemAppearance,
+  resolveEffectiveNodeAppearance,
+  resolveEffectivePartAppearance,
+  designStylePartNamesForNodeType,
   resolveDesignSystemColorRole,
   navigationActionHref,
   type ReusableRuntime,
@@ -149,7 +151,7 @@ export type RenderContext = {
 type NodeRenderer = (node: RenderableNode, context: RenderContext) => ReactElement;
 
 function styleBlockToProperties(
-  style: PageNodeStyle['base'] | PageNodeStyleV7['base'] | undefined,
+  style: Record<string, unknown> | undefined,
   context: RenderContext = {},
 ): CSSProperties {
   if (!style) {
@@ -174,15 +176,13 @@ function styleBlockToProperties(
 }
 
 function nodeStyle(node: RenderableNode, context: RenderContext = {}): CSSProperties {
-  const defaults = resolveDesignSystemAppearance(context.designSystem, {
-    type: node.type,
-    props: node.props as Record<string, unknown>,
-  });
   const style = styleBlockToProperties(
-    {
-      ...(defaults?.style?.base ?? {}),
-      ...(node.style?.base ?? {}),
-    },
+    resolveEffectiveNodeAppearance(
+      context.designSystem,
+      { type: node.type, props: node.props as Record<string, unknown> },
+      node.style,
+      'base',
+    ),
     context,
   );
   // `props.align` is retained only as a legacy fallback. New edits are
@@ -212,20 +212,16 @@ function nodePartStyle(
   const partsStyle = (
     node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
   ).partsStyle;
-  const defaults = resolveDesignSystemAppearance(context.designSystem, {
-    type: node.type,
-    props: node.props as Record<string, unknown>,
-    part,
-  });
   const localPart = partsStyle?.[part];
-  if (!defaults?.style && !localPart) return undefined;
-  return styleBlockToProperties(
-    {
-      ...(defaults?.style?.base ?? {}),
-      ...(localPart?.base ?? {}),
-    },
-    context,
+  const effective = resolveEffectivePartAppearance(
+    context.designSystem,
+    { type: node.type, props: node.props as Record<string, unknown> },
+    part,
+    localPart,
+    'base',
   );
+  if (Object.keys(effective).length === 0) return undefined;
+  return styleBlockToProperties(effective, context);
 }
 
 function nodeViewportStyle(
@@ -233,15 +229,12 @@ function nodeViewportStyle(
   viewport: 'tablet' | 'mobile',
   context: RenderContext,
 ): Record<string, unknown> {
-  const defaults = resolveDesignSystemAppearance(context.designSystem, {
-    type: node.type,
-    props: node.props as Record<string, unknown>,
+  return resolveEffectiveNodeAppearance(
+    context.designSystem,
+    { type: node.type, props: node.props as Record<string, unknown> },
+    node.style,
     viewport,
-  });
-  return {
-    ...(defaults?.style?.[viewport] ?? {}),
-    ...(node.style?.[viewport] ?? {}),
-  };
+  );
 }
 
 function nodePartViewportStyle(
@@ -250,19 +243,16 @@ function nodePartViewportStyle(
   viewport: 'tablet' | 'mobile',
   context: RenderContext,
 ): Record<string, unknown> {
-  const defaults = resolveDesignSystemAppearance(context.designSystem, {
-    type: node.type,
-    props: node.props as Record<string, unknown>,
-    part,
-    viewport,
-  });
   const localParts = (
     node as { partsStyle?: Record<string, PageNodeStyle | PageNodeStyleV7> }
   ).partsStyle;
-  return {
-    ...(defaults?.style?.[viewport] ?? {}),
-    ...(localParts?.[part]?.[viewport] ?? {}),
-  };
+  return resolveEffectivePartAppearance(
+    context.designSystem,
+    { type: node.type, props: node.props as Record<string, unknown> },
+    part,
+    localParts?.[part],
+    viewport,
+  );
 }
 
 function nodeAttributes(node: RenderableNode): {
@@ -1133,9 +1123,10 @@ function responsiveRules(
   const localPartNames = Object.keys(
     (node as { partsStyle?: Record<string, PageNodeStyle> }).partsStyle ?? {},
   );
-  const registeredPartNames = Object.keys(
-    PAGE_COMPONENT_REGISTRY[node.type].componentParts,
-  );
+  const registeredPartNames = [
+    ...Object.keys(PAGE_COMPONENT_REGISTRY[node.type].componentParts),
+    ...designStylePartNamesForNodeType(node.type),
+  ];
   for (const partName of new Set([...registeredPartNames, ...localPartNames])) {
     const partViewportStyle = nodePartViewportStyle(node, partName, viewport, context);
     const partDeclarations =
