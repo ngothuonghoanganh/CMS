@@ -49,6 +49,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Check governance
+        run: pnpm check:governance
+
       - name: Check CMS design system
         run: pnpm check:cms-design-system
 

@@ -1,11 +1,15 @@
-# Payload Page Platform
+# Payload Landing Page Platform
 
-Greenfield monorepo for a modular Page platform. The current implementation
-includes the Phase 6 forms/submissions foundation, Phase 7 notifications, Phase 8
-analytics and Phase 9 custom-domain/SEO hardening:
-versioned page payloads, Mongo persistence, authenticated REST management APIs, CMS
-page management and builder, public publishing, semantic forms, workspace-scoped
-submissions, email/webhook integrations and durable delivery records.
+Monorepo for a modular landing-page platform. The product core is the flow
+Create Site → Create Page → Build Page → Preview → Publish → Receive Leads,
+backed by the API, CMS and independent public renderer applications.
+
+The canonical architecture and active roadmap are maintained in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Historical phase, handoff and
+architecture documents are retained under
+[`docs/_archive/`](docs/_archive/) and are not current requirements.
+AI and contributor rules are defined in [`AGENTS.md`](AGENTS.md) and must be read
+before making repository changes.
 
 ## Prerequisites
 
@@ -124,34 +128,18 @@ RUN_MONGO_TESTS=true pnpm test
 ## Repository structure
 
 The monorepo contains `apps/api`, `apps/cms`, `apps/renderer`, `packages/contracts`,
-`packages/cli`, `docs/architecture`, `.github/workflows`, and `docker-compose.yml`.
+`packages/cli`, `docs/ARCHITECTURE.md`, `docs/_archive`, `.github/workflows`, and
+`docker-compose.yml`.
 
-## Phase boundary
+## Architecture and roadmap
 
-Phase 7 is complete for the scoped email/webhook notification foundation, Phase 8 is
-complete for first-party analytics and tracking, and Phase 9 is complete for
-custom-domain/SEO production readiness. Phase 10 adds a Master control plane and
-database-per-tenant tenancy while keeping resources workspace-owned inside each
-tenant database.
-`PagePayloadV1` remains frozen; forms use the minimum explicit `PagePayloadV2`
-extension, published snapshots drive server-side validation, and notification
-bindings/deliveries remain outside the canonical page payload. Domain and SEO settings
-are also separate records. Automation, CRM/social integrations, billing,
-collaboration and microservices remain deferred. See
-[`docs/architecture/phase-3.md`](docs/architecture/phase-3.md),
-[`docs/architecture/phase-4.md`](docs/architecture/phase-4.md),
-[`docs/architecture/phase-5.md`](docs/architecture/phase-5.md),
-[`docs/architecture/phase-6.md`](docs/architecture/phase-6.md),
-[`docs/architecture/phase-7.md`](docs/architecture/phase-7.md),
-[`docs/continuity/phase-7-handoff.md`](docs/continuity/phase-7-handoff.md),
-[`docs/phase-8.md`](docs/phase-8.md),
-[`docs/phase-9.md`](docs/phase-9.md),
-[`docs/continuity/phase-9-handoff.md`](docs/continuity/phase-9-handoff.md),
-[`docs/phase-10.md`](docs/phase-10.md),
-[`docs/continuity/phase-10-handoff.md`](docs/continuity/phase-10-handoff.md),
-[`docs/architecture/phase-2.md`](docs/architecture/phase-2.md) and
-[`docs/architecture/page-payload-v1.md`](docs/architecture/page-payload-v1.md) for the
-implementation boundary and domain decisions.
+The rebaseline resets phase numbering. The current phase is declared in
+`docs/ARCHITECTURE.md`; Phase 0 covers rebaseline and governance, followed by core
+product simplification, the canonical content engine, a guided builder, templates,
+publishing and delivery, leads and conversion, campaign operations, integrations,
+analytics and monetization. The old phase roadmap is inactive; new requirements must
+be evaluated against
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Custom domains and SEO
 
@@ -173,11 +161,12 @@ deferred until its invalidation contract is defined.
 Authenticated CMS ownership follows `Tenant → tenant-local membership → Workspace →
 Resources`. The Master DB stores tenant registry, lifecycle, hostname mappings and
 platform-admin records; each tenant has a separate MongoDB database containing its
-users, sessions, workspaces and business resources. `PagePayloadV1/V2` remain pure
-rendering contracts and contain no tenant metadata.
+users, sessions, workspaces and business resources. Legacy `PagePayload` versions
+remain compatibility-only; the target authoring source of truth is `PageCompositionV1`.
 
 Tenant provisioning is available under `/api/v1/control-plane/tenants`; authenticated
 context switching creates a session in the target tenant database. The legacy
 `/api/v1/organizations` routes are a temporary compatibility adapter backed by the
 new tenant model, not the old Organization collections. Billing, invitations and
-advanced RBAC remain deferred to Phase 11+.
+advanced RBAC remain deferred expansion; their old phase references are historical
+and inactive.
