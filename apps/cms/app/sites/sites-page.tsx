@@ -282,7 +282,7 @@ export default function SitesPage({
                             >
                               Edit
                             </button>
-                            {can('site.publish') ? (
+                            {can('page.publish') ? (
                               <button
                                 className="button button-small button-primary"
                                 disabled={busy || site.status === 'published'}

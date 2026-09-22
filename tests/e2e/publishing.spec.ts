@@ -110,11 +110,15 @@ test('publishes a site after its homepage is published', async ({
   await page.getByRole('button', { name: 'Sites', exact: true }).click();
   const siteRow = page.getByRole('row').filter({ hasText: siteName });
   const publishSiteButton = siteRow.getByRole('button', { name: 'Publish site' });
+  const publishedSiteButton = siteRow
+    .getByRole('cell', { name: 'Published', exact: true })
+    .getByRole('button', { name: 'Published' });
+  await expect(publishSiteButton.or(publishedSiteButton)).toBeVisible();
   if (await publishSiteButton.isVisible()) {
     await publishSiteButton.click();
     await expect(page.getByRole('status')).toContainText('Site published');
   }
-  await expect(siteRow.getByRole('button', { name: 'Published' })).toBeDisabled();
+  await expect(publishedSiteButton).toBeDisabled();
   await request.post(
     `${E2E_API_BASE_URL}/pages/${canonicalEnvironment.pageId}/unpublish`,
   );

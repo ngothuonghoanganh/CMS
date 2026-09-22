@@ -6,6 +6,7 @@ coverage
 .env.*
 !.env.example
 .turbo
+apps/api/.data/
 test-results
 playwright-report
 *.tsbuildinfo

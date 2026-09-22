@@ -25,7 +25,8 @@ async function editContent(
   field: string,
   value: string,
 ) {
-  const control = page.getByLabel(field, { exact: true }).first();
+  const control = page.getByLabel(field, { exact: true });
+  await expect(control).toHaveCount(1);
   await expect(control).toBeVisible();
   const tagName = await control.evaluate((element) => element.tagName);
   if (tagName === 'INPUT' && (await control.getAttribute('type')) === 'checkbox') {
@@ -49,9 +50,11 @@ async function editFormSubmitLabel(page: import('@playwright/test').Page, value:
   // its semantic Form/Button nodes. Edit the submit action through that
   // official child editor instead of exposing a second Form-level property.
   await page.getByRole('button', { name: 'Layers', exact: true }).click();
-  await page
-    .getByRole('treeitem', { name: /Select Button: Submit/ })
-    .first()
+  const formLayer = page.getByRole('treeitem', { name: 'Select Form', exact: true });
+  await expect(formLayer).toHaveCount(1);
+  await formLayer
+    .locator('xpath=ancestor::div[@data-builder-layer-row-id][1]')
+    .getByRole('treeitem', { name: 'Select Button: Submit', exact: true })
     .click();
   await page.getByRole('tab', { name: 'Content', exact: true }).click();
   const buttonText = page.getByLabel('Button text', { exact: true });
@@ -112,11 +115,14 @@ test('builder block content and design edits stay error-free', async ({
     });
 
     for (const element of legacyElements) {
-      await page
+      const section = page
         .frameLocator('iframe.gjs-frame')
-        .locator('[data-payload-node-type="section"]')
-        .first()
-        .click();
+        .locator('[data-payload-node-type="section"]');
+      // The canonical builder intentionally starts with two sections here; this
+      // regression loop targets the first section as its ordered insertion slot.
+      const firstSection = section.first();
+      await expect(firstSection).toBeVisible();
+      await firstSection.click();
       await page.getByRole('button', { name: 'Add blocks', exact: true }).click();
       const addButton =
         element.label === 'List' || element.label === 'Tabs'
@@ -185,22 +191,23 @@ test('Open Composition button label updates its rendered content', async ({
   try {
     await page.getByRole('button', { name: 'Contact Form add', exact: true }).click();
     await page.getByRole('button', { name: 'Layers', exact: true }).click();
-    await page
-      .getByRole('treeitem', { name: /Button: Submit/ })
-      .first()
+    const formLayer = page.getByRole('treeitem', { name: 'Select Form', exact: true });
+    await expect(formLayer).toHaveCount(1);
+    await formLayer
+      .locator('xpath=ancestor::div[@data-builder-layer-row-id][1]')
+      .getByRole('treeitem', { name: 'Select Button: Submit', exact: true })
       .click();
     await page.getByRole('tab', { name: 'Content', exact: true }).click();
     const buttonText = page.getByLabel('Button text', { exact: true });
     await expect(buttonText).toBeVisible();
     await buttonText.fill('Send message');
     await buttonText.blur();
-    await expect(
-      page
-        .frameLocator('iframe.gjs-frame')
-        .locator('[data-payload-node-type="button"]')
-        .filter({ hasText: 'Send message' })
-        .first(),
-    ).toBeVisible();
+    const renderedButton = page
+      .frameLocator('iframe.gjs-frame')
+      .locator('[data-payload-node-type="button"]')
+      .filter({ hasText: 'Send message' });
+    await expect(renderedButton).toHaveCount(1);
+    await expect(renderedButton).toBeVisible();
     await page.getByRole('tab', { name: 'Style', exact: true }).click();
     await page.getByText('Background', { exact: true }).click();
     const background = page.getByLabel('Background color hex value', { exact: true });
@@ -215,8 +222,8 @@ test('Open Composition button label updates its rendered content', async ({
     const reloadedButton = page
       .frameLocator('iframe.gjs-frame')
       .locator('[data-payload-node-type="button"]')
-      .filter({ hasText: 'Send message' })
-      .first();
+      .filter({ hasText: 'Send message' });
+    await expect(reloadedButton).toHaveCount(1);
     await expect(reloadedButton).toBeVisible();
   } finally {
     await temporaryPage.dispose();
