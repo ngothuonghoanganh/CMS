@@ -3,6 +3,9 @@ import { resolve } from 'node:path';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
+const DEVELOPMENT_CORS_ORIGIN =
+  'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002';
+
 // Load the repository-level environment file in both tsx development and the
 // compiled dist layout. The package working directory is apps/api, so the
 // second dotenv call below only covers an optional package-local .env file.
@@ -137,7 +140,13 @@ const environmentSchema = z
 export type Environment = z.infer<typeof environmentSchema>;
 
 export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
-  const result = environmentSchema.safeParse(input);
+  const result = environmentSchema.safeParse({
+    ...input,
+    ...(input.CORS_ORIGIN === undefined &&
+    (input.NODE_ENV === undefined || input.NODE_ENV === 'development')
+      ? { CORS_ORIGIN: DEVELOPMENT_CORS_ORIGIN }
+      : {}),
+  });
 
   if (!result.success) {
     const details = result.error.issues

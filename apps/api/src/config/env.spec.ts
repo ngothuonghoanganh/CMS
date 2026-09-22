@@ -8,8 +8,15 @@ describe('parseEnvironment', () => {
       MONGODB_URI: 'mongodb://127.0.0.1:27018/payload_landing_platform',
       NODE_ENV: 'development',
       PORT: 3001,
-      CORS_ORIGIN: '',
+      CORS_ORIGIN:
+        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002',
     });
+  });
+
+  it('keeps an explicitly empty development CORS allowlist disabled', () => {
+    expect(
+      parseEnvironment({ CORS_ORIGIN: '', NODE_ENV: 'development' }).CORS_ORIGIN,
+    ).toBe('');
   });
 
   it('accepts the DNS verifier prefix and treats empty optional values as unset', () => {
