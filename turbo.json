@@ -25,7 +25,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["RUN_MONGO_TESTS"],
+      "env": ["RUN_MONGO_TESTS", "MONGODB_URI"],
       "outputs": []
     }
   }

@@ -47,6 +47,7 @@ import {
   selectedMoveIntent,
 } from './builder-interaction';
 import {
+  adaptDefinitionForOpenRoot,
   createEditorCommandBus,
   executeEditorCommand,
   isOpenCompositionRoot,
@@ -825,10 +826,16 @@ function isGlobalBuilderPresetId(value: BuilderInsertable): value is GlobalPrese
   return typeof value === 'string' && isGlobalPresetId(value);
 }
 
-function createInsertableDefinition(type: BuilderInsertable): ComponentDefinition {
-  if (isBlockPresetId(type)) return createBlockPresetDefinition(type);
-  if (isGlobalBuilderPresetId(type)) return createGlobalPresetDefinition(type);
-  return createBlockDefinition(type);
+function createInsertableDefinition(
+  type: BuilderInsertable,
+  root?: Component,
+): ComponentDefinition {
+  const definition = isBlockPresetId(type)
+    ? createBlockPresetDefinition(type)
+    : isGlobalBuilderPresetId(type)
+      ? createGlobalPresetDefinition(type)
+      : createBlockDefinition(type);
+  return root ? adaptDefinitionForOpenRoot(root, definition) : definition;
 }
 
 function insertableNodeType(
@@ -867,6 +874,7 @@ function dropDefinitionAtPoint(
 
   const root = editor.getComponents().models[0];
   if (!root) return undefined;
+  definition = adaptDefinitionForOpenRoot(root, definition);
   const childType = insertableNodeType(definition);
   if (!childType) return undefined;
   const openDefinitionType = openDefinitionNodeType(definition);
@@ -1851,11 +1859,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       addBlock(type) {
         const editor = editorRef.current;
         if (!editor) return;
-        const definition = createInsertableDefinition(type);
+        const root = getRoot(editor);
+        if (!root) return;
+        const definition = createInsertableDefinition(type, root);
         const childType = insertableNodeType(definition);
         if (!childType) return;
         const openDefinitionType = openDefinitionNodeType(definition);
-        const root = getRoot(editor);
         if (
           openDefinitionType &&
           !isOpenCompositionRoot(root) &&
@@ -2390,11 +2399,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       insertBlock(type, placement) {
         const editor = editorRef.current;
         if (!editor) return false;
-        const definition = createInsertableDefinition(type);
+        const root = getRoot(editor);
+        if (!root) return false;
+        const definition = createInsertableDefinition(type, root);
         const childType = insertableNodeType(definition);
         if (!childType) return false;
         const openDefinitionType = openDefinitionNodeType(definition);
-        const root = getRoot(editor);
         if (
           openDefinitionType &&
           !isOpenCompositionRoot(root) &&
@@ -2482,11 +2492,12 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       canInsertBlock(type, placement) {
         const editor = editorRef.current;
         if (!editor) return false;
-        const definition = createInsertableDefinition(type);
+        const root = getRoot(editor);
+        if (!root) return false;
+        const definition = createInsertableDefinition(type, root);
         const childType = insertableNodeType(definition);
         if (!childType) return false;
         const openDefinitionType = openDefinitionNodeType(definition);
-        const root = getRoot(editor);
         if (openDefinitionType && !isOpenCompositionRoot(root)) {
           return placement
             ? Boolean(findPayloadComponent(root, placement.targetNodeId))

@@ -38,6 +38,40 @@ async function editContent(
   }
 }
 
+async function editFormSubmitLabel(page: import('@playwright/test').Page, value: string) {
+  const legacyControl = page.getByLabel('Submit button label', { exact: true });
+  if ((await legacyControl.count()) > 0) {
+    await editContent(page, 'Submit button label', value);
+    return;
+  }
+
+  // A legacy Form inserted after an Open Composition preset is represented by
+  // its semantic Form/Button nodes. Edit the submit action through that
+  // official child editor instead of exposing a second Form-level property.
+  await page.getByRole('button', { name: 'Layers', exact: true }).click();
+  await page
+    .getByRole('treeitem', { name: /Select Button: Submit/ })
+    .first()
+    .click();
+  await page.getByRole('tab', { name: 'Content', exact: true }).click();
+  const buttonText = page.getByLabel('Button text', { exact: true });
+  await expect(buttonText).toBeVisible();
+  await buttonText.fill(value);
+  await buttonText.blur();
+}
+
+async function editTabsOrientation(page: import('@playwright/test').Page) {
+  const legacyControl = page.getByLabel('Orientation', { exact: true });
+  if ((await legacyControl.count()) > 0) {
+    await editContent(page, 'Orientation', 'Updated Tabs');
+    return;
+  }
+
+  const openControl = page.getByLabel('Direction', { exact: true });
+  await expect(openControl).toBeVisible();
+  await openControl.selectOption({ index: 1 });
+}
+
 async function editWidth(page: import('@playwright/test').Page) {
   await page.getByRole('tab', { name: 'Style', exact: true }).click();
   const size = page
@@ -96,7 +130,13 @@ test('builder block content and design edits stay error-free', async ({
       try {
         if (element.content) {
           await page.getByRole('tab', { name: 'Content', exact: true }).click();
-          await editContent(page, element.content, `Updated ${element.label}`);
+          if (element.label === 'Form') {
+            await editFormSubmitLabel(page, `Updated ${element.label}`);
+          } else if (element.label === 'Tabs') {
+            await editTabsOrientation(page);
+          } else {
+            await editContent(page, element.content, `Updated ${element.label}`);
+          }
         }
         await editWidth(page);
         await page.getByRole('button', { name: 'Save draft', exact: true }).click();

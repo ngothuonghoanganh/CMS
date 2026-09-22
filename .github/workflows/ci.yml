@@ -21,6 +21,7 @@ jobs:
 
     env:
       RUN_MONGO_TESTS: 'true'
+      MONGODB_URI: mongodb://127.0.0.1:27017/payload_landing_platform
 
     steps:
       - name: Checkout

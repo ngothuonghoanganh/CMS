@@ -130,6 +130,35 @@ const payload: PagePayloadV1 = {
 };
 
 describe('builder adapter', () => {
+  it('creates a stable Form identity that survives serialization and reload', () => {
+    const root = createOpenCompositionNodeDefinition('root');
+    const section = createOpenCompositionNodeDefinition('section');
+    section.components = [createOpenCompositionNodeDefinition('form')];
+    root.components = [section];
+    root.attributes = {
+      ...(root.attributes ?? {}),
+      [BUILDER_METADATA_ATTRIBUTE]: JSON.stringify({ documentTitle: 'Stable form' }),
+      [BUILDER_OPEN_BEHAVIORS_ATTRIBUTE]: '[]',
+    };
+
+    const saved = OpenCompositionPayloadSchema.parse(
+      serializeEditorSnapshot(snapshotFromEditorDefinition(root)),
+    );
+    const savedForm = saved.root.children[0]?.children[0];
+    const formKey = savedForm?.type === 'form' ? savedForm.props.formKey : undefined;
+    expect(formKey).toEqual(expect.any(String));
+    expect(formKey).toMatch(/^form-/);
+
+    const reloaded = payloadToEditorComponent(saved);
+    const savedAgain = OpenCompositionPayloadSchema.parse(
+      serializeEditorSnapshot(snapshotFromEditorDefinition(reloaded)),
+    );
+    const reloadedForm = savedAgain.root.children[0]?.children[0];
+    expect(reloadedForm?.type === 'form' ? reloadedForm.props.formKey : undefined).toBe(
+      formKey,
+    );
+  });
+
   it('creates parseable defaults for every directly insertable authorable node', () => {
     for (const [type, authoring] of Object.entries(OPEN_COMPOSITION_AUTHORING_REGISTRY)) {
       if (!authoring.directInsert) continue;

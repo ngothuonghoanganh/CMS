@@ -80,14 +80,14 @@ describe.skipIf(!integrationEnabled)('tenant control-plane integration', () => {
 
     const tenantSite = await tenantAgent
       .post(`/api/v1/workspaces/${tenantWorkspaceId}/sites`)
-      .send({ name: 'Shared slug site', slug: `shared-slug-${suffix}` })
+      .send({ name: 'Tenant site', slug: `tenant-site-${suffix}` })
       .expect(201);
 
     const platformSession = await platformAgent.get('/api/v1/auth/me').expect(200);
     const platformWorkspaceId = platformSession.body.workspace.id as string;
     const platformSite = await platformAgent
       .post(`/api/v1/workspaces/${platformWorkspaceId}/sites`)
-      .send({ name: 'Shared slug site', slug: `shared-slug-${suffix}` })
+      .send({ name: 'Platform site', slug: `platform-site-${suffix}` })
       .expect(201);
 
     expect(platformSite.body.id).not.toBe(tenantSite.body.id);

@@ -59,6 +59,14 @@ function friendlyStyleDefinition(
   return label ? { ...definition, label } : definition;
 }
 
+function partStyleDefinition(
+  definition: ComponentPropertyDefinition,
+  targetLabel: string,
+): ComponentPropertyDefinition {
+  const friendly = friendlyStyleDefinition(definition);
+  return { ...friendly, label: `${targetLabel} ${friendly.label}` };
+}
+
 export type InspectorSectionKey =
   | 'content'
   | 'layout'
@@ -429,10 +437,14 @@ function OpenCompositionInspector({
               designSystem,
               { type: nodeType, props: selected.props, part: selectedPart },
             );
+            const partProperty = partStyleDefinition(
+              property,
+              `Component ${selectedPart}`,
+            );
             return (
               <div className="builder-inspector-field-stack" key={property.key}>
                 <PropertyControlRenderer
-                  definition={friendlyStyleDefinition(property)}
+                  definition={partProperty}
                   description={inheritedDescription(property, resolved)}
                   nodeId={selected.id}
                   onChange={(value) =>
@@ -452,7 +464,7 @@ function OpenCompositionInspector({
                 />
                 {resolved.authoredValue !== undefined ? (
                   <button
-                    aria-label={`Reset ${property.label} override`}
+                    aria-label={`Reset ${partProperty.label} override`}
                     className="button button-small button-ghost builder-reset-override"
                     onClick={() => resetSelectedPartStyle(selectedPart, property.key)}
                     type="button"
@@ -1727,7 +1739,7 @@ function LegacyBuilderInspector({
               designSystem,
             );
             const hasOverride = resolved.authoredValue !== undefined;
-            const friendlyField = friendlyStyleDefinition(field);
+            const friendlyField = partStyleDefinition(field, `Component ${part.label}`);
             return (
               <div className="builder-inspector-field-stack" key={field.key}>
                 {designSystem && tokenCategoryForProperty(field.key) ? (

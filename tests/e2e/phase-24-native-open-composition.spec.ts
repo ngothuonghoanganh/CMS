@@ -311,7 +311,7 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
     const inputRadius = page
       .locator('details.builder-inspector-section')
       .filter({ has: page.locator('summary', { hasText: 'Component part' }) })
-      .getByLabel('Corner radius', { exact: true });
+      .getByLabel('Component input Corner radius', { exact: true });
     await inputRadius.fill('26');
     await inputRadius.blur();
     await expect
@@ -326,7 +326,10 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
       )
       .toBe('26px');
     await page
-      .getByRole('button', { name: 'Reset Corner radius override', exact: true })
+      .getByRole('button', {
+        name: 'Reset Component input Corner radius override',
+        exact: true,
+      })
       .click();
     await expect
       .poll(
@@ -355,7 +358,10 @@ test('authors native List, FAQ, Tabs, and Gallery through the release journey', 
       )
       .toBe('28px');
     await page
-      .getByRole('button', { name: 'Reset Corner radius override', exact: true })
+      .getByRole('button', {
+        name: 'Reset Component input Corner radius override',
+        exact: true,
+      })
       .click();
     await expect
       .poll(async () =>

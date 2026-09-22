@@ -103,7 +103,11 @@ export function canInsertLiveChild(
           !isSemanticOwnedOpenCompositionChild(parentType, childType, grandparentType) &&
           canMutateStructuralNode(childType, parentType, grandparentType) &&
           canComposeChild(parentType, childType) &&
-          OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert
+          (OPEN_COMPOSITION_REGISTRY[childType].authoring.directInsert ||
+            // The legacy compatibility catalog still exposes Form. Its
+            // complete adapter definition is safe to insert, while the Open
+            // Composition inspector intentionally keeps Form recipe-only.
+            childType === 'form')
       : false;
   }
   const parentType = payloadNodeType(parent);

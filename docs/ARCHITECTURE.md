@@ -8,7 +8,7 @@
 **Scope:** Architecture + product boundary + migration strategy + new development phases
 
 ```text
-CURRENT_PHASE = PHASE 0A
+CURRENT_PHASE = PHASE 0B
 ```
 
 ---
@@ -247,6 +247,11 @@ submissions
 leads
 seo-basic
 ```
+
+`templates` in this active boundary is an existing compatibility surface during
+the rebaseline only. Existing template routes and data may remain available for
+current code and tests, but no template-system expansion, starter-flow work or
+template marketplace work is authorized before PHASE 4.
 
 These modules may still depend on shared infrastructure, but they must not
 depend on frozen platform capabilities without an explicit architecture decision.

@@ -439,6 +439,7 @@ describe.skipIf(!integrationEnabled)('domain API integration', () => {
         page: { name: `Public page ${suffix}`, slug: `public-page-${suffix}` },
         payload: payloadV1,
         site: { name: `Public site ${suffix}`, slug: `public-site-${suffix}` },
+        dataContext: { queryItems: {}, variables: {} },
       });
       expect(firstPublicResponse.body.workspaceId).toBeUndefined();
 

@@ -1367,6 +1367,37 @@ describe('editor command boundary', () => {
     });
   });
 
+  it('adapts a legacy Form insertion and gives a cloned form a unique key', () => {
+    const container = openNode('container', 'container');
+    const section = openNode('section', 'section', {}, [container]);
+    const root = openRoot([section]);
+    const editor = new FakeEditor(root);
+    const bus = createEditorCommandBus(asEditor(editor));
+
+    const inserted = bus.dispatch({
+      kind: 'insert',
+      definition: createBlockDefinition('form'),
+      parentId: 'container',
+    });
+    expect(inserted.changed).toBe(true);
+
+    const form = container.children[0];
+    expect(form?.getAttributes()[BUILDER_OPEN_COMPOSITION_ATTRIBUTE]).toBe('true');
+    const formProps = JSON.parse(
+      String(form?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+    ) as Record<string, unknown>;
+    expect(formProps.formKey).toMatch(/^form-/);
+
+    const formId = String(form?.getAttributes()[BUILDER_NODE_ID_ATTRIBUTE]);
+    expect(bus.dispatch({ kind: 'duplicate', nodeId: formId }).changed).toBe(true);
+    const duplicate = container.children[1];
+    const duplicateProps = JSON.parse(
+      String(duplicate?.getAttributes()[BUILDER_OPEN_PROPS_ATTRIBUTE]),
+    ) as Record<string, unknown>;
+    expect(duplicateProps.formKey).toEqual(expect.any(String));
+    expect(duplicateProps.formKey).not.toBe(formProps.formKey);
+  });
+
   it('applies a global preset inside the existing global root', () => {
     const header = new FakeComponent('header-existing', 'global-header', [
       new FakeComponent('custom-brand', 'site-brand'),

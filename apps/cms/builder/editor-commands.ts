@@ -848,6 +848,26 @@ export function isOpenCompositionRoot(root: Component): boolean {
 }
 
 /**
+ * Legacy block definitions can still be exposed by the compatibility catalog,
+ * but an Open Composition root may only contain Open Composition nodes. Forms
+ * and Tabs need their Open Composition semantic identities and behavior
+ * projections when they are inserted into that root.
+ */
+export function adaptDefinitionForOpenRoot(
+  root: Component,
+  definition: ComponentDefinition,
+): ComponentDefinition {
+  if (!isOpenCompositionRoot(root) || definitionOpenNodeType(definition)) {
+    return definition;
+  }
+  const nodeType = definitionNodeType(definition);
+  if (nodeType === 'form' || nodeType === 'tabs') {
+    return createOpenCompositionNodeDefinition(nodeType);
+  }
+  return definition;
+}
+
+/**
  * Keep legacy pages lazy until an Open Composition recipe is actually used.
  * This preserves the closed-widget editor contract for existing blocks while
  * giving the new recipe a valid V8 document to append to.
@@ -909,6 +929,89 @@ function definitionWithFreshIds(
   };
   assertUniquePersistedNodeIds(currentSnapshot);
   return remapSubtreeNodeIds(definition, collectPersistedNodeIds(currentSnapshot));
+}
+
+function existingOpenFormKeys(root: Component): Set<string> {
+  const keys = new Set<string>();
+  root.onAll((component) => {
+    if (openNodeType(component) !== 'form') return;
+    const formKey = openProps(component)?.formKey;
+    if (typeof formKey === 'string' && formKey.trim()) keys.add(formKey.trim());
+  });
+  return keys;
+}
+
+/**
+ * A cloned/inserted Open Composition form must not share a submission identity
+ * with an existing form on the same page. Preserve the authored key whenever
+ * it is unused, and suffix only the colliding clone.
+ */
+function definitionWithUniqueOpenFormKeys(
+  root: Component,
+  definition: ComponentDefinition,
+): ComponentDefinition {
+  const usedKeys = existingOpenFormKeys(root);
+
+  const transform = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(transform);
+    if (!isRecord(value)) return value;
+
+    let next: Record<string, unknown> = { ...value };
+    const attributes = isRecord(next.attributes) ? next.attributes : undefined;
+    const nodeType = attributes?.[BUILDER_NODE_TYPE_ATTRIBUTE];
+    const isOpenForm =
+      attributes?.[BUILDER_OPEN_COMPOSITION_ATTRIBUTE] === 'true' && nodeType === 'form';
+    if (
+      attributes &&
+      isOpenForm &&
+      typeof attributes[BUILDER_OPEN_PROPS_ATTRIBUTE] === 'string'
+    ) {
+      try {
+        const props = JSON.parse(
+          attributes[BUILDER_OPEN_PROPS_ATTRIBUTE] as string,
+        ) as unknown;
+        if (isRecord(props)) {
+          const nodeId =
+            typeof attributes[BUILDER_NODE_ID_ATTRIBUTE] === 'string'
+              ? attributes[BUILDER_NODE_ID_ATTRIBUTE]
+              : 'form';
+          const sourceKey =
+            typeof props.formKey === 'string' && props.formKey.trim()
+              ? props.formKey.trim()
+              : `form-${nodeId}`;
+          const baseKey = sourceKey.slice(0, 64) || `form-${nodeId}`;
+          let formKey = baseKey;
+          let suffix = 2;
+          while (usedKeys.has(formKey)) {
+            formKey = withBoundedNumericSuffix(sourceKey, suffix, 64);
+            suffix += 1;
+          }
+          usedKeys.add(formKey);
+          next = {
+            ...next,
+            attributes: {
+              ...attributes,
+              [BUILDER_OPEN_PROPS_ATTRIBUTE]: JSON.stringify({
+                ...props,
+                formKey,
+              }),
+            },
+          };
+        }
+      } catch {
+        // The adapter will report malformed Open Composition props at save.
+      }
+    }
+
+    return Object.fromEntries(
+      Object.entries(next).map(([key, child]) => [
+        key,
+        key === 'attributes' ? child : transform(child),
+      ]),
+    );
+  };
+
+  return transform(definition) as ComponentDefinition;
 }
 
 function componentIdentitySnapshot(component: Component): {
@@ -1853,8 +1956,18 @@ export function createEditorCommandBus(
 ): BuilderCommandBus {
   const bus: BuilderCommandBus = {
     dispatch: (command) => {
-      if (command.kind === 'insert' && definitionOpenNodeType(command.definition)) {
-        const root = getRoot(editor);
+      const root = getRoot(editor);
+      const adaptedCommand =
+        root && command.kind === 'insert'
+          ? {
+              ...command,
+              definition: adaptDefinitionForOpenRoot(root, command.definition),
+            }
+          : command;
+      if (
+        adaptedCommand.kind === 'insert' &&
+        definitionOpenNodeType(adaptedCommand.definition)
+      ) {
         if (root && !isOpenCompositionRoot(root)) {
           // Direct command callers may not have gone through the React insert
           // affordance. Promotion is still structural and sparse: it retains
@@ -1864,9 +1977,9 @@ export function createEditorCommandBus(
           }
         }
       }
-      const permitted = bus.canDispatch(command);
+      const permitted = bus.canDispatch(adaptedCommand);
       if (!permitted) return { changed: false };
-      return executeEditorCommand(editor, command, options);
+      return executeEditorCommand(editor, adaptedCommand, options);
     },
     canDispatch: (command) => {
       const root = getRoot(editor);
@@ -1888,6 +2001,7 @@ export function createEditorCommandBus(
       if (command.kind === 'move-tab')
         return canMoveTab(root, command.nodeId, command.direction);
       if (command.kind === 'insert') {
+        const definition = adaptDefinitionForOpenRoot(root, command.definition);
         const hasTarget = command.targetId !== undefined;
         const target = hasTarget ? getNode(editor, command.targetId ?? '') : undefined;
         if (hasTarget && !target) return false;
@@ -1896,7 +2010,7 @@ export function createEditorCommandBus(
           : (target?.parent() ?? root);
         return Boolean(
           parent &&
-          canInsertDefinition(parent, command.definition) &&
+          canInsertDefinition(parent, definition) &&
           (!target || target.parent() === parent),
         );
       }
@@ -2028,8 +2142,9 @@ export function executeEditorCommand(
     case 'move-tab':
       return moveTab(editor, root, command.nodeId, command.direction);
     case 'insert': {
+      const definition = adaptDefinitionForOpenRoot(root, command.definition);
       if (
-        definitionOpenNodeType(command.definition) &&
+        definitionOpenNodeType(definition) &&
         !isOpenCompositionRoot(root) &&
         !promoteLegacyRootForOpenInsert(root, options.designSystem)
       ) {
@@ -2043,24 +2158,27 @@ export function executeEditorCommand(
       const parent = command.parentId
         ? getNode(editor, command.parentId)
         : (requestedTarget?.parent() ?? root);
-      if (!parent || !canInsertDefinition(parent, command.definition)) {
+      if (!parent || !canInsertDefinition(parent, definition)) {
         return { changed: false };
       }
-      const safeDefinition = definitionWithFreshIds(root, command.definition);
+      const safeDefinition = definitionWithUniqueOpenFormKeys(
+        root,
+        definitionWithFreshIds(root, definition),
+      );
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       let at: number | undefined;
       if (requestedTarget) {
         if (requestedTarget.parent() !== parent) return { changed: false };
         at = requestedTarget.index() + (command.position === 'after' ? 1 : 0);
       }
-      const semanticSnapshot = definitionOpenNodeType(command.definition)
+      const semanticSnapshot = definitionOpenNodeType(definition)
         ? captureOpenSemanticState(root, undefined, parent)
         : undefined;
       const created = parent.append(
         safeDefinition,
         at === undefined ? undefined : { at },
       );
-      if (definitionOpenNodeType(command.definition)) {
+      if (definitionOpenNodeType(definition)) {
         repairOpenBehaviorsAfterMove(root, semanticSnapshot);
       }
       if (safeDefinition.components !== undefined) {
@@ -2158,7 +2276,10 @@ export function executeEditorCommand(
       const parent = node.parent();
       if (!parent) return { changed: false };
       const sourceDefinition = definitionFromComponent(node);
-      const safeDefinition = definitionWithFreshIds(root, sourceDefinition);
+      const safeDefinition = definitionWithUniqueOpenFormKeys(
+        root,
+        definitionWithFreshIds(root, sourceDefinition),
+      );
       const semanticSnapshot = captureOpenSemanticState(root, node, parent);
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const created = parent.append(safeDefinition, { at: node.index() + 1 });
@@ -2180,7 +2301,10 @@ export function executeEditorCommand(
       ) {
         return { changed: false };
       }
-      const safeDefinition = definitionWithFreshIds(root, command.definition);
+      const safeDefinition = definitionWithUniqueOpenFormKeys(
+        root,
+        definitionWithFreshIds(root, command.definition),
+      );
       const previousHistoryEntries = new Set(getHistoryEntries(editor));
       const at = node.index();
       editor.select(node);
