@@ -27,9 +27,10 @@
     "test:data:cleanup": "node scripts/test-data-cleanup.mjs",
     "check:cms-design-system": "node scripts/check-cms-design-system.mjs",
     "check:governance": "node scripts/check-governance.mjs",
+    "check:core-boundaries": "node scripts/check-core-boundaries.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:governance && pnpm check:cms-design-system && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:governance && pnpm check:core-boundaries && pnpm check:cms-design-system && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@playwright/test": "1.55.0",
