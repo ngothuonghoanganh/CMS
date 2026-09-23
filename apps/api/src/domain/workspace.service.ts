@@ -16,13 +16,15 @@ import {
   type PublishDesignSystemRequest,
 } from '@payload/contracts';
 
-import { QuotaService } from '../billing/quota.service';
 import {
   WorkspaceRecord,
   type WorkspaceDocument,
 } from '../persistence/schemas/workspace.schema';
+import {
+  CORE_EVENT_PUBLISHER,
+  type CoreEventPublisher,
+} from '../shared/events/core-event-publisher';
 import { TenantContext } from '../tenancy/tenant-context';
-import { EventBus } from '../extensions/event-bus';
 
 @Injectable()
 export class WorkspaceService {
@@ -30,25 +32,22 @@ export class WorkspaceService {
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-    @Inject(QuotaService) private readonly quotas: QuotaService,
-    @Inject(EventBus) private readonly events: EventBus,
+    @Inject(CORE_EVENT_PUBLISHER) private readonly events: CoreEventPublisher,
   ) {}
 
   async create(input: CreateWorkspaceRequest, _tenantId: string): Promise<Workspace> {
-    return this.quotas.withHardQuota('workspaces', async () => {
-      const record = await this.workspaceModel.create({
-        _id: randomUUID(),
-        designSystemDraft: createDefaultSiteDesignSystem(),
-        publishedDesignSystem: createDefaultSiteDesignSystem(),
-        ...input,
-      });
-      await this.events.publish('workspace.created', {
-        tenantId: this.tenantContext.require().id,
-        workspaceId: record._id.toString(),
-        occurredAt: new Date().toISOString(),
-      });
-      return this.toContract(record);
+    const record = await this.workspaceModel.create({
+      _id: randomUUID(),
+      designSystemDraft: createDefaultSiteDesignSystem(),
+      publishedDesignSystem: createDefaultSiteDesignSystem(),
+      ...input,
     });
+    await this.events.publish('workspace.created', {
+      tenantId: this.tenantContext.require().id,
+      workspaceId: record._id.toString(),
+      occurredAt: new Date().toISOString(),
+    });
+    return this.toContract(record);
   }
 
   async getDesignSystem(workspaceId: string): Promise<SiteDesignSystemResponse> {

@@ -8,7 +8,7 @@
 **Scope:** Architecture + product boundary + migration strategy + new development phases
 
 ```text
-CURRENT_PHASE = PHASE 0B
+CURRENT_PHASE = PHASE 1
 ```
 
 ---
@@ -639,6 +639,11 @@ Existing payloads gồm PagePayload V1 đến PagePayload V8 / Open Composition.
 
 Nếu chưa có production customer data cần migration, không mang historical schema debt sang architecture mới chỉ để duy trì compatibility với test/development data. Trước khi xóa parser cũ phải xác nhận repository không có dữ liệu production cần migrate.
 
+Owner/operator decision:
+
+There is no production/customer data requiring migration from the legacy
+PagePayload versions at the start of the rebaseline.
+
 ---
 
 # 26. New Development Phases
@@ -651,6 +656,12 @@ Mục tiêu là establish documentation, architecture, AI rules, baseline,
 dependency classification và quality gates. Phase 0A là nhiệm vụ governance
 foundation hiện tại. Phase 0B là final codebase rebaseline trước khi bắt đầu
 feature development.
+
+PHASE 0A = COMPLETE
+
+PHASE 0B = COMPLETE
+
+PHASE 0 = COMPLETE
 
 ### PHASE 0A — AI Governance & Documentation Foundation
 
@@ -859,6 +870,19 @@ Decision: Archived documentation is historical, not normative.
 Reason: Previous phase and handoff documents conflict with the rebaseline scope.
 Consequences: New requirements must use this document; archived documents are read
               only for historical context or legacy investigation.
+```
+
+### ADR-005
+
+```text
+Date: 2026-09-23
+Status: Accepted
+Decision: Close Phase 0 and begin Phase 1 with no production-data migration requirement.
+Reason: The owner/operator confirmed that no production/customer data requires
+        migration from legacy PagePayload versions at the start of the rebaseline.
+Consequences: Legacy payload code remains compatibility-only until dependency
+              analysis and a later migration decision permit removal. Phase 1
+              may simplify active core boundaries without destructive cleanup.
 ```
 
 ---

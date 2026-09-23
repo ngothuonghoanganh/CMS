@@ -49,7 +49,6 @@ import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { NavigationRecord } from '../persistence/schemas/navigation.schema';
-import { QuotaService } from '../billing/quota.service';
 import { SiteUrlService } from './site-url.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { TenantResolver } from '../tenancy/tenant-resolver';
@@ -68,7 +67,6 @@ export class SiteService {
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(NavigationRecord.name)
     private readonly navigationModel: Model<NavigationRecord>,
-    @Inject(QuotaService) private readonly quotas: QuotaService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
@@ -77,35 +75,33 @@ export class SiteService {
 
   async create(workspaceId: string, input: CreateSiteRequest): Promise<Site> {
     await this.requireWorkspace(workspaceId);
-    return this.quotas.withHardQuota('landing_pages', async () => {
-      const slug = normalizeUrlSlug(input.slug);
-      if (!slug) {
-        throw new BadRequestException({
-          code: 'INVALID_SITE_SLUG',
-          message: 'Site URL must contain at least one URL-safe character',
-        });
-      }
-      const record = await this.siteModel.create({
-        _id: randomUUID(),
-        workspaceId,
-        name: input.name,
-        slug,
-        ...(input.logo ? { logo: input.logo } : {}),
+    const slug = normalizeUrlSlug(input.slug);
+    if (!slug) {
+      throw new BadRequestException({
+        code: 'INVALID_SITE_SLUG',
+        message: 'Site URL must contain at least one URL-safe character',
       });
-      try {
-        await this.ensureHomePage(record);
-        await this.registerPublicRoute(record);
-      } catch (error) {
-        // Mongo deployments without replica-set transactions still get a
-        // compensating cleanup, so a failed bootstrap cannot leave a site that
-        // violates the homepage invariant.
-        await this.versionModel.deleteMany({ siteId: record._id.toString() }).exec();
-        await this.pageModel.deleteMany({ siteId: record._id.toString() }).exec();
-        await record.deleteOne().exec();
-        throw error;
-      }
-      return this.toContract(record);
+    }
+    const record = await this.siteModel.create({
+      _id: randomUUID(),
+      workspaceId,
+      name: input.name,
+      slug,
+      ...(input.logo ? { logo: input.logo } : {}),
     });
+    try {
+      await this.ensureHomePage(record);
+      await this.registerPublicRoute(record);
+    } catch (error) {
+      // Mongo deployments without replica-set transactions still get a
+      // compensating cleanup, so a failed bootstrap cannot leave a site that
+      // violates the homepage invariant.
+      await this.versionModel.deleteMany({ siteId: record._id.toString() }).exec();
+      await this.pageModel.deleteMany({ siteId: record._id.toString() }).exec();
+      await record.deleteOne().exec();
+      throw error;
+    }
+    return this.toContract(record);
   }
 
   async list(workspaceId: string, input: PaginationQuery): Promise<SiteListResponse> {

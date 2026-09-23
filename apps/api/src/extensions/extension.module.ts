@@ -22,6 +22,10 @@ import { ExtensionConnectionService } from './extension-connection.service';
 import { TenantExtensionService } from './tenant-extension.service';
 import { PageExtensionController } from './page-extension.controller';
 import { PageExtensionService } from './page-extension.service';
+import {
+  CORE_EVENT_PUBLISHER_PROVIDER,
+  LegacyExtensionEventPublisherAdapter,
+} from './legacy-extension-event-publisher.adapter';
 
 @Module({
   imports: [AuthenticationModule, SecurityModule, TenantModelsModule, TenantModule],
@@ -47,6 +51,8 @@ import { PageExtensionService } from './page-extension.service';
     TenantExtensionService,
     ExtensionConnectionService,
     PageExtensionService,
+    LegacyExtensionEventPublisherAdapter,
+    CORE_EVENT_PUBLISHER_PROVIDER,
   ],
   exports: [
     CapabilityRegistry,
@@ -54,6 +60,7 @@ import { PageExtensionService } from './page-extension.service';
     ExtensionRegistry,
     TenantExtensionService,
     PageExtensionService,
+    CORE_EVENT_PUBLISHER_PROVIDER.provide,
   ],
 })
 export class ExtensionModule {}

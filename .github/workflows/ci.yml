@@ -53,6 +53,9 @@ jobs:
       - name: Check governance
         run: pnpm check:governance
 
+      - name: Check core boundaries
+        run: pnpm check:core-boundaries
+
       - name: Check CMS design system
         run: pnpm check:cms-design-system
 
