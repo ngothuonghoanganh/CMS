@@ -16,38 +16,39 @@ const coreFiles = [
   'apps/api/src/domain/public-page.resolver.ts',
 ];
 
-// Every entry is an exact file plus dependency classification. This debt must
-// shrink as Phase 1 progresses; it is not a wildcard exemption for the domain.
+// Every entry is an exact file plus exact import specifier. This debt must
+// shrink as Phase 1 progresses; it is not a category or wildcard exemption.
 const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
-  'apps/api/src/domain/site.service.ts': ['navigation', 'reusables'],
+  'apps/api/src/domain/site.service.ts': [
+    '../persistence/schemas/navigation.schema',
+    './reusable.service',
+  ],
   'apps/api/src/domain/page.service.ts': [
-    'billing',
-    'extensions',
-    'workflows',
-    'navigation',
-    'layouts',
-    'reusables',
-    'collections',
+    '../extensions/page-extension.service',
+    './navigation.service',
+    './layout-extension.service',
+    './reusable.service',
+    './collection.service',
   ],
   'apps/api/src/domain/submission.service.ts': [
-    'billing',
-    'integrations',
-    'analytics',
-    'extensions',
+    '../billing/usage.service',
+    './integration-dispatcher',
+    './analytics.service',
+    '../extensions/event-bus',
   ],
   'apps/api/src/domain/asset.service.ts': [
-    'collections',
-    'templates',
-    'reusables',
-    'layouts',
+    '../persistence/schemas/collection.schema',
+    '../persistence/schemas/template.schema',
+    '../persistence/schemas/reusable.schema',
+    '../persistence/schemas/layout-extension.schema',
   ],
   'apps/api/src/domain/public-page.resolver.ts': [
-    'navigation',
-    'layouts',
-    'reusables',
-    'extensions',
-    'collections',
+    './navigation.service',
+    './layout-extension.service',
+    '../extensions/page-extension.service',
+    './reusable.service',
+    './collection.service',
   ],
 };
 
@@ -121,26 +122,66 @@ function lineNumber(source, index) {
   return source.slice(0, index).split('\n').length;
 }
 
-function inspectSource(relativePath, source) {
-  const allowed = new Set(knownDebt[relativePath] ?? []);
+function inspectSource(relativePath, source, debt = knownDebt) {
+  const allowed = new Set(debt[relativePath] ?? []);
   return extractImports(source).flatMap(({ source: importSource, index }) => {
     const dependency = dependencyForImport(importSource);
-    if (!dependency || allowed.has(dependency)) return [];
+    if (!dependency || allowed.has(importSource)) return [];
     return [
       `${relativePath}:${lineNumber(source, index)} imports frozen ${dependency} dependency (${importSource})`,
     ];
   });
 }
 
+function staleDebtEntries(relativePath, source, debt = knownDebt) {
+  const actualImports = new Set(
+    extractImports(source).map(({ source: importSource }) => importSource),
+  );
+  return (debt[relativePath] ?? []).filter(
+    (importSource) =>
+      !actualImports.has(importSource) || !dependencyForImport(importSource),
+  );
+}
+
 function runSelfTest() {
-  const violations = inspectSource(
+  const existingDebt =
+    "import { PageExtensionService } from '../extensions/page-extension.service';\n";
+  const existingDebtViolations = inspectSource(
+    'apps/api/src/domain/page.service.ts',
+    existingDebt,
+  );
+  if (existingDebtViolations.length !== 0) {
+    throw new Error('Core boundary checker did not allow an existing exact debt import');
+  }
+
+  const billingViolations = inspectSource(
     'apps/api/src/domain/workspace.service.ts',
     "import { QuotaService } from '../billing/quota.service';\n",
   );
-  if (violations.length !== 1 || !violations[0].includes('billing')) {
+  if (billingViolations.length !== 1 || !billingViolations[0].includes('billing')) {
     throw new Error(
       'Core boundary checker self-test did not detect a new billing import',
     );
+  }
+
+  const extensionViolations = inspectSource(
+    'apps/api/src/domain/page.service.ts',
+    "import { ExtensionRegistry } from '../extensions/extension-registry';\n",
+  );
+  if (
+    extensionViolations.length !== 1 ||
+    !extensionViolations[0].includes('extension-registry')
+  ) {
+    throw new Error(
+      'Core boundary checker self-test did not detect a new extension import',
+    );
+  }
+
+  const stale = staleDebtEntries('fixture.ts', existingDebt, {
+    'fixture.ts': ['../extensions/page-extension.service', '../extensions/removed'],
+  });
+  if (stale.length !== 1 || stale[0] !== '../extensions/removed') {
+    throw new Error('Core boundary checker self-test did not detect stale debt');
   }
 }
 
@@ -153,7 +194,13 @@ for (const relativePath of coreFiles) {
     failures.push(`Missing protected core file: ${relativePath}`);
     continue;
   }
-  failures.push(...inspectSource(relativePath, readFileSync(filePath, 'utf8')));
+  const source = readFileSync(filePath, 'utf8');
+  for (const stale of staleDebtEntries(relativePath, source)) {
+    failures.push(
+      `${relativePath} has stale exact debt entry (${stale}); remove it from knownDebt`,
+    );
+  }
+  failures.push(...inspectSource(relativePath, source));
 }
 
 if (failures.length > 0) {

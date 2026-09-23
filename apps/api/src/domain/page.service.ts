@@ -6,6 +6,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -63,7 +64,6 @@ import {
   type UpdatePageRequest,
 } from '@payload/contracts';
 
-import { QuotaService } from '../billing/quota.service';
 import { assertExpectedVersionNumber, nextVersionNumber } from './versioning';
 import { PublicPageResolver } from './public-page.resolver';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
@@ -72,10 +72,16 @@ import {
   type PageVersionDocument,
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
-import { EventBus } from '../extensions/event-bus';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { TenantContext } from '../tenancy/tenant-context';
-import { WorkflowService } from '../workflows/workflow.service';
+import {
+  CORE_EVENT_PUBLISHER,
+  type CoreEventPublisher,
+} from '../shared/events/core-event-publisher';
+import {
+  PAGE_PUBLISH_COMPATIBILITY,
+  type PagePublishCompatibility,
+} from '../shared/page-publish-compatibility';
 import { SiteService } from './site.service';
 import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
@@ -98,18 +104,19 @@ export class PageService {
     private readonly siteModel: Model<SiteRecord>,
     @Inject(PublicPageResolver)
     private readonly publicPageResolver: PublicPageResolver,
-    @Inject(QuotaService) private readonly quotas: QuotaService,
-    @Inject(EventBus) private readonly events: EventBus,
+    @Inject(CORE_EVENT_PUBLISHER) private readonly events: CoreEventPublisher,
     @Inject(PageExtensionService)
     private readonly pageExtensions: PageExtensionService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-    @Inject(WorkflowService) private readonly workflows: WorkflowService,
     @Inject(SiteService) private readonly sites: SiteService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
     @Inject(LayoutExtensionService)
     private readonly layoutExtensions: LayoutExtensionService,
     @Inject(ReusableService) private readonly reusables: ReusableService,
     @Inject(CollectionService) private readonly collections: CollectionService,
+    @Optional()
+    @Inject(PAGE_PUBLISH_COMPATIBILITY)
+    private readonly pagePublishCompatibility?: PagePublishCompatibility,
   ) {}
 
   async create(
@@ -119,113 +126,111 @@ export class PageService {
     canDesign = true,
   ): Promise<Page> {
     if (!canDesign) throw this.designPermissionRequired();
-    return this.quotas.withHardQuota('landing_pages', async () => {
-      const site = await this.requireSite(siteId, workspaceId);
-      await this.sites.ensureHomePage(site);
-      const payload = this.parsePayload(input.payload);
-      await this.validateInlineNavigationDocument(payload, workspaceId, siteId);
-      const pageId = randomUUID();
-      const kind = input.kind ?? 'standard';
-      const dynamicMetadata =
-        kind === 'dynamic'
-          ? await this.requireDynamicMetadata(
-              input.collectionId,
-              input.pathPattern,
-              input.lookupField,
-              site.workspaceId,
-              siteId,
-            )
-          : undefined;
-      const composition = this.normalizeComposition(
-        pageId,
-        payload,
-        input.composition,
-        undefined,
-        input.composition?.layoutAttachments ?? input.layoutAttachments,
-      );
-      const path = dynamicMetadata
+    const site = await this.requireSite(siteId, workspaceId);
+    await this.sites.ensureHomePage(site);
+    const payload = this.parsePayload(input.payload);
+    await this.validateInlineNavigationDocument(payload, workspaceId, siteId);
+    const pageId = randomUUID();
+    const kind = input.kind ?? 'standard';
+    const dynamicMetadata =
+      kind === 'dynamic'
+        ? await this.requireDynamicMetadata(
+            input.collectionId,
+            input.pathPattern,
+            input.lookupField,
+            site.workspaceId,
+            siteId,
+          )
+        : undefined;
+    const composition = this.normalizeComposition(
+      pageId,
+      payload,
+      input.composition,
+      undefined,
+      input.composition?.layoutAttachments ?? input.layoutAttachments,
+    );
+    const path = dynamicMetadata
+      ? undefined
+      : this.requirePath(
+          input.path ??
+            (input.slug
+              ? `/${normalizeUrlSlug(input.slug)}`
+              : `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`),
+        );
+    if (path) await this.assertStaticPathDoesNotMatchDynamic(workspaceId, siteId, path);
+    const legacySlug =
+      kind === 'dynamic' || !path
         ? undefined
-        : this.requirePath(
-            input.path ??
-              (input.slug
-                ? `/${normalizeUrlSlug(input.slug)}`
-                : `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`),
-          );
-      if (path) await this.assertStaticPathDoesNotMatchDynamic(workspaceId, siteId, path);
-      const legacySlug =
-        kind === 'dynamic' || !path
-          ? undefined
-          : normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
-      if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
-      const requestedLayoutAttachments =
-        input.composition?.layoutAttachments ?? input.layoutAttachments;
-      if (requestedLayoutAttachments) {
-        await this.assertLayoutAttachmentsAvailable(
-          siteId,
-          workspaceId,
-          PageLayoutAttachmentsSchema.parse(requestedLayoutAttachments),
-        );
-      }
-      const versionId = randomUUID();
-      let page: PageDocument;
-      try {
-        page = await this.pageModel.create({
-          _id: pageId,
-          workspaceId: site.workspaceId,
-          siteId,
-          name: input.name,
-          ...(input.description ? { description: input.description } : {}),
-          ...(path ? { path } : {}),
-          kind,
-          ...(dynamicMetadata ? dynamicMetadata : {}),
-          ...(input.parentId ? { parentId: input.parentId } : {}),
-          ...(input.anchors ? { anchors: input.anchors } : {}),
-          ...(legacySlug ? { slug: legacySlug } : {}),
-          ...(requestedLayoutAttachments?.length
-            ? { layoutAttachments: requestedLayoutAttachments }
-            : {}),
-          ...(input.appliedTemplate ? { appliedTemplate: input.appliedTemplate } : {}),
-        });
-      } catch (error) {
-        if (isDuplicateKeyError(error)) throw this.duplicatePath();
-        throw error;
-      }
-      try {
-        await this.versionModel.create({
-          _id: versionId,
-          workspaceId: site.workspaceId,
-          siteId,
-          landingPageId: pageId,
-          versionNumber: 1,
-          payload,
-          composition,
-        });
-        page.currentDraftVersionId = versionId;
-        await page.save();
-        await this.pageExtensions.synchronizeComposition(
-          pageId,
-          site.workspaceId,
-          composition,
-        );
+        : normalizeUrlSlug(input.slug ?? path.replace(/^\/+/, ''));
+    if (input.parentId) await this.requireParent(input.parentId, siteId, workspaceId);
+    const requestedLayoutAttachments =
+      input.composition?.layoutAttachments ?? input.layoutAttachments;
+    if (requestedLayoutAttachments) {
+      await this.assertLayoutAttachmentsAvailable(
+        siteId,
+        workspaceId,
+        PageLayoutAttachmentsSchema.parse(requestedLayoutAttachments),
+      );
+    }
+    const versionId = randomUUID();
+    let page: PageDocument;
+    try {
+      page = await this.pageModel.create({
+        _id: pageId,
+        workspaceId: site.workspaceId,
+        siteId,
+        name: input.name,
+        ...(input.description ? { description: input.description } : {}),
+        ...(path ? { path } : {}),
+        kind,
+        ...(dynamicMetadata ? dynamicMetadata : {}),
+        ...(input.parentId ? { parentId: input.parentId } : {}),
+        ...(input.anchors ? { anchors: input.anchors } : {}),
+        ...(legacySlug ? { slug: legacySlug } : {}),
+        ...(requestedLayoutAttachments?.length
+          ? { layoutAttachments: requestedLayoutAttachments }
+          : {}),
+        ...(input.appliedTemplate ? { appliedTemplate: input.appliedTemplate } : {}),
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw this.duplicatePath();
+      throw error;
+    }
+    try {
+      await this.versionModel.create({
+        _id: versionId,
+        workspaceId: site.workspaceId,
+        siteId,
+        landingPageId: pageId,
+        versionNumber: 1,
+        payload,
+        composition,
+      });
+      page.currentDraftVersionId = versionId;
+      await page.save();
+      await this.pageExtensions.synchronizeComposition(
+        pageId,
+        site.workspaceId,
+        composition,
+      );
 
-        await this.events.publish('page.created', {
-          tenantId: this.tenantContext.require().id,
-          pageId,
-          workspaceId: site.workspaceId,
-          siteId,
-          occurredAt: new Date().toISOString(),
-        });
-      } catch (error) {
-        await this.pageExtensions
-          .removeAllForPage(pageId, site.workspaceId)
-          .catch(() => undefined);
-        await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
-        await page.deleteOne().exec();
-        throw error;
-      }
+      await this.events.publish('page.created', {
+        tenantId: this.tenantContext.require().id,
+        pageId,
+        workspaceId: site.workspaceId,
+        siteId,
+        occurredAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      await this.pageExtensions
+        .removeAllForPage(pageId, site.workspaceId)
+        .catch(() => undefined);
+      await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
+      await page.deleteOne().exec();
+      throw error;
+    }
 
-      return this.toPageContract(page);
-    });
+    return this.toPageContract(page);
   }
 
   async listBySite(
@@ -466,85 +471,79 @@ export class PageService {
     workspaceId: string,
   ): Promise<Page> {
     const parsedInput = DuplicatePageRequestSchema.parse(input);
-    return this.quotas.withHardQuota('landing_pages', async () => {
-      const source = await this.requirePageDocument(pageId, workspaceId);
-      const latest = await this.findCurrentDraftVersion(source);
-      if (!latest) {
-        throw new NotFoundException({
-          code: 'PAGE_VERSION_NOT_FOUND',
-          message: 'The page does not have a version to duplicate',
+    const source = await this.requirePageDocument(pageId, workspaceId);
+    const latest = await this.findCurrentDraftVersion(source);
+    if (!latest) {
+      throw new NotFoundException({
+        code: 'PAGE_VERSION_NOT_FOUND',
+        message: 'The page does not have a version to duplicate',
+      });
+    }
+    const site = await this.requireSite(source.siteId, workspaceId);
+    if (source.kind === 'dynamic') {
+      throw new ConflictException({
+        code: 'DYNAMIC_DUPLICATE_REQUIRES_NEW_PATTERN',
+        message: 'Duplicate a dynamic page by creating it with a new path pattern',
+      });
+    }
+    const path = await this.findAvailablePath(
+      site._id.toString(),
+      parsedInput.path ??
+        this.copyPath(source.path ?? (source.slug ? `/${source.slug}` : '/')),
+      workspaceId,
+    );
+    const duplicated = await this.pageModel.create({
+      _id: randomUUID(),
+      workspaceId,
+      siteId: source.siteId,
+      name: parsedInput.name ?? `Copy of ${source.name}`,
+      ...(source.description ? { description: source.description } : {}),
+      path,
+      kind: source.kind ?? 'standard',
+      ...(source.parentId ? { parentId: source.parentId } : {}),
+      ...(source.anchors ? { anchors: [...source.anchors] } : {}),
+    });
+    try {
+      const sourcePayload = this.parsePayload(latest.payload);
+      const sourceComposition = this.compositionForVersion(source, latest, sourcePayload);
+      if (!sourceComposition) {
+        throw new InternalServerErrorException({
+          code: 'PAGE_COMPOSITION_INVALID',
+          message: 'The source page composition could not be normalized',
         });
       }
-      const site = await this.requireSite(source.siteId, workspaceId);
-      if (source.kind === 'dynamic') {
-        throw new ConflictException({
-          code: 'DYNAMIC_DUPLICATE_REQUIRES_NEW_PATTERN',
-          message: 'Duplicate a dynamic page by creating it with a new path pattern',
-        });
-      }
-      const path = await this.findAvailablePath(
-        site._id.toString(),
-        parsedInput.path ??
-          this.copyPath(source.path ?? (source.slug ? `/${source.slug}` : '/')),
-        workspaceId,
+      const composition = clonePageCompositionForPage(
+        sourceComposition,
+        duplicated._id.toString(),
       );
-      const duplicated = await this.pageModel.create({
+      const version = await this.versionModel.create({
         _id: randomUUID(),
         workspaceId,
         siteId: source.siteId,
-        name: parsedInput.name ?? `Copy of ${source.name}`,
-        ...(source.description ? { description: source.description } : {}),
-        path,
-        kind: source.kind ?? 'standard',
-        ...(source.parentId ? { parentId: source.parentId } : {}),
-        ...(source.anchors ? { anchors: [...source.anchors] } : {}),
+        landingPageId: duplicated._id.toString(),
+        versionNumber: 1,
+        payload: composition.payload,
+        composition,
       });
-      try {
-        const sourcePayload = this.parsePayload(latest.payload);
-        const sourceComposition = this.compositionForVersion(
-          source,
-          latest,
-          sourcePayload,
-        );
-        if (!sourceComposition) {
-          throw new InternalServerErrorException({
-            code: 'PAGE_COMPOSITION_INVALID',
-            message: 'The source page composition could not be normalized',
-          });
-        }
-        const composition = clonePageCompositionForPage(
-          sourceComposition,
-          duplicated._id.toString(),
-        );
-        const version = await this.versionModel.create({
-          _id: randomUUID(),
-          workspaceId,
-          siteId: source.siteId,
-          landingPageId: duplicated._id.toString(),
-          versionNumber: 1,
-          payload: composition.payload,
-          composition,
-        });
-        duplicated.currentDraftVersionId = version._id.toString();
-        if (composition.layoutAttachments.length > 0) {
-          duplicated.layoutAttachments = composition.layoutAttachments;
-        }
-        await duplicated.save();
-        await this.pageExtensions.synchronizeComposition(
-          duplicated._id.toString(),
-          workspaceId,
-          composition,
-        );
-        return this.toPageContract(duplicated);
-      } catch (error) {
-        await this.pageExtensions
-          .removeAllForPage(duplicated._id.toString(), workspaceId)
-          .catch(() => undefined);
-        await this.versionModel.deleteMany({ landingPageId: duplicated._id }).exec();
-        await duplicated.deleteOne().exec();
-        throw error;
+      duplicated.currentDraftVersionId = version._id.toString();
+      if (composition.layoutAttachments.length > 0) {
+        duplicated.layoutAttachments = composition.layoutAttachments;
       }
-    });
+      await duplicated.save();
+      await this.pageExtensions.synchronizeComposition(
+        duplicated._id.toString(),
+        workspaceId,
+        composition,
+      );
+      return this.toPageContract(duplicated);
+    } catch (error) {
+      await this.pageExtensions
+        .removeAllForPage(duplicated._id.toString(), workspaceId)
+        .catch(() => undefined);
+      await this.versionModel.deleteMany({ landingPageId: duplicated._id }).exec();
+      await duplicated.deleteOne().exec();
+      throw error;
+    }
   }
 
   async setHomepage(pageId: string, workspaceId: string): Promise<Page> {
@@ -651,7 +650,7 @@ export class PageService {
       designSystem.draft,
       [payload],
     );
-    await this.workflows.validatePagePublishDependencies(pageId, workspaceId);
+    await this.pagePublishCompatibility?.validateBeforePublish(pageId, workspaceId);
     await this.pageExtensions.validateBeforePublish(
       pageId,
       workspaceId,
@@ -944,7 +943,9 @@ export class PageService {
             [payload],
           );
         },
-        () => this.workflows.validatePagePublishDependencies(pageId, workspaceId),
+        () =>
+          this.pagePublishCompatibility?.validateBeforePublish(pageId, workspaceId) ??
+          Promise.resolve(),
         () =>
           this.pageExtensions.validateBeforePublish(
             pageId,

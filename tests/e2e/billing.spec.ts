@@ -1,7 +1,7 @@
 import { expect, request, test } from '@playwright/test';
 import { E2E_API_ORIGIN } from './fixtures/urls';
 
-test('@tenancy provisions a default plan and enforces a tenant-scoped workspace quota', async ({
+test('@tenancy provisions a default plan and enforces supported tenant-scoped quotas', async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -95,16 +95,10 @@ test('@tenancy provisions a default plan and enforces a tenant-scoped workspace 
       });
       expect(createdPage.ok()).toBe(true);
     }
-    const rejectedPage = await api.post(`/api/v1/sites/${site.id}/pages`, {
-      data: { name: 'Blocked page', slug: 'blocked-page', payload },
+    const additionalPage = await api.post(`/api/v1/sites/${site.id}/pages`, {
+      data: { name: 'Additional page', slug: 'additional-page', payload },
     });
-    expect(rejectedPage.status()).toBe(409);
-    await expect(rejectedPage.json()).resolves.toMatchObject({
-      error: {
-        code: 'QUOTA_EXCEEDED',
-        details: { metric: 'landing_pages', limit: 10, usage: 10 },
-      },
-    });
+    expect(additionalPage.ok()).toBe(true);
 
     const firstDomain = await api.post(`/api/v1/workspaces/${workspaceId}/domains`, {
       data: { hostname: `first-${suffix}.example.com` },
