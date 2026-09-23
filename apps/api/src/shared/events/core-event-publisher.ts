@@ -19,6 +19,21 @@ export type CoreEventMap = {
   'workspace.created': CoreEventBase & {
     workspaceId: string;
   };
+  'page.created': CoreEventBase & {
+    pageId: string;
+    workspaceId: string;
+    siteId: string;
+  };
+  'page.updated': CoreEventBase & {
+    pageId: string;
+    workspaceId: string;
+    versionNumber?: number;
+  };
+  'page.published': CoreEventBase & {
+    pageId: string;
+    workspaceId: string;
+    versionNumber: number;
+  };
 };
 
 export type CoreEventName = keyof CoreEventMap;

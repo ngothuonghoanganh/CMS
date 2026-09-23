@@ -77,7 +77,7 @@ describe('PageService publish readiness', () => {
       versionModel: typeof versionModel;
       reusables: Record<string, ReturnType<typeof vi.fn>>;
       sites: Record<string, ReturnType<typeof vi.fn>>;
-      workflows: Record<string, ReturnType<typeof vi.fn>>;
+      pagePublishCompatibility: Record<string, ReturnType<typeof vi.fn>>;
       pageExtensions: Record<string, ReturnType<typeof vi.fn>>;
       collections: Record<string, ReturnType<typeof vi.fn>>;
     };
@@ -92,13 +92,17 @@ describe('PageService publish readiness', () => {
         draft: createDefaultSiteDesignSystem(),
       }),
     };
-    state.workflows = { validatePagePublishDependencies: vi.fn() };
+    state.pagePublishCompatibility = { validateBeforePublish: vi.fn() };
     state.pageExtensions = { validateBeforePublish: vi.fn() };
     state.collections = { validateComposition: vi.fn() };
 
     const readiness = await service.getPublishReadiness(pageId, workspaceId);
 
     expect(readiness.ready).toBe(true);
+    expect(state.pagePublishCompatibility.validateBeforePublish).toHaveBeenCalledWith(
+      pageId,
+      workspaceId,
+    );
     expect(readiness.summary).toMatchObject({
       componentsAdded: 2,
       contentFieldChanges: 0,

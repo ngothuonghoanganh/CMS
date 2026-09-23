@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AuthenticationModule } from '../common/guards/authentication.module';
 import { SecurityModule } from '../security/security.module';
+import { CoreEventsModule } from '../shared/events/core-events.module';
 import { TenantModelsModule } from '../tenancy/tenant-models.module';
 import { TenantModule } from '../tenancy/tenant.module';
 import { CapabilityRegistry } from './capability-registry';
@@ -22,13 +23,16 @@ import { ExtensionConnectionService } from './extension-connection.service';
 import { TenantExtensionService } from './tenant-extension.service';
 import { PageExtensionController } from './page-extension.controller';
 import { PageExtensionService } from './page-extension.service';
-import {
-  CORE_EVENT_PUBLISHER_PROVIDER,
-  LegacyExtensionEventPublisherAdapter,
-} from './legacy-extension-event-publisher.adapter';
+import { LegacyExtensionEventBridge } from './legacy-extension-event-bridge';
 
 @Module({
-  imports: [AuthenticationModule, SecurityModule, TenantModelsModule, TenantModule],
+  imports: [
+    AuthenticationModule,
+    SecurityModule,
+    CoreEventsModule,
+    TenantModelsModule,
+    TenantModule,
+  ],
   controllers: [
     ExtensionController,
     ExtensionConnectionController,
@@ -51,8 +55,7 @@ import {
     TenantExtensionService,
     ExtensionConnectionService,
     PageExtensionService,
-    LegacyExtensionEventPublisherAdapter,
-    CORE_EVENT_PUBLISHER_PROVIDER,
+    LegacyExtensionEventBridge,
   ],
   exports: [
     CapabilityRegistry,
@@ -60,7 +63,6 @@ import {
     ExtensionRegistry,
     TenantExtensionService,
     PageExtensionService,
-    CORE_EVENT_PUBLISHER_PROVIDER.provide,
   ],
 })
 export class ExtensionModule {}

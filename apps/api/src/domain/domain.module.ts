@@ -59,6 +59,7 @@ import { TenantModelsModule } from '../tenancy/tenant-models.module';
 import { TenantModule } from '../tenancy/tenant.module';
 import { ControlPlaneModule } from '../tenancy/control-plane.module';
 import { SecurityModule } from '../security/security.module';
+import { CoreEventsModule } from '../shared/events/core-events.module';
 import { ExtensionModule } from '../extensions/extension.module';
 import { WorkflowModule } from '../workflows/workflow.module';
 import {
@@ -87,6 +88,7 @@ import { ASSET_STORAGE, LocalFilesystemAssetStorageProvider } from './asset-stor
     BillingModule,
     ControlPlaneModule,
     SecurityModule,
+    CoreEventsModule,
     ExtensionModule,
     WorkflowModule,
     TenantModelsModule,
