@@ -1,14 +1,10 @@
 'use client';
 
 import {
-  AssetListResponseSchema,
   PageListResponseSchema,
   SiteListResponseSchema,
-  TemplateListResponseSchema,
-  type Asset,
   type Page,
   type Site,
-  type Template,
 } from '@payload/contracts';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -18,85 +14,64 @@ import { cmsViewPath, pagesPath } from '../cms-routes';
 import { api } from '../lib/api';
 import { StatusBadge } from '../status-badge';
 import { EmptyState, PageHeader } from '../ui/surfaces';
+import { getOverviewStep } from './overview-flow';
 
 export default function OverviewPage() {
   const { workspaceId, can } = useCmsShell();
   const [sites, setSites] = useState<Site[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    const requests: Promise<unknown>[] = [];
-    if (can('site.read')) {
-      requests.push(
-        api.get(`/workspaces/${workspaceId}/sites?limit=20&offset=0`).then((response) => {
-          if (active) setSites(SiteListResponseSchema.parse(response).items);
-        }),
-      );
+    async function loadOverview() {
+      try {
+        setError(null);
+        const siteResponse = can('site.read')
+          ? SiteListResponseSchema.parse(
+              await api.get(`/workspaces/${workspaceId}/sites?limit=20&offset=0`),
+            )
+          : undefined;
+        const siteList = siteResponse?.items ?? [];
+        if (active) setSites(siteList);
+
+        const firstSite = siteList[0];
+        if (can('page.read') && firstSite) {
+          const pageResponse = await api.get(`/sites/${firstSite.id}/pages?limit=100`);
+          if (active) setPages(PageListResponseSchema.parse(pageResponse).items);
+        }
+      } catch (caughtError) {
+        if (active) {
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : 'Unable to load overview.',
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     }
-    if (can('asset.read')) {
-      requests.push(
-        api.get(`/workspaces/${workspaceId}/assets?limit=100`).then((response) => {
-          if (active) setAssets(AssetListResponseSchema.parse(response).items);
-        }),
-      );
-    }
-    if (can('template.read')) {
-      requests.push(
-        api.get(`/workspaces/${workspaceId}/templates?limit=100`).then((response) => {
-          if (active) setTemplates(TemplateListResponseSchema.parse(response).items);
-        }),
-      );
-    }
-    if (can('page.read')) {
-      requests.push(
-        api
-          .get(`/workspaces/${workspaceId}/sites?limit=20&offset=0`)
-          .then(async (response) => {
-            const siteList = SiteListResponseSchema.parse(response).items;
-            const firstSite = siteList[0];
-            if (!firstSite) return;
-            const pageResponse = await api.get(`/sites/${firstSite.id}/pages?limit=100`);
-            if (active) setPages(PageListResponseSchema.parse(pageResponse).items);
-          }),
-      );
-    }
-    void Promise.allSettled(requests).finally(() => {
-      if (active) setLoading(false);
-    });
+
+    void loadOverview();
     return () => {
       active = false;
     };
   }, [can, workspaceId]);
 
-  const metrics = [
-    { count: sites.length, href: cmsViewPath(workspaceId, 'sites'), label: 'Sites' },
-    { count: pages.length, href: pagesPath(workspaceId, sites[0]?.id), label: 'Pages' },
-    { count: assets.length, href: cmsViewPath(workspaceId, 'assets'), label: 'Assets' },
-    {
-      count: templates.length,
-      href: cmsViewPath(workspaceId, 'templates'),
-      label: 'Templates',
-    },
-  ];
+  const nextStep = getOverviewStep({ pageCount: pages.length, siteCount: sites.length });
+  const nextStepHref =
+    nextStep.key === 'create-site'
+      ? `${cmsViewPath(workspaceId, 'sites')}/new`
+      : pagesPath(workspaceId, sites[0]?.id);
 
   return (
     <>
       <PageHeader
         actions={
           <div className="form-actions">
-            {can('page.read') && sites[0] ? (
-              <Link
-                className="button button-secondary"
-                href={pagesPath(workspaceId, sites[0].id)}
-              >
-                Continue editing
-              </Link>
-            ) : null}
-            {can('site.create') ? (
+            {can('site.create') && !sites.length ? (
               <Link
                 className="button button-primary"
                 href={`${cmsViewPath(workspaceId, 'sites')}/new`}
@@ -106,58 +81,67 @@ export default function OverviewPage() {
             ) : null}
           </div>
         }
-        description="A focused workspace for managing your page inventory."
+        description="Create a website, add a page, and make it live without code."
         eyebrow="Overview"
         title="Good morning"
       />
       <section className="overview-hero panel">
         <div>
-          <span className="eyebrow">Start here</span>
-          <h2>What would you like to do?</h2>
-          <p className="muted">
-            Create a website, update a page, or add content to your workspace.
-          </p>
-        </div>
-        <div className="overview-hero-actions">
-          {can('site.create') ? (
+          <span className="eyebrow">Next step</span>
+          <h2>{nextStep.title}</h2>
+          <p className="muted">{nextStep.description}</p>
+          {can(nextStep.key === 'create-site' ? 'site.create' : 'page.read') ? (
             <Link
-              className="overview-action-card"
-              href={`${cmsViewPath(workspaceId, 'sites')}/new`}
+              className="button button-primary overview-next-action"
+              href={nextStepHref}
             >
-              <strong>Create a website</strong>
-              <span>Start with a name and a ready-to-edit homepage.</span>
-            </Link>
-          ) : null}
-          {can('page.read') && sites[0] ? (
-            <Link
-              className="overview-action-card"
-              href={pagesPath(workspaceId, sites[0].id)}
-            >
-              <strong>Update a page</strong>
-              <span>Choose a page and open the visual editor.</span>
+              {nextStep.actionLabel}
             </Link>
           ) : null}
         </div>
+        <ol className="overview-steps" aria-label="Website setup progress">
+          <li className={sites.length ? 'is-complete' : 'is-current'}>
+            <span>1</span>
+            <strong>Website</strong>
+            <small>{sites.length ? 'Ready' : 'Start here'}</small>
+          </li>
+          <li className={pages.length ? 'is-complete' : sites.length ? 'is-current' : ''}>
+            <span>2</span>
+            <strong>Page</strong>
+            <small>{pages.length ? 'Ready' : 'Add next'}</small>
+          </li>
+          <li className={pages.length ? 'is-current' : ''}>
+            <span>3</span>
+            <strong>Publish</strong>
+            <small>Make it live</small>
+          </li>
+        </ol>
       </section>
+      {error ? (
+        <div className="alert alert-error" role="alert">
+          <span>{error}</span>
+          <button
+            className="button button-small button-ghost"
+            onClick={() => window.location.reload()}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
       {loading ? (
         <div aria-busy="true" className="analytics-skeleton">
           Loading workspace overview…
         </div>
       ) : null}
-      <div className="metric-grid">
-        {metrics.map((metric) => (
-          <Link className="metric-card" href={metric.href} key={metric.label}>
-            <span className="muted">{metric.label}</span>
-            <strong>{metric.count}</strong>
-            <span className="linkish">Manage →</span>
-          </Link>
-        ))}
-      </div>
       <section className="panel">
         <div className="panel-heading">
-          <h2>Sites at a glance</h2>
+          <div>
+            <span className="eyebrow">Your work</span>
+            <h2>Websites</h2>
+          </div>
           <Link className="text-link" href={cmsViewPath(workspaceId, 'sites')}>
-            View all
+            View websites
           </Link>
         </div>
         {sites.length ? (

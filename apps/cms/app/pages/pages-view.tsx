@@ -792,82 +792,87 @@ export function PagesView({
       )}
 
       {selectedPage ? (
-        <section className="panel page-secondary-panel">
-          <div className="panel-heading">
+        <details className="panel page-secondary-panel page-disclosure">
+          <summary className="panel-heading page-disclosure-summary">
             <div>
               <span className="eyebrow">Immutable snapshots</span>
               <h2>Version history</h2>
             </div>
-            <span className="muted small">
-              Current draft v{draftVersion?.versionNumber ?? '—'}
+            <span className="page-disclosure-summary-meta">
+              <span className="muted small">
+                Draft v{draftVersion?.versionNumber ?? '—'}
+              </span>
+              <span aria-hidden="true" className="page-disclosure-chevron" />
             </span>
+          </summary>
+          <div className="page-disclosure-body">
+            {versions.length ? (
+              <div className="page-version-list">
+                {versions.map((version) => (
+                  <div className="list-row" key={version.id}>
+                    <div>
+                      <strong>Version {version.versionNumber}</strong>
+                      <span className="muted">
+                        {new Date(version.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="form-actions">
+                      <button
+                        className="button button-small button-ghost"
+                        onClick={() => onPreviewVersion(selectedPage, version)}
+                        type="button"
+                      >
+                        Preview
+                      </button>
+                      {canPublishPage ? (
+                        <button
+                          className="button button-small button-ghost"
+                          onClick={() =>
+                            onOpenPublishDialog(selectedPage, version.versionNumber)
+                          }
+                          type="button"
+                        >
+                          Check readiness
+                        </button>
+                      ) : null}
+                      {canRollbackPage &&
+                      version.id !== selectedPage.currentDraftVersionId ? (
+                        <button
+                          className="button button-small button-ghost"
+                          disabled={busy}
+                          onClick={() => onRestoreVersion(selectedPage, version)}
+                          type="button"
+                        >
+                          Restore as draft
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <PageEmptyState
+                title="No versions found"
+                description="The page has no readable draft history."
+              />
+            )}
+            {versionPagination.total ? (
+              <PaginationControls
+                busy={busy}
+                noun="versions"
+                onNext={() =>
+                  onVersionPage(versionPagination.offset + versionPagination.limit)
+                }
+                onPrevious={() =>
+                  onVersionPage(
+                    Math.max(0, versionPagination.offset - versionPagination.limit),
+                  )
+                }
+                pagination={versionPagination}
+              />
+            ) : null}
           </div>
-          {versions.length ? (
-            <div className="page-version-list">
-              {versions.map((version) => (
-                <div className="list-row" key={version.id}>
-                  <div>
-                    <strong>Version {version.versionNumber}</strong>
-                    <span className="muted">
-                      {new Date(version.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="form-actions">
-                    <button
-                      className="button button-small button-ghost"
-                      onClick={() => onPreviewVersion(selectedPage, version)}
-                      type="button"
-                    >
-                      Preview
-                    </button>
-                    {canPublishPage ? (
-                      <button
-                        className="button button-small button-ghost"
-                        onClick={() =>
-                          onOpenPublishDialog(selectedPage, version.versionNumber)
-                        }
-                        type="button"
-                      >
-                        Check readiness
-                      </button>
-                    ) : null}
-                    {canRollbackPage &&
-                    version.id !== selectedPage.currentDraftVersionId ? (
-                      <button
-                        className="button button-small button-ghost"
-                        disabled={busy}
-                        onClick={() => onRestoreVersion(selectedPage, version)}
-                        type="button"
-                      >
-                        Restore as draft
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <PageEmptyState
-              title="No versions found"
-              description="The page has no readable draft history."
-            />
-          )}
-          {versionPagination.total ? (
-            <PaginationControls
-              busy={busy}
-              noun="versions"
-              onNext={() =>
-                onVersionPage(versionPagination.offset + versionPagination.limit)
-              }
-              onPrevious={() =>
-                onVersionPage(
-                  Math.max(0, versionPagination.offset - versionPagination.limit),
-                )
-              }
-              pagination={versionPagination}
-            />
-          ) : null}
-        </section>
+        </details>
       ) : null}
 
       {selectedPage ? (

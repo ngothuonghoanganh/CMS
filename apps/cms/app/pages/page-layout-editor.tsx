@@ -180,197 +180,210 @@ export function PageLayoutEditor({
   const headerAttachment = attachments.find((attachment) => attachment.type === 'header');
 
   return (
-    <section className="panel page-secondary-panel" aria-label="Page layout attachments">
-      <div className="panel-heading">
+    <details
+      className="panel page-secondary-panel page-disclosure"
+      aria-label="Page layout attachments"
+    >
+      <summary className="panel-heading page-disclosure-summary">
         <div>
-          <span className="eyebrow">Page composition</span>
+          <span className="eyebrow">Optional</span>
           <h2>Header, menu &amp; footer</h2>
         </div>
-        {loading ? <span className="muted small">Loading…</span> : null}
-      </div>
-      <p className="muted small">
-        Choose the shared header and footer for this page. You can edit their menus
-        without leaving the page settings.
-      </p>
-      {!canDesign ? (
-        <p className="helper-text" role="status">
-          Page layout attachments and layout editing require design permission.
+        <span className="page-disclosure-summary-meta">
+          {error ? (
+            <span className="page-disclosure-summary-error" role="status">
+              Couldn’t load
+            </span>
+          ) : loading ? (
+            <span className="muted small">Loading…</span>
+          ) : null}
+          <span aria-hidden="true" className="page-disclosure-chevron" />
+        </span>
+      </summary>
+      <div className="page-disclosure-body">
+        <p className="muted small">
+          Choose a shared header or footer only if your website needs one.
         </p>
-      ) : null}
-      {error ? (
-        <p className="alert alert-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {notice ? (
-        <p className="alert alert-success" role="status">
-          {notice}
-        </p>
-      ) : null}
-      <div className="page-layout-grid">
-        <div className="page-layout-attachment-card">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Attached to this page</span>
-              <h3>Shared page areas</h3>
+        {!canDesign ? (
+          <p className="helper-text" role="status">
+            Page layout attachments and layout editing require design permission.
+          </p>
+        ) : null}
+        {error ? (
+          <p className="alert alert-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {notice ? (
+          <p className="alert alert-success" role="status">
+            {notice}
+          </p>
+        ) : null}
+        <div className="page-layout-grid">
+          <div className="page-layout-attachment-card">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Attached to this page</span>
+                <h3>Shared page areas</h3>
+              </div>
             </div>
-          </div>
-          <div className="stack">
-            <label>
-              Header
-              <select
-                aria-label="Page header"
-                disabled={loading || !canDesign}
-                onChange={(event) => setResource('header', event.target.value)}
-                value={selectedResourceId(attachments, 'header')}
-              >
-                <option value="">No header</option>
-                {headers.map((resource) => (
-                  <option key={resource.id} value={resource.id}>
-                    {resource.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {headerAttachment ? (
+            <div className="stack">
               <label>
-                Header placement
+                Header
                 <select
-                  aria-label="Header placement"
-                  disabled={!canDesign}
-                  onChange={(event) =>
-                    setHeaderSlot(event.target.value as PageLayoutSlot)
-                  }
-                  value={headerAttachment.slot}
+                  aria-label="Page header"
+                  disabled={loading || !canDesign}
+                  onChange={(event) => setResource('header', event.target.value)}
+                  value={selectedResourceId(attachments, 'header')}
                 >
-                  <option value="page.header.top">Top</option>
-                  <option value="page.header.top-left">Top left</option>
-                  <option value="page.header.top-right">Top right</option>
+                  <option value="">No header</option>
+                  {headers.map((resource) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                    </option>
+                  ))}
                 </select>
               </label>
-            ) : null}
-            <label>
-              Footer
-              <select
-                aria-label="Page footer"
-                disabled={loading || !canDesign}
-                onChange={(event) => setResource('footer', event.target.value)}
-                value={selectedResourceId(attachments, 'footer')}
-              >
-                <option value="">No footer</option>
-                {footers.map((resource) => (
-                  <option key={resource.id} value={resource.id}>
-                    {resource.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="row-actions">
-              <button
-                className="button button-primary button-small"
-                disabled={loading || saving || !canDesign}
-                onClick={() => void save()}
-                type="button"
-              >
-                {saving ? 'Saving…' : 'Save layout'}
-              </button>
               {headerAttachment ? (
+                <label>
+                  Header placement
+                  <select
+                    aria-label="Header placement"
+                    disabled={!canDesign}
+                    onChange={(event) =>
+                      setHeaderSlot(event.target.value as PageLayoutSlot)
+                    }
+                    value={headerAttachment.slot}
+                  >
+                    <option value="page.header.top">Top</option>
+                    <option value="page.header.top-left">Top left</option>
+                    <option value="page.header.top-right">Top right</option>
+                  </select>
+                </label>
+              ) : null}
+              <label>
+                Footer
+                <select
+                  aria-label="Page footer"
+                  disabled={loading || !canDesign}
+                  onChange={(event) => setResource('footer', event.target.value)}
+                  value={selectedResourceId(attachments, 'footer')}
+                >
+                  <option value="">No footer</option>
+                  {footers.map((resource) => (
+                    <option key={resource.id} value={resource.id}>
+                      {resource.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="row-actions">
                 <button
-                  className="button button-ghost button-small"
-                  disabled={!canDesign}
-                  onClick={() => {
-                    const resource = headers.find(
-                      (candidate) => candidate.id === headerAttachment.resourceId,
-                    );
-                    if (resource) openBuilder(resource);
-                  }}
+                  className="button button-primary button-small"
+                  disabled={loading || saving || !canDesign}
+                  onClick={() => void save()}
                   type="button"
                 >
-                  Edit header &amp; menu
+                  {saving ? 'Saving…' : 'Save layout'}
                 </button>
-              ) : null}
-              {selectedResourceId(attachments, 'footer') ? (
-                <button
-                  className="button button-ghost button-small"
-                  disabled={!canDesign}
-                  onClick={() => {
-                    const resource = footers.find(
-                      (candidate) =>
-                        candidate.id === selectedResourceId(attachments, 'footer'),
-                    );
-                    if (resource) openBuilder(resource);
-                  }}
-                  type="button"
+                {headerAttachment ? (
+                  <button
+                    className="button button-ghost button-small"
+                    disabled={!canDesign}
+                    onClick={() => {
+                      const resource = headers.find(
+                        (candidate) => candidate.id === headerAttachment.resourceId,
+                      );
+                      if (resource) openBuilder(resource);
+                    }}
+                    type="button"
+                  >
+                    Edit header &amp; menu
+                  </button>
+                ) : null}
+                {selectedResourceId(attachments, 'footer') ? (
+                  <button
+                    className="button button-ghost button-small"
+                    disabled={!canDesign}
+                    onClick={() => {
+                      const resource = footers.find(
+                        (candidate) =>
+                          candidate.id === selectedResourceId(attachments, 'footer'),
+                      );
+                      if (resource) openBuilder(resource);
+                    }}
+                    type="button"
+                  >
+                    Edit footer
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          <div className="page-layout-resource-card">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Shared areas</span>
+                <h3>Create a header or footer</h3>
+              </div>
+            </div>
+            <form className="stack" onSubmit={(event) => void createLayout(event)}>
+              <label>
+                Type
+                <select
+                  aria-label="New layout type"
+                  disabled={!canDesign || creating}
+                  onChange={(event) =>
+                    setNewLayout((current) => ({
+                      ...current,
+                      kind: event.target.value === 'footer' ? 'footer' : 'header',
+                    }))
+                  }
+                  value={newLayout.kind}
                 >
-                  Edit footer
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <div className="page-layout-resource-card">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">Shared areas</span>
-              <h3>Create a header or footer</h3>
-            </div>
-          </div>
-          <form className="stack" onSubmit={(event) => void createLayout(event)}>
-            <label>
-              Type
-              <select
-                aria-label="New layout type"
-                disabled={!canDesign || creating}
-                onChange={(event) =>
-                  setNewLayout((current) => ({
-                    ...current,
-                    kind: event.target.value === 'footer' ? 'footer' : 'header',
-                  }))
-                }
-                value={newLayout.kind}
+                  <option value="header">Header</option>
+                  <option value="footer">Footer</option>
+                </select>
+              </label>
+              <label>
+                Name
+                <input
+                  aria-label="New layout name"
+                  disabled={!canDesign || creating}
+                  onChange={(event) =>
+                    setNewLayout((current) => ({ ...current, name: event.target.value }))
+                  }
+                  placeholder="Marketing header"
+                  required
+                  value={newLayout.name}
+                />
+              </label>
+              <label>
+                Description <span className="muted">Optional</span>
+                <textarea
+                  aria-label="Layout creation notes"
+                  disabled={!canDesign || creating}
+                  onChange={(event) =>
+                    setNewLayout((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  rows={2}
+                  value={newLayout.description}
+                />
+              </label>
+              <button
+                className="button button-secondary button-small"
+                disabled={!canDesign || creating || !newLayout.name.trim()}
+                type="submit"
               >
-                <option value="header">Header</option>
-                <option value="footer">Footer</option>
-              </select>
-            </label>
-            <label>
-              Name
-              <input
-                aria-label="New layout name"
-                disabled={!canDesign || creating}
-                onChange={(event) =>
-                  setNewLayout((current) => ({ ...current, name: event.target.value }))
-                }
-                placeholder="Marketing header"
-                required
-                value={newLayout.name}
-              />
-            </label>
-            <label>
-              Description <span className="muted">Optional</span>
-              <textarea
-                aria-label="Layout creation notes"
-                disabled={!canDesign || creating}
-                onChange={(event) =>
-                  setNewLayout((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                rows={2}
-                value={newLayout.description}
-              />
-            </label>
-            <button
-              className="button button-secondary button-small"
-              disabled={!canDesign || creating || !newLayout.name.trim()}
-              type="submit"
-            >
-              {creating ? 'Creating…' : 'Create and build'}
-            </button>
-          </form>
+                {creating ? 'Creating…' : 'Create and build'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
-    </section>
+    </details>
   );
 }

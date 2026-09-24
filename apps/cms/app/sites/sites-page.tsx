@@ -49,10 +49,6 @@ export default function SitesPage({
 
   const selectedSite = sites.find((site) => site.id === siteId);
   const editLoading = action === 'edit' && (loading || !selectedSite);
-  const publishedSiteCount = sites.filter((site) => site.status === 'published').length;
-  const draftSiteCount = sites.filter((site) => site.status === 'draft').length;
-  const archivedSiteCount = sites.filter((site) => site.status === 'archived').length;
-
   async function load(offset = pagination.offset) {
     setLoading(true);
     setError(null);
@@ -152,42 +148,10 @@ export default function SitesPage({
                 Create website
               </button>
             }
-            description="Create a website, then manage its pages, styles, and publishing from one place."
+            description="Give your website a name. We’ll set up a homepage for you."
             eyebrow="Workspace"
             title="Sites"
           />
-          <section aria-label="Sites summary" className="sites-summary-grid">
-            <div className="sites-summary-card sites-summary-card-primary">
-              <div className="sites-summary-icon" aria-hidden="true">
-                ◫
-              </div>
-              <div>
-                <span className="eyebrow">Websites</span>
-                <strong>{pagination.total}</strong>
-                <span className="muted">In this workspace</span>
-              </div>
-            </div>
-            <div className="sites-summary-card">
-              <div className="sites-summary-icon" aria-hidden="true">
-                ↗
-              </div>
-              <div>
-                <span className="eyebrow">Published</span>
-                <strong>{publishedSiteCount}</strong>
-                <span className="muted">Live websites</span>
-              </div>
-            </div>
-            <div className="sites-summary-card">
-              <div className="sites-summary-icon" aria-hidden="true">
-                ◌
-              </div>
-              <div>
-                <span className="eyebrow">In progress</span>
-                <strong>{draftSiteCount + archivedSiteCount}</strong>
-                <span className="muted">Drafts and archived</span>
-              </div>
-            </div>
-          </section>
           {error ? (
             <div className="alert alert-error" role="alert">
               {error}
@@ -207,7 +171,7 @@ export default function SitesPage({
               <span className="count-badge">{pagination.total}</span>
             </div>
             <p className="panel-description">
-              Open a website to edit pages, update its look, or make changes live.
+              Open a website to add pages, change its look, or make it live.
             </p>
             {loading ? (
               <div aria-busy="true" className="analytics-skeleton">
@@ -219,7 +183,6 @@ export default function SitesPage({
                   <thead>
                     <tr>
                       <th>Site</th>
-                      <th>Published URL</th>
                       <th>Status</th>
                       <th>
                         <span className="sr-only">Actions</span>
@@ -242,21 +205,6 @@ export default function SitesPage({
                               <span>/{site.slug}</span>
                             </span>
                           </a>
-                        </td>
-                        <td className="site-url-cell">
-                          {site.officialUrl ? (
-                            <a
-                              className="site-url-link"
-                              href={site.officialUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <span>{site.officialUrl}</span>{' '}
-                              <span aria-hidden="true">↗</span>
-                            </a>
-                          ) : (
-                            <span className="site-url-empty">Not published yet</span>
-                          )}
                         </td>
                         <td className="site-status-cell">
                           {site.status === 'published' ? (

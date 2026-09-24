@@ -24,9 +24,10 @@ import {
 } from 'react';
 
 import { AppHeader } from './app-header';
+import { navigationSections } from './cms-navigation';
 import { cmsViewPath, type CmsView } from './cms-routes';
 import { ApiClientError, api } from './lib/api';
-import { Icon, type CmsIconName } from './ui/icons';
+import { Icon } from './ui/icons';
 
 type CmsShellContextValue = {
   organizations: Organization[];
@@ -55,14 +56,12 @@ const viewLabels: Record<CmsView, string> = {
   roles: 'Roles',
   seo: 'SEO',
   sites: 'Sites',
-  submissions: 'Submissions',
+  submissions: 'Form responses',
   templates: 'Templates',
   users: 'Users',
   workflows: 'Workflows',
   'design-system': 'Brand & styles',
 };
-
-type NavigationItem = { key: CmsView; label: string; icon: CmsIconName };
 
 function viewFromPathname(pathname: string): CmsView {
   const segments = pathname.split('/').filter(Boolean);
@@ -80,70 +79,6 @@ function viewFromPathname(pathname: string): CmsView {
   }
   if (resource in viewLabels) return resource as CmsView;
   return 'dashboard';
-}
-
-function navigationSections(can: (permission: TenantPermission) => boolean) {
-  const home: NavigationItem[] = [
-    { icon: 'dashboard', key: 'dashboard', label: 'Dashboard' },
-  ] as NavigationItem[];
-  const websites: NavigationItem[] = [
-    ...(can('site.read') ? [{ icon: 'sites', key: 'sites', label: 'Websites' }] : []),
-    ...(can('page.read') ? [{ icon: 'pages', key: 'pages', label: 'Pages' }] : []),
-    ...(can('design-system.read')
-      ? [{ icon: 'designSystem', key: 'design-system', label: 'Brand & styles' }]
-      : []),
-    ...(can('template.read')
-      ? [{ icon: 'templates', key: 'templates', label: 'Templates' }]
-      : []),
-  ] as NavigationItem[];
-  const content: NavigationItem[] = [
-    ...(can('collection.read')
-      ? [{ icon: 'collections', key: 'collections', label: 'Content' }]
-      : []),
-  ] as NavigationItem[];
-  const media: NavigationItem[] = [
-    ...(can('asset.read') ? [{ icon: 'assets', key: 'assets', label: 'Media' }] : []),
-  ] as NavigationItem[];
-  const results: NavigationItem[] = [
-    ...(can('lead.read')
-      ? [{ icon: 'submissions', key: 'submissions', label: 'Submissions' }]
-      : []),
-    ...(can('analytics.read')
-      ? [{ icon: 'analytics', key: 'analytics', label: 'Analytics' }]
-      : []),
-  ] as NavigationItem[];
-  const settings: NavigationItem[] = [
-    ...(can('workspace.read')
-      ? [{ icon: 'organization', key: 'organization', label: 'Organization' }]
-      : []),
-    ...(can('integration.read')
-      ? [{ icon: 'integrations', key: 'integrations', label: 'Integrations' }]
-      : []),
-    ...(can('domain.read')
-      ? [{ icon: 'domains', key: 'domains', label: 'Domains' }]
-      : []),
-    ...(can('seo.read') ? [{ icon: 'seo', key: 'seo', label: 'SEO' }] : []),
-    ...(can('workflow.read')
-      ? [{ icon: 'workflows', key: 'workflows', label: 'Workflows' }]
-      : []),
-    ...(can('billing.read')
-      ? [{ icon: 'billing', key: 'billing', label: 'Billing & Usage' }]
-      : []),
-    ...(can('user.read') ? [{ icon: 'users', key: 'users', label: 'Users' }] : []),
-    ...(can('role.read') ? [{ icon: 'roles', key: 'roles', label: 'Roles' }] : []),
-    ...(can('audit.read') ? [{ icon: 'audit', key: 'audit', label: 'Audit Log' }] : []),
-    ...(can('extensions.read') || can('layout.read')
-      ? [{ icon: 'extensions', key: 'extensions', label: 'Extensions' }]
-      : []),
-  ] as NavigationItem[];
-  return [
-    { label: 'Home', items: home },
-    { label: 'Websites', items: websites },
-    { label: 'Content', items: content },
-    { label: 'Media', items: media },
-    { label: 'Results', items: results },
-    { label: 'Settings', items: settings },
-  ].filter((section) => section.items.length > 0);
 }
 
 function loadingShell() {
@@ -379,40 +314,66 @@ export default function CmsShell({
             </button>
           </div>
           <nav aria-label="Primary navigation" className="nav-list">
-            {navigationSections(can).map((section) => (
-              <div className="nav-section" key={section.label}>
-                <span className="nav-section-label">{section.label}</span>
-                {section.items.map((item) => {
-                  const href = navigationHref(workspaceId, item.key, siteId);
-                  const active = activeNavigationKey === item.key;
-                  const legacyAccessibleLabel =
-                    item.key === 'sites'
-                      ? 'Sites'
-                      : item.key === 'collections'
-                        ? 'Collections'
-                        : item.key === 'assets'
-                          ? 'Assets'
-                          : item.label;
-                  return (
-                    <Link
-                      aria-label={legacyAccessibleLabel}
-                      aria-current={active ? 'page' : undefined}
-                      className={active ? 'nav-item active' : 'nav-item'}
-                      href={href}
-                      key={item.key}
-                      onClick={() => setMobileSidebarOpen(false)}
-                      role="button"
-                      title={sidebarCollapsed ? item.label : undefined}
-                    >
-                      <span className="nav-icon">
-                        <Icon name={item.icon} />
+            {navigationSections(can, activeNavigationKey).map((section) => {
+              const content = (
+                <>
+                  {section.items.map((item) => {
+                    const href = navigationHref(workspaceId, item.key, siteId);
+                    const active = activeNavigationKey === item.key;
+                    const legacyAccessibleLabel =
+                      item.key === 'sites'
+                        ? 'Sites'
+                        : item.key === 'collections'
+                          ? 'Collections'
+                          : item.key === 'assets'
+                            ? 'Assets'
+                            : item.label;
+                    return (
+                      <Link
+                        aria-label={legacyAccessibleLabel}
+                        aria-current={active ? 'page' : undefined}
+                        className={active ? 'nav-item active' : 'nav-item'}
+                        href={href}
+                        key={item.key}
+                        onClick={() => setMobileSidebarOpen(false)}
+                        role="button"
+                        title={sidebarCollapsed ? item.label : undefined}
+                      >
+                        <span className="nav-icon">
+                          <Icon name={item.icon} />
+                        </span>
+                        <span className="nav-label">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </>
+              );
+
+              if (section.collapsible) {
+                return (
+                  <details
+                    className="nav-section nav-section-collapsible"
+                    key={section.label}
+                    open={section.open}
+                  >
+                    <summary className="nav-section-label">
+                      <span>{section.label}</span>
+                      <span aria-hidden="true" className="nav-section-chevron">
+                        <Icon name="chevronDown" size={14} />
                       </span>
-                      <span className="nav-label">{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            ))}
+                    </summary>
+                    {content}
+                  </details>
+                );
+              }
+
+              return (
+                <div className="nav-section" key={section.label}>
+                  <span className="nav-section-label">{section.label}</span>
+                  {content}
+                </div>
+              );
+            })}
           </nav>
         </aside>
         <main className="content-area">
