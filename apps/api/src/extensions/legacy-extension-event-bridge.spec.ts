@@ -31,6 +31,7 @@ describe('LegacyExtensionEventBridge', () => {
       received.push(`${event.pageId}:${event.siteId}`);
     });
     bridge.onModuleInit();
+    bridge.onModuleInit();
 
     await coreEvents.publish('page.created', {
       tenantId: 'tenant-a',

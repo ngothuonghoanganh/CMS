@@ -115,4 +115,16 @@ describe('CoreEventsModule', () => {
     ).resolves.toBeUndefined();
     expect(received).toBe(1);
   });
+
+  it('rejects events whose tenant does not match the authoritative context', async () => {
+    const coreEvents = new CoreEventBus(createTenantContext());
+
+    await expect(
+      coreEvents.publish('workspace.created', {
+        tenantId: 'tenant-b',
+        workspaceId: 'workspace-1',
+        occurredAt: new Date().toISOString(),
+      }),
+    ).rejects.toThrow('EVENT_TENANT_CONTEXT_MISMATCH');
+  });
 });

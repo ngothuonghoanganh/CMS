@@ -76,6 +76,7 @@ describe('PageService publish readiness', () => {
       pageModel: typeof pageModel;
       versionModel: typeof versionModel;
       reusables: Record<string, ReturnType<typeof vi.fn>>;
+      navigation: Record<string, ReturnType<typeof vi.fn>>;
       sites: Record<string, ReturnType<typeof vi.fn>>;
       pagePublishCompatibility: Record<string, ReturnType<typeof vi.fn>>;
       pageExtensions: Record<string, ReturnType<typeof vi.fn>>;
@@ -86,6 +87,9 @@ describe('PageService publish readiness', () => {
     state.reusables = {
       assertDependenciesAvailable: vi.fn(),
       assertDesignTokenDependenciesAvailable: vi.fn(),
+    };
+    state.navigation = {
+      validateInlineNavigationDocument: vi.fn(),
     };
     state.sites = {
       getDesignSystem: vi.fn().mockResolvedValue({
@@ -103,6 +107,11 @@ describe('PageService publish readiness', () => {
       pageId,
       workspaceId,
     );
+    expect(state.navigation.validateInlineNavigationDocument).toHaveBeenCalledWith(
+      payload,
+      workspaceId,
+      siteId,
+    );
     expect(readiness.summary).toMatchObject({
       componentsAdded: 2,
       contentFieldChanges: 0,
@@ -116,5 +125,124 @@ describe('PageService publish readiness', () => {
       componentsReordered: 0,
       componentsTypeChanged: 0,
     });
+  });
+
+  it('reports invalid inline navigation as a blocking readiness issue without writes', async () => {
+    const page = {
+      _id: { toString: () => pageId },
+      workspaceId,
+      siteId,
+      path: '/first-publication',
+      kind: 'standard',
+      currentDraftVersionId: 'version-1',
+    };
+    const version = {
+      _id: 'version-1',
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload,
+      composition,
+    };
+    const pageModel = {
+      findOne: vi.fn((filter: Record<string, unknown>) => ({
+        select: vi.fn().mockReturnThis(),
+        exec: vi.fn().mockResolvedValue(filter._id === pageId ? page : null),
+      })),
+      findOneAndUpdate: vi.fn(),
+    };
+    const versionModel = {
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(version) })),
+      create: vi.fn(),
+      save: vi.fn(),
+    };
+    const service = Object.create(PageService.prototype) as PageService;
+    const state = service as unknown as Record<string, unknown>;
+    state.pageModel = pageModel;
+    state.versionModel = versionModel;
+    state.navigation = {
+      validateInlineNavigationDocument: vi
+        .fn()
+        .mockRejectedValue(new Error('invalid inline navigation')),
+    };
+    state.reusables = {
+      assertDependenciesAvailable: vi.fn(),
+      assertDesignTokenDependenciesAvailable: vi.fn(),
+    };
+    state.sites = {
+      getDesignSystem: vi.fn().mockResolvedValue({
+        draft: createDefaultSiteDesignSystem(),
+      }),
+    };
+    state.pagePublishCompatibility = { validateBeforePublish: vi.fn() };
+    state.pageExtensions = { validateBeforePublish: vi.fn() };
+    state.collections = { validateComposition: vi.fn() };
+
+    const readiness = await service.getPublishReadiness(pageId, workspaceId);
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingIssues).toEqual([
+      expect.objectContaining({ code: 'UNKNOWN', message: 'invalid inline navigation' }),
+    ]);
+    expect(pageModel.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(versionModel.create).not.toHaveBeenCalled();
+  });
+
+  it('reports the same workflow compatibility failure as a publish blocker', async () => {
+    const page = {
+      _id: { toString: () => pageId },
+      workspaceId,
+      siteId,
+      path: '/workflow-blocked',
+      kind: 'standard',
+      currentDraftVersionId: 'version-1',
+    };
+    const version = {
+      _id: 'version-1',
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload,
+      composition,
+    };
+    const service = Object.create(PageService.prototype) as PageService;
+    const state = service as unknown as Record<string, unknown>;
+    state.pageModel = {
+      findOne: vi.fn((filter: Record<string, unknown>) => ({
+        select: vi.fn().mockReturnThis(),
+        exec: vi.fn().mockResolvedValue(filter._id === pageId ? page : null),
+      })),
+    };
+    state.versionModel = {
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(version) })),
+    };
+    state.navigation = { validateInlineNavigationDocument: vi.fn() };
+    state.reusables = {
+      assertDependenciesAvailable: vi.fn(),
+      assertDesignTokenDependenciesAvailable: vi.fn(),
+    };
+    state.sites = {
+      getDesignSystem: vi.fn().mockResolvedValue({
+        draft: createDefaultSiteDesignSystem(),
+      }),
+    };
+    state.pagePublishCompatibility = {
+      validateBeforePublish: vi.fn().mockRejectedValue(new Error('workflow blocked')),
+    };
+    state.pageExtensions = { validateBeforePublish: vi.fn() };
+    state.collections = { validateComposition: vi.fn() };
+
+    const readiness = await service.getPublishReadiness(pageId, workspaceId);
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingIssues).toEqual([
+      expect.objectContaining({ code: 'UNKNOWN', message: 'workflow blocked' }),
+    ]);
+    expect(state.pagePublishCompatibility.validateBeforePublish).toHaveBeenCalledWith(
+      pageId,
+      workspaceId,
+    );
   });
 });

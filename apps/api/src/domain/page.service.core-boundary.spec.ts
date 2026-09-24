@@ -419,7 +419,174 @@ describe('PageService core dependency boundary', () => {
       versionNumber: 1,
       occurredAt: expect.any(String),
     });
+    expect(pageExtensions.compilePublishedBundle).toHaveBeenCalledWith(
+      pageId,
+      workspaceId,
+      1,
+      payload,
+      expect.objectContaining({ pageId }),
+      [],
+    );
+    expect(version.set).toHaveBeenCalledWith('publishedBundle', {});
     expect(order).toEqual(['version.save', 'page.save', 'event']);
     expect(pageExtensions.afterPublish).toHaveBeenCalledWith(pageId, workspaceId, 1);
+  });
+
+  it('blocks publish on workflow compatibility failure before publication writes', async () => {
+    const page = pageDocument({
+      id: pageId,
+      name: 'Workflow blocked',
+      path: '/workflow-blocked',
+      currentDraftVersionId: versionId,
+    });
+    const version = {
+      _id: versionId,
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload,
+      composition: {
+        pageId,
+        payload,
+        attachments: [],
+        layoutAttachments: [],
+        bindings: [],
+        actions: [],
+        resources: [],
+        queries: [],
+      },
+      set: vi.fn(),
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    const events: CoreEventPublisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    };
+    const pageExtensions = {
+      validateBeforePublish: vi.fn().mockResolvedValue(undefined),
+      compilePublishedBundle: vi.fn().mockResolvedValue({}),
+      afterPublish: vi.fn().mockResolvedValue(undefined),
+    };
+    const workflowCompatibility = {
+      validateBeforePublish: vi.fn().mockRejectedValue(new Error('workflow blocked')),
+    };
+    const { service } = createService({
+      pageModel: {
+        findOne: vi.fn((filter: Record<string, unknown>) =>
+          filter._id === pageId && filter.workspaceId === workspaceId
+            ? query(page)
+            : query(null),
+        ),
+      },
+      versionModel: { findOne: vi.fn(() => query(version)) },
+      pageExtensions,
+      events,
+      navigation: { validateInlineNavigationDocument: vi.fn() },
+      reusables: {
+        assertDependenciesAvailable: vi.fn(),
+        assertDesignTokenDependenciesAvailable: vi.fn(),
+      },
+      sites: {
+        getDesignSystem: vi
+          .fn()
+          .mockResolvedValue({ draft: createDefaultSiteDesignSystem() }),
+      },
+      collections: { validateComposition: vi.fn() },
+      pagePublishCompatibility: workflowCompatibility,
+    });
+
+    await expect(service.publish(pageId, {}, workspaceId)).rejects.toThrow(
+      'workflow blocked',
+    );
+
+    expect(workflowCompatibility.validateBeforePublish).toHaveBeenCalledWith(
+      pageId,
+      workspaceId,
+    );
+    expect(version.save).not.toHaveBeenCalled();
+    expect(page.save).not.toHaveBeenCalled();
+    expect(pageExtensions.compilePublishedBundle).not.toHaveBeenCalled();
+    expect(events.publish).not.toHaveBeenCalled();
+  });
+
+  it('blocks publish on invalid inline navigation before publication writes', async () => {
+    const page = pageDocument({
+      id: pageId,
+      name: 'Navigation blocked',
+      path: '/navigation-blocked',
+      currentDraftVersionId: versionId,
+    });
+    const version = {
+      _id: versionId,
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload,
+      composition: {
+        pageId,
+        payload,
+        attachments: [],
+        layoutAttachments: [],
+        bindings: [],
+        actions: [],
+        resources: [],
+        queries: [],
+      },
+      set: vi.fn(),
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    const events: CoreEventPublisher = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    };
+    const pageExtensions = {
+      validateBeforePublish: vi.fn().mockResolvedValue(undefined),
+      compilePublishedBundle: vi.fn().mockResolvedValue({}),
+    };
+    const navigation = {
+      validateInlineNavigationDocument: vi
+        .fn()
+        .mockRejectedValue(new Error('navigation blocked')),
+    };
+    const { service } = createService({
+      pageModel: {
+        findOne: vi.fn((filter: Record<string, unknown>) =>
+          filter._id === pageId && filter.workspaceId === workspaceId
+            ? query(page)
+            : query(null),
+        ),
+      },
+      versionModel: { findOne: vi.fn(() => query(version)) },
+      pageExtensions,
+      events,
+      navigation,
+      reusables: {
+        assertDependenciesAvailable: vi.fn(),
+        assertDesignTokenDependenciesAvailable: vi.fn(),
+      },
+      sites: {
+        getDesignSystem: vi
+          .fn()
+          .mockResolvedValue({ draft: createDefaultSiteDesignSystem() }),
+      },
+      collections: { validateComposition: vi.fn() },
+      pagePublishCompatibility: {
+        validateBeforePublish: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await expect(service.publish(pageId, {}, workspaceId)).rejects.toThrow(
+      'navigation blocked',
+    );
+
+    expect(navigation.validateInlineNavigationDocument).toHaveBeenCalledWith(
+      payload,
+      workspaceId,
+      siteId,
+    );
+    expect(version.save).not.toHaveBeenCalled();
+    expect(page.save).not.toHaveBeenCalled();
+    expect(pageExtensions.compilePublishedBundle).not.toHaveBeenCalled();
+    expect(events.publish).not.toHaveBeenCalled();
   });
 });
