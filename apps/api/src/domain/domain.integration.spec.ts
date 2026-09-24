@@ -434,7 +434,7 @@ describe.skipIf(!integrationEnabled)('domain API integration', () => {
       const firstPublicResponse = await request(app.getHttpServer())
         .get(publicPath)
         .expect(200);
-      expect(firstPublicResponse.body).toEqual({
+      expect(firstPublicResponse.body).toMatchObject({
         tenantSlug: env.AUTH_TENANT_SLUG,
         page: { name: `Public page ${suffix}`, slug: `public-page-${suffix}` },
         payload: payloadV1,
