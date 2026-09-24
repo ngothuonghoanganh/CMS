@@ -50,7 +50,7 @@ export default function SubmissionsPage() {
           setError(
             caughtError instanceof ApiClientError
               ? caughtError.message
-              : 'Unable to load submissions.',
+              : 'Unable to load form responses.',
           );
       });
   }, [page.offset, search, status, workspaceId]);
@@ -71,7 +71,7 @@ export default function SubmissionsPage() {
       setError(
         caughtError instanceof ApiClientError
           ? caughtError.message
-          : 'Unable to update submission.',
+          : 'Unable to update form response.',
       );
     }
   }
@@ -79,9 +79,9 @@ export default function SubmissionsPage() {
   return (
     <>
       <PageHeader
-        description="Review form submissions captured by published pages."
-        eyebrow="Leads"
-        title="Submissions"
+        description="See the messages people sent through your website forms."
+        eyebrow="Website messages"
+        title="Form responses"
       />
       {error ? (
         <div className="alert alert-error" role="alert">
@@ -92,7 +92,7 @@ export default function SubmissionsPage() {
         <label className="inline-field">
           Search
           <input
-            aria-label="Search submissions"
+            aria-label="Search form responses"
             onChange={(event) => {
               setSearch(event.target.value);
               setPage((current) => ({ ...current, offset: 0 }));
@@ -104,7 +104,7 @@ export default function SubmissionsPage() {
         <label className="inline-field">
           Status
           <select
-            aria-label="Filter submissions by status"
+            aria-label="Filter form responses by status"
             onChange={(event) => {
               setStatus(event.target.value);
               setPage((current) => ({ ...current, offset: 0 }));
@@ -136,7 +136,7 @@ export default function SubmissionsPage() {
                   <strong>
                     {submission.fields.find((field) => field.type === 'email')?.value ||
                       submission.fields[0]?.value ||
-                      'Submission'}
+                      'Form response'}
                   </strong>
                   <span className="muted">
                     {submission.pageName} ·{' '}
@@ -149,12 +149,12 @@ export default function SubmissionsPage() {
           </div>
         ) : (
           <EmptyState
-            description="Publish a page with a form to start collecting leads."
-            title="No submissions yet"
+            description="Publish a page with a form to start receiving messages."
+            title="No responses yet"
           />
         )}
         <PaginationControls
-          noun="submissions"
+          noun="form responses"
           onNext={() =>
             setPage((current) => ({ ...current, offset: current.offset + current.limit }))
           }
@@ -170,7 +170,7 @@ export default function SubmissionsPage() {
       {selected ? (
         <Drawer
           description={`${selected.siteName} · ${selected.pageName}`}
-          eyebrow="Submission detail"
+          eyebrow="Form response detail"
           onClose={() => setSelected(null)}
           open
           title={selected.pageName}
