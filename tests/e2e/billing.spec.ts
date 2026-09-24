@@ -48,9 +48,15 @@ test('@tenancy provisions a default plan and enforces supported tenant-scoped qu
     await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
     await page
       .getByRole('navigation', { name: 'Primary navigation' })
-      .locator('summary.nav-section-label', { hasText: 'More tools' })
+      .getByRole('link', { name: 'Settings', exact: true })
       .click();
-    await page.getByRole('button', { name: 'Billing & Usage' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    await page
+      .locator('.settings-link-card')
+      .filter({ hasText: 'Billing & usage' })
+      .click();
     await expect(page.getByRole('heading', { name: 'Billing & usage' })).toBeVisible();
     await expect(page.getByText('Free', { exact: true })).toBeVisible();
 

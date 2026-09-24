@@ -5,27 +5,23 @@ import { navigationSections } from './cms-navigation';
 const allow = () => true;
 
 describe('CMS navigation', () => {
-  it('keeps the common website journey visible', () => {
+  it('keeps the primary navigation focused on user tasks', () => {
     const sections = navigationSections(allow, 'dashboard');
     const labels = sections.flatMap((section) => section.items.map((item) => item.label));
 
-    expect(labels).toEqual(
-      expect.arrayContaining(['Home', 'Websites', 'Pages', 'Media', 'Templates']),
-    );
-    expect(sections.map((section) => section.label)).toEqual([
-      'Home',
-      'Website',
-      'Results',
-      'More tools',
-    ]);
+    expect(labels).toEqual(['Home', 'Websites', 'Responses', 'Library', 'Settings']);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.label).toBeUndefined();
   });
 
-  it('opens the secondary group for a deep-linked advanced page', () => {
-    const sections = navigationSections(allow, 'integrations');
-    const moreTools = sections.find((section) => section.label === 'More tools');
+  it('does not expose technical modules in the primary navigation', () => {
+    const labels = navigationSections(allow, 'integrations').flatMap((section) =>
+      section.items.map((item) => item.label),
+    );
 
-    expect(moreTools?.collapsible).toBe(true);
-    expect(moreTools?.open).toBe(true);
+    expect(labels).not.toEqual(
+      expect.arrayContaining(['More tools', 'Templates', 'Analytics', 'Extensions']),
+    );
   });
 
   it('does not show tools the user cannot access', () => {
@@ -35,6 +31,16 @@ describe('CMS navigation', () => {
     );
     const labels = sections.flatMap((section) => section.items.map((item) => item.label));
 
-    expect(labels).toEqual(['Home', 'Websites', 'Pages']);
+    expect(labels).toEqual(['Home', 'Websites']);
+  });
+
+  it('shows Settings when the user has a settings permission', () => {
+    const sections = navigationSections(
+      (permission) => permission === 'integration.read',
+      'integrations',
+    );
+    const labels = sections.flatMap((section) => section.items.map((item) => item.label));
+
+    expect(labels).toEqual(['Home', 'Settings']);
   });
 });

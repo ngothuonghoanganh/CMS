@@ -27,12 +27,15 @@ const blankForm: DomainForm = {
   isPrimary: false,
 };
 
-export default function DomainsPage() {
+export default function DomainsPage({ siteId }: { siteId?: string } = {}) {
   const { workspaceId } = useCmsShell();
   const [domains, setDomains] = useState<CustomDomain[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
-  const [form, setForm] = useState(blankForm);
+  const [form, setForm] = useState<DomainForm>(() => ({
+    ...blankForm,
+    ...(siteId ? { siteId } : {}),
+  }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -42,22 +45,38 @@ export default function DomainsPage() {
         api.get(`/workspaces/${workspaceId}/domains`),
         api.get(`/workspaces/${workspaceId}/sites?limit=100&offset=0`),
       ]);
-      setDomains(CustomDomainListResponseSchema.parse(domainResponse).items);
-      const nextSites = SiteListResponseSchema.parse(siteResponse).items;
+      const allDomains = CustomDomainListResponseSchema.parse(domainResponse).items;
+      const allSites = SiteListResponseSchema.parse(siteResponse).items;
+      const nextSites = siteId
+        ? allSites.filter((candidate) => candidate.id === siteId)
+        : allSites;
       setSites(nextSites);
       const pageResponses = await Promise.all(
         nextSites.map((site) => api.get(`/sites/${site.id}/pages?limit=100`)),
       );
-      setPages(
-        pageResponses.flatMap((response) => PageListResponseSchema.parse(response).items),
+      const nextPages = pageResponses.flatMap(
+        (response) => PageListResponseSchema.parse(response).items,
       );
+      setPages(nextPages);
+      if (siteId) {
+        const sitePageIds = new Set(nextPages.map((page) => page.id));
+        setDomains(
+          allDomains.filter(
+            (domain) =>
+              domain.siteId === siteId ||
+              (domain.landingPageId ? sitePageIds.has(domain.landingPageId) : false),
+          ),
+        );
+      } else {
+        setDomains(allDomains);
+      }
     } catch (caughtError) {
       setError(message(caughtError));
     }
   }
   useEffect(() => {
     void load();
-  }, [workspaceId]);
+  }, [siteId, workspaceId]);
   async function action(run: () => Promise<void>) {
     setBusy(true);
     setError(null);
@@ -80,7 +99,7 @@ export default function DomainsPage() {
         ...(form.isPrimary ? { isPrimary: true } : {}),
       });
       setDomains((current) => [created, ...current]);
-      setForm(blankForm);
+      setForm({ ...blankForm, ...(siteId ? { siteId } : {}) });
       setNotice('Domain added. Add the DNS TXT record before verifying it.');
     });
   }
@@ -138,6 +157,7 @@ export default function DomainsPage() {
         }
         pages={pages}
         sites={sites}
+        {...(siteId ? { siteId } : {})}
       />
     </>
   );

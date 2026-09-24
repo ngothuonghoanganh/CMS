@@ -49,9 +49,12 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await loginToCanonicalBuilder(page, canonicalEnvironment);
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Integrations', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Integrations' }).click();
   await page.getByRole('button', { name: 'Add integration', exact: true }).click();
   await page.getByLabel('Name').fill(emailIntegrationName);
   await page.getByLabel(/Recipients/).fill('sales@example.com');
@@ -82,7 +85,10 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: '← Pages' }).click();
 
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
   await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
   await page.getByRole('button', { name: pageName }).click();
   await expect(page.getByRole('heading', { name: 'Form integrations' })).toBeVisible();
@@ -111,9 +117,12 @@ test('configures integrations, binds them to a form and records deliveries', asy
 
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Integrations', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Integrations' }).click();
   await expect(page.getByRole('heading', { name: 'Delivery logs' })).toBeVisible();
   await expect
     .poll(async () => {

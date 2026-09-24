@@ -29,7 +29,10 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: '← Pages' }).click();
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
   await page
     .getByLabel('Site', { exact: true })
     .selectOption({ label: canonicalEnvironmentNames.siteName });
@@ -60,9 +63,12 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
 
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Analytics', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Analytics' }).click();
   await expect(page.getByRole('heading', { name: 'Analytics' })).toBeVisible();
   await expect(
     page.locator('.analytics-metric-card').nth(0).locator('strong'),

@@ -47,6 +47,112 @@ test('major CMS modules are independently deep-linkable and refresh-safe', async
   ).toBeVisible();
 });
 
+test('task navigation keeps technical tools secondary and preserves website context', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
+
+  const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(navigation.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
+  for (const label of ['Websites', 'Responses', 'Library', 'Settings']) {
+    await expect(
+      navigation.getByRole('link', { name: label, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(navigation.getByText('More tools', { exact: true })).toHaveCount(0);
+  await expect(navigation.getByText('Templates', { exact: true })).toHaveCount(0);
+
+  await navigation.getByRole('link', { name: 'Websites', exact: true }).click();
+  await page
+    .locator('tr.site-table-row')
+    .filter({ hasText: canonicalEnvironment.siteName })
+    .getByRole('link')
+    .first()
+    .click();
+
+  const siteNavigation = page.getByRole('navigation', {
+    name: `${canonicalEnvironment.siteName} website navigation`,
+  });
+  await expect(siteNavigation).toBeVisible();
+  for (const label of ['Overview', 'Edit website', 'Pages', 'Brand', 'Settings']) {
+    await expect(
+      siteNavigation.getByRole('link', { name: label, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByRole('heading', { name: canonicalEnvironment.siteName }),
+  ).toBeVisible();
+
+  const editWebsite = siteNavigation.getByRole('link', {
+    name: 'Edit website',
+    exact: true,
+  });
+  await expect(editWebsite).toHaveAttribute('href', /\/builder$/);
+  await editWebsite.click();
+  await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+    timeout: 15_000,
+  });
+  await page.goto(
+    `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}`,
+  );
+  await expect(siteNavigation).toBeVisible();
+
+  await siteNavigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Website settings', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('These settings apply to', { exact: false })).toBeVisible();
+
+  await page
+    .locator('.settings-link-card')
+    .filter({ has: page.getByText('Domain', { exact: true }) })
+    .click();
+  await expect(page).toHaveURL(/\/sites\/[^/]+\/domains$/);
+  await expect(page.getByRole('heading', { name: 'Domains', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add domain', exact: true }).click();
+  const domainDialog = page.getByRole('dialog', { name: 'Add a custom domain' });
+  await expect(domainDialog.getByLabel('Site')).toHaveValue(canonicalEnvironment.siteId);
+  await domainDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  await siteNavigation.getByRole('link', { name: 'All websites', exact: false }).click();
+  await expect(page.getByRole('heading', { name: 'Sites', exact: true })).toBeVisible();
+  await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.settings-link-card').filter({ hasText: 'Analytics' }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.settings-link-card').filter({ hasText: 'Extensions' }),
+  ).toBeVisible();
+});
+
+test('website context navigation stays inside the viewport across supported widths', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
+
+  const sitePath = `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}`;
+  await page.goto(sitePath);
+  const siteNavigation = page.getByRole('navigation', {
+    name: `${canonicalEnvironment.siteName} website navigation`,
+  });
+  await expect(siteNavigation).toBeVisible();
+
+  for (const width of [320, 375, 390, 768, 1024, 1280, 1440, 1920]) {
+    await page.setViewportSize({ height: 900, width });
+    await expect(siteNavigation).toBeVisible();
+    const documentWidth = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(documentWidth.scrollWidth).toBeLessThanOrEqual(documentWidth.clientWidth + 1);
+  }
+});
+
 test('CMS resource routes are deep-linkable and overlays require intent', async ({
   page,
   canonicalEnvironment,

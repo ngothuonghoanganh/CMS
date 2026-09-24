@@ -20,6 +20,7 @@ export type CmsIconName =
   | 'pages'
   | 'roles'
   | 'search'
+  | 'settings'
   | 'seo'
   | 'sites'
   | 'submissions'
@@ -50,6 +51,8 @@ const paths: Record<CmsIconName, string> = {
   pages: 'M6 3h9l3 3v15H6V3Zm9 0v4h3M9 11h6M9 15h6',
   roles: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0',
   search: 'm21 21-4.35-4.35m2.1-5.15a7.25 7.25 0 1 1-14.5 0 7.25 7.25 0 0 1 14.5 0Z',
+  settings:
+    'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0-5v2m0 12v2m8.5-7.5h-2m-13 0h-2m13.01-6.01-1.42 1.42M7.91 16.09l-1.42 1.42m10.02 0-1.42-1.42M7.91 7.91 6.49 6.49',
   seo: 'm11 4-7 8h8l-1 8 7-9h-8l1-7Z',
   sites: 'M4 6h16v12H4V6Zm0 4h16M8 14h3',
   submissions: 'M4 5h16v14H4V5Zm0 3 8 5 8-5',

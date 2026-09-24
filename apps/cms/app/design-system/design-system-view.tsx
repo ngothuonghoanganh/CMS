@@ -1149,9 +1149,7 @@ export function DesignSystemView({
     <section className="stack">
       <div className="page-header">
         <div>
-          <span className="eyebrow">
-            {siteId ? 'Site override' : 'Workspace foundation'}
-          </span>
+          <span className="eyebrow">{siteId ? 'Website style' : 'Company default'}</span>
           <h1>Brand &amp; styles</h1>
           <p className="muted">
             Shape how <strong>{siteName}</strong> looks across every page.
@@ -1167,7 +1165,9 @@ export function DesignSystemView({
                   : 'Saved draft'}
             </span>
             <span className="muted small">
-              {siteId ? 'Only this website changes.' : 'Websites inherit these defaults.'}
+              {siteId
+                ? 'Applies to this website.'
+                : 'Available to all websites by default.'}
             </span>
           </div>
         </div>
@@ -1190,8 +1190,8 @@ export function DesignSystemView({
           <strong>Website styles only</strong>
           <p>
             {siteId
-              ? `${siteName} uses these styles. The CMS workspace keeps its own interface theme.`
-              : `These defaults can flow into ${inheritedSiteCount ?? 0} website${inheritedSiteCount === 1 ? '' : 's'}. The CMS workspace keeps its own interface theme.`}
+              ? `These styles apply to ${siteName}. The CMS interface is not affected.`
+              : `These defaults are available to ${inheritedSiteCount ?? 0} website${inheritedSiteCount === 1 ? '' : 's'}. The CMS interface is not affected.`}
           </p>
         </div>
       </div>
@@ -1247,7 +1247,7 @@ export function DesignSystemView({
                 <div>
                   <strong>Brand &amp; styles</strong>
                   <span className="design-system-editor-toolbar-hint">
-                    {siteUsesWorkspaceStyles ? 'Using workspace style' : 'Draft style'}
+                    {siteUsesWorkspaceStyles ? 'Using company default' : 'Draft style'}
                   </span>
                 </div>
                 <div className="design-system-editor-toolbar-tools">
@@ -1269,7 +1269,7 @@ export function DesignSystemView({
                   onClick={() => setSystem(workspaceSystem)}
                   type="button"
                 >
-                  Use workspace style
+                  Use company default
                 </button>
               ) : null}
               {canUpdate ? (

@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { useCmsShell } from '../cms-shell';
-import { cmsViewPath, pagesPath, sitePath } from '../cms-routes';
+import { cmsViewPath, pagePath, pagesPath, sitePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
 import { AssetPicker } from '../collections/collection-field-controls';
 import { StatusBadge } from '../status-badge';
@@ -142,6 +142,7 @@ export default function SitesPage({
         <SiteDetail
           loading={loading}
           site={selectedSite}
+          canEdit={can('page.read')}
           canUpdate={can('site.update')}
           workspaceId={workspaceId}
         />
@@ -392,11 +393,13 @@ export default function SitesPage({
 function SiteDetail({
   loading,
   site,
+  canEdit,
   canUpdate,
   workspaceId,
 }: {
   loading: boolean;
   site: Site | undefined;
+  canEdit: boolean;
   canUpdate: boolean;
   workspaceId: string;
 }) {
@@ -424,14 +427,26 @@ function SiteDetail({
     <>
       <PageHeader
         actions={
-          <button
-            className="button button-primary"
-            disabled={!canUpdate}
-            onClick={() => router.push(`${sitePath(workspaceId, site.id)}/edit`)}
-            type="button"
-          >
-            Edit website
-          </button>
+          <div className="form-actions">
+            <button
+              className="button button-primary"
+              disabled={!canEdit}
+              onClick={() =>
+                router.push(pagePath(workspaceId, site.id, site.homePageId, 'builder'))
+              }
+              type="button"
+            >
+              Edit website
+            </button>
+            <button
+              className="button button-ghost"
+              disabled={!canUpdate}
+              onClick={() => router.push(`${sitePath(workspaceId, site.id)}/edit`)}
+              type="button"
+            >
+              Edit details
+            </button>
+          </div>
         }
         description={`/${site.slug} · Everything you need to edit, style, and publish this website.`}
         eyebrow="Site"
@@ -498,18 +513,16 @@ function SiteDetail({
             onClick={() => router.push(`${sitePath(workspaceId, site.id)}/design-system`)}
             type="button"
           >
-            Brand &amp; styles
+            Brand
           </button>
           <button
             className="button button-secondary"
             onClick={() =>
-              router.push(
-                `${cmsViewPath(workspaceId, 'domains')}?siteId=${encodeURIComponent(site.id)}`,
-              )
+              router.push(cmsViewPath(workspaceId, 'site-settings', site.id))
             }
             type="button"
           >
-            Domain &amp; publish
+            Settings
           </button>
         </div>
       </section>

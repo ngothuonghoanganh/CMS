@@ -23,6 +23,7 @@ export function DomainsView({
   onVerify,
   onUpdate,
   onRemove,
+  siteId,
 }: {
   domains: CustomDomain[];
   pages: Page[];
@@ -37,6 +38,7 @@ export function DomainsView({
     input: { landingPageId: string | null; isPrimary: boolean },
   ) => void;
   onRemove: (domain: CustomDomain) => void;
+  siteId?: string;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   return (
@@ -53,7 +55,11 @@ export function DomainsView({
         }
         eyebrow="Settings"
         title="Domains"
-        description="Connect a verified hostname to a published site or keep the legacy page assignment. TLS remains the responsibility of your edge or hosting provider."
+        description={
+          siteId
+            ? 'Connect a verified hostname to this website. TLS remains the responsibility of your edge or hosting provider.'
+            : 'Connect a verified hostname to a published site or keep the legacy page assignment. TLS remains the responsibility of your edge or hosting provider.'
+        }
       />
       <section className="panel">
         <PanelTitle title="Configured domains" count={domains.length} />

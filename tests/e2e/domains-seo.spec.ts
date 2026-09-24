@@ -8,6 +8,23 @@ import {
 } from './fixtures/canonical-environment';
 import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
+async function openSitePages(page: import('@playwright/test').Page, siteName: string) {
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
+  await page
+    .locator('tr.site-table-row')
+    .filter({ hasText: siteName })
+    .getByRole('link')
+    .first()
+    .click();
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
+}
+
 test('configures SEO, verifies a custom domain and renders its public metadata', async ({
   browser,
   page,
@@ -26,17 +43,17 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
 
   await loginToCanonicalBuilder(page);
   await switchCanonicalBrowserContext(page, canonicalEnvironment);
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page
-    .getByLabel('Site', { exact: true })
-    .selectOption({ label: canonicalEnvironmentNames.siteName });
+  await openSitePages(page, canonicalEnvironmentNames.siteName);
   await page.getByRole('button', { name: /__e2e__ phase-seo/ }).click();
 
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'SEO', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'SEO' }).click();
   await page.getByRole('combobox', { name: 'Page', exact: true }).selectOption({
     label: pageName,
   });
@@ -54,7 +71,14 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   expect(seoResponse.ok()).toBe(true);
   await expect(page.getByRole('status')).toContainText('SEO settings saved');
 
-  await page.getByRole('button', { name: 'Domains', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Settings', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Domains' }).click();
   await page.getByRole('button', { name: 'Add domain', exact: true }).first().click();
   await page.getByLabel('Hostname').fill(hostname);
   await page
@@ -67,10 +91,7 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
   await domainRow.getByRole('button', { name: 'Verify / retry' }).click();
   await expect(domainRow.getByText('active', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page
-    .getByLabel('Site', { exact: true })
-    .selectOption({ label: canonicalEnvironmentNames.siteName });
+  await openSitePages(page, canonicalEnvironmentNames.siteName);
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await page.getByRole('button', { name: 'Publish version' }).click();

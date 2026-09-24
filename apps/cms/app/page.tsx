@@ -29,6 +29,8 @@ const cmsViews = new Set<CmsView>([
   'roles',
   'seo',
   'sites',
+  'settings',
+  'site-settings',
   'submissions',
   'templates',
   'users',
@@ -69,7 +71,13 @@ export default function CmsHomePage() {
           // workspace-ownership migration has been observed. New CMS links
           // never generate this compatibility route.
           target = collectionPath(workspace.id, siteId, requestedCollectionId);
-        } else if ((view === 'navigation' || view === 'design-system') && siteId) {
+        } else if (
+          (view === 'navigation' ||
+            view === 'design-system' ||
+            view === 'domains' ||
+            view === 'site-settings') &&
+          siteId
+        ) {
           target = cmsViewPath(workspace.id, view, siteId);
         } else if (view === 'pages') {
           target = pagesPath(workspace.id, siteId);

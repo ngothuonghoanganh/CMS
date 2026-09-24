@@ -134,34 +134,13 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
 
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
   await expect(navigation).toBeVisible();
-  for (const section of ['Home', 'Website', 'Results', 'More tools']) {
-    await expect(
-      navigation.locator('.nav-section-label', { hasText: section }),
-    ).toBeVisible();
+  for (const item of ['Home', 'Websites', 'Responses', 'Library', 'Settings']) {
+    await expect(navigation.getByRole('link', { name: item, exact: true })).toBeVisible();
   }
-  for (const item of ['Websites', 'Pages', 'Brand & styles', 'Media']) {
-    await expect(navigation.getByText(item, { exact: true })).toBeVisible();
-  }
-  const openMoreTools = async (itemName: string) => {
-    const item = navigation.getByRole('button', { name: itemName, exact: true });
-    if (!(await item.isVisible())) {
-      await navigation
-        .locator('summary.nav-section-label', { hasText: 'More tools' })
-        .click();
-    }
-    await expect(item).toBeVisible();
-  };
-  await openMoreTools('Templates');
-  await expect(
-    navigation.getByRole('button', { name: 'Brand & styles', exact: true }),
-  ).toBeVisible();
-  await expect(navigation.getByText('Headers & Footers', { exact: true })).toHaveCount(0);
-  await navigation.getByRole('button', { name: 'Brand & styles', exact: true }).click();
-  await expect(page).toHaveURL(/\/design-system$/);
-  await expect(
-    page.getByRole('heading', { name: 'Brand & styles', exact: true }),
-  ).toBeVisible();
-  await navigation.getByRole('button', { name: 'Home', exact: true }).click();
+  await expect(navigation.getByText('More tools', { exact: true })).toHaveCount(0);
+  await navigation.getByRole('link', { name: 'Websites', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sites', exact: true })).toBeVisible();
+  await navigation.getByRole('link', { name: 'Home', exact: true }).click();
   await expect(page).toHaveURL(/\/workspaces\/[^/]+$/);
   await expect(page.getByLabel('Current workspace')).toBeVisible();
   await expect(page.locator('.topbar-page-context')).toHaveCount(0);
@@ -186,8 +165,10 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
       if (width === 390) {
         await openNavigation.click();
         await expect(navigation).toBeVisible();
-        await page.getByRole('button', { name: 'Pages', exact: true }).click();
-        await expect(page.getByRole('heading', { name: 'Pages' })).toBeVisible();
+        await navigation.getByRole('link', { name: 'Websites', exact: true }).click();
+        await expect(
+          page.getByRole('heading', { name: 'Sites', exact: true }),
+        ).toBeVisible();
         const mobileWorkspaceTrigger = page.getByRole('button', {
           name: 'Current workspace',
         });
@@ -208,15 +189,23 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
   }
 
   await page.setViewportSize({ height: 900, width: 1440 });
-  await openMoreTools('Roles');
-  await page.getByRole('button', { name: 'Roles', exact: true }).click();
+  const openSetting = async (itemName: string) => {
+    await navigation.getByRole('link', { name: 'Settings', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Settings', exact: true }),
+    ).toBeVisible();
+    await page
+      .locator('.settings-link-card')
+      .filter({ has: page.getByText(itemName, { exact: true }) })
+      .click();
+  };
+  await openSetting('Roles');
   await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Form responses', exact: true }).click();
+  await navigation.getByRole('link', { name: 'Responses', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Form responses', exact: true }),
   ).toBeVisible();
-  await openMoreTools('Users');
-  await page.getByRole('button', { name: 'Users', exact: true }).click();
+  await openSetting('Members');
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View details', exact: true }).first().click();
   await expect(page.getByText('User details', { exact: true })).toBeVisible();
@@ -256,12 +245,11 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
     mobileUsersWidth.clientWidth + 1,
   );
   await page.setViewportSize({ height: 900, width: 1440 });
-  await openMoreTools('Billing & Usage');
-  await page.getByRole('button', { name: 'Billing & Usage', exact: true }).click();
+  await openSetting('Billing & usage');
   await expect(
     page.getByRole('heading', { name: 'Billing & usage', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Audit Log', exact: true }).click();
+  await openSetting('Audit log');
   await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
   await expect(page.getByLabel('Filter audit by action')).toBeVisible();
 });
@@ -278,9 +266,12 @@ test('extension management settles without a request loop and stays responsive',
   await login(page);
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Extensions', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Extensions' }).click();
   await expect(
     page.getByRole('heading', { name: 'Extensions', exact: true }),
   ).toBeVisible();
@@ -420,9 +411,12 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
 
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Extensions', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Extensions' }).click();
   const countdownCard = page
     .locator('.extension-card')
     .filter({ hasText: 'Countdown Builder Element' });
@@ -430,7 +424,10 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   await countdownCard.getByRole('button', { name: 'Enable' }).click();
   await expect(countdownCard.getByText('Enabled', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
   await expect(page.getByLabel('Site name')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Countdown Site ${suffix}`);
@@ -494,10 +491,10 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   ).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole('button', { name: '← Pages' }).click();
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site', { exact: true }).selectOption({
-    label: `Countdown Site ${suffix}`,
-  });
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
   await page.getByRole('button', { name: pageName }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await page.getByRole('button', { name: 'Publish version' }).click();
@@ -579,7 +576,10 @@ test('refreshes an active session when the access cookie is no longer present', 
 test('@tenancy creates and edits a site', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
   await expect(page.getByLabel('Site name')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`E2E Site ${suffix}`);
@@ -610,7 +610,10 @@ test('@tenancy creates and updates a website logo without leaving the UI', async
     'base64',
   );
   await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Logo Site ${suffix}`);
 
@@ -637,14 +640,17 @@ test('@tenancy creates and updates a website logo without leaving the UI', async
   ).toBeVisible();
   await page
     .getByRole('main')
-    .getByRole('button', { name: 'Brand & styles', exact: true })
+    .getByRole('button', { name: 'Brand', exact: true })
     .click();
   await expect(page.locator('.site-preview-brand img')).toHaveAttribute(
     'src',
     firstLogoSource!,
   );
 
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
   await page
     .locator('tr.site-table-row')
     .filter({ hasText: `Logo Site ${suffix}` })
@@ -673,7 +679,7 @@ test('@tenancy creates and updates a website logo without leaving the UI', async
   ).toBeVisible();
   await page
     .getByRole('main')
-    .getByRole('button', { name: 'Brand & styles', exact: true })
+    .getByRole('button', { name: 'Brand', exact: true })
     .click();
   await expect(page.locator('.site-preview-brand img')).toHaveAttribute(
     'src',
@@ -684,7 +690,10 @@ test('@tenancy creates and updates a website logo without leaving the UI', async
 test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
   await expect(page.getByLabel('Site name')).toHaveCount(0);
   await page.getByRole('button', { name: 'New site', exact: true }).click();
   await page.getByLabel('Site name').fill(`Page Site ${suffix}`);
@@ -722,9 +731,12 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   ).toHaveCount(0);
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Extensions', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Extensions' }).click();
   await expect(
     page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
   ).toBeVisible();
@@ -734,7 +746,20 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: /^(Build|Edit) Footer$/, exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
+  await page
+    .locator('tr.site-table-row')
+    .filter({ hasText: `Page Site ${suffix}` })
+    .getByRole('link')
+    .first()
+    .click();
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
   await page.getByRole('button', { name: `Select page Edited Page ${suffix}` }).click();
   await expect(
     page.getByRole('heading', { name: 'Version history', exact: true }),

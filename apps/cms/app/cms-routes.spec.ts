@@ -25,6 +25,15 @@ describe('CMS route map', () => {
     expect(cmsViewPath('workspace-1', 'collections', 'site-1')).toBe(
       '/workspaces/workspace-1/sites/site-1/collections',
     );
+    expect(cmsViewPath('workspace-1', 'settings')).toBe(
+      '/workspaces/workspace-1/settings',
+    );
+    expect(cmsViewPath('workspace-1', 'domains', 'site-1')).toBe(
+      '/workspaces/workspace-1/sites/site-1/domains',
+    );
+    expect(cmsViewPath('workspace-1', 'site-settings', 'site-1')).toBe(
+      '/workspaces/workspace-1/sites/site-1/settings',
+    );
   });
 
   it('keeps resource actions as route segments', () => {

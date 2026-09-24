@@ -7,10 +7,25 @@ import {
 import { E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 async function openPages(page: Page, siteName?: string) {
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  if (siteName) {
-    await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
+  const pathname = new URL(page.url()).pathname;
+  const sitePages = page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true });
+  if (/\/sites\/[^/]+/.test(pathname)) {
+    await expect(sitePages).toBeVisible();
+    await sitePages.click();
+    return;
   }
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
+  const siteRow = siteName
+    ? page.locator('tr.site-table-row').filter({ hasText: siteName }).first()
+    : page.locator('tr.site-table-row').first();
+  await siteRow.getByRole('link').first().click();
+  await expect(sitePages).toBeVisible();
+  await sitePages.click();
 }
 
 test('builds, publishes, submits and manages a form with published-schema isolation', async ({
@@ -142,9 +157,8 @@ test('builds, publishes, submits and manages a form with published-schema isolat
 
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Responses', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Form responses', exact: true }).click();
   await expect(page.getByText('jane.e2e@example.com').first()).toBeVisible({
     timeout: 15_000,
   });

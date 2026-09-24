@@ -7,6 +7,8 @@ import {
   WorkspaceListResponseSchema,
   type AuthSessionResponse,
   type Organization,
+  SiteSchema,
+  type Site,
   type TenantPermission,
   type Workspace,
 } from '@payload/contracts';
@@ -27,6 +29,7 @@ import { AppHeader } from './app-header';
 import { navigationSections } from './cms-navigation';
 import { cmsViewPath, type CmsView } from './cms-routes';
 import { ApiClientError, api } from './lib/api';
+import { SiteContextNav } from './site-context-nav';
 import { Icon } from './ui/icons';
 
 type CmsShellContextValue = {
@@ -36,6 +39,8 @@ type CmsShellContextValue = {
   permissions: TenantPermission[];
   workspaces: Workspace[];
   can: (permission: TenantPermission) => boolean;
+  currentSite: Site | null;
+  currentSiteLoading: boolean;
 };
 
 const CmsShellContext = createContext<CmsShellContextValue | null>(null);
@@ -55,8 +60,10 @@ const viewLabels: Record<CmsView, string> = {
   pages: 'Pages',
   roles: 'Roles',
   seo: 'SEO',
+  settings: 'Settings',
   sites: 'Sites',
   submissions: 'Form responses',
+  'site-settings': 'Website settings',
   templates: 'Templates',
   users: 'Users',
   workflows: 'Workflows',
@@ -73,8 +80,10 @@ function viewFromPathname(pathname: string): CmsView {
     if (nestedResource === 'collections') return 'collections';
     if (nestedResource === 'navigation') return 'navigation';
     if (nestedResource === 'design-system') return 'design-system';
+    if (nestedResource === 'domains') return 'domains';
     if (nestedResource === 'seo') return 'seo';
     if (nestedResource === 'workflows') return 'workflows';
+    if (nestedResource === 'settings') return 'site-settings';
     return 'sites';
   }
   if (resource in viewLabels) return resource as CmsView;
@@ -122,6 +131,8 @@ export default function CmsShell({
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [currentSite, setCurrentSite] = useState<Site | null>(null);
+  const [currentSiteReadyFor, setCurrentSiteReadyFor] = useState<string | null>(null);
   const [loading, setLoading] = useState(() => !isNestedShell);
   const [error, setError] = useState<string | null>(null);
   const mobileSidebarCloseRef = useRef<HTMLButtonElement>(null);
@@ -132,6 +143,11 @@ export default function CmsShell({
     [permissionSet],
   );
   const siteId = searchParams.get('siteId') ?? extractSiteId(pathname);
+  const currentSiteLoading = Boolean(siteId) && currentSiteReadyFor !== siteId;
+  const primaryNavigationKey = getPrimaryNavigationKey(
+    activeNavigationKey,
+    Boolean(siteId),
+  );
 
   useEffect(() => {
     if (isNestedShell) return;
@@ -179,6 +195,31 @@ export default function CmsShell({
       active = false;
     };
   }, [isNestedShell, router, workspaceId]);
+
+  useEffect(() => {
+    if (isNestedShell || !siteId) {
+      setCurrentSite(null);
+      setCurrentSiteReadyFor(null);
+      return;
+    }
+
+    let active = true;
+    void api
+      .get(`/workspaces/${workspaceId}/sites/${siteId}`)
+      .then((response) => {
+        if (active) setCurrentSite(SiteSchema.parse(response));
+      })
+      .catch(() => {
+        if (active) setCurrentSite(null);
+      })
+      .finally(() => {
+        if (active) setCurrentSiteReadyFor(siteId);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isNestedShell, siteId, workspaceId]);
 
   useEffect(() => {
     if (isNestedShell) return;
@@ -264,6 +305,8 @@ export default function CmsShell({
     currentOrganization?.name ?? session.user.tenantSlug ?? 'Current company';
   const context: CmsShellContextValue = {
     can,
+    currentSite,
+    currentSiteLoading,
     organizations,
     permissions,
     session,
@@ -314,66 +357,64 @@ export default function CmsShell({
             </button>
           </div>
           <nav aria-label="Primary navigation" className="nav-list">
-            {navigationSections(can, activeNavigationKey).map((section) => {
-              const content = (
-                <>
-                  {section.items.map((item) => {
-                    const href = navigationHref(workspaceId, item.key, siteId);
-                    const active = activeNavigationKey === item.key;
-                    const legacyAccessibleLabel =
-                      item.key === 'sites'
-                        ? 'Sites'
-                        : item.key === 'collections'
-                          ? 'Collections'
-                          : item.key === 'assets'
-                            ? 'Assets'
-                            : item.label;
-                    return (
-                      <Link
-                        aria-label={legacyAccessibleLabel}
-                        aria-current={active ? 'page' : undefined}
-                        className={active ? 'nav-item active' : 'nav-item'}
-                        href={href}
-                        key={item.key}
-                        onClick={() => setMobileSidebarOpen(false)}
-                        role="button"
-                        title={sidebarCollapsed ? item.label : undefined}
-                      >
-                        <span className="nav-icon">
-                          <Icon name={item.icon} />
-                        </span>
-                        <span className="nav-label">{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </>
-              );
-
-              if (section.collapsible) {
-                return (
-                  <details
-                    className="nav-section nav-section-collapsible"
-                    key={section.label}
-                    open={section.open}
-                  >
-                    <summary className="nav-section-label">
-                      <span>{section.label}</span>
-                      <span aria-hidden="true" className="nav-section-chevron">
-                        <Icon name="chevronDown" size={14} />
-                      </span>
-                    </summary>
-                    {content}
-                  </details>
+            {navigationSections(can, primaryNavigationKey).map(
+              (section, sectionIndex) => {
+                const content = (
+                  <>
+                    {section.items.map((item) => {
+                      const href = navigationHref(workspaceId, item.key);
+                      const active = primaryNavigationKey === item.key;
+                      return (
+                        <Link
+                          aria-label={item.label}
+                          aria-current={active ? 'page' : undefined}
+                          className={active ? 'nav-item active' : 'nav-item'}
+                          href={href}
+                          key={item.key}
+                          onClick={() => setMobileSidebarOpen(false)}
+                          title={sidebarCollapsed ? item.label : undefined}
+                        >
+                          <span className="nav-icon">
+                            <Icon name={item.icon} />
+                          </span>
+                          <span className="nav-label">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </>
                 );
-              }
 
-              return (
-                <div className="nav-section" key={section.label}>
-                  <span className="nav-section-label">{section.label}</span>
-                  {content}
-                </div>
-              );
-            })}
+                if (section.collapsible) {
+                  return (
+                    <details
+                      className="nav-section nav-section-collapsible"
+                      key={section.label ?? `primary-${sectionIndex}`}
+                      open={section.open}
+                    >
+                      <summary className="nav-section-label">
+                        <span>{section.label}</span>
+                        <span aria-hidden="true" className="nav-section-chevron">
+                          <Icon name="chevronDown" size={14} />
+                        </span>
+                      </summary>
+                      {content}
+                    </details>
+                  );
+                }
+
+                return (
+                  <div
+                    className="nav-section"
+                    key={section.label ?? `primary-${sectionIndex}`}
+                  >
+                    {section.label ? (
+                      <span className="nav-section-label">{section.label}</span>
+                    ) : null}
+                    {content}
+                  </div>
+                );
+              },
+            )}
           </nav>
         </aside>
         <main className="content-area">
@@ -389,6 +430,15 @@ export default function CmsShell({
             userEmail={session.user.email}
             workspaces={workspaces}
           />
+          {siteId ? (
+            <SiteContextNav
+              activeView={activeNavigationKey}
+              can={can}
+              loading={currentSiteLoading}
+              site={currentSite}
+              workspaceId={workspaceId}
+            />
+          ) : null}
           <section className="content-inner">
             {error ? (
               <div className="alert alert-error" role="alert">
@@ -420,9 +470,22 @@ function extractSiteId(pathname: string): string | undefined {
 
 function navigationHref(workspaceId: string, view: CmsView, siteId?: string): string {
   const path = cmsViewPath(workspaceId, view, siteId);
-  return view === 'domains' || view === 'extensions' || view === 'templates'
+  return view === 'extensions' || view === 'templates'
     ? siteId
       ? `${path}?siteId=${encodeURIComponent(siteId)}`
       : path
     : path;
+}
+
+function getPrimaryNavigationKey(view: CmsView, hasSiteContext: boolean): CmsView {
+  if (
+    hasSiteContext ||
+    ['pages', 'design-system', 'domains', 'navigation', 'site-settings'].includes(view)
+  ) {
+    return 'sites';
+  }
+  if (view === 'submissions') return 'submissions';
+  if (view === 'assets') return 'assets';
+  if (view === 'dashboard' || view === 'sites') return view;
+  return 'settings';
 }

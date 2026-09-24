@@ -18,7 +18,9 @@ export type CmsView =
   | 'users'
   | 'extensions'
   | 'workflows'
-  | 'organization';
+  | 'organization'
+  | 'settings'
+  | 'site-settings';
 
 export type CmsRoute = {
   view: CmsView;
@@ -173,13 +175,22 @@ export function cmsViewPath(workspaceId: string, view: CmsView, siteId?: string)
       return siteId
         ? `${sitePath(workspaceId, siteId)}/workflows`
         : `${workspacePath(workspaceId)}/workflows`;
+    case 'site-settings':
+      return siteId
+        ? `${sitePath(workspaceId, siteId)}/settings`
+        : `${workspacePath(workspaceId)}/settings`;
+    case 'settings':
+      return `${workspacePath(workspaceId)}/settings`;
+    case 'domains':
+      return siteId
+        ? `${sitePath(workspaceId, siteId)}/domains`
+        : `${workspacePath(workspaceId)}/domains`;
     case 'organization':
     case 'assets':
     case 'templates':
     case 'submissions':
     case 'integrations':
     case 'analytics':
-    case 'domains':
     case 'billing':
     case 'roles':
     case 'audit':

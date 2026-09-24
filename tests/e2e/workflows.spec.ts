@@ -96,9 +96,12 @@ test('renders the workflow builder without horizontal overflow across viewports'
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
-  await page.getByRole('button', { name: 'Workflows', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Settings', exact: true }),
+  ).toBeVisible();
+  await page.locator('.settings-link-card').filter({ hasText: 'Workflows' }).click();
   await expect(
     page.getByRole('heading', { level: 1, name: 'Workflows', exact: true }),
   ).toBeVisible();
@@ -126,10 +129,20 @@ test('attaches a page workflow and configures trigger, condition and action node
   );
   await loginToCanonicalBuilder(page);
   await switchCanonicalBrowserContext(page, canonicalEnvironment);
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
   await page
-    .getByLabel('Site', { exact: true })
-    .selectOption({ label: canonicalEnvironmentNames.siteName });
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
+  await page
+    .locator('tr.site-table-row')
+    .filter({ hasText: canonicalEnvironmentNames.siteName })
+    .getByRole('link')
+    .first()
+    .click();
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
   await page.getByRole('button', { name: /__e2e__ phase-workflows/ }).click();
   await page.getByRole('button', { name: 'Manage workflows' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Workflows' })).toBeVisible();
@@ -165,7 +178,10 @@ test('attaches a page workflow and configures trigger, condition and action node
   await expect(page.getByText('Workflow published.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Enable' }).click();
   await expect(page.getByText('Workflow enabled.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
+  await page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true })
+    .click();
   await page.getByRole('button', { name: /__e2e__ phase-workflows/ }).click();
   await page.getByRole('button', { name: 'Publish draft' }).click();
   await page.getByRole('button', { name: 'Publish version' }).click();

@@ -9,10 +9,25 @@ import {
 import { E2E_API_BASE_URL, E2E_RENDERER_ORIGIN } from './fixtures/urls';
 
 async function openPages(page: Page, siteName?: string) {
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  if (siteName) {
-    await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
+  const pathname = new URL(page.url()).pathname;
+  const sitePages = page
+    .locator('.site-context-nav')
+    .getByRole('link', { name: 'Pages', exact: true });
+  if (/\/sites\/[^/]+/.test(pathname)) {
+    await expect(sitePages).toBeVisible();
+    await sitePages.click();
+    return;
   }
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
+  const siteRow = siteName
+    ? page.locator('tr.site-table-row').filter({ hasText: siteName }).first()
+    : page.locator('tr.site-table-row').first();
+  await siteRow.getByRole('link').first().click();
+  await expect(sitePages).toBeVisible();
+  await sitePages.click();
 }
 
 async function returnToPages(page: Page, siteName: string) {
@@ -97,8 +112,7 @@ test('publishes a site after its homepage is published', async ({
   const siteName = canonicalEnvironmentNames.siteName;
   await loginToCanonicalBuilder(page);
   await switchCanonicalBrowserContext(page, canonicalEnvironment);
-  await page.getByRole('button', { name: 'Pages', exact: true }).click();
-  await page.getByLabel('Site', { exact: true }).selectOption({ label: siteName });
+  await openPages(page, siteName);
   await page.getByRole('button', { name: /Select page .* at \/$/ }).click();
   const publishPageButton = page.getByRole('button', { name: 'Publish draft' });
   if (await publishPageButton.isVisible()) {
@@ -107,7 +121,10 @@ test('publishes a site after its homepage is published', async ({
     await expect(page.getByRole('status')).toContainText('Page published');
   }
 
-  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .getByRole('link', { name: 'Websites', exact: true })
+    .click();
   const siteRow = page.getByRole('row').filter({ hasText: siteName });
   const publishSiteButton = siteRow.getByRole('button', { name: 'Publish site' });
   const publishedSiteButton = siteRow
