@@ -1629,6 +1629,10 @@ export const GrapesEditor = forwardRef(function GrapesEditor(
       internalChangeRef.current = wasInternalChange;
     });
     if (!result.changed) return result;
+    // A command can add a node before the iframe MutationObserver receives its
+    // child-list event. Paint the effective Design System cascade immediately
+    // so inserted blocks never spend a render in the platform default style.
+    applyAllViewportStyles(getRoot(editor), viewportRef.current, designSystemRef.current);
     if (command.kind === 'set-property') {
       const changedNode = findPayloadComponent(getRoot(editor), command.nodeId);
       if (changedNode && payloadNodeType(changedNode) === 'navigation-view') {

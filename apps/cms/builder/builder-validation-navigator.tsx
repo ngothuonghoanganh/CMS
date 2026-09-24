@@ -27,19 +27,22 @@ export function BuilderValidationNavigator({
   const first = issues[0];
   if (!first) return null;
   return (
-    <section
+    <details
       aria-label="Validation issues"
       className="builder-validation-navigator"
       data-builder-validation-summary
       role="region"
     >
-      <div className="builder-validation-navigator-heading">
+      <summary className="builder-validation-navigator-heading">
         <div>
           <span className="eyebrow">Needs attention</span>
           <strong>
             {issues.length} issue{issues.length === 1 ? '' : 's'} need attention
           </strong>
         </div>
+        <span className="builder-validation-navigator-hint">Save stays available</span>
+      </summary>
+      <div className="builder-validation-navigator-actions">
         <button
           className="button button-small button-primary"
           onClick={() => onFocusIssue(first)}
@@ -74,6 +77,6 @@ export function BuilderValidationNavigator({
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   );
 }

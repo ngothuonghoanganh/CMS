@@ -20,6 +20,7 @@ import {
   PageVersionListResponseSchema,
   PageVersionSchema,
   PageCompositionFieldsSchema,
+  PublishReadinessSchema,
   EffectivePermissionsResponseSchema,
   PAGE_COMPONENT_REGISTRY,
   builderPreviewForComponent,
@@ -53,6 +54,7 @@ import {
   type PagePreviewSnapshot,
   type PageRuntimeExtension,
   type PageCompositionFields,
+  type PublishReadiness,
 } from '@payload/contracts';
 import { useRouter } from 'next/navigation';
 import {
@@ -109,7 +111,11 @@ import {
 } from './builder-block/block-presets';
 import { isBuilderExtensionAvailableForPage } from './builder-block/builder-extension-registry';
 import type { DropPosition, MoveNodeIntent } from './builder-interaction';
-import { saveStatusAfterAcknowledgement } from './builder-save';
+import {
+  canStartBuilderSave,
+  isBuilderPublishDisabled,
+  saveStatusAfterAcknowledgement,
+} from './builder-save';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
 import { QuickAddOverlay } from './canvas/quick-add-overlay';
 import {
@@ -578,6 +584,10 @@ export default function BuilderShell({
   const [designSystem, setDesignSystem] = useState<SiteDesignSystem>(
     createDefaultSiteDesignSystem,
   );
+  const [publishReadiness, setPublishReadiness] = useState<PublishReadiness | null>(null);
+  const [publishReadinessLoading, setPublishReadinessLoading] = useState(false);
+  const [publishValidationBlocked, setPublishValidationBlocked] = useState(false);
+  const publishReadinessRequestRef = useRef(0);
   const [reusableSaveDraft, setReusableSaveDraft] = useState<{
     document: ReusableComponentDocument;
     name: string;
@@ -614,7 +624,7 @@ export default function BuilderShell({
   >({
     content: true,
     layout: true,
-    size: true,
+    size: false,
     spacing: false,
     typography: false,
     background: false,
@@ -651,7 +661,7 @@ export default function BuilderShell({
   } | null>(null);
   const [blockQuery, setBlockQuery] = useState('');
   const [addPanelTab, setAddPanelTab] = useState<AddPanelTab>('layouts');
-  const [addPanelTabTouched, setAddPanelTabTouched] = useState(false);
+  const [addPanelTabTouched, setAddPanelTabTouched] = useState(true);
   const [layerQuery, setLayerQuery] = useState('');
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
@@ -755,6 +765,19 @@ export default function BuilderShell({
     saveStatus === 'validation' ||
     saveStatus === 'error' ||
     saveStatus === 'conflict';
+  const publishDisabled = isBuilderPublishDisabled({
+    busy: saveInFlight,
+    hasDraft: isEditingReusable ? Boolean(editingReusable) : Boolean(version),
+    saveStatus,
+    ...(isEditingReusable ? {} : { readiness: publishReadiness?.ready ?? null }),
+    readinessLoading: !isEditingReusable && publishReadinessLoading,
+    validationBlocked: publishValidationBlocked,
+  });
+  const publishDisabledReason =
+    publishReadiness?.ready === false
+      ? (publishReadiness.blockingIssues[0]?.message ??
+        'Complete the required fields before publishing.')
+      : undefined;
   const pageExtensionState = new Map(
     pageExtensions.map((item) => [item.extensionId, item.enabled]),
   );
@@ -1220,6 +1243,9 @@ export default function BuilderShell({
     async function loadBuilder() {
       setLoadState('loading');
       setError(null);
+      setPublishReadiness(null);
+      setPublishValidationBlocked(false);
+      setPublishReadinessLoading(!initialReusableId);
       try {
         const requestedPreviewEntryId =
           typeof window === 'undefined'
@@ -1233,6 +1259,7 @@ export default function BuilderShell({
           siteResponse,
           reusablesResponseRaw,
           designSystemResponseRaw,
+          publishReadinessResponseRaw,
           previewResponseRaw,
           headerLayoutsResponseRaw,
           footerLayoutsResponseRaw,
@@ -1261,6 +1288,7 @@ export default function BuilderShell({
               }
               throw caughtError;
             }),
+          api.get(`/pages/${pageId}/publish-readiness`).catch(() => null),
           api.get(`/preview/pages/${pageId}`).catch(() => null),
           api.get(`/workspaces/${workspaceId}/layouts/headers`).catch(() => null),
           api.get(`/workspaces/${workspaceId}/layouts/footers`).catch(() => null),
@@ -1296,6 +1324,12 @@ export default function BuilderShell({
         const nextDesignSystem = designSystemResponseRaw
           ? SiteDesignSystemResponseSchema.parse(designSystemResponseRaw).draft
           : createDefaultSiteDesignSystem();
+        const parsedPublishReadiness = publishReadinessResponseRaw
+          ? PublishReadinessSchema.safeParse(publishReadinessResponseRaw)
+          : undefined;
+        setPublishReadiness(
+          parsedPublishReadiness?.success ? parsedPublishReadiness.data : null,
+        );
         setPage(nextPage);
         setSiteContext({
           name: nextSite.name,
@@ -1482,8 +1516,10 @@ export default function BuilderShell({
         }
         setLoadState('ready');
         setSaveStatus('saved');
+        setPublishReadinessLoading(false);
       } catch (caughtError) {
         if (cancelled) return;
+        setPublishReadinessLoading(false);
         if (caughtError instanceof ApiClientError && caughtError.status === 401) {
           router.replace('/login');
           return;
@@ -1672,6 +1708,29 @@ export default function BuilderShell({
     return () => window.removeEventListener('message', handlePreviewMessage);
   }, []);
 
+  async function refreshPublishReadiness(versionNumber?: number): Promise<void> {
+    if (isEditingReusable) return;
+    const requestId = ++publishReadinessRequestRef.current;
+    setPublishReadinessLoading(true);
+    try {
+      const query = versionNumber ? `?versionNumber=${versionNumber}` : '';
+      const response = await api.get(`/pages/${pageId}/publish-readiness${query}`);
+      if (requestId !== publishReadinessRequestRef.current) return;
+      setPublishReadiness(PublishReadinessSchema.parse(response));
+      setPublishValidationBlocked(false);
+    } catch {
+      if (requestId !== publishReadinessRequestRef.current) return;
+      // A readiness request is advisory. The publish endpoint remains the
+      // final authority, and a transient preflight failure must not make the
+      // saved draft impossible to publish.
+      setPublishReadiness(null);
+    } finally {
+      if (requestId === publishReadinessRequestRef.current) {
+        setPublishReadinessLoading(false);
+      }
+    }
+  }
+
   async function saveDraft(): Promise<SaveDraftResult> {
     if (!editorRef.current || saveInFlightRef.current) {
       return false;
@@ -1680,16 +1739,6 @@ export default function BuilderShell({
       setError(null);
       setNotice('Everything is already saved.');
       return true;
-    }
-    const blockingIssue = validationIssuesRef.current.find(
-      (issue) => issue.severity === 'error',
-    );
-    if (blockingIssue) {
-      setSaveStatus('validation');
-      setError(null);
-      setNotice(null);
-      await validationCoordinatorRef.current?.focusIssue(blockingIssue);
-      return false;
     }
     saveInFlightRef.current = true;
     setSaveInFlight(true);
@@ -1789,6 +1838,8 @@ export default function BuilderShell({
         );
       }
       validationCoordinatorRef.current?.clearResolvedIssues();
+      setPublishValidationBlocked(false);
+      void refreshPublishReadiness(nextVersion.versionNumber);
       const nextPageExtensions = PageExtensionListResponseSchema.parse(
         await api.get(`/pages/${pageId}/extensions`),
       );
@@ -1821,6 +1872,7 @@ export default function BuilderShell({
           typeof caughtError === 'object' &&
           Array.isArray((caughtError as { issues?: unknown }).issues))
       ) {
+        setSaveStatus('unsaved');
         showValidationIssue(
           validationIssueFromError(caughtError, {
             scope: scopeForDocumentKind(
@@ -1834,6 +1886,7 @@ export default function BuilderShell({
         return false;
       }
       if (caughtError instanceof ApiClientError && caughtError.status < 500) {
+        setSaveStatus('unsaved');
         showValidationIssue(
           createBuilderValidationIssue({
             scope: scopeForDocumentKind(
@@ -1858,10 +1911,7 @@ export default function BuilderShell({
   }
 
   async function publishPage() {
-    if (saveStatus === 'unsaved' || saveStatus === 'saving') {
-      setError('Save the current draft before publishing.');
-      return;
-    }
+    if (publishDisabled) return;
     setError(null);
     setNotice(null);
     try {
@@ -1875,6 +1925,7 @@ export default function BuilderShell({
           ),
         );
         validationCoordinatorRef.current?.clearResolvedIssues();
+        setPublishValidationBlocked(false);
         setNotice(
           'Site published. The public site now uses the published reusable source.',
         );
@@ -1882,10 +1933,13 @@ export default function BuilderShell({
       }
       const updated = PageSchema.parse(await api.post(`/pages/${pageId}/publish`, {}));
       setPage(updated);
+      setPublishValidationBlocked(false);
       validationCoordinatorRef.current?.clearResolvedIssues();
       setNotice('Page published. The public site now uses the published snapshot.');
+      void refreshPublishReadiness();
     } catch (caughtError) {
       if (caughtError instanceof ApiClientError && caughtError.status < 500) {
+        setPublishValidationBlocked(true);
         showValidationIssue(
           createBuilderValidationIssue({
             scope: scopeForDocumentKind(
@@ -2096,12 +2150,6 @@ export default function BuilderShell({
     });
     validationIssuesRef.current = sorted;
     setValidationIssues(sorted);
-    if (issue?.severity === 'error') {
-      setSaveStatus('validation');
-    }
-    if (!issue && sorted.length === 0) {
-      setSaveStatus((current) => (current === 'validation' ? 'unsaved' : current));
-    }
   }
 
   function showValidationIssue(issue: BuilderValidationIssue, focus = false): void {
@@ -2435,7 +2483,12 @@ export default function BuilderShell({
           <button
             aria-label="Save draft"
             className="button button-primary"
-            disabled={saveInFlight || saveStatus === 'initializing'}
+            disabled={
+              !canStartBuilderSave({
+                editorReady: saveStatus !== 'initializing',
+                saveInFlight,
+              })
+            }
             onClick={() => void saveDraft()}
             type="button"
           >
@@ -2443,14 +2496,8 @@ export default function BuilderShell({
           </button>
           <button
             className="button button-success"
-            disabled={
-              saveInFlight ||
-              saveStatus === 'initializing' ||
-              saveStatus === 'unsaved' ||
-              saveStatus === 'saving' ||
-              saveStatus === 'validation' ||
-              saveStatus === 'conflict'
-            }
+            disabled={publishDisabled}
+            title={publishDisabledReason}
             onClick={() => void publishPage()}
             type="button"
           >

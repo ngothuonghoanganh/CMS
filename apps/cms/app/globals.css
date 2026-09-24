@@ -9347,3 +9347,191 @@ body {
     font-size: 1.35rem;
   }
 }
+
+/* Final builder layout guardrails. Keep every grid track shrinkable so a
+ * narrow window cannot push the canvas or inspector outside the viewport. */
+.builder-frame,
+.builder-frame > * {
+  min-width: 0;
+}
+
+.builder-topbar {
+  min-width: 0;
+}
+
+.builder-title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.builder-actions {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.builder-actions > * {
+  min-width: 0;
+}
+
+.builder-workspace-v2 {
+  min-width: 0;
+  grid-template-columns:
+    minmax(0, calc(3.5rem + var(--builder-left-panel-width) + 0.45rem))
+    minmax(0, 0.45rem)
+    minmax(0, 1fr)
+    minmax(0, 0.45rem)
+    minmax(0, var(--builder-right-panel-width));
+  gap: 0.45rem;
+}
+
+.builder-workspace-v2 > *,
+.builder-left-dock,
+.builder-left-dock > *,
+.builder-canvas-panel,
+.builder-properties-panel,
+.builder-editor-shell {
+  min-width: 0;
+  min-height: 0;
+}
+
+.builder-left-dock .builder-panel {
+  min-height: 0;
+}
+
+.builder-workspace-v2.is-left-collapsed {
+  grid-template-columns:
+    3.5rem
+    minmax(0, 1fr)
+    minmax(0, 0.45rem)
+    minmax(0, var(--builder-right-panel-width));
+}
+
+.builder-workspace-v2.is-right-collapsed {
+  grid-template-columns:
+    minmax(0, calc(3.5rem + var(--builder-left-panel-width) + 0.45rem))
+    minmax(0, 0.45rem)
+    minmax(0, 1fr);
+}
+
+.builder-workspace-v2.is-left-collapsed.is-right-collapsed {
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+}
+
+.builder-validation-navigator {
+  overflow: hidden;
+}
+
+.builder-validation-navigator > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.builder-validation-navigator > summary::-webkit-details-marker {
+  display: none;
+}
+
+.builder-validation-navigator > summary::after {
+  content: '＋';
+  flex: 0 0 auto;
+  color: var(--cms-danger);
+  font-size: 1rem;
+}
+
+.builder-validation-navigator[open] > summary::after {
+  content: '−';
+}
+
+.builder-validation-navigator-hint {
+  margin-left: auto;
+  color: var(--cms-text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.builder-validation-navigator-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+.builder-history-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.builder-history-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.builder-history-disclosure > summary::after {
+  content: '＋';
+  flex: 0 0 auto;
+  color: var(--cms-text-muted);
+}
+
+.builder-history-disclosure[open] > summary::after {
+  content: '−';
+}
+
+@media (min-width: 981px) and (max-width: 1100px) {
+  /* Keep the three useful surfaces side by side at tablet/desktop widths.
+   * The previous max-width rule switched to overlapping absolute panels too
+   * early, which made the builder look broken even when space was available. */
+  .builder-workspace-v2 {
+    display: grid;
+    grid-template-columns:
+      minmax(0, calc(3.25rem + min(var(--builder-left-panel-width), 230px) + 0.4rem))
+      minmax(0, 0.45rem)
+      minmax(0, 1fr)
+      minmax(0, 0.45rem)
+      minmax(260px, min(300px, var(--builder-right-panel-width)));
+  }
+
+  .builder-workspace-v2.is-left-collapsed {
+    grid-template-columns:
+      3.25rem
+      minmax(0, 1fr)
+      minmax(0, 0.45rem)
+      minmax(260px, min(300px, var(--builder-right-panel-width)));
+  }
+
+  .builder-workspace-v2.is-right-collapsed {
+    grid-template-columns:
+      minmax(0, calc(3.25rem + min(var(--builder-left-panel-width), 230px) + 0.4rem))
+      minmax(0, 0.45rem)
+      minmax(0, 1fr);
+  }
+
+  .builder-workspace-v2.is-left-collapsed.is-right-collapsed {
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+  }
+
+  .builder-left-dock,
+  .builder-properties-panel {
+    position: static;
+    width: auto;
+    max-width: none;
+  }
+
+  .builder-left-dock {
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+  }
+
+  .builder-left-dock.is-collapsed {
+    grid-template-columns: 3.25rem 0;
+  }
+
+  .builder-panel-resizer {
+    display: block;
+  }
+
+  .builder-editor-shell {
+    height: 100%;
+  }
+}

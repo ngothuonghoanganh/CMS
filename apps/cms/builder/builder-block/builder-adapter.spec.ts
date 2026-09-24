@@ -8,6 +8,7 @@ import {
   type PagePayloadV7,
   type ReusableComponentDocument,
   type SiteGlobalPayloadV1,
+  createDefaultSiteDesignSystem,
   OPEN_COMPOSITION_AUTHORING_REGISTRY,
   OpenCompositionPayloadSchema,
   type OpenCompositionNodeType,
@@ -36,6 +37,7 @@ import {
   BUILDER_OPEN_COMPOSITION_ATTRIBUTE,
   BUILDER_OPEN_BEHAVIORS_ATTRIBUTE,
   applyEditorPartViewportStyles,
+  applyEditorComponentDefaultStyle,
   BuilderAdapterError,
   createBlockDefinition,
   createOpenCompositionNodeDefinition,
@@ -721,6 +723,55 @@ describe('builder adapter', () => {
     updateEditorViewportStyle(component, 'desktop', 'width', '240px');
     const responsive = JSON.parse(String(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]));
     expect(responsive.base).toMatchObject({ width: '240px', display: 'inline-block' });
+  });
+
+  it('paints configured component defaults without turning them into local styles', () => {
+    const system = createDefaultSiteDesignSystem();
+    const values = new Map<string, string>();
+    const configuredSystem = {
+      ...system,
+      spacing: [
+        ...system.spacing,
+        { id: 'space-builder', name: 'Builder spacing', value: '28px' },
+      ],
+      componentDefaults: {
+        ...system.componentDefaults,
+        section: {
+          ...(system.componentDefaults?.section ?? {}),
+          style: {
+            base: {
+              padding: { kind: 'token' as const, tokenId: 'space-builder' },
+              backgroundColor: '#f8fafc',
+            },
+          },
+        },
+      },
+    };
+    const element = {
+      style: {
+        setProperty: (property: string, value: string) => values.set(property, value),
+        removeProperty: (property: string) => values.delete(property),
+      },
+    };
+    const attrs: Record<string, unknown> = {
+      [BUILDER_NODE_ID_ATTRIBUTE]: 'section-1',
+      [BUILDER_NODE_TYPE_ATTRIBUTE]: 'section',
+    };
+    const component = {
+      getAttributes: () => attrs,
+      getEl: () => element,
+      getStyle: () => ({}),
+    } as never;
+
+    applyEditorComponentDefaultStyle(component, 'section', 'desktop', configuredSystem);
+
+    expect(values).toEqual(
+      new Map([
+        ['padding', '28px'],
+        ['background-color', '#f8fafc'],
+      ]),
+    );
+    expect(attrs[BUILDER_RESPONSIVE_STYLE_ATTRIBUTE]).toBeUndefined();
   });
 
   it('clamps opacity before persisting editor style state', () => {

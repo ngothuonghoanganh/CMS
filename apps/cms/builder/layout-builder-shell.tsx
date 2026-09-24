@@ -68,6 +68,7 @@ import {
   type BuilderPanelWidths,
 } from './builder-panel-size';
 import { BuilderPanelResizer } from './builder-panel-resizer';
+import { canStartBuilderSave, isBuilderPublishDisabled } from './builder-save';
 import { BuilderContextToolbar } from './canvas/builder-context-toolbar';
 import { QuickAddOverlay } from './canvas/quick-add-overlay';
 import {
@@ -246,7 +247,7 @@ export default function LayoutBuilderShell({
   const [openSections, setOpenSections] = useState(inspectorSections);
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
   const [addPanelTab, setAddPanelTab] = useState<AddPanelTab>('layouts');
-  const [addPanelTabTouched, setAddPanelTabTouched] = useState(false);
+  const [addPanelTabTouched, setAddPanelTabTouched] = useState(true);
   const [blockQuery, setBlockQuery] = useState('');
   const [layerQuery, setLayerQuery] = useState('');
   const [collapsedLayerIds, setCollapsedLayerIds] = useState<Set<string>>(
@@ -271,7 +272,16 @@ export default function LayoutBuilderShell({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const isDirty = status === 'unsaved' || status === 'saving' || status === 'conflict';
+  const isDirty =
+    status === 'unsaved' ||
+    status === 'saving' ||
+    status === 'error' ||
+    status === 'conflict';
+  const publishDisabled = isBuilderPublishDisabled({
+    busy,
+    hasDraft: Boolean(resource?.draftVersionId),
+    saveStatus: status,
+  });
   const effectivePreviewSiteId =
     previewSiteId ?? workspacePreviewSiteId ?? resource?.siteId;
 
@@ -594,6 +604,14 @@ export default function LayoutBuilderShell({
   async function saveDraft(): Promise<void> {
     const current = editorRef.current?.getDocument() ?? document;
     if (!current || 'schemaVersion' in current) return;
+    if (
+      !canStartBuilderSave({
+        editorReady: Boolean(document),
+        saveInFlight: busy,
+      })
+    ) {
+      return;
+    }
     setBusy(true);
     setStatus('saving');
     setError(null);
@@ -635,10 +653,7 @@ export default function LayoutBuilderShell({
 
   async function publish(): Promise<void> {
     if (!resource) return;
-    if (status === 'unsaved') {
-      setError('Save the draft before publishing it.');
-      return;
-    }
+    if (publishDisabled) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -886,7 +901,12 @@ export default function LayoutBuilderShell({
           </button>
           <button
             className="button button-primary"
-            disabled={busy}
+            disabled={
+              !canStartBuilderSave({
+                editorReady: Boolean(document),
+                saveInFlight: busy,
+              })
+            }
             onClick={() => void saveDraft()}
             type="button"
           >
@@ -904,7 +924,7 @@ export default function LayoutBuilderShell({
           ) : null}
           <button
             className="button button-success"
-            disabled={busy || !resource.draftVersionId || status === 'unsaved'}
+            disabled={publishDisabled}
             onClick={() => void publish()}
             type="button"
           >
@@ -1357,13 +1377,14 @@ export default function LayoutBuilderShell({
           </button>
         )}
       </div>
-      <section className="panel page-secondary-panel">
-        <div className="panel-heading">
+      <details className="panel page-secondary-panel builder-history-disclosure">
+        <summary className="panel-heading">
           <div>
-            <span className="eyebrow">Immutable history</span>
-            <h2>Versions</h2>
+            <span className="eyebrow">Optional</span>
+            <h2>Version history</h2>
           </div>
-        </div>
+          <span className="muted small">{versions.length} saved</span>
+        </summary>
         <div className="list">
           {versions.map((version) => (
             <div className="list-row" key={version.id}>
@@ -1374,7 +1395,7 @@ export default function LayoutBuilderShell({
             </div>
           ))}
         </div>
-      </section>
+      </details>
       {dialog}
     </main>
   );
