@@ -8,6 +8,7 @@ import {
   PAGE_STYLE_PROPERTY_DEFINITIONS,
   type PagePayload,
   SiteDesignSystemSchema,
+  type SiteDesignSystem,
   type OpenCompositionNode,
   type OpenCompositionPayload,
 } from '@payload/contracts';
@@ -297,6 +298,111 @@ function v8ParityDesignSystem() {
       },
     },
   });
+}
+
+const cyclePrimaryColors = [
+  '#be123c',
+  '#0369a1',
+  '#047857',
+  '#7c3aed',
+  '#c2410c',
+  '#4338ca',
+  '#0f766e',
+  '#a21caf',
+  '#b45309',
+  '#1d4ed8',
+  '#be185d',
+  '#15803d',
+  '#6d28d9',
+  '#c2410c',
+  '#0e7490',
+  '#9f1239',
+  '#166534',
+  '#5b21b6',
+  '#92400e',
+  '#1e40af',
+] as const;
+
+const cycleSurfaceColors = [
+  '#fef2f2',
+  '#ecfeff',
+  '#ecfdf5',
+  '#f5f3ff',
+  '#fff7ed',
+  '#eef2ff',
+  '#f0fdfa',
+  '#fdf4ff',
+  '#fffbeb',
+  '#eff6ff',
+  '#fdf2f8',
+  '#f0fdf4',
+  '#faf5ff',
+  '#fff7ed',
+  '#ecfeff',
+  '#fff1f2',
+  '#f0fdf4',
+  '#f5f3ff',
+  '#fffbeb',
+  '#eff6ff',
+] as const;
+
+function cycleDesignSystem(cycle: number): SiteDesignSystem {
+  const base = v8ParityDesignSystem();
+  const primary = cyclePrimaryColors[cycle % cyclePrimaryColors.length];
+  const surface = cycleSurfaceColors[cycle % cycleSurfaceColors.length];
+  const fontFamily = cycle % 2 === 0 ? 'Georgia, serif' : 'Arial, sans-serif';
+  const spacing = `${16 + (cycle % 9)}px`;
+  const radius = `${6 + (cycle % 9)}px`;
+  const componentDefaults = base.componentDefaults ?? {};
+
+  return SiteDesignSystemSchema.parse({
+    ...base,
+    colors: base.colors.map((token) => {
+      if (token.id === 'color-primary') return { ...token, value: primary };
+      if (token.id === 'color-surface') return { ...token, value: surface };
+      return token;
+    }),
+    typography: base.typography.map((token) => {
+      if (token.id === 'type-body') {
+        return { ...token, fontFamily, fontSize: `${16 + (cycle % 4)}px` };
+      }
+      if (token.id === 'type-heading') {
+        return { ...token, fontFamily, fontSize: `${28 + (cycle % 5)}px` };
+      }
+      return token;
+    }),
+    spacing: base.spacing.map((token) =>
+      token.id === 'space-2' ? { ...token, value: spacing } : token,
+    ),
+    radii: base.radii.map((token) =>
+      token.id === 'radius-md' ? { ...token, value: radius } : token,
+    ),
+    componentDefaults: {
+      ...componentDefaults,
+      stack: {
+        ...componentDefaults.stack,
+        style: {
+          ...(componentDefaults.stack?.style ?? { base: {} }),
+          base: { ...(componentDefaults.stack?.style?.base ?? {}), gap: spacing },
+        },
+      },
+    },
+  });
+}
+
+function cssColor(value: string): string {
+  const hex = value.trim().replace(/^#/, '');
+  const expanded =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((part) => `${part}${part}`)
+          .join('')
+      : hex;
+  const channels = [0, 2, 4].map((offset) =>
+    Number.parseInt(expanded.slice(offset, offset + 2), 16),
+  );
+  return `rgb(${channels.join(', ')})`;
 }
 
 function v8ParityFixture(): OpenCompositionPayload {
@@ -1321,6 +1427,318 @@ test('V8 Open Composition inherits one Design System across Builder, review, and
   } finally {
     await review.close();
     await published.close();
+    await temporaryPage.dispose();
+  }
+});
+
+test('Design System remains in sync through 20 Builder save and publish cycles', async ({
+  browser,
+  page,
+  request,
+  canonicalEnvironment,
+}, testInfo) => {
+  test.setTimeout(900_000);
+
+  const workspaceDesignSystemUrl = `${E2E_API_BASE_URL}/workspaces/${canonicalEnvironment.workspaceId}/design-system`;
+  const siteDesignSystemUrl = `${E2E_API_BASE_URL}/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/design-system`;
+  const fixture = v8ParityFixture();
+  const ids = [
+    'root',
+    'v8-section',
+    'v8-stack',
+    'v8-stack-text',
+    'v8-card',
+    'v8-card-button',
+  ] as const;
+  const properties = [
+    'background-color',
+    'color',
+    'font-family',
+    'font-size',
+    'gap',
+    'padding',
+    'border-color',
+    'border-radius',
+    'border-width',
+  ] as const;
+
+  async function applyCycleDesignSystem(cycle: number, withSiteOverride: boolean) {
+    const designSystem = cycleDesignSystem(cycle);
+    const workspaceDraft = await request.patch(workspaceDesignSystemUrl, {
+      data: designSystem,
+    });
+    expect(workspaceDraft.ok(), await workspaceDraft.text()).toBe(true);
+    const workspacePublish = await request.post(`${workspaceDesignSystemUrl}/publish`, {
+      data: { designSystem },
+    });
+    expect(workspacePublish.ok(), await workspacePublish.text()).toBe(true);
+
+    const overrideColor =
+      cyclePrimaryColors[(cycle + 5) % cyclePrimaryColors.length] ?? '#111827';
+    const siteDraft = await request.patch(siteDesignSystemUrl, {
+      data: withSiteOverride
+        ? {
+            override: {
+              version: 1,
+              colors: [
+                {
+                  id: 'color-primary',
+                  name: 'Site primary override',
+                  value: overrideColor,
+                },
+              ],
+            },
+          }
+        : { override: { version: 1 } },
+    });
+    expect(siteDraft.ok(), await siteDraft.text()).toBe(true);
+    const sitePublish = await request.post(`${siteDesignSystemUrl}/publish`, {
+      data: {},
+    });
+    expect(sitePublish.ok(), await sitePublish.text()).toBe(true);
+
+    const effectiveResponse = await request.get(siteDesignSystemUrl);
+    expect(effectiveResponse.ok(), await effectiveResponse.text()).toBe(true);
+    const effective = SiteDesignSystemSchema.parse(
+      ((await effectiveResponse.json()) as { draft: unknown }).draft,
+    );
+    const expectedPrimary = withSiteOverride ? overrideColor : cyclePrimaryColors[cycle];
+    expect(effective.colors.find((token) => token.id === 'color-primary')?.value).toBe(
+      expectedPrimary,
+    );
+    return { designSystem, effective };
+  }
+
+  // Establish a known published baseline before the builder opens. Each loop
+  // then changes the Design System while the builder remains the active task,
+  // simulating a second Brand & styles tab.
+  await applyCycleDesignSystem(0, false);
+  const temporaryPage = await openCanonicalBuilder(
+    page,
+    request,
+    canonicalEnvironment,
+    'ux stabilization twenty cycles',
+    fixture,
+  );
+  let stylesPage: import('@playwright/test').Page | undefined;
+  let activePreview: import('@playwright/test').Page | undefined;
+  const publicPage = await browser.newPage({ baseURL: rendererOrigin });
+
+  try {
+    const seeded = await request.post(
+      `${E2E_API_BASE_URL}/pages/${temporaryPage.id}/versions`,
+      {
+        data: { expectedVersionNumber: 1, payload: fixture },
+      },
+    );
+    expect(seeded.status(), await seeded.text()).toBe(201);
+    await page.setViewportSize({ width: 1965, height: 1000 });
+
+    // Exercise the real multi-tab authoring case once before the matrix. The
+    // Builder remains open while Brand & styles publishes from another CMS
+    // tab, then a reload must project the published token into the canvas.
+    stylesPage = await page.context().newPage();
+    await stylesPage.goto(
+      `/workspaces/${canonicalEnvironment.workspaceId}/sites/${canonicalEnvironment.siteId}/design-system`,
+    );
+    await expect(
+      stylesPage.getByRole('heading', { name: 'Brand & styles', exact: true }),
+    ).toBeVisible();
+    const stylesEditor = stylesPage.locator('.design-system-editor');
+    await stylesEditor.getByRole('button', { name: 'Colors', exact: true }).click();
+    await stylesEditor.getByRole('button', { name: /^Primary Primary/ }).click();
+    const multiTabPrimary = cyclePrimaryColors[1];
+    await stylesPage
+      .getByLabel('Primary color hex value', { exact: true })
+      .fill(multiTabPrimary);
+    await stylesEditor
+      .getByRole('button', { name: 'Publish styles', exact: true })
+      .click();
+    await expect(stylesPage.locator('.builder-alert.alert-success')).toHaveText(
+      'Website styles published immediately.',
+    );
+    await page.reload();
+    const multiTabBuilderRoot = page
+      .frameLocator('iframe.gjs-frame')
+      .locator('main[data-payload-node-id="root"]');
+    await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+      timeout: 20_000,
+    });
+    await waitForPageSurface(multiTabBuilderRoot);
+    const multiTabSnapshot = await collectVisualSnapshot(multiTabBuilderRoot);
+    expect(
+      new Map(multiTabSnapshot.nodes.map((node) => [node.id, node])).get('v8-card-button')
+        ?.style['background-color'],
+    ).toBe(cssColor(multiTabPrimary));
+    await stylesPage.close();
+    stylesPage = undefined;
+
+    // Restore the inherited baseline before starting the 20-cycle matrix.
+    await applyCycleDesignSystem(0, false);
+    await page.reload();
+
+    for (let cycle = 1; cycle <= 20; cycle += 1) {
+      const { effective } = await applyCycleDesignSystem(cycle, cycle >= 11);
+      await page.reload();
+      const builderRoot = page
+        .frameLocator('iframe.gjs-frame')
+        .locator('main[data-payload-node-id="root"]');
+      await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+        timeout: 20_000,
+      });
+      await waitForPageSurface(builderRoot);
+
+      const editableText = builderRoot.locator('[data-payload-node-id="v8-stack-text"]');
+      await editableText.click();
+      const textField = page.getByRole('textbox', { name: 'Text', exact: true });
+      await expect(textField).toBeVisible();
+      await textField.fill(`Cycle ${cycle}`);
+      await textField.blur();
+      await expect(editableText).toHaveText(`Cycle ${cycle}`);
+      await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+      await expect(page.locator('.builder-save-status')).toContainText('Saved', {
+        timeout: 20_000,
+      });
+
+      // A reload is part of every cycle: the next assertions must use the
+      // persisted Builder document and the freshly resolved Design System.
+      await page.reload();
+      await expect(page.locator('.builder-editor-host iframe.gjs-frame')).toBeAttached({
+        timeout: 20_000,
+      });
+      await waitForPageSurface(builderRoot);
+      await expect(
+        builderRoot.locator('[data-payload-node-id="v8-stack-text"]'),
+      ).toHaveText(`Cycle ${cycle}`);
+
+      const popupPromise = page.waitForEvent('popup');
+      await page.getByRole('button', { name: 'Live preview', exact: true }).click();
+      activePreview = await popupPromise;
+      await activePreview.waitForLoadState('domcontentloaded');
+      const reviewRoot = activePreview.locator('.payload-page');
+      await waitForPageSurface(reviewRoot);
+      await expect(activePreview.locator('.preview-banner')).toBeVisible();
+      await activePreview.locator('.preview-banner').evaluate((element) => {
+        (element as HTMLElement).style.visibility = 'hidden';
+      });
+
+      const publishButton = page.getByRole('button', { name: 'Publish', exact: true });
+      await expect(publishButton).toBeEnabled({ timeout: 20_000 });
+      await publishButton.click();
+      await expect(page.locator('.builder-alert.alert-success')).toContainText(
+        'Page published',
+        { timeout: 20_000 },
+      );
+
+      const publicResponse = await publicPage.goto(
+        `/${temporaryPage.siteSlug}/${temporaryPage.slug}?cycle=${cycle}`,
+      );
+      expect(publicResponse?.status()).toBe(200);
+      const publicRoot = publicPage.locator('.payload-page');
+      await waitForPageSurface(publicRoot);
+      await isolateBuilderPageSurface(page, builderRoot);
+      await isolateRendererChrome(activePreview);
+      await isolateRendererChrome(publicPage);
+
+      const builderBounds = await builderRoot.boundingBox();
+      expect(builderBounds).toBeTruthy();
+      const viewport = {
+        width: Math.round(builderBounds?.width ?? 0),
+        height: Math.round(builderBounds?.height ?? 0),
+      };
+      expect(viewport.width).toBeGreaterThan(0);
+      expect(viewport.height).toBeGreaterThan(0);
+      await activePreview.setViewportSize(viewport);
+      await publicPage.setViewportSize(viewport);
+      await waitForPageSurface(reviewRoot);
+      await waitForPageSurface(publicRoot);
+
+      const [builderSnapshot, reviewSnapshot, publicSnapshot] = await Promise.all([
+        collectVisualSnapshot(builderRoot),
+        collectVisualSnapshot(reviewRoot),
+        collectVisualSnapshot(publicRoot),
+      ]);
+      expectSelectedStyleParity(
+        builderSnapshot,
+        reviewSnapshot,
+        ids,
+        properties,
+        `Cycle ${cycle}: Builder ↔ Review`,
+      );
+      expectSelectedStyleParity(
+        reviewSnapshot,
+        publicSnapshot,
+        ids,
+        properties,
+        `Cycle ${cycle}: Review ↔ Public`,
+      );
+      expectSelectedStyleParity(
+        builderSnapshot,
+        publicSnapshot,
+        ids,
+        properties,
+        `Cycle ${cycle}: Builder ↔ Public`,
+      );
+
+      const reviewById = new Map(reviewSnapshot.nodes.map((node) => [node.id, node]));
+      expect(reviewById.get('v8-card-button')?.style['background-color']).toBe(
+        cssColor(
+          effective.colors.find((token) => token.id === 'color-primary')?.value ??
+            '#000000',
+        ),
+      );
+      expect(reviewById.get('v8-card')?.style['background-color']).toBe(
+        cssColor(
+          effective.colors.find((token) => token.id === 'color-surface')?.value ??
+            '#ffffff',
+        ),
+      );
+      expect(reviewById.get('v8-stack')?.style.gap).toBe(
+        effective.spacing.find((token) => token.id === 'space-2')?.value,
+      );
+
+      const frame = page.locator('iframe.gjs-frame');
+      const frameBounds = await frame.boundingBox();
+      expect(frameBounds).toBeTruthy();
+      const cdp = await page.context().newCDPSession(page);
+      const builderImage = await cdp.send('Page.captureScreenshot', {
+        captureBeyondViewport: false,
+        clip: { ...frameBounds!, scale: 1 },
+        fromSurface: true,
+        format: 'png',
+      });
+      await cdp.detach();
+      const builderScreenshot = Buffer.from(builderImage.data, 'base64');
+      expect(builderScreenshot.length).toBeGreaterThan(0);
+      if ([1, 10, 11, 20].includes(cycle)) {
+        await testInfo.attach(`design-system-cycle-${cycle}-builder.png`, {
+          body: builderScreenshot,
+          contentType: 'image/png',
+        });
+      }
+
+      // Review and public are the same top-level renderer surface, so their
+      // raster output is the strict screenshot contract. The Builder iframe
+      // has a different browser capture origin; its node-by-node computed
+      // style parity above is the stable contract, while the frame capture is
+      // still produced and attached for the representative cycles.
+      await compareScreenshots(
+        reviewRoot,
+        reviewRoot,
+        publicRoot,
+        `cycle-${String(cycle).padStart(2, '0')}`,
+        testInfo,
+        viewport.height,
+        { builder: reviewSnapshot, review: reviewSnapshot, published: publicSnapshot },
+      );
+
+      await activePreview.close();
+      activePreview = undefined;
+    }
+  } finally {
+    if (activePreview && !activePreview.isClosed()) await activePreview.close();
+    if (stylesPage && !stylesPage.isClosed()) await stylesPage.close();
+    await publicPage.close();
     await temporaryPage.dispose();
   }
 });

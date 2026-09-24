@@ -11,11 +11,12 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useCmsShell } from '../cms-shell';
 import { cmsViewPath, pagesPath, sitePath } from '../cms-routes';
 import { ApiClientError, api } from '../lib/api';
+import { AssetPicker } from '../collections/collection-field-controls';
 import { StatusBadge } from '../status-badge';
 import { Drawer, EmptyState, PageHeader, PaginationControls } from '../ui/surfaces';
 
-type SiteForm = { name: string; slug: string };
-const blankSite: SiteForm = { name: '', slug: '' };
+type SiteForm = { name: string; slug: string; logo: string };
+const blankSite: SiteForm = { name: '', slug: '', logo: '' };
 
 function normalizeSlug(value: string): string {
   return value
@@ -59,7 +60,7 @@ export default function SitesPage({
       setSites(response.items);
       setPagination(response.pagination);
       const site = response.items.find((item) => item.id === siteId);
-      if (site) setForm({ name: site.name, slug: site.slug });
+      if (site) setForm({ name: site.name, slug: site.slug, logo: site.logo ?? '' });
     } catch (caughtError) {
       setError(errorMessage(caughtError));
     } finally {
@@ -74,7 +75,11 @@ export default function SitesPage({
   useEffect(() => {
     if (action === 'create') setForm(blankSite);
     if (action === 'edit' && selectedSite) {
-      setForm({ name: selectedSite.name, slug: selectedSite.slug });
+      setForm({
+        name: selectedSite.name,
+        slug: selectedSite.slug,
+        logo: selectedSite.logo ?? '',
+      });
     }
   }, [action, selectedSite]);
 
@@ -87,7 +92,11 @@ export default function SitesPage({
       if (action === 'edit' && siteId) {
         const updated = await api.patch<Site>(
           `/workspaces/${workspaceId}/sites/${siteId}`,
-          form,
+          {
+            name: form.name,
+            slug: form.slug,
+            logo: form.logo.trim() || null,
+          },
         );
         setSites((current) =>
           current.map((site) => (site.id === updated.id ? updated : site)),
@@ -97,6 +106,7 @@ export default function SitesPage({
         const created = await api.post<Site>(`/workspaces/${workspaceId}/sites`, {
           name: form.name,
           slug: form.slug || normalizeSlug(form.name),
+          ...(form.logo.trim() ? { logo: form.logo.trim() } : {}),
         });
         router.push(sitePath(workspaceId, created.id));
       }
@@ -327,6 +337,28 @@ export default function SitesPage({
                   value={form.name}
                 />
               </label>
+              <div className="site-logo-field">
+                <span className="ui-field-label">Website logo</span>
+                <p className="ui-field-description">
+                  Choose an image from Media. It will appear in your website header.
+                </p>
+                <AssetPicker
+                  allowExternalUrl
+                  initialMediaType="image"
+                  onAssetSelected={(asset) =>
+                    setForm((current) => ({
+                      ...current,
+                      logo: asset.publicUrl ?? asset.storageKey,
+                    }))
+                  }
+                  onChange={(value) =>
+                    setForm((current) => ({ ...current, logo: value }))
+                  }
+                  onRemove={() => setForm((current) => ({ ...current, logo: '' }))}
+                  value={form.logo}
+                  workspaceId={workspaceId}
+                />
+              </div>
               <details className="form-advanced" open={Boolean(siteId)}>
                 <summary>Advanced settings</summary>
                 <label>

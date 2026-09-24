@@ -134,11 +134,24 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
 
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
   await expect(navigation).toBeVisible();
-  for (const section of ['Home', 'Websites', 'Content', 'Media', 'Results', 'Settings']) {
+  for (const section of ['Home', 'Website', 'Results', 'More tools']) {
     await expect(
       navigation.locator('.nav-section-label', { hasText: section }),
     ).toBeVisible();
   }
+  for (const item of ['Websites', 'Pages', 'Brand & styles', 'Media']) {
+    await expect(navigation.getByText(item, { exact: true })).toBeVisible();
+  }
+  const openMoreTools = async (itemName: string) => {
+    const item = navigation.getByRole('button', { name: itemName, exact: true });
+    if (!(await item.isVisible())) {
+      await navigation
+        .locator('summary.nav-section-label', { hasText: 'More tools' })
+        .click();
+    }
+    await expect(item).toBeVisible();
+  };
+  await openMoreTools('Templates');
   await expect(
     navigation.getByRole('button', { name: 'Brand & styles', exact: true }),
   ).toBeVisible();
@@ -148,7 +161,7 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
   await expect(
     page.getByRole('heading', { name: 'Brand & styles', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await navigation.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(page).toHaveURL(/\/workspaces\/[^/]+$/);
   await expect(page.getByLabel('Current workspace')).toBeVisible();
   await expect(page.locator('.topbar-page-context')).toHaveCount(0);
@@ -195,12 +208,14 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
   }
 
   await page.setViewportSize({ height: 900, width: 1440 });
+  await openMoreTools('Roles');
   await page.getByRole('button', { name: 'Roles', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Roles', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Form responses', exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'Submissions', exact: true }),
+    page.getByRole('heading', { name: 'Form responses', exact: true }),
   ).toBeVisible();
+  await openMoreTools('Users');
   await page.getByRole('button', { name: 'Users', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View details', exact: true }).first().click();
@@ -241,6 +256,7 @@ test('CMS shell groups navigation and stays usable across desktop and tablet wid
     mobileUsersWidth.clientWidth + 1,
   );
   await page.setViewportSize({ height: 900, width: 1440 });
+  await openMoreTools('Billing & Usage');
   await page.getByRole('button', { name: 'Billing & Usage', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Billing & usage', exact: true }),
@@ -260,6 +276,10 @@ test('extension management settles without a request loop and stays responsive',
     }
   });
   await login(page);
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Extensions', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Extensions', exact: true }),
@@ -398,6 +418,10 @@ test('@tenancy uses the enabled Countdown extension through builder save and pub
   await page.goto(`/workspaces/${workspace.id}`);
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
 
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Extensions', exact: true }).click();
   const countdownCard = page
     .locator('.extension-card')
@@ -573,6 +597,90 @@ test('@tenancy creates and edits a site', async ({ page }) => {
   ).toBeVisible();
 });
 
+test('@tenancy creates and updates a website logo without leaving the UI', async ({
+  page,
+}) => {
+  const suffix = Date.now().toString();
+  const pixel = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64',
+  );
+  const secondPixel = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p1sAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await login(page);
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page.getByRole('button', { name: 'New site', exact: true }).click();
+  await page.getByLabel('Site name').fill(`Logo Site ${suffix}`);
+
+  const logoPicker = page.locator('.site-logo-field');
+  await logoPicker.getByRole('button', { name: 'Select asset', exact: true }).click();
+  const firstAssetDialog = page.getByRole('dialog', { name: 'Select asset' });
+  await firstAssetDialog.locator('input[type="file"]').setInputFiles({
+    name: `logo-first-${suffix}.png`,
+    mimeType: 'image/png',
+    buffer: pixel,
+  });
+  await expect(logoPicker.locator('.collection-picker-current img')).toHaveAttribute(
+    'src',
+    new RegExp(`logo-first-${suffix}\\.png$`),
+  );
+  const firstLogoSource = await logoPicker
+    .locator('.collection-picker-current img')
+    .getAttribute('src');
+  expect(firstLogoSource).toBeTruthy();
+
+  await page.getByRole('button', { name: 'Create site', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: `Logo Site ${suffix}`, exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('main')
+    .getByRole('button', { name: 'Brand & styles', exact: true })
+    .click();
+  await expect(page.locator('.site-preview-brand img')).toHaveAttribute(
+    'src',
+    firstLogoSource!,
+  );
+
+  await page.getByRole('button', { name: 'Sites', exact: true }).click();
+  await page
+    .locator('tr.site-table-row')
+    .filter({ hasText: `Logo Site ${suffix}` })
+    .getByRole('button', { name: 'Edit', exact: true })
+    .click();
+  const editPicker = page.locator('.site-logo-field');
+  await editPicker.getByRole('button', { name: 'Change asset', exact: true }).click();
+  const secondAssetDialog = page.getByRole('dialog', { name: 'Select asset' });
+  await secondAssetDialog.locator('input[type="file"]').setInputFiles({
+    name: `logo-second-${suffix}.png`,
+    mimeType: 'image/png',
+    buffer: secondPixel,
+  });
+  await expect(editPicker.locator('.collection-picker-current img')).toHaveAttribute(
+    'src',
+    new RegExp(`logo-second-${suffix}\\.png$`),
+  );
+  const secondLogoSource = await editPicker
+    .locator('.collection-picker-current img')
+    .getAttribute('src');
+  expect(secondLogoSource).toBeTruthy();
+  expect(secondLogoSource).not.toBe(firstLogoSource);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: `Logo Site ${suffix}`, exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('main')
+    .getByRole('button', { name: 'Brand & styles', exact: true })
+    .click();
+  await expect(page.locator('.site-preview-brand img')).toHaveAttribute(
+    'src',
+    secondLogoSource!,
+  );
+});
+
 test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   const suffix = Date.now().toString();
   await login(page);
@@ -598,7 +706,12 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   await page.getByLabel('Page name').fill(`Edited Page ${suffix}`);
   await page.getByLabel('Description').fill(`Information page ${suffix}`);
   await page.getByRole('button', { name: 'Save metadata' }).click();
-  await expect(page.getByText(`Edited Page ${suffix}`)).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Selected page details' })
+      .getByRole('heading', { name: `Edited Page ${suffix}`, exact: true }),
+  ).toBeVisible();
+  await page.getByRole('heading', { name: 'Version history', exact: true }).click();
   await expect(page.getByText('Version 1')).toBeVisible();
   await page.getByRole('button', { name: `Edited Page ${suffix}` }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -607,6 +720,10 @@ test('@tenancy creates a page and edits its metadata', async ({ page }) => {
   await expect(
     page.getByRole('tab', { name: 'Header & Footer', exact: true }),
   ).toHaveCount(0);
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Extensions', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Header & Footer blocks', exact: true }),
@@ -667,7 +784,7 @@ test('Builder visual QA stays readable without horizontal overflow across viewpo
   await page.getByRole('button', { name: 'Text add' }).click();
   await expect(page.getByLabel('Text content')).toBeVisible();
 
-  for (const width of [1440, 1280, 1024, 768, 390]) {
+  for (const width of [320, 375, 390, 768, 1024, 1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.locator('.builder-frame')).toBeVisible();
     const builderBox = await page.locator('.builder-frame').boundingBox();
@@ -682,11 +799,65 @@ test('Builder visual QA stays readable without horizontal overflow across viewpo
     await expect(
       page.locator('.builder-properties-panel').getByText('Properties', { exact: true }),
     ).toBeVisible();
+    if (width <= 820) {
+      await expect(page.locator('.builder-left-dock.is-collapsed')).toBeVisible();
+      const rail = await page.locator('.builder-tool-rail').boundingBox();
+      const inspector = await page.locator('.builder-properties-panel').boundingBox();
+      expect(rail).not.toBeNull();
+      expect(inspector).not.toBeNull();
+      expect(inspector!.x).toBeGreaterThanOrEqual(rail!.x + rail!.width - 1);
+      const contextToolbar = await page.locator('.builder-context-toolbar').boundingBox();
+      if (contextToolbar) {
+        const overlapsInspector =
+          contextToolbar.x < inspector!.x + inspector!.width &&
+          contextToolbar.x + contextToolbar.width > inspector!.x &&
+          contextToolbar.y < inspector!.y + inspector!.height &&
+          contextToolbar.y + contextToolbar.height > inspector!.y;
+        expect(overlapsInspector).toBe(false);
+      }
+    }
     await page.screenshot({
       path: `test-results/builder-visual-qa-${width}.png`,
       fullPage: true,
     });
   }
+
+  // CSS zoom is the closest deterministic browser-level approximation that
+  // can run in this suite. It catches the common failure mode where the
+  // toolbar or inspector becomes unreachable even though the normal viewport
+  // still passes. The zoomed document is allowed to be twice as wide by
+  // design, but controls must remain inside that layout and visible.
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = '2';
+  });
+  await expect(
+    page.getByRole('button', { name: 'Save draft', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible();
+  const zoomedLayout = await page.evaluate(() => {
+    const save = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Save draft"]',
+    );
+    const publish = Array.from(document.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Publish',
+    );
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      saveRight: save?.getBoundingClientRect().right ?? 0,
+      publishRight: publish?.getBoundingClientRect().right ?? 0,
+    };
+  });
+  expect(zoomedLayout.documentWidth).toBeLessThanOrEqual(768 * 2 + 1);
+  expect(zoomedLayout.saveRight).toBeLessThanOrEqual(zoomedLayout.documentWidth);
+  expect(zoomedLayout.publishRight).toBeLessThanOrEqual(zoomedLayout.documentWidth);
+  await page.screenshot({
+    path: 'test-results/builder-visual-qa-zoom-200.png',
+    fullPage: true,
+  });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = '';
+  });
 });
 
 test('supports true block drag and a second edit after save and reload', async ({
@@ -1424,6 +1595,35 @@ test('offers a context toolbar and quick add at the selected insertion point', a
   ).toHaveCount(1);
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Saved · v2')).toBeVisible({ timeout: 15_000 });
+});
+
+test('keeps mobile quick add outside the Inspector surface', async ({
+  page,
+  request,
+  canonicalEnvironment,
+}) => {
+  await openBuilder(page, request, canonicalEnvironment, 'Mobile Context Actions');
+  await page.getByRole('button', { name: /^Section/ }).click();
+  await page.setViewportSize({ width: 320, height: 900 });
+
+  const toolbar = page.locator('.builder-context-toolbar');
+  await expect(toolbar).toBeVisible();
+  const inspector = page.locator('.builder-properties-panel');
+  const inspectorBox = await inspector.boundingBox();
+  const toolbarBox = await toolbar.boundingBox();
+  expect(inspectorBox).not.toBeNull();
+  expect(toolbarBox).not.toBeNull();
+  expect(toolbarBox!.y).toBeGreaterThanOrEqual(inspectorBox!.y + inspectorBox!.height);
+
+  await toolbar.getByRole('button', { name: /Add after selected/ }).click();
+  await expect(inspector).toHaveClass(/is-collapsed/);
+  const dialog = page.getByRole('dialog', { name: 'Quick add' });
+  await expect(dialog).toBeVisible();
+  const dialogBox = await dialog.boundingBox();
+  expect(dialogBox).not.toBeNull();
+  expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
+  expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(320);
+  await dialog.getByRole('button', { name: 'Close quick add' }).click();
 });
 
 test('duplicates a button with a fresh identity and no React key warning', async ({

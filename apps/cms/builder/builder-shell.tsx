@@ -661,7 +661,7 @@ export default function BuilderShell({
   } | null>(null);
   const [blockQuery, setBlockQuery] = useState('');
   const [addPanelTab, setAddPanelTab] = useState<AddPanelTab>('layouts');
-  const [addPanelTabTouched, setAddPanelTabTouched] = useState(true);
+  const [addPanelTabTouched, setAddPanelTabTouched] = useState(false);
   const [layerQuery, setLayerQuery] = useState('');
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
@@ -727,6 +727,16 @@ export default function BuilderShell({
   }, [panelPreferencesReady, panelWidths]);
 
   useEffect(() => {
+    // The Add/Layers drawer and Inspector cannot share the same horizontal
+    // space on a narrow screen. Keep the canvas and one task surface
+    // reachable; selecting a node below explicitly opens the Inspector.
+    if (builderViewportWidth <= 820) {
+      setLeftPanelCollapsed(true);
+      if (!selected) setRightPanelCollapsed(true);
+    }
+  }, [builderViewportWidth, selected]);
+
+  useEffect(() => {
     if (!canDesign || editorMode === 'content') {
       if (editorMode !== 'content') setEditorMode('content');
       if (activeTool !== 'assets') setActiveTool('assets');
@@ -737,6 +747,14 @@ export default function BuilderShell({
     setPanelWidths((current) =>
       normalizePanelWidths({ ...current, [side]: width }, builderViewportWidth),
     );
+  }
+
+  function activateBuilderTool(tool: BuilderTool) {
+    setActiveTool(tool);
+    if (builderViewportWidth <= 820) {
+      setLeftPanelCollapsed(false);
+      setRightPanelCollapsed(true);
+    }
   }
 
   const editingReusable = editingReusableId
@@ -771,7 +789,9 @@ export default function BuilderShell({
     saveStatus,
     ...(isEditingReusable ? {} : { readiness: publishReadiness?.ready ?? null }),
     readinessLoading: !isEditingReusable && publishReadinessLoading,
-    validationBlocked: publishValidationBlocked,
+    validationBlocked:
+      publishValidationBlocked ||
+      validationIssues.some((issue) => issue.severity === 'error'),
   });
   const publishDisabledReason =
     publishReadiness?.ready === false
@@ -1004,7 +1024,7 @@ export default function BuilderShell({
     selectedStyleTargetRef.current = target;
     setSelectedStyleTarget(target);
     setFocusPartName(partName);
-    setInspectorTab('style');
+    changeInspectorTab('style');
     setRightPanelCollapsed(false);
     editorRef.current?.selectNode(nodeId);
   }
@@ -1735,6 +1755,17 @@ export default function BuilderShell({
     if (!editorRef.current || saveInFlightRef.current) {
       return false;
     }
+    const blockingIssues = (
+      validationCoordinatorRef.current?.validateCurrentDocument() ?? []
+    ).filter((issue) => issue.severity === 'error');
+    if (blockingIssues.length > 0) {
+      setSaveStatus('validation');
+      setError(null);
+      setNotice(null);
+      const firstIssue = blockingIssues[0];
+      if (firstIssue) focusValidationIssue(firstIssue);
+      return false;
+    }
     if (saveStatus === 'saved' && !editorRef.current.hasUnsavedChanges()) {
       setError(null);
       setNotice('Everything is already saved.');
@@ -2095,7 +2126,7 @@ export default function BuilderShell({
     section?: string,
     partName?: string,
   ): void {
-    if (tab) setInspectorTab(tab);
+    if (tab) changeInspectorTab(tab);
     if (partName) setFocusPartName(partName);
     const sections: readonly InspectorSectionKey[] = [
       'content',
@@ -2164,6 +2195,7 @@ export default function BuilderShell({
 
   function openQuickAdd() {
     if (!designEnabled || !selected) return;
+    if (builderViewportWidth <= 820) setRightPanelCollapsed(true);
     setQuickAddTarget({
       targetNodeId: selected.id,
       position: selected.type === 'root' ? 'inside' : 'after',
@@ -2291,6 +2323,16 @@ export default function BuilderShell({
 
   function updateSelectedStyle(property: string, value: string | StyleTokenReference) {
     editorRef.current?.updateSelectedStyle(property, value);
+  }
+
+  function changeInspectorTab(tab: InspectorTab) {
+    setInspectorTab(tab);
+    if (tab === 'style') {
+      // Put the most common no-code controls in view when a user enters
+      // Appearance. Width, height and responsive sizing should not require
+      // discovering a second collapsed disclosure before the first edit.
+      setOpenInspectorSections((current) => ({ ...current, size: true }));
+    }
   }
 
   function resetSelectedStyle(property: string) {
@@ -2563,7 +2605,7 @@ export default function BuilderShell({
                 aria-pressed={activeTool === tool}
                 className={`builder-tool-button${activeTool === tool ? ' is-active' : ''}`}
                 key={tool}
-                onClick={() => setActiveTool(tool)}
+                onClick={() => activateBuilderTool(tool)}
                 type="button"
               >
                 <span aria-hidden="true">{icon}</span>
@@ -3140,6 +3182,10 @@ export default function BuilderShell({
                   setSelectedStyleTarget(null);
                   setFocusPartName(undefined);
                 }
+                if (nextSelection && builderViewportWidth <= 820) {
+                  setLeftPanelCollapsed(true);
+                  setRightPanelCollapsed(false);
+                }
                 setSelected(nextSelection);
               }}
               ref={editorRef}
@@ -3263,7 +3309,7 @@ export default function BuilderShell({
               <BuilderInspector
                 workspaceId={workspaceId}
                 inspectorTab={inspectorTab}
-                onInspectorTabChange={setInspectorTab}
+                onInspectorTabChange={changeInspectorTab}
                 onAddStructuralChild={(slotName, childType) =>
                   childType && childType !== 'root' && childType !== 'reusable-instance'
                     ? editorRef.current?.addStructuralChild(slotName, childType)

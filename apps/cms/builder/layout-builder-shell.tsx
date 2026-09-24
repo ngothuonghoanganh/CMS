@@ -247,7 +247,7 @@ export default function LayoutBuilderShell({
   const [openSections, setOpenSections] = useState(inspectorSections);
   const [activeTool, setActiveTool] = useState<BuilderTool>('add');
   const [addPanelTab, setAddPanelTab] = useState<AddPanelTab>('layouts');
-  const [addPanelTabTouched, setAddPanelTabTouched] = useState(true);
+  const [addPanelTabTouched, setAddPanelTabTouched] = useState(false);
   const [blockQuery, setBlockQuery] = useState('');
   const [layerQuery, setLayerQuery] = useState('');
   const [collapsedLayerIds, setCollapsedLayerIds] = useState<Set<string>>(
@@ -745,6 +745,7 @@ export default function LayoutBuilderShell({
 
   function openQuickAdd(): void {
     if (!selected) return;
+    if (builderViewportWidth <= 820) setRightPanelCollapsed(true);
     setQuickAddTarget({
       targetNodeId: selected.id,
       position: selected.type === 'root' ? 'inside' : 'after',

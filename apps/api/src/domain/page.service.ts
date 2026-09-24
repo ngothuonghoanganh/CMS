@@ -1475,20 +1475,26 @@ export class PageService {
   }
 
   private emptyDocumentForPayload(payload: PagePayload): ContractPageDocument {
-    return createPageDocument(
-      PagePayloadSchema.parse({
-        ...payload,
-        root: { ...payload.root, children: [] },
-      }),
-      {
-        attachments: [],
-        layoutAttachments: [],
-        bindings: [],
-        actions: [],
-        resources: [],
-        queries: [],
-      },
-    );
+    // Open Composition behaviors are node-scoped. Removing the visual tree to
+    // build the never-published comparison baseline must also remove those
+    // references, otherwise the contract refinement rejects an otherwise
+    // valid saved draft before readiness can return an actionable result.
+    const emptyPayload =
+      payload.version === 8
+        ? {
+            ...payload,
+            root: { ...payload.root, children: [] },
+            behaviors: [],
+          }
+        : { ...payload, root: { ...payload.root, children: [] } };
+    return createPageDocument(PagePayloadSchema.parse(emptyPayload), {
+      attachments: [],
+      layoutAttachments: [],
+      bindings: [],
+      actions: [],
+      resources: [],
+      queries: [],
+    });
   }
 
   private parsePayload(payload: unknown): PagePayload {

@@ -58,6 +58,10 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
   await expect(publicPage.getByRole('status')).toContainText('Thanks');
   await publicPage.close();
 
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Analytics', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Analytics' })).toBeVisible();
   await expect(

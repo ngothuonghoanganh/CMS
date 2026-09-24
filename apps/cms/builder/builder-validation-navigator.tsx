@@ -40,7 +40,9 @@ export function BuilderValidationNavigator({
             {issues.length} issue{issues.length === 1 ? '' : 's'} need attention
           </strong>
         </div>
-        <span className="builder-validation-navigator-hint">Save stays available</span>
+        <span className="builder-validation-navigator-hint">
+          Fix the highlighted field to save
+        </span>
       </summary>
       <div className="builder-validation-navigator-actions">
         <button

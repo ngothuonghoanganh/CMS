@@ -32,6 +32,10 @@ test('configures SEO, verifies a custom domain and renders its public metadata',
     .selectOption({ label: canonicalEnvironmentNames.siteName });
   await page.getByRole('button', { name: /__e2e__ phase-seo/ }).click();
 
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'SEO', exact: true }).click();
   await page.getByRole('combobox', { name: 'Page', exact: true }).selectOption({
     label: pageName,

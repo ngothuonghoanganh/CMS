@@ -304,9 +304,14 @@ export function createBuilderValidationCoordinator(options: {
   setIssues: (issues: BuilderValidationIssue[]) => void;
   navigation: BuilderValidationNavigation;
 }): BuilderValidationCoordinator {
-  let flashTimer: number | undefined;
+  const clearValidationFocus = (issue: BuilderValidationIssue): void => {
+    findValidationField(issue)?.classList.remove('builder-validation-flash');
+  };
 
   const clearIssue = (issueId: string) => {
+    for (const issue of options.getIssues()) {
+      if (issue.id === issueId) clearValidationFocus(issue);
+    }
     options.setIssues(options.getIssues().filter((issue) => issue.id !== issueId));
   };
 
@@ -327,17 +332,13 @@ export function createBuilderValidationCoordinator(options: {
         'input:not([type="hidden"]), textarea, select, button',
       );
       field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // Keep the location marker until the issue is resolved. A short-lived
+      // animation made the target disappear before slower inspector updates
+      // and browser assertions completed.
+      field.classList.remove('builder-validation-flash');
+      void field.offsetWidth;
       field.classList.add('builder-validation-flash');
       target?.focus();
-      if (flashTimer !== undefined && typeof window !== 'undefined') {
-        window.clearTimeout(flashTimer);
-      }
-      if (typeof window !== 'undefined') {
-        flashTimer = window.setTimeout(() => {
-          field.classList.remove('builder-validation-flash');
-          flashTimer = undefined;
-        }, 1_500);
-      }
     },
     async focusFirstIssue() {
       const first = options.getIssues()[0];
@@ -345,6 +346,7 @@ export function createBuilderValidationCoordinator(options: {
     },
     clearIssue,
     clearResolvedIssues() {
+      for (const issue of options.getIssues()) clearValidationFocus(issue);
       options.setIssues([]);
     },
   };

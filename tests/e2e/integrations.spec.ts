@@ -47,6 +47,10 @@ test('configures integrations, binds them to a form and records deliveries', asy
   const webhookIntegrationName = `__e2e__ CRM webhook ${suffix}`;
 
   await loginToCanonicalBuilder(page, canonicalEnvironment);
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Integrations', exact: true }).click();
   await page.getByRole('button', { name: 'Add integration', exact: true }).click();
   await page.getByLabel('Name').fill(emailIntegrationName);
@@ -105,6 +109,10 @@ test('configures integrations, binds them to a form and records deliveries', asy
   await publicPage.getByRole('button', { name: 'Submit' }).click();
   await expect(publicPage.getByRole('status')).toContainText('Thanks');
 
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Integrations', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Delivery logs' })).toBeVisible();
   await expect

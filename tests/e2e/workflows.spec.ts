@@ -94,6 +94,10 @@ test('renders the workflow builder without horizontal overflow across viewports'
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Good morning' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
   await page.getByRole('button', { name: 'Workflows', exact: true }).click();
   await expect(
     page.getByRole('heading', { level: 1, name: 'Workflows', exact: true }),

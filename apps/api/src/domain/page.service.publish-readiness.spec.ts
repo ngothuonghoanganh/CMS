@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDefaultSiteDesignSystem } from '@payload/contracts';
+import {
+  createDefaultSiteDesignSystem,
+  OpenCompositionPayloadSchema,
+} from '@payload/contracts';
 
 import { PageService } from './page.service';
 
@@ -244,5 +247,89 @@ describe('PageService publish readiness', () => {
       pageId,
       workspaceId,
     );
+  });
+
+  it('keeps readiness structured for a never-published Open Composition draft', async () => {
+    const openPayload = OpenCompositionPayloadSchema.parse({
+      version: 8,
+      metadata: { documentTitle: 'Open Composition page' },
+      root: {
+        id: 'root',
+        type: 'root',
+        props: {},
+        children: [
+          {
+            id: 'section-1',
+            type: 'section',
+            props: {},
+            children: [
+              {
+                id: 'form-1',
+                type: 'form',
+                props: { formKey: 'contact' },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+      behaviors: [
+        {
+          id: 'form-submit',
+          kind: 'action',
+          nodeId: 'form-1',
+          event: 'submit',
+          action: 'submit-form',
+          targetNodeId: 'form-1',
+        },
+      ],
+    });
+    const page = {
+      _id: { toString: () => pageId },
+      workspaceId,
+      siteId,
+      path: '/open-composition',
+      kind: 'standard',
+      currentDraftVersionId: 'version-1',
+    };
+    const version = {
+      _id: 'version-1',
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload: openPayload,
+      composition: { ...composition, payload: openPayload },
+    };
+    const service = Object.create(PageService.prototype) as PageService;
+    const state = service as unknown as Record<string, unknown>;
+    state.pageModel = {
+      findOne: vi.fn((filter: Record<string, unknown>) => ({
+        select: vi.fn().mockReturnThis(),
+        exec: vi.fn().mockResolvedValue(filter._id === pageId ? page : null),
+      })),
+    };
+    state.versionModel = {
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(version) })),
+    };
+    state.navigation = { validateInlineNavigationDocument: vi.fn() };
+    state.reusables = {
+      assertDependenciesAvailable: vi.fn(),
+      assertDesignTokenDependenciesAvailable: vi.fn(),
+    };
+    state.sites = {
+      getDesignSystem: vi.fn().mockResolvedValue({
+        draft: createDefaultSiteDesignSystem(),
+      }),
+    };
+    state.pagePublishCompatibility = { validateBeforePublish: vi.fn() };
+    state.pageExtensions = { validateBeforePublish: vi.fn() };
+    state.collections = { validateComposition: vi.fn() };
+
+    const readiness = await service.getPublishReadiness(pageId, workspaceId);
+
+    expect(readiness.ready).toBe(true);
+    expect(readiness.blockingIssues).toEqual([]);
+    expect(readiness.summary.componentsAdded).toBe(2);
   });
 });

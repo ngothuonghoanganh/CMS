@@ -22,9 +22,9 @@ export function canStartBuilderSave(input: BuilderSaveGate): boolean {
 
 /**
  * Publish is an explicit final step. It must only be offered for a saved draft
- * and a document that passed the server readiness check. Validation messages
- * collected while editing do not participate in this gate; the field control
- * that produced them owns whether its operation is enabled.
+ * and a document that passed the server readiness check. Blocking validation
+ * issues are supplied by the field-level coordinator so the publish control
+ * stays disabled until the user can publish a valid document.
  */
 export function isBuilderPublishDisabled(input: BuilderPublishGate): boolean {
   return Boolean(

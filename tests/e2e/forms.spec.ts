@@ -140,7 +140,11 @@ test('builds, publishes, submits and manages a form with published-schema isolat
   await expect(publicPage.getByLabel('Phone')).toBeVisible();
   await expect(publicPage.getByLabel('Email')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Submissions', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Primary navigation' })
+    .locator('summary.nav-section-label', { hasText: 'More tools' })
+    .click();
+  await page.getByRole('button', { name: 'Form responses', exact: true }).click();
   await expect(page.getByText('jane.e2e@example.com').first()).toBeVisible({
     timeout: 15_000,
   });
