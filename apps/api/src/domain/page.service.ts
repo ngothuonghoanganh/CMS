@@ -925,6 +925,7 @@ export class PageService {
     if (payload && composition) {
       const checks: Array<() => Promise<void>> = [
         () => this.assertPageRoutePublishable(page, workspaceId),
+        () => this.validateInlineNavigationDocument(payload, workspaceId, page.siteId),
         () =>
           this.reusables.assertDependenciesAvailable(
             page.workspaceId,

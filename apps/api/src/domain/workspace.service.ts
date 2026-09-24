@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -35,7 +40,14 @@ export class WorkspaceService {
     @Inject(CORE_EVENT_PUBLISHER) private readonly events: CoreEventPublisher,
   ) {}
 
-  async create(input: CreateWorkspaceRequest, _tenantId: string): Promise<Workspace> {
+  async create(input: CreateWorkspaceRequest, tenantId: string): Promise<Workspace> {
+    const tenant = this.tenantContext.require();
+    if (tenant.id !== tenantId) {
+      throw new ForbiddenException({
+        code: 'TENANT_CONTEXT_MISMATCH',
+        message: 'The requested workspace tenant is not the active tenant',
+      });
+    }
     const record = await this.workspaceModel.create({
       _id: randomUUID(),
       designSystemDraft: createDefaultSiteDesignSystem(),

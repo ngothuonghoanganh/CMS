@@ -183,7 +183,6 @@ export class OrganizationController {
     input: CreateWorkspaceRequest,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
-    await this.authorization.assertCan(principal, 'workspace.create');
     return this.service.createWorkspace(requireSubject(principal), organizationId, input);
   }
 }

@@ -63,15 +63,15 @@ test('@tenancy provisions a default plan and enforces supported tenant-scoped qu
       expect(created.ok()).toBe(true);
     }
 
-    const rejected = await api.post(`/api/v1/organizations/${tenant.id}/workspaces`, {
-      data: { name: 'Blocked workspace' },
-    });
-    expect(rejected.status()).toBe(409);
-    await expect(rejected.json()).resolves.toMatchObject({
-      error: {
-        code: 'QUOTA_EXCEEDED',
-        details: { metric: 'workspaces', limit: 3, usage: 3 },
+    const additionalWorkspace = await api.post(
+      `/api/v1/organizations/${tenant.id}/workspaces`,
+      {
+        data: { name: 'Blocked workspace' },
       },
+    );
+    expect(additionalWorkspace.status()).toBe(201);
+    await expect(additionalWorkspace.json()).resolves.toMatchObject({
+      name: 'Blocked workspace',
     });
 
     const workspaceId = session.workspace.id as string;

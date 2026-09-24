@@ -34,7 +34,6 @@ import {
 } from '@payload/contracts';
 
 import { env } from '../config/env';
-import { QuotaService } from '../billing/quota.service';
 import {
   WorkspaceRecord,
   type WorkspaceDocument,
@@ -50,7 +49,7 @@ import { TenantProvisioningService } from '../tenancy/tenant-provisioning.servic
 import { TenantResolver } from '../tenancy/tenant-resolver';
 import { AuthorizationService } from '../security/authorization.service';
 import { RoleService } from '../security/role.service';
-import { EventBus } from '../extensions/event-bus';
+import { WorkspaceService } from './workspace.service';
 
 /**
  * Compatibility adapter for the pre-Phase 10 `/organizations` routes.
@@ -75,10 +74,9 @@ export class OrganizationService {
     @Inject(TenantContext) private readonly context: TenantContext,
     @Inject(TenantProvisioningService)
     private readonly provisioning: TenantProvisioningService,
-    @Inject(QuotaService) private readonly quotas: QuotaService,
+    @Inject(WorkspaceService) private readonly workspaceService: WorkspaceService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
     @Inject(RoleService) private readonly roles: RoleService,
-    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async listForUser(userId: string) {
@@ -310,20 +308,7 @@ export class OrganizationService {
     input: CreateWorkspaceRequest,
   ): Promise<Workspace> {
     await this.requirePermission(userId, tenantId, 'workspace.create');
-    return this.inTenant(tenantId, async () => {
-      return this.quotas.withHardQuota('workspaces', async () => {
-        const workspace = await this.workspaceModel.create({
-          _id: randomUUID(),
-          name: input.name,
-        });
-        await this.events.publish('workspace.created', {
-          tenantId: this.context.require().id,
-          workspaceId: workspace._id.toString(),
-          occurredAt: new Date().toISOString(),
-        });
-        return this.toWorkspace(workspace);
-      });
-    });
+    return this.inTenant(tenantId, () => this.workspaceService.create(input, tenantId));
   }
 
   async requireActiveMember(

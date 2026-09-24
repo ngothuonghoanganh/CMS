@@ -32,6 +32,7 @@ export class LegacyExtensionEventBridge implements OnModuleDestroy, OnModuleInit
   ) {}
 
   onModuleInit(): void {
+    if (this.unsubscribers.length > 0) return;
     this.unsubscribers = bridgedEventNames.map((eventName) =>
       this.subscribeToCoreEvent(eventName),
     );

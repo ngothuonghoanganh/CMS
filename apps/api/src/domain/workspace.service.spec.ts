@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { Model } from 'mongoose';
 
@@ -50,12 +51,33 @@ describe('WorkspaceService core boundary', () => {
       updatedAt: now.toISOString(),
     });
     expect(workspaceModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ _id: expect.any(String), name: 'Workspace A' }),
+      expect.objectContaining({
+        _id: expect.any(String),
+        name: 'Workspace A',
+        designSystemDraft: expect.any(Object),
+        publishedDesignSystem: expect.any(Object),
+      }),
     );
     expect(events.publish).toHaveBeenCalledWith('workspace.created', {
       tenantId,
       workspaceId,
       occurredAt: expect.any(String),
     });
+  });
+
+  it('rejects a caller-supplied tenant that differs from the authoritative context', async () => {
+    const workspaceModel = {
+      create: vi.fn(),
+    } as unknown as Model<WorkspaceRecord>;
+    const events: CoreEventPublisher = {
+      publish: vi.fn(),
+    };
+    const service = new WorkspaceService(workspaceModel, createTenantContext(), events);
+
+    await expect(
+      service.create({ name: 'Workspace A' }, '00000000-0000-4000-8000-000000000099'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(workspaceModel.create).not.toHaveBeenCalled();
+    expect(events.publish).not.toHaveBeenCalled();
   });
 });
