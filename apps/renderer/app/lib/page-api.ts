@@ -47,6 +47,38 @@ async function readPageResponse(response: Response): Promise<PublicPage | null> 
   return parsed.data;
 }
 
+export type PreviewPageUnavailableReason = 'authentication' | 'forbidden' | 'not-found';
+
+export type PreviewPageResult =
+  { page: PublicPage } | { page: null; reason: PreviewPageUnavailableReason };
+
+export function previewPageUnavailableReason(
+  status: number,
+): PreviewPageUnavailableReason | undefined {
+  if (status === 401) return 'authentication';
+  if (status === 403) return 'forbidden';
+  if (status === 404) return 'not-found';
+  return undefined;
+}
+
+export async function readPreviewPageResponse(
+  response: Response,
+): Promise<PreviewPageResult> {
+  const reason = previewPageUnavailableReason(response.status);
+  if (reason) return { page: null, reason };
+
+  if (!response.ok) {
+    throw new Error(`Preview page API request failed with status ${response.status}`);
+  }
+
+  const parsed = PublicPageSchema.safeParse(await response.json());
+  if (!parsed.success) {
+    throw new Error('The preview page API returned an invalid public page payload');
+  }
+
+  return { page: parsed.data };
+}
+
 export const getPublicPage = cache(async function getPublicPage(
   siteSlug: string,
   pageSlug: string,
@@ -117,7 +149,7 @@ export const getPreviewPage = cache(async function getPreviewPage(
   pageId: string,
   entryId?: string,
   versionNumber?: number,
-): Promise<PublicPage | null> {
+): Promise<PreviewPageResult> {
   const cookieHeader = (await cookies()).toString();
   const requestInit: RequestInit = { cache: 'no-store' };
   if (cookieHeader) {
@@ -134,5 +166,5 @@ export const getPreviewPage = cache(async function getPreviewPage(
     ),
     requestInit,
   );
-  return readPageResponse(response);
+  return readPreviewPageResponse(response);
 });

@@ -425,18 +425,27 @@ export default function PagesPage({
   function openBuilder(page: Page) {
     router.push(pagePath(workspaceId, page.siteId, page.id, 'builder'));
   }
+  async function openPreviewUrl(url: string): Promise<void> {
+    try {
+      await api.ensureSession();
+      const previewWindow = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!previewWindow) {
+        setError('The preview window was blocked. Allow pop-ups for this workspace.');
+      }
+    } catch (caughtError) {
+      setError(message(caughtError));
+    }
+  }
   function openPreview(page: Page) {
     const query = new URLSearchParams();
     if (page.kind === 'dynamic' && pageForm.previewEntryId) {
       query.set('entryId', pageForm.previewEntryId);
     }
     const queryString = query.toString();
-    window.open(
+    void openPreviewUrl(
       `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}${
         queryString ? `?${queryString}` : ''
       }`,
-      '_blank',
-      'noopener,noreferrer',
     );
   }
   function openHistoricalPreview(page: Page, version: PageVersion) {
@@ -444,10 +453,8 @@ export default function PagesPage({
     if (page.kind === 'dynamic' && pageForm.previewEntryId) {
       query.set('entryId', pageForm.previewEntryId);
     }
-    window.open(
+    void openPreviewUrl(
       `${rendererBaseUrl}/preview/${encodeURIComponent(page.id)}?${query.toString()}`,
-      '_blank',
-      'noopener,noreferrer',
     );
   }
   const collectionEntries = useMemo(() => entries, [entries]);

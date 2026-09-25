@@ -152,6 +152,10 @@ async function requestWithoutDedup<T>(
 }
 
 export const api = {
+  ensureSession(): Promise<void> {
+    return request('/auth/me').then(() => undefined);
+  },
+
   delete<T>(path: string): Promise<T> {
     return request<T>(path, { method: 'DELETE' });
   },

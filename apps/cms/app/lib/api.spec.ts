@@ -82,4 +82,19 @@ describe('api client authentication recovery', () => {
     await expect(api.get('/auth/me')).resolves.toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('provides a session preflight for preview navigation', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      }),
+    );
+
+    await expect(api.ensureSession()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:3001/api/v1/auth/me',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
 });

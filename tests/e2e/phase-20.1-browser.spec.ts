@@ -506,4 +506,17 @@ test('Phase 20.1 collection management and dynamic page flow works in the browse
     popup.getByText(String(liveEntry!.values.name), { exact: true }),
   ).toBeVisible();
   await popup.close();
+
+  await page.context().clearCookies({
+    name: process.env.AUTH_ACCESS_TOKEN_COOKIE_NAME ?? 'payload_access_token',
+  });
+  const refreshedSessionPopupPromise = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Preview', exact: true }).last().click();
+  const refreshedSessionPopup = await refreshedSessionPopupPromise;
+  await refreshedSessionPopup.waitForLoadState('domcontentloaded');
+  await expect(refreshedSessionPopup.locator('.preview-banner')).toBeVisible();
+  await expect(
+    refreshedSessionPopup.getByText(String(liveEntry!.values.name), { exact: true }),
+  ).toBeVisible();
+  await refreshedSessionPopup.close();
 });
