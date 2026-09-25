@@ -43,8 +43,11 @@ import { SiteUrlService } from './site-url.service';
 import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { ReusableService } from './reusable.service';
-import { PageExtensionService } from '../extensions/page-extension.service';
 import { CollectionService } from './collection.service';
+import {
+  PAGE_EXTENSION_PORT,
+  type PageExtensionPort,
+} from '../shared/page-extension-port';
 
 @Injectable()
 export class PublicPageResolver {
@@ -66,8 +69,8 @@ export class PublicPageResolver {
     @Inject(NavigationService) private readonly navigation: NavigationService,
     @Inject(LayoutExtensionService)
     private readonly layoutExtensions: LayoutExtensionService,
-    @Inject(PageExtensionService)
-    private readonly pageExtensions: PageExtensionService,
+    @Inject(PAGE_EXTENSION_PORT)
+    private readonly pageExtensions: PageExtensionPort,
     @Inject(ReusableService) private readonly reusables: ReusableService,
     @Inject(CollectionService) private readonly collections: CollectionService,
   ) {}

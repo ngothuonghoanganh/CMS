@@ -1,6 +1,21 @@
+import { Test } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/mongoose';
 import { describe, expect, it, vi } from 'vitest';
 
+import { PageRecord } from '../persistence/schemas/page.schema';
+import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
+import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import { SiteRecord } from '../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
+import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
+import { TenantContext } from '../tenancy/tenant-context';
+import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
+import { CollectionService } from './collection.service';
+import { LayoutExtensionService } from './layout-extension.service';
+import { NavigationService } from './navigation.service';
 import { PublicPageResolver } from './public-page.resolver';
+import { ReusableService } from './reusable.service';
+import { SiteUrlService } from './site-url.service';
 
 type TestResolver = {
   siteModel: { find: () => ReturnType<typeof query> };
@@ -23,6 +38,30 @@ function query<T>(value: T) {
 }
 
 describe('public page resolver', () => {
+  it('resolves with the Core PageExtensionPort token', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        { provide: getModelToken(SiteRecord.name), useValue: {} },
+        { provide: getModelToken(WorkspaceRecord.name), useValue: {} },
+        { provide: getModelToken(PageRecord.name), useValue: {} },
+        { provide: getModelToken(PageVersionRecord.name), useValue: {} },
+        { provide: getModelToken(PageSeoSettingsRecord.name), useValue: {} },
+        { provide: getModelToken(CustomDomainRecord.name), useValue: {} },
+        { provide: TenantContext, useValue: {} },
+        { provide: SiteUrlService, useValue: {} },
+        { provide: NavigationService, useValue: {} },
+        { provide: LayoutExtensionService, useValue: {} },
+        { provide: PAGE_EXTENSION_PORT, useValue: {} },
+        { provide: ReusableService, useValue: {} },
+        { provide: CollectionService, useValue: {} },
+        PublicPageResolver,
+      ],
+    }).compile();
+
+    expect(moduleRef.get(PublicPageResolver)).toBeInstanceOf(PublicPageResolver);
+    await moduleRef.close();
+  });
+
   it('resolves the site homepage reference without a delivery-time repair write', async () => {
     const site = {
       _id: { toString: () => 'site-1' },

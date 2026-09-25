@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Model } from 'mongoose';
 import {
   ExtensionIds,
@@ -16,6 +16,7 @@ import { EventBus } from './event-bus';
 import { ExtensionRegistry } from './extension-registry';
 import { PageExtensionService } from './page-extension.service';
 import { TenantContext } from '../tenancy/tenant-context';
+import { platformLogger } from '../common/logging/platform-logger';
 
 const pageId = '11111111-1111-4111-8111-111111111111';
 const workspaceId = '22222222-2222-4222-8222-222222222222';
@@ -26,14 +27,31 @@ type StoredInstance = PageExtensionInstanceRecord & {
   updatedAt: Date;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function matchesFilter(record: StoredInstance, filter: Record<string, unknown>) {
+  return Object.entries(filter).every(([key, expected]) => {
+    const actual = record[key as keyof StoredInstance];
+    if (!isRecord(expected)) return actual === expected;
+    if ('$exists' in expected) return (actual !== undefined) === expected.$exists;
+    if ('$ne' in expected) return actual !== expected.$ne;
+    if ('$nin' in expected && Array.isArray(expected.$nin)) {
+      return !expected.$nin.includes(actual);
+    }
+    return actual === expected;
+  });
+}
+
 class PageExtensionStore {
   readonly records = new Map<string, StoredInstance>();
+  failNextUpdate = false;
+  afterUpdate?: (record: StoredInstance) => void;
 
   find(filter: Record<string, unknown>) {
     const values = [...this.records.values()].filter((record) =>
-      Object.entries(filter).every(
-        ([key, value]) => record[key as keyof StoredInstance] === value,
-      ),
+      matchesFilter(record, filter),
     );
     const chain = {
       sort: () => chain,
@@ -42,31 +60,41 @@ class PageExtensionStore {
     return chain;
   }
 
-  findOne(filter: { pageId: string; workspaceId: string; extensionId: string }) {
+  findOne(filter: Record<string, unknown>) {
     return {
       exec: async () =>
-        [...this.records.values()].find(
-          (record) =>
-            record.pageId === filter.pageId &&
-            record.workspaceId === filter.workspaceId &&
-            record.extensionId === filter.extensionId,
-        ),
+        [...this.records.values()].find((record) => matchesFilter(record, filter)),
     };
   }
 
   findOneAndUpdate(
-    filter: { pageId: string; workspaceId: string; extensionId: string },
-    update: { $set?: Partial<StoredInstance>; $setOnInsert?: Partial<StoredInstance> },
+    filter: Record<string, unknown>,
+    update: {
+      $set?: Record<string, unknown>;
+      $unset?: Record<string, unknown>;
+      $setOnInsert?: Record<string, unknown>;
+    },
+    options: { upsert?: boolean } = {},
   ) {
     return {
       exec: async () => {
+        if (this.failNextUpdate) {
+          this.failNextUpdate = false;
+          throw new Error('injected projection write failure');
+        }
         const now = new Date();
-        const key = `${filter.pageId}:${filter.extensionId}`;
+        const key = `${String(filter.pageId)}:${String(filter.extensionId)}`;
+        const existing = [...this.records.values()].find((record) =>
+          matchesFilter(record, filter),
+        );
+        if (!existing && !options.upsert) return undefined;
         const record =
-          this.records.get(key) ??
+          existing ??
           ({
             _id: `instance-${key}`,
-            ...filter,
+            pageId: String(filter.pageId),
+            workspaceId: String(filter.workspaceId),
+            extensionId: String(filter.extensionId),
             enabled: true,
             configuration: {},
             capabilities: [],
@@ -76,28 +104,33 @@ class PageExtensionStore {
             ...update.$setOnInsert,
           } as StoredInstance);
         Object.assign(record, update.$set, { updatedAt: now });
+        for (const keyToUnset of Object.keys(update.$unset ?? {})) {
+          delete record[keyToUnset as keyof StoredInstance];
+        }
         this.records.set(key, record);
+        this.afterUpdate?.(record);
         return record;
       },
     };
   }
 
-  deleteOne(filter: { pageId: string; workspaceId: string; extensionId: string }) {
+  deleteOne(filter: Record<string, unknown>) {
     return {
       exec: async () => {
-        this.records.delete(`${filter.pageId}:${filter.extensionId}`);
+        const record = [...this.records.values()].find((candidate) =>
+          matchesFilter(candidate, filter),
+        );
+        if (record) this.records.delete(`${record.pageId}:${record.extensionId}`);
+        return { deletedCount: record ? 1 : 0 };
       },
     };
   }
 
-  deleteMany(filter: { pageId: string; workspaceId: string }) {
+  deleteMany(filter: Record<string, unknown>) {
     return {
       exec: async () => {
         for (const [key, record] of this.records) {
-          if (
-            record.pageId === filter.pageId &&
-            record.workspaceId === filter.workspaceId
-          ) {
+          if (matchesFilter(record, filter)) {
             this.records.delete(key);
           }
         }
@@ -107,10 +140,19 @@ class PageExtensionStore {
 }
 
 class PageStore {
-  findOne() {
-    return {
-      exec: async () => ({ _id: pageId, workspaceId, siteId: 'site' }),
+  currentDraftVersionId = 'draft-a';
+
+  findOne(filter: Record<string, unknown>) {
+    const page =
+      filter.currentDraftVersionId !== undefined &&
+      filter.currentDraftVersionId !== this.currentDraftVersionId
+        ? undefined
+        : { _id: pageId, workspaceId, siteId: 'site' };
+    const chain = {
+      select: () => chain,
+      exec: async () => page,
     };
+    return chain;
   }
 }
 
@@ -429,5 +471,186 @@ describe('PageExtensionService', () => {
       }),
     );
     expect(instances.records.has(`${pageId}:${ExtensionIds.DemoBuilder}`)).toBe(false);
+  });
+
+  it('restores the legacy projection after an injected mid-sync failure', async () => {
+    const tenantContext = new TenantContext();
+    const registry = new ExtensionRegistry(
+      [demoBuilderExtension],
+      new CapabilityRegistry(),
+      new EventBus(tenantContext),
+    );
+    await registry.onModuleInit();
+    const instances = new PageExtensionStore();
+    const orphan = {
+      _id: 'orphan-instance',
+      workspaceId,
+      pageId,
+      extensionId: 'orphan-extension',
+      enabled: true,
+      configuration: { legacy: true },
+      capabilities: [],
+      runtimeIds: [],
+      createdAt: new Date('2026-09-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-24T00:00:00.000Z'),
+    } satisfies StoredInstance;
+    instances.records.set(`${pageId}:orphan-extension`, orphan);
+    instances.failNextUpdate = true;
+    const pages = new PageStore();
+    const service = new PageExtensionService(
+      instances as unknown as Model<PageExtensionInstanceRecord>,
+      pages as unknown as Model<PageRecord>,
+      new TenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
+      registry,
+    );
+    const composition = PageCompositionSchema.parse({
+      pageId,
+      payload: PagePayloadV3Schema.parse({
+        version: 3,
+        metadata: { documentTitle: 'Failure recovery' },
+        root: { id: 'root', type: 'root', props: {}, children: [] },
+      }),
+      attachments: [
+        {
+          id: '44444444-4444-4444-8444-444444444444',
+          pageId,
+          extensionId: ExtensionIds.DemoBuilder,
+          enabled: true,
+          configuration: {},
+          resourceIds: [],
+        },
+      ],
+      layoutAttachments: [],
+      bindings: [],
+      actions: [],
+      resources: [],
+    });
+
+    await expect(
+      service.synchronizeComposition(pageId, workspaceId, composition, 'draft-a'),
+    ).rejects.toThrow('injected projection write failure');
+
+    expect(instances.records.get(`${pageId}:orphan-extension`)).toMatchObject({
+      _id: orphan._id,
+      pageId,
+      workspaceId,
+      extensionId: orphan.extensionId,
+      enabled: true,
+      configuration: { legacy: true },
+      capabilities: [],
+      runtimeIds: [],
+    });
+    expect(instances.records.has(`${pageId}:${ExtensionIds.DemoBuilder}`)).toBe(false);
+  });
+
+  it('does not clean up a newer concurrent projection during recovery', async () => {
+    const tenantContext = new TenantContext();
+    const registry = new ExtensionRegistry(
+      [demoBuilderExtension],
+      new CapabilityRegistry(),
+      new EventBus(tenantContext),
+    );
+    await registry.onModuleInit();
+    const instances = new PageExtensionStore();
+    const pages = new PageStore();
+    instances.afterUpdate = (record) => {
+      if (
+        record.extensionId === ExtensionIds.DemoBuilder &&
+        record.projectionVersionId === 'draft-a'
+      ) {
+        pages.currentDraftVersionId = 'draft-b';
+        record.projectionVersionId = 'draft-b';
+        record.configuration = { concurrent: true };
+      }
+    };
+    const service = new PageExtensionService(
+      instances as unknown as Model<PageExtensionInstanceRecord>,
+      pages as unknown as Model<PageRecord>,
+      new TenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
+      registry,
+    );
+    const composition = PageCompositionSchema.parse({
+      pageId,
+      payload: PagePayloadV3Schema.parse({
+        version: 3,
+        metadata: { documentTitle: 'Concurrent recovery' },
+        root: { id: 'root', type: 'root', props: {}, children: [] },
+      }),
+      attachments: [
+        {
+          id: '44444444-4444-4444-8444-444444444444',
+          pageId,
+          extensionId: ExtensionIds.DemoBuilder,
+          enabled: true,
+          configuration: {},
+          resourceIds: [],
+        },
+      ],
+      layoutAttachments: [],
+      bindings: [],
+      actions: [],
+      resources: [],
+    });
+
+    await expect(
+      service.synchronizeComposition(pageId, workspaceId, composition, 'draft-a'),
+    ).rejects.toMatchObject({ response: { code: 'PAGE_EXTENSION_PROJECTION_CONFLICT' } });
+
+    expect(instances.records.get(`${pageId}:${ExtensionIds.DemoBuilder}`)).toMatchObject({
+      projectionVersionId: 'draft-b',
+      configuration: { concurrent: true },
+    });
+  });
+
+  it('keeps after-publish hooks best effort and logs only structured identifiers', async () => {
+    const tenantContext = new TenantContext();
+    const failingExtension = {
+      ...demoBuilderExtension,
+      manifest: {
+        ...demoBuilderExtension.manifest,
+        id: 'demo-after-publish-failure',
+      },
+      afterPublish: vi.fn().mockRejectedValue(new Error('optional hook failed')),
+    };
+    const registry = new ExtensionRegistry(
+      [failingExtension],
+      new CapabilityRegistry(),
+      new EventBus(tenantContext),
+    );
+    await registry.onModuleInit();
+    const instances = new PageExtensionStore();
+    instances.records.set(`${pageId}:demo-after-publish-failure`, {
+      _id: 'after-publish-instance',
+      workspaceId,
+      pageId,
+      extensionId: 'demo-after-publish-failure',
+      enabled: true,
+      configuration: { secret: 'not logged' },
+      capabilities: [],
+      runtimeIds: [],
+      createdAt: new Date('2026-09-24T00:00:00.000Z'),
+      updatedAt: new Date('2026-09-24T00:00:00.000Z'),
+    });
+    const service = new PageExtensionService(
+      instances as unknown as Model<PageExtensionInstanceRecord>,
+      new PageStore() as unknown as Model<PageRecord>,
+      new TenantExtensionStore() as unknown as Model<TenantExtensionRecord>,
+      registry,
+    );
+    const warning = vi.spyOn(platformLogger, 'warn').mockImplementation(() => undefined);
+
+    await expect(service.afterPublish(pageId, workspaceId, 3)).resolves.toBeUndefined();
+
+    expect(warning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extensionId: 'demo-after-publish-failure',
+        pageId,
+        workspaceId,
+        versionNumber: 3,
+      }),
+      'page extension after-publish hook failed',
+    );
+    expect(warning.mock.calls[0]?.[0]).not.toHaveProperty('configuration');
+    warning.mockRestore();
   });
 });

@@ -37,6 +37,10 @@ export class PageExtensionInstanceRecord {
   @Prop({ type: [String], required: true, default: [] })
   runtimeIds!: string[];
 
+  /** Internal optimistic-concurrency marker for composition projection writes. */
+  @Prop({ type: String, required: false })
+  projectionVersionId?: string;
+
   createdAt!: Date;
   updatedAt!: Date;
 }

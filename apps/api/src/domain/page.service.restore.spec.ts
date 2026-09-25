@@ -162,6 +162,7 @@ describe('PageService historical restore', () => {
       pageId,
       workspaceId,
       expect.objectContaining({ queries: [expect.objectContaining({ id: queryOne })] }),
+      '99999999-9999-4999-8999-999999999999',
     );
   });
 

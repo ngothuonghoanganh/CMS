@@ -24,6 +24,7 @@ const coreInfrastructureFiles = [
   'apps/api/src/shared/events/core-event-bus.ts',
   'apps/api/src/shared/events/core-events.module.ts',
   'apps/api/src/shared/page-publish-compatibility.ts',
+  'apps/api/src/shared/page-extension-port.ts',
 ];
 
 const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
@@ -37,7 +38,6 @@ const knownDebt = {
     './reusable.service',
   ],
   'apps/api/src/domain/page.service.ts': [
-    '../extensions/page-extension.service',
     './navigation.service',
     './layout-extension.service',
     './reusable.service',
@@ -58,7 +58,6 @@ const knownDebt = {
   'apps/api/src/domain/public-page.resolver.ts': [
     './navigation.service',
     './layout-extension.service',
-    '../extensions/page-extension.service',
     './reusable.service',
     './collection.service',
   ],
@@ -233,16 +232,6 @@ function staleDebtEntries(relativePath, source, debt = knownDebt) {
 }
 
 function runSelfTest() {
-  const existingDebt =
-    "import { PageExtensionService } from '../extensions/page-extension.service';\n";
-  const existingDebtViolations = inspectSource(
-    'apps/api/src/domain/page.service.ts',
-    existingDebt,
-  );
-  if (existingDebtViolations.length !== 0) {
-    throw new Error('Core boundary checker did not allow an existing exact debt import');
-  }
-
   const billingViolations = inspectSource(
     'apps/api/src/domain/workspace.service.ts',
     "import { QuotaService } from '../billing/quota.service';\n",
@@ -263,6 +252,19 @@ function runSelfTest() {
   ) {
     throw new Error(
       'Core boundary checker self-test did not detect a new extension import',
+    );
+  }
+
+  const directPageExtensionViolation = inspectSource(
+    'apps/api/src/domain/page.service.ts',
+    "import { PageExtensionService } from '../extensions/page-extension.service';\n",
+  );
+  if (
+    directPageExtensionViolation.length !== 1 ||
+    !directPageExtensionViolation[0].includes('page-extension.service')
+  ) {
+    throw new Error(
+      'Core boundary checker self-test did not detect a direct PageExtensionService import',
     );
   }
 
@@ -311,6 +313,8 @@ function runSelfTest() {
     );
   }
 
+  const existingDebt =
+    "import { PageExtensionService } from '../extensions/page-extension.service';\n";
   const stale = staleDebtEntries('fixture.ts', existingDebt, {
     'fixture.ts': ['../extensions/page-extension.service', '../extensions/removed'],
   });

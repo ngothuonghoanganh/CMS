@@ -885,6 +885,25 @@ Consequences: Legacy payload code remains compatibility-only until dependency
               may simplify active core boundaries without destructive cleanup.
 ```
 
+### ADR-006
+
+```text
+Date: 2026-09-25
+Status: Accepted
+Decision: PageService and PublicPageResolver consume the narrow Core-owned
+          PageExtensionPort token; ExtensionModule provides it with useExisting
+          against the single PageExtensionService instance.
+Reason: Phase 1B Slice 3 must isolate Core from the concrete optional extension
+        platform while preserving the existing composition-root wiring and
+        published/draft extension behavior.
+Consequences: The port contains only Core-required synchronization, publishing
+              and runtime capabilities. Extension projection synchronization
+              carries an optimistic draft-version fence and compensates partial
+              writes without overwriting a newer projection. The legacy
+              page-extension projection remains compatibility infrastructure;
+              no payload migration or platform expansion is implied.
+```
+
 ---
 
 # 32. Final Architecture Principle

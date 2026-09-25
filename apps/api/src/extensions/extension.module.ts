@@ -24,6 +24,12 @@ import { TenantExtensionService } from './tenant-extension.service';
 import { PageExtensionController } from './page-extension.controller';
 import { PageExtensionService } from './page-extension.service';
 import { LegacyExtensionEventBridge } from './legacy-extension-event-bridge';
+import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
+
+export const PAGE_EXTENSION_PORT_PROVIDER = {
+  provide: PAGE_EXTENSION_PORT,
+  useExisting: PageExtensionService,
+} as const;
 
 @Module({
   imports: [
@@ -55,6 +61,7 @@ import { LegacyExtensionEventBridge } from './legacy-extension-event-bridge';
     TenantExtensionService,
     ExtensionConnectionService,
     PageExtensionService,
+    PAGE_EXTENSION_PORT_PROVIDER,
     LegacyExtensionEventBridge,
   ],
   exports: [
@@ -63,6 +70,7 @@ import { LegacyExtensionEventBridge } from './legacy-extension-event-bridge';
     ExtensionRegistry,
     TenantExtensionService,
     PageExtensionService,
+    PAGE_EXTENSION_PORT,
   ],
 })
 export class ExtensionModule {}

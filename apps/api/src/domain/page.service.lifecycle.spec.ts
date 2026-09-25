@@ -158,6 +158,7 @@ describe('PageService version persistence lifecycle', () => {
       pageId,
       workspaceId,
       expect.objectContaining({ layoutAttachments: oldLayoutAttachments }),
+      nextVersionId,
     );
   });
 

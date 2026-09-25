@@ -72,7 +72,6 @@ import {
   type PageVersionDocument,
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
-import { PageExtensionService } from '../extensions/page-extension.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import {
   CORE_EVENT_PUBLISHER,
@@ -82,6 +81,10 @@ import {
   PAGE_PUBLISH_COMPATIBILITY,
   type PagePublishCompatibility,
 } from '../shared/page-publish-compatibility';
+import {
+  PAGE_EXTENSION_PORT,
+  type PageExtensionPort,
+} from '../shared/page-extension-port';
 import { SiteService } from './site.service';
 import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
@@ -105,8 +108,8 @@ export class PageService {
     @Inject(PublicPageResolver)
     private readonly publicPageResolver: PublicPageResolver,
     @Inject(CORE_EVENT_PUBLISHER) private readonly events: CoreEventPublisher,
-    @Inject(PageExtensionService)
-    private readonly pageExtensions: PageExtensionService,
+    @Inject(PAGE_EXTENSION_PORT)
+    private readonly pageExtensions: PageExtensionPort,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(SiteService) private readonly sites: SiteService,
     @Inject(NavigationService) private readonly navigation: NavigationService,
@@ -212,6 +215,7 @@ export class PageService {
         pageId,
         site.workspaceId,
         composition,
+        versionId,
       );
 
       await this.events.publish('page.created', {
@@ -534,6 +538,7 @@ export class PageService {
         duplicated._id.toString(),
         workspaceId,
         composition,
+        version._id.toString(),
       );
       return this.toPageContract(duplicated);
     } catch (error) {
@@ -1144,6 +1149,7 @@ export class PageService {
         page._id.toString(),
         page.workspaceId,
         composition,
+        record._id.toString(),
       );
     } catch (error) {
       await this.versionModel

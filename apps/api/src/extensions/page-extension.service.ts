@@ -32,6 +32,7 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import { env } from '../config/env';
+import { platformLogger } from '../common/logging/platform-logger';
 import { IntegrationSecretVault } from '../domain/integration-secret-vault';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import {
@@ -43,9 +44,23 @@ import { TenantExtensionRecord } from '../persistence/schemas/tenant-extension.s
 import { ExtensionRegistry } from './extension-registry';
 import { customExtensionManifest } from './custom-extension';
 import { collectExtensionPlacements } from '../domain/page-composition';
+import type { PageExtensionPort } from '../shared/page-extension-port';
+
+type ProjectionSnapshot = {
+  _id: string;
+  workspaceId: string;
+  pageId: string;
+  extensionId: string;
+  connectionId?: string;
+  enabled: boolean;
+  configuration: Record<string, string | boolean | number>;
+  capabilities: string[];
+  runtimeIds: string[];
+  projectionVersionId?: string;
+};
 
 @Injectable()
-export class PageExtensionService {
+export class PageExtensionService implements PageExtensionPort {
   constructor(
     @InjectModel(PageExtensionInstanceRecord.name)
     private readonly instanceModel: Model<PageExtensionInstanceRecord>,
@@ -134,7 +149,10 @@ export class PageExtensionService {
             runtimeIds: extension ? this.registry.runtime(extensionId).runtimeIds : [],
             ...(nextConnectionId ? { connectionId: nextConnectionId } : {}),
           },
-          ...(parsed.connectionId === null ? { $unset: { connectionId: 1 } } : {}),
+          $unset: {
+            ...(parsed.connectionId === null ? { connectionId: 1 } : {}),
+            projectionVersionId: 1,
+          },
           $setOnInsert: { _id: randomUUID() },
         },
         { new: true, upsert: true, setDefaultsOnInsert: true },
@@ -195,8 +213,10 @@ export class PageExtensionService {
     pageId: string,
     workspaceId: string,
     composition: PageComposition,
+    expectedDraftVersionId?: string,
   ): Promise<void> {
     await this.requirePage(pageId, workspaceId);
+    await this.assertDraftVersionCurrent(pageId, workspaceId, expectedDraftVersionId);
     const attachmentByExtension = new Map<
       string,
       PageComposition['attachments'][number]
@@ -215,40 +235,78 @@ export class PageExtensionService {
     }
 
     const existing = await this.instanceModel.find({ pageId, workspaceId }).exec();
-    for (const instance of existing) {
-      if (!attachmentByExtension.has(instance.extensionId)) {
-        await this.instanceModel
-          .deleteOne({ pageId, workspaceId, extensionId: instance.extensionId })
-          .exec();
-      }
-    }
+    const snapshots = existing.map((instance) => this.snapshot(instance));
+    const existingByExtension = new Map(
+      existing.map((instance) => [instance.extensionId, instance]),
+    );
+    let projectionMutationStarted = false;
 
-    for (const [extensionId, attachment] of attachmentByExtension) {
-      const tenantEnabled = await this.tenantExtensionModel.exists({
-        extensionId,
-        enabled: true,
-      });
-      if (!tenantEnabled) continue;
-      const manifest = await this.resolveManifest(extensionId);
-      await this.instanceModel
-        .findOneAndUpdate(
-          { pageId, workspaceId, extensionId },
-          {
-            $set: {
-              enabled: attachment.enabled,
-              configuration: attachment.configuration,
-              capabilities: manifest.capabilities,
-              runtimeIds: this.runtimeIds(extensionId),
-              ...(attachment.connectionId
-                ? { connectionId: attachment.connectionId }
-                : {}),
+    try {
+      for (const instance of existing) {
+        if (attachmentByExtension.has(instance.extensionId)) continue;
+        await this.assertDraftVersionCurrent(pageId, workspaceId, expectedDraftVersionId);
+        projectionMutationStarted = true;
+        const deleted = await this.instanceModel
+          .deleteOne(
+            this.projectionFilter(
+              pageId,
+              workspaceId,
+              instance.extensionId,
+              expectedDraftVersionId,
+              instance.projectionVersionId,
+            ),
+          )
+          .exec();
+        if (expectedDraftVersionId && deleted.deletedCount !== 1) {
+          throw this.projectionConflict();
+        }
+      }
+
+      for (const [extensionId, attachment] of attachmentByExtension) {
+        const tenantEnabled = await this.tenantExtensionModel.exists({
+          extensionId,
+          enabled: true,
+        });
+        if (!tenantEnabled) continue;
+        const manifest = await this.resolveManifest(extensionId);
+        await this.assertDraftVersionCurrent(pageId, workspaceId, expectedDraftVersionId);
+        projectionMutationStarted = true;
+        const updated = await this.instanceModel
+          .findOneAndUpdate(
+            this.projectionFilter(
+              pageId,
+              workspaceId,
+              extensionId,
+              expectedDraftVersionId,
+              existingByExtension.get(extensionId)?.projectionVersionId,
+            ),
+            this.compositionProjectionUpdate(
+              extensionId,
+              attachment,
+              manifest,
+              expectedDraftVersionId,
+            ),
+            {
+              new: true,
+              upsert: !existingByExtension.has(extensionId),
+              setDefaultsOnInsert: true,
             },
-            ...(attachment.connectionId ? {} : { $unset: { connectionId: 1 } }),
-            $setOnInsert: { _id: randomUUID() },
-          },
-          { new: true, upsert: true, setDefaultsOnInsert: true },
-        )
-        .exec();
+          )
+          .exec();
+        if (!updated) throw this.projectionConflict();
+      }
+
+      await this.assertDraftVersionCurrent(pageId, workspaceId, expectedDraftVersionId);
+    } catch (error) {
+      if (projectionMutationStarted) {
+        await this.rollbackCompositionProjection(
+          pageId,
+          workspaceId,
+          snapshots,
+          expectedDraftVersionId,
+        );
+      }
+      throw error;
     }
   }
 
@@ -318,11 +376,204 @@ export class PageExtensionService {
               versionNumber,
             });
           }
-        } catch {
+        } catch (error) {
           // After-publish work is best effort; publication is already durable.
+          platformLogger.warn(
+            {
+              err: error,
+              extensionId: instance.extensionId,
+              pageId,
+              workspaceId,
+              versionNumber,
+            },
+            'page extension after-publish hook failed',
+          );
         }
       }),
     );
+  }
+
+  private async assertDraftVersionCurrent(
+    pageId: string,
+    workspaceId: string,
+    expectedDraftVersionId?: string,
+  ): Promise<void> {
+    if (!expectedDraftVersionId) return;
+    const page = await this.pageModel
+      .findOne({
+        _id: pageId,
+        workspaceId,
+        currentDraftVersionId: expectedDraftVersionId,
+      })
+      .select({ _id: 1 })
+      .exec();
+    if (!page) throw this.projectionConflict();
+  }
+
+  private projectionFilter(
+    pageId: string,
+    workspaceId: string,
+    extensionId: string,
+    expectedDraftVersionId?: string,
+    observedProjectionVersionId?: string,
+  ): Record<string, unknown> {
+    const filter: Record<string, unknown> = { pageId, workspaceId, extensionId };
+    if (expectedDraftVersionId) {
+      filter.projectionVersionId =
+        observedProjectionVersionId === undefined
+          ? { $exists: false }
+          : observedProjectionVersionId;
+    }
+    return filter;
+  }
+
+  private compositionProjectionUpdate(
+    extensionId: string,
+    attachment: PageComposition['attachments'][number],
+    manifest: ExtensionManifest,
+    expectedDraftVersionId?: string,
+  ) {
+    const set: Record<string, unknown> = {
+      enabled: attachment.enabled,
+      configuration: attachment.configuration,
+      capabilities: manifest.capabilities,
+      runtimeIds: this.runtimeIds(extensionId),
+      ...(attachment.connectionId ? { connectionId: attachment.connectionId } : {}),
+      ...(expectedDraftVersionId ? { projectionVersionId: expectedDraftVersionId } : {}),
+    };
+    const unset: Record<string, 1> = {
+      ...(attachment.connectionId ? {} : { connectionId: 1 }),
+    };
+    return {
+      $set: set,
+      ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      $setOnInsert: { _id: randomUUID() },
+    };
+  }
+
+  private snapshot(record: PageExtensionInstanceDocument): ProjectionSnapshot {
+    return {
+      _id: record._id.toString(),
+      workspaceId: record.workspaceId,
+      pageId: record.pageId,
+      extensionId: record.extensionId,
+      ...(record.connectionId ? { connectionId: record.connectionId } : {}),
+      enabled: record.enabled,
+      configuration: { ...record.configuration },
+      capabilities: [...record.capabilities],
+      runtimeIds: [...record.runtimeIds],
+      ...(record.projectionVersionId
+        ? { projectionVersionId: record.projectionVersionId }
+        : {}),
+    };
+  }
+
+  private projectionRestoreUpdate(snapshot: ProjectionSnapshot) {
+    const set: Record<string, unknown> = {
+      workspaceId: snapshot.workspaceId,
+      pageId: snapshot.pageId,
+      extensionId: snapshot.extensionId,
+      enabled: snapshot.enabled,
+      configuration: snapshot.configuration,
+      capabilities: snapshot.capabilities,
+      runtimeIds: snapshot.runtimeIds,
+      ...(snapshot.connectionId ? { connectionId: snapshot.connectionId } : {}),
+      ...(snapshot.projectionVersionId
+        ? { projectionVersionId: snapshot.projectionVersionId }
+        : {}),
+    };
+    const unset: Record<string, 1> = {
+      ...(snapshot.connectionId ? {} : { connectionId: 1 }),
+      ...(snapshot.projectionVersionId ? {} : { projectionVersionId: 1 }),
+    };
+    return {
+      $set: set,
+      ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      $setOnInsert: { _id: snapshot._id },
+    };
+  }
+
+  /**
+   * Compensates a failed multi-document projection write. Every recovery
+   * write is fenced by the source projection version, so a newer save can
+   * win without being overwritten by an older request's cleanup.
+   */
+  private async rollbackCompositionProjection(
+    pageId: string,
+    workspaceId: string,
+    snapshots: readonly ProjectionSnapshot[],
+    expectedDraftVersionId?: string,
+  ): Promise<void> {
+    const failures: unknown[] = [];
+    for (const snapshot of snapshots) {
+      try {
+        const current = await this.instanceModel
+          .findOne({
+            pageId,
+            workspaceId,
+            extensionId: snapshot.extensionId,
+          })
+          .exec();
+        if (
+          current &&
+          expectedDraftVersionId &&
+          current.projectionVersionId !== expectedDraftVersionId
+        ) {
+          continue;
+        }
+        await this.instanceModel
+          .findOneAndUpdate(
+            this.projectionFilter(
+              pageId,
+              workspaceId,
+              snapshot.extensionId,
+              expectedDraftVersionId,
+              current ? expectedDraftVersionId : undefined,
+            ),
+            this.projectionRestoreUpdate(snapshot),
+            { new: true, upsert: !current, setDefaultsOnInsert: true },
+          )
+          .exec();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+
+    try {
+      const cleanupFilter: Record<string, unknown> = { pageId, workspaceId };
+      if (expectedDraftVersionId) {
+        cleanupFilter.projectionVersionId = expectedDraftVersionId;
+      }
+      if (snapshots.length > 0) {
+        cleanupFilter.extensionId = {
+          $nin: snapshots.map((snapshot) => snapshot.extensionId),
+        };
+      }
+      await this.instanceModel.deleteMany(cleanupFilter).exec();
+    } catch (error) {
+      failures.push(error);
+    }
+
+    if (failures.length > 0) {
+      platformLogger.error(
+        {
+          err: failures[0],
+          pageId,
+          workspaceId,
+          expectedDraftVersionId,
+          failureCount: failures.length,
+        },
+        'page extension projection recovery was incomplete',
+      );
+    }
+  }
+
+  private projectionConflict(): ConflictException {
+    return new ConflictException({
+      code: 'PAGE_EXTENSION_PROJECTION_CONFLICT',
+      message:
+        'The page draft changed while its extension projection was being synchronized',
+    });
   }
 
   async resolveRuntime(pageId: string, workspaceId: string) {

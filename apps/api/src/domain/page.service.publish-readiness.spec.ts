@@ -249,6 +249,68 @@ describe('PageService publish readiness', () => {
     );
   });
 
+  it('reports a PageExtensionPort validation failure as a publish blocker', async () => {
+    const page = {
+      _id: { toString: () => pageId },
+      workspaceId,
+      siteId,
+      path: '/extension-blocked',
+      kind: 'standard',
+      currentDraftVersionId: 'version-1',
+    };
+    const version = {
+      _id: 'version-1',
+      workspaceId,
+      siteId,
+      landingPageId: pageId,
+      versionNumber: 1,
+      payload,
+      composition,
+    };
+    const service = Object.create(PageService.prototype) as PageService;
+    const state = service as unknown as Record<string, unknown>;
+    state.pageModel = {
+      findOne: vi.fn((filter: Record<string, unknown>) => ({
+        select: vi.fn().mockReturnThis(),
+        exec: vi.fn().mockResolvedValue(filter._id === pageId ? page : null),
+      })),
+    };
+    state.versionModel = {
+      findOne: vi.fn(() => ({ exec: vi.fn().mockResolvedValue(version) })),
+    };
+    state.navigation = { validateInlineNavigationDocument: vi.fn() };
+    state.reusables = {
+      assertDependenciesAvailable: vi.fn(),
+      assertDesignTokenDependenciesAvailable: vi.fn(),
+    };
+    state.sites = {
+      getDesignSystem: vi.fn().mockResolvedValue({
+        draft: createDefaultSiteDesignSystem(),
+      }),
+    };
+    state.pagePublishCompatibility = { validateBeforePublish: vi.fn() };
+    state.pageExtensions = {
+      validateBeforePublish: vi
+        .fn()
+        .mockRejectedValue(new Error('extension runtime is unavailable')),
+    };
+    state.collections = { validateComposition: vi.fn() };
+
+    const readiness = await service.getPublishReadiness(pageId, workspaceId);
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingIssues).toEqual([
+      expect.objectContaining({
+        code: 'UNKNOWN',
+        message: 'extension runtime is unavailable',
+      }),
+    ]);
+    expect(
+      (state.pageExtensions as { validateBeforePublish: ReturnType<typeof vi.fn> })
+        .validateBeforePublish,
+    ).toHaveBeenCalledWith(pageId, workspaceId, payload, composition);
+  });
+
   it('keeps readiness structured for a never-published Open Composition draft', async () => {
     const openPayload = OpenCompositionPayloadSchema.parse({
       version: 8,

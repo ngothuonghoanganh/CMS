@@ -13,12 +13,15 @@ import { SiteService } from './site.service';
 import { PageRecord } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
-import { PageExtensionService } from '../extensions/page-extension.service';
 import { CoreEventBus } from '../shared/events/core-event-bus';
 import {
   CORE_EVENT_PUBLISHER,
   type CoreEventPublisher,
 } from '../shared/events/core-event-publisher';
+import {
+  PAGE_EXTENSION_PORT,
+  type PageExtensionPort,
+} from '../shared/page-extension-port';
 import { TenantContext } from '../tenancy/tenant-context';
 
 const tenantId = 'tenant-a';
@@ -120,7 +123,10 @@ describe('PageService core dependency boundary', () => {
         { provide: getModelToken(SiteRecord.name), useValue: {} },
         { provide: PublicPageResolver, useValue: {} },
         { provide: CORE_EVENT_PUBLISHER, useValue: eventPublisher },
-        { provide: PageExtensionService, useValue: {} },
+        {
+          provide: PAGE_EXTENSION_PORT,
+          useValue: {} satisfies Partial<PageExtensionPort>,
+        },
         { provide: TenantContext, useValue: tenantContext },
         { provide: SiteService, useValue: {} },
         { provide: NavigationService, useValue: {} },
