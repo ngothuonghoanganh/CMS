@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["PORT"],
+  "globalPassThroughEnv": ["PORT", "NEXT_PUBLIC_API_BASE_URL", "RENDERER_API_BASE_URL"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

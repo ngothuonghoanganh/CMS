@@ -8,7 +8,21 @@ import {
   type PublicSiteRoutes,
 } from '@payload/contracts';
 
-const apiBaseUrl = process.env.RENDERER_API_BASE_URL ?? 'http://127.0.0.1:3001/api/v1';
+export function resolveRendererApiBaseUrl(
+  environment: {
+    [key: string]: string | undefined;
+    RENDERER_API_BASE_URL?: string;
+    NEXT_PUBLIC_API_BASE_URL?: string;
+  } = process.env,
+): string {
+  return (
+    environment.RENDERER_API_BASE_URL ??
+    environment.NEXT_PUBLIC_API_BASE_URL ??
+    'http://127.0.0.1:3001/api/v1'
+  ).replace(/\/$/, '');
+}
+
+const apiBaseUrl = resolveRendererApiBaseUrl();
 
 function uncachedApiUrl(path: string): string {
   // The request is already no-store; the nonce also bypasses Next dev's HMR
