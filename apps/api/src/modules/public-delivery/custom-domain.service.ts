@@ -38,7 +38,7 @@ import {
   DOMAIN_VERIFICATION_RESOLVER,
   type DomainVerificationResolver,
 } from './domain-verification-resolver';
-import { PublicPageResolver } from '../pages/public-page.resolver';
+import { PublicPageResolver } from './public-page.resolver';
 import { TenantResolver } from '../../tenancy/tenant-resolver';
 import { TenantContext } from '../../tenancy/tenant-context';
 import {

@@ -14,7 +14,7 @@ const coreServiceFiles = [
   'apps/api/src/modules/pages/page.service.ts',
   'apps/api/src/modules/submissions/submission.service.ts',
   'apps/api/src/modules/assets/asset.service.ts',
-  'apps/api/src/modules/pages/public-page.resolver.ts',
+  'apps/api/src/modules/public-delivery/public-page.resolver.ts',
   'apps/api/src/modules/public-delivery/custom-domain.service.ts',
 ];
 
@@ -38,7 +38,7 @@ const knownDebt = {
   'apps/api/src/modules/pages/page.service.ts': [],
   'apps/api/src/modules/submissions/submission.service.ts': [],
   'apps/api/src/modules/assets/asset.service.ts': [],
-  'apps/api/src/modules/pages/public-page.resolver.ts': [],
+  'apps/api/src/modules/public-delivery/public-page.resolver.ts': [],
   'apps/api/src/modules/public-delivery/custom-domain.service.ts': [],
 };
 

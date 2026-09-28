@@ -65,7 +65,6 @@ import {
 } from '@payload/contracts';
 
 import { assertExpectedVersionNumber, nextVersionNumber } from './versioning';
-import { PublicPageResolver } from './public-page.resolver';
 import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
 import {
   PageVersionRecord,
@@ -115,8 +114,6 @@ export class PageService {
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(SiteRecord.name)
     private readonly siteModel: Model<SiteRecord>,
-    @Inject(PublicPageResolver)
-    private readonly publicPageResolver: PublicPageResolver,
     @Inject(CORE_EVENT_PUBLISHER) private readonly events: CoreEventPublisher,
     @Inject(PAGE_EXTENSION_PORT)
     private readonly pageExtensions: PageExtensionPort,
@@ -711,14 +708,6 @@ export class PageService {
     page.set('publishedVersionId', undefined);
     await page.save();
     return this.toPageContract(page);
-  }
-
-  async resolvePublicPage(siteSlug: string, pageSlug: string): Promise<PublicPage> {
-    return this.publicPageResolver.resolveByLegacySlug(siteSlug, pageSlug);
-  }
-
-  async resolvePublicPageByPath(siteSlug: string, path: string): Promise<PublicPage> {
-    return this.publicPageResolver.resolveByPath(siteSlug, path);
   }
 
   async resolvePreview(

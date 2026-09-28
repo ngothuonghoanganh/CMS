@@ -4,7 +4,6 @@ import { createDefaultSiteDesignSystem, type PagePayload } from '@payload/contra
 import { describe, expect, it, vi } from 'vitest';
 
 import { PageService } from './page.service';
-import { PublicPageResolver } from './public-page.resolver';
 import { SiteService } from '../sites/site.service';
 import { PageRecord } from '../../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
@@ -107,7 +106,6 @@ function createService(overrides: Record<string, unknown> = {}) {
   state.layoutExtensions = {};
   state.reusables = {};
   state.collections = {};
-  state.publicPageResolver = {};
   state.pagePublishCompatibility = undefined;
   Object.assign(state, overrides);
   return { service, state, tenantContext };
@@ -124,7 +122,6 @@ describe('PageService core dependency boundary', () => {
         { provide: getModelToken(PageRecord.name), useValue: {} },
         { provide: getModelToken(PageVersionRecord.name), useValue: {} },
         { provide: getModelToken(SiteRecord.name), useValue: {} },
-        { provide: PublicPageResolver, useValue: {} },
         { provide: CORE_EVENT_PUBLISHER, useValue: eventPublisher },
         {
           provide: PAGE_EXTENSION_PORT,

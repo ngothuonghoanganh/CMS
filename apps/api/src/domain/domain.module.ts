@@ -8,11 +8,9 @@ import { NavigationModule } from '../modules/navigation/navigation.module';
 import {
   PageController,
   PreviewPageController,
-  PublicPageController,
   SitePagesController,
 } from '../modules/pages/page.controller';
 import { PageService } from '../modules/pages/page.service';
-import { PublicPageResolver } from '../modules/pages/public-page.resolver';
 import { ReusablesModule } from '../modules/reusables/reusables.module';
 import { SiteModule } from '../modules/sites/site.module';
 import { WorkspaceModule } from '../modules/workspaces/workspace.module';
@@ -21,6 +19,8 @@ import {
   PublicDomainController,
 } from '../modules/public-delivery/custom-domain.controller';
 import { CustomDomainService } from '../modules/public-delivery/custom-domain.service';
+import { PublicPageController } from '../modules/public-delivery/public-page.controller';
+import { PublicPageResolver } from '../modules/public-delivery/public-page.resolver';
 import {
   DOMAIN_VERIFICATION_RESOLVER,
   InMemoryDomainVerificationResolver,

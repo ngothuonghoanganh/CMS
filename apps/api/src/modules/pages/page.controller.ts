@@ -411,32 +411,6 @@ export class PageController {
   }
 }
 
-@Controller('public/sites')
-export class PublicPageController {
-  constructor(@Inject(PageService) private readonly pageService: PageService) {}
-
-  @Get(':siteSlug/pages/:pageSlug')
-  async getPublicPage(
-    @Param('siteSlug') siteSlug: string,
-    @Param('pageSlug') pageSlug: string,
-  ) {
-    return this.pageService.resolvePublicPage(siteSlug, pageSlug);
-  }
-
-  @Get(':siteSlug')
-  async getPublicHomePage(@Param('siteSlug') siteSlug: string) {
-    return this.pageService.resolvePublicPageByPath(siteSlug, '/');
-  }
-
-  @Get(':siteSlug/resolve')
-  async resolvePublicPage(
-    @Param('siteSlug') siteSlug: string,
-    @Query('path') path = '/',
-  ) {
-    return this.pageService.resolvePublicPageByPath(siteSlug, path);
-  }
-}
-
 @Controller('preview/pages')
 @UseGuards(AuthenticationGuard)
 export class PreviewPageController {
