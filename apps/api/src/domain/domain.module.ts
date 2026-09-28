@@ -102,6 +102,10 @@ import {
   PAGE_COLLECTION_PORT_PROVIDER,
   PageCollectionAdapter,
 } from './page-collection.adapter';
+import {
+  SUBMISSION_SIDE_EFFECTS_PORT_PROVIDER,
+  SubmissionSideEffectsAdapter,
+} from './submission-side-effects.adapter';
 
 @Module({
   imports: [
@@ -177,6 +181,8 @@ import {
     PAGE_LAYOUT_PORT_PROVIDER,
     PageCollectionAdapter,
     PAGE_COLLECTION_PORT_PROVIDER,
+    SubmissionSideEffectsAdapter,
+    SUBMISSION_SIDE_EFFECTS_PORT_PROVIDER,
     CollectionService,
     PageReusableAdapter,
     PAGE_REUSABLE_PORT_PROVIDER,

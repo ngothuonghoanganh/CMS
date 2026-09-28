@@ -35,12 +35,7 @@ const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
   'apps/api/src/domain/site.service.ts': [],
   'apps/api/src/domain/page.service.ts': [],
-  'apps/api/src/domain/submission.service.ts': [
-    '../billing/usage.service',
-    './integration-dispatcher',
-    './analytics.service',
-    '../extensions/event-bus',
-  ],
+  'apps/api/src/domain/submission.service.ts': [],
   'apps/api/src/domain/asset.service.ts': [
     '../persistence/schemas/collection.schema',
     '../persistence/schemas/template.schema',

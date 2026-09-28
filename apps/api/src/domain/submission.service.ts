@@ -42,12 +42,12 @@ import {
 } from '../persistence/schemas/page-version.schema';
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
-import { UsageService } from '../billing/usage.service';
 import { TenantContext } from '../tenancy/tenant-context';
-import { IntegrationDispatcher } from './integration-dispatcher';
-import { AnalyticsService } from './analytics.service';
 import { platformLogger } from '../common/logging/platform-logger';
-import { EventBus } from '../extensions/event-bus';
+import {
+  SUBMISSION_SIDE_EFFECTS_PORT,
+  type SubmissionSideEffectsPort,
+} from '../shared/submission-side-effects-port';
 import { findResolvedForm, type ResolvedFormNode } from './open-composition-form';
 
 type ResolvedForm = {
@@ -82,15 +82,11 @@ export class SubmissionService {
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
-    @Inject(IntegrationDispatcher)
-    private readonly integrationDispatcher: IntegrationDispatcher,
-    @Inject(AnalyticsService)
-    private readonly analyticsService: AnalyticsService,
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
-    @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(SUBMISSION_SIDE_EFFECTS_PORT)
+    private readonly sideEffects: SubmissionSideEffectsPort,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-    @Inject(EventBus) private readonly events: EventBus,
   ) {}
 
   async submitPublic(
@@ -143,10 +139,8 @@ export class SubmissionService {
       submittedAt,
     });
     try {
-      await this.usage.increment(
+      await this.sideEffects.incrementSubmissionUsage(
         this.tenantContextId(),
-        'form_submissions_monthly',
-        1,
         submittedAt,
       );
     } catch (error) {
@@ -156,7 +150,7 @@ export class SubmissionService {
       );
     }
     try {
-      await this.integrationDispatcher.enqueueForSubmission(
+      await this.sideEffects.enqueueIntegration(
         submission._id.toString(),
         resolved.site.workspaceId,
       );
@@ -169,7 +163,7 @@ export class SubmissionService {
       );
     }
     try {
-      await this.analyticsService.recordSubmission({
+      await this.sideEffects.recordAnalytics({
         workspaceId: resolved.site.workspaceId,
         siteId: resolved.site._id.toString(),
         landingPageId: resolved.page._id.toString(),
@@ -189,7 +183,7 @@ export class SubmissionService {
       );
     }
 
-    await this.events.publish('form.submitted', {
+    await this.sideEffects.publishFormSubmitted({
       tenantId: this.tenantContext.require().id,
       eventId: submission._id.toString(),
       submissionId: submission._id.toString(),
@@ -199,7 +193,7 @@ export class SubmissionService {
       formNodeId: resolved.form.id,
       occurredAt: submittedAt.toISOString(),
     });
-    await this.events.publish('lead.created', {
+    await this.sideEffects.publishLeadCreated({
       tenantId: this.tenantContext.require().id,
       eventId: `lead:${submission._id.toString()}`,
       submissionId: submission._id.toString(),

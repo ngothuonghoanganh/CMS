@@ -35,6 +35,7 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { UsageService } from '../billing/usage.service';
 import { platformLogger } from '../common/logging/platform-logger';
 import { EventBus } from '../extensions/event-bus';
+import type { SubmissionAnalyticsInput } from '../shared/submission-side-effects-port';
 
 const ANALYTICS_MAX_EVENT_BYTES = 8 * 1024;
 const ANALYTICS_RATE_WINDOW_MS = 60_000;
@@ -42,17 +43,6 @@ const ANALYTICS_RATE_MAX_EVENTS = 120;
 const MAX_OCCURRED_AT_SKEW_MS = 15 * 60_000;
 
 type RateBucket = { startedAt: number; count: number };
-
-export type SubmissionAnalyticsInput = {
-  workspaceId: string;
-  siteId: string;
-  landingPageId: string;
-  pageVersionId: string;
-  publishedVersionNumber: number;
-  submissionId: string;
-  submittedAt: Date;
-  sessionId?: string;
-};
 
 type PublishedAnalyticsContext = {
   site: SiteDocument;
