@@ -19,7 +19,7 @@ describe('CMS navigation', () => {
     ]);
     expect(sections).toHaveLength(2);
     expect(sections[0]?.label).toBe('Overview');
-    expect(sections[1]?.label).toBeUndefined();
+    expect(sections[1]?.label).toBe('Operations');
   });
 
   it('does not expose technical modules in the primary navigation', () => {

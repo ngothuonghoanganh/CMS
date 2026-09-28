@@ -54,6 +54,8 @@ test('task navigation keeps technical tools secondary and preserves website cont
   await loginToCanonicalBuilder(page, canonicalEnvironment);
 
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(navigation.getByText('Overview', { exact: true })).toBeVisible();
+  await expect(navigation.getByText('Operations', { exact: true })).toBeVisible();
   await expect(navigation.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
   for (const label of ['Analytics', 'Websites', 'Responses', 'Library', 'Settings']) {
     await expect(
