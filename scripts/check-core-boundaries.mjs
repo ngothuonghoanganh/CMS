@@ -35,7 +35,6 @@ const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
   'apps/api/src/domain/site.service.ts': [],
   'apps/api/src/domain/page.service.ts': [
-    './navigation.service',
     './layout-extension.service',
     './collection.service',
   ],
@@ -52,7 +51,6 @@ const knownDebt = {
     '../persistence/schemas/layout-extension.schema',
   ],
   'apps/api/src/domain/public-page.resolver.ts': [
-    './navigation.service',
     './layout-extension.service',
     './collection.service',
   ],

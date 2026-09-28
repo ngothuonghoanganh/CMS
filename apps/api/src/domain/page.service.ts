@@ -86,8 +86,12 @@ import {
   type PageExtensionPort,
 } from '../shared/page-extension-port';
 import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
+import {
+  PAGE_NAVIGATION_PORT,
+  type PageNavigationPort,
+} from '../shared/page-navigation-port';
+import { collectNavigationPageIds } from '../shared/navigation-page-ids';
 import { SiteService } from './site.service';
-import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { CollectionService } from './collection.service';
 import {
@@ -112,7 +116,7 @@ export class PageService {
     private readonly pageExtensions: PageExtensionPort,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(SiteService) private readonly sites: SiteService,
-    @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(PAGE_NAVIGATION_PORT) private readonly navigation: PageNavigationPort,
     @Inject(LayoutExtensionService)
     private readonly layoutExtensions: LayoutExtensionService,
     @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,
@@ -1532,7 +1536,7 @@ export class PageService {
     siteId: string,
   ): Promise<void> {
     // A few historical unit fixtures construct PageService without Nest's
-    // injected collaborators. Production instances always have NavigationService.
+    // injected collaborators. Production instances always have the navigation port.
     if (!this.navigation) return;
     await this.navigation.validateInlineNavigationDocument(payload, workspaceId, siteId);
   }

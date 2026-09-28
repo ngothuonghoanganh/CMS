@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { CollectionService } from './collection.service';
 import { LayoutExtensionService } from './layout-extension.service';
-import { NavigationService } from './navigation.service';
 import { PageService } from './page.service';
 import { PublicPageResolver } from './public-page.resolver';
 import { SiteService } from './site.service';
@@ -17,6 +16,7 @@ import {
   CORE_EVENT_PUBLISHER,
   type CoreEventPublisher,
 } from '../shared/events/core-event-publisher';
+import { PAGE_NAVIGATION_PORT } from '../shared/page-navigation-port';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
@@ -129,7 +129,7 @@ describe('PageService core dependency boundary', () => {
         },
         { provide: TenantContext, useValue: tenantContext },
         { provide: SiteService, useValue: {} },
-        { provide: NavigationService, useValue: {} },
+        { provide: PAGE_NAVIGATION_PORT, useValue: {} },
         { provide: LayoutExtensionService, useValue: {} },
         {
           provide: PAGE_REUSABLE_PORT,

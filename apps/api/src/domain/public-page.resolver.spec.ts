@@ -10,10 +10,10 @@ import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
+import { PAGE_NAVIGATION_PORT } from '../shared/page-navigation-port';
 import { PAGE_REUSABLE_PORT } from '../shared/page-reusable-port';
 import { CollectionService } from './collection.service';
 import { LayoutExtensionService } from './layout-extension.service';
-import { NavigationService } from './navigation.service';
 import { PublicPageResolver } from './public-page.resolver';
 import { SiteUrlService } from './site-url.service';
 
@@ -49,7 +49,7 @@ describe('public page resolver', () => {
         { provide: getModelToken(CustomDomainRecord.name), useValue: {} },
         { provide: TenantContext, useValue: {} },
         { provide: SiteUrlService, useValue: {} },
-        { provide: NavigationService, useValue: {} },
+        { provide: PAGE_NAVIGATION_PORT, useValue: {} },
         { provide: LayoutExtensionService, useValue: {} },
         { provide: PAGE_EXTENSION_PORT, useValue: {} },
         { provide: PAGE_REUSABLE_PORT, useValue: {} },

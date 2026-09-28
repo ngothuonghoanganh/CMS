@@ -40,7 +40,6 @@ import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schem
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { SiteUrlService } from './site-url.service';
-import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { CollectionService } from './collection.service';
 import {
@@ -48,6 +47,11 @@ import {
   type PageExtensionPort,
 } from '../shared/page-extension-port';
 import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
+import {
+  PAGE_NAVIGATION_PORT,
+  type PageNavigationPort,
+} from '../shared/page-navigation-port';
+import { collectNavigationPageIds } from '../shared/navigation-page-ids';
 
 @Injectable()
 export class PublicPageResolver {
@@ -66,7 +70,7 @@ export class PublicPageResolver {
     private readonly seoModel: Model<PageSeoSettingsRecord>,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
-    @Inject(NavigationService) private readonly navigation: NavigationService,
+    @Inject(PAGE_NAVIGATION_PORT) private readonly navigation: PageNavigationPort,
     @Inject(LayoutExtensionService)
     private readonly layoutExtensions: LayoutExtensionService,
     @Inject(PAGE_EXTENSION_PORT)

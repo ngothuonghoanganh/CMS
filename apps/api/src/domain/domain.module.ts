@@ -93,6 +93,10 @@ import {
   SITE_NAVIGATION_PORT_PROVIDER,
   SiteNavigationAdapter,
 } from './site-navigation.adapter';
+import {
+  PAGE_NAVIGATION_PORT_PROVIDER,
+  PageNavigationAdapter,
+} from './page-navigation.adapter';
 
 @Module({
   imports: [
@@ -162,6 +166,8 @@ import {
     SITE_REUSABLE_PORT_PROVIDER,
     SiteNavigationAdapter,
     SITE_NAVIGATION_PORT_PROVIDER,
+    PageNavigationAdapter,
+    PAGE_NAVIGATION_PORT_PROVIDER,
     CollectionService,
     PageReusableAdapter,
     PAGE_REUSABLE_PORT_PROVIDER,
