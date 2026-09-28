@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuthenticationModule } from '../common/guards/authentication.module';
 import { BillingModule } from '../billing/billing.module';
 import { env } from '../config/env';
+import { AssetModule } from '../modules/assets/asset.module';
 import {
   PageController,
   PreviewPageController,
@@ -25,15 +26,6 @@ import { SeoController } from './seo.controller';
 import { SeoService } from './seo.service';
 import { SiteController } from './site.controller';
 import { SiteService } from './site.service';
-import { AssetController } from './asset.controller';
-import { AssetService } from './asset.service';
-import {
-  ASSET_REFERENCE_PORT_PROVIDER,
-  AssetReferenceAdapter,
-} from './asset-reference.adapter';
-import { AssetFolderController } from './asset-folder.controller';
-import { AssetFolderService } from './asset-folder.service';
-import { PublicAssetController } from './public-asset.controller';
 import { TemplateController } from './template.controller';
 import { TemplateService } from './template.service';
 import { WorkspaceController } from './workspace.controller';
@@ -84,7 +76,6 @@ import {
   WorkspaceCollectionController,
 } from './collection.controller';
 import { CollectionService } from './collection.service';
-import { ASSET_STORAGE, LocalFilesystemAssetStorageProvider } from './asset-storage';
 import {
   PAGE_REUSABLE_PORT_PROVIDER,
   PageReusableAdapter,
@@ -122,11 +113,9 @@ import {
     WorkflowModule,
     TenantModelsModule,
     TenantModule,
+    AssetModule,
   ],
   controllers: [
-    AssetController,
-    AssetFolderController,
-    PublicAssetController,
     PageController,
     PreviewPageController,
     PublicPageController,
@@ -153,10 +142,6 @@ import {
     WorkspaceCollectionController,
   ],
   providers: [
-    AssetService,
-    AssetReferenceAdapter,
-    ASSET_REFERENCE_PORT_PROVIDER,
-    AssetFolderService,
     PageService,
     SiteService,
     SubmissionService,
@@ -192,7 +177,6 @@ import {
     CollectionService,
     PageReusableAdapter,
     PAGE_REUSABLE_PORT_PROVIDER,
-    { provide: ASSET_STORAGE, useClass: LocalFilesystemAssetStorageProvider },
     {
       provide: DOMAIN_VERIFICATION_RESOLVER,
       useFactory: () =>

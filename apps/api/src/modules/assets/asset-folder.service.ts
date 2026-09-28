@@ -14,8 +14,8 @@ import {
 import {
   AssetFolderRecord,
   type AssetFolderDocument,
-} from '../persistence/schemas/asset-folder.schema';
-import { AssetRecord } from '../persistence/schemas/asset.schema';
+} from '../../persistence/schemas/asset-folder.schema';
+import { AssetRecord } from '../../persistence/schemas/asset.schema';
 
 @Injectable()
 export class AssetFolderService {

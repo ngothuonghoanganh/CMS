@@ -17,14 +17,14 @@ import {
   type UpdateAssetRequest,
 } from '@payload/contracts';
 
-import { AssetRecord, type AssetDocument } from '../persistence/schemas/asset.schema';
-import { AssetFolderRecord } from '../persistence/schemas/asset-folder.schema';
+import { AssetRecord, type AssetDocument } from '../../persistence/schemas/asset.schema';
+import { AssetFolderRecord } from '../../persistence/schemas/asset-folder.schema';
 import { ASSET_STORAGE, type AssetStorageProvider } from './asset-storage';
-import { platformLogger } from '../common/logging/platform-logger';
+import { platformLogger } from '../../common/logging/platform-logger';
 import {
   ASSET_REFERENCE_PORT,
   type AssetReferencePort,
-} from '../shared/asset-reference-port';
+} from '../../shared/asset-reference-port';
 
 const ASSET_USAGE_RESPONSE_LIMIT = 100;
 

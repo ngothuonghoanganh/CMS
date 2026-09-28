@@ -1,20 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Model } from 'mongoose';
 
-import type { CollectionEntryVersionRecord } from '../persistence/schemas/collection.schema';
+import type { CollectionEntryVersionRecord } from '../../persistence/schemas/collection.schema';
 import type {
   LayoutExtensionRecord,
   LayoutExtensionVersionRecord,
-} from '../persistence/schemas/layout-extension.schema';
-import type { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
-import type { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import type { ReusableRecord } from '../persistence/schemas/reusable.schema';
-import type { SiteRecord } from '../persistence/schemas/site.schema';
+} from '../../persistence/schemas/layout-extension.schema';
+import type { PageSeoSettingsRecord } from '../../persistence/schemas/page-seo-settings.schema';
+import type { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
+import type { ReusableRecord } from '../../persistence/schemas/reusable.schema';
+import type { SiteRecord } from '../../persistence/schemas/site.schema';
 import type {
   TemplateRecord,
   TemplateVersionRecord,
-} from '../persistence/schemas/template.schema';
-import type { AssetReferencePort } from '../shared/asset-reference-port';
+} from '../../persistence/schemas/template.schema';
+import type { AssetReferencePort } from '../../shared/asset-reference-port';
 import { AssetReferenceAdapter } from './asset-reference.adapter';
 import { AssetService } from './asset.service';
 

@@ -6,20 +6,20 @@ import {
   ASSET_REFERENCE_PORT,
   type AssetReferencePort,
   type AssetReferenceUsage,
-} from '../shared/asset-reference-port';
-import { CollectionEntryVersionRecord } from '../persistence/schemas/collection.schema';
+} from '../../shared/asset-reference-port';
+import { CollectionEntryVersionRecord } from '../../persistence/schemas/collection.schema';
 import {
   LayoutExtensionRecord,
   LayoutExtensionVersionRecord,
-} from '../persistence/schemas/layout-extension.schema';
-import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
-import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import { ReusableRecord } from '../persistence/schemas/reusable.schema';
-import { SiteRecord } from '../persistence/schemas/site.schema';
+} from '../../persistence/schemas/layout-extension.schema';
+import { PageSeoSettingsRecord } from '../../persistence/schemas/page-seo-settings.schema';
+import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
+import { ReusableRecord } from '../../persistence/schemas/reusable.schema';
+import { SiteRecord } from '../../persistence/schemas/site.schema';
 import {
   TemplateRecord,
   TemplateVersionRecord,
-} from '../persistence/schemas/template.schema';
+} from '../../persistence/schemas/template.schema';
 
 type PageVersionUsageRecord = {
   landingPageId: string;
