@@ -6,8 +6,7 @@ import * as ts from 'typescript';
 const scriptPath = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(scriptPath), '..');
 
-// These are the core service files that Phase 1A is actively protecting. The
-// DomainModule remains a composition root until the graph is split gradually.
+// These are the core service files that Phase 1 is actively protecting.
 const coreServiceFiles = [
   'apps/api/src/modules/workspaces/workspace.service.ts',
   'apps/api/src/modules/sites/site.service.ts',
@@ -27,6 +26,21 @@ const coreInfrastructureFiles = [
   'apps/api/src/shared/events/core-events.module.ts',
   'apps/api/src/shared/page-publish-compatibility.ts',
   'apps/api/src/shared/page-extension-port.ts',
+];
+
+// Feature modules are protected separately because a module-level import can
+// reintroduce a frozen platform even when every service depends only on ports.
+const coreModuleFiles = [
+  'apps/api/src/modules/workspaces/workspace.module.ts',
+  'apps/api/src/modules/sites/site.module.ts',
+  'apps/api/src/modules/pages/pages.module.ts',
+  'apps/api/src/modules/assets/asset.module.ts',
+  'apps/api/src/modules/submissions/submissions.module.ts',
+  'apps/api/src/modules/public-delivery/public-delivery.module.ts',
+  'apps/api/src/modules/navigation/navigation.module.ts',
+  'apps/api/src/tenancy/control-plane.module.ts',
+  'apps/api/src/bootstrap/tenant-bootstrap.module.ts',
+  'apps/api/src/common/guards/authentication.module.ts',
 ];
 
 const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
@@ -109,6 +123,37 @@ const frozenDependencyRules = [
   },
 ];
 
+// Navigation and the other active core modules may be composed by a Core
+// feature module. Module-level protection therefore only covers deferred
+// platform modules, not every concrete service rule used by core services.
+const frozenModuleDependencyRules = [
+  { dependency: 'billing', matches: (source) => hasPathSegment(source, 'billing') },
+  {
+    dependency: 'extensions',
+    matches: (source) => hasPathSegment(source, 'extensions'),
+  },
+  {
+    dependency: 'workflows',
+    matches: (source) => hasPathSegment(source, 'workflows'),
+  },
+  {
+    dependency: 'analytics',
+    matches: (source) => hasPathSegment(source, 'analytics'),
+  },
+  {
+    dependency: 'collections',
+    matches: (source) => hasPathSegment(source, 'collections'),
+  },
+  {
+    dependency: 'reusables',
+    matches: (source) => hasPathSegment(source, 'reusables'),
+  },
+  {
+    dependency: 'integrations',
+    matches: (source) => hasPathSegment(source, 'integrations'),
+  },
+];
+
 function normalizeImportSource(source) {
   return source.startsWith('.')
     ? path.posix.normalize(source.replaceAll('\\', '/'))
@@ -185,6 +230,10 @@ function dependencyForImport(source) {
   return frozenDependencyRules.find((rule) => rule.matches(source))?.dependency;
 }
 
+function moduleDependencyForImport(source) {
+  return frozenModuleDependencyRules.find((rule) => rule.matches(source))?.dependency;
+}
+
 function lineNumber(source, index) {
   return source.slice(0, index).split('\n').length;
 }
@@ -197,6 +246,18 @@ function inspectSource(relativePath, source, debt = knownDebt) {
       if (!dependency || allowed.has(importSource)) return [];
       return [
         `${relativePath}:${lineNumber(source, index)} imports frozen ${dependency} dependency (${importSource})`,
+      ];
+    },
+  );
+}
+
+function inspectCoreModuleSource(relativePath, source) {
+  return extractImports(source, relativePath).flatMap(
+    ({ source: importSource, index }) => {
+      const dependency = moduleDependencyForImport(importSource);
+      if (!dependency) return [];
+      return [
+        `${relativePath}:${lineNumber(source, index)} imports frozen ${dependency} module dependency (${importSource})`,
       ];
     },
   );
@@ -294,6 +355,46 @@ function runSelfTest() {
     );
   }
 
+  const moduleImportViolation = inspectCoreModuleSource(
+    'apps/api/src/modules/pages/pages.module.ts',
+    "import { BillingModule } from '../../billing/billing.module';\n",
+  );
+  if (
+    moduleImportViolation.length !== 1 ||
+    !moduleImportViolation[0].includes('frozen billing module')
+  ) {
+    throw new Error('Core boundary checker did not detect a frozen module import');
+  }
+
+  const moduleSyntaxCases = [
+    {
+      source: "export { WorkflowModule } from '../../workflows/workflow.module';\n",
+      dependency: 'workflows',
+    },
+    {
+      source: "const load = () => import('../../extensions/extension.module');\n",
+      dependency: 'extensions',
+    },
+    {
+      source: "import Billing = require('../../billing/billing.module');\n",
+      dependency: 'billing',
+    },
+  ];
+  for (const { source, dependency } of moduleSyntaxCases) {
+    const violations = inspectCoreModuleSource(
+      'apps/api/src/modules/pages/pages.module.ts',
+      source,
+    );
+    if (
+      violations.length !== 1 ||
+      !violations[0].includes(`frozen ${dependency} module`)
+    ) {
+      throw new Error(
+        `Core boundary checker did not detect ${dependency} module syntax edge`,
+      );
+    }
+  }
+
   const existingDebt =
     "import { PageExtensionService } from '../extensions/page-extension.service';\n";
   const stale = staleDebtEntries('fixture.ts', existingDebt, {
@@ -327,6 +428,15 @@ for (const relativePath of protectedCoreFiles) {
   }
   failures.push(...inspectSource(relativePath, source));
 }
+for (const relativePath of coreModuleFiles) {
+  const filePath = path.join(root, relativePath);
+  if (!existsSync(filePath)) {
+    failures.push(`Missing protected Core module file: ${relativePath}`);
+    continue;
+  }
+  const source = readFileSync(filePath, 'utf8');
+  failures.push(...inspectCoreModuleSource(relativePath, source));
+}
 
 if (failures.length > 0) {
   console.error('Core boundary check failed:');
@@ -338,6 +448,6 @@ if (failures.length > 0) {
     0,
   );
   console.log(
-    `Core boundary check passed (${protectedCoreFiles.length} files checked; ${debtEntries} explicit debt entries).`,
+    `Core boundary check passed (${protectedCoreFiles.length} service/infrastructure files and ${coreModuleFiles.length} module files checked; ${debtEntries} explicit debt entries).`,
   );
 }

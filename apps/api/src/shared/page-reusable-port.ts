@@ -1,6 +1,7 @@
 import type { PagePayload, ReusableRuntime, SiteDesignSystem } from '@payload/contracts';
 
 export const PAGE_REUSABLE_PORT = Symbol('PAGE_REUSABLE_PORT');
+export const PAGE_REUSABLE_IMPLEMENTATION = Symbol('PAGE_REUSABLE_IMPLEMENTATION');
 
 /**
  * Narrow capability used by core page workflows. The reusable library remains

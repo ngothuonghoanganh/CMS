@@ -15,7 +15,9 @@ const bridgedEventNames = [
   'page.created',
   'page.updated',
   'page.published',
+  'domain.verified',
 ] as const satisfies readonly CoreEventName[];
+type BridgedEventName = (typeof bridgedEventNames)[number];
 
 /**
  * Compatibility-only bridge. Core events remain usable when Extensions are
@@ -43,7 +45,7 @@ export class LegacyExtensionEventBridge implements OnModuleDestroy, OnModuleInit
     this.unsubscribers = [];
   }
 
-  private subscribeToCoreEvent<K extends CoreEventName>(eventName: K): () => void {
+  private subscribeToCoreEvent<K extends BridgedEventName>(eventName: K): () => void {
     return this.coreEvents.subscribe(eventName, (event) =>
       this.extensionEvents.publish(eventName, event as unknown as PlatformEventMap[K]),
     );

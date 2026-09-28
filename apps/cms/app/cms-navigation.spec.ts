@@ -9,14 +9,7 @@ describe('CMS navigation', () => {
     const sections = navigationSections(allow, 'dashboard');
     const labels = sections.flatMap((section) => section.items.map((item) => item.label));
 
-    expect(labels).toEqual([
-      'Home',
-      'Analytics',
-      'Websites',
-      'Responses',
-      'Library',
-      'Settings',
-    ]);
+    expect(labels).toEqual(['Home', 'Websites', 'Responses', 'Library', 'Settings']);
     expect(sections).toHaveLength(2);
     expect(sections[0]?.label).toBe('Overview');
     expect(sections[1]?.label).toBe('Operations');
@@ -32,7 +25,7 @@ describe('CMS navigation', () => {
     );
   });
 
-  it('places Analytics beside Home when the user has analytics access', () => {
+  it('keeps frozen Analytics out of the primary navigation', () => {
     const sections = navigationSections(
       (permission) => permission === 'analytics.read',
       'analytics',
@@ -40,14 +33,11 @@ describe('CMS navigation', () => {
 
     expect(sections[0]).toMatchObject({
       label: 'Overview',
-      items: [
-        { key: 'dashboard', label: 'Home' },
-        { key: 'analytics', label: 'Analytics' },
-      ],
+      items: [{ key: 'dashboard', label: 'Home' }],
     });
     expect(
       sections.flatMap((section) => section.items.map((item) => item.label)),
-    ).not.toContain('Settings');
+    ).toEqual(['Home', 'Settings']);
   });
 
   it('does not show tools the user cannot access', () => {

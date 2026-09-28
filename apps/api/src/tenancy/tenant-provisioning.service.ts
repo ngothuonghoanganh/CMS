@@ -5,6 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { Model, Schema } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -80,7 +81,10 @@ import { TenantConnectionManager } from './tenant-connection.manager';
 import { TenantContext } from './tenant-context';
 import { TenantModelRegistry } from './tenant-model.registry';
 import { TenantResolver } from './tenant-resolver';
-import { SubscriptionService } from '../billing/subscription.service';
+import {
+  TENANT_SUBSCRIPTION_PROVISIONER,
+  type TenantSubscriptionProvisioner,
+} from '../shared/tenant-subscription-provisioner';
 import { RoleRecord, RoleSchema } from '../persistence/schemas/role.schema';
 import {
   TenantMigrationRecord,
@@ -148,8 +152,9 @@ export class TenantProvisioningService {
     private readonly connections: TenantConnectionManager,
     @Inject(TenantContext) private readonly context: TenantContext,
     @Inject(TenantModelRegistry) private readonly models: TenantModelRegistry,
-    @Inject(SubscriptionService)
-    private readonly subscriptions: SubscriptionService,
+    @Optional()
+    @Inject(TENANT_SUBSCRIPTION_PROVISIONER)
+    private readonly subscriptions?: TenantSubscriptionProvisioner,
   ) {}
 
   async list(): Promise<TenantListResponse> {
@@ -275,10 +280,12 @@ export class TenantProvisioningService {
         await this.seedTenant(input);
       });
       await this.syncPublicSiteRoutes(scope);
-      await this.subscriptions.ensureDefaultForTenant(
-        tenantId,
-        env.BILLING_DEFAULT_PLAN_KEY,
-      );
+      if (this.subscriptions) {
+        await this.subscriptions.ensureDefaultForTenant(
+          tenantId,
+          env.BILLING_DEFAULT_PLAN_KEY,
+        );
+      }
       const updated = await this.tenantModel
         .findOneAndUpdate(
           { _id: current._id },

@@ -34,6 +34,20 @@ export type CoreEventMap = {
     workspaceId: string;
     versionNumber: number;
   };
+  'submission.created': CoreEventBase & {
+    submissionId: string;
+    workspaceId: string;
+    siteId: string;
+    pageId: string;
+    pageVersionId: string;
+    formNodeId: string;
+    publishedVersionNumber: number;
+    sessionId?: string;
+  };
+  'domain.verified': CoreEventBase & {
+    domainId: string;
+    workspaceId: string;
+  };
 };
 
 export type CoreEventName = keyof CoreEventMap;

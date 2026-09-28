@@ -7,6 +7,7 @@ import type {
 } from '@payload/contracts';
 
 export const PAGE_EXTENSION_PORT = Symbol('PAGE_EXTENSION_PORT');
+export const PAGE_EXTENSION_IMPLEMENTATION = Symbol('PAGE_EXTENSION_IMPLEMENTATION');
 
 /**
  * Narrow Core-owned capability for the optional page extension projection and

@@ -1,6 +1,7 @@
 import type { DesignTokenUsageResponse, SiteDesignSystem } from '@payload/contracts';
 
 export const SITE_REUSABLE_PORT = Symbol('SITE_REUSABLE_PORT');
+export const SITE_REUSABLE_IMPLEMENTATION = Symbol('SITE_REUSABLE_IMPLEMENTATION');
 
 /**
  * Narrow reusable capabilities required by site-level workflows. The reusable

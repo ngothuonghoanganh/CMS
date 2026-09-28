@@ -121,6 +121,13 @@ const settingsGroups: Array<{ items: SettingsLink[]; title: string }> = [
         label: 'Extensions',
         permission: 'extensions.read',
       },
+      {
+        description: 'Review advanced traffic and conversion reporting.',
+        icon: 'analytics',
+        key: 'analytics',
+        label: 'Analytics',
+        permission: 'analytics.read',
+      },
     ],
   },
 ];

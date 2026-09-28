@@ -42,13 +42,14 @@ const settingsPermissions: readonly TenantPermission[] = [
   'workflow.read',
   'extensions.read',
   'template.read',
+  'analytics.read',
 ];
 
 /**
  * The primary navigation is intentionally task-based. Technical modules remain
  * routable, but they are reached from Settings so the first-run website journey
- * is not competing with administration and platform configuration. Analytics is
- * a product outcome view, so it stays beside Home in the Overview group.
+ * is not competing with administration and platform configuration. Frozen
+ * platform capabilities remain routable from Settings.
  */
 export function navigationSections(
   can: (permission: TenantPermission) => boolean,
@@ -56,11 +57,6 @@ export function navigationSections(
 ): NavigationSection[] {
   const overview: NavigationItem[] = [
     { icon: 'dashboard', key: 'dashboard', label: 'Home' },
-    ...permittedItem(can, 'analytics.read', {
-      icon: 'analytics',
-      key: 'analytics',
-      label: 'Analytics',
-    }),
   ];
   const primary: NavigationItem[] = [
     ...permittedItem(can, 'site.read', {

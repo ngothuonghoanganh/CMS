@@ -1,4 +1,7 @@
 export const PAGE_PUBLISH_COMPATIBILITY = Symbol('PAGE_PUBLISH_COMPATIBILITY');
+export const PAGE_PUBLISH_COMPATIBILITY_IMPLEMENTATION = Symbol(
+  'PAGE_PUBLISH_COMPATIBILITY_IMPLEMENTATION',
+);
 
 /**
  * Narrow compatibility capability for the legacy workflow subsystem. Core

@@ -7,6 +7,7 @@ import type {
 } from '@payload/contracts';
 
 export const PAGE_COLLECTION_PORT = Symbol('PAGE_COLLECTION_PORT');
+export const PAGE_COLLECTION_IMPLEMENTATION = Symbol('PAGE_COLLECTION_IMPLEMENTATION');
 
 export type CollectionCompositionValidationOptions = {
   currentEntryCollectionId?: string;

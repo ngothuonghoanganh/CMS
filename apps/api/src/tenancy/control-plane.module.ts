@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { BillingCoreModule } from '../billing/billing-core.module';
 import { MASTER_CONNECTION } from './master-connection';
 import { TenantDomainRecord, TenantDomainSchema } from './schemas/tenant-domain.schema';
 import { TenantRecord, TenantSchema } from './schemas/tenant.schema';
@@ -25,15 +24,8 @@ import {
 } from './schemas/public-site-route.schema';
 
 @Module({
-  exports: [
-    MongooseModule,
-    BillingCoreModule,
-    TenantResolver,
-    TenantModule,
-    TenantProvisioningService,
-  ],
+  exports: [MongooseModule, TenantResolver, TenantModule, TenantProvisioningService],
   imports: [
-    BillingCoreModule,
     TenantModule,
     TenantModelsModule,
     MongooseModule.forFeature(

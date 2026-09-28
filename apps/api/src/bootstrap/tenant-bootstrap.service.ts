@@ -1,11 +1,14 @@
 import { InjectModel } from '@nestjs/mongoose';
-import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, type OnModuleInit } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import { randomUUID, randomBytes, scrypt as nodeScrypt } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { env } from '../config/env';
-import { SubscriptionService } from '../billing/subscription.service';
+import {
+  TENANT_SUBSCRIPTION_PROVISIONER,
+  type TenantSubscriptionProvisioner,
+} from '../shared/tenant-subscription-provisioner';
 import { legacyDatabaseName, MASTER_CONNECTION } from '../tenancy/master-connection';
 import { TenantDomainRecord } from '../tenancy/schemas/tenant-domain.schema';
 import { TenantRecord, type TenantDocument } from '../tenancy/schemas/tenant.schema';
@@ -78,8 +81,9 @@ export class TenantBootstrapService implements OnModuleInit {
     private readonly connections: TenantConnectionManager,
     @Inject(TenantContext) private readonly context: TenantContext,
     @Inject(TenantModelRegistry) private readonly models: TenantModelRegistry,
-    @Inject(SubscriptionService)
-    private readonly subscriptions: SubscriptionService,
+    @Optional()
+    @Inject(TENANT_SUBSCRIPTION_PROVISIONER)
+    private readonly subscriptions?: TenantSubscriptionProvisioner,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -95,10 +99,12 @@ export class TenantBootstrapService implements OnModuleInit {
     await this.syncExistingDomains(scope);
     await this.syncExistingSiteRoutes(scope);
     await this.syncRoutesForOtherActiveTenants(scope.id);
-    await this.subscriptions.ensureDefaultForTenant(
-      scope.id,
-      env.BILLING_EXISTING_TENANT_PLAN_KEY,
-    );
+    if (this.subscriptions) {
+      await this.subscriptions.ensureDefaultForTenant(
+        scope.id,
+        env.BILLING_EXISTING_TENANT_PLAN_KEY,
+      );
+    }
     if (tenant.status !== 'active') {
       await this.tenantModel
         .updateOne(

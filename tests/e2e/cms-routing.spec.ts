@@ -57,7 +57,7 @@ test('task navigation keeps technical tools secondary and preserves website cont
   await expect(navigation.getByText('Overview', { exact: true })).toBeVisible();
   await expect(navigation.getByText('Operations', { exact: true })).toBeVisible();
   await expect(navigation.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
-  for (const label of ['Analytics', 'Websites', 'Responses', 'Library', 'Settings']) {
+  for (const label of ['Websites', 'Responses', 'Library', 'Settings']) {
     await expect(
       navigation.getByRole('link', { name: label, exact: true }),
     ).toBeVisible();
@@ -125,7 +125,7 @@ test('task navigation keeps technical tools secondary and preserves website cont
   ).toBeVisible();
   await expect(
     page.locator('.settings-link-card').filter({ hasText: 'Analytics' }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expect(
     page.locator('.settings-link-card').filter({ hasText: 'Extensions' }),
   ).toBeVisible();

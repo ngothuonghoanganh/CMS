@@ -8,7 +8,8 @@
 **Scope:** Architecture + product boundary + migration strategy + new development phases
 
 ```text
-CURRENT_PHASE = PHASE 1
+CURRENT_PHASE = PHASE 2
+PHASE 1 = COMPLETE
 ```
 
 ---
@@ -685,6 +686,8 @@ Exit gate: baseline code/test/dependency report được owner xác nhận và m
 
 Simplify active product surface, isolate frozen modules, reduce unnecessary
 coupling và stabilize core. Không redesign Builder trong phase này.
+
+PHASE 1 = COMPLETE
 
 Exit gate: core modules build độc lập và frozen modules không ảnh hưởng core flow.
 

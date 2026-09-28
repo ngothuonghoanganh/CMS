@@ -6,6 +6,7 @@ import type {
 } from '@payload/contracts';
 
 export const PAGE_LAYOUT_PORT = Symbol('PAGE_LAYOUT_PORT');
+export const PAGE_LAYOUT_IMPLEMENTATION = Symbol('PAGE_LAYOUT_IMPLEMENTATION');
 
 export type PageLayoutComposition = {
   header?: { slot: string; document: SiteGlobalPayloadV1 };

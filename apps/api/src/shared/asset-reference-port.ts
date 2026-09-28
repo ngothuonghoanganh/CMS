@@ -1,6 +1,7 @@
 import type { AssetUsageResponse } from '@payload/contracts';
 
 export const ASSET_REFERENCE_PORT = Symbol('ASSET_REFERENCE_PORT');
+export const ASSET_REFERENCE_IMPLEMENTATION = Symbol('ASSET_REFERENCE_IMPLEMENTATION');
 
 export type AssetReferenceUsage = AssetUsageResponse['items'][number];
 

@@ -45,9 +45,9 @@ import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
 import { TenantContext } from '../../tenancy/tenant-context';
 import { platformLogger } from '../../common/logging/platform-logger';
 import {
-  SUBMISSION_SIDE_EFFECTS_PORT,
-  type SubmissionSideEffectsPort,
-} from '../../shared/submission-side-effects-port';
+  CORE_EVENT_PUBLISHER,
+  type CoreEventPublisher,
+} from '../../shared/events/core-event-publisher';
 import { findResolvedForm, type ResolvedFormNode } from '../pages/open-composition-form';
 
 type ResolvedForm = {
@@ -84,8 +84,7 @@ export class SubmissionService {
     private readonly versionModel: Model<PageVersionRecord>,
     @InjectModel(WorkspaceRecord.name)
     private readonly workspaceModel: Model<WorkspaceRecord>,
-    @Inject(SUBMISSION_SIDE_EFFECTS_PORT)
-    private readonly sideEffects: SubmissionSideEffectsPort,
+    @Inject(CORE_EVENT_PUBLISHER) private readonly events: CoreEventPublisher,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
   ) {}
 
@@ -138,74 +137,35 @@ export class SubmissionService {
       status: 'new',
       submittedAt,
     });
+
+    const tenantId = this.tenantContext.require().id;
     try {
-      await this.sideEffects.incrementSubmissionUsage(
-        this.tenantContextId(),
-        submittedAt,
-      );
-    } catch (error) {
-      platformLogger.warn(
-        { err: error },
-        'form-submission billing usage increment failed',
-      );
-    }
-    try {
-      await this.sideEffects.enqueueIntegration(
-        submission._id.toString(),
-        resolved.site.workspaceId,
-      );
-    } catch {
-      // The lead is already durable. A temporary outbox/database failure must
-      // not turn a successful form submission into a visitor-visible failure.
-      platformLogger.warn(
-        { submissionId: submission._id.toString() },
-        'integration delivery enqueue failed after form submission',
-      );
-    }
-    try {
-      await this.sideEffects.recordAnalytics({
+      await this.events.publish('submission.created', {
+        tenantId,
+        eventId: submission._id.toString(),
+        submissionId: submission._id.toString(),
         workspaceId: resolved.site.workspaceId,
         siteId: resolved.site._id.toString(),
-        landingPageId: resolved.page._id.toString(),
+        pageId: resolved.page._id.toString(),
         pageVersionId: resolved.version._id.toString(),
+        formNodeId: resolved.form.id,
         publishedVersionNumber: resolved.version.versionNumber,
-        submissionId: submission._id.toString(),
-        submittedAt,
         ...(parsedInput.analyticsSessionId
           ? { sessionId: parsedInput.analyticsSessionId }
           : {}),
+        occurredAt: submittedAt.toISOString(),
       });
-    } catch {
-      // Analytics is best effort after the authoritative FormSubmission write.
+    } catch (error) {
+      // Persistence is the authoritative operation. Core event delivery is a
+      // post-write integration point and must not turn a durable lead into a
+      // visitor-visible failure.
       platformLogger.warn(
-        { submissionId: submission._id.toString() },
-        'analytics conversion recording failed after form submission',
+        { err: error, submissionId: submission._id.toString() },
+        'submission.created event publish failed after form submission',
       );
     }
 
-    await this.sideEffects.publishFormSubmitted({
-      tenantId: this.tenantContext.require().id,
-      eventId: submission._id.toString(),
-      submissionId: submission._id.toString(),
-      workspaceId: resolved.site.workspaceId,
-      siteId: resolved.site._id.toString(),
-      pageId: resolved.page._id.toString(),
-      formNodeId: resolved.form.id,
-      occurredAt: submittedAt.toISOString(),
-    });
-    await this.sideEffects.publishLeadCreated({
-      tenantId: this.tenantContext.require().id,
-      eventId: `lead:${submission._id.toString()}`,
-      submissionId: submission._id.toString(),
-      workspaceId: resolved.site.workspaceId,
-      occurredAt: submittedAt.toISOString(),
-    });
-
     return { success: true };
-  }
-
-  private tenantContextId(): string {
-    return this.tenantContext.require().id;
   }
 
   async list(
