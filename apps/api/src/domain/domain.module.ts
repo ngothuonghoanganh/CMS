@@ -19,13 +19,21 @@ import { WorkspaceModule } from '../modules/workspaces/workspace.module';
 import {
   CustomDomainController,
   PublicDomainController,
-} from './custom-domain.controller';
-import { CustomDomainService } from './custom-domain.service';
+} from '../modules/public-delivery/custom-domain.controller';
+import { CustomDomainService } from '../modules/public-delivery/custom-domain.service';
 import {
   DOMAIN_VERIFICATION_RESOLVER,
   InMemoryDomainVerificationResolver,
   NodeDomainVerificationResolver,
-} from './domain-verification-resolver';
+} from '../modules/public-delivery/domain-verification-resolver';
+import {
+  CUSTOM_DOMAIN_EVENT_PORT_PROVIDER,
+  CustomDomainEventAdapter,
+} from '../modules/public-delivery/custom-domain-event.adapter';
+import {
+  CUSTOM_DOMAIN_QUOTA_PORT_PROVIDER,
+  CustomDomainQuotaAdapter,
+} from '../modules/public-delivery/custom-domain-quota.adapter';
 import { SeoController } from './seo.controller';
 import { SeoService } from './seo.service';
 import { TemplateController } from './template.controller';
@@ -138,6 +146,10 @@ import {
     LayoutExtensionService,
     AnalyticsQueryService,
     CustomDomainService,
+    CustomDomainQuotaAdapter,
+    CUSTOM_DOMAIN_QUOTA_PORT_PROVIDER,
+    CustomDomainEventAdapter,
+    CUSTOM_DOMAIN_EVENT_PORT_PROVIDER,
     PublicPageResolver,
     SeoService,
     PageNavigationAdapter,

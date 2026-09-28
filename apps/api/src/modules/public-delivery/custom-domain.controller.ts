@@ -22,16 +22,16 @@ import {
 } from '@payload/contracts';
 import type { Request } from 'express';
 
-import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
-import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { requireRequestedWorkspace } from '../common/guards/workspace-context';
-import type { PlatformRequest } from '../common/interfaces/request';
-import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { CurrentPrincipal } from '../../common/decorators/current-principal.decorator';
+import { AuthenticationGuard } from '../../common/guards/authentication.guard';
+import { requireRequestedWorkspace } from '../../common/guards/workspace-context';
+import type { PlatformRequest } from '../../common/interfaces/request';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CustomDomainService } from './custom-domain.service';
-import { TenantContext } from '../tenancy/tenant-context';
-import { TenantResolver } from '../tenancy/tenant-resolver';
-import { AuthorizationService } from '../security/authorization.service';
-import { AuditService } from '../security/audit.service';
+import { TenantContext } from '../../tenancy/tenant-context';
+import { TenantResolver } from '../../tenancy/tenant-resolver';
+import { AuthorizationService } from '../../security/authorization.service';
+import { AuditService } from '../../security/audit.service';
 
 @Controller('workspaces/:workspaceId/domains')
 @UseGuards(AuthenticationGuard)

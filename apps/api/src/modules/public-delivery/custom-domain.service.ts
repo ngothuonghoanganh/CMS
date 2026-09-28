@@ -25,24 +25,30 @@ import {
   type UpdateCustomDomainRequest,
 } from '@payload/contracts';
 
-import { env } from '../config/env';
+import { env } from '../../config/env';
 import {
   CustomDomainRecord,
   type CustomDomainDocument,
-} from '../persistence/schemas/custom-domain.schema';
-import { PageRecord } from '../persistence/schemas/page.schema';
-import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
-import { SiteRecord } from '../persistence/schemas/site.schema';
-import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
+} from '../../persistence/schemas/custom-domain.schema';
+import { PageRecord } from '../../persistence/schemas/page.schema';
+import { PageSeoSettingsRecord } from '../../persistence/schemas/page-seo-settings.schema';
+import { SiteRecord } from '../../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
 import {
   DOMAIN_VERIFICATION_RESOLVER,
   type DomainVerificationResolver,
 } from './domain-verification-resolver';
-import { PublicPageResolver } from '../modules/pages/public-page.resolver';
-import { TenantResolver } from '../tenancy/tenant-resolver';
-import { TenantContext } from '../tenancy/tenant-context';
-import { QuotaService } from '../billing/quota.service';
-import { EventBus } from '../extensions/event-bus';
+import { PublicPageResolver } from '../pages/public-page.resolver';
+import { TenantResolver } from '../../tenancy/tenant-resolver';
+import { TenantContext } from '../../tenancy/tenant-context';
+import {
+  CUSTOM_DOMAIN_EVENT_PORT,
+  type CustomDomainEventPort,
+} from '../../shared/custom-domain-event-port';
+import {
+  CUSTOM_DOMAIN_QUOTA_PORT,
+  type CustomDomainQuotaPort,
+} from '../../shared/custom-domain-quota-port';
 
 const PUBLIC_DOMAIN_RESOLVE_RATE_LIMIT_MAX_REQUESTS = 240;
 const PUBLIC_DOMAIN_RESOLVE_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -71,8 +77,10 @@ export class CustomDomainService {
     private readonly publicPageResolver: PublicPageResolver,
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
-    @Inject(QuotaService) private readonly quotas: QuotaService,
-    @Inject(EventBus) private readonly events: EventBus,
+    @Inject(CUSTOM_DOMAIN_QUOTA_PORT)
+    private readonly quotas: CustomDomainQuotaPort,
+    @Inject(CUSTOM_DOMAIN_EVENT_PORT)
+    private readonly events: CustomDomainEventPort,
   ) {}
 
   async list(workspaceId: string): Promise<CustomDomainListResponse> {
@@ -119,7 +127,7 @@ export class CustomDomainService {
       });
     }
 
-    return this.quotas.withHardQuota('custom_domains', async () => {
+    return this.quotas.withHardQuota(async () => {
       if (parsedInput.isPrimary && (siteId ?? pageSiteId))
         await this.clearPrimaryDomain(workspaceId, siteId ?? pageSiteId!, landingPageId);
 
@@ -254,7 +262,7 @@ export class CustomDomainService {
         hostname: record.hostname,
         sourceDomainId: record._id.toString(),
       });
-      await this.events.publish('domain.verified', {
+      await this.events.publishDomainVerified({
         tenantId: this.tenantContext.require().id,
         domainId: record._id.toString(),
         workspaceId,

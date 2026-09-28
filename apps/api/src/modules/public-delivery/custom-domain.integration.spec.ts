@@ -7,13 +7,13 @@ import type { Model } from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { AppModule } from '../app.module';
-import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
-import { env } from '../config/env';
+import { AppModule } from '../../app.module';
+import { ApiExceptionFilter } from '../../common/filters/api-exception.filter';
+import { env } from '../../config/env';
 import { DOMAIN_VERIFICATION_RESOLVER } from './domain-verification-resolver';
-import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
-import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
-import { withTestTenant } from '../testing/tenant-test-context';
+import { CustomDomainRecord } from '../../persistence/schemas/custom-domain.schema';
+import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
+import { withTestTenant } from '../../testing/tenant-test-context';
 
 const integrationEnabled = process.env.RUN_MONGO_TESTS === 'true';
 
