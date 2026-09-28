@@ -48,11 +48,14 @@ import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schem
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import { NavigationRecord } from '../persistence/schemas/navigation.schema';
 import { SiteUrlService } from './site-url.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { TenantResolver } from '../tenancy/tenant-resolver';
 import { SITE_REUSABLE_PORT, type SiteReusablePort } from '../shared/site-reusable-port';
+import {
+  SITE_NAVIGATION_PORT,
+  type SiteNavigationPort,
+} from '../shared/site-navigation-port';
 
 @Injectable()
 export class SiteService {
@@ -65,12 +68,12 @@ export class SiteService {
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
-    @InjectModel(NavigationRecord.name)
-    private readonly navigationModel: Model<NavigationRecord>,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
     @Inject(SITE_REUSABLE_PORT) private readonly reusables: SiteReusablePort,
+    @Inject(SITE_NAVIGATION_PORT)
+    private readonly navigations: SiteNavigationPort,
   ) {}
 
   async create(workspaceId: string, input: CreateSiteRequest): Promise<Site> {
@@ -442,7 +445,7 @@ export class SiteService {
         publishedAt = version.createdAt;
       }
     }
-    const navigations = await this.navigationModel.find({ siteId, workspaceId }).exec();
+    const navigations = await this.navigations.listReferences(workspaceId, siteId);
     const main = navigations.find((navigation) => navigation.key === 'main');
     const footer = navigations.find((navigation) => navigation.key === 'footer');
     return SiteManifestSchema.parse({
@@ -451,8 +454,8 @@ export class SiteService {
       homePageId: home._id.toString(),
       routes,
       navigation: {
-        ...(main ? { main: main._id.toString() } : {}),
-        ...(footer ? { footer: footer._id.toString() } : {}),
+        ...(main ? { main: main.id } : {}),
+        ...(footer ? { footer: footer.id } : {}),
       },
       globals: {},
       ...(publishedAt ? { publishedAt: publishedAt.toISOString() } : {}),

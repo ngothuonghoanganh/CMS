@@ -89,6 +89,10 @@ import {
   SITE_REUSABLE_PORT_PROVIDER,
   SiteReusableAdapter,
 } from './site-reusable.adapter';
+import {
+  SITE_NAVIGATION_PORT_PROVIDER,
+  SiteNavigationAdapter,
+} from './site-navigation.adapter';
 
 @Module({
   imports: [
@@ -156,6 +160,8 @@ import {
     ReusableService,
     SiteReusableAdapter,
     SITE_REUSABLE_PORT_PROVIDER,
+    SiteNavigationAdapter,
+    SITE_NAVIGATION_PORT_PROVIDER,
     CollectionService,
     PageReusableAdapter,
     PAGE_REUSABLE_PORT_PROVIDER,
