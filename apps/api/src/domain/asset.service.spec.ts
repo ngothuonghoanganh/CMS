@@ -1,6 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Model } from 'mongoose';
 
+import type { CollectionEntryVersionRecord } from '../persistence/schemas/collection.schema';
+import type {
+  LayoutExtensionRecord,
+  LayoutExtensionVersionRecord,
+} from '../persistence/schemas/layout-extension.schema';
+import type { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
+import type { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import type { ReusableRecord } from '../persistence/schemas/reusable.schema';
+import type { SiteRecord } from '../persistence/schemas/site.schema';
+import type {
+  TemplateRecord,
+  TemplateVersionRecord,
+} from '../persistence/schemas/template.schema';
+import type { AssetReferencePort } from '../shared/asset-reference-port';
+import { AssetReferenceAdapter } from './asset-reference.adapter';
 import { AssetService } from './asset.service';
 
 const workspaceA = '11111111-1111-4111-8111-111111111111';
@@ -77,29 +92,32 @@ function setup(options: {
       throw new Error('cursor unavailable');
     });
   }
+  const entryVersions = model(options.entryVersions ?? []);
+  const templateModel = model(options.templates ?? []);
+  const templateVersionModel = model(options.templateVersions ?? []);
+  const reusableModel = model(options.reusables ?? []);
+  const layoutModel = model(options.layouts ?? []);
+  const layoutVersionModel = model(options.layoutVersions ?? []);
+  const siteModel = model(options.sites ?? []);
+  const seoModel = model(options.seoSettings ?? []);
+  const assetReferences = new AssetReferenceAdapter(
+    pageVersions as unknown as Model<PageVersionRecord>,
+    entryVersions as unknown as Model<CollectionEntryVersionRecord>,
+    templateVersionModel as unknown as Model<TemplateVersionRecord>,
+    templateModel as unknown as Model<TemplateRecord>,
+    reusableModel as unknown as Model<ReusableRecord>,
+    layoutVersionModel as unknown as Model<LayoutExtensionVersionRecord>,
+    layoutModel as unknown as Model<LayoutExtensionRecord>,
+    siteModel as unknown as Model<SiteRecord>,
+    seoModel as unknown as Model<PageSeoSettingsRecord>,
+  );
   const service = Object.create(AssetService.prototype) as AssetService;
   const state = service as unknown as {
     assetModel: Model<never>;
-    pageVersionModel: MockModel;
-    entryVersionModel: MockModel;
-    templateVersionModel: MockModel;
-    templateModel: MockModel;
-    reusableModel: MockModel;
-    layoutVersionModel: MockModel;
-    layoutModel: MockModel;
-    siteModel: MockModel;
-    seoModel: MockModel;
+    assetReferences: AssetReferencePort;
   };
   state.assetModel = model([]) as unknown as Model<never>;
-  state.pageVersionModel = pageVersions;
-  state.entryVersionModel = model(options.entryVersions ?? []);
-  state.templateModel = model(options.templates ?? []);
-  state.templateVersionModel = model(options.templateVersions ?? []);
-  state.reusableModel = model(options.reusables ?? []);
-  state.layoutModel = model(options.layouts ?? []);
-  state.layoutVersionModel = model(options.layoutVersions ?? []);
-  state.siteModel = model(options.sites ?? []);
-  state.seoModel = model(options.seoSettings ?? []);
+  state.assetReferences = assetReferences;
   return { service, pageVersions, state };
 }
 

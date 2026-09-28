@@ -36,12 +36,7 @@ const knownDebt = {
   'apps/api/src/domain/site.service.ts': [],
   'apps/api/src/domain/page.service.ts': [],
   'apps/api/src/domain/submission.service.ts': [],
-  'apps/api/src/domain/asset.service.ts': [
-    '../persistence/schemas/collection.schema',
-    '../persistence/schemas/template.schema',
-    '../persistence/schemas/reusable.schema',
-    '../persistence/schemas/layout-extension.schema',
-  ],
+  'apps/api/src/domain/asset.service.ts': [],
   'apps/api/src/domain/public-page.resolver.ts': [],
 };
 

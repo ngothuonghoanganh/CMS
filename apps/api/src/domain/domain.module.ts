@@ -27,6 +27,10 @@ import { SiteController } from './site.controller';
 import { SiteService } from './site.service';
 import { AssetController } from './asset.controller';
 import { AssetService } from './asset.service';
+import {
+  ASSET_REFERENCE_PORT_PROVIDER,
+  AssetReferenceAdapter,
+} from './asset-reference.adapter';
 import { AssetFolderController } from './asset-folder.controller';
 import { AssetFolderService } from './asset-folder.service';
 import { PublicAssetController } from './public-asset.controller';
@@ -150,6 +154,8 @@ import {
   ],
   providers: [
     AssetService,
+    AssetReferenceAdapter,
+    ASSET_REFERENCE_PORT_PROVIDER,
     AssetFolderService,
     PageService,
     SiteService,
