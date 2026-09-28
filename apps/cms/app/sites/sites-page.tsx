@@ -5,6 +5,7 @@ import {
   SitePublishResponseSchema,
   type Site,
 } from '@payload/contracts';
+import type { TableColumnsType } from 'antd';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
@@ -14,6 +15,7 @@ import { ApiClientError, api } from '../lib/api';
 import { AssetPicker } from '../collections/collection-field-controls';
 import { StatusBadge } from '../status-badge';
 import { Drawer, EmptyState, PageHeader, PaginationControls } from '../ui/surfaces';
+import { AdminTable } from '../../src/shared/ui/admin-table';
 
 type SiteForm = { name: string; slug: string; logo: string };
 const blankSite: SiteForm = { name: '', slug: '', logo: '' };
@@ -135,6 +137,67 @@ export default function SitesPage({
     }
   }
 
+  const siteColumns: TableColumnsType<Site> = [
+    {
+      className: 'site-name-cell',
+      key: 'site',
+      title: 'Site',
+      render: (_, site) => (
+        <a className="site-name-link" href={sitePath(workspaceId, site.id)}>
+          <span aria-hidden="true" className="site-avatar">
+            {initials(site.name)}
+          </span>
+          <span className="site-name-copy">
+            <strong>{site.name}</strong>
+            <span>/{site.slug}</span>
+          </span>
+        </a>
+      ),
+    },
+    {
+      className: 'site-status-cell',
+      key: 'status',
+      title: 'Status',
+      render: (_, site) => (
+        <>
+          {site.status === 'published' ? (
+            <button className="button button-small button-primary" disabled type="button">
+              Published
+            </button>
+          ) : (
+            <StatusBadge status={site.status} />
+          )}
+        </>
+      ),
+    },
+    {
+      key: 'actions',
+      title: <span className="sr-only">Actions</span>,
+      align: 'right',
+      render: (_, site) => (
+        <div className="row-menu site-row-actions">
+          <button
+            className="button button-small button-ghost"
+            onClick={() => router.push(`${sitePath(workspaceId, site.id)}/edit`)}
+            type="button"
+          >
+            Edit
+          </button>
+          {can('page.publish') ? (
+            <button
+              className="button button-small button-primary"
+              disabled={busy || site.status === 'published'}
+              onClick={() => void publish(site)}
+              type="button"
+            >
+              {site.status === 'published' ? 'Published' : 'Publish site'}
+            </button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+
   const isDetail = Boolean(siteId && !action);
   return (
     <>
@@ -190,75 +253,13 @@ export default function SitesPage({
               </div>
             ) : sites.length ? (
               <div className="table-shell">
-                <table className="resource-table">
-                  <thead>
-                    <tr>
-                      <th>Site</th>
-                      <th>Status</th>
-                      <th>
-                        <span className="sr-only">Actions</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sites.map((site) => (
-                      <tr className="site-table-row" key={site.id}>
-                        <td className="site-name-cell">
-                          <a
-                            className="site-name-link"
-                            href={sitePath(workspaceId, site.id)}
-                          >
-                            <span aria-hidden="true" className="site-avatar">
-                              {initials(site.name)}
-                            </span>
-                            <span className="site-name-copy">
-                              <strong>{site.name}</strong>
-                              <span>/{site.slug}</span>
-                            </span>
-                          </a>
-                        </td>
-                        <td className="site-status-cell">
-                          {site.status === 'published' ? (
-                            <button
-                              className="button button-small button-primary"
-                              disabled
-                              type="button"
-                            >
-                              Published
-                            </button>
-                          ) : (
-                            <StatusBadge status={site.status} />
-                          )}
-                        </td>
-                        <td>
-                          <div className="row-menu site-row-actions">
-                            <button
-                              className="button button-small button-ghost"
-                              onClick={() =>
-                                router.push(`${sitePath(workspaceId, site.id)}/edit`)
-                              }
-                              type="button"
-                            >
-                              Edit
-                            </button>
-                            {can('page.publish') ? (
-                              <button
-                                className="button button-small button-primary"
-                                disabled={busy || site.status === 'published'}
-                                onClick={() => void publish(site)}
-                                type="button"
-                              >
-                                {site.status === 'published'
-                                  ? 'Published'
-                                  : 'Publish site'}
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <AdminTable
+                  className="resource-table"
+                  columns={siteColumns}
+                  dataSource={sites}
+                  rowClassName="site-table-row"
+                  rowKey="id"
+                />
               </div>
             ) : (
               <EmptyState

@@ -1,0 +1,41 @@
+/* Ant Design is mounted only below .cms-admin-root. Keep these overrides
+ * scoped so the Builder and customer-facing renderer retain their own CSS. */
+.cms-admin-root {
+  min-height: 100%;
+  color: var(--cms-text-primary);
+  font-family: var(--cms-font-sans);
+}
+
+.cms-admin-root .cms-antd-table-wrapper {
+  min-width: 0;
+  color: var(--cms-text-primary);
+}
+
+.cms-admin-root .cms-antd-table {
+  background: var(--cms-bg-surface);
+  color: var(--cms-text-primary);
+  font-family: var(--cms-font-sans);
+}
+
+.cms-admin-root .cms-antd-table-thead > tr > th {
+  color: var(--cms-text-muted);
+  background: var(--cms-bg-surface-muted);
+  font-size: var(--cms-font-size-xs);
+  font-weight: var(--cms-font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cms-admin-root .cms-antd-table-tbody > tr > td {
+  border-bottom-color: var(--cms-border-default);
+  background: var(--cms-bg-surface);
+  color: var(--cms-text-primary);
+}
+
+.cms-admin-root .cms-antd-table-tbody > tr.cms-antd-table-row:hover > td {
+  background: var(--cms-bg-surface-hover);
+}
+
+.cms-admin-root .cms-antd-table-cell-scrollbar {
+  background: var(--cms-bg-surface-muted);
+}

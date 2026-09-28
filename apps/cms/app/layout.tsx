@@ -4,6 +4,7 @@ import './ui/tokens.css';
 import './ui/third-party.css';
 import './globals.css';
 import './ui/system.css';
+import './ui/admin-antd.css';
 import { CmsThemeProvider } from './ui/theme-provider';
 
 export const metadata: Metadata = {
