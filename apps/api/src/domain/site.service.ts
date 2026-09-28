@@ -52,7 +52,7 @@ import { NavigationRecord } from '../persistence/schemas/navigation.schema';
 import { SiteUrlService } from './site-url.service';
 import { TenantContext } from '../tenancy/tenant-context';
 import { TenantResolver } from '../tenancy/tenant-resolver';
-import { ReusableService } from './reusable.service';
+import { SITE_REUSABLE_PORT, type SiteReusablePort } from '../shared/site-reusable-port';
 
 @Injectable()
 export class SiteService {
@@ -70,7 +70,7 @@ export class SiteService {
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
-    @Inject(ReusableService) private readonly reusables: ReusableService,
+    @Inject(SITE_REUSABLE_PORT) private readonly reusables: SiteReusablePort,
   ) {}
 
   async create(workspaceId: string, input: CreateSiteRequest): Promise<Site> {

@@ -85,6 +85,10 @@ import {
   PAGE_REUSABLE_PORT_PROVIDER,
   PageReusableAdapter,
 } from './page-reusable.adapter';
+import {
+  SITE_REUSABLE_PORT_PROVIDER,
+  SiteReusableAdapter,
+} from './site-reusable.adapter';
 
 @Module({
   imports: [
@@ -150,6 +154,8 @@ import {
     PublicPageResolver,
     SeoService,
     ReusableService,
+    SiteReusableAdapter,
+    SITE_REUSABLE_PORT_PROVIDER,
     CollectionService,
     PageReusableAdapter,
     PAGE_REUSABLE_PORT_PROVIDER,

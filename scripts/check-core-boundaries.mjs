@@ -33,10 +33,7 @@ const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
 // shrink as Phase 1 progresses; it is not a category or wildcard exemption.
 const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
-  'apps/api/src/domain/site.service.ts': [
-    '../persistence/schemas/navigation.schema',
-    './reusable.service',
-  ],
+  'apps/api/src/domain/site.service.ts': ['../persistence/schemas/navigation.schema'],
   'apps/api/src/domain/page.service.ts': [
     './navigation.service',
     './layout-extension.service',
