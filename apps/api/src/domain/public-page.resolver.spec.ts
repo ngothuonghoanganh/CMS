@@ -10,11 +10,11 @@ import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
+import { PAGE_REUSABLE_PORT } from '../shared/page-reusable-port';
 import { CollectionService } from './collection.service';
 import { LayoutExtensionService } from './layout-extension.service';
 import { NavigationService } from './navigation.service';
 import { PublicPageResolver } from './public-page.resolver';
-import { ReusableService } from './reusable.service';
 import { SiteUrlService } from './site-url.service';
 
 type TestResolver = {
@@ -52,7 +52,7 @@ describe('public page resolver', () => {
         { provide: NavigationService, useValue: {} },
         { provide: LayoutExtensionService, useValue: {} },
         { provide: PAGE_EXTENSION_PORT, useValue: {} },
-        { provide: ReusableService, useValue: {} },
+        { provide: PAGE_REUSABLE_PORT, useValue: {} },
         { provide: CollectionService, useValue: {} },
         PublicPageResolver,
       ],

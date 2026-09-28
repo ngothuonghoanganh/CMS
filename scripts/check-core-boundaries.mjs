@@ -57,7 +57,6 @@ const knownDebt = {
   'apps/api/src/domain/public-page.resolver.ts': [
     './navigation.service',
     './layout-extension.service',
-    './reusable.service',
     './collection.service',
   ],
 };

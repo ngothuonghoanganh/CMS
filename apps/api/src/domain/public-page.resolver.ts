@@ -42,12 +42,12 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { SiteUrlService } from './site-url.service';
 import { collectNavigationPageIds, NavigationService } from './navigation.service';
 import { LayoutExtensionService } from './layout-extension.service';
-import { ReusableService } from './reusable.service';
 import { CollectionService } from './collection.service';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
 } from '../shared/page-extension-port';
+import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
 
 @Injectable()
 export class PublicPageResolver {
@@ -71,7 +71,7 @@ export class PublicPageResolver {
     private readonly layoutExtensions: LayoutExtensionService,
     @Inject(PAGE_EXTENSION_PORT)
     private readonly pageExtensions: PageExtensionPort,
-    @Inject(ReusableService) private readonly reusables: ReusableService,
+    @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,
     @Inject(CollectionService) private readonly collections: CollectionService,
   ) {}
 
