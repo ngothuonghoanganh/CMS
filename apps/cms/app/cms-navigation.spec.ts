@@ -9,9 +9,17 @@ describe('CMS navigation', () => {
     const sections = navigationSections(allow, 'dashboard');
     const labels = sections.flatMap((section) => section.items.map((item) => item.label));
 
-    expect(labels).toEqual(['Home', 'Websites', 'Responses', 'Library', 'Settings']);
-    expect(sections).toHaveLength(1);
-    expect(sections[0]?.label).toBeUndefined();
+    expect(labels).toEqual([
+      'Home',
+      'Analytics',
+      'Websites',
+      'Responses',
+      'Library',
+      'Settings',
+    ]);
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.label).toBe('Overview');
+    expect(sections[1]?.label).toBeUndefined();
   });
 
   it('does not expose technical modules in the primary navigation', () => {
@@ -20,8 +28,26 @@ describe('CMS navigation', () => {
     );
 
     expect(labels).not.toEqual(
-      expect.arrayContaining(['More tools', 'Templates', 'Analytics', 'Extensions']),
+      expect.arrayContaining(['More tools', 'Templates', 'Extensions']),
     );
+  });
+
+  it('places Analytics beside Home when the user has analytics access', () => {
+    const sections = navigationSections(
+      (permission) => permission === 'analytics.read',
+      'analytics',
+    );
+
+    expect(sections[0]).toMatchObject({
+      label: 'Overview',
+      items: [
+        { key: 'dashboard', label: 'Home' },
+        { key: 'analytics', label: 'Analytics' },
+      ],
+    });
+    expect(
+      sections.flatMap((section) => section.items.map((item) => item.label)),
+    ).not.toContain('Settings');
   });
 
   it('does not show tools the user cannot access', () => {

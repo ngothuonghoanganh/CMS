@@ -101,13 +101,6 @@ const settingsGroups: Array<{ items: SettingsLink[]; title: string }> = [
     title: 'Advanced tools',
     items: [
       {
-        description: 'Understand visits and conversions.',
-        icon: 'analytics',
-        key: 'analytics',
-        label: 'Analytics',
-        permission: 'analytics.read',
-      },
-      {
         description: 'Connect forms and other services.',
         icon: 'integrations',
         key: 'integrations',

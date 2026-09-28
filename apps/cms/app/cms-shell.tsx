@@ -486,6 +486,6 @@ function getPrimaryNavigationKey(view: CmsView, hasSiteContext: boolean): CmsVie
   }
   if (view === 'submissions') return 'submissions';
   if (view === 'assets') return 'assets';
-  if (view === 'dashboard' || view === 'sites') return view;
+  if (view === 'analytics' || view === 'dashboard' || view === 'sites') return view;
   return 'settings';
 }

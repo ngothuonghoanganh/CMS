@@ -36,7 +36,6 @@ const settingsPermissions: readonly TenantPermission[] = [
   'billing.read',
   'audit.read',
   'collection.read',
-  'analytics.read',
   'integration.read',
   'domain.read',
   'seo.read',
@@ -48,14 +47,22 @@ const settingsPermissions: readonly TenantPermission[] = [
 /**
  * The primary navigation is intentionally task-based. Technical modules remain
  * routable, but they are reached from Settings so the first-run website journey
- * is not competing with administration and platform configuration.
+ * is not competing with administration and platform configuration. Analytics is
+ * a product outcome view, so it stays beside Home in the Overview group.
  */
 export function navigationSections(
   can: (permission: TenantPermission) => boolean,
   _activeNavigationKey?: CmsView,
 ): NavigationSection[] {
-  const primary: NavigationItem[] = [
+  const overview: NavigationItem[] = [
     { icon: 'dashboard', key: 'dashboard', label: 'Home' },
+    ...permittedItem(can, 'analytics.read', {
+      icon: 'analytics',
+      key: 'analytics',
+      label: 'Analytics',
+    }),
+  ];
+  const primary: NavigationItem[] = [
     ...permittedItem(can, 'site.read', {
       icon: 'sites',
       key: 'sites',
@@ -78,5 +85,8 @@ export function navigationSections(
     }),
   ];
 
-  return primary.length ? [{ items: primary }] : [];
+  return [
+    ...(overview.length ? [{ items: overview, label: 'Overview' }] : []),
+    ...(primary.length ? [{ items: primary }] : []),
+  ];
 }

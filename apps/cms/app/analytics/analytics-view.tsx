@@ -3,12 +3,12 @@
 import {
   AnalyticsOverviewResponseSchema,
   AnalyticsPageResponseSchema,
-  type AnalyticsBreakdownItem,
   type AnalyticsOverviewResponse,
   type AnalyticsPageResponse,
 } from '@payload/contracts';
 import { useEffect, useMemo, useState } from 'react';
 
+import { AnalyticsCharts } from './analytics-charts';
 import { api } from '../lib/api';
 
 type RangePreset = 'today' | '7' | '30' | 'custom';
@@ -217,9 +217,18 @@ function AnalyticsReport({
           </span>
         </div>
       ) : null}
-      <section className="panel">
+      <AnalyticsCharts
+        breakdowns={{
+          campaigns: report.topCampaigns,
+          devices: report.deviceBreakdown,
+          referrers: report.topReferrers,
+        }}
+        timeline={report.timeline}
+        topPages={overview && !pageReport ? overview.topPages : undefined}
+      />
+      <section className="panel analytics-detail-panel">
         <div className="panel-heading">
-          <h2>Traffic trend</h2>
+          <h2>Daily detail</h2>
           <span className="muted small">UTC day buckets</span>
         </div>
         <div className="analytics-table-wrap">
@@ -247,24 +256,6 @@ function AnalyticsReport({
           </table>
         </div>
       </section>
-      {overview && !pageReport ? <TopPages pages={overview.topPages} /> : null}
-      <div className="analytics-breakdown-grid">
-        <Breakdown
-          title="Top referrers"
-          items={report.topReferrers}
-          empty="No referrer data yet."
-        />
-        <Breakdown
-          title="UTM campaigns"
-          items={report.topCampaigns}
-          empty="No campaign data yet."
-        />
-        <Breakdown
-          title="Devices"
-          items={report.deviceBreakdown}
-          empty="No device data yet."
-        />
-      </div>
     </>
   );
 }
@@ -275,72 +266,6 @@ function AnalyticsMetric({ label, value }: { label: string; value: number | stri
       <span className="muted">{label}</span>
       <strong>{value}</strong>
     </div>
-  );
-}
-
-function TopPages({ pages }: { pages: AnalyticsOverviewResponse['topPages'] }) {
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <h2>Top pages</h2>
-      </div>
-      {pages.length ? (
-        <div className="list">
-          {pages.map((page) => (
-            <div className="list-row" key={page.id}>
-              <div>
-                <strong>{page.name}</strong>
-                <span className="muted">
-                  {page.siteName} · {page.pagePath ?? (page.slug ? `/${page.slug}` : '/')}
-                </span>
-              </div>
-              <span className="pill">{page.metrics.pageViews} views</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <span className="muted">No page activity in this range.</span>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Breakdown({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: AnalyticsBreakdownItem[];
-  empty: string;
-}) {
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <h2>{title}</h2>
-      </div>
-      {items.length ? (
-        <div className="list">
-          {items.slice(0, 8).map((item) => (
-            <div className="list-row" key={item.name}>
-              <div>
-                <strong>{item.name}</strong>
-                <span className="muted">
-                  {item.sessions} sessions · {item.submissions} submissions
-                </span>
-              </div>
-              <span className="pill">{item.pageViews} views</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <span className="muted">{empty}</span>
-        </div>
-      )}
-    </section>
   );
 }
 
