@@ -5144,7 +5144,16 @@ export * from './open-composition-semantic-integrity';
 export * from './open-composition-icons';
 export * from './page-runtime';
 export * from './style-registry';
+export * from './page/page-node';
+export * from './composition/page-composition';
+export * from './publish/release';
+export * from './legacy/page-adapter';
 
+/**
+ * Legacy persistence/editor envelope. PageCompositionV1 is the canonical
+ * authoring contract; this shape remains only for the compatibility boundary
+ * while PageVersion persistence is migrated in a later slice.
+ */
 export const PageCompositionFieldsSchema = z
   .object({
     attachments: z.array(PageExtensionAttachmentSchema).max(100).default([]),

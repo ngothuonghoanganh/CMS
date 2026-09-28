@@ -2,7 +2,7 @@ import {
   ExtensionIds,
   PageCompositionInputSchema,
   PageCompositionSchema,
-  PagePayloadSchema,
+  parseLegacyPageDocument,
   type AnyPageNode,
   type PageComposition,
   type PageCompositionFields,
@@ -52,7 +52,7 @@ export function normalizePageComposition(input: {
   previous?: PageComposition | undefined;
   legacyLayoutAttachments?: readonly PageLayoutAttachment[] | undefined;
 }): PageComposition {
-  const parsedPayload = PagePayloadSchema.parse(input.payload);
+  const parsedPayload = parseLegacyPageDocument(input.payload);
   const supplied = input.composition
     ? PageCompositionInputSchema.parse(input.composition)
     : undefined;
@@ -150,7 +150,7 @@ export function clonePageCompositionForPage(
     source.attachments.map((attachment) => [attachment.id, randomUUID()]),
   );
   const queryIds = new Map(source.queries.map((query) => [query.id, randomUUID()]));
-  const payload = PagePayloadSchema.parse(
+  const payload = parseLegacyPageDocument(
     remapPayloadReferences(source.payload, attachmentIds, queryIds),
   );
   const layoutAttachments = source.layoutAttachments.map((attachment) => ({

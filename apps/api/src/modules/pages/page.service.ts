@@ -15,9 +15,9 @@ import { randomUUID } from 'node:crypto';
 import {
   CreatePageVersionRequestSchema,
   DuplicatePageRequestSchema,
+  parseLegacyPageDocument,
+  safeParseLegacyPageDocument,
   PageSchema,
-  PagePayloadSchema,
-  canonicalizeOpenCompositionPayload,
   SiteGlobalsSchema,
   PageLayoutAttachmentsSchema,
   PageLayoutUpdateRequestSchema,
@@ -905,7 +905,7 @@ export class PageService {
     }
 
     const storedComposition = PageCompositionSchema.safeParse(version.composition);
-    const payloadResult = PagePayloadSchema.safeParse(
+    const payloadResult = safeParseLegacyPageDocument(
       storedComposition.success ? storedComposition.data.payload : version.payload,
     );
     if (!payloadResult.success) {
@@ -1022,7 +1022,7 @@ export class PageService {
       const storedComposition = PageCompositionSchema.safeParse(
         latestVersion.composition,
       );
-      const payload = PagePayloadSchema.parse(
+      const payload = parseLegacyPageDocument(
         storedComposition.success
           ? storedComposition.data.payload
           : latestVersion.payload,
@@ -1491,7 +1491,7 @@ export class PageService {
             behaviors: [],
           }
         : { ...payload, root: { ...payload.root, children: [] } };
-    return createPageDocument(PagePayloadSchema.parse(emptyPayload), {
+    return createPageDocument(parseLegacyPageDocument(emptyPayload), {
       attachments: [],
       layoutAttachments: [],
       bindings: [],
@@ -1502,7 +1502,7 @@ export class PageService {
   }
 
   private parsePayload(payload: unknown): PagePayload {
-    const result = PagePayloadSchema.safeParse(payload);
+    const result = safeParseLegacyPageDocument(payload);
 
     if (!result.success) {
       const issueMessages = result.error.issues.map((issue) => issue.message);
@@ -1519,9 +1519,7 @@ export class PageService {
       });
     }
 
-    return result.data.version === 8
-      ? canonicalizeOpenCompositionPayload(result.data)
-      : result.data;
+    return parseLegacyPageDocument(result.data);
   }
 
   private async validateInlineNavigationDocument(
@@ -1594,7 +1592,7 @@ export class PageService {
     try {
       const versionContract = this.toVersionContract(version);
       const storedComposition = PageCompositionSchema.safeParse(version.composition);
-      const payload = PagePayloadSchema.parse(
+      const payload = parseLegacyPageDocument(
         storedComposition.success ? storedComposition.data.payload : version.payload,
       );
       // Review is draft-scoped. New versions use their immutable composition;

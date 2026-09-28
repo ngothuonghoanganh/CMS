@@ -24,6 +24,23 @@ import { UsageService } from '../billing/usage.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { WorkflowService } from '../workflows/workflow.service';
 import { ReusableService } from './reusables/reusable.service';
+import { PageCollectionAdapter } from '../domain/page-collection.adapter';
+import { PageLayoutAdapter } from '../domain/page-layout.adapter';
+import { PageReusableAdapter } from '../domain/page-reusable.adapter';
+import { AssetReferenceAdapter } from './assets/asset-reference.adapter';
+import { SiteReusableAdapter } from './sites/site-reusable.adapter';
+import { SeoCollectionAdapter } from './public-delivery/seo-collection.adapter';
+import { CustomDomainQuotaAdapter } from './public-delivery/custom-domain-quota.adapter';
+import { CustomDomainEventAdapter } from './public-delivery/custom-domain-event.adapter';
+import { ASSET_REFERENCE_PORT } from '../shared/asset-reference-port';
+import { CUSTOM_DOMAIN_EVENT_PORT } from '../shared/custom-domain-event-port';
+import { CUSTOM_DOMAIN_QUOTA_PORT } from '../shared/custom-domain-quota-port';
+import { PAGE_COLLECTION_PORT } from '../shared/page-collection-port';
+import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
+import { PAGE_LAYOUT_PORT } from '../shared/page-layout-port';
+import { PAGE_REUSABLE_PORT } from '../shared/page-reusable-port';
+import { SEO_COLLECTION_PORT } from '../shared/seo-collection-port';
+import { SITE_REUSABLE_PORT } from '../shared/site-reusable-port';
 
 function createConnectionStub(): Connection {
   return {
@@ -96,6 +113,34 @@ describe('Core feature module bootstrap', () => {
     );
     expect(moduleRef.get(PublicPageResolver, { strict: false })).toBeInstanceOf(
       PublicPageResolver,
+    );
+
+    expect(moduleRef.get(PAGE_EXTENSION_PORT, { strict: false })).toBeInstanceOf(
+      PageExtensionService,
+    );
+    expect(moduleRef.get(PAGE_COLLECTION_PORT, { strict: false })).toBeInstanceOf(
+      PageCollectionAdapter,
+    );
+    expect(moduleRef.get(PAGE_REUSABLE_PORT, { strict: false })).toBeInstanceOf(
+      PageReusableAdapter,
+    );
+    expect(moduleRef.get(PAGE_LAYOUT_PORT, { strict: false })).toBeInstanceOf(
+      PageLayoutAdapter,
+    );
+    expect(moduleRef.get(ASSET_REFERENCE_PORT, { strict: false })).toBeInstanceOf(
+      AssetReferenceAdapter,
+    );
+    expect(moduleRef.get(SITE_REUSABLE_PORT, { strict: false })).toBeInstanceOf(
+      SiteReusableAdapter,
+    );
+    expect(moduleRef.get(SEO_COLLECTION_PORT, { strict: false })).toBeInstanceOf(
+      SeoCollectionAdapter,
+    );
+    expect(moduleRef.get(CUSTOM_DOMAIN_QUOTA_PORT, { strict: false })).toBeInstanceOf(
+      CustomDomainQuotaAdapter,
+    );
+    expect(moduleRef.get(CUSTOM_DOMAIN_EVENT_PORT, { strict: false })).toBeInstanceOf(
+      CustomDomainEventAdapter,
     );
 
     await moduleRef.close();

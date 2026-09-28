@@ -30,6 +30,7 @@ export class PageVersionRecord {
   @Prop({ type: Number, required: true, min: 1, immutable: true })
   versionNumber!: number;
 
+  /** Legacy payload retained until the PageVersion persistence migration. */
   @Prop({
     type: Object,
     required: true,
@@ -41,6 +42,7 @@ export class PageVersionRecord {
   })
   payload!: unknown;
 
+  /** Legacy composition envelope; canonical authoring uses PageCompositionV1. */
   @Prop({
     type: Object,
     required: false,
@@ -52,6 +54,7 @@ export class PageVersionRecord {
   })
   composition?: unknown;
 
+  /** Release-era compatibility snapshot; public delivery remains snapshot-only. */
   @Prop({
     type: Object,
     required: false,

@@ -7,8 +7,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import {
-  PagePayloadSchema,
   PageCompositionSchema,
+  parseLegacyPageDocument,
   PublishedPageBundleSchema,
   PublicPageSchema,
   PublicSeoSettingsSchema,
@@ -258,7 +258,7 @@ export class PublicPageResolver {
         ? PublishedPageBundleSchema.parse(version.publishedBundle)
         : undefined;
       const versionComposition = PageCompositionSchema.safeParse(version.composition);
-      const payload = PagePayloadSchema.parse(
+      const payload = parseLegacyPageDocument(
         publishedBundle?.payload ??
           (versionComposition.success
             ? versionComposition.data.payload
