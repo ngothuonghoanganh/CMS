@@ -75,6 +75,30 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
     page.locator('.analytics-metric-card').nth(2).locator('strong'),
   ).toHaveText(/[1-9]/);
   await expect(page.getByText('Top pages')).toBeVisible();
+  await page.locator('.analytics-line-chart').focus();
+  await expect(page.locator('.analytics-chart-tooltip')).toContainText('Page views');
+  const firstTooltip = await page.locator('.analytics-chart-tooltip').textContent();
+  await page.keyboard.press('ArrowRight');
+  await expect
+    .poll(() => page.locator('.analytics-chart-tooltip').textContent())
+    .not.toBe(firstTooltip);
+  const pageViewsLegend = page.getByRole('button', {
+    name: 'Page views',
+    exact: true,
+  });
+  await expect(pageViewsLegend).toHaveAttribute('aria-pressed', 'true');
+  await pageViewsLegend.click();
+  await expect(pageViewsLegend).toHaveAttribute('aria-pressed', 'false');
+  await pageViewsLegend.click();
+  const topPageButton = page.locator('.analytics-ranking-button').first();
+  if (await topPageButton.count()) {
+    await topPageButton.click();
+    await expect(page.locator('.analytics-report-heading h2')).not.toHaveText(
+      'Workspace overview',
+    );
+    await page.getByLabel('Analytics page').selectOption('');
+    await expect(page.getByText('Top pages')).toBeVisible();
+  }
 
   for (const width of [390, 768, 1024, 1440]) {
     await page.setViewportSize({ height: 900, width });

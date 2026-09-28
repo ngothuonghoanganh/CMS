@@ -3,7 +3,7 @@ import type {
   AnalyticsPageSummary,
   AnalyticsTimeSeriesPoint,
 } from '@payload/contracts';
-import { useId } from 'react';
+import { useId, useState } from 'react';
 
 type AnalyticsChartsProps = {
   breakdowns: {
@@ -13,11 +13,15 @@ type AnalyticsChartsProps = {
   };
   timeline: AnalyticsTimeSeriesPoint[];
   topPages?: AnalyticsPageSummary[] | undefined;
+  onSelectPage?: ((value: string) => void) | undefined;
+  selectedPageId?: string | undefined;
 };
+
+type TrendKey = 'pageViews' | 'sessions' | 'submissions';
 
 type TrendSeries = {
   color: string;
-  key: 'pageViews' | 'sessions' | 'submissions';
+  key: TrendKey;
   label: string;
 };
 
@@ -31,6 +35,8 @@ export function AnalyticsCharts({
   breakdowns,
   timeline,
   topPages,
+  onSelectPage,
+  selectedPageId,
 }: AnalyticsChartsProps) {
   const hasTopPages = topPages !== undefined;
 
@@ -65,7 +71,11 @@ export function AnalyticsCharts({
                 </span>
               </div>
             </div>
-            <TopPagesChart pages={topPages} />
+            <TopPagesChart
+              onSelectPage={onSelectPage}
+              pages={topPages}
+              selectedPageId={selectedPageId}
+            />
           </section>
         ) : null}
       </div>
@@ -92,6 +102,12 @@ export function AnalyticsCharts({
 
 function TrafficTrendChart({ points }: { points: AnalyticsTimeSeriesPoint[] }) {
   const titleId = useId();
+  const [activeSeries, setActiveSeries] = useState<Record<TrendKey, boolean>>({
+    pageViews: true,
+    sessions: true,
+    submissions: true,
+  });
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   if (!points.length) {
     return (
       <div className="empty-state" role="status">
@@ -102,9 +118,10 @@ function TrafficTrendChart({ points }: { points: AnalyticsTimeSeriesPoint[] }) {
 
   const chart = { bottom: 214, left: 48, right: 744, top: 18 };
   const chartHeight = chart.bottom - chart.top;
+  const visibleSeries = trendSeries.filter((series) => activeSeries[series.key]);
   const maxValue = Math.max(
     1,
-    ...points.flatMap((point) => [point.pageViews, point.sessions, point.submissions]),
+    ...points.flatMap((point) => visibleSeries.map((series) => point[series.key])),
   );
   const xFor = (index: number) =>
     chart.left + (index / Math.max(points.length - 1, 1)) * (chart.right - chart.left);
@@ -115,13 +132,35 @@ function TrafficTrendChart({ points }: { points: AnalyticsTimeSeriesPoint[] }) {
     Math.floor((points.length - 1) / 2),
     points.length - 1,
   ]);
+  const hoveredPoint = hoveredIndex === null ? undefined : points[hoveredIndex];
+  const toggleSeries = (key: TrendKey) => {
+    setActiveSeries((current) => {
+      const activeCount = Object.values(current).filter(Boolean).length;
+      if (current[key] && activeCount === 1) return current;
+      return { ...current, [key]: !current[key] };
+    });
+  };
 
   return (
     <>
       <svg
+        aria-keyshortcuts="ArrowLeft ArrowRight"
         aria-labelledby={titleId}
         className="analytics-line-chart"
+        onBlur={() => setHoveredIndex(null)}
+        onFocus={() => setHoveredIndex((current) => current ?? 0)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          setHoveredIndex((current) => {
+            const nextIndex = current ?? 0;
+            return event.key === 'ArrowLeft'
+              ? Math.max(0, nextIndex - 1)
+              : Math.min(points.length - 1, nextIndex + 1);
+          });
+        }}
         role="img"
+        tabIndex={0}
         viewBox="0 0 760 250"
       >
         <title id={titleId}>Traffic trend by day</title>
@@ -142,7 +181,7 @@ function TrafficTrendChart({ points }: { points: AnalyticsTimeSeriesPoint[] }) {
             </g>
           );
         })}
-        {trendSeries.map((series) => (
+        {visibleSeries.map((series) => (
           <path
             className="analytics-chart-line"
             d={buildPath(points, series.key, xFor, yFor)}
@@ -150,6 +189,30 @@ function TrafficTrendChart({ points }: { points: AnalyticsTimeSeriesPoint[] }) {
             stroke={series.color}
           />
         ))}
+        {hoveredIndex !== null ? (
+          <line
+            className="analytics-chart-hover-line"
+            x1={xFor(hoveredIndex)}
+            x2={xFor(hoveredIndex)}
+            y1={chart.top}
+            y2={chart.bottom}
+          />
+        ) : null}
+        {visibleSeries.flatMap((series) =>
+          points.map((point, index) => (
+            <circle
+              aria-label={`${series.label} on ${formatTooltipDate(point.date)}: ${point[series.key]}`}
+              className="analytics-chart-point"
+              cx={xFor(index)}
+              cy={yFor(point[series.key])}
+              fill={series.color}
+              key={`${series.key}-${point.date}`}
+              onMouseEnter={() => setHoveredIndex(index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+              r={hoveredIndex === index ? 5 : 3}
+            />
+          )),
+        )}
         {labelIndexes.map((index) => (
           <text
             className="analytics-chart-axis-label"
@@ -162,22 +225,55 @@ function TrafficTrendChart({ points }: { points: AnalyticsTimeSeriesPoint[] }) {
           </text>
         ))}
       </svg>
+      <div aria-live="polite" className="analytics-chart-tooltip">
+        {hoveredPoint ? (
+          <>
+            <strong>{formatTooltipDate(hoveredPoint.date)}</strong>
+            <span>
+              {trendSeries
+                .map((series) => `${series.label}: ${hoveredPoint[series.key]}`)
+                .join(' · ')}
+            </span>
+          </>
+        ) : (
+          <span>Hover or focus a point to inspect the daily totals.</span>
+        )}
+      </div>
       <div className="analytics-chart-legend" aria-label="Traffic trend legend">
         {trendSeries.map((series) => (
-          <span className="analytics-chart-legend-item" key={series.key}>
+          <button
+            aria-pressed={activeSeries[series.key]}
+            className={
+              activeSeries[series.key]
+                ? 'analytics-chart-legend-item is-active'
+                : 'analytics-chart-legend-item'
+            }
+            disabled={activeSeries[series.key] && visibleSeries.length === 1}
+            key={series.key}
+            onClick={() => toggleSeries(series.key)}
+            type="button"
+          >
             <span
               aria-hidden="true"
               className={`analytics-chart-legend-dot analytics-chart-legend-dot-${series.key}`}
             />
             {series.label}
-          </span>
+          </button>
         ))}
       </div>
     </>
   );
 }
 
-function TopPagesChart({ pages }: { pages: AnalyticsPageSummary[] }) {
+function TopPagesChart({
+  onSelectPage,
+  pages,
+  selectedPageId,
+}: {
+  onSelectPage: ((value: string) => void) | undefined;
+  pages: AnalyticsPageSummary[];
+  selectedPageId: string | undefined;
+}) {
   if (!pages.length) {
     return (
       <div className="empty-state" role="status">
@@ -193,30 +289,42 @@ function TopPagesChart({ pages }: { pages: AnalyticsPageSummary[] }) {
     <div className="analytics-ranking-chart" role="list">
       {visiblePages.map((page) => (
         <div className="analytics-ranking-item" key={page.id} role="listitem">
-          <div className="analytics-ranking-heading">
-            <div
-              className="analytics-ranking-copy"
-              title={`${page.name} · ${page.siteName}`}
-            >
-              <strong>{page.name}</strong>
-              <span className="muted">
-                {page.siteName} · {page.pagePath ?? (page.slug ? `/${page.slug}` : '/')}
-              </span>
-            </div>
-            <strong className="analytics-chart-value">
-              {formatCompactNumber(page.metrics.pageViews)}
-            </strong>
-          </div>
-          <div
-            aria-label={`${page.name} page views`}
-            aria-valuemax={maxViews}
-            aria-valuemin={0}
-            aria-valuenow={page.metrics.pageViews}
-            className="analytics-ranking-bar"
-            role="progressbar"
+          <button
+            aria-pressed={selectedPageId === page.id}
+            className={
+              selectedPageId === page.id
+                ? 'analytics-ranking-button is-selected'
+                : 'analytics-ranking-button'
+            }
+            disabled={!onSelectPage}
+            onClick={() => onSelectPage?.(page.id)}
+            type="button"
           >
-            <span style={{ width: `${(page.metrics.pageViews / maxViews) * 100}%` }} />
-          </div>
+            <div className="analytics-ranking-heading">
+              <div
+                className="analytics-ranking-copy"
+                title={`${page.name} · ${page.siteName}`}
+              >
+                <strong>{page.name}</strong>
+                <span className="muted">
+                  {page.siteName} · {page.pagePath ?? (page.slug ? `/${page.slug}` : '/')}
+                </span>
+              </div>
+              <strong className="analytics-chart-value">
+                {formatCompactNumber(page.metrics.pageViews)}
+              </strong>
+            </div>
+            <div
+              aria-label={`${page.name} page views`}
+              aria-valuemax={maxViews}
+              aria-valuemin={0}
+              aria-valuenow={page.metrics.pageViews}
+              className="analytics-ranking-bar"
+              role="progressbar"
+            >
+              <span style={{ width: `${(page.metrics.pageViews / maxViews) * 100}%` }} />
+            </div>
+          </button>
         </div>
       ))}
     </div>
@@ -262,6 +370,8 @@ function BreakdownChart({
                 aria-valuenow={item.pageViews}
                 className="analytics-ranking-bar"
                 role="progressbar"
+                tabIndex={0}
+                title={`${item.name}: ${item.pageViews} views, ${item.sessions} sessions, ${item.submissions} submissions`}
               >
                 <span style={{ width: `${(item.pageViews / maxViews) * 100}%` }} />
               </div>
@@ -302,6 +412,10 @@ function getTextAnchor(index: number, count: number): 'end' | 'middle' | 'start'
 
 function formatChartDate(value: string): string {
   return value ? value.slice(5).replace('-', '/') : '';
+}
+
+function formatTooltipDate(value: string): string {
+  return value ? `${value} UTC` : 'Unknown date';
 }
 
 function formatCompactNumber(value: number): string {
