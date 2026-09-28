@@ -3,7 +3,6 @@ import { getModelToken } from '@nestjs/mongoose';
 import { createDefaultSiteDesignSystem, type PagePayload } from '@payload/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CollectionService } from './collection.service';
 import { PageService } from './page.service';
 import { PublicPageResolver } from './public-page.resolver';
 import { SiteService } from './site.service';
@@ -17,6 +16,7 @@ import {
 } from '../shared/events/core-event-publisher';
 import { PAGE_NAVIGATION_PORT } from '../shared/page-navigation-port';
 import { PAGE_LAYOUT_PORT } from '../shared/page-layout-port';
+import { PAGE_COLLECTION_PORT } from '../shared/page-collection-port';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
@@ -135,7 +135,7 @@ describe('PageService core dependency boundary', () => {
           provide: PAGE_REUSABLE_PORT,
           useValue: {} satisfies Partial<PageReusablePort>,
         },
-        { provide: CollectionService, useValue: {} },
+        { provide: PAGE_COLLECTION_PORT, useValue: {} },
         PageService,
       ],
     }).compile();

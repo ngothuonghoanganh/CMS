@@ -40,7 +40,6 @@ import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schem
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { SiteUrlService } from './site-url.service';
-import { CollectionService } from './collection.service';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
@@ -52,6 +51,10 @@ import {
 } from '../shared/page-navigation-port';
 import { collectNavigationPageIds } from '../shared/navigation-page-ids';
 import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../shared/page-layout-port';
+import {
+  PAGE_COLLECTION_PORT,
+  type PageCollectionPort,
+} from '../shared/page-collection-port';
 
 @Injectable()
 export class PublicPageResolver {
@@ -75,7 +78,7 @@ export class PublicPageResolver {
     @Inject(PAGE_EXTENSION_PORT)
     private readonly pageExtensions: PageExtensionPort,
     @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,
-    @Inject(CollectionService) private readonly collections: CollectionService,
+    @Inject(PAGE_COLLECTION_PORT) private readonly collections: PageCollectionPort,
   ) {}
 
   async resolveByLegacySlug(siteSlug: string, pageSlug: string): Promise<PublicPage> {

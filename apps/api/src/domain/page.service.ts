@@ -92,8 +92,11 @@ import {
 } from '../shared/page-navigation-port';
 import { collectNavigationPageIds } from '../shared/navigation-page-ids';
 import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../shared/page-layout-port';
+import {
+  PAGE_COLLECTION_PORT,
+  type PageCollectionPort,
+} from '../shared/page-collection-port';
 import { SiteService } from './site.service';
-import { CollectionService } from './collection.service';
 import {
   PageCompositionError,
   clonePageCompositionForPage,
@@ -119,7 +122,7 @@ export class PageService {
     @Inject(PAGE_NAVIGATION_PORT) private readonly navigation: PageNavigationPort,
     @Inject(PAGE_LAYOUT_PORT) private readonly layoutExtensions: PageLayoutPort,
     @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,
-    @Inject(CollectionService) private readonly collections: CollectionService,
+    @Inject(PAGE_COLLECTION_PORT) private readonly collections: PageCollectionPort,
     @Optional()
     @Inject(PAGE_PUBLISH_COMPATIBILITY)
     private readonly pagePublishCompatibility?: PagePublishCompatibility,

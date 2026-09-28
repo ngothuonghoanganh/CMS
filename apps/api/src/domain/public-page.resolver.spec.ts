@@ -12,8 +12,8 @@ import { TenantContext } from '../tenancy/tenant-context';
 import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
 import { PAGE_NAVIGATION_PORT } from '../shared/page-navigation-port';
 import { PAGE_LAYOUT_PORT } from '../shared/page-layout-port';
+import { PAGE_COLLECTION_PORT } from '../shared/page-collection-port';
 import { PAGE_REUSABLE_PORT } from '../shared/page-reusable-port';
-import { CollectionService } from './collection.service';
 import { PublicPageResolver } from './public-page.resolver';
 import { SiteUrlService } from './site-url.service';
 
@@ -53,7 +53,7 @@ describe('public page resolver', () => {
         { provide: PAGE_LAYOUT_PORT, useValue: {} },
         { provide: PAGE_EXTENSION_PORT, useValue: {} },
         { provide: PAGE_REUSABLE_PORT, useValue: {} },
-        { provide: CollectionService, useValue: {} },
+        { provide: PAGE_COLLECTION_PORT, useValue: {} },
         PublicPageResolver,
       ],
     }).compile();

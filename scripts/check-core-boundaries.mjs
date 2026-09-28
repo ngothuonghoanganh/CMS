@@ -34,7 +34,7 @@ const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
 const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
   'apps/api/src/domain/site.service.ts': [],
-  'apps/api/src/domain/page.service.ts': ['./collection.service'],
+  'apps/api/src/domain/page.service.ts': [],
   'apps/api/src/domain/submission.service.ts': [
     '../billing/usage.service',
     './integration-dispatcher',
@@ -47,7 +47,7 @@ const knownDebt = {
     '../persistence/schemas/reusable.schema',
     '../persistence/schemas/layout-extension.schema',
   ],
-  'apps/api/src/domain/public-page.resolver.ts': ['./collection.service'],
+  'apps/api/src/domain/public-page.resolver.ts': [],
 };
 
 const frozenDependencyRules = [
