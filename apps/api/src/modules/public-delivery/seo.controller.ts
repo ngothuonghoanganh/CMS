@@ -4,14 +4,14 @@ import {
   type UpdatePageSeoSettingsRequest,
 } from '@payload/contracts';
 
-import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
-import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { requireWorkspaceId } from '../common/guards/workspace-context';
-import type { PlatformRequest } from '../common/interfaces/request';
-import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { CurrentPrincipal } from '../../common/decorators/current-principal.decorator';
+import { AuthenticationGuard } from '../../common/guards/authentication.guard';
+import { requireWorkspaceId } from '../../common/guards/workspace-context';
+import type { PlatformRequest } from '../../common/interfaces/request';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { SeoService } from './seo.service';
-import { AuthorizationService } from '../security/authorization.service';
-import { AuditService } from '../security/audit.service';
+import { AuthorizationService } from '../../security/authorization.service';
+import { AuditService } from '../../security/audit.service';
 
 @Controller('pages/:pageId/seo')
 @UseGuards(AuthenticationGuard)

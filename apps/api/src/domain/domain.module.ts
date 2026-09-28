@@ -34,8 +34,12 @@ import {
   CUSTOM_DOMAIN_QUOTA_PORT_PROVIDER,
   CustomDomainQuotaAdapter,
 } from '../modules/public-delivery/custom-domain-quota.adapter';
-import { SeoController } from './seo.controller';
-import { SeoService } from './seo.service';
+import { SeoController } from '../modules/public-delivery/seo.controller';
+import { SeoService } from '../modules/public-delivery/seo.service';
+import {
+  SEO_COLLECTION_PORT_PROVIDER,
+  SeoCollectionAdapter,
+} from '../modules/public-delivery/seo-collection.adapter';
 import { TemplateController } from './template.controller';
 import { TemplateService } from './template.service';
 import {
@@ -152,6 +156,8 @@ import {
     CUSTOM_DOMAIN_EVENT_PORT_PROVIDER,
     PublicPageResolver,
     SeoService,
+    SeoCollectionAdapter,
+    SEO_COLLECTION_PORT_PROVIDER,
     PageNavigationAdapter,
     PAGE_NAVIGATION_PORT_PROVIDER,
     PageLayoutAdapter,

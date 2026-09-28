@@ -18,9 +18,12 @@ import {
 import {
   PageSeoSettingsRecord,
   type PageSeoSettingsDocument,
-} from '../persistence/schemas/page-seo-settings.schema';
-import { PageRecord } from '../persistence/schemas/page.schema';
-import { CollectionService } from './collection.service';
+} from '../../persistence/schemas/page-seo-settings.schema';
+import { PageRecord } from '../../persistence/schemas/page.schema';
+import {
+  SEO_COLLECTION_PORT,
+  type SeoCollectionPort,
+} from '../../shared/seo-collection-port';
 
 @Injectable()
 export class SeoService {
@@ -29,8 +32,8 @@ export class SeoService {
     private readonly seoModel: Model<PageSeoSettingsRecord>,
     @InjectModel(PageRecord.name)
     private readonly pageModel: Model<PageRecord>,
-    @Inject(CollectionService)
-    private readonly collections: CollectionService,
+    @Inject(SEO_COLLECTION_PORT)
+    private readonly collections: SeoCollectionPort,
   ) {}
 
   async get(pageId: string, workspaceId: string): Promise<PageSeoSettings> {

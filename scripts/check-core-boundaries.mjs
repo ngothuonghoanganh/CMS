@@ -16,6 +16,7 @@ const coreServiceFiles = [
   'apps/api/src/modules/assets/asset.service.ts',
   'apps/api/src/modules/public-delivery/public-page.resolver.ts',
   'apps/api/src/modules/public-delivery/custom-domain.service.ts',
+  'apps/api/src/modules/public-delivery/seo.service.ts',
 ];
 
 // Core-owned infrastructure is protected separately from the service debt
@@ -40,6 +41,7 @@ const knownDebt = {
   'apps/api/src/modules/assets/asset.service.ts': [],
   'apps/api/src/modules/public-delivery/public-page.resolver.ts': [],
   'apps/api/src/modules/public-delivery/custom-domain.service.ts': [],
+  'apps/api/src/modules/public-delivery/seo.service.ts': [],
 };
 
 const frozenDependencyRules = [
