@@ -5315,12 +5315,12 @@ textarea {
 
 .sites-list-panel .resource-table th:first-child,
 .sites-list-panel .resource-table td:first-child {
-  padding-left: 0;
+  padding-left: 0.75rem;
 }
 
 .sites-list-panel .resource-table th:last-child,
 .sites-list-panel .resource-table td:last-child {
-  padding-right: 0;
+  padding-right: 0.75rem;
 }
 
 .sites-list-panel .site-name-link {
@@ -6073,6 +6073,13 @@ textarea {
     border-radius: 1rem 1rem 0 0;
     padding: 1.25rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
   }
+}
+
+.overview-next-action {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  width: fit-content;
 }
 
 /* Collections workspace */
@@ -9786,12 +9793,6 @@ body {
 }
 
 @media (max-width: 767px) {
-  .overview-next-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
   .overview-sites-panel .list-row > span:first-child {
     display: grid;
     flex: 1 1 100%;

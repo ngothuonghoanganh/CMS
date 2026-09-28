@@ -36,6 +36,21 @@
   background: var(--cms-bg-surface-hover);
 }
 
+.cms-admin-root .cms-antd-table-thead > tr > th,
+.cms-admin-root .cms-antd-table-tbody > tr > td {
+  padding: 0.8rem 0.75rem;
+}
+
+.cms-admin-root .cms-antd-table-thead > tr > th:first-child,
+.cms-admin-root .cms-antd-table-tbody > tr > td:first-child {
+  padding-left: 0.75rem;
+}
+
+.cms-admin-root .cms-antd-table-thead > tr > th:last-child,
+.cms-admin-root .cms-antd-table-tbody > tr > td:last-child {
+  padding-right: 0.75rem;
+}
+
 .cms-admin-root .cms-antd-table-cell-scrollbar {
   background: var(--cms-bg-surface-muted);
 }

@@ -22,6 +22,7 @@ test('CMS resource actions remain contained across narrow admin layouts', async 
   await page.setViewportSize({ width: 320, height: 900 });
   await page.goto(`${workspacePath}/sites`);
   await expect(page.getByRole('heading', { name: 'Sites', exact: true })).toBeVisible();
+  await expect(page.locator('.sites-list-panel .site-row-actions').first()).toBeVisible();
   await expectViewportToContainDocument(page);
 
   const siteActions = await page
@@ -41,6 +42,11 @@ test('CMS resource actions remain contained across narrow admin layouts', async 
 
   await page.goto(`${workspacePath}/assets`);
   await expect(page.getByRole('heading', { name: 'Assets', exact: true })).toBeVisible();
+  await expect(
+    page
+      .locator('.asset-library-layout > section.panel .list-row .form-actions button')
+      .first(),
+  ).toBeVisible();
   await expectViewportToContainDocument(page);
   await expect(page.locator('.asset-library-layout')).toHaveCSS(
     'grid-template-columns',
@@ -63,8 +69,9 @@ test('CMS resource actions remain contained across narrow admin layouts', async 
   await expect(
     page.getByRole('heading', { name: 'Good morning', exact: true }),
   ).toBeVisible();
+  await expect(page.locator('.overview-sites-panel .list-row').first()).toBeVisible();
   await expectViewportToContainDocument(page);
-  await expect(page.locator('.overview-next-action')).toHaveCSS('display', 'inline-flex');
+  await expect(page.locator('.overview-next-action')).toHaveCSS('display', 'flex');
 
   const overviewCopy = await page
     .locator('.overview-sites-panel .list-row > span:first-child')
@@ -78,4 +85,42 @@ test('CMS resource actions remain contained across narrow admin layouts', async 
   for (const copy of overviewCopy) {
     expect(copy.scrollWidth).toBeLessThanOrEqual(copy.clientWidth + 1);
   }
+
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto(workspacePath);
+  await expect(
+    page.getByRole('heading', { name: 'Good morning', exact: true }),
+  ).toBeVisible();
+  const overviewActionSpacing = await page.evaluate(() => {
+    const paragraph = document.querySelector('.overview-hero p');
+    const action = document.querySelector('.overview-next-action');
+    if (!paragraph || !action) return null;
+    return {
+      actionTop: action.getBoundingClientRect().top,
+      paragraphBottom: paragraph.getBoundingClientRect().bottom,
+    };
+  });
+  expect(overviewActionSpacing).not.toBeNull();
+  expect(overviewActionSpacing!.actionTop).toBeGreaterThanOrEqual(
+    overviewActionSpacing!.paragraphBottom,
+  );
+
+  await page.goto(`${workspacePath}/sites`);
+  await expect(page.getByRole('heading', { name: 'Sites', exact: true })).toBeVisible();
+  const sitesTablePadding = await page
+    .locator('.sites-list-panel .resource-table table')
+    .evaluate((table) => {
+      const firstCell = table.querySelector('thead th');
+      const lastCell = table.querySelector('thead th:last-child');
+      return {
+        firstLeft: firstCell
+          ? Number.parseFloat(getComputedStyle(firstCell).paddingLeft)
+          : 0,
+        lastRight: lastCell
+          ? Number.parseFloat(getComputedStyle(lastCell).paddingRight)
+          : 0,
+      };
+    });
+  expect(sitesTablePadding.firstLeft).toBeGreaterThanOrEqual(8);
+  expect(sitesTablePadding.lastRight).toBeGreaterThanOrEqual(8);
 });
