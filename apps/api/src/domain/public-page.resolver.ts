@@ -40,7 +40,6 @@ import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schem
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
 import { SiteUrlService } from './site-url.service';
-import { LayoutExtensionService } from './layout-extension.service';
 import { CollectionService } from './collection.service';
 import {
   PAGE_EXTENSION_PORT,
@@ -52,6 +51,7 @@ import {
   type PageNavigationPort,
 } from '../shared/page-navigation-port';
 import { collectNavigationPageIds } from '../shared/navigation-page-ids';
+import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../shared/page-layout-port';
 
 @Injectable()
 export class PublicPageResolver {
@@ -71,8 +71,7 @@ export class PublicPageResolver {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(PAGE_NAVIGATION_PORT) private readonly navigation: PageNavigationPort,
-    @Inject(LayoutExtensionService)
-    private readonly layoutExtensions: LayoutExtensionService,
+    @Inject(PAGE_LAYOUT_PORT) private readonly layoutExtensions: PageLayoutPort,
     @Inject(PAGE_EXTENSION_PORT)
     private readonly pageExtensions: PageExtensionPort,
     @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,

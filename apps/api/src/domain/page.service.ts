@@ -91,8 +91,8 @@ import {
   type PageNavigationPort,
 } from '../shared/page-navigation-port';
 import { collectNavigationPageIds } from '../shared/navigation-page-ids';
+import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../shared/page-layout-port';
 import { SiteService } from './site.service';
-import { LayoutExtensionService } from './layout-extension.service';
 import { CollectionService } from './collection.service';
 import {
   PageCompositionError,
@@ -117,8 +117,7 @@ export class PageService {
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(SiteService) private readonly sites: SiteService,
     @Inject(PAGE_NAVIGATION_PORT) private readonly navigation: PageNavigationPort,
-    @Inject(LayoutExtensionService)
-    private readonly layoutExtensions: LayoutExtensionService,
+    @Inject(PAGE_LAYOUT_PORT) private readonly layoutExtensions: PageLayoutPort,
     @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,
     @Inject(CollectionService) private readonly collections: CollectionService,
     @Optional()

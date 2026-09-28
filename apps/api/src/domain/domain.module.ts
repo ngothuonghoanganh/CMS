@@ -97,6 +97,7 @@ import {
   PAGE_NAVIGATION_PORT_PROVIDER,
   PageNavigationAdapter,
 } from './page-navigation.adapter';
+import { PAGE_LAYOUT_PORT_PROVIDER, PageLayoutAdapter } from './page-layout.adapter';
 
 @Module({
   imports: [
@@ -168,6 +169,8 @@ import {
     SITE_NAVIGATION_PORT_PROVIDER,
     PageNavigationAdapter,
     PAGE_NAVIGATION_PORT_PROVIDER,
+    PageLayoutAdapter,
+    PAGE_LAYOUT_PORT_PROVIDER,
     CollectionService,
     PageReusableAdapter,
     PAGE_REUSABLE_PORT_PROVIDER,
