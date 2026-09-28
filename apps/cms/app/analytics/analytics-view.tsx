@@ -224,7 +224,9 @@ function AnalyticsReport({
           referrers: report.topReferrers,
         }}
         timeline={report.timeline}
+        onSelectPage={onSelectPage}
         topPages={overview && !pageReport ? overview.topPages : undefined}
+        selectedPageId={selectedPageId}
       />
       <section className="panel analytics-detail-panel">
         <div className="panel-heading">
