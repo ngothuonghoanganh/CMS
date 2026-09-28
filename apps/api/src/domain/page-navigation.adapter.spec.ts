@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { NavigationService } from './navigation.service';
+import type { NavigationService } from '../modules/navigation/navigation.service';
 import { PageNavigationAdapter } from './page-navigation.adapter';
 
 describe('PageNavigationAdapter', () => {

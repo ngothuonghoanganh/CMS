@@ -4,6 +4,9 @@ import { AuthenticationModule } from '../common/guards/authentication.module';
 import { BillingModule } from '../billing/billing.module';
 import { env } from '../config/env';
 import { AssetModule } from '../modules/assets/asset.module';
+import { NavigationModule } from '../modules/navigation/navigation.module';
+import { ReusablesModule } from '../modules/reusables/reusables.module';
+import { SiteModule } from '../modules/sites/site.module';
 import {
   PageController,
   PreviewPageController,
@@ -24,8 +27,6 @@ import {
 } from './domain-verification-resolver';
 import { SeoController } from './seo.controller';
 import { SeoService } from './seo.service';
-import { SiteController } from './site.controller';
-import { SiteService } from './site.service';
 import { TemplateController } from './template.controller';
 import { TemplateService } from './template.service';
 import { WorkspaceController } from './workspace.controller';
@@ -59,18 +60,10 @@ import { CoreEventsModule } from '../shared/events/core-events.module';
 import { ExtensionModule } from '../extensions/extension.module';
 import { WorkflowModule } from '../workflows/workflow.module';
 import {
-  NavigationController,
-  WorkspaceNavigationController,
-} from './navigation.controller';
-import { NavigationService } from './navigation.service';
-import {
   LayoutExtensionController,
   WorkspaceLayoutExtensionController,
 } from './layout-extension.controller';
 import { LayoutExtensionService } from './layout-extension.service';
-import { SiteUrlService } from './site-url.service';
-import { ReusableController } from './reusable.controller';
-import { ReusableService } from './reusable.service';
 import {
   CollectionController,
   WorkspaceCollectionController,
@@ -80,14 +73,6 @@ import {
   PAGE_REUSABLE_PORT_PROVIDER,
   PageReusableAdapter,
 } from './page-reusable.adapter';
-import {
-  SITE_REUSABLE_PORT_PROVIDER,
-  SiteReusableAdapter,
-} from './site-reusable.adapter';
-import {
-  SITE_NAVIGATION_PORT_PROVIDER,
-  SiteNavigationAdapter,
-} from './site-navigation.adapter';
 import {
   PAGE_NAVIGATION_PORT_PROVIDER,
   PageNavigationAdapter,
@@ -114,13 +99,15 @@ import {
     TenantModelsModule,
     TenantModule,
     AssetModule,
+    NavigationModule,
+    ReusablesModule,
+    SiteModule,
   ],
   controllers: [
     PageController,
     PreviewPageController,
     PublicPageController,
     SitePagesController,
-    SiteController,
     TemplateController,
     WorkspaceController,
     SubmissionController,
@@ -133,17 +120,13 @@ import {
     PublicDomainController,
     SeoController,
     OrganizationController,
-    NavigationController,
-    WorkspaceNavigationController,
     LayoutExtensionController,
     WorkspaceLayoutExtensionController,
-    ReusableController,
     CollectionController,
     WorkspaceCollectionController,
   ],
   providers: [
     PageService,
-    SiteService,
     SubmissionService,
     TemplateService,
     WorkspaceService,
@@ -154,18 +137,11 @@ import {
     AnalyticsRepository,
     AnalyticsService,
     OrganizationService,
-    NavigationService,
     LayoutExtensionService,
-    SiteUrlService,
     AnalyticsQueryService,
     CustomDomainService,
     PublicPageResolver,
     SeoService,
-    ReusableService,
-    SiteReusableAdapter,
-    SITE_REUSABLE_PORT_PROVIDER,
-    SiteNavigationAdapter,
-    SITE_NAVIGATION_PORT_PROVIDER,
     PageNavigationAdapter,
     PAGE_NAVIGATION_PORT_PROVIDER,
     PageLayoutAdapter,

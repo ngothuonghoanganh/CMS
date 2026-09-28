@@ -3,10 +3,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { normalizePagePath } from '@payload/contracts';
 
-import { env } from '../config/env';
-import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
-import { PageRecord } from '../persistence/schemas/page.schema';
-import type { SiteDocument } from '../persistence/schemas/site.schema';
+import { env } from '../../config/env';
+import { CustomDomainRecord } from '../../persistence/schemas/custom-domain.schema';
+import { PageRecord } from '../../persistence/schemas/page.schema';
+import type { SiteDocument } from '../../persistence/schemas/site.schema';
 
 export type SiteUrlState = {
   url?: string;

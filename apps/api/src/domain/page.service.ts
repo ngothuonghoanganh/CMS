@@ -96,7 +96,7 @@ import {
   PAGE_COLLECTION_PORT,
   type PageCollectionPort,
 } from '../shared/page-collection-port';
-import { SiteService } from './site.service';
+import { SiteService } from '../modules/sites/site.service';
 import {
   PageCompositionError,
   clonePageCompositionForPage,

@@ -18,12 +18,12 @@ import {
   type UpdateNavigationRequest,
 } from '@payload/contracts';
 
-import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
-import { requireWorkspaceId } from '../common/guards/workspace-context';
-import type { PlatformRequest } from '../common/interfaces/request';
-import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { AuthorizationService } from '../security/authorization.service';
+import { AuthenticationGuard } from '../../common/guards/authentication.guard';
+import { CurrentPrincipal } from '../../common/decorators/current-principal.decorator';
+import { requireWorkspaceId } from '../../common/guards/workspace-context';
+import type { PlatformRequest } from '../../common/interfaces/request';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { AuthorizationService } from '../../security/authorization.service';
 import { NavigationService } from './navigation.service';
 
 @Controller('sites/:siteId/navigations')

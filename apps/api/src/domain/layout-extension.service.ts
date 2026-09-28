@@ -38,8 +38,8 @@ import { PageRecord } from '../persistence/schemas/page.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { PageExtensionService } from '../extensions/page-extension.service';
-import { ReusableService } from './reusable.service';
-import { NavigationService } from './navigation.service';
+import { ReusableService } from '../modules/reusables/reusable.service';
+import { NavigationService } from '../modules/navigation/navigation.service';
 
 /**
  * Header and Footer layout extensions. They share the Page Builder engine but

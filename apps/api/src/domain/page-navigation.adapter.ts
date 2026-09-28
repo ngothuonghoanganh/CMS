@@ -6,7 +6,7 @@ import {
   type PageNavigationPort,
   type ResolvedSiteNavigation,
 } from '../shared/page-navigation-port';
-import { NavigationService } from './navigation.service';
+import { NavigationService } from '../modules/navigation/navigation.service';
 
 /** Composition-root adapter from the navigation platform service to the page port. */
 @Injectable()

@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { PagePayload, ReusableRuntime, SiteDesignSystem } from '@payload/contracts';
 
 import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
-import { ReusableService } from './reusable.service';
+import { ReusableService } from '../modules/reusables/reusable.service';
 
 /** Composition-root adapter from the reusable platform service to the core port. */
 @Injectable()

@@ -44,18 +44,21 @@ import {
 } from '@payload/contracts';
 
 import { DomainError } from './domain-error';
-import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
-import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
-import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
-import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import { SiteRecord, type SiteDocument } from '../../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
+import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
+import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
 import { SiteUrlService } from './site-url.service';
-import { TenantContext } from '../tenancy/tenant-context';
-import { TenantResolver } from '../tenancy/tenant-resolver';
-import { SITE_REUSABLE_PORT, type SiteReusablePort } from '../shared/site-reusable-port';
+import { TenantContext } from '../../tenancy/tenant-context';
+import { TenantResolver } from '../../tenancy/tenant-resolver';
+import {
+  SITE_REUSABLE_PORT,
+  type SiteReusablePort,
+} from '../../shared/site-reusable-port';
 import {
   SITE_NAVIGATION_PORT,
   type SiteNavigationPort,
-} from '../shared/site-navigation-port';
+} from '../../shared/site-navigation-port';
 
 @Injectable()
 export class SiteService {

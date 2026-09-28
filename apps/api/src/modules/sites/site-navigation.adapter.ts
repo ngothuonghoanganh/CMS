@@ -6,8 +6,8 @@ import {
   SITE_NAVIGATION_PORT,
   type SiteNavigationPort,
   type SiteNavigationReference,
-} from '../shared/site-navigation-port';
-import { NavigationRecord } from '../persistence/schemas/navigation.schema';
+} from '../../shared/site-navigation-port';
+import { NavigationRecord } from '../../persistence/schemas/navigation.schema';
 
 /** Composition-root adapter for the manifest's minimal navigation read. */
 @Injectable()

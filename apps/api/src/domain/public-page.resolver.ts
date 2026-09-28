@@ -39,7 +39,7 @@ import {
 import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { TenantContext } from '../tenancy/tenant-context';
-import { SiteUrlService } from './site-url.service';
+import { SiteUrlService } from '../modules/sites/site-url.service';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,

@@ -26,14 +26,14 @@ import {
   type DesignTokenUsageQuery,
 } from '@payload/contracts';
 
-import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
-import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { requireRequestedWorkspace } from '../common/guards/workspace-context';
-import type { PlatformRequest } from '../common/interfaces/request';
-import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { CurrentPrincipal } from '../../common/decorators/current-principal.decorator';
+import { AuthenticationGuard } from '../../common/guards/authentication.guard';
+import { requireRequestedWorkspace } from '../../common/guards/workspace-context';
+import type { PlatformRequest } from '../../common/interfaces/request';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { SiteService } from './site.service';
-import { AuthorizationService } from '../security/authorization.service';
-import { AuditService } from '../security/audit.service';
+import { AuthorizationService } from '../../security/authorization.service';
+import { AuditService } from '../../security/audit.service';
 
 @Controller('workspaces/:workspaceId/sites')
 @UseGuards(AuthenticationGuard)

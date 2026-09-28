@@ -1,8 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DesignTokenUsageResponse, SiteDesignSystem } from '@payload/contracts';
 
-import { SITE_REUSABLE_PORT, type SiteReusablePort } from '../shared/site-reusable-port';
-import { ReusableService } from './reusable.service';
+import {
+  SITE_REUSABLE_PORT,
+  type SiteReusablePort,
+} from '../../shared/site-reusable-port';
+import { ReusableService } from '../reusables/reusable.service';
 
 /** Composition-root adapter from the reusable platform service to the site port. */
 @Injectable()

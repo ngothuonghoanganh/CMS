@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(scriptPath), '..');
 // DomainModule remains a composition root until the graph is split gradually.
 const coreServiceFiles = [
   'apps/api/src/domain/workspace.service.ts',
-  'apps/api/src/domain/site.service.ts',
+  'apps/api/src/modules/sites/site.service.ts',
   'apps/api/src/domain/page.service.ts',
   'apps/api/src/domain/submission.service.ts',
   'apps/api/src/modules/assets/asset.service.ts',
@@ -33,7 +33,7 @@ const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
 // shrink as Phase 1 progresses; it is not a category or wildcard exemption.
 const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
-  'apps/api/src/domain/site.service.ts': [],
+  'apps/api/src/modules/sites/site.service.ts': [],
   'apps/api/src/domain/page.service.ts': [],
   'apps/api/src/domain/submission.service.ts': [],
   'apps/api/src/modules/assets/asset.service.ts': [],

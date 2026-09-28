@@ -15,7 +15,7 @@ import { PAGE_LAYOUT_PORT } from '../shared/page-layout-port';
 import { PAGE_COLLECTION_PORT } from '../shared/page-collection-port';
 import { PAGE_REUSABLE_PORT } from '../shared/page-reusable-port';
 import { PublicPageResolver } from './public-page.resolver';
-import { SiteUrlService } from './site-url.service';
+import { SiteUrlService } from '../modules/sites/site-url.service';
 
 type TestResolver = {
   siteModel: { find: () => ReturnType<typeof query> };

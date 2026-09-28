@@ -22,22 +22,22 @@ import {
 } from '@payload/contracts';
 import { randomUUID } from 'node:crypto';
 
-import { PageRecord } from '../persistence/schemas/page.schema';
+import { PageRecord } from '../../persistence/schemas/page.schema';
 import {
   NavigationRecord,
   type NavigationDocument,
-} from '../persistence/schemas/navigation.schema';
-import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
+} from '../../persistence/schemas/navigation.schema';
+import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
+import { SiteRecord, type SiteDocument } from '../../persistence/schemas/site.schema';
 import {
   LayoutExtensionRecord,
   LayoutExtensionVersionRecord,
-} from '../persistence/schemas/layout-extension.schema';
+} from '../../persistence/schemas/layout-extension.schema';
 import {
   TemplateRecord,
   TemplateVersionRecord,
-} from '../persistence/schemas/template.schema';
-import { ReusableRecord } from '../persistence/schemas/reusable.schema';
+} from '../../persistence/schemas/template.schema';
+import { ReusableRecord } from '../../persistence/schemas/reusable.schema';
 
 /**
  * Navigation is pure menu data. There is no draft/published lifecycle, no

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { NavigationItem } from '@payload/contracts';
 
 import { NavigationService } from './navigation.service';
-import type { NavigationDocument } from '../persistence/schemas/navigation.schema';
+import type { NavigationDocument } from '../../persistence/schemas/navigation.schema';
 
 const homePageId = '00000000-0000-4000-8000-000000000001';
 const campaignPageId = '00000000-0000-4000-8000-000000000002';

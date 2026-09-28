@@ -4,7 +4,7 @@ import {
 } from '@payload/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ReusableService } from './reusable.service';
+import type { ReusableService } from '../reusables/reusable.service';
 import { SiteReusableAdapter } from './site-reusable.adapter';
 
 describe('SiteReusableAdapter', () => {

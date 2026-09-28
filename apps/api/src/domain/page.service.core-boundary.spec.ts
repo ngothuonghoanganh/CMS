@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { PageService } from './page.service';
 import { PublicPageResolver } from './public-page.resolver';
-import { SiteService } from './site.service';
+import { SiteService } from '../modules/sites/site.service';
 import { PageRecord } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';

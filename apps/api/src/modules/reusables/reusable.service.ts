@@ -26,14 +26,14 @@ import {
   UpdateReusableRequestSchema,
 } from '@payload/contracts';
 
-import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
-import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
+import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
+import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
 import {
   ReusableRecord,
   type ReusableDocument,
-} from '../persistence/schemas/reusable.schema';
-import { SiteRecord } from '../persistence/schemas/site.schema';
-import { NavigationService } from './navigation.service';
+} from '../../persistence/schemas/reusable.schema';
+import { SiteRecord } from '../../persistence/schemas/site.schema';
+import { NavigationService } from '../navigation/navigation.service';
 
 @Injectable()
 export class ReusableService {

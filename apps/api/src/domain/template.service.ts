@@ -45,10 +45,10 @@ import { SiteRecord } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { LayoutExtensionService } from './layout-extension.service';
 import { PageService } from './page.service';
-import { ReusableService } from './reusable.service';
+import { ReusableService } from '../modules/reusables/reusable.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { CollectionService } from './collection.service';
-import { NavigationService } from './navigation.service';
+import { NavigationService } from '../modules/navigation/navigation.service';
 
 /**
  * Design Templates are immutable, versioned starter snapshots. Applying a

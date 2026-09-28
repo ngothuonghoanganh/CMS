@@ -1,7 +1,7 @@
 import { createDefaultSiteDesignSystem, PagePayloadSchema } from '@payload/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ReusableService } from './reusable.service';
+import type { ReusableService } from '../modules/reusables/reusable.service';
 import { PageReusableAdapter } from './page-reusable.adapter';
 
 describe('PageReusableAdapter', () => {
