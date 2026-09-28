@@ -60,6 +60,51 @@ architecture wins.
 - Keep controllers/routes thin, business rules explicit and persistence details out
   of UI and public contracts.
 
+## Refactoring, CMS admin and Builder safety rules
+
+These rules apply to every coding agent working in this repository. They make
+the current architecture executable; they do not authorize a phase change or a
+new product capability.
+
+- Apply SOLID only where the code has a real responsibility or dependency
+  problem. Prefer composition, dependency inversion and separation of concerns;
+  do not introduce a design pattern without a concrete problem it solves.
+- Preserve behavior and public contracts. Do not change endpoints, responses,
+  authorization, tenant isolation, schemas, persistence, preview/publish behavior
+  or any other active public contract.
+- Organize modules by business feature with an explicit dependency direction.
+  Do not add circular dependencies or deep/private imports across module
+  boundaries.
+- Keep controllers and routes thin. Extract application use cases, business
+  policy and infrastructure collaborators only when an actual responsibility
+  boundary requires them.
+- Keep one source of truth for application state. Avoid duplicate state, hidden
+  side effects, giant components, god services and generic utility dumping
+  grounds.
+- Reuse existing patterns and primitives. Use Adapter, Strategy, Factory,
+  Repository or similar patterns only when the specific boundary or variation
+  justifies them.
+- Keep TypeScript strict. Do not use `any` to evade an error, suppress lint or
+  test failures, or hide errors; error handling must remain explicit and
+  actionable.
+- Add characterization or regression tests for every behavior change and every
+  complex move/refactor whose behavior could regress.
+- Do not create abstractions, dependencies or modules for unapproved future
+  features.
+- Do not modify any file under `apps/cms/builder/**`, the Builder route entry
+  point, or Builder Store, Canvas, Layers, Properties, GrapesJS, save/load,
+  preview or publish logic. Do not change shared code, CSS or contracts in a way
+  that changes Builder behavior.
+- Ant Design is allowed only in CMS management UI. Never import it into Builder,
+  Renderer, the public site or the customer website design system.
+- New CMS admin UI must consume the existing CMS admin tokens and primitives;
+  do not add a second hard-coded palette or parallel design system.
+- Do not modify `docs/_archive/**` or treat archived documentation as a current
+  requirement.
+- Refactor incrementally in small verified slices. Do not perform a big-bang
+  rewrite, and report exactly which checks ran; never claim PASS for an unrun
+  check.
+
 ## Coding standards
 
 - Use the repository's strict TypeScript settings. Avoid unnecessary `any` and do
