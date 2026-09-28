@@ -5,24 +5,27 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { PageService } from './page.service';
 import { PublicPageResolver } from './public-page.resolver';
-import { SiteService } from '../modules/sites/site.service';
-import { PageRecord } from '../persistence/schemas/page.schema';
-import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import { SiteRecord } from '../persistence/schemas/site.schema';
-import { CoreEventBus } from '../shared/events/core-event-bus';
+import { SiteService } from '../sites/site.service';
+import { PageRecord } from '../../persistence/schemas/page.schema';
+import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
+import { SiteRecord } from '../../persistence/schemas/site.schema';
+import { CoreEventBus } from '../../shared/events/core-event-bus';
 import {
   CORE_EVENT_PUBLISHER,
   type CoreEventPublisher,
-} from '../shared/events/core-event-publisher';
-import { PAGE_NAVIGATION_PORT } from '../shared/page-navigation-port';
-import { PAGE_LAYOUT_PORT } from '../shared/page-layout-port';
-import { PAGE_COLLECTION_PORT } from '../shared/page-collection-port';
+} from '../../shared/events/core-event-publisher';
+import { PAGE_NAVIGATION_PORT } from '../../shared/page-navigation-port';
+import { PAGE_LAYOUT_PORT } from '../../shared/page-layout-port';
+import { PAGE_COLLECTION_PORT } from '../../shared/page-collection-port';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
-} from '../shared/page-extension-port';
-import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
-import { TenantContext } from '../tenancy/tenant-context';
+} from '../../shared/page-extension-port';
+import {
+  PAGE_REUSABLE_PORT,
+  type PageReusablePort,
+} from '../../shared/page-reusable-port';
+import { TenantContext } from '../../tenancy/tenant-context';
 
 const tenantId = 'tenant-a';
 const workspaceId = '11111111-1111-4111-8111-111111111111';

@@ -20,14 +20,14 @@ import {
 } from '@payload/contracts';
 import type { Request } from 'express';
 
-import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
-import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { requireWorkspaceId } from '../common/guards/workspace-context';
-import type { PlatformRequest } from '../common/interfaces/request';
-import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { CurrentPrincipal } from '../../common/decorators/current-principal.decorator';
+import { AuthenticationGuard } from '../../common/guards/authentication.guard';
+import { requireWorkspaceId } from '../../common/guards/workspace-context';
+import type { PlatformRequest } from '../../common/interfaces/request';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { SubmissionService } from './submission.service';
-import { AuthorizationService } from '../security/authorization.service';
-import { AuditService } from '../security/audit.service';
+import { AuthorizationService } from '../../security/authorization.service';
+import { AuditService } from '../../security/audit.service';
 
 @Controller('submissions')
 @UseGuards(AuthenticationGuard)

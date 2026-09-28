@@ -2,20 +2,20 @@ import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PageRecord } from '../persistence/schemas/page.schema';
-import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
-import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import { SiteRecord } from '../persistence/schemas/site.schema';
-import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
-import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
-import { TenantContext } from '../tenancy/tenant-context';
-import { PAGE_EXTENSION_PORT } from '../shared/page-extension-port';
-import { PAGE_NAVIGATION_PORT } from '../shared/page-navigation-port';
-import { PAGE_LAYOUT_PORT } from '../shared/page-layout-port';
-import { PAGE_COLLECTION_PORT } from '../shared/page-collection-port';
-import { PAGE_REUSABLE_PORT } from '../shared/page-reusable-port';
+import { PageRecord } from '../../persistence/schemas/page.schema';
+import { PageSeoSettingsRecord } from '../../persistence/schemas/page-seo-settings.schema';
+import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
+import { SiteRecord } from '../../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
+import { CustomDomainRecord } from '../../persistence/schemas/custom-domain.schema';
+import { TenantContext } from '../../tenancy/tenant-context';
+import { PAGE_EXTENSION_PORT } from '../../shared/page-extension-port';
+import { PAGE_NAVIGATION_PORT } from '../../shared/page-navigation-port';
+import { PAGE_LAYOUT_PORT } from '../../shared/page-layout-port';
+import { PAGE_COLLECTION_PORT } from '../../shared/page-collection-port';
+import { PAGE_REUSABLE_PORT } from '../../shared/page-reusable-port';
 import { PublicPageResolver } from './public-page.resolver';
-import { SiteUrlService } from '../modules/sites/site-url.service';
+import { SiteUrlService } from '../sites/site-url.service';
 
 type TestResolver = {
   siteModel: { find: () => ReturnType<typeof query> };

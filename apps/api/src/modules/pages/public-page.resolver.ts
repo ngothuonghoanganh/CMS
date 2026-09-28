@@ -27,34 +27,37 @@ import {
   normalizePagePath,
 } from '@payload/contracts';
 
-import { env } from '../config/env';
-import { platformLogger } from '../common/logging/platform-logger';
-import { CustomDomainRecord } from '../persistence/schemas/custom-domain.schema';
-import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
-import { PageSeoSettingsRecord } from '../persistence/schemas/page-seo-settings.schema';
+import { env } from '../../config/env';
+import { platformLogger } from '../../common/logging/platform-logger';
+import { CustomDomainRecord } from '../../persistence/schemas/custom-domain.schema';
+import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
+import { PageSeoSettingsRecord } from '../../persistence/schemas/page-seo-settings.schema';
 import {
   PageVersionRecord,
   type PageVersionDocument,
-} from '../persistence/schemas/page-version.schema';
-import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
-import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
-import { TenantContext } from '../tenancy/tenant-context';
-import { SiteUrlService } from '../modules/sites/site-url.service';
+} from '../../persistence/schemas/page-version.schema';
+import { SiteRecord, type SiteDocument } from '../../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
+import { TenantContext } from '../../tenancy/tenant-context';
+import { SiteUrlService } from '../sites/site-url.service';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
-} from '../shared/page-extension-port';
-import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
+} from '../../shared/page-extension-port';
+import {
+  PAGE_REUSABLE_PORT,
+  type PageReusablePort,
+} from '../../shared/page-reusable-port';
 import {
   PAGE_NAVIGATION_PORT,
   type PageNavigationPort,
-} from '../shared/page-navigation-port';
-import { collectNavigationPageIds } from '../shared/navigation-page-ids';
-import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../shared/page-layout-port';
+} from '../../shared/page-navigation-port';
+import { collectNavigationPageIds } from '../../shared/navigation-page-ids';
+import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../../shared/page-layout-port';
 import {
   PAGE_COLLECTION_PORT,
   type PageCollectionPort,
-} from '../shared/page-collection-port';
+} from '../../shared/page-collection-port';
 
 @Injectable()
 export class PublicPageResolver {

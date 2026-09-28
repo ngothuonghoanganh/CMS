@@ -11,10 +11,10 @@ const root = path.resolve(path.dirname(scriptPath), '..');
 const coreServiceFiles = [
   'apps/api/src/domain/workspace.service.ts',
   'apps/api/src/modules/sites/site.service.ts',
-  'apps/api/src/domain/page.service.ts',
-  'apps/api/src/domain/submission.service.ts',
+  'apps/api/src/modules/pages/page.service.ts',
+  'apps/api/src/modules/submissions/submission.service.ts',
   'apps/api/src/modules/assets/asset.service.ts',
-  'apps/api/src/domain/public-page.resolver.ts',
+  'apps/api/src/modules/pages/public-page.resolver.ts',
 ];
 
 // Core-owned infrastructure is protected separately from the service debt
@@ -34,10 +34,10 @@ const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
 const knownDebt = {
   'apps/api/src/domain/workspace.service.ts': [],
   'apps/api/src/modules/sites/site.service.ts': [],
-  'apps/api/src/domain/page.service.ts': [],
-  'apps/api/src/domain/submission.service.ts': [],
+  'apps/api/src/modules/pages/page.service.ts': [],
+  'apps/api/src/modules/submissions/submission.service.ts': [],
   'apps/api/src/modules/assets/asset.service.ts': [],
-  'apps/api/src/domain/public-page.resolver.ts': [],
+  'apps/api/src/modules/pages/public-page.resolver.ts': [],
 };
 
 const frozenDependencyRules = [
@@ -220,7 +220,7 @@ function runSelfTest() {
   }
 
   const extensionViolations = inspectSource(
-    'apps/api/src/domain/page.service.ts',
+    'apps/api/src/modules/pages/page.service.ts',
     "import { ExtensionRegistry } from '../extensions/extension-registry';\n",
   );
   if (
@@ -233,7 +233,7 @@ function runSelfTest() {
   }
 
   const directPageExtensionViolation = inspectSource(
-    'apps/api/src/domain/page.service.ts',
+    'apps/api/src/modules/pages/page.service.ts',
     "import { PageExtensionService } from '../extensions/page-extension.service';\n",
   );
   if (

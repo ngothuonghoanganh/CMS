@@ -19,7 +19,7 @@ import {
 import { IntegrationRecord } from '../persistence/schemas/integration.schema';
 import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
-import { findResolvedForm } from './open-composition-form';
+import { findResolvedForm } from '../modules/pages/open-composition-form';
 
 @Injectable()
 export class FormIntegrationBindingService {

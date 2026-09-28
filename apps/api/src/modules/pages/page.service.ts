@@ -66,37 +66,40 @@ import {
 
 import { assertExpectedVersionNumber, nextVersionNumber } from './versioning';
 import { PublicPageResolver } from './public-page.resolver';
-import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
+import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
 import {
   PageVersionRecord,
   type PageVersionDocument,
-} from '../persistence/schemas/page-version.schema';
-import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
-import { TenantContext } from '../tenancy/tenant-context';
+} from '../../persistence/schemas/page-version.schema';
+import { SiteRecord, type SiteDocument } from '../../persistence/schemas/site.schema';
+import { TenantContext } from '../../tenancy/tenant-context';
 import {
   CORE_EVENT_PUBLISHER,
   type CoreEventPublisher,
-} from '../shared/events/core-event-publisher';
+} from '../../shared/events/core-event-publisher';
 import {
   PAGE_PUBLISH_COMPATIBILITY,
   type PagePublishCompatibility,
-} from '../shared/page-publish-compatibility';
+} from '../../shared/page-publish-compatibility';
 import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
-} from '../shared/page-extension-port';
-import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
+} from '../../shared/page-extension-port';
+import {
+  PAGE_REUSABLE_PORT,
+  type PageReusablePort,
+} from '../../shared/page-reusable-port';
 import {
   PAGE_NAVIGATION_PORT,
   type PageNavigationPort,
-} from '../shared/page-navigation-port';
-import { collectNavigationPageIds } from '../shared/navigation-page-ids';
-import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../shared/page-layout-port';
+} from '../../shared/page-navigation-port';
+import { collectNavigationPageIds } from '../../shared/navigation-page-ids';
+import { PAGE_LAYOUT_PORT, type PageLayoutPort } from '../../shared/page-layout-port';
 import {
   PAGE_COLLECTION_PORT,
   type PageCollectionPort,
-} from '../shared/page-collection-port';
-import { SiteService } from '../modules/sites/site.service';
+} from '../../shared/page-collection-port';
+import { SiteService } from '../sites/site.service';
 import {
   PageCompositionError,
   clonePageCompositionForPage,

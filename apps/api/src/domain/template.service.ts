@@ -44,7 +44,7 @@ import { PageRecord } from '../persistence/schemas/page.schema';
 import { SiteRecord } from '../persistence/schemas/site.schema';
 import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
 import { LayoutExtensionService } from './layout-extension.service';
-import { PageService } from './page.service';
+import { PageService } from '../modules/pages/page.service';
 import { ReusableService } from '../modules/reusables/reusable.service';
 import { PageExtensionService } from '../extensions/page-extension.service';
 import { CollectionService } from './collection.service';

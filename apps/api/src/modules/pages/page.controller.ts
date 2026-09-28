@@ -33,14 +33,14 @@ import {
   type UpdatePageRequest,
 } from '@payload/contracts';
 
-import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
-import { CurrentPrincipal } from '../common/decorators/current-principal.decorator';
-import { AuthenticationGuard } from '../common/guards/authentication.guard';
-import { requireWorkspaceId } from '../common/guards/workspace-context';
-import type { PlatformRequest } from '../common/interfaces/request';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { CurrentPrincipal } from '../../common/decorators/current-principal.decorator';
+import { AuthenticationGuard } from '../../common/guards/authentication.guard';
+import { requireWorkspaceId } from '../../common/guards/workspace-context';
+import type { PlatformRequest } from '../../common/interfaces/request';
 import { PageService } from './page.service';
-import { AuthorizationService } from '../security/authorization.service';
-import { AuditService } from '../security/audit.service';
+import { AuthorizationService } from '../../security/authorization.service';
+import { AuditService } from '../../security/audit.service';
 
 @Controller('sites/:siteId/pages')
 @UseGuards(AuthenticationGuard)

@@ -43,7 +43,7 @@ import { ExtensionConnectionRecord } from '../persistence/schemas/extension-conn
 import { TenantExtensionRecord } from '../persistence/schemas/tenant-extension.schema';
 import { ExtensionRegistry } from './extension-registry';
 import { customExtensionManifest } from './custom-extension';
-import { collectExtensionPlacements } from '../domain/page-composition';
+import { collectExtensionPlacements } from '../modules/pages/page-composition';
 import type { PageExtensionPort } from '../shared/page-extension-port';
 
 type ProjectionSnapshot = {

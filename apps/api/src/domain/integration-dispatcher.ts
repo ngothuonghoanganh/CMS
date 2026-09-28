@@ -37,7 +37,7 @@ import type {
   DeliverySubmissionContext,
   IntegrationAdapter,
 } from './integrations/integration.types';
-import { findResolvedForm } from './open-composition-form';
+import { findResolvedForm } from '../modules/pages/open-composition-form';
 
 export const INTEGRATION_ADAPTERS = Symbol('INTEGRATION_ADAPTERS');
 export const DELIVERY_MAX_ATTEMPTS = 4;

@@ -5,16 +5,16 @@ import { BillingModule } from '../billing/billing.module';
 import { env } from '../config/env';
 import { AssetModule } from '../modules/assets/asset.module';
 import { NavigationModule } from '../modules/navigation/navigation.module';
-import { ReusablesModule } from '../modules/reusables/reusables.module';
-import { SiteModule } from '../modules/sites/site.module';
 import {
   PageController,
   PreviewPageController,
   PublicPageController,
   SitePagesController,
-} from './page.controller';
-import { PageService } from './page.service';
-import { PublicPageResolver } from './public-page.resolver';
+} from '../modules/pages/page.controller';
+import { PageService } from '../modules/pages/page.service';
+import { PublicPageResolver } from '../modules/pages/public-page.resolver';
+import { ReusablesModule } from '../modules/reusables/reusables.module';
+import { SiteModule } from '../modules/sites/site.module';
 import {
   CustomDomainController,
   PublicDomainController,
@@ -34,8 +34,8 @@ import { WorkspaceService } from './workspace.service';
 import {
   SubmissionController,
   PublicSubmissionController,
-} from './submission.controller';
-import { SubmissionService } from './submission.service';
+} from '../modules/submissions/submission.controller';
+import { SubmissionService } from '../modules/submissions/submission.service';
 import { IntegrationController } from './integration.controller';
 import { IntegrationDeliveryController } from './integration-delivery.controller';
 import { IntegrationService } from './integration.service';

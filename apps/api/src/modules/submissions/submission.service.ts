@@ -34,21 +34,21 @@ import {
 import {
   FormSubmissionRecord,
   type FormSubmissionDocument,
-} from '../persistence/schemas/form-submission.schema';
-import { PageRecord, type PageDocument } from '../persistence/schemas/page.schema';
+} from '../../persistence/schemas/form-submission.schema';
+import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
 import {
   PageVersionRecord,
   type PageVersionDocument,
-} from '../persistence/schemas/page-version.schema';
-import { SiteRecord, type SiteDocument } from '../persistence/schemas/site.schema';
-import { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
-import { TenantContext } from '../tenancy/tenant-context';
-import { platformLogger } from '../common/logging/platform-logger';
+} from '../../persistence/schemas/page-version.schema';
+import { SiteRecord, type SiteDocument } from '../../persistence/schemas/site.schema';
+import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
+import { TenantContext } from '../../tenancy/tenant-context';
+import { platformLogger } from '../../common/logging/platform-logger';
 import {
   SUBMISSION_SIDE_EFFECTS_PORT,
   type SubmissionSideEffectsPort,
-} from '../shared/submission-side-effects-port';
-import { findResolvedForm, type ResolvedFormNode } from './open-composition-form';
+} from '../../shared/submission-side-effects-port';
+import { findResolvedForm, type ResolvedFormNode } from '../pages/open-composition-form';
 
 type ResolvedForm = {
   site: SiteDocument;
