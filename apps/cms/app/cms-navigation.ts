@@ -87,6 +87,6 @@ export function navigationSections(
 
   return [
     ...(overview.length ? [{ items: overview, label: 'Overview' }] : []),
-    ...(primary.length ? [{ items: primary }] : []),
+    ...(primary.length ? [{ items: primary, label: 'Operations' }] : []),
   ];
 }
