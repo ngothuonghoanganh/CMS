@@ -8,7 +8,6 @@ import { LayoutExtensionService } from './layout-extension.service';
 import { NavigationService } from './navigation.service';
 import { PageService } from './page.service';
 import { PublicPageResolver } from './public-page.resolver';
-import { ReusableService } from './reusable.service';
 import { SiteService } from './site.service';
 import { PageRecord } from '../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../persistence/schemas/page-version.schema';
@@ -22,6 +21,7 @@ import {
   PAGE_EXTENSION_PORT,
   type PageExtensionPort,
 } from '../shared/page-extension-port';
+import { PAGE_REUSABLE_PORT, type PageReusablePort } from '../shared/page-reusable-port';
 import { TenantContext } from '../tenancy/tenant-context';
 
 const tenantId = 'tenant-a';
@@ -131,7 +131,10 @@ describe('PageService core dependency boundary', () => {
         { provide: SiteService, useValue: {} },
         { provide: NavigationService, useValue: {} },
         { provide: LayoutExtensionService, useValue: {} },
-        { provide: ReusableService, useValue: {} },
+        {
+          provide: PAGE_REUSABLE_PORT,
+          useValue: {} satisfies Partial<PageReusablePort>,
+        },
         { provide: CollectionService, useValue: {} },
         PageService,
       ],

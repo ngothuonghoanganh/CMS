@@ -81,6 +81,10 @@ import {
 } from './collection.controller';
 import { CollectionService } from './collection.service';
 import { ASSET_STORAGE, LocalFilesystemAssetStorageProvider } from './asset-storage';
+import {
+  PAGE_REUSABLE_PORT_PROVIDER,
+  PageReusableAdapter,
+} from './page-reusable.adapter';
 
 @Module({
   imports: [
@@ -147,6 +151,8 @@ import { ASSET_STORAGE, LocalFilesystemAssetStorageProvider } from './asset-stor
     SeoService,
     ReusableService,
     CollectionService,
+    PageReusableAdapter,
+    PAGE_REUSABLE_PORT_PROVIDER,
     { provide: ASSET_STORAGE, useClass: LocalFilesystemAssetStorageProvider },
     {
       provide: DOMAIN_VERIFICATION_RESOLVER,

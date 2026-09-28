@@ -40,7 +40,6 @@ const knownDebt = {
   'apps/api/src/domain/page.service.ts': [
     './navigation.service',
     './layout-extension.service',
-    './reusable.service',
     './collection.service',
   ],
   'apps/api/src/domain/submission.service.ts': [
