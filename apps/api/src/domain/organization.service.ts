@@ -49,7 +49,7 @@ import { TenantProvisioningService } from '../tenancy/tenant-provisioning.servic
 import { TenantResolver } from '../tenancy/tenant-resolver';
 import { AuthorizationService } from '../security/authorization.service';
 import { RoleService } from '../security/role.service';
-import { WorkspaceService } from './workspace.service';
+import { WorkspaceService } from '../modules/workspaces/workspace.service';
 
 /**
  * Compatibility adapter for the pre-Phase 10 `/organizations` routes.

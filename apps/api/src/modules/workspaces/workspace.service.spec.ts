@@ -2,10 +2,10 @@ import { ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { Model } from 'mongoose';
 
-import { TenantContext } from '../tenancy/tenant-context';
-import type { CoreEventPublisher } from '../shared/events/core-event-publisher';
+import { TenantContext } from '../../tenancy/tenant-context';
+import type { CoreEventPublisher } from '../../shared/events/core-event-publisher';
 import { WorkspaceService } from './workspace.service';
-import type { WorkspaceRecord } from '../persistence/schemas/workspace.schema';
+import type { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
 
 const tenantId = '00000000-0000-4000-8000-000000000001';
 const workspaceId = '00000000-0000-4000-8000-000000000002';

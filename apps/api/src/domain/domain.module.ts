@@ -15,6 +15,7 @@ import { PageService } from '../modules/pages/page.service';
 import { PublicPageResolver } from '../modules/pages/public-page.resolver';
 import { ReusablesModule } from '../modules/reusables/reusables.module';
 import { SiteModule } from '../modules/sites/site.module';
+import { WorkspaceModule } from '../modules/workspaces/workspace.module';
 import {
   CustomDomainController,
   PublicDomainController,
@@ -29,8 +30,6 @@ import { SeoController } from './seo.controller';
 import { SeoService } from './seo.service';
 import { TemplateController } from './template.controller';
 import { TemplateService } from './template.service';
-import { WorkspaceController } from './workspace.controller';
-import { WorkspaceService } from './workspace.service';
 import {
   SubmissionController,
   PublicSubmissionController,
@@ -102,6 +101,7 @@ import {
     NavigationModule,
     ReusablesModule,
     SiteModule,
+    WorkspaceModule,
   ],
   controllers: [
     PageController,
@@ -109,7 +109,6 @@ import {
     PublicPageController,
     SitePagesController,
     TemplateController,
-    WorkspaceController,
     SubmissionController,
     PublicSubmissionController,
     IntegrationController,
@@ -129,7 +128,6 @@ import {
     PageService,
     SubmissionService,
     TemplateService,
-    WorkspaceService,
     IntegrationService,
     FormIntegrationBindingService,
     IntegrationDispatcher,

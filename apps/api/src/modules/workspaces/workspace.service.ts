@@ -24,12 +24,12 @@ import {
 import {
   WorkspaceRecord,
   type WorkspaceDocument,
-} from '../persistence/schemas/workspace.schema';
+} from '../../persistence/schemas/workspace.schema';
 import {
   CORE_EVENT_PUBLISHER,
   type CoreEventPublisher,
-} from '../shared/events/core-event-publisher';
-import { TenantContext } from '../tenancy/tenant-context';
+} from '../../shared/events/core-event-publisher';
+import { TenantContext } from '../../tenancy/tenant-context';
 
 @Injectable()
 export class WorkspaceService {

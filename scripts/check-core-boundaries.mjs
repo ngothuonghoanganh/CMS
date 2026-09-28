@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(scriptPath), '..');
 // These are the core service files that Phase 1A is actively protecting. The
 // DomainModule remains a composition root until the graph is split gradually.
 const coreServiceFiles = [
-  'apps/api/src/domain/workspace.service.ts',
+  'apps/api/src/modules/workspaces/workspace.service.ts',
   'apps/api/src/modules/sites/site.service.ts',
   'apps/api/src/modules/pages/page.service.ts',
   'apps/api/src/modules/submissions/submission.service.ts',
@@ -32,7 +32,7 @@ const protectedCoreFiles = [...coreServiceFiles, ...coreInfrastructureFiles];
 // Every entry is an exact file plus exact import specifier. This debt must
 // shrink as Phase 1 progresses; it is not a category or wildcard exemption.
 const knownDebt = {
-  'apps/api/src/domain/workspace.service.ts': [],
+  'apps/api/src/modules/workspaces/workspace.service.ts': [],
   'apps/api/src/modules/sites/site.service.ts': [],
   'apps/api/src/modules/pages/page.service.ts': [],
   'apps/api/src/modules/submissions/submission.service.ts': [],
