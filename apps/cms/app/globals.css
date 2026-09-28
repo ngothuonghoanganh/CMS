@@ -9733,3 +9733,77 @@ body {
     transform: none !important;
   }
 }
+
+/* Admin resource pages need a final narrow-layout pass after their desktop
+ * grid declarations. Keep these selectors feature-scoped so the Builder and
+ * customer-facing surfaces retain their existing layout contracts. */
+.asset-library-layout > section.panel .list-row > div:nth-child(2) {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.asset-library-layout > section.panel .list-row > div:nth-child(2) strong,
+.asset-library-layout > section.panel .list-row > div:nth-child(2) .muted {
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+@media (max-width: 820px) {
+  .asset-library-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asset-folder-panel {
+    position: static;
+  }
+
+  .asset-library-layout > section.panel {
+    min-width: 0;
+  }
+
+  .asset-library-layout > section.panel .list-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .asset-library-layout > section.panel .list-row > div:nth-child(2) {
+    flex: 1 1 calc(100% - 3.5rem);
+  }
+
+  .asset-library-layout > section.panel .list-row > .form-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    padding-left: 3.5rem;
+  }
+
+  .asset-library-layout > section.panel .pagination-actions {
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 767px) {
+  .overview-next-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overview-sites-panel .list-row > span:first-child {
+    display: grid;
+    flex: 1 1 100%;
+    gap: 0.25rem;
+    width: 100%;
+  }
+
+  .overview-sites-panel .list-row > span:first-child strong,
+  .overview-sites-panel .list-row > span:first-child .muted {
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+}

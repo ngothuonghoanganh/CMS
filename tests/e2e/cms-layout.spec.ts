@@ -1,0 +1,81 @@
+import { expect, loginToCanonicalBuilder, test } from './fixtures/canonical-environment';
+
+async function expectViewportToContainDocument(page: import('@playwright/test').Page) {
+  const dimensions = await page.evaluate(() => ({
+    bodyScrollWidth: document.body.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+    documentScrollWidth: document.documentElement.scrollWidth,
+  }));
+
+  expect(dimensions.documentScrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+  expect(dimensions.bodyScrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+}
+
+test('CMS resource actions remain contained across narrow admin layouts', async ({
+  page,
+  canonicalEnvironment,
+}) => {
+  await loginToCanonicalBuilder(page, canonicalEnvironment);
+
+  const workspacePath = `/workspaces/${canonicalEnvironment.workspaceId}`;
+
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto(`${workspacePath}/sites`);
+  await expect(page.getByRole('heading', { name: 'Sites', exact: true })).toBeVisible();
+  await expectViewportToContainDocument(page);
+
+  const siteActions = await page
+    .locator('.sites-list-panel .site-row-actions')
+    .evaluateAll((elements) => {
+      const tableShell = document.querySelector('.sites-list-panel .table-shell');
+      const shellRight = tableShell?.getBoundingClientRect().right ?? 0;
+      return {
+        actions: elements.map((element) => element.getBoundingClientRect().right),
+        shellRight,
+      };
+    });
+  expect(siteActions.actions.length).toBeGreaterThan(0);
+  expect(Math.max(...siteActions.actions)).toBeLessThanOrEqual(
+    siteActions.shellRight + 1,
+  );
+
+  await page.goto(`${workspacePath}/assets`);
+  await expect(page.getByRole('heading', { name: 'Assets', exact: true })).toBeVisible();
+  await expectViewportToContainDocument(page);
+  await expect(page.locator('.asset-library-layout')).toHaveCSS(
+    'grid-template-columns',
+    '288px',
+  );
+
+  const assetBounds = await page.locator('.asset-library-layout').evaluate((layout) => {
+    const layoutRight = layout.getBoundingClientRect().right;
+    const buttons = [
+      ...layout.querySelectorAll(':scope > section.panel .list-row .form-actions button'),
+    ].map((element) => element.getBoundingClientRect().right);
+    return { buttons, layoutRight };
+  });
+  expect(assetBounds.buttons.length).toBeGreaterThan(0);
+  expect(Math.max(...assetBounds.buttons)).toBeLessThanOrEqual(
+    assetBounds.layoutRight + 1,
+  );
+
+  await page.goto(workspacePath);
+  await expect(
+    page.getByRole('heading', { name: 'Good morning', exact: true }),
+  ).toBeVisible();
+  await expectViewportToContainDocument(page);
+  await expect(page.locator('.overview-next-action')).toHaveCSS('display', 'inline-flex');
+
+  const overviewCopy = await page
+    .locator('.overview-sites-panel .list-row > span:first-child')
+    .evaluateAll((elements) =>
+      elements.map((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      })),
+    );
+  expect(overviewCopy.length).toBeGreaterThan(0);
+  for (const copy of overviewCopy) {
+    expect(copy.scrollWidth).toBeLessThanOrEqual(copy.clientWidth + 1);
+  }
+});

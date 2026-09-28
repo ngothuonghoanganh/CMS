@@ -39,3 +39,100 @@
 .cms-admin-root .cms-antd-table-cell-scrollbar {
   background: var(--cms-bg-surface-muted);
 }
+
+/* Resource tables keep their desktop column sizing by default. On a narrow
+ * management viewport, render the Sites rows as compact cards so actions stay
+ * inside the admin surface instead of being hidden by horizontal scrolling. */
+@media (max-width: 680px) {
+  .cms-admin-root .sites-list-panel .table-shell {
+    overflow: visible;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table,
+  .cms-admin-root .sites-list-panel .resource-table .cms-antd-table,
+  .cms-admin-root .sites-list-panel .resource-table .cms-antd-table-container,
+  .cms-admin-root .sites-list-panel .resource-table .cms-antd-table-content {
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table table,
+  .cms-admin-root .sites-list-panel .resource-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table table {
+    table-layout: auto;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table thead {
+    display: none;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    border: 1px solid var(--cms-border-default);
+    border-radius: var(--cms-radius-md);
+    padding: 0.8rem;
+    background: var(--cms-bg-surface);
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr > td {
+    display: block;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr > td.site-name-cell {
+    grid-column: 1 / -1;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr > td.site-status-cell {
+    align-self: center;
+    grid-column: 1;
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr > td:last-child {
+    align-self: center;
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .cms-admin-root .sites-list-panel .site-name-copy strong,
+  .cms-admin-root .sites-list-panel .site-name-copy span {
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .cms-admin-root .sites-list-panel .site-row-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 360px) {
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr > td.site-status-cell,
+  .cms-admin-root .sites-list-panel .resource-table tbody > tr > td:last-child {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .cms-admin-root .sites-list-panel .site-row-actions {
+    justify-content: flex-start;
+  }
+}

@@ -134,7 +134,7 @@ export default function OverviewPage() {
           Loading workspace overview…
         </div>
       ) : null}
-      <section className="panel">
+      <section className="panel overview-sites-panel">
         <div className="panel-heading">
           <div>
             <span className="eyebrow">Your work</span>
