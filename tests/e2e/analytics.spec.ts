@@ -63,13 +63,11 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
 
   await page
     .getByRole('navigation', { name: 'Primary navigation' })
-    .getByRole('link', { name: 'Settings', exact: true })
+    .getByRole('link', { name: 'Analytics', exact: true })
     .click();
-  await expect(
-    page.getByRole('heading', { name: 'Settings', exact: true }),
-  ).toBeVisible();
-  await page.locator('.settings-link-card').filter({ hasText: 'Analytics' }).click();
   await expect(page.getByRole('heading', { name: 'Analytics' })).toBeVisible();
+  await expect(page.locator('.analytics-line-chart')).toBeVisible();
+  await expect(page.locator('.analytics-ranking-chart').first()).toBeVisible();
   await expect(
     page.locator('.analytics-metric-card').nth(0).locator('strong'),
   ).toHaveText(/[1-9]/, { timeout: 15_000 });
@@ -77,4 +75,14 @@ test('tracks a public page view, CTA click and form conversion in CMS Analytics'
     page.locator('.analytics-metric-card').nth(2).locator('strong'),
   ).toHaveText(/[1-9]/);
   await expect(page.getByText('Top pages')).toBeVisible();
+
+  for (const width of [390, 768, 1024, 1440]) {
+    await page.setViewportSize({ height: 900, width });
+    await expect(page.locator('.analytics-line-chart')).toBeVisible();
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+  }
 });
