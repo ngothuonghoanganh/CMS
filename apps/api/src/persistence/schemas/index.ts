@@ -3,6 +3,7 @@ export { AssetFolderRecord, AssetFolderSchema } from './asset-folder.schema';
 export { AnalyticsEventRecord, AnalyticsEventSchema } from './analytics-event.schema';
 export { AuthSessionRecord, AuthSessionSchema } from './auth-session.schema';
 export { PageRecord, PageSchema } from './page.schema';
+export { PageDraftRecord, PageDraftSchema } from './page-draft.schema';
 export { PageVersionRecord, PageVersionSchema } from './page-version.schema';
 export { SiteRecord, SiteSchema } from './site.schema';
 export { ReusableRecord, ReusableSchema } from './reusable.schema';

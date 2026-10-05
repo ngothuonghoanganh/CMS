@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createEmptyPageCompositionV1,
   deserializePageCompositionV1,
+  PAGE_COMPOSITION_V1_MAX_NODES,
+  PAGE_COMPOSITION_V1_MAX_SERIALIZED_BYTES,
+  PAGE_COMPOSITION_V1_MAX_TREE_DEPTH,
   PageCompositionV1Schema,
   parsePageCompositionV1,
   serializePageCompositionV1,
@@ -34,6 +38,14 @@ const validComposition = {
 };
 
 describe('PageCompositionV1 contract', () => {
+  it('creates an empty canonical document', () => {
+    expect(createEmptyPageCompositionV1()).toEqual({
+      version: 1,
+      root: { id: 'root', type: 'root', props: {}, children: [] },
+      settings: {},
+    });
+  });
+
   it('accepts a canonical authoring document', () => {
     expect(parsePageCompositionV1(validComposition)).toEqual(validComposition);
   });
@@ -131,5 +143,90 @@ describe('PageCompositionV1 contract', () => {
 
     expect(parsed).toEqual(validComposition);
     expect(serializePageCompositionV1(parsed)).toBe(serialized);
+  });
+
+  it('rejects duplicate node ids and invalid behavior references', () => {
+    const duplicated = {
+      ...validComposition,
+      root: {
+        ...validComposition.root,
+        children: [validComposition.root.children[0], validComposition.root.children[0]],
+      },
+    };
+    expect(() => parsePageCompositionV1(duplicated)).toThrow();
+    expect(() =>
+      parsePageCompositionV1({
+        ...validComposition,
+        behaviorRefs: [{ id: 'action-1', kind: 'action', nodeId: 'missing' }],
+      }),
+    ).toThrow();
+    expect(() =>
+      parsePageCompositionV1({
+        ...validComposition,
+        behaviorRefs: [
+          { id: 'action-1', kind: 'action', nodeId: 'hero' },
+          { id: 'action-1', kind: 'action', nodeId: 'hero' },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('enforces node count, tree depth, serialized size and root identity', () => {
+    expect(() =>
+      parsePageCompositionV1({
+        ...validComposition,
+        root: { ...validComposition.root, id: 'other' },
+      }),
+    ).toThrow();
+    expect(() =>
+      parsePageCompositionV1({
+        ...validComposition,
+        root: {
+          ...validComposition.root,
+          children: Array.from({ length: PAGE_COMPOSITION_V1_MAX_NODES }, (_, index) => ({
+            id: `section-${index}`,
+            type: 'section',
+            props: {},
+            children: [],
+          })),
+        },
+      }),
+    ).toThrow();
+    let deepNode: { id: string; type: string; props: object; children: unknown[] } = {
+      id: 'leaf',
+      type: 'section',
+      props: {},
+      children: [],
+    };
+    for (let depth = 0; depth < PAGE_COMPOSITION_V1_MAX_TREE_DEPTH - 1; depth += 1) {
+      deepNode = {
+        id: `level-${depth}`,
+        type: 'section',
+        props: {},
+        children: [deepNode],
+      };
+    }
+    expect(() =>
+      parsePageCompositionV1({
+        ...validComposition,
+        root: { ...validComposition.root, children: [deepNode] },
+      }),
+    ).toThrow();
+    expect(() =>
+      parsePageCompositionV1({
+        ...validComposition,
+        root: {
+          ...validComposition.root,
+          children: [
+            {
+              id: 'large',
+              type: 'section',
+              props: { text: 'x'.repeat(PAGE_COMPOSITION_V1_MAX_SERIALIZED_BYTES) },
+              children: [],
+            },
+          ],
+        },
+      }),
+    ).toThrow();
   });
 });

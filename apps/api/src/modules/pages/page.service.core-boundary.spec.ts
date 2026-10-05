@@ -4,6 +4,7 @@ import { createDefaultSiteDesignSystem, type PagePayload } from '@payload/contra
 import { describe, expect, it, vi } from 'vitest';
 
 import { PageService } from './page.service';
+import { PageDraftService } from './page-draft.service';
 import { SiteService } from '../sites/site.service';
 import { PageRecord } from '../../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
@@ -112,6 +113,34 @@ function createService(overrides: Record<string, unknown> = {}) {
 }
 
 describe('PageService core dependency boundary', () => {
+  it('removes a newly created Page if canonical Draft initialization fails', async () => {
+    const page = pageDocument({ id: pageId, name: 'Canonical', path: '/canonical' });
+    const drafts = {
+      createInitialDraft: vi.fn().mockRejectedValue(new Error('draft insert failed')),
+      removeDraft: vi.fn().mockResolvedValue(undefined),
+    };
+    const { service } = createService({
+      pageModel: {
+        findOne: vi.fn(() => query(null)),
+        create: vi.fn().mockResolvedValue(page),
+      },
+      siteModel: { findOne: vi.fn(() => query({ _id: siteId, workspaceId })) },
+      sites: { ensureHomePage: vi.fn().mockResolvedValue(undefined) },
+      drafts,
+      events: { publish: vi.fn() },
+    });
+
+    await expect(
+      service.createCanonical(
+        siteId,
+        { name: 'Canonical', path: '/canonical' },
+        workspaceId,
+      ),
+    ).rejects.toThrow('draft insert failed');
+    expect(drafts.removeDraft).toHaveBeenCalledOnce();
+    expect(page.deleteOne).toHaveBeenCalledOnce();
+  });
+
   it('is resolvable without QuotaService or WorkflowModule providers', async () => {
     const tenantContext = createTenantContext();
     const eventPublisher: CoreEventPublisher = {
@@ -129,6 +158,7 @@ describe('PageService core dependency boundary', () => {
         },
         { provide: TenantContext, useValue: tenantContext },
         { provide: SiteService, useValue: {} },
+        { provide: PageDraftService, useValue: {} },
         { provide: PAGE_NAVIGATION_PORT, useValue: {} },
         { provide: PAGE_LAYOUT_PORT, useValue: {} },
         {

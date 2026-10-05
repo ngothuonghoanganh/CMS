@@ -40,6 +40,7 @@ import {
   normalizePagePath,
   normalizeUrlSlug,
   type CreatePageRequest,
+  type CreateCanonicalPageRequest,
   type CreatePageVersionRequest,
   type DuplicatePageRequest,
   type Page,
@@ -99,6 +100,7 @@ import {
   type PageCollectionPort,
 } from '../../shared/page-collection-port';
 import { SiteService } from '../sites/site.service';
+import { PageDraftService } from './page-draft.service';
 import {
   PageCompositionError,
   clonePageCompositionForPage,
@@ -119,6 +121,7 @@ export class PageService {
     private readonly pageExtensions: PageExtensionPort,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(SiteService) private readonly sites: SiteService,
+    @Inject(PageDraftService) private readonly drafts: PageDraftService,
     @Inject(PAGE_NAVIGATION_PORT) private readonly navigation: PageNavigationPort,
     @Inject(PAGE_LAYOUT_PORT) private readonly layoutExtensions: PageLayoutPort,
     @Inject(PAGE_REUSABLE_PORT) private readonly reusables: PageReusablePort,
@@ -127,6 +130,50 @@ export class PageService {
     @Inject(PAGE_PUBLISH_COMPATIBILITY)
     private readonly pagePublishCompatibility?: PagePublishCompatibility,
   ) {}
+
+  async createCanonical(
+    siteId: string,
+    input: CreateCanonicalPageRequest,
+    workspaceId: string,
+  ): Promise<Page> {
+    const site = await this.requireSite(siteId, workspaceId);
+    await this.sites.ensureHomePage(site);
+    const pageId = randomUUID();
+    const path = this.requirePath(
+      input.path ?? `/${normalizeUrlSlug(input.name) || `page-${pageId.slice(-12)}`}`,
+    );
+    await this.assertStaticPathDoesNotMatchDynamic(workspaceId, siteId, path);
+    let page: PageDocument;
+    try {
+      page = await this.pageModel.create({
+        _id: pageId,
+        workspaceId: site.workspaceId,
+        siteId,
+        name: input.name,
+        ...(input.description ? { description: input.description } : {}),
+        path,
+        kind: input.kind ?? 'standard',
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw this.duplicatePath();
+      throw error;
+    }
+    try {
+      await this.drafts.createInitialDraft(page);
+      await this.events.publish('page.created', {
+        tenantId: this.tenantContext.require().id,
+        pageId,
+        workspaceId: site.workspaceId,
+        siteId,
+        occurredAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      await this.drafts.removeDraft(pageId, siteId, site.workspaceId);
+      await page.deleteOne().exec();
+      throw error;
+    }
+    return this.toPageContract(page);
+  }
 
   async create(
     siteId: string,
@@ -473,6 +520,7 @@ export class PageService {
     await this.pageExtensions.removeAllForPage(pageId, workspaceId);
     await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
     await page.deleteOne();
+    await this.drafts.removeDraft(pageId, page.siteId, workspaceId);
   }
 
   async duplicate(

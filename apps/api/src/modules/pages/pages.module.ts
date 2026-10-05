@@ -49,6 +49,7 @@ import {
   SitePagesController,
 } from './page.controller';
 import { PageService } from './page.service';
+import { PageDraftModule } from './page-draft.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { PageService } from './page.service';
     TenantModule,
     NavigationModule,
     SiteModule,
+    PageDraftModule,
   ],
   controllers: [PageController, PreviewPageController, SitePagesController],
   providers: [

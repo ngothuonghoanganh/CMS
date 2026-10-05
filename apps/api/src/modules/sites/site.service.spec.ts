@@ -119,6 +119,9 @@ describe('SiteService core creation boundary', () => {
     internals.siteModel = { create: vi.fn().mockResolvedValue(record) };
     internals.pageModel = { deleteMany: vi.fn().mockReturnValue(pageDelete) };
     internals.versionModel = { deleteMany: vi.fn().mockReturnValue(versionDelete) };
+    internals.drafts = {
+      removeDraftsForSite: vi.fn().mockResolvedValue(undefined),
+    };
     internals.requireWorkspace = vi.fn().mockResolvedValue(undefined);
     internals.ensureHomePage = vi.fn().mockResolvedValue(undefined);
     internals.registerPublicRoute = vi

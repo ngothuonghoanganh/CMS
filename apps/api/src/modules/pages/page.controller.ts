@@ -11,10 +11,13 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { z } from 'zod';
 import {
+  CreateCanonicalPageRequestSchema,
   CreatePageRequestSchema,
   CreatePageVersionRequestSchema,
   DuplicatePageRequestSchema,
@@ -23,6 +26,8 @@ import {
   PaginationQuerySchema,
   PublishPageRequestSchema,
   RestorePageVersionRequestSchema,
+  SavePageDraftRequestSchema,
+  type SavePageDraftRequest,
   type CreatePageRequest,
   type CreatePageVersionRequest,
   type DuplicatePageRequest,
@@ -39,8 +44,14 @@ import { AuthenticationGuard } from '../../common/guards/authentication.guard';
 import { requireWorkspaceId } from '../../common/guards/workspace-context';
 import type { PlatformRequest } from '../../common/interfaces/request';
 import { PageService } from './page.service';
+import { PageDraftService } from './page-draft.service';
 import { AuthorizationService } from '../../security/authorization.service';
 import { AuditService } from '../../security/audit.service';
+
+const CreatePageBodySchema = z.union([
+  CreatePageRequestSchema,
+  CreateCanonicalPageRequestSchema,
+]);
 
 @Controller('sites/:siteId/pages')
 @UseGuards(AuthenticationGuard)
@@ -54,17 +65,25 @@ export class SitePagesController {
   @Post()
   async create(
     @Param('siteId') siteId: string,
-    @Body(new ZodValidationPipe(CreatePageRequestSchema)) input: CreatePageRequest,
+    @Body(new ZodValidationPipe(CreatePageBodySchema))
+    input: CreatePageRequest | z.infer<typeof CreateCanonicalPageRequestSchema>,
     @CurrentPrincipal() principal: PlatformRequest['auth'],
   ) {
     await this.authorization.assertCan(principal, 'page.create');
     await this.authorization.assertCan(principal, 'page.design');
-    const result = await this.pageService.create(
-      siteId,
-      input,
-      requireWorkspaceId(principal),
-      true,
-    );
+    const result =
+      'payload' in input
+        ? await this.pageService.create(
+            siteId,
+            input,
+            requireWorkspaceId(principal),
+            true,
+          )
+        : await this.pageService.createCanonical(
+            siteId,
+            input,
+            requireWorkspaceId(principal),
+          );
     await this.audit
       .record({
         actorType: 'user',
@@ -95,9 +114,30 @@ export class SitePagesController {
 export class PageController {
   constructor(
     @Inject(PageService) private readonly pageService: PageService,
+    @Inject(PageDraftService) private readonly drafts: PageDraftService,
     @Inject(AuthorizationService) private readonly authorization: AuthorizationService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+
+  @Get(':pageId/draft')
+  async getDraft(
+    @Param('pageId') pageId: string,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.read');
+    return this.drafts.loadDraft(pageId, requireWorkspaceId(principal));
+  }
+
+  @Put(':pageId/draft')
+  async saveDraft(
+    @Param('pageId') pageId: string,
+    @Body(new ZodValidationPipe(SavePageDraftRequestSchema)) input: SavePageDraftRequest,
+    @CurrentPrincipal() principal: PlatformRequest['auth'],
+  ) {
+    await this.authorization.assertCan(principal, 'page.update');
+    await this.authorization.assertCan(principal, 'page.design');
+    return this.drafts.saveDraft(pageId, input, requireWorkspaceId(principal));
+  }
 
   @Get(':pageId')
   async get(

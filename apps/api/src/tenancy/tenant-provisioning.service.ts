@@ -61,6 +61,10 @@ import {
 } from '../persistence/schemas/integration.schema';
 import { PageRecord, PageSchema } from '../persistence/schemas/page.schema';
 import {
+  PageDraftRecord,
+  PageDraftSchema,
+} from '../persistence/schemas/page-draft.schema';
+import {
   PageSeoSettingsRecord,
   PageSeoSettingsSchema,
 } from '../persistence/schemas/page-seo-settings.schema';
@@ -126,6 +130,7 @@ const tenantMigrations = [
   [IntegrationDeliveryRecord, IntegrationDeliverySchema],
   [IntegrationRecord, IntegrationSchema],
   [PageRecord, PageSchema],
+  [PageDraftRecord, PageDraftSchema],
   [PageSeoSettingsRecord, PageSeoSettingsSchema],
   [PageVersionRecord, PageVersionSchema],
   [SiteRecord, SiteSchema],

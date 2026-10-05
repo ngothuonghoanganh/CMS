@@ -14,6 +14,7 @@ import {
 import { CoreSiteReusableAdapter } from './core-site-reusable.adapter';
 import { SiteService } from './site.service';
 import { SiteUrlService } from './site-url.service';
+import { PageDraftModule } from '../pages/page-draft.module';
 import {
   SITE_REUSABLE_IMPLEMENTATION,
   SITE_REUSABLE_PORT,
@@ -28,6 +29,7 @@ import {
     TenantModelsModule,
     TenantModule,
     NavigationModule,
+    PageDraftModule,
   ],
   controllers: [SiteController],
   providers: [

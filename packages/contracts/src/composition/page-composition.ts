@@ -163,6 +163,14 @@ export function parsePageCompositionV1(input: unknown): PageCompositionV1 {
   return PageCompositionV1Schema.parse(input);
 }
 
+export function createEmptyPageCompositionV1(): PageCompositionV1 {
+  return parsePageCompositionV1({
+    version: 1,
+    root: { id: 'root', type: 'root', props: {}, children: [] },
+    settings: {},
+  });
+}
+
 export function serializePageCompositionV1(input: unknown): string {
   return JSON.stringify(parsePageCompositionV1(input));
 }

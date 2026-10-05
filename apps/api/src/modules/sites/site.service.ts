@@ -48,6 +48,7 @@ import { SiteRecord, type SiteDocument } from '../../persistence/schemas/site.sc
 import { WorkspaceRecord } from '../../persistence/schemas/workspace.schema';
 import { PageRecord, type PageDocument } from '../../persistence/schemas/page.schema';
 import { PageVersionRecord } from '../../persistence/schemas/page-version.schema';
+import { PageDraftService } from '../pages/page-draft.service';
 import { SiteUrlService } from './site-url.service';
 import { TenantContext } from '../../tenancy/tenant-context';
 import { TenantResolver } from '../../tenancy/tenant-resolver';
@@ -71,6 +72,7 @@ export class SiteService {
     private readonly pageModel: Model<PageRecord>,
     @InjectModel(PageVersionRecord.name)
     private readonly versionModel: Model<PageVersionRecord>,
+    @Inject(PageDraftService) private readonly drafts: PageDraftService,
     @Inject(SiteUrlService) private readonly siteUrls: SiteUrlService,
     @Inject(TenantContext) private readonly tenantContext: TenantContext,
     @Inject(TenantResolver) private readonly tenantResolver: TenantResolver,
@@ -103,6 +105,7 @@ export class SiteService {
       // compensating cleanup, so a failed bootstrap cannot leave a site that
       // violates the homepage invariant.
       await this.versionModel.deleteMany({ siteId: record._id.toString() }).exec();
+      await this.drafts.removeDraftsForSite(record._id.toString(), workspaceId);
       await this.pageModel.deleteMany({ siteId: record._id.toString() }).exec();
       await record.deleteOne().exec();
       throw error;
@@ -529,19 +532,27 @@ export class SiteService {
       path: '/',
       kind: 'system',
     });
-    await this.versionModel.create({
-      _id: versionId,
-      workspaceId: site.workspaceId,
-      siteId,
-      landingPageId: pageId,
-      versionNumber: 1,
-      payload,
-    });
-    home.currentDraftVersionId = versionId;
-    await home.save();
-    site.homePageId = pageId;
-    await site.save();
-    return home;
+    try {
+      await this.versionModel.create({
+        _id: versionId,
+        workspaceId: site.workspaceId,
+        siteId,
+        landingPageId: pageId,
+        versionNumber: 1,
+        payload,
+      });
+      await this.drafts.createInitialDraft(home);
+      home.currentDraftVersionId = versionId;
+      await home.save();
+      site.homePageId = pageId;
+      await site.save();
+      return home;
+    } catch (error) {
+      await this.drafts.removeDraft(pageId, siteId, site.workspaceId);
+      await this.versionModel.deleteMany({ landingPageId: pageId }).exec();
+      await home.deleteOne().exec();
+      throw error;
+    }
   }
 
   /** Read-only homepage lookup used by public delivery and URL generation. */

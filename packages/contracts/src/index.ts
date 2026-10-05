@@ -5146,6 +5146,7 @@ export * from './page-runtime';
 export * from './style-registry';
 export * from './page/page-node';
 export * from './composition/page-composition';
+export * from './page/page-draft';
 export * from './publish/release';
 export * from './legacy/page-adapter';
 
