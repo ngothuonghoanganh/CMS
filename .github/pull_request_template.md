@@ -1,22 +1,24 @@
-## Summary
+## Changed
 
-<!-- What changed and why? -->
+## Why
 
-## Governance
-
-- [ ] Read `AGENTS.md`
-- [ ] Read `docs/ARCHITECTURE.md`
-- [ ] Change belongs to `CURRENT_PHASE`
-- [ ] No frozen module expanded unintentionally
-- [ ] No duplicate source of truth introduced
-- [ ] Tests added/updated
-- [ ] Lint/typecheck/test/build status reported
-- [ ] Architecture doc updated only if architecture actually changed
+## Files
 
 ## Tests
 
-<!-- List commands and results. -->
+<!-- List every gate you ran and its result. Never mark an unrun gate as passing. -->
 
-## Architecture impact / remaining issues
+- [ ] `pnpm format:check`
+- [ ] `pnpm lint`
+- [ ] `pnpm typecheck`
+- [ ] `pnpm test:unit`
+- [ ] `pnpm test:int`
+- [ ] `pnpm build`
+- [ ] `pnpm test:e2e`
+- [ ] `pnpm governance`
 
-<!-- Describe boundary impact, blockers or follow-ups. -->
+## Architecture impact
+
+<!-- Name the ADR in docs/ARCHITECTURE.md this follows or changes. -->
+
+## Remaining issues
