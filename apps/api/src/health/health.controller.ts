@@ -1,37 +1,23 @@
-import {
-  Controller,
-  Get,
-  Headers,
-  HttpCode,
-  HttpStatus,
-  ServiceUnavailableException,
-} from '@nestjs/common';
-
-import type { HealthResponse } from '@payload/contracts';
-
-// NestJS emitDecoratorMetadata needs the runtime class token for constructor injection.
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { HealthService } from './health.service';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { healthResponseSchema, type HealthResponse } from '@plp/contracts';
+import type { Connection } from 'mongoose';
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly healthService: HealthService) {}
+  constructor(@InjectConnection() private readonly connection: Connection) {}
 
-  @Get('live')
-  @HttpCode(HttpStatus.OK)
-  live(@Headers('x-request-id') requestId?: string): HealthResponse {
-    return this.healthService.getLiveness(requestId);
-  }
-
-  @Get('ready')
-  @HttpCode(HttpStatus.OK)
-  ready(@Headers('x-request-id') requestId?: string): HealthResponse {
-    const response = this.healthService.getReadiness(requestId);
-
-    if (response.status === 'degraded') {
-      throw new ServiceUnavailableException('Database is not ready');
+  @Get()
+  async check(): Promise<HealthResponse> {
+    const db = this.connection.db;
+    if (!db) {
+      throw new ServiceUnavailableException('Database connection is not ready');
     }
-
-    return response;
+    try {
+      await db.admin().ping();
+    } catch (error) {
+      throw new ServiceUnavailableException('Database ping failed', { cause: error });
+    }
+    return healthResponseSchema.parse({ status: 'ok', mongo: 'up' });
   }
 }

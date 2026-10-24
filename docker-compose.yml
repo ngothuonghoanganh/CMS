@@ -1,20 +1,62 @@
+# Local and CI infrastructure. Start with `pnpm infra:up`; the apps run on the host.
+name: plp
+
 services:
-  mongodb:
-    image: mongo:8.0
-    restart: unless-stopped
+  mongo:
+    image: mongo:9.0.4
+    # Single-node replica set: publish and rollback need multi-document transactions.
+    # Port 27117 avoids clashing with a native mongod on 27017; the member host matches the published port.
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27117']
     ports:
-      # Keep the host port isolated from other local MongoDB projects.
-      - '27018:27017'
-    environment:
-      MONGO_INITDB_DATABASE: payload_landing_platform
+      - '27117:27117'
     volumes:
-      - payload_mongodb_data:/data/db
+      - mongo-data:/data/db
     healthcheck:
       test:
-        ['CMD-SHELL', 'mongosh --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1']
+        - CMD
+        - mongosh
+        - --port
+        - '27117'
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27117' }] }).ok }"
       interval: 5s
-      timeout: 5s
-      retries: 10
+      timeout: 10s
+      retries: 30
+      start_period: 5s
+
+  storage:
+    image: rustfs/rustfs:1.0.3
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-plp-dev-access}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-plp-dev-secret}
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '9100:9000'
+      - '9101:9001'
+    volumes:
+      - storage-data:/data
+
+  storage-init:
+    image: amazon/aws-cli:2.38.5
+    depends_on:
+      - storage
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-plp-dev-access}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-plp-dev-secret}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      BUCKET: ${S3_BUCKET:-plp-assets}
+    entrypoint: ['/bin/sh', '-c']
+    # Creates the asset bucket and makes only the public/ prefix anonymously readable.
+    command:
+      - |
+        set -e
+        s3() { aws --endpoint-url http://storage:9000 "$$@"; }
+        for i in $$(seq 1 60); do s3 s3api list-buckets >/dev/null 2>&1 && break; sleep 1; done
+        s3 s3api head-bucket --bucket "$$BUCKET" 2>/dev/null || s3 s3api create-bucket --bucket "$$BUCKET"
+        s3 s3api put-bucket-policy --bucket "$$BUCKET" --policy "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::$$BUCKET/public/*\"]}]}"
+        echo "bucket $$BUCKET ready"
 
 volumes:
-  payload_mongodb_data:
+  mongo-data:
+  storage-data:

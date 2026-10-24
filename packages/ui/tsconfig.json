@@ -1,0 +1,7 @@
+{
+  "extends": "@plp/config/tsconfig.node.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src"]
+}

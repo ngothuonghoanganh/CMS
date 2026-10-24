@@ -1,0 +1,73 @@
+/*
+ * Admin design tokens. Source: docs/design/plp-ux-v1 (screens 01–08).
+ * Customer websites never use these tokens; site themes live in @plp/sections.
+ */
+:root {
+  /* Text */
+  --color-ink: #15171c;
+  --color-ink-2: #3c424e;
+  --color-muted: #5e6573;
+  --color-subtle: #8a91a0;
+
+  /* Surfaces and borders */
+  --color-surface: #ffffff;
+  --color-canvas: #f5f6f8;
+  --color-surface-subtle: #fafbfc;
+  --color-hover: #f0f2f5;
+  --color-border: #e2e5ea;
+  --color-border-strong: #cdd2da;
+  --color-divider: #eef0f3;
+
+  /* Primary */
+  --color-primary: #4338ca;
+  --color-primary-ink: #3730a3;
+  --color-primary-pressed: #26208a;
+  --color-primary-soft: #eef0ff;
+  --color-focus-ring: #e0e2ff;
+  --color-on-primary: #ffffff;
+
+  /* Status */
+  --color-success: #12a06a;
+  --color-success-ink: #0b6b45;
+  --color-success-soft: #e2f4ea;
+  --color-warning: #e39a12;
+  --color-warning-ink: #8a5300;
+  --color-warning-soft: #fff8eb;
+  --color-warning-border: #f3e2bd;
+  --color-warning-icon: #c27803;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdebe9;
+  --color-neutral-badge-bg: #eceef2;
+  --color-neutral-badge-ink: #474e5c;
+
+  /* Radius */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-pill: 999px;
+
+  /* Typography: the font variables are set by next/font in the admin layout */
+  --font-sans: var(--font-be-vietnam-pro), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-body-sm: 13px;
+  --text-body: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: 30px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(21, 23, 28, 0.08);
+  --shadow-dialog: 0 24px 64px rgba(21, 23, 28, 0.28);
+
+  /* Interaction */
+  --target-min: 44px;
+  --focus-outline: 2px solid var(--color-primary);
+  --focus-offset: 2px;
+}

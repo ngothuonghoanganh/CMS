@@ -1,14 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "allowJs": false,
-    "incremental": true,
-    "jsx": "preserve",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "noEmit": true,
-    "plugins": [{ "name": "next" }]
-  },
-  "include": ["next-env.d.ts", ".next/types/**/*.ts", "**/*.ts", "**/*.tsx"],
+  "extends": "@plp/config/tsconfig.nextjs.json",
+  "include": ["next-env.d.ts", "src", "next.config.ts", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }

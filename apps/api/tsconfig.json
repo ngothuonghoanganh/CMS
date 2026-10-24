@@ -1,10 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@plp/config/tsconfig.node.json",
   "compilerOptions": {
-    "allowSyntheticDefaultImports": true,
+    "rootDir": ".",
     "outDir": "dist",
-    "rootDir": "src"
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "declaration": false,
+    "declarationMap": false
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+  "include": ["src", "test", "vitest.config.ts", "vitest.int.config.ts"]
 }
