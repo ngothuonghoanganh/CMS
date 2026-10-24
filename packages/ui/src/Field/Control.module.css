@@ -1,0 +1,129 @@
+/* Shared look of text inputs, textareas and selects: 44px, border-strong, radius 10. */
+.control {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--target-min);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  transition:
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+
+.control:focus-within {
+  border-color: var(--color-primary);
+  box-shadow:
+    0 0 0 1px var(--color-primary),
+    0 0 0 4px var(--color-focus-ring);
+}
+
+.warning {
+  border-color: var(--color-warning);
+}
+
+.danger,
+.danger:focus-within {
+  border-color: var(--color-danger);
+}
+
+.danger:focus-within {
+  box-shadow:
+    0 0 0 1px var(--color-danger),
+    0 0 0 4px var(--color-danger-soft);
+}
+
+.control:has(:disabled) {
+  background: var(--color-canvas);
+}
+
+/* The native element is borderless inside the frame; the frame shows focus. */
+.native {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-body);
+}
+
+.native:focus-visible {
+  outline: none;
+}
+
+.native::placeholder {
+  color: var(--color-muted);
+  opacity: 1;
+}
+
+.native:disabled {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.mono .native {
+  font-family: var(--font-mono);
+  font-size: var(--text-body-sm);
+}
+
+.prefix {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 10px;
+  border-right: 1px solid var(--color-border);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-body-sm);
+  white-space: nowrap;
+}
+
+.leadingIcon {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding-left: 12px;
+  color: var(--color-muted);
+}
+
+.leadingIcon + .native {
+  padding-left: 8px;
+}
+
+.textarea {
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.textareaFrame {
+  min-height: 88px;
+}
+
+.select {
+  appearance: none;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.selectChevron {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  display: flex;
+  color: var(--color-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}

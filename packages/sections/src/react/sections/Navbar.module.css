@@ -1,0 +1,44 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.brand {
+  min-width: 0;
+  color: var(--plp-link);
+  font-family: var(--plp-font-heading);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.logo {
+  display: block;
+  width: auto;
+  height: 40px;
+  max-width: 180px;
+  object-fit: contain;
+}
+
+/* Two classes so the compact size wins over the shared button style. */
+.bar .cta {
+  flex: none;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+@container plp-page (min-width: 768px) {
+  .brand {
+    font-size: 19px;
+  }
+
+  .logo {
+    height: 44px;
+    max-width: 220px;
+  }
+}

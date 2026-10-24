@@ -1,0 +1,21 @@
+.card {
+  box-sizing: border-box;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.padding-none {
+  padding: 0;
+  overflow: hidden;
+}
+
+.padding-md {
+  padding: 18px 20px;
+}
+
+.padding-lg {
+  padding: 22px 24px;
+}

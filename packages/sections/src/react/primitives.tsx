@@ -94,9 +94,16 @@ export interface CtaButtonProps {
   /** Content path of the CTA object, e.g. "primaryCta". */
   path: string;
   cta: Cta;
-  variant?: 'primary' | 'secondary';
+  /** `link` draws a small text link (footer links) instead of a button. */
+  variant?: 'primary' | 'secondary' | 'link';
   className?: string | undefined;
 }
+
+const ctaVariantClasses = {
+  primary: [frame.button, frame.buttonPrimary],
+  secondary: [frame.button, frame.buttonSecondary],
+  link: [frame.textLink],
+} as const;
 
 /**
  * A call-to-action button. Unused buttons (empty label) are not rendered. In edit mode the label is
@@ -113,13 +120,7 @@ export function CtaButton({
   if (!isCtaUsed(cta)) {
     return null;
   }
-  const classes = [
-    frame.button,
-    variant === 'primary' ? frame.buttonPrimary : frame.buttonSecondary,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const classes = [...ctaVariantClasses[variant], className].filter(Boolean).join(' ');
   if (ctx.mode === 'edit') {
     return (
       <span className={classes}>
@@ -128,7 +129,7 @@ export function CtaButton({
           sectionId={sectionId}
           path={`${path}.label`}
           value={cta.label}
-          placeholder="Chữ trên nút"
+          placeholder={variant === 'link' ? 'Chữ của liên kết' : 'Chữ trên nút'}
         />
       </span>
     );

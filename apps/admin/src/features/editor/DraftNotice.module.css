@@ -1,0 +1,28 @@
+.url {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.restore {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-warning-strong-ink);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.restore:hover {
+  background: var(--color-warning-badge-bg);
+}
+
+.dialogNote {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}

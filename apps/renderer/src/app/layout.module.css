@@ -1,0 +1,27 @@
+/* Off screen until focused, then shown above everything (including the preview banner). */
+.skipLink {
+  position: absolute;
+  top: 0;
+  left: 16px;
+  z-index: 1100;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 0 0 10px 10px;
+  background: var(--renderer-paper);
+  color: var(--renderer-ink);
+  font-family: var(--renderer-font);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transform: translateY(-100%);
+}
+
+.skipLink:focus {
+  transform: none;
+  box-shadow: 0 2px 10px var(--renderer-shadow);
+  outline: 3px solid var(--renderer-brand);
+  outline-offset: 2px;
+}

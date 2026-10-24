@@ -1,0 +1,90 @@
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.label {
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.hostRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.host {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-primary-ink);
+  text-decoration: none;
+}
+
+.link:hover {
+  color: var(--color-primary-pressed);
+  text-decoration: underline;
+}
+
+.attention {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-body);
+}
+
+.attention li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.changesDot,
+.blockingDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+}
+
+.changesDot {
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+}
+
+.blockingDot {
+  border-radius: 2px;
+  background: var(--color-danger);
+}
+
+.ok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--color-success-ink);
+}

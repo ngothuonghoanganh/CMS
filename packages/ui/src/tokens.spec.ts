@@ -36,6 +36,20 @@ const textPairs: ReadonlyArray<readonly [string, string]> = [
   ['color-warning-ink', 'color-warning-soft'],
   ['color-danger', 'color-danger-soft'],
   ['color-neutral-badge-ink', 'color-neutral-badge-bg'],
+  // Added with the base components (badges, callouts, cards, buttons, segmented controls).
+  ['color-warning-ink', 'color-warning-badge-bg'],
+  ['color-warning-strong-ink', 'color-warning-soft'],
+  ['color-danger-ink', 'color-danger-soft'],
+  ['color-success-strong-ink', 'color-success-soft'],
+  ['color-primary-pressed', 'color-primary-soft'],
+  ['color-primary-ink', 'color-primary-tint'],
+  ['color-on-primary', 'color-danger'],
+  ['color-on-primary', 'color-danger-ink'],
+  ['color-on-primary', 'color-primary-ink'],
+  ['color-ink-2', 'color-hover'],
+  ['color-muted', 'color-hover'],
+  ['color-muted', 'color-surface-subtle'],
+  ['color-muted', 'color-border'],
 ];
 
 describe('admin tokens', () => {

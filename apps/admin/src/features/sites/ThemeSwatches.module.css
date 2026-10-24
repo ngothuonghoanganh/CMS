@@ -1,0 +1,28 @@
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.swatch {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 6px 7px;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body-sm);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.accent {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}

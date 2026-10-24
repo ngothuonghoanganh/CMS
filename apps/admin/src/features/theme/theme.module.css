@@ -1,0 +1,52 @@
+.dots {
+  display: flex;
+  flex: none;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-surface);
+}
+
+.dot + .dot {
+  margin-left: -6px;
+}
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.stripTile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 36px;
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  font-size: var(--text-body-sm);
+  font-weight: 700;
+}
+
+.stripAccent {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.readOnly {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}

@@ -1,0 +1,70 @@
+.group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-hover);
+}
+
+.fullWidth {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  width: 100%;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink-2);
+  font: inherit;
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.item:hover {
+  color: var(--color-ink);
+}
+
+.item:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: 0;
+}
+
+.item[aria-pressed='true'] {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.item:disabled {
+  color: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.iconOnly {
+  width: 40px;
+  padding: 0;
+  color: var(--color-muted);
+}
+
+.icon {
+  display: inline-flex;
+}

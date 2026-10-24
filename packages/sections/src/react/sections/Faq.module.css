@@ -1,0 +1,113 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  border-bottom: 1px solid var(--plp-border);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding-block: 8px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+/* A chevron that turns when the answer is open. */
+.summary::after {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-right: 2px solid var(--plp-link);
+  border-bottom: 2px solid var(--plp-link);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+
+.item[open] > .summary::after {
+  transform: rotate(-135deg) translateY(-2px);
+}
+
+.summary:focus-visible {
+  outline: 3px solid var(--plp-link);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.question {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.answer {
+  margin: 0;
+  padding-bottom: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.itemOpen {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 12px 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary::after {
+    transition: none;
+  }
+}
+
+@container plp-page (min-width: 768px) {
+  .root {
+    gap: 20px;
+  }
+
+  .heading {
+    font-size: 28px;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .question {
+    font-size: 17px;
+  }
+
+  .answer {
+    font-size: 16px;
+  }
+}

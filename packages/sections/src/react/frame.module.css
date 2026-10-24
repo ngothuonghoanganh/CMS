@@ -50,6 +50,20 @@
   margin-inline: auto;
 }
 
+/* The navigation bar stays a compact strip whatever spacing preset it carries. */
+.section[data-section-type='navbar'] {
+  border-bottom: 1px solid var(--plp-border);
+}
+.section[data-section-type='navbar'].compact {
+  padding-block: 8px;
+}
+.section[data-section-type='navbar'].normal {
+  padding-block: 12px;
+}
+.section[data-section-type='navbar'].spacious {
+  padding-block: 20px;
+}
+
 .preLine {
   white-space: pre-line;
 }
@@ -123,4 +137,20 @@
 .button:focus-visible {
   outline: 3px solid var(--plp-link);
   outline-offset: 3px;
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--plp-link);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.textLink:focus-visible {
+  outline: 3px solid var(--plp-link);
+  outline-offset: 2px;
+  border-radius: 4px;
 }

@@ -1,0 +1,98 @@
+.callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+}
+
+.panel {
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+}
+
+.banner {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 20px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+
+.icon {
+  display: flex;
+  flex: none;
+  margin-top: 1px;
+}
+
+.banner .icon {
+  margin-top: 0;
+}
+
+/* On narrow screens the action wraps under the text instead of squeezing it. */
+.content {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.body > :first-child {
+  margin-top: 0;
+}
+
+.body > :last-child {
+  margin-bottom: 0;
+}
+
+.action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.info {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-soft);
+  color: var(--color-primary-pressed);
+}
+
+.warning {
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning-strong-ink);
+}
+
+.warning .icon {
+  color: var(--color-warning-icon);
+}
+
+.danger {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-ink);
+}
+
+.danger .icon {
+  color: var(--color-danger);
+}
+
+.success {
+  background: var(--color-success-soft);
+  border-color: var(--color-success-border);
+  color: var(--color-success-strong-ink);
+}
