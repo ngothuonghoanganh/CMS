@@ -1,44 +1,56 @@
-import tseslint from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
+import js from '@eslint/js';
+import nextPlugin from '@next/eslint-plugin-next';
+import reactHooks from 'eslint-plugin-react-hooks';
+import { defineConfig } from 'eslint/config';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
-export default [
+export default defineConfig(
   {
     ignores: [
+      '**/dist/**',
       '**/.next/**',
       '**/coverage/**',
-      '**/dist/**',
-      '**/node_modules/**',
+      '**/next-env.d.ts',
+      '**/playwright-report/**',
+      '**/test-results/**',
+      'docs/design/**',
+      '.legacy-local/**',
+      '.kilo/**',
       '.serena/**',
-      'pnpm-lock.yaml',
     ],
   },
+  js.configs.recommended,
+  tseslint.configs.strictTypeChecked,
   {
-    files: ['**/*.{ts,tsx}'],
     languageOptions: {
-      parser: tsParser,
+      globals: { ...globals.node },
       parserOptions: {
-        ecmaFeatures: { jsx: true },
-        ecmaVersion: 'latest',
-        sourceType: 'module',
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
     },
-    plugins: {
-      '@typescript-eslint': tseslint,
-    },
     rules: {
-      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
-      ],
-      'no-duplicate-imports': 'error',
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      // NestJS modules are empty classes carrying a decorator.
+      '@typescript-eslint/no-extraneous-class': ['error', { allowWithDecorator: true }],
+      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
     },
   },
   {
     files: ['**/*.{js,mjs,cjs}'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    files: ['apps/admin/**/*.{ts,tsx}', 'apps/renderer/**/*.{ts,tsx}'],
+    plugins: { '@next/next': nextPlugin, 'react-hooks': reactHooks },
+    settings: { next: { rootDir: ['apps/admin/', 'apps/renderer/'] } },
     rules: {
-      'no-duplicate-imports': 'error',
+      ...nextPlugin.configs['core-web-vitals'].rules,
+      ...reactHooks.configs.flat.recommended.rules,
+      // Both apps use the App Router; this rule only applies to the Pages Router.
+      '@next/next/no-html-link-for-pages': 'off',
     },
   },
-];
+);

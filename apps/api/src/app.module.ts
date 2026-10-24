@@ -1,38 +1,36 @@
-import { Module, RequestMethod, type MiddlewareConsumer } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { type DynamicModule, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { LoggerModule } from 'nestjs-pino';
+import type { Env } from './config/env.js';
+import { HealthModule } from './health/health.module.js';
 
-import { AuthModule } from './auth/auth.module';
-import { TenantBootstrapModule } from './bootstrap/tenant-bootstrap.module';
-import { AuthenticationModule } from './common/guards/authentication.module';
-import { DomainModule } from './domain/domain.module';
-import { HealthModule } from './health/health.module';
-import { MASTER_CONNECTION, masterDatabaseUri } from './tenancy/master-connection';
-import { ControlPlaneModule } from './tenancy/control-plane.module';
-import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middleware';
-import { TenantManagementModule } from './tenancy/tenant-management.module';
-import { SecurityModule } from './security/security.module';
-
-@Module({
-  imports: [
-    MongooseModule.forRoot(masterDatabaseUri(), {
-      connectionName: MASTER_CONNECTION,
-      connectTimeoutMS: 3000,
-      serverSelectionTimeoutMS: 3000,
-    }),
-    ControlPlaneModule,
-    SecurityModule,
-    TenantBootstrapModule,
-    AuthenticationModule,
-    AuthModule,
-    DomainModule,
-    TenantManagementModule,
-    HealthModule,
-  ],
-})
+@Module({})
 export class AppModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(TenantResolutionMiddleware)
-      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  static forRoot(env: Env): DynamicModule {
+    return {
+      module: AppModule,
+      imports: [
+        LoggerModule.forRoot({
+          pinoHttp: {
+            level: env.LOG_LEVEL,
+            genReqId: (req, res) => {
+              const incoming = req.headers['x-request-id'];
+              const id =
+                typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
+              res.setHeader('x-request-id', id);
+              return id;
+            },
+            redact: [
+              'req.headers.cookie',
+              'req.headers.authorization',
+              'res.headers["set-cookie"]',
+            ],
+          },
+        }),
+        MongooseModule.forRoot(env.MONGODB_URI),
+        HealthModule,
+      ],
+    };
   }
 }

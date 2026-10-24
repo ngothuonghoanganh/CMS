@@ -1,0 +1,8 @@
+{
+  "extends": "@plp/config/tsconfig.node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["playwright.config.ts", "urls.ts", "specs"]
+}

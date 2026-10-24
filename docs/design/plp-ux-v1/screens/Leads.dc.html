@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Leads — Nha khoa Smile Care</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="Sidebar" active="leads" hint-size="248px,900px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 48px">
+    <div style="max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Leads</h1>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">Mọi đăng ký từ form trên các trang của Nha khoa Smile Care.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px">
+          <button type="button" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+            Nơi nhận lead
+          </button>
+          <button type="button" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg>
+            Xuất Excel / CSV
+          </button>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+        <div role="group" aria-label="Thư mục" style="display: flex; gap: 4px; padding: 3px; background: #ECEEF2; border-radius: 10px">
+          <button type="button" aria-pressed="true" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.08); font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Hộp thư · 48</button>
+          <button type="button" aria-pressed="false" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; font-weight: 500; color: #3C424E; cursor: pointer">Nghi ngờ spam · 3</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+          <label for="f-page" class="sr-only">Lọc theo trang</label>
+          <select id="f-page" style="min-height: 40px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 13px; background: #FFFFFF; color: #15171C"><option>Tất cả trang</option><option>Ưu đãi niềng răng tháng 11</option><option>Cấy ghép Implant</option><option>Trang chủ</option></select>
+          <label for="f-status" class="sr-only">Lọc theo trạng thái</label>
+          <select id="f-status" style="min-height: 40px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 13px; background: #FFFFFF; color: #15171C"><option>Mọi trạng thái</option><option>Mới</option><option>Đã liên hệ</option><option>Hẹn lịch</option><option>Không liên lạc được</option></select>
+          <label for="f-time" class="sr-only">Khoảng thời gian</label>
+          <select id="f-time" style="min-height: 40px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 13px; background: #FFFFFF; color: #15171C"><option>7 ngày qua</option><option>30 ngày qua</option><option>Tùy chọn…</option></select>
+          <div style="display: flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; width: 230px">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+            <label for="lead-search" class="sr-only">Tìm lead</label>
+            <input id="lead-search" type="search" placeholder="Tên, số điện thoại, email" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 13px; background: transparent; color: #15171C">
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+        <section aria-label="Danh sách lead" style="flex: 999 1 520px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px; overflow: hidden">
+          <div style="overflow-x: auto">
+            <table style="width: 100%; min-width: 600px; border-collapse: collapse; font-size: 14px">
+              <thead>
+                <tr style="text-align: left">
+                  <th scope="col" style="padding: 11px 14px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">LEAD</th>
+                  <th scope="col" style="padding: 11px 14px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">ĐIỆN THOẠI</th>
+                  <th scope="col" style="padding: 11px 14px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">NGUỒN</th>
+                  <th scope="col" style="padding: 11px 14px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">LÚC</th>
+                  <th scope="col" style="padding: 11px 14px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">TRẠNG THÁI</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style="background: #F5F5FF; box-shadow: inset 3px 0 0 #4338CA">
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><a href="#chi-tiet" aria-current="true" style="color: #15171C; font-weight: 600; text-decoration: none">Nguyễn Thu Hà</a><span style="font-size: 12px; color: #5E6573">Ưu đãi niềng răng tháng 11</span></div></td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-variant-numeric: tabular-nums">0901 234 567</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">facebook / cpc</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E; white-space: nowrap">16:42</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><span style="padding: 3px 9px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-size: 12px; font-weight: 600; white-space: nowrap">Mới</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><a href="#" style="color: #15171C; font-weight: 600; text-decoration: none">Trần Quốc Bảo</a><span title="Gửi tới Google Sheets thất bại" style="display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: #B42318"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.2v.1"></path></svg>Lỗi đồng bộ</span></span><span style="font-size: 12px; color: #5E6573">Ưu đãi niềng răng tháng 11</span></div></td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-variant-numeric: tabular-nums">0938 512 840</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">google / cpc</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E; white-space: nowrap">15:10</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><span style="padding: 3px 9px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-size: 12px; font-weight: 600; white-space: nowrap">Mới</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><a href="#" style="color: #15171C; font-weight: 600; text-decoration: none">Lê Mai Anh</a><span style="font-size: 12px; color: #5E6573">Cấy ghép Implant</span></div></td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-variant-numeric: tabular-nums">0987 106 223</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">trực tiếp</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E; white-space: nowrap">11:25</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><span style="padding: 3px 9px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 12px; font-weight: 600; white-space: nowrap">Đã liên hệ</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><a href="#" style="color: #15171C; font-weight: 600; text-decoration: none">Phạm Gia Huy</a><span style="font-size: 12px; color: #5E6573">Ưu đãi niềng răng tháng 11</span></div></td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-variant-numeric: tabular-nums">0912 448 019</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">zalo / oa</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E; white-space: nowrap">Hôm qua</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><span style="padding: 3px 9px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; font-size: 12px; font-weight: 600; white-space: nowrap">Hẹn lịch</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><a href="#" style="color: #15171C; font-weight: 600; text-decoration: none">Võ Ngọc Trâm</a><span style="font-size: 12px; color: #5E6573">Trang chủ</span></div></td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-variant-numeric: tabular-nums">0703 285 664</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">tiktok / paid</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E; white-space: nowrap">Hôm qua</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><span style="padding: 3px 9px; border-radius: 999px; background: #FFF1D6; color: #8A5300; font-size: 12px; font-weight: 600; white-space: nowrap">Chưa liên lạc được</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><a href="#" style="color: #15171C; font-weight: 600; text-decoration: none">Đặng Minh Khoa</a><span style="font-size: 12px; color: #5E6573">Ưu đãi niềng răng tháng 11</span></div></td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-variant-numeric: tabular-nums">0905 771 302</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">facebook / cpc</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E; white-space: nowrap">22/10</td>
+                  <td style="padding: 12px 14px; border-bottom: 1px solid #EEF0F3"><span style="padding: 3px 9px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; font-size: 12px; font-weight: 600; white-space: nowrap">Hẹn lịch</span></td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 14px"><div style="display: flex; flex-direction: column; gap: 2px"><a href="#" style="color: #15171C; font-weight: 600; text-decoration: none">Hoàng Thảo Vy</a><span style="font-size: 12px; color: #5E6573">Cấy ghép Implant</span></div></td>
+                  <td style="padding: 12px 14px; font-variant-numeric: tabular-nums">0396 004 517</td>
+                  <td style="padding: 12px 14px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #3C424E">google / organic</td>
+                  <td style="padding: 12px 14px; font-size: 13px; color: #3C424E; white-space: nowrap">22/10</td>
+                  <td style="padding: 12px 14px"><span style="padding: 3px 9px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 12px; font-weight: 600; white-space: nowrap">Đã liên hệ</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-top: 1px solid #E2E5EA; font-size: 13px; color: #5E6573">
+            <span>7 / 48 lead</span>
+            <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Tải thêm</button>
+          </div>
+        </section>
+
+        <aside id="chi-tiet" aria-labelledby="lead-name" style="flex: 1 1 360px; min-width: 0; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px; display: flex; flex-direction: column">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 16px 18px; border-bottom: 1px solid #EEF0F3">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <h2 id="lead-name" style="margin: 0; font-size: 18px; font-weight: 700">Nguyễn Thu Hà</h2>
+              <span style="font-size: 13px; color: #5E6573">24/10/2026 · 16:42 · từ điện thoại</span>
+            </div>
+            <label for="lead-status" class="sr-only">Trạng thái lead</label>
+            <select id="lead-status" style="min-height: 36px; padding: 0 8px; border: 1px solid #C7CBFF; border-radius: 8px; background: #EEF0FF; color: #3730A3; font: inherit; font-size: 13px; font-weight: 600"><option>Mới</option><option>Đã liên hệ</option><option>Hẹn lịch</option><option>Chưa liên lạc được</option><option>Đã chốt</option></select>
+          </div>
+
+          <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 18px">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+              <span style="flex: 1 1 140px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums">0901 234 567</span>
+              <a href="#" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 8px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 13px; font-weight: 600">Gọi</a>
+              <a href="#" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; color: #15171C; text-decoration: none; font-size: 13px; font-weight: 600">Nhắn Zalo</a>
+            </div>
+
+            <dl style="margin: 0; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; font-size: 13px">
+              <dt style="color: #5E6573">Trang</dt><dd style="margin: 0">Ưu đãi niềng răng tháng 11 <span style="color: #5E6573">· v12</span></dd>
+              <dt style="color: #5E6573">Nguồn</dt><dd style="margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px">facebook / cpc / uu-dai-t11</dd>
+              <dt style="color: #5E6573">Thiết bị</dt><dd style="margin: 0">Điện thoại</dd>
+            </dl>
+
+            <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #F5F6F8">
+              <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg>Bằng chứng đồng ý</span>
+              <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #3C424E">
+                <li style="display: flex; gap: 8px"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Đồng ý xử lý dữ liệu để được tư vấn</li>
+                <li style="display: flex; gap: 8px"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A91A0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M6 12h12"></path></svg>Không chọn nhận ưu đãi qua Zalo/SMS</li>
+              </ul>
+              <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Nội dung đồng ý bản 2 (áp dụng từ 01/10/2026) · lúc 16:42:07 · <a href="Consent.dc.html" style="font-weight: 600; text-decoration: none">Xem nội dung</a></span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <span style="font-size: 13px; font-weight: 600">Đã gửi tới</span>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span style="flex: 1">Email thông báo · 2 người nhận</span><span style="color: #5E6573">16:42</span></div>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span style="flex: 1">Google Sheets · “Lead Smile Care”</span><span style="color: #5E6573">16:42</span></div>
+              <div style="display: flex; align-items: center; gap: 10px; font-size: 13px"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span style="flex: 1">Meta Conversions API</span><span style="color: #5E6573">16:42</span></div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="lead-note" style="font-size: 13px; font-weight: 600">Ghi chú nội bộ</label>
+              <input id="lead-note" type="text" value="" placeholder="Ví dụ: hẹn gọi lại sau 18h" style="min-height: 42px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; color: #15171C">
+            </div>
+          </div>
+
+          <div style="margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 18px; border-top: 1px solid #EEF0F3">
+            <button type="button" style="min-height: 36px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 500; color: #15171C; cursor: pointer">Chuyển vào spam</button>
+            <button type="button" style="min-height: 36px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 500; color: #15171C; cursor: pointer">Xuất dữ liệu người này</button>
+            <button type="button" style="min-height: 36px; padding: 0 10px; border: 1px solid #F0B4AD; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #B42318; cursor: pointer">Xóa dữ liệu người này</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

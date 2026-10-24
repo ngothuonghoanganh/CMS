@@ -1,24 +1,26 @@
 {
-  "name": "@payload/renderer",
-  "version": "0.1.0",
+  "name": "@plp/renderer",
+  "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev --webpack -p 3002",
     "build": "next build",
-    "start": "next start -p 3002",
-    "lint": "eslint app",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "dev": "next dev --port 3101",
+    "start": "next start --port 3101",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "vitest run"
   },
   "dependencies": {
-    "@payload/contracts": "workspace:*",
-    "next": "16.3.2",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "@next/env": "16.4.3",
+    "next": "16.4.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@types/node": "24.13.3",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4"
+    "@plp/config": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "vitest": "^5.0.5"
   }
 }

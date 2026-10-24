@@ -1,65 +1,21 @@
 import { describe, expect, it } from 'vitest';
+import { parseEnv } from './env.js';
 
-import { parseEnvironment } from './env';
-
-describe('parseEnvironment', () => {
-  it('provides safe local defaults', () => {
-    expect(parseEnvironment({})).toMatchObject({
-      MONGODB_URI: 'mongodb://127.0.0.1:27018/payload_landing_platform',
+describe('parseEnv', () => {
+  it('applies defaults for optional settings', () => {
+    expect(parseEnv({ MONGODB_URI: 'mongodb://localhost:27117/plp' })).toEqual({
       NODE_ENV: 'development',
-      PORT: 3001,
-      CORS_ORIGIN:
-        'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002',
+      API_PORT: 4100,
+      MONGODB_URI: 'mongodb://localhost:27117/plp',
+      LOG_LEVEL: 'info',
     });
   });
 
-  it('keeps an explicitly empty development CORS allowlist disabled', () => {
-    expect(
-      parseEnvironment({ CORS_ORIGIN: '', NODE_ENV: 'development' }).CORS_ORIGIN,
-    ).toBe('');
+  it('fails fast with the name of the missing variable', () => {
+    expect(() => parseEnv({})).toThrow(/MONGODB_URI/);
   });
 
-  it('accepts the DNS verifier prefix and treats empty optional values as unset', () => {
-    const config = parseEnvironment({
-      DOMAIN_VERIFICATION_PREFIX: '_payload-verification',
-      EMAIL_FROM: '',
-      INTEGRATION_SECRET_ENCRYPTION_KEY: '',
-      RESEND_API_KEY: '',
-    });
-
-    expect(config.DOMAIN_VERIFICATION_PREFIX).toBe('_payload-verification');
-    expect(config.EMAIL_FROM).toBeUndefined();
-    expect(config.INTEGRATION_SECRET_ENCRYPTION_KEY).toBeUndefined();
-    expect(config.RESEND_API_KEY).toBeUndefined();
-  });
-
-  it('rejects an invalid MongoDB connection string', () => {
-    expect(() => parseEnvironment({ MONGODB_URI: 'postgres://localhost' })).toThrow(
-      'MONGODB_URI must be a MongoDB connection string',
-    );
-  });
-
-  it('rejects the fake domain verifier in production', () => {
-    expect(() =>
-      parseEnvironment({
-        DOMAIN_VERIFICATION_PROVIDER: 'fake',
-        NODE_ENV: 'production',
-      }),
-    ).toThrow('Fake domain verification is not allowed in production');
-  });
-
-  it('rejects wildcard CORS in production', () => {
-    expect(() => parseEnvironment({ CORS_ORIGIN: '*', NODE_ENV: 'production' })).toThrow(
-      'Wildcard CORS origins are not allowed in production',
-    );
-  });
-
-  it('accepts explicit production CORS origins', () => {
-    expect(
-      parseEnvironment({
-        CORS_ORIGIN: 'https://cms.example.com,https://preview.example.com',
-        NODE_ENV: 'production',
-      }).CORS_ORIGIN,
-    ).toBe('https://cms.example.com,https://preview.example.com');
+  it('rejects a connection string that is not MongoDB', () => {
+    expect(() => parseEnv({ MONGODB_URI: 'postgres://localhost/plp' })).toThrow(/mongodb/);
   });
 });

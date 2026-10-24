@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Xuất bản thay đổi</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; min-height: 1000px; background: #E6E8EC; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; overflow: hidden">
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+    <div style="height: 58px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA"></div>
+    <div style="height: 36px; background: #FFFBF2; border-bottom: 1px solid #F3E2BD"></div>
+    <div style="flex: 1; display: flex">
+      <div style="width: 272px; background: #FFFFFF; border-right: 1px solid #E2E5EA"></div>
+      <div style="flex: 1; padding: 52px 28px"><div style="max-width: 900px; height: 820px; margin: 0 auto; background: #FFFFFF; border-radius: 10px"></div></div>
+      <div style="width: 320px; background: #FFFFFF; border-left: 1px solid #E2E5EA"></div>
+    </div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(21,23,28,0.48)"></div>
+
+  <div style="position: relative; min-height: 1000px; box-sizing: border-box; padding: 48px 20px; display: flex; align-items: flex-start; justify-content: center">
+    <div role="dialog" aria-modal="true" aria-labelledby="pub-title" style="width: 100%; max-width: 640px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column; overflow: hidden">
+
+      <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+            <h1 id="pub-title" style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em">Xuất bản 4 thay đổi</h1>
+            <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: #3C424E">lên
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; padding: 2px 8px; border-radius: 6px; background: #F0F2F5; color: #15171C">go.smilecare.vn/uu-dai-thang-11</span>
+            </span>
+          </div>
+          <a href="Editor.dc.html" aria-label="Đóng" style="width: 40px; height: 40px; flex: none; border-radius: 10px; color: #3C424E; display: inline-flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </a>
+        </div>
+
+        <div style="margin: 0 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: 12px; background: #F5F6F8; font-size: 13px">
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5E6573">Đang live</span><span style="font-weight: 600">v12 · 2 giờ trước</span></span>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A91A0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5E6573">Sau khi xuất bản</span><span style="font-weight: 600; color: #3730A3">v13 · bản nháp hiện tại</span></span>
+          <span style="flex: 1 1 160px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px">
+            <span style="padding: 3px 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 12px">Sửa: Hero</span>
+            <span style="padding: 3px 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 12px">Thêm: So sánh</span>
+            <span style="padding: 3px 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 12px">Sửa: Form</span>
+            <span style="padding: 3px 8px; border-radius: 6px; background: #FFFFFF; border: 1px solid #E2E5EA; font-size: 12px">SEO: tiêu đề</span>
+          </span>
+        </div>
+
+        <div style="padding: 18px 22px 6px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px">
+            <h2 style="margin: 0; font-size: 15px; font-weight: 600">Kiểm tra trước khi xuất bản</h2>
+            <span style="font-size: 12px; color: #5E6573">{{ summary }}</span>
+          </div>
+
+          <sc-if value="{{ blocked }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #FDEBE9; border: 1px solid #F6C9C4">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.2v.1"></path></svg>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 3px">
+                <span style="font-size: 14px; font-weight: 600; color: #7A1A12">Lỗi chặn · Form đăng ký chưa có nơi nhận lead</span>
+                <span style="font-size: 13px; line-height: 1.5; color: #7A1A12">Khách gửi form sẽ không đến được ai. Chọn ít nhất một nơi nhận: email hoặc Google Sheets.</span>
+              </div>
+              <a href="Editor.dc.html" style="align-self: center; display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 8px; background: #FFFFFF; border: 1px solid #F0B4AD; color: #B42318; text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap">Sửa ngay</a>
+            </div>
+          </sc-if>
+
+          <sc-for list="{{ warnings }}" as="w" hint-placeholder-count="2">
+            <div style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: {{ w.bg }}; border: 1px solid {{ w.border }}">
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ w.icon }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0">
+                <span style="font-size: 14px; font-weight: 600; color: {{ w.fg }}; text-decoration: {{ w.strike }}">Cảnh báo · {{ w.title }}</span>
+                <span style="font-size: 13px; line-height: 1.5; color: {{ w.sub }}">{{ w.desc }}</span>
+              </div>
+              <div style="align-self: center; display: flex; gap: 6px">
+                <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 36px; padding: 0 10px; border-radius: 8px; color: #3730A3; text-decoration: none; font-size: 13px; font-weight: 600">Sửa</a>
+                <button type="button" aria-pressed="{{ w.pressed }}" onClick="{{ w.toggle }}" style="min-height: 36px; padding: 0 10px; border: 1px solid #E2CFA6; border-radius: 8px; background: #FFFFFF; color: #5C3D00; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap">{{ w.action }}</button>
+              </div>
+            </div>
+          </sc-for>
+
+          <details style="border: 1px solid #E2E5EA; border-radius: 12px; padding: 0 14px">
+            <summary style="display: flex; align-items: center; gap: 10px; min-height: 46px; cursor: pointer; font-size: 14px; font-weight: 500; color: #0B6B45">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+              9 mục đã đạt
+            </summary>
+            <ul style="margin: 0 0 12px; padding-left: 28px; font-size: 13px; line-height: 1.9; color: #3C424E; columns: 2">
+              <li>Tiêu đề SEO</li><li>Mô tả SEO</li><li>Đường dẫn hợp lệ, không trùng</li><li>Tên miền đã xác minh</li><li>HTTPS hoạt động</li><li>Tương phản màu đạt AA</li><li>Liên kết nội bộ hoạt động</li><li>Hiển thị tốt trên điện thoại</li><li>Có liên kết chính sách quyền riêng tư</li>
+            </ul>
+          </details>
+
+          <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 4px">
+            <label for="note" style="font-size: 13px; font-weight: 600">Ghi chú cho phiên bản <span style="font-weight: 400; color: #5E6573">· tùy chọn</span></label>
+            <input id="note" type="text" value="Đổi ảnh hero, thêm bảng so sánh phương pháp" style="min-height: 42px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; color: #15171C">
+          </div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin-top: 16px; padding: 14px 22px; border-top: 1px solid #E2E5EA; background: #FAFBFC">
+          <span style="font-size: 12px; line-height: 1.5; color: #5E6573; flex: 1 1 220px">Bản v12 vẫn được lưu. Bạn có thể khôi phục bất cứ lúc nào trong Lịch sử phiên bản.</span>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+            <sc-if value="{{ blocked }}" hint-placeholder-val="{{ true }}">
+              <span id="why-disabled" style="font-size: 12px; font-weight: 600; color: #B42318">Sửa 1 lỗi để xuất bản</span>
+            </sc-if>
+            <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; text-decoration: none; font-size: 14px; font-weight: 600; background: #FFFFFF">Hủy</a>
+            <button type="button" disabled="{{ blocked }}" aria-describedby="why-disabled" onClick="{{ doPublish }}" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600; background: {{ pubBg }}; color: {{ pubFg }}; cursor: {{ pubCursor }}">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+              Xuất bản v13
+            </button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ done }}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 28px 26px 8px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px">
+          <span aria-hidden="true" style="width: 56px; height: 56px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; display: flex; align-items: center; justify-content: center">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+          </span>
+          <h1 id="pub-title" style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em">v13 đã live</h1>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E; max-width: 420px">Khách truy cập đang thấy phiên bản mới. Bản nháp tiếp tục từ đây, các thay đổi sau chưa ảnh hưởng tới trang live.</p>
+        </div>
+        <div style="margin: 16px 22px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px; border: 1px solid #E2E5EA; border-radius: 12px">
+          <span aria-hidden="true" style="width: 84px; height: 84px; flex: none; border-radius: 8px; background: #FFFFFF; border: 1px solid #E2E5EA; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; padding: 8px; box-sizing: border-box">
+            <span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span>
+            <span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span></span><span></span><span style="background: #15171C"></span>
+            <span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span>
+            <span></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span></span>
+            <span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span style="background: #15171C"></span>
+            <span style="background: #15171C"></span><span></span><span></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span>
+            <span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span></span><span style="background: #15171C"></span><span style="background: #15171C"></span><span style="background: #15171C"></span>
+          </span>
+          <div style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+            <span style="font-size: 12px; color: #5E6573">Quét mã để kiểm tra trên điện thoại</span>
+            <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; padding: 4px 8px; border-radius: 6px; background: #F0F2F5">go.smilecare.vn/uu-dai-thang-11</span>
+              <button type="button" aria-label="Sao chép đường dẫn" style="width: 34px; height: 34px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.5"></rect><path d="M5 15V5a1 1 0 0 1 1-1h10"></path></svg></button>
+            </span>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding: 14px 22px; border-top: 1px solid #E2E5EA; background: #FAFBFC">
+          <a href="History.dc.html" style="font-size: 13px; font-weight: 600; text-decoration: none">Có vấn đề? Khôi phục v12</a>
+          <div style="display: flex; gap: 10px">
+            <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; text-decoration: none; font-size: 14px; font-weight: 600; background: #FFFFFF">Tiếp tục chỉnh sửa</a>
+            <a href="PublicPage.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 0 18px; border-radius: 10px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">Mở trang live
+              <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"></path></svg>
+            </a>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["blocked","ready","published"],"default":"blocked"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { ignored: {}, published: false };
+  }
+  renderVals() {
+    var self = this;
+    var mode = this.props.state ?? 'blocked';
+    var done = mode === 'published' || this.state.published;
+    var blocked = mode === 'blocked' && !done;
+    var defs = [
+      { id: 'alt', title: 'Ảnh Hero chưa có mô tả', desc: 'Người dùng trình đọc màn hình và công cụ tìm kiếm không biết ảnh nói gì.' },
+      { id: 'sample', title: 'Section “So sánh phương pháp” còn nội dung mẫu', desc: 'Còn 2 đoạn chữ mẫu chưa được thay bằng nội dung thật.' }
+    ];
+    var ignoredCount = 0;
+    var warnings = defs.map(function (w) {
+      var ig = !!self.state.ignored[w.id];
+      if (ig) ignoredCount++;
+      return {
+        title: w.title, desc: w.desc,
+        bg: ig ? '#FAFBFC' : '#FFF8EB', border: ig ? '#E2E5EA' : '#F3E2BD',
+        icon: ig ? '#A8AEB9' : '#C27803', fg: ig ? '#5E6573' : '#5C3D00', sub: ig ? '#5E6573' : '#6B4A0A',
+        strike: ig ? 'line-through' : 'none',
+        action: ig ? 'Hoàn tác' : 'Bỏ qua lần này',
+        pressed: ig ? 'true' : 'false',
+        toggle: function () { var n = Object.assign({}, self.state.ignored); n[w.id] = !ig; self.setState({ ignored: n }); }
+      };
+    });
+    var open = 2 - ignoredCount;
+    var summary = (blocked ? '1 lỗi chặn · ' : '') + open + ' cảnh báo' + (ignoredCount ? ' · ' + ignoredCount + ' đã bỏ qua' : '') + ' · 9 đạt';
+    return {
+      notDone: !done,
+      done: done,
+      blocked: blocked,
+      warnings: warnings,
+      summary: summary,
+      pubBg: blocked ? '#E2E5EA' : '#4338CA',
+      pubFg: blocked ? '#6B7280' : '#FFFFFF',
+      pubCursor: blocked ? 'not-allowed' : 'pointer',
+      doPublish: function () { if (!blocked) self.setState({ published: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

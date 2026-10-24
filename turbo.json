@@ -1,32 +1,30 @@
 {
-  "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["PORT", "NEXT_PUBLIC_API_BASE_URL", "RENDERER_API_BASE_URL"],
+  "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": [".env"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["API_INTERNAL_URL"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "start": {
-      "dependsOn": ["build"],
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^lint"],
-      "outputs": []
+      "dependsOn": ["^build"]
     },
     "typecheck": {
-      "dependsOn": ["^build"],
-      "outputs": []
+      "dependsOn": ["^build"]
     },
-    "test": {
+    "test:unit": {
+      "dependsOn": ["^build"]
+    },
+    "test:int": {
       "dependsOn": ["^build"],
-      "env": ["RUN_MONGO_TESTS", "MONGODB_URI"],
-      "outputs": []
+      "cache": false,
+      "env": ["MONGODB_URI"]
     }
   }
 }

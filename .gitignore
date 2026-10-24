@@ -2,15 +2,19 @@ node_modules
 .next
 dist
 coverage
+*.tsbuildinfo
+next-env.d.ts
+.turbo
 .env
 .env.*
 !.env.example
-.turbo
-apps/api/.data/
 test-results
 playwright-report
-*.tsbuildinfo
 .DS_Store
+
+# Local files from the legacy source, kept out of git (see legacy-v0 for the old code)
+.legacy-local/
+
+# Local agent tooling
 .serena/
 .playwright-mcp/
-mcp-*.png

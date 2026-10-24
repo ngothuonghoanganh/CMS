@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thêm section</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; min-height: 1080px; background: #E6E8EC; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; overflow: hidden">
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; display: flex; flex-direction: column">
+    <div style="height: 58px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA"></div>
+    <div style="height: 36px; background: #FFFBF2; border-bottom: 1px solid #F3E2BD"></div>
+    <div style="flex: 1; display: flex">
+      <div style="width: 272px; background: #FFFFFF; border-right: 1px solid #E2E5EA"></div>
+      <div style="flex: 1; padding: 52px 28px"><div style="max-width: 900px; height: 820px; margin: 0 auto; background: #FFFFFF; border-radius: 10px"></div></div>
+      <div style="width: 320px; background: #FFFFFF; border-left: 1px solid #E2E5EA"></div>
+    </div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(21,23,28,0.48)"></div>
+
+  <div style="position: relative; min-height: 1080px; box-sizing: border-box; padding: 48px 24px; display: flex; align-items: flex-start; justify-content: center">
+    <div role="dialog" aria-modal="true" aria-labelledby="dlg-title" style="width: 100%; max-width: 1060px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column; overflow: hidden">
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 18px 22px; border-bottom: 1px solid #E2E5EA">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <h1 id="dlg-title" style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em">Thêm section</h1>
+          <span style="font-size: 13px; color: #5E6573">Chèn sau <strong style="color: #15171C; font-weight: 600">Hero</strong> · vị trí 3 / 9</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1 1 280px; justify-content: flex-end">
+          <div style="display: flex; align-items: center; gap: 8px; min-height: 42px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; flex: 0 1 320px; min-width: 180px">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+            <label for="sec-search" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Tìm section</label>
+            <input id="sec-search" type="search" placeholder="Tìm: nhận xét, bảng giá, form…" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 14px; background: transparent; color: #15171C">
+          </div>
+          <a href="Editor.dc.html" aria-label="Đóng" style="width: 40px; height: 40px; flex: none; border-radius: 10px; color: #3C424E; display: inline-flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </a>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; min-height: 600px">
+        <nav aria-label="Nhóm section" style="flex: 1 1 220px; max-width: 100%; box-sizing: border-box; padding: 14px 10px; background: #FAFBFC; border-right: 1px solid #E2E5EA">
+          <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px">
+            <sc-for list="{{ cats }}" as="c" hint-placeholder-count="8">
+              <li>
+                <button type="button" aria-pressed="{{ c.pressed }}" onClick="{{ c.pick }}" style="width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px; cursor: pointer; text-align: left; font: inherit; font-size: 14px; background: {{ c.bg }}; color: {{ c.fg }}; font-weight: {{ c.fw }}">
+                  <span>{{ c.name }}</span>
+                  <span style="font-size: 12px; color: #5E6573; font-weight: 500">{{ c.count }}</span>
+                </button>
+              </li>
+            </sc-for>
+          </ul>
+          <div style="margin: 16px 6px 0; padding: 12px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E2E5EA; display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 12px; font-weight: 600">Section đã lưu của workspace</span>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Dùng lại section đã thiết kế cho khách hàng khác. Sẽ có sau MVP.</span>
+          </div>
+        </nav>
+
+        <section aria-labelledby="grid-title" style="flex: 999 1 520px; min-width: 0; padding: 18px 22px 22px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+            <h2 id="grid-title" style="margin: 0; font-size: 16px; font-weight: 600">{{ catName }}</h2>
+            <span style="font-size: 12px; color: #5E6573">Mọi section tự co giãn theo màn hình và dùng màu của site</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px">
+            <sc-for list="{{ items }}" as="it" hint-placeholder-count="4">
+              <button type="button" aria-pressed="{{ it.pressed }}" onClick="{{ it.pick }}" style="display: flex; flex-direction: column; gap: 10px; padding: 10px 10px 14px; border-radius: 12px; cursor: pointer; text-align: left; font: inherit; color: inherit; background: #FFFFFF; border: {{ it.border }}; box-shadow: {{ it.ring }}">
+                <span aria-hidden="true" style="display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 5px; height: 128px; box-sizing: border-box; padding: 12px; border-radius: 8px; background: #F3F5F7">
+                  <sc-for list="{{ it.blocks }}" as="b" hint-placeholder-count="4">
+                    <span style="display: block; width: {{ b.w }}; height: {{ b.h }}; border-radius: {{ b.r }}; background: {{ b.bg }}"></span>
+                  </sc-for>
+                </span>
+                <span style="display: flex; align-items: center; gap: 8px; padding: 0 4px">
+                  <span style="font-size: 14px; font-weight: 600; flex: 1">{{ it.name }}</span>
+                  <sc-if value="{{ it.rec }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size: 11px; font-weight: 600; color: #3730A3; background: #EEF0FF; border-radius: 999px; padding: 2px 8px; white-space: nowrap">Hợp mục tiêu</span>
+                  </sc-if>
+                </span>
+                <span style="font-size: 13px; line-height: 1.5; color: #5E6573; padding: 0 4px">{{ it.desc }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 14px 22px; border-top: 1px solid #E2E5EA; background: #FFFFFF">
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5E6573; max-width: 560px">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.8v.1"></path></svg>
+          Section mới có nội dung mẫu được đánh dấu. Trang sẽ nhắc nếu còn nội dung mẫu khi xuất bản.
+        </span>
+        <div style="display: flex; gap: 10px">
+          <a href="Editor.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; color: #15171C; text-decoration: none; font-size: 14px; font-weight: 600">Hủy</a>
+          <a href="Editor.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 0 18px; border-radius: 10px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">Thêm “{{ selName }}”</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cat: 'social', sel: 'social-cards' };
+  }
+  renderVals() {
+    var self = this;
+    var D = '#8A91A0', L = '#D5D9E0', A = '#A5ABF5', W = '#FFFFFF';
+    function blk(w, h, bg, r) { return { w: w, h: h, bg: bg || L, r: r || '3px' }; }
+    var T = {
+      heroSplit: [blk('44%', '8px', D), blk('44%', '0px'), blk('44%', '50px', W, '6px'), blk('44%', '50px', L, '6px')],
+      heroCenter: [blk('70%', '9px', D), blk('50%', '6px'), blk('24%', '12px', A, '6px')],
+      heroBg: [blk('100%', '80px', D, '6px')],
+      cards3: [blk('50%', '7px', D), blk('100%', '0px'), blk('29%', '48px', W, '6px'), blk('29%', '48px', W, '6px'), blk('29%', '48px', W, '6px')],
+      alternate: [blk('46%', '34px', L, '6px'), blk('46%', '34px', W, '6px'), blk('46%', '34px', W, '6px'), blk('46%', '34px', L, '6px')],
+      steps: [blk('50%', '7px', D), blk('100%', '0px'), blk('18px', '18px', A, '99px'), blk('18%', '4px'), blk('18px', '18px', A, '99px'), blk('18%', '4px'), blk('18px', '18px', A, '99px')],
+      quote: [blk('80%', '9px', D), blk('60%', '9px', D), blk('100%', '0px'), blk('22%', '6px')],
+      logos: [blk('40%', '6px', D), blk('100%', '0px'), blk('15%', '16px'), blk('15%', '16px'), blk('15%', '16px'), blk('15%', '16px'), blk('15%', '16px')],
+      beforeAfter: [blk('45%', '64px', L, '6px'), blk('45%', '64px', D, '6px')],
+      pricing: [blk('40%', '7px', D), blk('100%', '0px'), blk('28%', '60px', W, '6px'), blk('28%', '66px', A, '6px'), blk('28%', '60px', W, '6px')],
+      offer: [blk('80%', '74px', W, '8px')],
+      faq: [blk('40%', '7px', D), blk('100%', '0px'), blk('90%', '10px', W), blk('90%', '10px', W), blk('90%', '10px', W), blk('90%', '10px', W)],
+      form: [blk('44%', '8px', D), blk('44%', '14px', W, '4px'), blk('44%', '30px', L), blk('44%', '14px', W, '4px'), blk('44%', '0px'), blk('44%', '14px', A, '4px')],
+      formMap: [blk('44%', '74px', W, '6px'), blk('44%', '74px', L, '6px')],
+      quick: [blk('40%', '18px', A, '99px'), blk('40%', '18px', W, '99px')],
+      ctaBand: [blk('100%', '56px', D, '6px')],
+      footer: [blk('22%', '30px'), blk('22%', '30px'), blk('22%', '30px'), blk('100%', '4px')]
+    };
+    var cats = [
+      { id: 'hero', name: 'Hero', items: [
+        { id: 'hero-split', name: 'Chữ · Ảnh', desc: 'Tiêu đề, mô tả, 1–2 nút và ảnh bên cạnh.', t: 'heroSplit', rec: true },
+        { id: 'hero-center', name: 'Căn giữa', desc: 'Thông điệp ngắn, một nút nổi bật.', t: 'heroCenter' },
+        { id: 'hero-bg', name: 'Ảnh nền', desc: 'Ảnh lớn phía sau, chữ đặt trên lớp phủ đủ tương phản.', t: 'heroBg' }
+      ] },
+      { id: 'benefit', name: 'Lợi ích & tính năng', items: [
+        { id: 'b-grid', name: 'Lưới 3–6 lợi ích', desc: 'Biểu tượng, tiêu đề ngắn và một câu mô tả.', t: 'cards3', rec: true },
+        { id: 'b-alt', name: 'Xen kẽ ảnh và chữ', desc: 'Giải thích chi tiết từng điểm mạnh.', t: 'alternate' },
+        { id: 'b-steps', name: 'Quy trình 3 bước', desc: 'Khách biết điều gì xảy ra sau khi đăng ký.', t: 'steps', rec: true }
+      ] },
+      { id: 'social', name: 'Bằng chứng xã hội', items: [
+        { id: 'social-cards', name: 'Nhận xét dạng thẻ', desc: '3–6 nhận xét có tên và ảnh khách hàng.', t: 'cards3', rec: true },
+        { id: 'social-quote', name: 'Trích dẫn nổi bật', desc: 'Một nhận xét lớn, phù hợp ngay trước form.', t: 'quote', rec: true },
+        { id: 'social-logos', name: 'Logo đối tác', desc: 'Hàng logo đơn sắc, tự xuống dòng trên điện thoại.', t: 'logos' },
+        { id: 'social-ba', name: 'Trước & sau', desc: 'Hai ảnh so sánh, có chú thích và mô tả ảnh.', t: 'beforeAfter' }
+      ] },
+      { id: 'pricing', name: 'Bảng giá & ưu đãi', items: [
+        { id: 'p-3', name: '2–4 gói', desc: 'Một gói được đánh dấu khuyên dùng.', t: 'pricing' },
+        { id: 'p-offer', name: 'Ưu đãi đơn', desc: 'Giá, điều kiện và hạn áp dụng rõ ràng.', t: 'offer', rec: true }
+      ] },
+      { id: 'faq', name: 'Câu hỏi thường gặp', items: [
+        { id: 'faq-acc', name: 'Hỏi đáp mở rộng', desc: 'Câu hỏi bấm để mở, đọc được bằng bàn phím.', t: 'faq', rec: true }
+      ] },
+      { id: 'form', name: 'Form & liên hệ', items: [
+        { id: 'f-lead', name: 'Form đăng ký', desc: 'Mặc định Họ và tên + Số điện thoại, ô đồng ý không tick sẵn.', t: 'form', rec: true },
+        { id: 'f-map', name: 'Form + bản đồ', desc: 'Kèm địa chỉ và giờ làm việc.', t: 'formMap' },
+        { id: 'f-quick', name: 'Gọi / Zalo nhanh', desc: 'Hai nút liên hệ trực tiếp, không cần form.', t: 'quick' }
+      ] },
+      { id: 'cta', name: 'Kêu gọi hành động', items: [
+        { id: 'cta-band', name: 'Dải kêu gọi', desc: 'Nhắc lại lời mời ở cuối trang.', t: 'ctaBand', rec: true }
+      ] },
+      { id: 'footer', name: 'Chân trang', items: [
+        { id: 'footer-basic', name: 'Chân trang cơ bản', desc: 'Địa chỉ, liên hệ, liên kết chính sách quyền riêng tư.', t: 'footer' }
+      ] }
+    ];
+    var curCat = this.state.cat;
+    var active = cats.filter(function (c) { return c.id === curCat; })[0] || cats[0];
+    var selName = '';
+    var items = active.items.map(function (it) {
+      var on = it.id === self.state.sel;
+      if (on) selName = it.name;
+      return {
+        name: it.name, desc: it.desc, rec: !!it.rec, blocks: T[it.t],
+        pressed: on ? 'true' : 'false',
+        border: on ? '1.5px solid #4338CA' : '1px solid #E2E5EA',
+        ring: on ? '0 0 0 3px #E0E2FF' : 'none',
+        pick: function () { self.setState({ sel: it.id }); }
+      };
+    });
+    if (!selName) selName = active.items[0].name;
+    return {
+      cats: cats.map(function (c) {
+        var on = c.id === curCat;
+        return {
+          name: c.name, count: c.items.length,
+          pressed: on ? 'true' : 'false',
+          bg: on ? '#EEF0FF' : 'transparent', fg: on ? '#3730A3' : '#3C424E', fw: on ? 600 : 500,
+          pick: function () { self.setState({ cat: c.id, sel: c.items[0].id }); }
+        };
+      }),
+      items: items,
+      catName: active.name,
+      selName: selName
+    };
+  }
+}
+</script>
+</body>
+</html>
