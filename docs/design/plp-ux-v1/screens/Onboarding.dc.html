@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Tạo trang mới — chọn mục tiêu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 12px 24px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 12px; min-width: 0">
+      <a href="Main.dc.html" aria-label="Đóng và quay lại danh sách trang" style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 10px; color: #3C424E; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; min-width: 0">
+        <span style="font-size: 15px; font-weight: 600">Tạo trang mới</span>
+        <span style="font-size: 12px; color: #5E6573">Nha khoa Smile Care</span>
+      </div>
+    </div>
+
+    <ol aria-label="Các bước tạo trang" style="list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 14px">
+      <li aria-current="step" style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: #3730A3">
+        <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 999px; background: #4338CA; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">1</span>Mục tiêu
+      </li>
+      <li aria-hidden="true" style="width: 28px; height: 1px; background: #CDD2DA"></li>
+      <li style="display: flex; align-items: center; gap: 8px; color: #5E6573; font-weight: 500">
+        <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 999px; border: 1.5px solid #CDD2DA; display: flex; align-items: center; justify-content: center; font-size: 12px">2</span>Nội dung chính
+      </li>
+      <li aria-hidden="true" style="width: 28px; height: 1px; background: #CDD2DA"></li>
+      <li style="display: flex; align-items: center; gap: 8px; color: #5E6573; font-weight: 500">
+        <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 999px; border: 1.5px solid #CDD2DA; display: flex; align-items: center; justify-content: center; font-size: 12px">3</span>Phong cách
+      </li>
+    </ol>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 14px">
+      <a href="AddSection.dc.html" style="font-weight: 600; text-decoration: none">Duyệt thư viện mẫu</a>
+      <a href="Editor.dc.html" style="font-weight: 600; text-decoration: none; color: #3C424E">Bắt đầu trống</a>
+    </div>
+  </header>
+
+  <main style="flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; box-sizing: border-box; padding: 40px 32px 48px; display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start">
+
+    <section aria-labelledby="goal-heading" style="flex: 3 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 28px">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <h1 id="goal-heading" style="margin: 0; font-size: 30px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Trang này dùng để làm gì?</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #3C424E; max-width: 560px">Chọn một mục tiêu, chúng tôi dựng sẵn các section phù hợp và mặc định tối ưu chuyển đổi. Bạn đổi được mọi thứ trong editor.</p>
+      </div>
+
+      <fieldset style="margin: 0; padding: 0; border: 0; min-width: 0">
+        <legend style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Mục tiêu của trang</legend>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px">
+          <sc-for list="{{ goals }}" as="g" hint-placeholder-count="6">
+            <label style="position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 18px; border-radius: 12px; cursor: pointer; background: {{ g.bg }}; border: 1.5px solid {{ g.border }}; box-shadow: {{ g.shadow }}">
+              <div style="display: flex; align-items: center; justify-content: space-between">
+                <span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: {{ g.tileBg }}; color: {{ g.tileFg }}">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ g.icon }}"></path></svg>
+                </span>
+                <input type="radio" name="goal" value="{{ g.id }}" checked="{{ g.on }}" onChange="{{ g.pick }}" style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">
+              </div>
+              <span style="font-size: 15px; font-weight: 600">{{ g.title }}</span>
+              <span style="font-size: 13px; line-height: 1.5; color: #5E6573">{{ g.desc }}</span>
+            </label>
+          </sc-for>
+        </div>
+      </fieldset>
+
+      <div style="display: flex; flex-direction: column; gap: 18px; padding: 22px 24px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 600">Mô tả nhanh <span style="font-weight: 400; color: #5E6573">· tùy chọn</span></h2>
+          <p style="margin: 0; font-size: 13px; color: #5E6573">Dùng để điền sẵn tiêu đề và nút kêu gọi thay vì chữ mẫu.</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="offer" style="font-size: 13px; font-weight: 600">Ưu đãi hoặc dịch vụ chính</label>
+          <input id="offer" type="text" value="Niềng răng trong suốt — tư vấn miễn phí tháng 11" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; color: #15171C; background: #FFFFFF">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="audience" style="font-size: 13px; font-weight: 600">Ai sẽ xem trang này?</label>
+          <input id="audience" type="text" value="" placeholder="Ví dụ: người đi làm 22–35 tuổi tại TP.HCM" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; color: #15171C; background: #FFFFFF">
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding-top: 14px; border-top: 1px solid #EEF0F3">
+          <button type="button" role="switch" aria-checked="false" aria-labelledby="ai-label" style="flex: none; position: relative; width: 44px; height: 26px; margin-top: 1px; border: 0; border-radius: 999px; background: #CDD2DA; cursor: pointer; padding: 0">
+            <span aria-hidden="true" style="position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,28,0.2)"></span>
+          </button>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <span id="ai-label" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; font-weight: 600">Gợi ý nội dung bằng AI <span style="font-size: 11px; font-weight: 600; color: #3730A3; background: #EEF0FF; border-radius: 999px; padding: 2px 8px">Thử nghiệm</span></span>
+            <span style="font-size: 13px; line-height: 1.5; color: #5E6573">Gợi ý hiện cạnh nội dung hiện tại, bạn chọn Thay hoặc Giữ. Không bao giờ tự ghi đè.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside aria-labelledby="outline-heading" style="flex: 2 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 22px 22px 24px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+        <h2 id="outline-heading" style="margin: 0; font-size: 16px; font-weight: 600">Trang sẽ gồm</h2>
+        <span style="font-size: 13px; color: #5E6573">{{ count }} section</span>
+      </div>
+      <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{ outline }}" as="s" hint-placeholder-count="7">
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #EEF0F3; border-radius: 10px; background: #FAFBFC">
+            <span aria-hidden="true" style="width: 44px; height: 28px; flex: none; border-radius: 5px; background: #EEF0F3; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 6px; box-sizing: border-box">
+              <span style="display: block; height: 3px; width: {{ s.w1 }}; border-radius: 2px; background: #A8AEB9"></span>
+              <span style="display: block; height: 3px; width: {{ s.w2 }}; border-radius: 2px; background: #CDD2DA"></span>
+            </span>
+            <span style="flex: 1; font-size: 14px; font-weight: 500">{{ s.name }}</span>
+            <sc-if value="{{ s.form }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size: 11px; font-weight: 600; color: #0F5E55; background: #D9F2EE; border-radius: 999px; padding: 2px 8px">Form</span>
+            </sc-if>
+          </li>
+        </sc-for>
+      </ol>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 10px; background: #F5F6F8">
+        <span style="font-size: 13px; font-weight: 600">Mặc định hướng chuyển đổi</span>
+        <ul style="margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #3C424E">
+          <li>Form ngắn: Họ và tên + Số điện thoại</li>
+          <li>Nút kêu gọi lặp lại ở đầu và cuối trang</li>
+          <li>Bố cục một cột, ưu tiên màn hình điện thoại</li>
+          <li>Ô đồng ý xử lý dữ liệu không tick sẵn</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer style="position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 14px 32px; background: #FFFFFF; border-top: 1px solid #E2E5EA">
+    <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5E6573">
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+      Chưa có gì được xuất bản. Bản nháp chỉ nhóm của bạn nhìn thấy.
+    </span>
+    <a href="Editor.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 0 20px; border-radius: 10px; background: #4338CA; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 600">
+      Tiếp tục
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+    </a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { goal: 'lead' };
+  }
+  renderVals() {
+    var self = this;
+    var current = this.state.goal;
+    var defs = [
+      { id: 'lead', title: 'Thu lead tư vấn', desc: 'Khách để lại tên và số điện thoại để được gọi lại.', icon: 'M4 13l2.5-7h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 13h4l1.5 2.5h5L16 13h4' },
+      { id: 'promo', title: 'Ưu đãi có thời hạn', desc: 'Khuyến mãi theo chiến dịch, có điều kiện và hạn dùng.', icon: 'M3 12V4h8l10 10-8 8zM7.5 7.5h.01' },
+      { id: 'event', title: 'Sự kiện / webinar', desc: 'Giới thiệu chương trình và nhận đăng ký tham dự.', icon: 'M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M8 3v4M16 3v4' },
+      { id: 'product', title: 'Giới thiệu dịch vụ', desc: 'Trình bày lợi ích, cách làm và bảng giá.', icon: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9' },
+      { id: 'waitlist', title: 'Danh sách chờ', desc: 'Thu email trước khi ra mắt dịch vụ mới.', icon: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01' },
+      { id: 'about', title: 'Giới thiệu doanh nghiệp', desc: 'Trang thông tin, đội ngũ và cách liên hệ.', icon: 'M4 21V5l8-2v18M12 8h8v13M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01M3 21h18' }
+    ];
+    var outlines = {
+      lead: [['Hero + nút đặt lịch', 0], ['Lợi ích chính', 0], ['Cảm nhận khách hàng', 0], ['Ưu đãi & bảng giá', 0], ['Câu hỏi thường gặp', 0], ['Form đăng ký tư vấn', 1], ['Chân trang & chính sách', 0]],
+      promo: [['Hero + thời hạn ưu đãi', 0], ['Chi tiết ưu đãi', 0], ['Điều kiện áp dụng', 0], ['Cảm nhận khách hàng', 0], ['Form nhận ưu đãi', 1], ['Chân trang & chính sách', 0]],
+      event: [['Hero + thời gian, địa điểm', 0], ['Nội dung chương trình', 0], ['Diễn giả', 0], ['Form đăng ký tham dự', 1], ['Câu hỏi thường gặp', 0], ['Chân trang & chính sách', 0]],
+      product: [['Hero + hình dịch vụ', 0], ['Tính năng nổi bật', 0], ['Quy trình 3 bước', 0], ['Cảm nhận khách hàng', 0], ['Bảng giá', 0], ['Kêu gọi hành động', 0], ['Chân trang & chính sách', 0]],
+      waitlist: [['Hero + form email', 1], ['Lợi ích', 0], ['Câu hỏi thường gặp', 0], ['Chân trang & chính sách', 0]],
+      about: [['Hero', 0], ['Giới thiệu', 0], ['Dịch vụ', 0], ['Đội ngũ', 0], ['Liên hệ & bản đồ', 0], ['Chân trang & chính sách', 0]]
+    };
+    var widths = [['72%', '48%'], ['60%', '80%'], ['84%', '40%'], ['50%', '70%']];
+    var goals = defs.map(function (d) {
+      var on = d.id === current;
+      return Object.assign({}, d, {
+        on: on,
+        bg: on ? '#F5F5FF' : '#FFFFFF',
+        border: on ? '#4338CA' : '#E2E5EA',
+        shadow: on ? '0 0 0 3px #E0E2FF' : 'none',
+        tileBg: on ? '#4338CA' : '#F0F2F5',
+        tileFg: on ? '#FFFFFF' : '#3C424E',
+        pick: function () { self.setState({ goal: d.id }); }
+      });
+    });
+    var outline = outlines[current].map(function (o, i) {
+      var w = widths[i % widths.length];
+      return { name: o[0], form: o[1] === 1, w1: w[0], w2: w[1] };
+    });
+    return { goals: goals, outline: outline, count: outline.length };
+  }
+}
+</script>
+</body>
+</html>

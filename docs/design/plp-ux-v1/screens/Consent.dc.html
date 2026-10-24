@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Dữ liệu cá nhân &amp; đồng ý — Nha khoa Smile Care</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="Sidebar" active="consent" hint-size="248px,900px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 40px 56px">
+    <div style="max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+
+      <header style="display: flex; flex-direction: column; gap: 6px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Dữ liệu cá nhân &amp; đồng ý</h1>
+        <p style="margin: 0; font-size: 14px; color: #3C424E">Áp dụng cho mọi form trên các trang của Nha khoa Smile Care.</p>
+      </header>
+
+      <div style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 10px; background: #EEF0FF; color: #26208A; font-size: 13px; line-height: 1.5">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.8v.1"></path></svg>
+        Nội dung mặc định là điểm khởi đầu, không phải tư vấn pháp lý. Hãy nhờ người phụ trách pháp lý của doanh nghiệp kiểm tra trước khi dùng.
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+        <div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+          <section aria-labelledby="owner-title" style="padding: 18px 20px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px; display: flex; flex-direction: column; gap: 14px">
+            <h2 id="owner-title" style="margin: 0; font-size: 16px; font-weight: 600">Đơn vị thu thập dữ liệu</h2>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="org" style="font-size: 13px; font-weight: 600">Tên doanh nghiệp</label>
+              <input id="org" type="text" value="Công ty TNHH Nha khoa Smile Care" style="min-height: 42px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; color: #15171C">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <label for="dpo-mail" style="font-size: 13px; font-weight: 600">Email nhận yêu cầu về dữ liệu</label>
+              <input id="dpo-mail" type="email" value="dulieu@smilecare.vn" style="min-height: 42px; box-sizing: border-box; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; color: #15171C">
+            </div>
+            <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+              <legend style="padding: 0; margin-bottom: 8px; font-size: 13px; font-weight: 600">Chính sách quyền riêng tư</legend>
+              <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer"><input type="radio" name="policy" checked="checked" style="width: 18px; height: 18px; margin: 1px 0 0; accent-color: #4338CA"><span style="display: flex; flex-direction: column; gap: 2px">Tạo trang chính sách từ mẫu<span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #5E6573">go.smilecare.vn/chinh-sach-quyen-rieng-tu</span></span></label>
+              <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 14px; cursor: pointer"><input type="radio" name="policy" style="width: 18px; height: 18px; margin: 1px 0 0; accent-color: #4338CA">Dùng liên kết có sẵn</label>
+            </fieldset>
+          </section>
+
+          <section aria-labelledby="ret-title" style="padding: 18px 20px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px; display: flex; flex-direction: column; gap: 10px">
+            <h2 id="ret-title" style="margin: 0; font-size: 16px; font-weight: 600">Thời gian lưu lead</h2>
+            <label for="retention" style="font-size: 13px; color: #3C424E">Tự động xóa lead và bằng chứng đồng ý sau</label>
+            <select id="retention" style="min-height: 42px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF; color: #15171C"><option>12 tháng</option><option>24 tháng</option><option>6 tháng</option><option>Không tự xóa</option></select>
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Lead được xóa ở đây không tự xóa khỏi Google Sheets hay hệ thống khác đã kết nối.</span>
+          </section>
+        </div>
+
+        <section aria-labelledby="text-title" style="flex: 1 1 420px; min-width: 0; padding: 18px 20px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px">
+            <h2 id="text-title" style="margin: 0; font-size: 16px; font-weight: 600">Nội dung đồng ý trên form</h2>
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; font-size: 12px; font-weight: 600">Bản 2 · đang dùng từ 01/10/2026</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="consent-main" style="font-size: 13px; font-weight: 600">Đồng ý bắt buộc để gửi form</label>
+            <textarea id="consent-main" rows="3" style="box-sizing: border-box; padding: 10px 12px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 14px; line-height: 1.55; color: #15171C; resize: vertical">Tôi đồng ý để {Tên doanh nghiệp} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.</textarea>
+            <span style="font-size: 12px; color: #5E6573">Nêu rõ dữ liệu nào và dùng để làm gì. Liên kết chính sách được thêm tự động.</span>
+          </div>
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: 10px; border: 1px solid #E2E5EA">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span id="mkt-label" style="font-size: 14px; font-weight: 600">Thêm ô đồng ý nhận ưu đãi (không bắt buộc)</span>
+              <span style="font-size: 13px; line-height: 1.5; color: #5E6573">Tách riêng khỏi đồng ý tư vấn. Người gửi vẫn gửi được form nếu không chọn.</span>
+            </div>
+            <button type="button" role="switch" aria-checked="true" aria-labelledby="mkt-label" style="position: relative; width: 44px; height: 26px; flex: none; padding: 0; border: 0; border-radius: 999px; background: #4338CA; cursor: pointer"><span aria-hidden="true" style="position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 999px; background: #FFFFFF"></span></button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: #F5F6F8; font-size: 13px; color: #3C424E">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+            Ô đồng ý luôn để trống khi khách mở trang, không thể tick sẵn.
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 12px; border: 1px dashed #CDD2DA">
+            <span style="font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.04em">KHÁCH SẼ THẤY</span>
+            <span style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.55; color: #2D4A46"><span aria-hidden="true" style="width: 18px; height: 18px; flex: none; margin-top: 1px; border: 1.5px solid #8AA39E; border-radius: 4px; box-sizing: border-box"></span><span>Tôi đồng ý để Nha khoa Smile Care xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ. <span style="color: #0F5E55; font-weight: 600; text-decoration: underline">Chính sách quyền riêng tư</span></span></span>
+            <span style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.55; color: #2D4A46"><span aria-hidden="true" style="width: 18px; height: 18px; flex: none; margin-top: 1px; border: 1.5px solid #8AA39E; border-radius: 4px; box-sizing: border-box"></span><span>Nhận thông tin ưu đãi qua Zalo hoặc SMS (không bắt buộc)</span></span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+            <span style="font-size: 12px; line-height: 1.5; color: #5E6573; flex: 1 1 220px">Lưu sẽ tạo bản 3. Lead cũ vẫn giữ bản đã đồng ý. <a href="#" style="font-weight: 600; text-decoration: none">Xem bản 1</a></span>
+            <button type="button" style="min-height: 42px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; color: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer">Lưu thành bản 3</button>
+          </div>
+        </section>
+      </div>
+
+      <section aria-labelledby="req-title" style="background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 14px; overflow: hidden">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px 10px">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h2 id="req-title" style="margin: 0; font-size: 16px; font-weight: 600">Yêu cầu từ người gửi form</h2>
+            <span style="font-size: 13px; color: #5E6573">Xem, sửa, xóa dữ liệu hoặc rút lại đồng ý. Hạn được tính theo ngày làm việc.</span>
+          </div>
+          <button type="button" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+            Ghi nhận yêu cầu
+          </button>
+        </div>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 720px; border-collapse: collapse; font-size: 14px">
+            <thead>
+              <tr style="text-align: left">
+                <th scope="col" style="padding: 10px 18px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">NGƯỜI YÊU CẦU</th>
+                <th scope="col" style="padding: 10px 18px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">YÊU CẦU</th>
+                <th scope="col" style="padding: 10px 18px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">NHẬN LÚC</th>
+                <th scope="col" style="padding: 10px 18px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">HẠN</th>
+                <th scope="col" style="padding: 10px 18px; font-size: 12px; font-weight: 600; color: #5E6573; border-bottom: 1px solid #E2E5EA">TRẠNG THÁI</th>
+                <th scope="col" style="padding: 10px 18px; border-bottom: 1px solid #E2E5EA"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0)">Thao tác</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Lê Mai Anh</span><span style="font-size: 12px; color: #5E6573; font-variant-numeric: tabular-nums">0987 106 223 · 1 lead</span></div></td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3">Xóa toàn bộ dữ liệu</td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E">23/10 · 10:15</td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3; font-size: 13px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Phản hồi trước 27/10</span><span style="color: #5E6573">Hoàn tất trước 20/11</span></span></td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: #FFF1D6; color: #8A5300; font-size: 12px; font-weight: 600; white-space: nowrap"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Cần phản hồi</span></td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3; text-align: right"><button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer; white-space: nowrap">Xử lý</button></td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">Phạm Gia Huy</span><span style="font-size: 12px; color: #5E6573; font-variant-numeric: tabular-nums">0912 448 019 · 2 lead</span></div></td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3">Rút lại đồng ý nhận ưu đãi</td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #3C424E">15/10 · 19:02</td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3; font-size: 13px; color: #5E6573">—</td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; font-size: 12px; font-weight: 600; white-space: nowrap"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Hoàn tất 16/10</span></td>
+                <td style="padding: 12px 18px; border-bottom: 1px solid #EEF0F3; text-align: right"><button type="button" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #3730A3; cursor: pointer; white-space: nowrap">Xem nhật ký</button></td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 18px"><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 600">thaovy.h@…</span><span style="font-size: 12px; color: #5E6573">qua email · 1 lead</span></div></td>
+                <td style="padding: 12px 18px">Xem dữ liệu đang lưu</td>
+                <td style="padding: 12px 18px; font-size: 13px; color: #3C424E">02/10 · 08:40</td>
+                <td style="padding: 12px 18px; font-size: 13px; color: #5E6573">—</td>
+                <td style="padding: 12px 18px"><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: #E2F4EA; color: #0B6B45; font-size: 12px; font-weight: 600; white-space: nowrap"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Đã gửi bản sao 05/10</span></td>
+                <td style="padding: 12px 18px; text-align: right"><button type="button" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #3730A3; cursor: pointer; white-space: nowrap">Xem nhật ký</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-24T10:40:00Z"},
+  "title": "Payload Landing Page — Product Design",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 1080, "title": "01 · Bảng điều khiển — danh sách trang", "expand": "fill", "is_interactive": true},
+    "Onboarding.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 1080, "title": "02 · Tạo trang — chọn mục tiêu & brief", "expand": "fill", "is_interactive": true},
+    "Editor.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 1080, "title": "03 · Editor — section builder có hướng dẫn", "expand": "fill", "is_interactive": true},
+    "AddSection.dc.html": {"x": 4560, "y": 0, "w": 1440, "h": 1080, "title": "04 · Thêm section", "expand": "fill", "is_interactive": true},
+    "Publish.dc.html": {"x": 0, "y": 1560, "w": 1440, "h": 1000, "title": "05 · Xuất bản — kiểm tra trước khi live", "expand": "fill", "is_interactive": true},
+    "History.dc.html": {"x": 1520, "y": 1560, "w": 1440, "h": 1000, "title": "06 · Lịch sử phiên bản & rollback", "expand": "fill", "is_interactive": true},
+    "SEO.dc.html": {"x": 3040, "y": 1560, "w": 1440, "h": 1000, "title": "07 · SEO & chia sẻ", "expand": "fill", "is_interactive": true},
+    "Domain.dc.html": {"x": 4560, "y": 1560, "w": 1440, "h": 1000, "title": "08 · Tên miền", "expand": "fill", "is_interactive": true},
+    "PublicPage.dc.html": {"x": 0, "y": 3060, "w": 390, "h": 1720, "title": "09 · Trang public trên mobile (khách truy cập)"},
+    "Leads.dc.html": {"x": 470, "y": 3060, "w": 1440, "h": 1000, "title": "10 · Hộp thư lead", "expand": "fill", "is_interactive": true},
+    "Analytics.dc.html": {"x": 1990, "y": 3060, "w": 1440, "h": 1000, "title": "11 · Hiệu quả trang", "expand": "fill", "is_interactive": true},
+    "Consent.dc.html": {"x": 3510, "y": 3060, "w": 1440, "h": 1080, "title": "12 · Dữ liệu cá nhân & đồng ý", "expand": "fill", "is_interactive": true},
+    "Sidebar.dc.html": {"x": -368, "y": 0, "w": 248, "h": 900, "title": "Thành phần · Sidebar điều hướng"}
+  },
+  "order": [
+    "Main.dc.html",
+    "Onboarding.dc.html",
+    "Editor.dc.html",
+    "AddSection.dc.html",
+    "Publish.dc.html",
+    "History.dc.html",
+    "SEO.dc.html",
+    "Domain.dc.html",
+    "PublicPage.dc.html",
+    "Leads.dc.html",
+    "Analytics.dc.html",
+    "Consent.dc.html",
+    "Sidebar.dc.html"
+  ],
+  "notes": {
+    "rowCreate": {"x": 0, "y": -320, "text": "CREATE — Tạo & biên tập trang", "kind": "title1", "maxW": 6000},
+    "rowOperate": {"x": 0, "y": 1240, "text": "OPERATE — Xuất bản an toàn, lịch sử, SEO, tên miền", "kind": "title1", "maxW": 6000},
+    "rowConvert": {"x": 0, "y": 2740, "text": "CONVERT — Lead & đo lường (chỉ khi chọn MVP B)", "kind": "title1", "maxW": 4950},
+    "assumptions": {"x": -888, "y": 0, "w": 440, "fill": "blue", "text": "Giả định thiết kế (chưa phải quyết định)\n\n• ICP chính: SME marketing + small agency — D-01 còn mở\n• Baseline MVP A (publish-first); hàng CONVERT chỉ áp dụng nếu chọn MVP B — D-02\n• Editor: section builder có hướng dẫn — D-03\n• Workspace agency → nhiều site khách hàng — D-05\n• Nội dung mẫu: khách hàng giả định “Nha khoa Smile Care”; số liệu trong mockup là dữ liệu mẫu\n• Font Be Vietnam Pro + JetBrains Mono"}
+  },
+  "designSystems": []
+}
