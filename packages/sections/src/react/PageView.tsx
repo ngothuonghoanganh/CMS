@@ -7,6 +7,9 @@ import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
 import { fontStyle } from './theme-style.js';
 
+/** Id of the page's <main> in live mode, the target of the renderer's skip link. */
+export const MAIN_CONTENT_ID = 'main-content';
+
 export interface PageViewProps {
   composition: Composition;
   themePresetId: ThemePresetId;
@@ -44,7 +47,12 @@ export function PageView({ composition, themePresetId, ctx, wrapSection }: PageV
   return (
     <div className={frame.page} style={fontStyle(theme)}>
       {header?.node}
-      <main>{body.map((entry) => entry.node)}</main>
+      {ctx.mode === 'live' ? (
+        <main id={MAIN_CONTENT_ID}>{body.map((entry) => entry.node)}</main>
+      ) : (
+        // The admin canvas sits inside the admin's own <main>; avoid nested landmarks there.
+        <div>{body.map((entry) => entry.node)}</div>
+      )}
       {footer?.node}
     </div>
   );
