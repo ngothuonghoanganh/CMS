@@ -1,0 +1,10 @@
+{
+  "extends": "@plp/config/tsconfig.node.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["src", "vitest.config.ts"]
+}

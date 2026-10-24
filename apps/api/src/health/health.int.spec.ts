@@ -1,41 +1,26 @@
-import 'reflect-metadata';
-import type { Server } from 'node:http';
-import type { INestApplication } from '@nestjs/common';
-import { getConnectionToken } from '@nestjs/mongoose';
-import { Test } from '@nestjs/testing';
-import { healthResponseSchema } from '@plp/contracts';
-import type { Connection } from 'mongoose';
 import request from 'supertest';
+import { healthResponseSchema } from '@plp/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dropDatabase, isolatedMongoUri } from '../../test/mongo.js';
-import { AppModule } from '../app.module.js';
-import { parseEnv } from '../config/env.js';
+import { createTestApp, type TestApp } from '../../test/app.js';
 
 describe('GET /health', () => {
-  const mongoUri = isolatedMongoUri('plp_test_health');
-  let app: INestApplication<Server>;
+  let t: TestApp;
 
   beforeAll(async () => {
-    const env = parseEnv({ MONGODB_URI: mongoUri, NODE_ENV: 'test', LOG_LEVEL: 'silent' });
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule.forRoot(env)],
-    }).compile();
-    app = moduleRef.createNestApplication<INestApplication<Server>>();
-    await app.init();
+    t = await createTestApp('plp_test_health');
   });
 
   afterAll(async () => {
-    await app.close();
-    await dropDatabase(mongoUri);
+    await t.close();
   });
 
-  it('reports the API and database as healthy', async () => {
-    const response = await request(app.getHttpServer()).get('/health').expect(200);
+  it('reports the API and database as healthy without a session', async () => {
+    const response = await request(t.app.getHttpServer()).get('/health').expect(200);
     expect(healthResponseSchema.parse(response.body)).toEqual({ status: 'ok', mongo: 'up' });
   });
 
   it('echoes the caller request id for log correlation', async () => {
-    const response = await request(app.getHttpServer())
+    const response = await request(t.app.getHttpServer())
       .get('/health')
       .set('x-request-id', 'test-request-id')
       .expect(200);
@@ -43,7 +28,7 @@ describe('GET /health', () => {
   });
 
   it('runs MongoDB as a replica set, which publish transactions require', async () => {
-    const db = app.get<Connection>(getConnectionToken()).db;
+    const db = t.connection.db;
     if (!db) {
       throw new Error('Database connection is not ready');
     }

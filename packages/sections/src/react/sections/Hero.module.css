@@ -1,0 +1,130 @@
+.root {
+  display: grid;
+  gap: 32px;
+  align-items: center;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--plp-link);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.media {
+  min-width: 0;
+}
+
+/* Centered */
+.centered {
+  justify-items: center;
+  text-align: center;
+}
+
+.centered .text {
+  align-items: center;
+  max-width: 720px;
+}
+
+.centered .actions {
+  justify-content: center;
+}
+
+/* Background image: the overlay keeps white text readable on any photo. */
+.background {
+  position: relative;
+  isolation: isolate;
+  min-height: 420px;
+  padding: 40px 24px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--plp-surface);
+}
+
+.background .text {
+  max-width: 640px;
+}
+
+.backgroundImage {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+
+.backgroundImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.backgroundImage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 15, 20, 0.62);
+}
+
+.backgroundImage:empty::after {
+  display: none;
+}
+
+.background:has(.backgroundImage img) .heading,
+.background:has(.backgroundImage img) .subheading,
+.background:has(.backgroundImage img) .eyebrow {
+  color: #ffffff;
+}
+
+@container plp-page (max-width: 767px) {
+  .mediaFirst .media {
+    order: -1;
+  }
+}
+
+@container plp-page (min-width: 768px) {
+  .heading {
+    font-size: 44px;
+  }
+
+  .split {
+    grid-template-columns: 1.1fr 1fr;
+    gap: 48px;
+  }
+
+  .background {
+    min-height: 520px;
+    padding: 64px;
+    align-content: center;
+  }
+}
