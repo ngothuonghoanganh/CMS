@@ -7,6 +7,7 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
+import { LoginAttemptsRepository, loginAccountKey } from './login-attempts.repository.js';
 import { hashPassword, timingSafeDummyHash, verifyPassword } from './password.js';
 import { hashSessionToken, newSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
@@ -24,6 +25,7 @@ export class AuthService {
     @InjectEnv() private readonly env: Env,
     private readonly users: UsersRepository,
     private readonly sessions: SessionsRepository,
+    private readonly loginAttempts: LoginAttemptsRepository,
     private readonly workspaces: WorkspacesRepository,
     private readonly transactions: TransactionRunner,
   ) {}
@@ -53,7 +55,24 @@ export class AuthService {
     return this.issueSession({ id: userId, name: input.name, email: input.email });
   }
 
+  /**
+   * Each account allows `LOGIN_FAILURE_LIMIT` failed attempts per window. The attempt is counted
+   * before the password is checked; a success clears the count (ADR-004).
+   */
   async login(input: LoginRequest): Promise<IssuedSession> {
+    const accountKey = loginAccountKey(input.email);
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + this.env.LOGIN_FAILURE_WINDOW_MINUTES * 60_000);
+    const attempts = await this.loginAttempts.begin(accountKey, now, windowEnd);
+    if (attempts.count > this.env.LOGIN_FAILURE_LIMIT) {
+      const minutes = Math.max(
+        1,
+        Math.ceil((attempts.expiresAt.getTime() - now.getTime()) / 60_000),
+      );
+      throw new AppError(429, 'rate_limited', 'Đăng nhập sai quá nhiều lần', {
+        detail: `Tài khoản này tạm dừng đăng nhập vì nhập sai quá nhiều lần. Thử lại sau ${String(minutes)} phút.`,
+      });
+    }
     const user = await this.users.findByEmail(input.email);
     const valid = user
       ? await verifyPassword(user.passwordHash, input.password)
@@ -61,6 +80,7 @@ export class AuthService {
     if (!user || !valid) {
       throw new AppError(401, 'invalid_credentials', 'Email hoặc mật khẩu không đúng');
     }
+    await this.loginAttempts.clear(accountKey);
     return this.issueSession({ id: user._id, name: user.name, email: user.email });
   }
 
