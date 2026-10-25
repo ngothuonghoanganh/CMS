@@ -174,3 +174,78 @@ describe('auth rate limit behind a trusted edge proxy', () => {
     await fromClient('198.51.100.40', '/auth/signup', signupInput()).expect(201);
   });
 });
+
+describe('per-account login limit', () => {
+  let t: TestApp;
+
+  beforeAll(async () => {
+    t = await createTestApp('plp_test_auth_account_limit', { env: { LOGIN_FAILURE_LIMIT: 3 } });
+  });
+
+  afterAll(async () => {
+    await t.close();
+  });
+
+  async function signUp() {
+    const input = signupInput();
+    await new TestClient(t.app).post('/auth/signup', input).expect(201);
+    return input;
+  }
+
+  const login = (email: string, password: string) =>
+    new TestClient(t.app).post('/auth/login', { email, password });
+
+  it('refuses an account after too many failed logins, even with the right password', async () => {
+    const victim = await signUp();
+    const other = await signUp();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await login(victim.email, 'wrong-password').expect(401);
+    }
+
+    const response = await login(victim.email, victim.password).expect(429);
+    const problem = problemSchema.parse(response.body);
+    expect(problem.code).toBe('rate_limited');
+    expect(problem.detail).toContain('Thử lại sau 15 phút');
+    await login(other.email, other.password).expect(200);
+  });
+
+  it('clears the count after a successful login', async () => {
+    const user = await signUp();
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, user.password).expect(200);
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, user.password).expect(200);
+  });
+
+  it('limits an email without an account the same way', async () => {
+    const email = `ghost-${String(process.pid)}@example.com`;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await login(email, 'wrong-password').expect(401);
+    }
+    await login(email, 'wrong-password').expect(429);
+  });
+
+  it('lets no more than the limit of parallel attempts reach the password check', async () => {
+    const user = await signUp();
+    const responses = await Promise.all(
+      Array.from({ length: 10 }, () => login(user.email, 'wrong-password')),
+    );
+    const statuses = responses.map((response) => response.status).sort();
+    expect(statuses).toEqual([401, 401, 401, 429, 429, 429, 429, 429, 429, 429]);
+  });
+
+  it('starts a new window once the previous one has ended', async () => {
+    const user = await signUp();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await login(user.email, 'wrong-password').expect(401);
+    }
+    await login(user.email, user.password).expect(429);
+
+    await t.connection
+      .collection('login_attempts')
+      .updateMany({}, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+    await login(user.email, user.password).expect(200);
+  });
+});

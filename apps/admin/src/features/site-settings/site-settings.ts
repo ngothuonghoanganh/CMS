@@ -1,5 +1,12 @@
 import type { Asset, Site, ThemePresetId, UpdateSiteRequest } from '@plp/contracts';
 
+/**
+ * Shown after the site settings are saved: each live page keeps the name, theme, logo and share
+ * image its release was published with until that page is published again (ADR-015).
+ */
+export const LIVE_PAGES_KEEP_LOOK =
+  'Trang nào đang live sẽ giữ giao diện cũ cho tới khi bạn xuất bản lại trang đó. Bản nháp và xem trước dùng cài đặt mới ngay.';
+
 /** The values of the site settings form. */
 export interface SiteSettingsValues {
   name: string;

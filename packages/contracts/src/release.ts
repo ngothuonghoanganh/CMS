@@ -26,6 +26,12 @@ export const publishRequestSchema = z.object({
   expectedPublishedReleaseId: idSchema.nullable(),
   /** Fingerprints of the warnings the user chose to skip for this publish. */
   acknowledgedWarnings: z.array(z.string().max(300)).max(100),
+  /**
+   * Labels of the site-settings chips the user saw (`PageSummary.siteChanges`). The release freezes
+   * the site settings read at publish; when they no longer give these chips, publish answers 409
+   * `site_changed` rather than make live a look nobody reviewed (ADR-015).
+   */
+  acknowledgedSiteChanges: z.array(z.string().max(100)).max(10).default([]),
   note: z.string().trim().max(200, 'Ghi chú tối đa 200 ký tự'),
 });
 export type PublishRequest = z.infer<typeof publishRequestSchema>;

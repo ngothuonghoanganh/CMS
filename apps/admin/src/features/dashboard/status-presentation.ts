@@ -1,6 +1,6 @@
 import type { PageStatusKind, PageSummary, PointerEvent } from '@plp/contracts';
 import { type DateInput, formatDayMonth, formatRelativeTime } from '../../lib/format';
-import { SAME_AS_LIVE } from '../editor/presentation';
+import { hasSiteChanges, SAME_AS_LIVE, SITE_CHANGED_REMINDER } from '../editor/presentation';
 
 export type ChecksTone = 'danger' | 'warning' | 'success' | 'muted';
 
@@ -8,7 +8,10 @@ export type ChecksTone = 'danger' | 'warning' | 'success' | 'muted';
 export interface PageStatusPresentation {
   /** Status for `StatusBadge` ("Live", "Live · Có thay đổi", "Bản nháp", "Đã gỡ"). */
   badge: PageStatusKind;
-  /** Line under the badge, e.g. "4 thay đổi chưa xuất bản". */
+  /**
+   * Line under the badge, e.g. "4 thay đổi chưa xuất bản", or for a live page whose site settings
+   * changed since it was published, "Giao diện site đã đổi · xuất bản lại để áp dụng".
+   */
   subtext: string;
   /** "PHIÊN BẢN LIVE" column, e.g. "v12 · 2 giờ trước". */
   versionLine: string;
@@ -36,11 +39,17 @@ function subtextOf(page: PageSummary): string {
       if (event?.type === 'rolled_back') {
         return restoredLine(page);
       }
-      // After "Quay về bản live" the revision differs (rule 2) but nothing changed in content.
-      return page.status.changeCount === 0
-        ? SAME_AS_LIVE
-        : `${page.status.changeCount} thay đổi chưa xuất bản`;
+      // After "Quay về bản live" the revision differs (rule 2) but nothing changed in content;
+      // a publish would then only apply the site's new look, if any (ADR-015).
+      if (page.status.changeCount === 0) {
+        return hasSiteChanges(page) ? SITE_CHANGED_REMINDER : SAME_AS_LIVE;
+      }
+      return `${page.status.changeCount} thay đổi chưa xuất bản`;
     case 'live':
+      // The only thing a publish would change is the site's look (ADR-015): say so first.
+      if (hasSiteChanges(page)) {
+        return SITE_CHANGED_REMINDER;
+      }
       return isRestore(event) ? restoredLine(page) : 'Bản nháp trùng bản live';
     case 'draft':
       return 'Chưa từng xuất bản';

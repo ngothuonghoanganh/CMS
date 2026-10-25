@@ -128,6 +128,7 @@ export async function currentPublishBody(
     expectedRevision: detail.draft.revision,
     expectedPublishedReleaseId: detail.page.liveRelease?.id ?? null,
     acknowledgedWarnings: detail.checks.warnings.map((warning) => warning.fingerprint),
+    acknowledgedSiteChanges: detail.page.siteChanges.map((change) => change.label),
     note,
   };
 }

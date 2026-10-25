@@ -88,6 +88,13 @@ describe('release lines', () => {
         ],
       }),
     ).toBe('Sửa: Ưu đãi & bảng giá · SEO: mô tả');
+    // A republish that only applied new site settings (ADR-015).
+    expect(
+      releaseChangesLine({
+        version: 13,
+        changeSummary: [{ kind: 'site', label: 'Giao diện site: logo', sectionId: null }],
+      }),
+    ).toBe('Giao diện site: logo');
     expect(releaseChangesLine({ version: 1, changeSummary: [] })).toBe('Phiên bản đầu tiên');
     expect(releaseChangesLine({ version: 4, changeSummary: [] })).toBe(
       'Không có thay đổi so với bản trước',

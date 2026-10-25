@@ -18,8 +18,13 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { PreviewTokens } from '../preview/preview-tokens.js';
 import { imageOccurrences, linkedPageIds } from '../publishing/domain/content-refs.js';
 import { resolveSeo } from '../publishing/domain/resolve-seo.js';
+import type { SitePresentation } from '../publishing/domain/site-presentation.js';
 import type { PageSnapshot } from '../publishing/domain/snapshot.js';
 import { RedirectsRepository } from '../publishing/redirects.repository.js';
+import {
+  currentSitePresentation,
+  releasePresentation,
+} from '../publishing/release-presentation.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
@@ -79,7 +84,7 @@ export class PublicDeliveryService {
       }
       return resolveResponseSchema.parse({
         kind: 'page',
-        data: await this.pageData(site, live._id, release),
+        data: await this.pageData(site, live._id, release, releasePresentation(release, site)),
       });
     }
     const location = await this.redirectLocation(site, slug);
@@ -151,7 +156,8 @@ export class PublicDeliveryService {
 
   /**
    * A signed preview (ADR-010): the latest draft of a page or one release. Any invalid, expired or
-   * foreign token is 404, like a page that does not exist.
+   * foreign token is 404, like a page that does not exist. A draft shows the current site settings,
+   * which its next publish will snapshot; a release shows its own snapshot (ADR-015).
    */
   async preview(token: string): Promise<PublicPreviewResponse> {
     const claims = await this.previews.verify(token);
@@ -173,7 +179,7 @@ export class PublicDeliveryService {
         throw notFound(PUBLIC_PAGE_NOT_FOUND);
       }
       return publicPreviewResponseSchema.parse({
-        data: await this.pageData(site, page._id, page.draft),
+        data: await this.pageData(site, page._id, page.draft, currentSitePresentation(site)),
         preview: { kind: 'draft', version: null, expiresAt },
       });
     }
@@ -182,7 +188,7 @@ export class PublicDeliveryService {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
     return publicPreviewResponseSchema.parse({
-      data: await this.pageData(site, release.pageId, release),
+      data: await this.pageData(site, release.pageId, release, releasePresentation(release, site)),
       preview: { kind: 'release', version: release.version, expiresAt },
     });
   }
@@ -197,12 +203,15 @@ export class PublicDeliveryService {
 
   /**
    * Everything the renderer needs for one page: only the assets the composition references (with
-   * public URLs), the live path of every linked page and the resolved SEO.
+   * public URLs), the live path of every linked page and the resolved SEO. The site's name, theme,
+   * logo and default share image come from `presentation`, never from the site record (ADR-015);
+   * the record only gives the site's identity and address.
    */
   private async pageData(
     site: SiteRecord,
     pageId: ObjectId,
     snapshot: PageSnapshot,
+    presentation: SitePresentation,
   ): Promise<PublicPageData> {
     const imageIds = [
       ...new Set(
@@ -213,8 +222,8 @@ export class PublicDeliveryService {
     ];
     const siteImageIds = [
       snapshot.seo.shareImageAssetId,
-      site.defaultShareImageAssetId?.toHexString() ?? null,
-      site.logoAssetId?.toHexString() ?? null,
+      presentation.defaultShareImageAssetId,
+      presentation.logoAssetId,
     ];
     const linkedIds = linkedPageIds(snapshot.composition);
     const [found, liveSlugs] = await Promise.all([
@@ -230,28 +239,20 @@ export class PublicDeliveryService {
       };
     }
     const origin = this.sitesService.defaultOrigin(site);
-    const logoId = site.logoAssetId?.toHexString();
+    const logoId = presentation.logoAssetId;
     return {
       site: {
         id: site._id.toHexString(),
-        name: site.name,
+        name: presentation.name,
         subdomain: site.subdomain,
-        themePresetId: site.themePresetId,
-        logo: logoId === undefined ? null : (images[logoId] ?? null),
+        themePresetId: presentation.themePresetId,
+        logo: logoId === null ? null : (images[logoId] ?? null),
         origin,
       },
       page: {
         id: pageId.toHexString(),
         slug: snapshot.slug,
-        seo: resolveSeo(
-          snapshot,
-          {
-            name: site.name,
-            defaultShareImageAssetId: site.defaultShareImageAssetId?.toHexString() ?? null,
-          },
-          origin,
-          images,
-        ),
+        seo: resolveSeo(snapshot, presentation, origin, images),
         composition: snapshot.composition,
       },
       assets: Object.fromEntries(

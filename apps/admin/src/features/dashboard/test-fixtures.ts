@@ -55,6 +55,7 @@ export function pageFixture(overrides: Partial<PageSummary> = {}): PageSummary {
     slug: 'uu-dai-thang-11',
     goal: 'promo',
     status: { kind: 'live', changeCount: 0, changes: [] },
+    siteChanges: [],
     liveRelease: {
       id: '64b000000000000000000201',
       version: 12,

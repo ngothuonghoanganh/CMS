@@ -1,5 +1,12 @@
-import type { ChangeItem, Composition, Seo } from '@plp/contracts';
+import {
+  type ChangeItem,
+  changeKinds,
+  type Composition,
+  type Seo,
+  themePresetIds,
+} from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import type { SitePresentation } from './domain/site-presentation.js';
 
 export const RELEASE_MODEL = 'Release';
 export const RELEASES_VERSION_INDEX = 'releases_page_version_unique';
@@ -18,6 +25,12 @@ export interface ReleaseRecord {
   slug: string;
   composition: Composition;
   seo: Seo;
+  /**
+   * The site settings the page is served with (ADR-015), read from the site inside the publish
+   * transaction. Only releases published before ADR-015 lack it; `releasePresentation` reads
+   * those as the current site.
+   */
+  sitePresentation?: SitePresentation;
   /** Draft revision the snapshot was taken from; the page is `live` while the draft keeps it. */
   sourceRevision: number;
   createdBy: Types.ObjectId;
@@ -35,13 +48,19 @@ function slugMissing(this: ReleaseRecord): boolean {
 
 const changeItemSchema = new Schema<ChangeItem>(
   {
-    kind: {
-      type: String,
-      enum: ['added', 'removed', 'modified', 'moved', 'seo', 'slug'],
-      required: true,
-    },
+    kind: { type: String, enum: changeKinds, required: true },
     label: { type: String, required: true },
     sectionId: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+const sitePresentationSchema = new Schema<SitePresentation>(
+  {
+    name: { type: String, required: true },
+    themePresetId: { type: String, enum: themePresetIds, required: true },
+    logoAssetId: { type: String, default: null },
+    defaultShareImageAssetId: { type: String, default: null },
   },
   { _id: false },
 );
@@ -56,6 +75,8 @@ export const releaseSchema = new Schema<ReleaseRecord>(
     slug: { type: String, required: slugMissing },
     composition: { type: Schema.Types.Mixed, required: true },
     seo: { type: Schema.Types.Mixed, required: true },
+    // Required for every new release; documents published before ADR-015 are read without it.
+    sitePresentation: { type: sitePresentationSchema, required: true },
     sourceRevision: { type: Number, required: true, min: 0 },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },

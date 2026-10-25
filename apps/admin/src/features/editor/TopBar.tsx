@@ -30,6 +30,7 @@ import {
   checksSummaryView,
   deviceLabels,
   liveStatusView,
+  pendingChangeCount,
   publishButtonLabel,
   saveStatusView,
 } from './presentation';
@@ -114,7 +115,7 @@ export function TopBar({
   const summary = checksSummaryView(checks);
   const pageBase = `/sites/${siteId}/pages/${pageId}`;
   const publishLabel = publishButtonLabel(page);
-  const changeCount = page.status.changeCount;
+  const changeCount = pendingChangeCount(page);
 
   const checksButton = (
     <button
@@ -138,7 +139,7 @@ export function TopBar({
     <Button
       onClick={onOpenPublish}
       trailingIcon={
-        page.status.kind !== 'draft' && changeCount > 0 ? (
+        changeCount > 0 ? (
           <span className={styles.count}>
             {changeCount}
             <VisuallyHidden> thay đổi</VisuallyHidden>

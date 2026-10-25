@@ -88,6 +88,27 @@ describe('DraftNotice', () => {
     );
   });
 
+  it('says the live page keeps its look while the site settings differ from it (ADR-015)', () => {
+    const store = makeStore({
+      detail: pageDetail(sampleComposition(), {
+        status: { kind: 'live', changeCount: 0, changes: [] },
+        siteChanges: [{ kind: 'site', label: 'Giao diện site: tên site', sectionId: null }],
+        liveRelease,
+        latestVersion: 12,
+        liveUrl: 'https://go.smilecare.vn/uu-dai-thang-11',
+      }),
+    });
+    renderEditor(
+      <DraftNotice ensureSaved={() => Promise.resolve(currentSaveResponse(store.getState()))} />,
+      { store },
+    );
+    expect(screen.getByText(/Bạn đang sửa/)).toHaveTextContent(
+      'giữ nguyên đến khi bạn xuất bản. Giao diện site đã đổi sau khi xuất bản v12: trang live vẫn dùng giao diện cũ cho tới khi bạn xuất bản lại.',
+    );
+    // Nothing differs in the draft, so there is nothing to discard.
+    expect(screen.queryByRole('button', { name: 'Hủy thay đổi, quay về bản live' })).toBeNull();
+  });
+
   it('restores the live version into the draft after confirmation', async () => {
     const user = userEvent.setup();
     const store = liveStore();

@@ -7,7 +7,7 @@ import { ApiError, api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import styles from './DraftNotice.module.css';
 import { useEditor, useEditorStoreApi } from './editor-context';
-import { displayUrl } from './presentation';
+import { displayUrl, siteChangesNotice } from './presentation';
 import { replaceWithServerDraft } from './server-draft';
 import { DraftConflictError } from './use-draft-saver';
 
@@ -18,6 +18,8 @@ export interface DraftNoticeProps {
 /**
  * The amber strip under the top bar: editing never changes the live page until publishing. When
  * the draft differs from the live release, it offers to replace the draft with the live version.
+ * When the site settings changed after the live release, it says the live page keeps the old look
+ * until the next publish (ADR-015).
  */
 export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
   const store = useEditorStoreApi();
@@ -71,11 +73,13 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
     message =
       'Trang đã được gỡ khỏi internet. Bản nháp chỉ nhóm của bạn nhìn thấy cho tới khi bạn xuất bản lại.';
   } else {
+    const siteNotice = siteChangesNotice(page);
     message = (
       <>
         Bạn đang sửa <strong>bản nháp</strong>. Trang live{' '}
         <span className={styles.url}>{displayUrl(page.liveUrl)}</span> giữ nguyên đến khi bạn xuất
         bản.
+        {siteNotice === null ? null : <> {siteNotice}</>}
       </>
     );
   }

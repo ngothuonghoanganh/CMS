@@ -1,11 +1,33 @@
-import { expect, test } from '@playwright/test';
+import { type APIRequestContext, expect, test } from '@playwright/test';
+import { resolveResponseSchema, type ThemePresetId } from '@plp/contracts';
 import { Editor } from '../support/editor.js';
 import { fetchPublic } from '../support/public-site.js';
 import { createPageViaApi, promoPage, setUpSite } from '../support/setup.js';
-import { siteOrigin } from '../urls.js';
+import { siteOrigin, urls } from '../urls.js';
 
 const SEO_TITLE = 'Niềng răng giảm 30% | Smile Care';
 const SEO_DESCRIPTION = 'Ưu đãi niềng răng trong suốt tháng 11, tư vấn miễn phí.';
+
+// Background of the "Tối" scheme the promotion page's footer uses, in the server-rendered HTML.
+const MINT_FOOTER = '--plp-bg:#0B2E2A';
+const SUNSET_FOOTER = '--plp-bg:#2B1510';
+
+/** Theme of the live page straight from the API, behind any renderer cache. */
+async function liveTheme(
+  request: APIRequestContext,
+  subdomain: string,
+  slug: string,
+): Promise<ThemePresetId> {
+  const response = await request.get(
+    `${urls.api}/public/sites/${subdomain}/resolve?path=${encodeURIComponent(slug)}`,
+  );
+  expect(response.status()).toBe(200);
+  const resolved = resolveResponseSchema.parse(await response.json());
+  if (resolved.kind !== 'page') {
+    throw new Error(`Expected a page at "${slug}", got a redirect`);
+  }
+  return resolved.data.site.themePresetId;
+}
 
 test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', () => {
   test('a new slug redirects the old URL after publishing; head, sitemap and robots follow', async ({
@@ -84,6 +106,72 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
     expect((await fetchPublic(request, site.subdomain, '/uu-dai-thang-11')).html).toMatch(
       /<meta name="robots" content="noindex/,
     );
+  });
+
+  test('a new site theme reaches a live page only when the page is published again', async ({
+    page,
+    request,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    const created = await createPageViaApi(page.request, site.id, promoPage('uu-dai', 'Ưu đãi'));
+    const editor = new Editor(page);
+    await editor.goto(site.id, created.page.id);
+    await editor.publish(1);
+    const published = await fetchPublic(request, site.subdomain, '/uu-dai');
+    expect(published.status).toBe(200);
+    expect(published.html).toContain(MINT_FOOTER);
+
+    // The owner switches the theme in the site settings.
+    await page.goto(`/sites/${site.id}/settings`);
+    await page.getByRole('radio', { name: 'Hoàng hôn' }).click();
+    await page.getByRole('button', { name: 'Lưu cài đặt' }).click();
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: 'Trang nào đang live sẽ giữ giao diện cũ cho tới khi bạn xuất bản' }),
+    ).toBeVisible();
+
+    // Saving is not publishing (ADR-015): the very next request still gets the published look,
+    // and so does the API behind the renderer's cache.
+    const saved = await fetchPublic(request, site.subdomain, '/uu-dai');
+    expect(saved.html).toContain(MINT_FOOTER);
+    expect(saved.html).not.toContain(SUNSET_FOOTER);
+    expect(await liveTheme(request, site.subdomain, 'uu-dai')).toBe('mint');
+
+    // The dashboard reminds that the live page keeps the old look; the page is still "Live".
+    await page.goto(`/sites/${site.id}`);
+    const row = page.getByRole('row').filter({ hasText: 'Ưu đãi niềng răng tháng 11' });
+    await expect(row.getByText('Giao diện site đã đổi · xuất bản lại để áp dụng')).toBeVisible();
+
+    // Publishing the unchanged draft applies the new theme.
+    await editor.goto(site.id, created.page.id);
+    await expect(editor.topBar.getByText('Live v1 · Giao diện site đã đổi')).toBeVisible();
+    // The draft notice says so too; only the visible notice counts, as a hidden copy of the
+    // screen can exist while it loads.
+    await expect(
+      page.getByText(/Giao diện site đã đổi sau khi xuất bản v1/).filter({ visible: true }),
+    ).toBeVisible();
+    const dialog = await editor.openPublishDialog();
+    await expect(
+      dialog.getByRole('list', { name: 'Các thay đổi' }).getByRole('listitem'),
+    ).toHaveText(['Giao diện site: giao diện']);
+    const done = await editor.publishFromDialog(dialog, 2);
+    await done.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }).click();
+    await expect(editor.topBar.getByText('Live v2', { exact: true })).toBeVisible();
+
+    const republished = await fetchPublic(request, site.subdomain, '/uu-dai');
+    expect(republished.status).toBe(200);
+    expect(republished.html).toContain(SUNSET_FOOTER);
+    expect(republished.html).not.toContain(MINT_FOOTER);
+    expect(await liveTheme(request, site.subdomain, 'uu-dai')).toBe('sunset');
+
+    // The history says what v2 changed.
+    await editor.topBar.getByRole('link', { name: 'Lịch sử phiên bản' }).click();
+    const v2 = page
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('heading', { name: 'v2', exact: true }) });
+    await expect(v2).toContainText('ĐANG LIVE');
+    await expect(v2).toContainText('Giao diện site: giao diện');
   });
 
   test('the domain screen shows the default domain only', async ({ page }) => {

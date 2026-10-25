@@ -92,6 +92,15 @@ describe('SiteSettingsForm', () => {
     });
     expect(router.refresh).toHaveBeenCalledTimes(1);
     expect(save).toBeDisabled();
+    // Saving is not publishing: live pages keep the look they were published with (ADR-015).
+    expect(
+      screen.getByText(
+        'Trang nào đang live sẽ giữ giao diện cũ cho tới khi bạn xuất bản lại trang đó. Bản nháp và xem trước dùng cài đặt mới ngay.',
+      ),
+    ).toBeInTheDocument();
+    // The note belongs to that save; the next edit starts over.
+    await user.type(nameInput(), ' mới');
+    expect(screen.queryByText(/giữ giao diện cũ/)).toBeNull();
   });
 
   it('checks the name before saving', async () => {

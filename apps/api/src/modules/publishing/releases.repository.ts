@@ -12,6 +12,7 @@ import {
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import type { SitePresentation } from './domain/site-presentation.js';
 import { RELEASE_MODEL, RELEASES_IDEMPOTENCY_INDEX, type ReleaseRecord } from './release.schema.js';
 
 export interface InsertReleaseInput {
@@ -21,6 +22,7 @@ export interface InsertReleaseInput {
   slug: string;
   composition: Composition;
   seo: Seo;
+  sitePresentation: SitePresentation;
   sourceRevision: number;
   note: string;
   changeSummary: ChangeItem[];

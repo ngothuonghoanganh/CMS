@@ -1,12 +1,13 @@
 import type { PublicImage, PublicSeo } from '@plp/contracts';
 import { seoTitleOf } from '@plp/sections/schema';
+import type { SitePresentation } from './site-presentation.js';
 import type { PageSnapshot } from './snapshot.js';
 
-/** The site settings SEO falls back to. */
-export interface SeoSiteDefaults {
-  name: string;
-  defaultShareImageAssetId: string | null;
-}
+/**
+ * The site settings SEO falls back to. For a live page they come from its release's snapshot
+ * (ADR-015), never from the current site record.
+ */
+export type SeoSiteDefaults = Pick<SitePresentation, 'name' | 'defaultShareImageAssetId'>;
 
 /** Public address of a page: the origin plus its slug ("/" for the home page). */
 export function canonicalUrl(origin: string, slug: string): string {

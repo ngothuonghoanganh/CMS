@@ -47,9 +47,11 @@ export class SitesRepository {
     return site ? { id: site._id, workspaceId: site.workspaceId } : null;
   }
 
-  findById(scope: WorkspaceScope, siteId: ObjectId): Promise<SiteRecord | null> {
+  /** In `tx` when given, e.g. publish reads the settings a release snapshots (ADR-015). */
+  findById(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<SiteRecord | null> {
     return this.sites
       .findOne({ _id: siteId, workspaceId: scope.workspaceId })
+      .session(tx ?? null)
       .lean<SiteRecord>()
       .exec();
   }

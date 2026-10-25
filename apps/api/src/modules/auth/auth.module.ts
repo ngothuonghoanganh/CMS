@@ -4,9 +4,17 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { LoginAttemptsRepository } from './login-attempts.repository.js';
 import { SessionGuard } from './session.guard.js';
 import { SessionsRepository } from './sessions.repository.js';
-import { SESSION_MODEL, sessionSchema, USER_MODEL, userSchema } from './user.schema.js';
+import {
+  LOGIN_ATTEMPT_MODEL,
+  loginAttemptSchema,
+  SESSION_MODEL,
+  sessionSchema,
+  USER_MODEL,
+  userSchema,
+} from './user.schema.js';
 import { UsersRepository } from './users.repository.js';
 
 @Module({
@@ -15,6 +23,7 @@ import { UsersRepository } from './users.repository.js';
     MongooseModule.forFeature([
       { name: USER_MODEL, schema: userSchema },
       { name: SESSION_MODEL, schema: sessionSchema },
+      { name: LOGIN_ATTEMPT_MODEL, schema: loginAttemptSchema },
     ]),
   ],
   controllers: [AuthController],
@@ -22,6 +31,7 @@ import { UsersRepository } from './users.repository.js';
     AuthService,
     UsersRepository,
     SessionsRepository,
+    LoginAttemptsRepository,
     { provide: APP_GUARD, useClass: SessionGuard },
   ],
   exports: [UsersRepository],

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  ChangeItem,
   ChecksResult,
   CursorQuery,
   HistoryEntry,
@@ -26,13 +27,16 @@ import { PageEvaluator } from '../pages/page-evaluator.service.js';
 import type { PageRecord } from '../pages/page.schema.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { diffSnapshots } from './domain/diff-snapshots.js';
+import { diffSitePresentation } from './domain/site-presentation.js';
 import { emptyPageSnapshot } from './domain/snapshot.js';
 import { mergeKeysetPages } from './history-merge.js';
 import { pointerConflict, PointerService } from './pointer.service.js';
 import { RELEASE_NOT_FOUND, toReleaseSummary } from './release-dto.js';
+import { currentSitePresentation, releasePresentation } from './release-presentation.js';
 import type { ReleaseRecord } from './release.schema.js';
 import { IdempotencyKeyUsedError, ReleasesRepository } from './releases.repository.js';
 
@@ -61,6 +65,12 @@ function sameRelease(current: ObjectId | null, expected: string | null): boolean
   return current === null ? expected === null : current.toHexString() === expected;
 }
 
+/** Whether the site-settings chips are the ones the user saw, in any order. */
+function sameLabels(changes: readonly ChangeItem[], seen: readonly string[]): boolean {
+  const expected = new Set(seen);
+  return changes.length === expected.size && changes.every((change) => expected.has(change.label));
+}
+
 function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId): UserRef {
   const user = users.get(id.toHexString());
   if (!user) {
@@ -76,6 +86,8 @@ type HistoryRow =
 interface CommittedRelease {
   release: ReleaseRecord;
   activityId: ObjectId;
+  /** The site as the publish transaction read it (its settings are in the release). */
+  site: SiteRecord;
 }
 
 export interface PublishOutcome {
@@ -96,6 +108,7 @@ export class PublishingService {
     private readonly activity: ActivityRepository,
     private readonly users: UsersRepository,
     private readonly sites: SitesService,
+    private readonly siteRecords: SitesRepository,
   ) {}
 
   async checks(user: AuthenticatedUser, pageId: string): Promise<ChecksResult> {
@@ -145,6 +158,7 @@ export class PublishingService {
         idempotencyKey,
         note: input.note,
         warningsAcknowledged: checks.warnings.map((warning) => warning.fingerprint),
+        acknowledgedSiteChanges: input.acknowledgedSiteChanges,
       });
     } catch (error) {
       const raced =
@@ -168,7 +182,8 @@ export class PublishingService {
     }
 
     const revalidation = await this.pointer.revalidate(site, committed.activityId);
-    const summary = await this.summaryOf(scope, site, page._id);
+    // The site as the transaction read it, so the summary compares the new release with it.
+    const summary = await this.summaryOf(scope, committed.site, page._id);
     return {
       response: {
         release: toReleaseSummary(committed.release, {
@@ -185,20 +200,46 @@ export class PublishingService {
 
   /**
    * Step 4 of publish, in one transaction: claim version `releaseSeq + 1` (guarded by revision,
-   * pointer and sequence), insert the release, then `movePointer` records the activity. Any failure
-   * aborts everything, so no release exists without its pointer move.
+   * pointer and sequence), snapshot the site settings, insert the release, then `movePointer`
+   * records the activity. Any failure aborts everything, so no release exists without its pointer
+   * move.
    */
   private async commitRelease(
     scope: WorkspaceScope,
     site: SiteRecord,
     page: PageRecord,
-    meta: { idempotencyKey: string; note: string; warningsAcknowledged: string[] },
+    {
+      acknowledgedSiteChanges,
+      ...meta
+    }: {
+      idempotencyKey: string;
+      note: string;
+      warningsAcknowledged: string[];
+      acknowledgedSiteChanges: string[];
+    },
   ): Promise<CommittedRelease> {
     const from = await this.liveReleaseOf(scope, page);
-    const changeSummary = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
+    const pageChanges = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
     return this.pointer.transaction(scope, site._id, async (tx) => {
       if (!(await this.pages.claimReleaseVersion(scope, page, page.draft.revision, tx))) {
         throw await this.publishConflict(scope, page._id, page.draft.revision);
+      }
+      // The site settings are read in the transaction that makes the release live (ADR-015).
+      const current = await this.siteRecords.findById(scope, site._id, tx);
+      if (!current) {
+        throw new Error(`Site ${site._id.toHexString()} of page ${page._id.toHexString()} is gone`);
+      }
+      const sitePresentation = currentSitePresentation(current);
+      // A first publish (or one after unpublishing) has no previously live look to differ from.
+      const siteChanges =
+        from === null
+          ? []
+          : diffSitePresentation(releasePresentation(from, current), sitePresentation);
+      if (!sameLabels(siteChanges, acknowledgedSiteChanges)) {
+        throw new AppError(409, 'site_changed', 'Cài đặt site vừa thay đổi', {
+          detail:
+            'Giao diện site đã được đổi trong lúc bạn xuất bản. Xem lại thay đổi rồi xuất bản.',
+        });
       }
       const release = await this.releases.insert(
         scope,
@@ -209,8 +250,9 @@ export class PublishingService {
           slug: page.draft.slug,
           composition: page.draft.composition,
           seo: page.draft.seo,
+          sitePresentation,
           sourceRevision: page.draft.revision,
-          changeSummary,
+          changeSummary: [...pageChanges, ...siteChanges],
           ...meta,
         },
         tx,
@@ -219,7 +261,7 @@ export class PublishingService {
         { scope, page, from, target: release, reason: null, activityType: 'page.published' },
         tx,
       );
-      return { release, activityId };
+      return { release, activityId, site: current };
     });
   }
 

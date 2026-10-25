@@ -56,9 +56,23 @@ export const pageTitleSchema = z
   .min(1, 'Nhập tên trang')
   .max(120, 'Tên trang tối đa 120 ký tự');
 
+/**
+ * Section changes, SEO fields and the slug come from the draft; `site` is a site setting that
+ * differs from the snapshot a release was published with (ADR-015).
+ */
+export const changeKinds = [
+  'added',
+  'removed',
+  'modified',
+  'moved',
+  'seo',
+  'slug',
+  'site',
+] as const;
+
 export const changeItemSchema = z.object({
-  kind: z.enum(['added', 'removed', 'modified', 'moved', 'seo', 'slug']),
-  /** Human label as shown on chips, e.g. "Sửa: Hero" or "SEO: tiêu đề". */
+  kind: z.enum(changeKinds),
+  /** Human label as shown on chips, e.g. "Sửa: Hero", "SEO: tiêu đề" or "Giao diện site: logo". */
   label: z.string(),
   sectionId: z.string().nullable(),
 });
@@ -107,6 +121,13 @@ export const pageSummarySchema = z.object({
   slug: z.string(),
   goal: pageGoalSchema.nullable(),
   status: pageStatusSchema,
+  /**
+   * Site settings (theme, logo, name, default share image) that differ from the snapshot the live
+   * release was published with (ADR-015). The live page keeps that snapshot until the page is
+   * published again, so these are reminders, not part of the status (rule 2 compares revisions
+   * only). Empty when nothing is live or nothing differs; derived on the server, never stored.
+   */
+  siteChanges: z.array(changeItemSchema),
   liveRelease: liveReleaseRefSchema.nullable(),
   /** Number of releases ever created (the latest version number). */
   latestVersion: z.number().int().nonnegative(),

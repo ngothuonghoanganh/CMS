@@ -13,6 +13,7 @@ import { fieldError } from '../shell/use-schema-form';
 import { ThemePicker } from '../theme';
 import {
   hasChanges,
+  LIVE_PAGES_KEEP_LOOK,
   settingsChanges,
   type SiteSettingsValues,
   settingsValuesOf,
@@ -190,6 +191,13 @@ export function SiteSettingsForm({ site, assets, canEdit }: SiteSettingsFormProp
           {formError}
         </Callout>
       )}
+
+      {/* Saving is not publishing (rule 1): the note stays until the next edit. */}
+      {save.isSuccess ? (
+        <Callout tone="info" role="status">
+          {LIVE_PAGES_KEEP_LOOK}
+        </Callout>
+      ) : null}
 
       {canEdit ? (
         <div className={styles.actions}>

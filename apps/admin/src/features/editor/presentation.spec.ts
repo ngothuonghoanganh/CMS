@@ -4,11 +4,14 @@ import {
   displayUrl,
   frameLayout,
   frameStyle,
+  hasSiteChanges,
   liveStatusView,
   livePathOf,
   lowerFirst,
+  pendingChangeCount,
   publishButtonLabel,
   saveStatusView,
+  siteChangesNotice,
 } from './presentation';
 import { emptyChecks, pageSummary, RELEASE_ID } from './test-fixtures';
 
@@ -19,6 +22,7 @@ const liveRelease = {
   slug: 'uu-dai-thang-11',
   publishedAt: '2026-10-20T08:00:00.000Z',
 };
+const siteChange = { kind: 'site' as const, label: 'Giao diện site: giao diện', sectionId: null };
 
 function item(severity: 'blocking' | 'warning') {
   return {
@@ -90,11 +94,42 @@ describe('editor presentation', () => {
         pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
       ).text,
     ).toBe('Live v12');
+    expect(
+      liveStatusView(
+        pageSummary({
+          status: { kind: 'live', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ).text,
+    ).toBe('Live v12 · Giao diện site đã đổi');
+    // A draft restored from live has the live content, but the site look may still differ.
+    expect(
+      liveStatusView(
+        pageSummary({
+          status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ).text,
+    ).toBe('Live v12 · Giao diện site đã đổi');
     expect(liveStatusView(pageSummary()).text).toBe('Chưa xuất bản');
     expect(
       liveStatusView(pageSummary({ status: { kind: 'unpublished', changeCount: 0, changes: [] } }))
         .text,
     ).toBe('Đã gỡ');
+  });
+
+  it('words the site settings reminder of the draft notice (ADR-015)', () => {
+    const live = { status: { kind: 'live' as const, changeCount: 0, changes: [] }, liveRelease };
+    expect(siteChangesNotice(pageSummary(live))).toBeNull();
+    expect(siteChangesNotice(pageSummary({ ...live, siteChanges: [siteChange] }))).toBe(
+      'Giao diện site đã đổi sau khi xuất bản v12: trang live vẫn dùng giao diện cũ cho tới khi bạn xuất bản lại.',
+    );
+    // Nothing is live: nothing keeps an old look.
+    expect(siteChangesNotice(pageSummary({ siteChanges: [siteChange] }))).toBeNull();
+    expect(hasSiteChanges(pageSummary({ siteChanges: [siteChange] }))).toBe(true);
+    expect(hasSiteChanges(pageSummary(live))).toBe(false);
   });
 
   it('summarizes checks', () => {
@@ -136,9 +171,38 @@ describe('editor presentation', () => {
         pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
       ),
     ).toBe('Xuất bản');
+    // Applying the site's new look is a change too (ADR-015).
+    expect(
+      publishButtonLabel(
+        pageSummary({
+          status: { kind: 'live', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ),
+    ).toBe('Xuất bản thay đổi');
     expect(livePathOf({ liveRelease })).toBe('/uu-dai-thang-11');
     expect(livePathOf({ liveRelease: { ...liveRelease, slug: '' } })).toBe('/');
     expect(livePathOf({ liveRelease: null })).toBeNull();
+  });
+
+  it('counts the draft changes and the site settings the next publish applies', () => {
+    const live = { kind: 'live_with_changes' as const, changeCount: 3, changes: [] };
+    expect(pendingChangeCount(pageSummary({ status: live, liveRelease }))).toBe(3);
+    expect(
+      pendingChangeCount(pageSummary({ status: live, siteChanges: [siteChange], liveRelease })),
+    ).toBe(4);
+    expect(
+      pendingChangeCount(
+        pageSummary({
+          status: { kind: 'live', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ),
+    ).toBe(1);
+    // A page that was never published has nothing live to change.
+    expect(pendingChangeCount(pageSummary())).toBe(0);
   });
 
   it('shortens URLs and lowercases item labels', () => {

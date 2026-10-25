@@ -16,6 +16,12 @@ const envSchema = z.object({
   /** Sign-up and login attempts allowed per client per minute. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
   /**
+   * Failed logins allowed per account (email) in one window; further attempts, even with the
+   * right password, are refused until the window ends. Holds whatever proxy setup is deployed.
+   */
+  LOGIN_FAILURE_LIMIT: z.coerce.number().int().min(1).default(5),
+  LOGIN_FAILURE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+  /**
    * Proxies between the browser and the API whose `X-Forwarded-For` entry is trusted. The client
    * address, which keys the auth rate limit, is read through them. Default 0: the admin's `/api`
    * rewrite passes on whatever the browser sent, so trusting it without an edge proxy that
