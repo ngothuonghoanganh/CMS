@@ -46,10 +46,24 @@ test.describe('S6 · create a page by goal', () => {
     ).toBeVisible();
     await expect(editor.topBar.getByText('Chưa xuất bản', { exact: true })).toBeVisible();
 
-    // The brief's phone number becomes the Hero call to action.
+    // The promotion page collects contacts with the form: the Hero button leads to it (ADR-016),
+    // and the brief's phone number becomes the navigation bar's call.
+    await expect(editor.rows.filter({ hasText: 'Form đăng ký' })).toHaveCount(1);
     await editor.heroRow.click();
+    const target = editor.heroPanel.getByRole('combobox', { name: 'Khi bấm, đưa tới' }).first();
+    await expect(target).toHaveValue('section');
     await expect(
-      editor.heroPanel.getByRole('textbox', { name: 'Số điện thoại' }).first(),
+      editor.heroPanel.getByRole('combobox', { name: 'Section đích' }).locator('option:checked'),
+    ).toHaveText(/Form đăng ký/);
+    await editor.structure
+      .getByRole('button', { name: /^Thanh điều hướng/ })
+      .filter({ hasNotText: 'Kéo' })
+      .first()
+      .click();
+    await expect(
+      page
+        .getByRole('complementary', { name: 'Thanh điều hướng' })
+        .getByRole('textbox', { name: 'Số điện thoại' }),
     ).toHaveValue('0901 234 567');
   });
 

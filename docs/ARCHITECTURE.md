@@ -372,7 +372,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (sau review MVP A):**
   - **Số mục tối thiểu theo variant:** `list.min` là mức sàn của field; variant có thể nâng lên bằng `listMin`. Lợi ích: Lưới 3–6, Xen kẽ 2–6. Cảm nhận khách hàng: Thẻ 3–6, Trích dẫn nổi bật từ 1 (hiện mục đầu). `validateComposition` cưỡng chế, nên lưu và publish đều từ chối; đổi sang variant cần nhiều mục hơn thì editor thêm mục mẫu.
   - **Field bị variant ẩn vẫn là dữ liệu:** đổi variant giữ giá trị của chúng, nên `collectLeaves(section, { includeHidden: true })` là cách duy nhất để tìm asset được tham chiếu và đánh dấu nội dung mẫu. Kiểm tra publish và panel chỉ xét field variant hiện tại hiển thị.
-- **Amended 2026-10-25 (MVP B):** thêm section thứ 8 là Form đăng ký (`leadForm`, nhóm "Form & liên hệ"), mỗi trang tối đa một. Nội dung đồng ý không nằm trong content của section mà được truyền vào component từ `leadCapture` (ADR-016, ADR-017).
+- **Amended 2026-10-25 (MVP B):** thêm section thứ 8 là Form đăng ký (`lead_form`, nhóm "Form & liên hệ"), mỗi trang tối đa một. Nội dung đồng ý không nằm trong content của section mà được truyền vào component từ `leadCapture` (ADR-016, ADR-017).
+- **Amended 2026-10-25 (B2):**
+  - Tên type là `lead_form`, theo quy ước snake_case của `sectionTypes`.
+  - Section có cờ `capturesLeads`; `RenderContext` có thêm `leadCapture` (bắt buộc) và `leadSubmission` (chỉ trang live).
+  - Mỗi color scheme có thêm màu `danger` cho lỗi của form; `themes.spec` kiểm AA trên nền và surface.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -532,7 +536,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
 - **Date:** 2026-10-25 · **Status:** Accepted
 - **Decision:**
-  - **Section `leadForm`** ("Form đăng ký", nhóm "Form & liên hệ"): `singleton`, không có vị trí cố định, một variant.
+  - **Section `lead_form`** ("Form đăng ký", nhóm "Form & liên hệ"): `singleton`, không có vị trí cố định, một variant.
     - Trường cố định: Họ và tên, Số điện thoại (bắt buộc, `phoneSchema`). Email và Lời nhắn bật/tắt được; khi bật thì không bắt buộc. Không có trường tùy ý.
     - Content sửa được: tiêu đề, mô tả, chữ trên nút, tiêu đề và lời nhắn sau khi gửi.
     - Ô đồng ý và link chính sách không nằm trong content; component nhận chúng qua props từ `leadCapture` (ADR-017).
@@ -580,6 +584,16 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Rate limit ở MongoDB nên đúng khi có nhiều instance API.
   - Mục tiêu "Danh sách chờ" vẫn bắt buộc số điện thoại; muốn chỉ thu email cần quyết định mới.
   - Rollback về một release không có form thì form biến mất khỏi trang live; lead cũ vẫn trỏ đúng release của chúng.
+- **Amended 2026-10-25 (B2):**
+  - **Địa chỉ của khách:** renderer chỉ tin phần tử cuối của `X-Forwarded-For` khi `TRUST_PROXY=true`, tức có edge proxy phía trước nối địa chỉ vào. Không có thì không gửi địa chỉ nào, và mọi khách của một site chung một bucket (5 lead mỗi 10 phút cho cả site), cùng mặc định an toàn như ADR-004. Production phải đặt `TRUST_PROXY=true` sau edge proxy.
+  - **Chữ ký:** HMAC phủ timestamp, method, path, địa chỉ, user agent và đúng các byte của body, nối bằng xuống dòng (`rendererSignaturePayload` trong contracts). API bật `rawBody` để kiểm đúng các byte đó. Một chữ ký không dùng lại được cho route khác.
+  - **Kênh renderer:** decorator `@RendererRequest()` gộp `@Public()`, metadata và guard kiểm chữ ký. `OriginGuard` chỉ bỏ qua kiểm Origin khi có metadata đó.
+  - **Số điện thoại:** `leadPhoneSchema` nhận 10 số bắt đầu bằng 0, hoặc +84 và 9 số; khoảng trắng, dấu chấm, gạch ngang được bỏ; lưu dạng 10 số bắt đầu bằng 0.
+  - **Nguồn:** không có utm và không có referrer ngoài site thì lưu `(direct) / (none)`, admin hiển thị là "trực tiếp".
+  - **Check:** target mới `{ kind: 'privacy', sectionId }`; "Sửa ngay" mở màn "Dữ liệu & đồng ý". Mục passed "Có liên kết chính sách quyền riêng tư" chỉ có trên trang có form.
+  - **Không có JavaScript:** form POST urlencoded tới `/_lead`. Nhận xong thì 303 sang `GET /_lead?status=received&back=/slug` (post/redirect/get); lỗi thì trả trang HTML kèm thông báo. Trang kết quả không chứa nội dung của site và chỉ cho link quay về một đường dẫn trong site.
+  - **Không lưu những gì form không hỏi:** email, lời nhắn và đồng ý ưu đãi bị bỏ khi form của release không có các ô đó.
+  - Đổi thời gian lưu thì tính lại `expiresAt` sau khi lưu cài đặt, ngoài transaction. Lệnh này idempotent: lưu lại lần nữa sẽ sửa những lead còn sót nếu lần trước lỗi.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -715,7 +729,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 | ---------- | -------------------------------------------------------------------------------- | --------------- | ---------- |
 | Quyết định | ADR-016…019, quy tắc 10–11                                                       | —               | Xong       |
 | B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar   | 12 (phần trên)  | Xong       |
-| B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint | 02, 04, 05, 09  | Chưa làm   |
+| B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint | 02, 04, 05, 09  | Xong       |
 | B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người | 10, 01, Sidebar | Chưa làm   |
 | B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                     | 10, 05, 03      | Chưa làm   |
 | B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                    | 12 (phần dưới)  | Chưa làm   |

@@ -1,14 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import {
+  consentVersionSchema,
   type CreatePageRequest,
   endpoints,
   type MeResponse,
   meResponseSchema,
   type PageDetailResponse,
   pageDetailResponseSchema,
+  privacySettingsSchema,
   type Site,
   siteSchema,
+  SUGGESTED_MARKETING_CONSENT_TEXT,
+  SUGGESTED_REQUIRED_CONSENT_TEXT,
 } from '@plp/contracts';
 import { urls } from '../urls.js';
 
@@ -42,7 +46,7 @@ export function newSubdomain(prefix = 'e2e'): string {
  */
 async function call<T>(
   request: APIRequestContext,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT',
   path: string,
   schema: { parse: (value: unknown) => T },
   data?: unknown,
@@ -51,7 +55,7 @@ async function call<T>(
   const response =
     method === 'GET'
       ? await request.get(url)
-      : await request.post(url, { data, headers: { origin: urls.admin } });
+      : await request.fetch(url, { method, data, headers: { origin: urls.admin } });
   if (!response.ok()) {
     throw new Error(`${method} ${path} answered ${response.status()}: ${await response.text()}`);
   }
@@ -76,6 +80,35 @@ export function createPageViaApi(
   body: CreatePageRequest,
 ): Promise<PageDetailResponse> {
   return call(request, 'POST', endpoints.createPage.path(siteId), pageDetailResponseSchema, body);
+}
+
+export const PRIVACY = {
+  controllerName: 'Công ty TNHH Nha khoa Smile Care',
+  requestEmail: 'dulieu@smilecare.vn',
+  policyUrl: 'https://smilecare.vn/chinh-sach-quyen-rieng-tu',
+  retentionMonths: 12,
+} as const;
+
+/**
+ * The site's personal data settings and a first consent version (ADR-017), as the owner saves
+ * them on "Dữ liệu & đồng ý". A page with a lead form cannot be published without them (ADR-016).
+ */
+export async function configurePrivacyViaApi(
+  request: APIRequestContext,
+  siteId: string,
+): Promise<void> {
+  await call(
+    request,
+    'PUT',
+    endpoints.updatePrivacySettings.path(siteId),
+    privacySettingsSchema,
+    PRIVACY,
+  );
+  await call(request, 'POST', endpoints.createConsentVersion.path(siteId), consentVersionSchema, {
+    baseVersion: 0,
+    requiredText: SUGGESTED_REQUIRED_CONSENT_TEXT,
+    marketingText: SUGGESTED_MARKETING_CONSENT_TEXT,
+  });
 }
 
 export interface SiteFixture {

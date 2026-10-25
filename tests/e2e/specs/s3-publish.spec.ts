@@ -1,12 +1,19 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Editor } from '../support/editor.js';
 import { fetchPublic, firstHeading } from '../support/public-site.js';
-import { createPageViaApi, promoPage, setUpSite } from '../support/setup.js';
+import {
+  configurePrivacyViaApi,
+  createPageViaApi,
+  promoPage,
+  setUpSite,
+} from '../support/setup.js';
 import { siteOrigin } from '../urls.js';
 
 /** A signed-in owner on the editor of a fresh, never published promotion page at /uu-dai. */
 async function openNewPage(page: Page) {
   const { site } = await setUpSite(page.request);
+  // The promotion page has a lead form, which needs the site's consent settings (ADR-016).
+  await configurePrivacyViaApi(page.request, site.id);
   const created = await createPageViaApi(
     page.request,
     site.id,
