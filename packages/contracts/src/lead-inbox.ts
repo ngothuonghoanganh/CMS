@@ -76,6 +76,28 @@ export const LEAD_CUSTOM_RANGE_MAX_DAYS = 365;
 
 export const LEAD_SEARCH_MAX = 80;
 
+/** Characters no search needs; a NUL could not even be sent to the database. */
+const SEARCH_FORBIDDEN = /[\p{Cc}\u2028\u2029]/u;
+
+/** A search as `leadSearchSchema` accepts it: control characters (e.g. from a paste) become spaces. */
+export function cleanLeadSearch(value: string): string {
+  return value
+    .replace(new RegExp(SEARCH_FORBIDDEN.source, 'gu'), ' ')
+    .trim()
+    .slice(0, LEAD_SEARCH_MAX);
+}
+
+/**
+ * The start of a phone number or an email, or part of a name (accents ignored). It is personal
+ * data, so it travels in request bodies only, never in a URL that logs or the Referer header would
+ * keep (rule 10).
+ */
+export const leadSearchSchema = z
+  .string()
+  .trim()
+  .max(LEAD_SEARCH_MAX, `Tìm tối đa ${LEAD_SEARCH_MAX} ký tự`)
+  .refine((value) => !SEARCH_FORBIDDEN.test(value), 'Từ khóa tìm kiếm có ký tự không hợp lệ');
+
 const leadFilterShape = {
   folder: leadFolderSchema.default('inbox'),
   pageId: idSchema.optional(),
@@ -84,8 +106,11 @@ const leadFilterShape = {
   /** First and last day of a `custom` range in Vietnam, both included; ignored otherwise. */
   from: vnDaySchema.optional(),
   to: vnDaySchema.optional(),
-  /** The start of a phone number or an email, or part of a name (accents ignored). */
-  q: z.string().trim().max(LEAD_SEARCH_MAX).optional(),
+};
+
+const leadPagingShape = {
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(50),
 };
 
 function checkCustomRange(
@@ -119,18 +144,31 @@ function checkCustomRange(
   }
 }
 
-/** The inbox filters; the CSV export takes the same ones. */
-export const leadFiltersSchema = z.object(leadFilterShape).superRefine(checkCustomRange);
+/** The inbox filters with an optional search: the body of the CSV export. */
+export const leadFiltersSchema = z
+  .object({ ...leadFilterShape, q: leadSearchSchema.optional() })
+  .superRefine(checkCustomRange);
 export type LeadFilters = z.output<typeof leadFiltersSchema>;
+export type LeadFiltersRequest = z.input<typeof leadFiltersSchema>;
 
+/**
+ * Query of `GET /sites/:siteId/leads`: filters and paging. A search never goes in the URL, so the
+ * schema refuses unknown parameters such as `q`; `leadSearchRequestSchema` carries it instead.
+ */
 export const leadListQuerySchema = z
-  .object({
-    ...leadFilterShape,
-    cursor: z.string().max(200).optional(),
-    limit: z.coerce.number().int().min(1).max(50).default(50),
-  })
+  .strictObject({ ...leadFilterShape, ...leadPagingShape })
   .superRefine(checkCustomRange);
 export type LeadListQuery = z.input<typeof leadListQuerySchema>;
+
+/** Body of `POST /sites/:siteId/leads/search`: the same list narrowed by a search. */
+export const leadSearchRequestSchema = z
+  .object({
+    ...leadFilterShape,
+    q: leadSearchSchema.refine((value) => value !== '', 'Nhập từ khóa tìm kiếm'),
+    ...leadPagingShape,
+  })
+  .superRefine(checkCustomRange);
+export type LeadSearchRequest = z.input<typeof leadSearchRequestSchema>;
 
 export const leadPageRefSchema = z.object({ id: idSchema, title: z.string() });
 export type LeadPageRef = z.infer<typeof leadPageRefSchema>;

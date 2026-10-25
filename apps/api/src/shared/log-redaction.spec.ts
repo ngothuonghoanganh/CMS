@@ -87,6 +87,33 @@ describe('log redaction', () => {
     expect(query.q).toBe('thuha@example.com');
   });
 
+  it('keeps a search out of the Referer an admin page sends, without touching the live headers', () => {
+    const headers = {
+      referer: 'http://localhost:3100/sites/abc/leads?status=new&q=0901234567&lead=x',
+      cookie: 'plp_session=secret',
+    };
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        lines.push(chunk.toString('utf8'));
+        done();
+      },
+    });
+    const logger = pino(
+      { redact: [...LOG_REDACT_PATHS], serializers: { req: serializeRequest } },
+      sink,
+    );
+    logger.info({ req: { method: 'GET', url: '/leads/x', headers } }, 'request completed');
+    const output = lines.join('');
+    expect(output).toContain(`q=${REDACTED}&lead=x`);
+    expect(output).not.toContain('0901234567');
+    expect(output).not.toContain('plp_session');
+    expect(headers.referer).toContain('q=0901234567');
+    expect(serializeRequest({ url: '/x', headers: { referer: 'http://a/b' } }).headers).toEqual({
+      referer: 'http://a/b',
+    });
+  });
+
   it('keeps the visitor address, user agent and channel signature of a lead out of the log', () => {
     const lines: string[] = [];
     const sink = new Writable({

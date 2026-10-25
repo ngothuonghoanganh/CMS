@@ -204,19 +204,28 @@ export class LeadsRepository {
    * The leads matching the filters and created up to `until`, newest first, at most `limit`; read
    * as a stream so an export never holds them all in memory.
    */
-  streamMatching(
+  async *streamMatching(
     scope: WorkspaceScope,
     siteId: ObjectId,
     criteria: LeadCriteria,
     until: Date,
     limit: number,
-  ): AsyncIterable<LeadRecord> {
-    return this.leads
+  ): AsyncGenerator<LeadRecord> {
+    const cursor = this.leads
       .find(this.criteriaFilter(scope, siteId, criteria, until))
       .sort(NEWEST_FIRST)
       .limit(limit)
       .lean<LeadRecord[]>()
       .cursor();
+    try {
+      for await (const lead of cursor) {
+        yield lead;
+      }
+    } finally {
+      // A download that stops early (the client left) ends the iteration without exhausting the
+      // cursor; close it, or the server cursor and its buffered batch stay open until timeout.
+      await cursor.close();
+    }
   }
 
   /**

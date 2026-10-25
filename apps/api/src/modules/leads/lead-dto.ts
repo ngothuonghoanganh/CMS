@@ -41,7 +41,7 @@ export function pageTitleOf(titles: ReadonlyMap<string, string>, pageId: ObjectI
  * one, and releases are immutable, so a missing one means the data was edited by hand.
  */
 export function consentOf(
-  captures: ReadonlyMap<string, { version: number; leadCapture?: LeadCapture | null }>,
+  captures: ReadonlyMap<string, { leadCapture?: LeadCapture | null }>,
   lead: Pick<LeadRecord, '_id' | 'releaseId'>,
 ): LeadCapture {
   const capture = captures.get(lead.releaseId.toHexString())?.leadCapture ?? null;

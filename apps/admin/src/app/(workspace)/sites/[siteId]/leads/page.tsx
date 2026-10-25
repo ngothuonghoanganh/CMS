@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: LeadsPageProps): Promise<Meta
 
 /** Screen 10: the lead inbox. The client keeps the filters and the open lead in the URL. */
 export default async function LeadsPage({ params, searchParams }: LeadsPageProps) {
-  const { site, membership } = await loadSiteContext((await params).siteId);
+  const { site, membership, leadCounts } = await loadSiteContext((await params).siteId);
   const query = await searchParams;
   const filters = parseLeadFilters(query);
   const leadId = parseSelectedLead(query);
@@ -32,6 +32,7 @@ export default async function LeadsPage({ params, searchParams }: LeadsPageProps
       initialList={data.list}
       initialDetail={data.detail}
       pageRefs={data.pageRefs.items}
+      leadCounts={leadCounts}
       loadedAt={data.loadedAt}
     />
   );

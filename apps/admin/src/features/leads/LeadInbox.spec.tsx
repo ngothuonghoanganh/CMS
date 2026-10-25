@@ -1,9 +1,15 @@
-import { endpoints, type LeadDetail, type LeadListResponse } from '@plp/contracts';
+import {
+  endpoints,
+  type LeadCounts,
+  type LeadDetail,
+  type LeadListResponse,
+  updateLeadRequestSchema,
+} from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, downloadFile } from '../../lib/api';
-import { siteFixture } from '../dashboard/test-fixtures';
+import { NO_LEADS, siteFixture } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { DEFAULT_LEAD_FILTERS, type LeadInboxFilters } from './filters';
 import { LeadInbox } from './LeadInbox';
@@ -40,31 +46,68 @@ const bao = leadItem({
   status: 'scheduled',
   createdAt: '2026-10-23T03:10:00.000Z',
 });
+const baoDetail = leadDetail({
+  id: OTHER_LEAD_ID,
+  name: 'Trần Quốc Bảo',
+  phone: '+84938512840',
+  email: null,
+  message: null,
+  status: 'scheduled',
+  personLeads: { count: 1, capped: false },
+});
 
 interface Setup {
   list?: LeadListResponse;
   filters?: LeadInboxFilters;
   canManage?: boolean;
   leadId?: string | null;
-  /** The open lead, or null when it no longer exists. */
-  detail?: LeadDetail | null;
+  /** The details the API knows; a lead missing here answers 404. */
+  details?: LeadDetail[];
+  /** The detail the server rendered the page with. */
+  initialDetail?: LeadDetail | null;
+  counts?: LeadCounts;
 }
 
-/** Answers the inbox's requests like the API, with `detail` for the open lead. */
-function serve(detail: LeadDetail | null, list: LeadListResponse) {
-  apiMock.mockImplementation((endpoint, _args, options) => {
-    if (endpoint === endpoints.getLead) {
-      return detail === null
-        ? Promise.reject(apiError(404, 'not_found', 'Không tìm thấy lead'))
-        : Promise.resolve(detail);
-    }
-    if (endpoint === endpoints.updateLead) {
-      return Promise.resolve({ ...detail, ...(options?.body ?? {}) });
+/** The first path argument of a call, e.g. the lead id of `getLead`. */
+function idArgument(args: unknown): string | undefined {
+  return Array.isArray(args) && typeof args[0] === 'string' ? args[0] : undefined;
+}
+
+/**
+ * A small fake of the lead API: a PATCH changes the stored detail like the server does, the list
+ * and the search answer `list`, and a deleted person's lead is gone.
+ */
+function serve(details: LeadDetail[], list: LeadListResponse) {
+  const byId = new Map(details.map((detail) => [detail.id, detail]));
+  apiMock.mockImplementation((endpoint, args, options) => {
+    const id = idArgument(args);
+    if (endpoint === endpoints.getLead || endpoint === endpoints.updateLead) {
+      const current = id === undefined ? undefined : byId.get(id);
+      if (current === undefined) {
+        return Promise.reject(apiError(404, 'not_found', 'Không tìm thấy lead'));
+      }
+      if (endpoint === endpoints.getLead) {
+        return Promise.resolve(current);
+      }
+      const changes = updateLeadRequestSchema.parse(options?.body);
+      const updated: LeadDetail = {
+        ...current,
+        ...(changes.status === undefined ? {} : { status: changes.status }),
+        ...(changes.note === undefined ? {} : { note: changes.note }),
+        ...(changes.spam === undefined
+          ? {}
+          : { spam: { ...current.spam, suspected: changes.spam } }),
+      };
+      byId.set(current.id, updated);
+      return Promise.resolve(updated);
     }
     if (endpoint === endpoints.deleteLeadPerson) {
+      if (id !== undefined) {
+        byId.delete(id);
+      }
       return Promise.resolve({ deletedCount: 2 });
     }
-    if (endpoint === endpoints.listLeads || endpoint === endpoints.leadCounts) {
+    if (endpoint === endpoints.listLeads || endpoint === endpoints.searchLeads) {
       return Promise.resolve(list);
     }
     return Promise.reject(new Error('unexpected call'));
@@ -78,9 +121,11 @@ function renderInbox({
   filters = DEFAULT_LEAD_FILTERS,
   canManage = true,
   leadId = null,
-  detail = leadDetail(),
+  details = [leadDetail(), baoDetail],
+  initialDetail = null,
+  counts = NO_LEADS,
 }: Setup = {}) {
-  serve(detail, list);
+  serve(details, list);
   return renderWithProviders(
     <LeadInbox
       site={siteFixture()}
@@ -88,8 +133,9 @@ function renderInbox({
       initialFilters={filters}
       initialLeadId={leadId}
       initialList={list}
-      initialDetail={null}
+      initialDetail={initialDetail}
       pageRefs={pageRefs}
+      leadCounts={counts}
       loadedAt={LOADED_AT}
     />,
   );
@@ -111,6 +157,10 @@ async function openLead(name = 'Nguyễn Thu Hà') {
   return { user, panel };
 }
 
+function updateCalls(): number {
+  return apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.updateLead).length;
+}
+
 beforeEach(() => {
   // Times in the list are relative to the browser's clock once the page hydrates.
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -129,7 +179,9 @@ describe('LeadInbox', () => {
     renderInbox();
 
     expect(screen.getByRole('heading', { level: 1, name: 'Leads' })).toBeInTheDocument();
-    expect(screen.getByText('Mọi đăng ký từ form trên các trang của Nha khoa Smile Care.'));
+    expect(
+      screen.getByText('Mọi đăng ký từ form trên các trang của Nha khoa Smile Care.'),
+    ).toBeInTheDocument();
     const folders = screen.getByRole('group', { name: 'Thư mục' });
     expect(within(folders).getByRole('button', { name: 'Hộp thư · 2' })).toHaveAttribute(
       'aria-pressed',
@@ -200,16 +252,13 @@ describe('LeadInbox', () => {
         'Tôi đồng ý để Công ty TNHH Nha khoa Smile Care xử lý họ tên và số điện thoại của tôi.',
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole('link', { name: 'https://smilecare.vn/chinh-sach' }));
+    expect(
+      within(dialog).getByRole('link', { name: 'https://smilecare.vn/chinh-sach' }),
+    ).toBeInTheDocument();
   });
 
   it('changes the status and saves a note, then refreshes the list and the counts', async () => {
     const { queryClient } = renderInbox();
-    // What the sidebar badge shows.
-    queryClient.setQueryData(leadQueryKeys.counts(SITE_ID), {
-      new: { count: 2, capped: false },
-      last7Days: { count: 2, capped: false },
-    });
     const { user, panel } = await openLead();
 
     await user.selectOptions(
@@ -242,9 +291,35 @@ describe('LeadInbox', () => {
       });
     });
     expect(await screen.findByText('Đã lưu ghi chú')).toBeInTheDocument();
+    expect(note).toHaveValue('hẹn gọi lại sau 18h');
+    // The status saved before stays: the note did not overwrite it.
+    expect(within(panel).getByRole('combobox', { name: 'Trạng thái lead' })).toHaveValue(
+      'contacted',
+    );
   });
 
-  it('moves a lead to spam for editors, without the owner-only actions', async () => {
+  it('keeps the status control focusable while the change is being saved', async () => {
+    renderInbox();
+    const { user, panel } = await openLead();
+    // The save never answers.
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.updateLead
+        ? new Promise(() => undefined)
+        : Promise.reject(new Error('unexpected call')),
+    );
+    const status = within(panel).getByRole('combobox', { name: 'Trạng thái lead' });
+
+    await user.selectOptions(status, 'contacted');
+
+    expect(status).toBeEnabled();
+    expect(status).toHaveAttribute('aria-busy', 'true');
+    expect(status).toHaveValue('contacted');
+    await user.selectOptions(status, 'won');
+    // A second choice while saving is ignored.
+    expect(updateCalls()).toBe(1);
+  });
+
+  it('moves a lead to spam and back for editors, without the owner-only actions', async () => {
     renderInbox({ canManage: false });
     expect(screen.queryByRole('button', { name: 'Xuất Excel / CSV' })).not.toBeInTheDocument();
     const { user, panel } = await openLead();
@@ -262,9 +337,15 @@ describe('LeadInbox', () => {
       });
     });
     expect(await screen.findByText('Đã chuyển vào Nghi ngờ spam')).toBeInTheDocument();
+    expect(
+      within(panel).getByText('Một thành viên đã chuyển lead này vào Nghi ngờ spam.'),
+    ).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Không phải spam' }));
+    expect(await screen.findByText('Đã chuyển về Hộp thư')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Chuyển vào spam' })).toBeInTheDocument();
   });
 
-  it('deletes the data of a person after a confirmation that says what is kept', async () => {
+  it('deletes the data of a person after a confirmation, then focuses the empty panel', async () => {
     renderInbox();
     const { user, panel } = await openLead();
 
@@ -281,6 +362,10 @@ describe('LeadInbox', () => {
     });
     expect(await screen.findByText('Đã xóa 2 lead của người này')).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Nguyễn Thu Hà' })).not.toBeInTheDocument();
+    const empty = screen.getByRole('complementary', { name: 'Chi tiết lead' });
+    await vi.waitFor(() => {
+      expect(empty).toHaveFocus();
+    });
     expect(window.location.search).toBe('');
   });
 
@@ -321,11 +406,7 @@ describe('LeadInbox', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Khoảng thời gian' }), 'custom');
     expect(screen.getByRole('status')).toHaveTextContent('Chọn ngày bắt đầu và ngày kết thúc');
     await user.type(screen.getByLabelText('Từ ngày'), '2026-10-01');
-    expect(apiMock).not.toHaveBeenCalledWith(
-      endpoints.listLeads,
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(apiMock).not.toHaveBeenCalled();
     await user.type(screen.getByLabelText('Đến ngày'), '2026-10-31');
     await vi.waitFor(() => {
       expect(lastCallTo(apiMock, endpoints.listLeads).options).toHaveProperty('query', {
@@ -338,6 +419,54 @@ describe('LeadInbox', () => {
         limit: 50,
       });
     });
+  });
+
+  it('searches in a request body and never writes the search into the URL (rule 10)', async () => {
+    const user = userEvent.setup();
+    renderInbox();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Tìm lead' }), ' 0901 234 ');
+    await vi.waitFor(() => {
+      expect(lastCallTo(apiMock, endpoints.searchLeads).options).toHaveProperty('body', {
+        folder: 'inbox',
+        range: '7d',
+        q: '0901 234',
+        limit: 50,
+      });
+    });
+    expect(window.location.search).toBe('');
+    expect(apiMock.mock.calls.some(([endpoint]) => endpoint === endpoints.listLeads)).toBe(false);
+
+    downloadMock.mockResolvedValue({ truncated: false });
+    await user.click(screen.getByRole('button', { name: 'Xuất Excel / CSV' }));
+    await vi.waitFor(() => {
+      expect(downloadMock).toHaveBeenCalledWith(endpoints.exportLeads, [SITE_ID], {
+        body: { folder: 'inbox', range: '7d', q: '0901 234' },
+      });
+    });
+  });
+
+  it('loads more leads after the cursor and appends them', async () => {
+    const user = userEvent.setup();
+    const counts = { inbox: { count: 2, capped: false }, spam: { count: 0, capped: false } };
+    renderInbox({ list: leadList([ha], { nextCursor: 'cursor-2', counts }) });
+    serve([leadDetail(), baoDetail], leadList([bao], { counts }));
+    expect(screen.getByText('1 / 2 lead')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Tải thêm' }));
+
+    await vi.waitFor(() => {
+      expect(lastCallTo(apiMock, endpoints.listLeads).options).toHaveProperty('query', {
+        folder: 'inbox',
+        range: '7d',
+        limit: 50,
+        cursor: 'cursor-2',
+      });
+    });
+    expect(await screen.findByRole('link', { name: 'Trần Quốc Bảo' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Nguyễn Thu Hà' })).toBeInTheDocument();
+    expect(screen.getByText('2 / 2 lead')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tải thêm' })).not.toBeInTheDocument();
   });
 
   it('exports the leads of the current filters and warns when the file is cut', async () => {
@@ -358,7 +487,9 @@ describe('LeadInbox', () => {
     const user = userEvent.setup();
     renderInbox({ list: leadList([]) });
 
-    expect(screen.getByRole('heading', { name: 'Chưa có lead nào trong 7 ngày qua' }));
+    expect(
+      screen.getByRole('heading', { name: 'Chưa có lead nào trong 7 ngày qua' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xuất Excel / CSV' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Xem toàn bộ thời gian' }));
     await vi.waitFor(() => {
@@ -370,11 +501,83 @@ describe('LeadInbox', () => {
     });
   });
 
-  it('closes a lead that was deleted meanwhile', async () => {
-    renderInbox({ leadId: LEAD_ID, detail: null });
+  it('says an empty spam folder only covers the last 7 days, with a way to see every time', async () => {
+    const user = userEvent.setup();
+    renderInbox({ list: leadList([]), filters: { ...DEFAULT_LEAD_FILTERS, folder: 'spam' } });
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'Không có lead nào bị nghi ngờ spam trong 7 ngày qua',
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Xem toàn bộ thời gian' }));
+    await vi.waitFor(() => {
+      expect(lastCallTo(apiMock, endpoints.listLeads).options).toHaveProperty('query', {
+        folder: 'spam',
+        range: 'all',
+        limit: 50,
+      });
+    });
+  });
+
+  it('closes a lead that was deleted meanwhile and keeps focus in the panel', async () => {
+    renderInbox({ leadId: LEAD_ID, details: [baoDetail] });
     const user = userEvent.setup();
     expect(await screen.findByText('Lead này không còn')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Đóng' }));
-    expect(screen.getByText(/Chọn một lead trong danh sách/)).toBeInTheDocument();
+    const empty = screen.getByRole('complementary', { name: 'Chi tiết lead' });
+    expect(empty).toHaveTextContent(/Chọn một lead trong danh sách/);
+    expect(empty).toHaveFocus();
+  });
+
+  it('reopens a lead from the cache rather than the copy the page was rendered with', async () => {
+    renderInbox({ leadId: LEAD_ID, initialDetail: leadDetail() });
+    const panel = screen.getByRole('complementary', { name: 'Nguyễn Thu Hà' });
+    const user = userEvent.setup();
+    await user.selectOptions(
+      within(panel).getByRole('combobox', { name: 'Trạng thái lead' }),
+      'contacted',
+    );
+    await vi.waitFor(() => {
+      expect(updateCalls()).toBe(1);
+    });
+
+    await openLead('Trần Quốc Bảo');
+    const { panel: again } = await openLead('Nguyễn Thu Hà');
+    await vi.waitFor(() => {
+      expect(within(again).getByRole('combobox', { name: 'Trạng thái lead' })).toHaveValue(
+        'contacted',
+      );
+    });
+  });
+
+  it('gives the sidebar badge the counts loaded with the inbox, when they are newer', () => {
+    const { queryClient } = renderWithProviders(<span />);
+    // What the sidebar cached when the admin opened, before three more leads arrived.
+    queryClient.setQueryData(
+      leadQueryKeys.counts(SITE_ID),
+      { new: { count: 2, capped: false }, last7Days: { count: 2, capped: false } },
+      { updatedAt: LOADED_AT - 60_000 },
+    );
+    serve([], leadList([ha, bao]));
+    const fresh: LeadCounts = {
+      new: { count: 5, capped: false },
+      last7Days: { count: 5, capped: false },
+    };
+    renderWithProviders(
+      <LeadInbox
+        site={siteFixture()}
+        canManage
+        initialFilters={DEFAULT_LEAD_FILTERS}
+        initialLeadId={null}
+        initialList={leadList([ha, bao])}
+        initialDetail={null}
+        pageRefs={pageRefs}
+        leadCounts={fresh}
+        loadedAt={LOADED_AT}
+      />,
+      queryClient,
+    );
+    expect(queryClient.getQueryData(leadQueryKeys.counts(SITE_ID))).toEqual(fresh);
   });
 });

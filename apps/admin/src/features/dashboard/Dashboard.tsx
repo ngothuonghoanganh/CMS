@@ -81,7 +81,7 @@ export function Dashboard({
   loadedAt,
 }: DashboardProps) {
   const now = useNow(loadedAt);
-  const leadCounts = useLeadCounts(site.id, initialLeadCounts).data;
+  const leadCounts = useLeadCounts(site.id, initialLeadCounts, loadedAt).data;
   const [status, setStatus] = useState(initialFilters.status);
   const [searchText, setSearchText] = useState(initialFilters.q);
   const q = normalizeSearch(useDebouncedValue(searchText, SEARCH_DEBOUNCE_MS));

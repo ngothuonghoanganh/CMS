@@ -2,6 +2,7 @@ import {
   activityListResponseSchema,
   EXPORT_TRUNCATED_HEADER,
   LEAD_EXPORT_MAX_ROWS,
+  LEAD_PERSON_EXPORT_MAX,
   type LeadListResponse,
   leadListResponseSchema,
   personDeleteResponseSchema,
@@ -22,6 +23,7 @@ import {
   submitLead,
 } from '../../../test/leads.js';
 import {
+  publish,
   RecordingRevalidationClient,
   uniqueSlug,
   withRevalidationRecorder,
@@ -96,6 +98,11 @@ describe('lead exports and a person’s data', () => {
       .items.map((item) => ({ type: item.type, count: item.data.count }));
   }
 
+  /** The day the server put in a file name: the export may start just before midnight. */
+  function exportDays(before: Date): string[] {
+    return [vnDayOf(before), vnDayOf(new Date())];
+  }
+
   function lines(text: string): string[] {
     return text.split('\r\n').filter((line) => line !== '');
   }
@@ -112,11 +119,12 @@ describe('lead exports and a person’s data', () => {
     await send(site, releaseId, { name: '=HYPERLINK("http://x")', phone: '0938 512 840' });
     await send(site, releaseId, { name: 'Bot', honeypot: 'x' });
 
+    const started = new Date();
     const response = await owner.post(`/sites/${site.id}/leads/export`, {}).expect(200);
     expect(response.headers['content-type']).toBe('text/csv; charset=utf-8');
-    expect(response.headers['content-disposition']).toBe(
-      `attachment; filename="leads-${site.subdomain}-${vnDayOf(new Date())}.csv"`,
-    );
+    expect(
+      exportDays(started).map((day) => `attachment; filename="leads-${site.subdomain}-${day}.csv"`),
+    ).toContain(response.headers['content-disposition']);
     expect(response.headers['cache-control']).toBe('no-store');
     expect(response.headers[EXPORT_TRUNCATED_HEADER.toLowerCase()]).toBe('false');
     const text = response.text;
@@ -139,7 +147,13 @@ describe('lead exports and a person’s data', () => {
     expect(lines(spam.text)).toHaveLength(2);
     expect(spam.text).toContain(',Bot,');
 
+    // A search goes in the body, like the other filters.
+    const searched = await owner.post(`/sites/${site.id}/leads/export`, { q: '0938' }).expect(200);
+    expect(lines(searched.text)).toHaveLength(2);
+    expect(searched.text).toContain(`,"'=HYPERLINK(""http://x"")",`);
+
     expect(await leadActivity(site)).toEqual([
+      { type: 'lead.exported', count: 1 },
       { type: 'lead.exported', count: 1 },
       { type: 'lead.exported', count: 2 },
     ]);
@@ -177,7 +191,9 @@ describe('lead exports and a person’s data', () => {
   });
 
   it('exports every lead of a person as JSON or CSV, with the consent text they agreed to', async () => {
-    const { site, releaseId } = await formSite();
+    const { site, pageId } = await formSite();
+    // Release v2 still carries consent text v1: the file must name the consent version.
+    const releaseId = (await publish(owner, pageId)).release.id;
     await send(site, releaseId, {
       name: 'Nguyễn Thu Hà',
       email: 'thuha@example.com',
@@ -192,12 +208,16 @@ describe('lead exports and a person’s data', () => {
     await send(site, releaseId, { name: 'Trần Quốc Bảo', phone: '0938 512 840' });
     const leadId = await leadIdOf(site, 'Nguyễn Thu Hà');
 
+    const started = new Date();
     const json = await owner.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(200);
     expect(json.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(json.headers['content-disposition']).toBe(
-      `attachment; filename="du-lieu-ca-nhan-${site.subdomain}-${vnDayOf(new Date())}.json"`,
-    );
+    expect(
+      exportDays(started).map(
+        (day) => `attachment; filename="du-lieu-ca-nhan-${site.subdomain}-${day}.json"`,
+      ),
+    ).toContain(json.headers['content-disposition']);
     expect(json.headers['cache-control']).toBe('no-store');
+    expect(json.headers[EXPORT_TRUNCATED_HEADER.toLowerCase()]).toBe('false');
     const file = personExportFileSchema.parse(JSON.parse(json.text));
     expect(file.site).toBe(site.name);
     expect(file.leads.map((lead) => lead.name)).toEqual(['Hà (số cũ)', 'Thu Hà', 'Nguyễn Thu Hà']);
@@ -205,7 +225,7 @@ describe('lead exports and a person’s data', () => {
       phone: '+84901234567',
       email: 'thuha@example.com',
       page: 'Đăng ký tư vấn',
-      pageVersion: 1,
+      pageVersion: 2,
       source: 'trực tiếp',
       device: 'Máy tính',
       status: 'Mới',
@@ -225,11 +245,46 @@ describe('lead exports and a person’s data', () => {
     expect(csvLines[0]).toBe(`${BOM}${HEADER},Lúc đồng ý,Bản nội dung đồng ý,Nội dung đồng ý`);
     expect(csvLines).toHaveLength(4);
     expect(csv.text).not.toContain('Trần Quốc Bảo');
+    // The last three fields of a row: when, which consent version and its text.
+    expect(csvLines[3]).toMatch(
+      new RegExp(
+        `,\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},1,Tôi đồng ý để ${PRIVACY_SETTINGS.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ\\.$`,
+      ),
+    );
 
     await owner.post(`/leads/${leadId}/person/export`, { format: 'xml' }).expect(422);
     expect(await leadActivity(site)).toEqual([
       { type: 'lead.exported', count: 3 },
       { type: 'lead.exported', count: 3 },
+    ]);
+  });
+
+  it('holds at most 1000 leads of one person and says when there were more', async () => {
+    const { site, pageId, releaseId } = await formSite();
+    const now = Date.now();
+    await insertLeads(
+      t,
+      Array.from({ length: LEAD_PERSON_EXPORT_MAX + 1 }, (_, index) =>
+        storedLead({
+          workspaceId,
+          siteId: site.id,
+          pageId,
+          releaseId,
+          name: `Lần ${index}`,
+          phone: '+84901234567',
+          createdAt: new Date(now - index * 1000),
+        }),
+      ),
+    );
+    const leadId = await leadIdOf(site, 'Lần 0');
+    const json = await owner.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(200);
+    expect(json.headers[EXPORT_TRUNCATED_HEADER.toLowerCase()]).toBe('true');
+    const file = personExportFileSchema.parse(JSON.parse(json.text));
+    expect(file.leads).toHaveLength(LEAD_PERSON_EXPORT_MAX);
+    expect(file.leads[0]?.name).toBe('Lần 0');
+    expect(file.leads.at(-1)?.name).toBe(`Lần ${LEAD_PERSON_EXPORT_MAX - 1}`);
+    expect(await leadActivity(site)).toEqual([
+      { type: 'lead.exported', count: LEAD_PERSON_EXPORT_MAX },
     ]);
   });
 

@@ -6,16 +6,21 @@
   gap: 12px;
 }
 
+/* Shrinks to the gutter: a long page title in the page filter must not widen the page. */
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
+/* A long page title truncates inside the select instead of widening the row. */
 .filter {
   flex: 0 1 auto;
   min-width: 150px;
+  max-width: 260px;
 }
 
 .search {
@@ -83,6 +88,7 @@
   letter-spacing: 0.02em;
   color: var(--color-muted);
   text-align: left;
+  white-space: nowrap;
 }
 
 .table td {
@@ -138,6 +144,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   color: var(--color-ink-2);
+  white-space: nowrap;
 }
 
 .time {
@@ -409,5 +416,6 @@
   .search {
     flex: 1 1 100%;
     min-width: 0;
+    max-width: 100%;
   }
 }

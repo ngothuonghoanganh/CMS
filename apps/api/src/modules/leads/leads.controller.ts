@@ -21,6 +21,7 @@ import {
   leadFiltersSchema,
   type LeadListResponse,
   leadListQuerySchema,
+  leadSearchRequestSchema,
   type PersonDeleteResponse,
   type PersonExportRequest,
   personExportRequestSchema,
@@ -34,7 +35,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { type LeadFile, LeadExportService } from './lead-export.service.js';
 import {
   LeadInboxService,
-  type LeadListQueryValues,
+  type LeadPageQuery,
   type UpdateLeadValues,
 } from './lead-inbox.service.js';
 import { LeadPersonService } from './lead-person.service.js';
@@ -65,9 +66,21 @@ export class LeadsController {
   list(
     @CurrentUser() user: AuthenticatedUser,
     @Param('siteId') siteId: string,
-    @Query(new ZodPipe(leadListQuerySchema)) query: LeadListQueryValues,
+    @Query(new ZodPipe(leadListQuerySchema)) query: LeadPageQuery,
   ): Promise<LeadListResponse> {
     return this.inbox.list(user, siteId, query);
+  }
+
+  /** The same list narrowed by a search, which stays out of the URL (rule 10). */
+  @Post('sites/:siteId/leads/search')
+  @HttpCode(200)
+  @Header('Cache-Control', NO_STORE)
+  search(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Body(new ZodPipe(leadSearchRequestSchema)) body: LeadPageQuery,
+  ): Promise<LeadListResponse> {
+    return this.inbox.list(user, siteId, body);
   }
 
   @Get('sites/:siteId/lead-counts')

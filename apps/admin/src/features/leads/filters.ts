@@ -1,8 +1,9 @@
 import {
+  cleanLeadSearch,
   DEFAULT_LEAD_RANGE,
   idSchema,
-  LEAD_SEARCH_MAX,
   type LeadFolder,
+  type LeadFiltersRequest,
   leadFiltersSchema,
   leadFolderSchema,
   type LeadListQuery,
@@ -16,7 +17,9 @@ import type { z } from 'zod';
 
 /**
  * Filters of the lead inbox (board 10). They live in the URL (`?folder=&pageId=&status=&range=
- * &from=&to=&q=`), with the selected lead (`&lead=`), so a reload or a shared link keeps them.
+ * &from=&to=`), with the selected lead (`&lead=`), so a reload or a shared link keeps them. The
+ * search does not: a phone number, email or name in a URL would reach browser history, access logs
+ * and the Referer header (rule 10).
  */
 export interface LeadInboxFilters {
   folder: LeadFolder;
@@ -26,6 +29,7 @@ export interface LeadInboxFilters {
   /** First and last day of a custom range ("2026-10-01"); empty until chosen. */
   from: string;
   to: string;
+  /** What the member typed in "Tìm lead", cleaned; sent in request bodies only. */
   q: string;
 }
 
@@ -53,11 +57,12 @@ function parsed<T>(schema: z.ZodType<T>, value: string): T | null {
   return result.success ? result.data : null;
 }
 
+/** A typed or pasted search as the API accepts it. */
 export function normalizeLeadSearch(value: string): string {
-  return value.trim().slice(0, LEAD_SEARCH_MAX);
+  return cleanLeadSearch(value);
 }
 
-/** Reads the filters from search params, ignoring anything the API would reject. */
+/** Reads the filters from search params, ignoring anything the API would reject and any search. */
 export function parseLeadFilters(
   params: Partial<Record<string, SearchParamValue>>,
 ): LeadInboxFilters {
@@ -69,7 +74,7 @@ export function parseLeadFilters(
     range,
     from: range === 'custom' ? (parsed(vnDaySchema, single(params.from)) ?? '') : '',
     to: range === 'custom' ? (parsed(vnDaySchema, single(params.to)) ?? '') : '',
-    q: normalizeLeadSearch(single(params.q)),
+    q: '',
   };
 }
 
@@ -80,7 +85,7 @@ export function parseSelectedLead(
   return parsed(idSchema, single(params.lead));
 }
 
-/** "?status=new&range=all&lead=…", without the defaults; "" when nothing differs. */
+/** "?status=new&range=all&lead=…", without the defaults or the search; "" when nothing differs. */
 export function leadInboxSearch(filters: LeadInboxFilters, leadId: string | null): string {
   const params = new URLSearchParams();
   if (filters.folder !== 'inbox') {
@@ -103,9 +108,6 @@ export function leadInboxSearch(filters: LeadInboxFilters, leadId: string | null
       params.set('to', filters.to);
     }
   }
-  if (filters.q !== '') {
-    params.set('q', filters.q);
-  }
   if (leadId !== null) {
     params.set('lead', leadId);
   }
@@ -113,11 +115,12 @@ export function leadInboxSearch(filters: LeadInboxFilters, leadId: string | null
   return query === '' ? '' : `?${query}`;
 }
 
-/** The API filters for the inbox filters; empty values are left out. */
+/** The API filters for the inbox filters, without the search; empty values are left out. */
 export type LeadFilterQuery = Omit<LeadListQuery, 'cursor' | 'limit'>;
 
 export type LeadFilterCheck =
-  | { ok: true; query: LeadFilterQuery }
+  /** `q` is "" without a search; with one, the list and the export send it in a request body. */
+  | { ok: true; query: LeadFilterQuery; q: string }
   /** A custom range still missing a day, or spanning too many days: nothing to ask the API yet. */
   | { ok: false; message: string };
 
@@ -129,13 +132,20 @@ export function leadFilterQuery(filters: LeadInboxFilters): LeadFilterCheck {
     ...(filters.status === null ? {} : { status: filters.status }),
     ...(filters.range === 'custom' && filters.from !== '' ? { from: filters.from } : {}),
     ...(filters.range === 'custom' && filters.to !== '' ? { to: filters.to } : {}),
-    ...(filters.q === '' ? {} : { q: filters.q }),
   };
-  const result = leadFiltersSchema.safeParse(query);
+  const result = leadFiltersSchema.safeParse({
+    ...query,
+    ...(filters.q === '' ? {} : { q: filters.q }),
+  });
   if (!result.success) {
     return { ok: false, message: result.error.issues[0]?.message ?? 'Bộ lọc chưa hợp lệ' };
   }
-  return { ok: true, query };
+  return { ok: true, query, q: filters.q };
+}
+
+/** The body of the CSV export: the filters and, if any, the search. */
+export function leadExportBody(check: { query: LeadFilterQuery; q: string }): LeadFiltersRequest {
+  return { ...check.query, ...(check.q === '' ? {} : { q: check.q }) };
 }
 
 /** Whether the inbox shows something other than its default view, e.g. for "Xem tất cả lead". */

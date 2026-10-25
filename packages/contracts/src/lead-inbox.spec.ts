@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cleanLeadSearch,
   leadFiltersSchema,
   leadListQuerySchema,
+  leadSearchRequestSchema,
   leadSourceLabel,
   updateLeadRequestSchema,
 } from './lead-inbox.js';
@@ -20,7 +22,6 @@ describe('leadListQuerySchema', () => {
         range: 'custom',
         from: '2026-10-01',
         to: '2026-10-31',
-        q: ' 0901 ',
         limit: '20',
       }),
     ).toEqual({
@@ -30,8 +31,13 @@ describe('leadListQuerySchema', () => {
       range: 'custom',
       from: '2026-10-01',
       to: '2026-10-31',
-      q: '0901',
       limit: 20,
+    });
+  });
+
+  it('refuses a search in the URL: it is personal data and goes in a request body', () => {
+    expect(leadListQuerySchema.safeParse({ q: '0901' }).error?.issues[0]).toMatchObject({
+      code: 'unrecognized_keys',
     });
   });
 
@@ -63,17 +69,50 @@ describe('leadListQuerySchema', () => {
     expect(leadListQuerySchema.safeParse({ status: 'lost' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ range: '90d' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ from: '25/10/2026' }).success).toBe(false);
-    expect(leadListQuerySchema.safeParse({ q: 'x'.repeat(81) }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ limit: 51 }).success).toBe(false);
   });
 
-  it('shares its filters and the range rule with the export', () => {
-    expect(leadFiltersSchema.parse({ status: 'new', range: 'all' })).toEqual({
+  it('shares its filters and the range rule with the export, which may also search', () => {
+    expect(leadFiltersSchema.parse({ status: 'new', range: 'all', q: ' Hà ' })).toEqual({
       folder: 'inbox',
       status: 'new',
       range: 'all',
+      q: 'Hà',
     });
     expect(leadFiltersSchema.safeParse({ range: 'custom' }).success).toBe(false);
+  });
+});
+
+describe('leadSearchRequestSchema', () => {
+  it('narrows the list by a search sent in the body, with the same filters and paging', () => {
+    expect(leadSearchRequestSchema.parse({ q: ' 0901 ', status: 'new', limit: 20 })).toEqual({
+      folder: 'inbox',
+      status: 'new',
+      range: '7d',
+      q: '0901',
+      limit: 20,
+    });
+  });
+
+  it('needs something to search for, at most 80 characters, without control characters', () => {
+    expect(leadSearchRequestSchema.safeParse({ q: '   ' }).error?.issues[0]?.message).toBe(
+      'Nhập từ khóa tìm kiếm',
+    );
+    expect(leadSearchRequestSchema.safeParse({ q: 'x'.repeat(81) }).success).toBe(false);
+    for (const q of ['thuha@example.com\u0000', 'a\u2028b', 'line\nbreak']) {
+      expect(leadSearchRequestSchema.safeParse({ q }).error?.issues[0]?.message).toBe(
+        'Từ khóa tìm kiếm có ký tự không hợp lệ',
+      );
+    }
+    expect(leadFiltersSchema.safeParse({ q: 'a\u0000' }).success).toBe(false);
+  });
+
+  it('cleans a pasted search the way the schema accepts it', () => {
+    expect(cleanLeadSearch(' 0901\n234\u0000567 ')).toBe('0901 234 567');
+    expect(cleanLeadSearch('x'.repeat(100))).toHaveLength(80);
+    expect(leadSearchRequestSchema.safeParse({ q: cleanLeadSearch('a\u2028b') }).success).toBe(
+      true,
+    );
   });
 });
 

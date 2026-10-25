@@ -3,6 +3,7 @@
 import {
   endpoints,
   LEAD_EXPORT_MAX_ROWS,
+  type LeadCounts,
   type LeadDetail,
   type LeadListResponse,
   type LeadPageRef,
@@ -29,7 +30,7 @@ import {
   VisuallyHidden,
 } from '@plp/ui';
 import { keepPreviousData, useInfiniteQuery, useMutation } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, downloadFile } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { leadsHref } from '../shell/navigation';
@@ -41,6 +42,7 @@ import {
   DEFAULT_LEAD_FILTERS,
   isFiltered,
   LEAD_PAGE_SIZE,
+  leadExportBody,
   leadFilterQuery,
   type LeadInboxFilters,
   leadInboxSearch,
@@ -49,7 +51,7 @@ import {
 import { cappedCountLabel } from './lead-presentation';
 import { LeadDetailPanel } from './LeadDetailPanel';
 import { LeadTable } from './LeadTable';
-import { leadQueryKeys } from './queries';
+import { leadQueryKeys, useLeadCounts } from './queries';
 import styles from './LeadInbox.module.css';
 
 export const LEAD_SEARCH_DEBOUNCE_MS = 300;
@@ -75,6 +77,8 @@ export interface LeadInboxProps {
   initialDetail: LeadDetail | null;
   /** Every page of the site, for the page filter. */
   pageRefs: readonly LeadPageRef[];
+  /** Counts loaded with the list, so the sidebar badge matches the inbox it opened. */
+  leadCounts: LeadCounts;
   /** When the server loaded the data (epoch ms). */
   loadedAt: number;
 }
@@ -100,10 +104,12 @@ export function LeadInbox({
   initialList,
   initialDetail,
   pageRefs,
+  leadCounts,
   loadedAt,
 }: LeadInboxProps) {
   const now = useNow(loadedAt);
   const { toast } = useToast();
+  useLeadCounts(site.id, leadCounts, loadedAt);
   const { q: initialSearch, ...initialBase } = initialFilters;
   const [base, setBase] = useState(initialBase);
   const [searchText, setSearchText] = useState(initialSearch);
@@ -111,9 +117,13 @@ export function LeadInbox({
   const filters: LeadInboxFilters = { ...base, q };
   const [selectedId, setSelectedId] = useState(initialLeadId);
   const [picked, setPicked] = useState(false);
+  // When the open lead goes away (deleted, gone, "Đóng"), focus moves to the empty panel instead
+  // of dropping to the page.
+  const focusEmptyPanel = useRef(false);
 
-  // The URL mirrors the filters and the open lead, so a reload or a shared link keeps them.
-  // Replacing the entry (rather than navigating) keeps the server from rendering the page again.
+  // The URL mirrors the filters (not the search) and the open lead, so a reload or a shared link
+  // keeps them. Replacing the entry (rather than navigating) keeps the server from rendering the
+  // page again.
   const search = leadInboxSearch(filters, selectedId);
   useEffect(() => {
     const url = `${window.location.pathname}${search}`;
@@ -129,14 +139,14 @@ export function LeadInbox({
       if (!check.ok) {
         throw new Error(check.message);
       }
-      return api(endpoints.listLeads, [site.id], {
-        query: {
-          ...check.query,
-          limit: LEAD_PAGE_SIZE,
-          ...(pageParam === null ? {} : { cursor: pageParam }),
-        },
-        signal,
-      });
+      const page = { limit: LEAD_PAGE_SIZE, ...(pageParam === null ? {} : { cursor: pageParam }) };
+      // A search is personal data: it goes in a request body, never in the URL (rule 10).
+      return check.q === ''
+        ? api(endpoints.listLeads, [site.id], { query: { ...check.query, ...page }, signal })
+        : api(endpoints.searchLeads, [site.id], {
+            body: { ...check.query, q: check.q, ...page },
+            signal,
+          });
     },
     enabled: check.ok,
     initialPageParam: FIRST_PAGE,
@@ -154,7 +164,7 @@ export function LeadInbox({
       if (!check.ok) {
         throw new Error(check.message);
       }
-      return downloadFile(endpoints.exportLeads, [site.id], { body: check.query });
+      return downloadFile(endpoints.exportLeads, [site.id], { body: leadExportBody(check) });
     },
     onSuccess: (file) => {
       toast(
@@ -374,25 +384,23 @@ export function LeadInbox({
                 icon={<InboxIcon size={24} />}
                 title={
                   filters.folder === 'spam'
-                    ? 'Không có lead nào bị nghi ngờ spam'
+                    ? 'Không có lead nào bị nghi ngờ spam trong 7 ngày qua'
                     : 'Chưa có lead nào trong 7 ngày qua'
                 }
                 description={
                   filters.folder === 'spam'
-                    ? 'Lead điền ô ẩn chống bot hoặc gửi quá nhanh sẽ nằm ở đây, không tính vào số lead.'
+                    ? 'Lead điền ô ẩn chống bot hoặc gửi quá nhanh nằm ở đây, không tính vào số lead.'
                     : 'Lead từ form trên các trang live của site sẽ hiện ở đây.'
                 }
                 action={
-                  filters.folder === 'spam' ? null : (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        update({ range: 'all' });
-                      }}
-                    >
-                      Xem toàn bộ thời gian
-                    </Button>
-                  )
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      update({ range: 'all' });
+                    }}
+                  >
+                    Xem toàn bộ thời gian
+                  </Button>
                 }
               />
             )
@@ -435,7 +443,17 @@ export function LeadInbox({
         </Card>
 
         {selectedId === null ? (
-          <aside className={cx(styles.detail, styles.detailEmpty)} aria-label="Chi tiết lead">
+          <aside
+            ref={(node) => {
+              if (node !== null && focusEmptyPanel.current) {
+                focusEmptyPanel.current = false;
+                node.focus();
+              }
+            }}
+            tabIndex={-1}
+            className={cx(styles.detail, styles.detailEmpty)}
+            aria-label="Chi tiết lead"
+          >
             <p>Chọn một lead trong danh sách để xem chi tiết, gọi lại và ghi chú.</p>
           </aside>
         ) : (
@@ -443,10 +461,14 @@ export function LeadInbox({
             key={selectedId}
             siteId={site.id}
             leadId={selectedId}
-            initialDetail={initialDetail?.id === selectedId ? initialDetail : undefined}
+            // The server's copy only for the lead the page opened with; once the member has
+            // picked leads, the cache holds newer data.
+            initialDetail={!picked && initialDetail?.id === selectedId ? initialDetail : undefined}
+            loadedAt={loadedAt}
             canManage={canManage}
             focusOnShow={picked}
             onGone={() => {
+              focusEmptyPanel.current = true;
               setSelectedId(null);
             }}
           />

@@ -53,8 +53,9 @@ import styles from './LeadInbox.module.css';
 export interface LeadDetailPanelProps {
   siteId: string;
   leadId: string;
-  /** The detail the server loaded for this lead, if any. */
+  /** The detail the server loaded for this lead, if any, and when. */
   initialDetail?: LeadDetail | undefined;
+  loadedAt: number;
   /** The workspace owner exports and deletes a person's data (ADR-017). */
   canManage: boolean;
   /** Move focus to the lead's name once it shows: the user just picked it in the list. */
@@ -75,6 +76,7 @@ export function LeadDetailPanel({
   siteId,
   leadId,
   initialDetail,
+  loadedAt,
   canManage,
   focusOnShow,
   onGone,
@@ -87,7 +89,9 @@ export function LeadDetailPanel({
   const detail = useQuery({
     queryKey: detailKey,
     queryFn: ({ signal }) => api(endpoints.getLead, [leadId], { signal }),
-    ...(initialDetail === undefined ? {} : { initialData: initialDetail }),
+    ...(initialDetail === undefined
+      ? {}
+      : { initialData: initialDetail, initialDataUpdatedAt: loadedAt }),
   });
   const lead = detail.data;
   const loaded = lead !== undefined;
@@ -226,10 +230,12 @@ export function LeadDetailPanel({
         <Field label="Trạng thái lead" hideLabel className={styles.statusField}>
           <Select
             value={pendingStatus ?? lead.status}
-            disabled={update.isPending}
+            // Never disabled while saving: that would drop keyboard focus. A choice made before
+            // the save answers is ignored; the select shows the status being saved.
+            aria-busy={update.isPending}
             onChange={(event) => {
               const status = leadStatusSchema.safeParse(event.target.value);
-              if (status.success) {
+              if (status.success && !update.isPending) {
                 update.mutate({ status: status.data });
               }
             }}

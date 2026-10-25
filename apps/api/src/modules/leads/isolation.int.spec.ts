@@ -58,6 +58,7 @@ describe('workspace isolation of leads', () => {
 
   it('hides the inbox, counts, pages and exports of site A from the owner of workspace B', async () => {
     await expectNotFound(ownerB.get(`/sites/${siteA.id}/leads`));
+    await expectNotFound(ownerB.post(`/sites/${siteA.id}/leads/search`, { q: '0901' }));
     await expectNotFound(ownerB.get(`/sites/${siteA.id}/lead-counts`));
     await expectNotFound(ownerB.get(`/sites/${siteA.id}/page-refs`));
     await expectNotFound(ownerB.post(`/sites/${siteA.id}/leads/export`, {}));

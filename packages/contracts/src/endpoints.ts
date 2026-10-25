@@ -17,6 +17,7 @@ import {
   leadFiltersSchema,
   leadListQuerySchema,
   leadListResponseSchema,
+  leadSearchRequestSchema,
   pageRefListResponseSchema,
   personDeleteResponseSchema,
   personExportRequestSchema,
@@ -209,12 +210,23 @@ export const endpoints = {
   }),
 
   // Lead inbox (ADR-018): members read and triage leads, the owner exports and deletes them
-  /** Newest first, with the folder counts for the same filters. */
+  /** Newest first, with the folder counts for the same filters; `searchLeads` adds a search. */
   listLeads: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/leads`,
     request: null,
     query: leadListQuerySchema,
+    response: leadListResponseSchema,
+  }),
+  /**
+   * `listLeads` narrowed by a search. A POST because the search is personal data (a phone number,
+   * email or name) that must stay out of URLs, access logs and the Referer header (rule 10).
+   */
+  searchLeads: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/leads/search`,
+    request: leadSearchRequestSchema,
+    query: null,
     response: leadListResponseSchema,
   }),
   /** The sidebar badge "N mới" and the dashboard card "Lead 7 ngày qua". */

@@ -33,6 +33,7 @@ import {
 } from '../../../test/pages.js';
 import { configurePrivacy, PRIVACY_SETTINGS, saveConsentVersion } from '../../../test/privacy.js';
 import { addEditor, createSite } from '../../../test/resources.js';
+import { addMonthsUtc } from './domain/lead-intake-rules.js';
 
 const DAY_MS = 86_400_000;
 
@@ -95,6 +96,19 @@ describe('lead inbox', () => {
 
   function names(list: LeadListResponse): string[] {
     return list.items.map((item) => item.name);
+  }
+
+  /** `POST …/leads/search`: the search travels in the body, never in the URL (rule 10). */
+  async function search(
+    site: Site,
+    q: string,
+    filters: Record<string, unknown> = {},
+  ): Promise<LeadListResponse> {
+    const response = await owner
+      .post(`/sites/${site.id}/leads/search`, { ...filters, q })
+      .expect(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    return leadListResponseSchema.parse(response.body);
   }
 
   async function detail(leadId: string, client = owner): Promise<LeadDetail> {
@@ -176,18 +190,35 @@ describe('lead inbox', () => {
     expect(names(await inbox(site, '?status=contacted'))).toEqual(['Lê Mai Anh']);
     expect(names(await inbox(site, '?status=new'))).toEqual(['Trần Quốc Bảo', 'Nguyễn Thu Hà']);
 
-    const byPhone = await inbox(site, '?q=0938%20512');
+    const byPhone = await search(site, '0938 512');
     expect(names(byPhone)).toEqual(['Trần Quốc Bảo']);
     expect(byPhone.counts.inbox).toEqual({ count: 1, capped: false });
-    expect(names(await inbox(site, `?q=${encodeURIComponent('+84 987')}`))).toEqual(['Lê Mai Anh']);
-    expect(names(await inbox(site, '?q=901%20234'))).toEqual(['Nguyễn Thu Hà']);
-    expect(names(await inbox(site, '?q=thuha%40ex'))).toEqual(['Nguyễn Thu Hà']);
-    expect(names(await inbox(site, '?q=quoc%20bao'))).toEqual(['Trần Quốc Bảo']);
-    expect(names(await inbox(site, `?q=${encodeURIComponent('Bảo')}`))).toEqual(['Trần Quốc Bảo']);
+    expect(names(await search(site, '+84 987'))).toEqual(['Lê Mai Anh']);
+    expect(names(await search(site, '901 234'))).toEqual(['Nguyễn Thu Hà']);
+    expect(names(await search(site, 'thuha@ex'))).toEqual(['Nguyễn Thu Hà']);
+    expect(names(await search(site, 'quoc bao'))).toEqual(['Trần Quốc Bảo']);
+    expect(names(await search(site, 'Bảo'))).toEqual(['Trần Quốc Bảo']);
+    // The search narrows the other filters.
+    expect(names(await search(site, 'thuha@ex', { status: 'contacted' }))).toEqual([]);
     // A phone number is matched from its start only.
-    expect(names(await inbox(site, '?q=567'))).toEqual([]);
+    expect(names(await search(site, '567'))).toEqual([]);
     // Characters that mean something in a regular expression are searched literally.
-    expect(names(await inbox(site, `?q=${encodeURIComponent('.*')}`))).toEqual([]);
+    expect(names(await search(site, '.*'))).toEqual([]);
+  });
+
+  it('keeps a search out of URLs and refuses characters no search needs', async () => {
+    const { site, releaseId } = await inboxSite();
+    await send(site, releaseId, { name: 'Nguyễn Thu Hà', email: 'thuha@example.com' });
+    const inUrl = await owner.get(`/sites/${site.id}/leads?q=0901`).expect(422);
+    expect(problemSchema.parse(inUrl.body).issues?.[0]?.code).toBe('unrecognized_keys');
+    // A NUL cannot reach the database: it is a 422, not a 500 that would log the search.
+    for (const q of ['thuha@example.com\u0000', 'a\u2028b', '   ']) {
+      const response = await owner.post(`/sites/${site.id}/leads/search`, { q }).expect(422);
+      expect(problemSchema.parse(response.body).code).toBe('validation_failed');
+    }
+    await owner
+      .post(`/sites/${site.id}/leads/export`, { q: 'thuha@example.com\u0000' })
+      .expect(422);
   });
 
   it('refuses filters the inbox does not know', async () => {
@@ -197,7 +228,7 @@ describe('lead inbox', () => {
       '?status=lost',
       '?range=custom&from=2026-10-01',
       '?range=custom&from=2025-01-01&to=2026-12-31',
-      `?q=${'x'.repeat(81)}`,
+      '?limit=51',
       '?pageId=abc',
       '?cursor=nope',
     ]) {
@@ -275,7 +306,10 @@ describe('lead inbox', () => {
   });
 
   it('shows a lead with the consent text of the release the visitor saw, and their other leads', async () => {
-    const { site, pageId, releaseId } = await inboxSite();
+    const { site, pageId } = await inboxSite();
+    // Release v2 still carries consent text v1: the evidence must name the consent version, not
+    // the release.
+    const releaseId = (await publish(owner, pageId)).release.id;
     await send(site, releaseId, {
       name: 'Nguyễn Thu Hà',
       email: 'thuha@example.com',
@@ -297,7 +331,7 @@ describe('lead inbox', () => {
       email: 'thuha@example.com',
       message: 'Gọi sau 18h',
       page: { id: pageId, title: 'Đăng ký tư vấn' },
-      releaseVersion: 1,
+      releaseVersion: 2,
       device: 'desktop',
       status: 'new',
       note: '',
@@ -314,9 +348,7 @@ describe('lead inbox', () => {
       // The same email links the second lead to the same person.
       personLeads: { count: 2, capped: false },
     });
-    const expires = new Date(lead.createdAt);
-    expires.setUTCMonth(expires.getUTCMonth() + 12);
-    expect(lead.expiresAt).toBe(expires.toISOString());
+    expect(lead.expiresAt).toBe(addMonthsUtc(new Date(lead.createdAt), 12).toISOString());
 
     // A new consent text, published again: older leads keep the text their visitor agreed to.
     await saveConsentVersion(owner, site.id, 1, { requiredText: 'Bản 2 của {Tên doanh nghiệp}.' });
@@ -327,8 +359,16 @@ describe('lead inbox', () => {
       version: 2,
       requiredText: `Bản 2 của ${PRIVACY_SETTINGS.controllerName}.`,
     });
-    expect(newer.releaseVersion).toBe(2);
-    expect((await detail(first)).consent).toMatchObject({ version: 1 });
+    expect(newer.releaseVersion).toBe(3);
+    expect(await detail(first)).toMatchObject({ releaseVersion: 2, consent: { version: 1 } });
+  });
+
+  it('answers a lead with no-store, as every response holding personal data', async () => {
+    const { site, releaseId } = await inboxSite();
+    await send(site, releaseId, { name: 'Nguyễn Thu Hà' });
+    const leadId = leadIdOf(await inbox(site), 'Nguyễn Thu Hà');
+    const response = await owner.get(`/leads/${leadId}`).expect(200);
+    expect(response.headers['cache-control']).toBe('no-store');
   });
 
   it('changes status, note and spam for owners and editors alike', async () => {

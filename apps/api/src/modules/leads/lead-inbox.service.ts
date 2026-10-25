@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import {
   type LeadCounts,
   type LeadDetail,
+  type LeadFilters,
   type LeadListResponse,
-  type leadListQuerySchema,
   recentDaysWindow,
   type updateLeadRequestSchema,
 } from '@plp/contracts';
@@ -29,7 +29,8 @@ import {
 import type { LeadRecord } from './lead.schema.js';
 import { LeadsRepository } from './leads.repository.js';
 
-export type LeadListQueryValues = z.output<typeof leadListQuerySchema>;
+/** A page of the inbox: the filters, optionally a search, and the keyset position. */
+export type LeadPageQuery = LeadFilters & { cursor?: string | undefined; limit: number };
 export type UpdateLeadValues = z.output<typeof updateLeadRequestSchema>;
 
 /** Leads not suspected of spam, of every page, status and time. */
@@ -55,11 +56,14 @@ export class LeadInboxService {
     private readonly releases: ReleasesRepository,
   ) {}
 
-  /** One page of leads, newest first, with the count of each folder under the same filters. */
+  /**
+   * One page of leads, newest first, with the count of each folder under the same filters. The
+   * search arrives in a request body (`POST …/leads/search`), never in a URL (rule 10).
+   */
   async list(
     user: AuthenticatedUser,
     siteId: string,
-    query: LeadListQueryValues,
+    query: LeadPageQuery,
   ): Promise<LeadListResponse> {
     const { scope, site } = await this.sites.access(user, siteId);
     const criteria = leadCriteria(query, new Date());
