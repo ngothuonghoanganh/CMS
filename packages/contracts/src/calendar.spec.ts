@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   addVnDays,
+  businessDeadline,
   recentDaysWindow,
   vnDateTimeOf,
   vnDayOf,
   vnDaySpan,
   vnDayStart,
   vnDaysWindow,
+  vnInstantOf,
 } from './calendar.js';
 
 describe('Vietnamese calendar days', () => {
@@ -52,5 +54,39 @@ describe('Vietnamese calendar days', () => {
     expect(recentDaysWindow(new Date('2026-10-25T17:30:00.000Z'), 7).from).toEqual(
       new Date('2026-10-19T17:00:00.000Z'),
     );
+  });
+});
+
+describe('businessDeadline', () => {
+  const vn = (text: string) => new Date(`${text}+07:00`);
+
+  it('matches board 12: received Friday 23/10 at 10:15, answer by 27/10 and complete by 20/11', () => {
+    const received = vn('2026-10-23T10:15:00');
+    expect(businessDeadline(received, 2)).toEqual(vn('2026-10-27T23:59:59.999'));
+    expect(businessDeadline(received, 20)).toEqual(vn('2026-11-20T23:59:59.999'));
+  });
+
+  it('counts from the day of receipt, whatever the hour', () => {
+    expect(businessDeadline(vn('2026-10-23T23:30:00'), 2)).toEqual(vn('2026-10-27T23:59:59.999'));
+    // 00:30 on Saturday in Vietnam is still Friday in UTC.
+    expect(businessDeadline(vn('2026-10-24T00:30:00'), 2)).toEqual(vn('2026-10-27T23:59:59.999'));
+  });
+
+  it('starts on the Monday after a request received at the weekend', () => {
+    expect(businessDeadline(vn('2026-10-24T09:00:00'), 1)).toEqual(vn('2026-10-26T23:59:59.999'));
+    expect(businessDeadline(vn('2026-10-25T21:00:00'), 2)).toEqual(vn('2026-10-27T23:59:59.999'));
+  });
+
+  it('runs across months and the new year', () => {
+    expect(businessDeadline(vn('2026-12-30T08:00:00'), 2)).toEqual(vn('2027-01-01T23:59:59.999'));
+    expect(businessDeadline(vn('2026-12-31T08:00:00'), 2)).toEqual(vn('2027-01-04T23:59:59.999'));
+    expect(businessDeadline(vn('2026-12-31T08:00:00'), 20)).toEqual(vn('2027-01-28T23:59:59.999'));
+  });
+});
+
+describe('vnInstantOf', () => {
+  it('reads a day and a time of day in Vietnam', () => {
+    expect(vnInstantOf('2026-10-23', '10:15').toISOString()).toBe('2026-10-23T03:15:00.000Z');
+    expect(vnInstantOf('2027-01-01', '06:59').toISOString()).toBe('2026-12-31T23:59:00.000Z');
   });
 });

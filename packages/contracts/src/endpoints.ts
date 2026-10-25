@@ -9,6 +9,12 @@ import {
 import { loginRequestSchema, meResponseSchema, signupRequestSchema } from './auth.js';
 import { checksResultSchema } from './checks.js';
 import { cursorQuerySchema } from './common.js';
+import {
+  createDataRequestRequestSchema,
+  dataRequestDetailSchema,
+  dataRequestListQuerySchema,
+  dataRequestListResponseSchema,
+} from './data-request.js';
 import { healthResponseSchema } from './health.js';
 import { publicLeadRequestSchema, publicLeadResponseSchema } from './lead.js';
 import {
@@ -21,6 +27,7 @@ import {
   pageRefListResponseSchema,
   personDeleteResponseSchema,
   personExportRequestSchema,
+  updateLeadContactRequestSchema,
   updateLeadRequestSchema,
 } from './lead-inbox.js';
 import {
@@ -270,6 +277,14 @@ export const endpoints = {
     query: null,
     response: leadDetailSchema,
   }),
+  /** Owner only: the lead's name, phone number and email, e.g. for a request to correct them. */
+  updateLeadContact: endpoint({
+    method: 'PATCH',
+    path: (leadId: string) => `/leads/${e(leadId)}/contact`,
+    request: updateLeadContactRequestSchema,
+    query: null,
+    response: leadDetailSchema,
+  }),
   /**
    * Owner only. A JSON or CSV file with every lead of the same person (phone number or email) in
    * the site, consent evidence included; at most `LEAD_PERSON_EXPORT_MAX` leads.
@@ -300,6 +315,61 @@ export const endpoints = {
     request: null,
     query: null,
     response: leadDetailSchema,
+  }),
+
+  // Requests from people who sent a form (ADR-017): owner only
+  listDataRequests: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/data-requests`,
+    request: null,
+    query: dataRequestListQuerySchema,
+    response: dataRequestListResponseSchema,
+  }),
+  /** Records a request received by email or phone; the deadlines count from `receivedAt`. */
+  createDataRequest: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/data-requests`,
+    request: createDataRequestRequestSchema,
+    query: null,
+    response: dataRequestDetailSchema,
+  }),
+  getDataRequest: endpoint({
+    method: 'GET',
+    path: (requestId: string) => `/data-requests/${e(requestId)}`,
+    request: null,
+    query: null,
+    response: dataRequestDetailSchema,
+  }),
+  /** The person was answered. 409 `conflict` unless the request is `open`. */
+  respondDataRequest: endpoint({
+    method: 'POST',
+    path: (requestId: string) => `/data-requests/${e(requestId)}/respond`,
+    request: null,
+    query: null,
+    response: dataRequestDetailSchema,
+  }),
+  /**
+   * A request to see the stored data: the person's leads as a JSON or CSV file, like
+   * `exportLeadPerson`. 409 `conflict` for another type or a completed request.
+   */
+  exportDataRequest: endpoint({
+    method: 'POST',
+    path: (requestId: string) => `/data-requests/${e(requestId)}/export`,
+    request: personExportRequestSchema,
+    query: null,
+    response: null,
+  }),
+  /**
+   * Completes the request. A deletion deletes the person's leads and masks the contact; a
+   * withdrawal records the withdrawn marketing consent on their leads; both in the same
+   * transaction. 409 `conflict` when the request is already completed.
+   */
+  completeDataRequest: endpoint({
+    method: 'POST',
+    path: (requestId: string) => `/data-requests/${e(requestId)}/complete`,
+    request: null,
+    query: null,
+    response: dataRequestDetailSchema,
   }),
 
   // Lead recipients (ADR-018): members read them, the owner changes them

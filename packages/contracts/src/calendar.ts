@@ -16,6 +16,11 @@ export function vnDayOf(at: Date): VnDay {
   return new Date(at.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** The instant of a time of day ("10:15") on a Vietnamese calendar day. */
+export function vnInstantOf(day: VnDay, time: string): Date {
+  return new Date(Date.parse(`${day}T${time}:00.000Z`) - VN_OFFSET_MS);
+}
+
 /** "2026-10-24 16:42:07": the time in Vietnam of an instant, in a form spreadsheets read as a date. */
 export function vnDateTimeOf(at: Date): string {
   return new Date(at.getTime() + VN_OFFSET_MS).toISOString().slice(0, 19).replace('T', ' ');
@@ -52,4 +57,26 @@ export function vnDaysWindow(from: VnDay, to: VnDay): InstantWindow {
 export function recentDaysWindow(now: Date, days: number): InstantWindow {
   const today = vnDayOf(now);
   return vnDaysWindow(addVnDays(today, 1 - days), today);
+}
+
+/** Monday to Friday; public holidays are not taken out (ADR-017). */
+function isWorkingDay(day: VnDay): boolean {
+  const weekday = new Date(`${day}T00:00:00.000Z`).getUTCDay();
+  return weekday !== 0 && weekday !== 6;
+}
+
+/**
+ * The last instant (23:59:59.999 in Vietnam) of the `workingDays`-th working day after the day of
+ * `receivedAt`: a request received on Friday 23/10 has 2 working days until Tuesday 27/10. A
+ * request received on a weekend counts from the Monday after (ADR-017).
+ */
+export function businessDeadline(receivedAt: Date, workingDays: number): Date {
+  let day = vnDayOf(receivedAt);
+  for (let counted = 0; counted < workingDays;) {
+    day = addVnDays(day, 1);
+    if (isWorkingDay(day)) {
+      counted += 1;
+    }
+  }
+  return new Date(vnDayStart(addVnDays(day, 1)).getTime() - 1);
 }

@@ -3,6 +3,8 @@
 import type { PrivacySettings } from '@plp/contracts';
 import { Callout } from '@plp/ui';
 import { useState } from 'react';
+import { DataRequestsSection } from '../data-requests/DataRequestsSection';
+import type { DataRequestsData } from '../data-requests/load-data-requests';
 import { ConsentTextCard } from './ConsentTextCard';
 import { PrivacySettingsForm } from './PrivacySettingsForm';
 import styles from './PrivacyScreen.module.css';
@@ -12,13 +14,20 @@ export interface PrivacyScreenProps {
   settings: PrivacySettings;
   /** Only the workspace owner changes these settings (ADR-004); editors read them. */
   canEdit: boolean;
+  /** The requests from people who sent a form; null for editors, who do not handle them. */
+  dataRequests: DataRequestsData | null;
 }
 
 /**
  * "Dữ liệu cá nhân & đồng ý" (board 12, ADR-017): who collects the data, the policy link, how long
  * leads are kept, and the consent texts every form shows.
  */
-export function PrivacyScreen({ siteId, settings: initial, canEdit }: PrivacyScreenProps) {
+export function PrivacyScreen({
+  siteId,
+  settings: initial,
+  canEdit,
+  dataRequests,
+}: PrivacyScreenProps) {
   const [settings, setSettings] = useState(initial);
   return (
     <div className={styles.screen}>
@@ -28,7 +37,8 @@ export function PrivacyScreen({ siteId, settings: initial, canEdit }: PrivacyScr
       </Callout>
       {canEdit ? null : (
         <Callout tone="info">
-          Chỉ Owner của workspace được thay đổi dữ liệu cá nhân và đồng ý.
+          Chỉ Owner của workspace được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu cầu từ người
+          gửi form.
         </Callout>
       )}
       <div className={styles.columns}>
@@ -48,6 +58,13 @@ export function PrivacyScreen({ siteId, settings: initial, canEdit }: PrivacyScr
           }}
         />
       </div>
+      {dataRequests === null ? null : (
+        <DataRequestsSection
+          siteId={siteId}
+          initial={dataRequests.list}
+          loadedAt={dataRequests.loadedAt}
+        />
+      )}
     </div>
   );
 }

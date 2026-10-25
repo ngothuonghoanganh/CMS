@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { DataRequestsModule } from './modules/data-requests/data-requests.module.js';
 import { LeadsModule } from './modules/leads/leads.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PagesModule } from './modules/pages/pages.module.js';
@@ -61,6 +62,7 @@ export class AppModule {
         PagesModule,
         PublishingModule,
         LeadsModule,
+        DataRequestsModule,
         NotificationsModule,
         PreviewModule,
         PrivacyModule,

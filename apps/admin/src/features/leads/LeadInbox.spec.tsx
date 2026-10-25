@@ -355,6 +355,7 @@ describe('LeadInbox', () => {
     expect(
       within(panel).queryByRole('button', { name: 'Xóa dữ liệu người này' }),
     ).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Sửa thông tin' })).not.toBeInTheDocument();
     await user.click(within(panel).getByRole('button', { name: 'Chuyển vào spam' }));
     await vi.waitFor(() => {
       expect(lastCallTo(apiMock, endpoints.updateLead).options).toHaveProperty('body', {

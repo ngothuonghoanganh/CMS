@@ -6,6 +6,7 @@ export * from './checks.js';
 export * from './common.js';
 export * from './composition.js';
 export * from './content.js';
+export * from './data-request.js';
 export * from './endpoints.js';
 export * from './errors.js';
 export * from './goals.js';

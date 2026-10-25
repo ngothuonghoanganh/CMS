@@ -20,13 +20,18 @@ export interface LeadSearchKeys {
   name: string;
 }
 
+/** The digits of an E.164 number: how searches and a person's leads find it. */
+export function phoneSearchKey(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
 export function leadSearchKeys(fields: {
   name: string;
   phone: string;
   email: string | null;
 }): LeadSearchKeys {
   return {
-    phone: fields.phone.replace(/\D/g, ''),
+    phone: phoneSearchKey(fields.phone),
     email: fields.email?.toLowerCase() ?? null,
     name: foldVietnamese(fields.name),
   };

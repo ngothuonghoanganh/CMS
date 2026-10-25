@@ -39,6 +39,7 @@ import { formatDate, formatDateTime } from '../../lib/format';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ConsentEvidenceDialog } from './ConsentEvidenceDialog';
+import { EditLeadContactDialog } from './EditLeadContactDialog';
 import {
   cappedCountLabel,
   consentMoment,
@@ -58,7 +59,7 @@ export interface LeadDetailPanelProps {
   /** The detail the server loaded for this lead, if any, and when. */
   initialDetail?: LeadDetail | undefined;
   loadedAt: number;
-  /** The workspace owner exports and deletes a person's data (ADR-017). */
+  /** The workspace owner corrects, exports and deletes a person's data (ADR-017). */
   canManage: boolean;
   /** Move focus to the lead's name once it shows: the user just picked it in the list. */
   focusOnShow: boolean;
@@ -106,6 +107,9 @@ export function LeadDetailPanel({
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // A new key opens "Sửa thông tin" with the lead as it is now.
+  const [editKey, setEditKey] = useState(0);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (focusOnShow && loaded) {
@@ -473,6 +477,16 @@ export function LeadDetailPanel({
         </Button>
         {canManage ? (
           <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setEditKey((key) => key + 1);
+                setEditOpen(true);
+              }}
+            >
+              Sửa thông tin
+            </Button>
             <DropdownMenu
               align="start"
               trigger={
@@ -517,6 +531,25 @@ export function LeadDetailPanel({
       </div>
 
       <ConsentEvidenceDialog consent={consent} open={evidenceOpen} onOpenChange={setEvidenceOpen} />
+      {canManage && editKey > 0 ? (
+        <EditLeadContactDialog
+          key={editKey}
+          lead={lead}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSaved={(updated) => {
+            setEditOpen(false);
+            queryClient.setQueryData(detailKey, updated);
+            refreshLists();
+            toast({ tone: 'success', title: 'Đã sửa thông tin của lead' });
+          }}
+          onGone={() => {
+            setEditOpen(false);
+            refreshLists();
+            onGone();
+          }}
+        />
+      ) : null}
       {canManage ? (
         <ConfirmDialog
           open={deleteOpen}

@@ -86,6 +86,18 @@ describe('activitySentence', () => {
     ).toBe('Ngọc Anh đổi nơi nhận lead (còn 2 địa chỉ) [primary]');
   });
 
+  it('describes requests from people who sent a form, with counts only (ADR-017)', () => {
+    expect(sentence({ type: 'data_request.created', page: null, data: noVersions })).toBe(
+      'Ngọc Anh ghi nhận một yêu cầu về dữ liệu [primary]',
+    );
+    expect(
+      sentence({ type: 'data_request.completed', page: null, data: { ...noVersions, count: 2 } }),
+    ).toBe('Ngọc Anh hoàn tất một yêu cầu về dữ liệu (2 lead) [success]');
+    expect(sentence({ type: 'data_request.completed', page: null, data: noVersions })).toBe(
+      'Ngọc Anh hoàn tất một yêu cầu về dữ liệu [success]',
+    );
+  });
+
   it('describes changes to the personal data settings and consent texts (ADR-017)', () => {
     expect(sentence({ type: 'privacy.updated', page: null, data: noVersions })).toBe(
       'Ngọc Anh cập nhật cài đặt dữ liệu cá nhân [primary]',

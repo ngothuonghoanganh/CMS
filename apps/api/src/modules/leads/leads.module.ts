@@ -35,5 +35,7 @@ import { PublicLeadsController } from './public-leads.controller.js';
     LeadPersonService,
     RendererSignatureGuard,
   ],
+  // Data requests (ADR-017) reuse the access checks and a person's export.
+  exports: [LeadAccessService, LeadExportService],
 })
 export class LeadsModule {}

@@ -122,6 +122,8 @@ export interface StoredLeadInput {
   email?: string | null;
   status?: 'new' | 'contacted' | 'scheduled' | 'unreachable' | 'won';
   spam?: boolean;
+  /** Ticked the optional marketing checkbox. */
+  marketing?: boolean;
   createdAt?: Date;
   /** The email notification; leads stored before ADR-018 had none (the default). */
   notification?: {
@@ -152,7 +154,7 @@ export function storedLead(input: StoredLeadInput): Record<string, unknown> {
     releaseVersion: input.releaseVersion ?? 1,
     submissionId: null,
     fields,
-    consent: { marketing: false, at: createdAt, marketingWithdrawnAt: null },
+    consent: { marketing: input.marketing ?? false, at: createdAt, marketingWithdrawnAt: null },
     source: { source: 'zalo', medium: 'oa', campaign: null },
     device: 'mobile',
     status: input.status ?? 'new',

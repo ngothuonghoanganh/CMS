@@ -84,6 +84,16 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
             : `xóa dữ liệu của một người gửi form (${data.count} lead)`,
         tone: 'muted',
       };
+    case 'data_request.created':
+      return { text: 'ghi nhận một yêu cầu về dữ liệu', tone: 'primary' };
+    case 'data_request.completed':
+      return {
+        text:
+          data.count === null
+            ? 'hoàn tất một yêu cầu về dữ liệu'
+            : `hoàn tất một yêu cầu về dữ liệu (${data.count} lead)`,
+        tone: 'success',
+      };
   }
 }
 

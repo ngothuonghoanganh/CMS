@@ -558,3 +558,9 @@
 .recipientForm > button {
   margin-top: 26px;
 }
+
+.contactForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
