@@ -1,5 +1,5 @@
-/** Site sections in the sidebar. Leads, "Hiệu quả" and "Dữ liệu & đồng ý" are MVP B (hidden). */
-export type SiteNavKey = 'pages' | 'domain' | 'settings';
+/** Site sections in the sidebar. Leads and "Hiệu quả" come with later MVP B slices. */
+export type SiteNavKey = 'pages' | 'domain' | 'privacy' | 'settings';
 
 export interface SiteNavItem {
   key: SiteNavKey;
@@ -16,8 +16,14 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
   return [
     { key: 'pages', label: 'Trang', href: base },
     { key: 'domain', label: 'Tên miền', href: `${base}/domain` },
+    { key: 'privacy', label: 'Dữ liệu & đồng ý', href: privacyHref(siteId) },
     { key: 'settings', label: 'Cài đặt site', href: `${base}/settings` },
   ];
+}
+
+/** "Dữ liệu & đồng ý" (ADR-017). */
+export function privacyHref(siteId: string): string {
+  return `${siteHref(siteId)}/privacy`;
 }
 
 /**

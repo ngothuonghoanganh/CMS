@@ -190,6 +190,13 @@ export const GlobeIcon = createIcon(
     <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
   </>,
 );
+export const ShieldCheckIcon = createIcon(
+  'shield-check',
+  <>
+    <path d="M12 3l7 3v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z" />
+    <path d="M9 12l2 2 4-4" />
+  </>,
+);
 export const FileIcon = createIcon(
   'file',
   <>

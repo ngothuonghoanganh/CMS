@@ -24,6 +24,14 @@ import {
 } from './page.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
 import {
+  consentVersionListQuerySchema,
+  consentVersionListResponseSchema,
+  consentVersionSchema,
+  createConsentVersionRequestSchema,
+  privacySettingsSchema,
+  updatePrivacyRequestSchema,
+} from './privacy.js';
+import {
   pathStatusResponseSchema,
   publicPreviewResponseSchema,
   resolveQuerySchema,
@@ -154,6 +162,38 @@ export const endpoints = {
     request: updateSiteRequestSchema,
     query: null,
     response: siteSchema,
+  }),
+
+  // Personal data and consent (ADR-017): every member reads, the owner writes
+  getPrivacySettings: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/privacy`,
+    request: null,
+    query: null,
+    response: privacySettingsSchema,
+  }),
+  updatePrivacySettings: endpoint({
+    method: 'PUT',
+    path: (siteId: string) => `/sites/${e(siteId)}/privacy`,
+    request: updatePrivacyRequestSchema,
+    query: null,
+    response: privacySettingsSchema,
+  }),
+  /** Newest first. */
+  listConsentVersions: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/consent-versions`,
+    request: null,
+    query: consentVersionListQuerySchema,
+    response: consentVersionListResponseSchema,
+  }),
+  /** 409 `conflict` when `baseVersion` is no longer the latest version. */
+  createConsentVersion: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/consent-versions`,
+    request: createConsentVersionRequestSchema,
+    query: null,
+    response: consentVersionSchema,
   }),
 
   // Pages and drafts

@@ -59,6 +59,19 @@ describe('activitySentence', () => {
     );
   });
 
+  it('describes changes to the personal data settings and consent texts (ADR-017)', () => {
+    expect(sentence({ type: 'privacy.updated', page: null, data: noVersions })).toBe(
+      'Ngọc Anh cập nhật cài đặt dữ liệu cá nhân [primary]',
+    );
+    expect(
+      sentence({
+        type: 'consent.version_created',
+        page: null,
+        data: { version: 3, fromVersion: null, toVersion: null, revalidationFailed: false },
+      }),
+    ).toBe('Ngọc Anh lưu nội dung đồng ý bản 3 [primary]');
+  });
+
   it('describes copying a release into the draft', () => {
     expect(
       sentence({

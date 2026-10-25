@@ -37,6 +37,7 @@ describe('icons', () => {
       'TrashIcon',
       'DuplicateIcon',
       'GlobeIcon',
+      'ShieldCheckIcon',
       'FileIcon',
       'ImageIcon',
       'MoreHorizontalIcon',

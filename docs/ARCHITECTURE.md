@@ -617,6 +617,17 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Đổi nội dung đồng ý phải publish lại từng trang có form. Trang chưa publish lại vẫn dùng bản cũ, và lead ghi đúng bản đó.
   - Dữ liệu đã gửi đi qua email (ADR-018) không bị xóa theo; màn 12 nói rõ điều này.
   - Không có trang chính sách tạo từ mẫu: site phải có link chính sách trước khi publish trang có form.
+- **Amended 2026-10-25 (B1):**
+  - Lưu cài đặt cần tên doanh nghiệp và link chính sách; email nhận yêu cầu không bắt buộc. Không có API xóa cài đặt, nên cài đặt đã đủ thì luôn đủ.
+  - Tạo phiên bản gửi kèm `baseVersion`. Đã có bản mới hơn thì trả 409 `conflict` kèm `currentVersion`; hai request tranh cùng số cũng vậy, vì unique index `(siteId, version)` quyết định.
+  - Chip dữ liệu cá nhân có change kind riêng là `privacy`, để admin ghi "Dữ liệu cá nhân đã đổi" thay vì "Giao diện site đã đổi". Hai loại chip cùng đi qua `acknowledgedSiteChanges` và 409 `site_changed`.
+  - Nội dung đồng ý được so theo id phiên bản, không theo chữ đã điền tên: đổi tên doanh nghiệp chỉ ra chip "tên doanh nghiệp".
+  - Có hai phép so:
+    - Nhắc việc so snapshot của release đang live với cài đặt hiện tại.
+    - `changeSummary` so snapshot của release live trước đó với snapshot của release mới, nên gỡ form khỏi trang thì release mới không có chip dữ liệu cá nhân.
+  - Section thu dữ liệu cá nhân được đánh dấu `capturesLeads` trong registry; publish và nhắc việc dựa vào cờ này.
+  - `PageEvaluator` chỉ đọc phiên bản đồng ý khi site đã có cài đặt hoặc có trang chứa form, nên thêm tối đa một truy vấn.
+  - Màn "Dữ liệu & đồng ý" chỉ có ô link chính sách; lựa chọn "Tạo trang chính sách từ mẫu" của thiết kế nằm ngoài phạm vi (§1).
 
 ### ADR-018 — Hộp thư lead và email thông báo
 
@@ -703,7 +714,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 | Lát        | Nội dung                                                                         | Màn             | Trạng thái |
 | ---------- | -------------------------------------------------------------------------------- | --------------- | ---------- |
 | Quyết định | ADR-016…019, quy tắc 10–11                                                       | —               | Xong       |
-| B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar   | 12 (phần trên)  | Chưa làm   |
+| B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar   | 12 (phần trên)  | Xong       |
 | B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint | 02, 04, 05, 09  | Chưa làm   |
 | B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người | 10, 01, Sidebar | Chưa làm   |
 | B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                     | 10, 05, 03      | Chưa làm   |

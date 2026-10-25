@@ -16,6 +16,7 @@ import {
   LogoutIcon,
   PlusIcon,
   SettingsIcon,
+  ShieldCheckIcon,
   VisuallyHidden,
 } from '@plp/ui';
 import Link from 'next/link';
@@ -31,6 +32,7 @@ import styles from './Sidebar.module.css';
 const navIcons: Record<SiteNavKey, IconComponent> = {
   pages: FileIcon,
   domain: GlobeIcon,
+  privacy: ShieldCheckIcon,
   settings: SettingsIcon,
 };
 

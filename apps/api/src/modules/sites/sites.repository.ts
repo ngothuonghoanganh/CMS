@@ -7,7 +7,12 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { SITE_MODEL, type SiteRecord, SITES_SUBDOMAIN_INDEX } from './site.schema.js';
+import {
+  SITE_MODEL,
+  type SitePrivacyRecord,
+  type SiteRecord,
+  SITES_SUBDOMAIN_INDEX,
+} from './site.schema.js';
 import { SUBDOMAIN_TAKEN_MESSAGE } from './subdomain-availability.js';
 
 /** The minimum needed to check access to a site before loading it in a scope. */
@@ -92,6 +97,7 @@ export class SitesRepository {
       logoAssetId: null,
       defaultShareImageAssetId: null,
       pageSeq: 0,
+      privacy: null,
       createdBy: scope.userId,
       createdAt: now,
       updatedAt: now,
@@ -122,6 +128,23 @@ export class SitesRepository {
         { _id: siteId, workspaceId: scope.workspaceId },
         { $set: { ...patch, updatedAt: new Date() } },
         { returnDocument: 'after' },
+      )
+      .lean<SiteRecord>()
+      .exec();
+  }
+
+  /** Replaces the personal data settings (ADR-017); null when the site is not in scope. */
+  updatePrivacy(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    privacy: SitePrivacyRecord,
+    tx: Tx,
+  ): Promise<SiteRecord | null> {
+    return this.sites
+      .findOneAndUpdate(
+        { _id: siteId, workspaceId: scope.workspaceId },
+        { $set: { privacy, updatedAt: privacy.updatedAt } },
+        { returnDocument: 'after', session: tx },
       )
       .lean<SiteRecord>()
       .exec();

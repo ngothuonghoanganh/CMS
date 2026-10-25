@@ -12,6 +12,7 @@ import type {
   PublishResponse,
   UserRef,
 } from '@plp/contracts';
+import { pageCapturesLeads } from '@plp/sections/schema';
 import { AppError, notFound } from '../../shared/errors.js';
 import type { KeysetPage } from '../../shared/persistence/keyset.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -29,14 +30,21 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SitesService } from '../sites/sites.service.js';
+import { ConsentVersionsRepository } from '../privacy/consent-versions.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { diffSnapshots } from './domain/diff-snapshots.js';
+import { diffLeadCapture } from './domain/lead-capture.js';
 import { diffSitePresentation } from './domain/site-presentation.js';
 import { emptyPageSnapshot } from './domain/snapshot.js';
 import { mergeKeysetPages } from './history-merge.js';
 import { pointerConflict, PointerService } from './pointer.service.js';
 import { RELEASE_NOT_FOUND, toReleaseSummary } from './release-dto.js';
-import { currentSitePresentation, releasePresentation } from './release-presentation.js';
+import {
+  currentSiteLeadCapture,
+  currentSitePresentation,
+  releaseLeadCapture,
+  releasePresentation,
+} from './release-presentation.js';
 import type { ReleaseRecord } from './release.schema.js';
 import { IdempotencyKeyUsedError, ReleasesRepository } from './releases.repository.js';
 
@@ -65,7 +73,7 @@ function sameRelease(current: ObjectId | null, expected: string | null): boolean
   return current === null ? expected === null : current.toHexString() === expected;
 }
 
-/** Whether the site-settings chips are the ones the user saw, in any order. */
+/** Whether the site-settings chips (look and privacy) are the ones the user saw, in any order. */
 function sameLabels(changes: readonly ChangeItem[], seen: readonly string[]): boolean {
   const expected = new Set(seen);
   return changes.length === expected.size && changes.every((change) => expected.has(change.label));
@@ -109,6 +117,7 @@ export class PublishingService {
     private readonly users: UsersRepository,
     private readonly sites: SitesService,
     private readonly siteRecords: SitesRepository,
+    private readonly consentVersions: ConsentVersionsRepository,
   ) {}
 
   async checks(user: AuthenticatedUser, pageId: string): Promise<ChecksResult> {
@@ -200,9 +209,9 @@ export class PublishingService {
 
   /**
    * Step 4 of publish, in one transaction: claim version `releaseSeq + 1` (guarded by revision,
-   * pointer and sequence), snapshot the site settings, insert the release, then `movePointer`
-   * records the activity. Any failure aborts everything, so no release exists without its pointer
-   * move.
+   * pointer and sequence), snapshot the site settings (look, and the consent settings of a page
+   * with a form), insert the release, then `movePointer` records the activity. Any failure aborts
+   * everything, so no release exists without its pointer move.
    */
   private async commitRelease(
     scope: WorkspaceScope,
@@ -220,27 +229,48 @@ export class PublishingService {
   ): Promise<CommittedRelease> {
     const from = await this.liveReleaseOf(scope, page);
     const pageChanges = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
+    const capturesLeads = pageCapturesLeads(page.draft.composition);
     return this.pointer.transaction(scope, site._id, async (tx) => {
       if (!(await this.pages.claimReleaseVersion(scope, page, page.draft.revision, tx))) {
         throw await this.publishConflict(scope, page._id, page.draft.revision);
       }
-      // The site settings are read in the transaction that makes the release live (ADR-015).
-      const current = await this.siteRecords.findById(scope, site._id, tx);
+      // The site settings are read in the transaction that makes the release live (ADR-015, 017).
+      const [current, consent] = await Promise.all([
+        this.siteRecords.findById(scope, site._id, tx),
+        this.consentVersions.findCurrent(scope, site._id, tx),
+      ]);
       if (!current) {
         throw new Error(`Site ${site._id.toHexString()} of page ${page._id.toHexString()} is gone`);
       }
       const sitePresentation = currentSitePresentation(current);
-      // A first publish (or one after unpublishing) has no previously live look to differ from.
-      const siteChanges =
-        from === null
-          ? []
-          : diffSitePresentation(releasePresentation(from, current), sitePresentation);
+      const settingsCapture = currentSiteLeadCapture(current, consent);
+      if (capturesLeads && settingsCapture === null) {
+        // The checks refuse a form without consent settings, which cannot be removed once saved.
+        throw new Error(`Page ${page._id.toHexString()} has a form but its site has no consent`);
+      }
+      const leadCapture = capturesLeads ? settingsCapture : null;
+      // A first publish (or one after unpublishing) has nothing previously live to differ from.
+      const livePresentation = from && releasePresentation(from, current);
+      const liveCapture = from && releaseLeadCapture(from);
+      // The reminders the user saw: the live page's snapshot against the current settings.
+      const siteChanges = livePresentation
+        ? [
+            ...diffSitePresentation(livePresentation, sitePresentation),
+            ...diffLeadCapture(liveCapture, settingsCapture),
+          ]
+        : [];
       if (!sameLabels(siteChanges, acknowledgedSiteChanges)) {
         throw new AppError(409, 'site_changed', 'Cài đặt site vừa thay đổi', {
-          detail:
-            'Giao diện site đã được đổi trong lúc bạn xuất bản. Xem lại thay đổi rồi xuất bản.',
+          detail: 'Cài đặt site đã được đổi trong lúc bạn xuất bản. Xem lại thay đổi rồi xuất bản.',
         });
       }
+      // What this release changes from the previously live one; a removed form has no chips.
+      const settingChanges = livePresentation
+        ? [
+            ...diffSitePresentation(livePresentation, sitePresentation),
+            ...diffLeadCapture(liveCapture, leadCapture),
+          ]
+        : [];
       const release = await this.releases.insert(
         scope,
         {
@@ -251,8 +281,9 @@ export class PublishingService {
           composition: page.draft.composition,
           seo: page.draft.seo,
           sitePresentation,
+          leadCapture,
           sourceRevision: page.draft.revision,
-          changeSummary: [...pageChanges, ...siteChanges],
+          changeSummary: [...pageChanges, ...settingChanges],
           ...meta,
         },
         tx,

@@ -6,6 +6,7 @@ import {
   themePresetIds,
 } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import type { LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
 
 export const RELEASE_MODEL = 'Release';
@@ -31,6 +32,11 @@ export interface ReleaseRecord {
    * those as the current site.
    */
   sitePresentation?: SitePresentation;
+  /**
+   * The consent settings the form shows (ADR-017), read inside the publish transaction; null for
+   * a page without a form. Releases published before ADR-017 lack the field and had no form.
+   */
+  leadCapture?: LeadCapture | null;
   /** Draft revision the snapshot was taken from; the page is `live` while the draft keeps it. */
   sourceRevision: number;
   createdBy: Types.ObjectId;
@@ -65,6 +71,18 @@ const sitePresentationSchema = new Schema<SitePresentation>(
   { _id: false },
 );
 
+const leadCaptureSchema = new Schema<LeadCapture>(
+  {
+    consentVersionId: { type: String, required: true },
+    consentVersion: { type: Number, required: true, min: 1 },
+    controllerName: { type: String, required: true },
+    policyUrl: { type: String, required: true },
+    requiredText: { type: String, required: true },
+    marketingText: { type: String, default: null },
+  },
+  { _id: false },
+);
+
 export const releaseSchema = new Schema<ReleaseRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
@@ -77,6 +95,8 @@ export const releaseSchema = new Schema<ReleaseRecord>(
     seo: { type: Schema.Types.Mixed, required: true },
     // Required for every new release; documents published before ADR-015 are read without it.
     sitePresentation: { type: sitePresentationSchema, required: true },
+    // `required` would refuse the null of a page without a form; `InsertReleaseInput` requires it.
+    leadCapture: { type: leadCaptureSchema, default: null },
     sourceRevision: { type: Number, required: true, min: 0 },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },

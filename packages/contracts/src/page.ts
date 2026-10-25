@@ -57,8 +57,9 @@ export const pageTitleSchema = z
   .max(120, 'Tên trang tối đa 120 ký tự');
 
 /**
- * Section changes, SEO fields and the slug come from the draft; `site` is a site setting that
- * differs from the snapshot a release was published with (ADR-015).
+ * Section changes, SEO fields and the slug come from the draft; `site` is a site look setting
+ * that differs from the snapshot a release was published with (ADR-015), `privacy` a personal
+ * data or consent setting that differs from the snapshot of a page with a form (ADR-017).
  */
 export const changeKinds = [
   'added',
@@ -68,6 +69,7 @@ export const changeKinds = [
   'seo',
   'slug',
   'site',
+  'privacy',
 ] as const;
 
 export const changeItemSchema = z.object({
@@ -122,10 +124,12 @@ export const pageSummarySchema = z.object({
   goal: pageGoalSchema.nullable(),
   status: pageStatusSchema,
   /**
-   * Site settings (theme, logo, name, default share image) that differ from the snapshot the live
-   * release was published with (ADR-015). The live page keeps that snapshot until the page is
-   * published again, so these are reminders, not part of the status (rule 2 compares revisions
-   * only). Empty when nothing is live or nothing differs; derived on the server, never stored.
+   * Site settings that differ from the snapshot the live release was published with: the look
+   * (theme, logo, name, default share image; kind `site`, ADR-015) and, for a page with a form,
+   * the consent text, business name and policy link (kind `privacy`, ADR-017). The live page keeps
+   * that snapshot until the page is published again, so these are reminders, not part of the
+   * status (rule 2 compares revisions only). Empty when nothing is live or nothing differs;
+   * derived on the server, never stored.
    */
   siteChanges: z.array(changeItemSchema),
   liveRelease: liveReleaseRefSchema.nullable(),

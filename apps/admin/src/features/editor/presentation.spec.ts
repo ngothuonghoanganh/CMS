@@ -11,6 +11,8 @@ import {
   pendingChangeCount,
   publishButtonLabel,
   saveStatusView,
+  siteChangedLabel,
+  siteChangedReminder,
   siteChangesNotice,
 } from './presentation';
 import { emptyChecks, pageSummary, RELEASE_ID } from './test-fixtures';
@@ -130,6 +132,30 @@ describe('editor presentation', () => {
     expect(siteChangesNotice(pageSummary({ siteChanges: [siteChange] }))).toBeNull();
     expect(hasSiteChanges(pageSummary({ siteChanges: [siteChange] }))).toBe(true);
     expect(hasSiteChanges(pageSummary(live))).toBe(false);
+  });
+
+  it('names the consent settings when they changed, alone or with the look (ADR-017)', () => {
+    const live = { status: { kind: 'live' as const, changeCount: 0, changes: [] }, liveRelease };
+    const privacyChange = {
+      kind: 'privacy' as const,
+      label: 'Dữ liệu cá nhân: nội dung đồng ý',
+      sectionId: null,
+    };
+    const privacyOnly = pageSummary({ ...live, siteChanges: [privacyChange] });
+    expect(liveStatusView(privacyOnly).text).toBe('Live v12 · Dữ liệu cá nhân đã đổi');
+    expect(siteChangesNotice(privacyOnly)).toBe(
+      'Dữ liệu cá nhân đã đổi sau khi xuất bản v12: trang live vẫn dùng nội dung đồng ý cũ cho tới khi bạn xuất bản lại.',
+    );
+    expect(siteChangedReminder(privacyOnly)).toBe(
+      'Dữ liệu cá nhân đã đổi · xuất bản lại để áp dụng',
+    );
+
+    const both = pageSummary({ ...live, siteChanges: [siteChange, privacyChange] });
+    expect(siteChangedLabel(both)).toBe('Cài đặt site đã đổi');
+    expect(siteChangesNotice(both)).toBe(
+      'Cài đặt site đã đổi sau khi xuất bản v12: trang live vẫn dùng cài đặt cũ cho tới khi bạn xuất bản lại.',
+    );
+    expect(pendingChangeCount(both)).toBe(2);
   });
 
   it('summarizes checks', () => {

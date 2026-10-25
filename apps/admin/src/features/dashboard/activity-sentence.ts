@@ -53,6 +53,16 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
       return { text: 'tạo site', tone: 'primary' };
     case 'asset.uploaded':
       return { text: 'tải ảnh lên', tone: 'primary' };
+    case 'privacy.updated':
+      return { text: 'cập nhật cài đặt dữ liệu cá nhân', tone: 'primary' };
+    case 'consent.version_created':
+      return {
+        text:
+          data.version === null
+            ? 'lưu nội dung đồng ý mới'
+            : `lưu nội dung đồng ý bản ${data.version}`,
+        tone: 'primary',
+      };
   }
 }
 
