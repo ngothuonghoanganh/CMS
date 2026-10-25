@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import { DIRECT_LEAD_SOURCE } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { toObjectId } from '../../../shared/persistence/object-id.js';
+import { addressKey, addressKeySecret } from '../../../shared/renderer-channel/address-key.js';
 import {
   addMonthsUtc,
   clientLimitKey,
@@ -8,12 +10,24 @@ import {
   siteLimitKey,
   spamReasons,
 } from './lead-intake-rules.js';
-import { normalizeLeadSource } from './lead-source.js';
+import { isStandardSource, normalizeLeadSource } from './lead-source.js';
 
 const NONE = { utmSource: null, utmMedium: null, utmCampaign: null, referrer: null };
 const SITE_HOST = 'smilecare.payload.site';
 
 describe('normalizeLeadSource', () => {
+  it('turns line breaks and other control characters of a tag into one space', () => {
+    expect(
+      normalizeLeadSource({
+        ...NONE,
+        utmSource: 'Face\nbook',
+        utmMedium: ' c\r\n\tp  c ',
+        utmCampaign: '\u0000',
+        siteHost: SITE_HOST,
+      }),
+    ).toEqual({ source: 'face book', medium: 'c p c', campaign: null });
+  });
+
   it('uses campaign tags first, lowercased and cut to 40 characters', () => {
     expect(
       normalizeLeadSource({
@@ -94,12 +108,27 @@ describe('lead intake rules', () => {
     );
   });
 
-  it('hashes visitor addresses into per-site buckets', () => {
+  it('keys visitor addresses into per-site buckets that the database cannot read back', () => {
     const siteId = toObjectId('64b0000000000000000000a1');
-    const key = clientLimitKey(siteId, '203.0.113.7');
-    expect(key).toMatch(/^lead:ip:64b0000000000000000000a1:[0-9a-f]{64}$/);
+    const secret = addressKeySecret('renderer-api-secret-of-at-least-32-chars');
+    const key = clientLimitKey(secret, siteId, '203.0.113.7');
+    expect(key).toBe(
+      `lead:ip:64b0000000000000000000a1:${addressKey(secret, siteId, '203.0.113.7')}`,
+    );
     expect(key).not.toContain('203.0.113.7');
-    expect(clientLimitKey(siteId, null)).toBe('lead:ip:64b0000000000000000000a1:unknown');
+    expect(key).not.toContain(createHash('sha256').update('203.0.113.7').digest('hex'));
+    expect(clientLimitKey(secret, siteId, null)).toBe('lead:ip:64b0000000000000000000a1:unknown');
     expect(siteLimitKey(siteId)).toBe('lead:site:64b0000000000000000000a1');
+  });
+});
+
+describe('isStandardSource', () => {
+  it('is direct visits and the organic visits of a search engine', () => {
+    expect(isStandardSource(DIRECT_LEAD_SOURCE)).toBe(true);
+    expect(isStandardSource({ source: 'google', medium: 'organic' })).toBe(true);
+    expect(isStandardSource({ source: 'coccoc', medium: 'organic' })).toBe(true);
+    expect(isStandardSource({ source: 'google', medium: 'cpc' })).toBe(false);
+    expect(isStandardSource({ source: '(direct)', medium: 'cpc' })).toBe(false);
+    expect(isStandardSource({ source: 'facebook', medium: 'organic' })).toBe(false);
   });
 });

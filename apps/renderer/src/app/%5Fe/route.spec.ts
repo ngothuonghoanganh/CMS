@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { rendererSignaturePayload } from '@plp/contracts';
+import { PAGE_VIEW_MAX_BYTES, pageViewSchema, rendererSignaturePayload } from '@plp/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
@@ -92,6 +92,23 @@ describe('POST /_e', () => {
       POST(beacon(VIEW, { host: 'example.com' })),
     ]);
     expect(answers.map((answer) => answer.status)).toEqual([204, 204, 204, 204, 204, 204]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('drops a view over 2 KB even when each of its fields is within its limit', async () => {
+    const long = {
+      path: `/${'a'.repeat(511)}`,
+      source: {
+        utmSource: 'u'.repeat(500),
+        utmMedium: 'm'.repeat(500),
+        utmCampaign: null,
+        referrer: `https://example.com/${'r'.repeat(970)}`,
+      },
+    };
+    expect(pageViewSchema.safeParse(long).success).toBe(true);
+    expect(JSON.stringify(long).length).toBeGreaterThan(PAGE_VIEW_MAX_BYTES);
+
+    expect((await POST(beacon(long))).status).toBe(204);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

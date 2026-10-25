@@ -36,6 +36,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError, api, downloadFile } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
+import { analyticsQueryKeys } from '../analytics/queries';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ConsentEvidenceDialog } from './ConsentEvidenceDialog';
@@ -128,8 +129,9 @@ export function LeadDetailPanel({
   function refreshLists() {
     void queryClient.invalidateQueries({ queryKey: leadQueryKeys.lists(siteId) });
     void queryClient.invalidateQueries({ queryKey: leadQueryKeys.counts(siteId) });
-    // "LEAD 7 NGÀY" of the dashboard leaves spam out.
+    // "LEAD 7 NGÀY" of the dashboard and the leads of "Hiệu quả" leave spam out.
     void queryClient.invalidateQueries({ queryKey: siteQueryKeys.pages(siteId) });
+    void queryClient.invalidateQueries({ queryKey: analyticsQueryKeys.all(siteId) });
   }
 
   const update = useMutation({

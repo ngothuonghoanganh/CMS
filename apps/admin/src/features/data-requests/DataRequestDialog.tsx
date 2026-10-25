@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState } from 'react';
 import { api, downloadFile } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
+import { analyticsQueryKeys } from '../analytics/queries';
 import { siteQueryKeys } from '../dashboard/queries';
 import { cappedCountLabel } from '../leads/lead-presentation';
 import { leadQueryKeys } from '../leads/queries';
@@ -135,9 +136,11 @@ export function DataRequestDialog({
       focusNext.current = 'log';
       setConfirming(false);
       updated(next);
-      // Leads were deleted or changed: the inbox, its badge and the dashboard read them again.
+      // Leads were deleted or changed: the inbox, its badge, the dashboard and "Hiệu quả" read
+      // them again.
       void queryClient.invalidateQueries({ queryKey: leadQueryKeys.all(siteId) });
       void queryClient.invalidateQueries({ queryKey: siteQueryKeys.pages(siteId) });
+      void queryClient.invalidateQueries({ queryKey: analyticsQueryKeys.all(siteId) });
       toast({ tone: 'success', title: 'Yêu cầu đã hoàn tất' });
     },
     onError: (error) => {

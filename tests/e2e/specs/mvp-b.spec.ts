@@ -140,10 +140,10 @@ test('MVP B: consent → confirmed recipient → "Thu lead" page → lead → em
   await expect(handle.getByText(/Dữ liệu của người này đã được xóa/)).toBeVisible();
   await handle.getByRole('button', { name: 'Đóng' }).last().click();
 
-  await navigate(page, /^Leads/);
+  // Back on "Hiệu quả" in the same tab: not the report kept from step 6.
+  await navigate(page, 'Hiệu quả');
+  await expect(kpi(page, 'Lead')).toHaveText('0');
   await page.goto(`/sites/${site.id}/leads?range=all`);
   await expect(page.getByRole('region', { name: 'Danh sách lead' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Nguyễn Thu Hà' })).toHaveCount(0);
-  await navigate(page, 'Hiệu quả');
-  await expect(kpi(page, 'Lead')).toHaveText('0');
 });

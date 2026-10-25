@@ -1,11 +1,12 @@
-import { type AnalyticsReport, endpoints } from '@plp/contracts';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { addVnDays, type AnalyticsReport, endpoints } from '@plp/contracts';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture } from '../dashboard/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { AnalyticsScreen } from './AnalyticsScreen';
+import type { AnalyticsFilters } from './filters';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -47,6 +48,16 @@ function report(overrides: Partial<AnalyticsReport> = {}): AnalyticsReport {
   };
 }
 
+/** `count` days up to 24/10/2026: a report of 30 or 90 days. */
+function dailyOf(count: number): AnalyticsReport['daily'] {
+  return Array.from({ length: count }, (_, index) => ({
+    day: addVnDays('2026-10-24', index + 1 - count),
+    views: 120,
+    visitors: 100,
+    leads: 2,
+  }));
+}
+
 const site = siteFixture();
 
 const pageRefs = [
@@ -54,16 +65,45 @@ const pageRefs = [
   { id: PAGE_B, title: 'Cấy ghép Implant' },
 ];
 
-function renderScreen(initial = report()) {
-  return renderWithProviders(
+function screenOf(
+  initial: AnalyticsReport,
+  initialFilters: AnalyticsFilters = { range: '7d', pageId: null },
+  loadedAt = LOADED_AT,
+) {
+  return (
     <AnalyticsScreen
       site={site}
       pageRefs={pageRefs}
-      initialFilters={{ range: '7d', pageId: null }}
+      initialFilters={initialFilters}
       initialReport={initial}
-      loadedAt={LOADED_AT}
-    />,
+      loadedAt={loadedAt}
+    />
   );
+}
+
+function renderScreen(initial = report(), initialFilters?: AnalyticsFilters) {
+  return renderWithProviders(screenOf(initial, initialFilters));
+}
+
+/** A report request that answers only when the test says so. */
+function pendingReports() {
+  const pending: { resolve: (value: AnalyticsReport) => void } = { resolve: () => undefined };
+  apiMock.mockImplementation(
+    () =>
+      new Promise((done) => {
+        pending.resolve = done;
+      }),
+  );
+  return pending;
+}
+
+function chart() {
+  return screen.getByRole('region', { name: 'Khách duy nhất mỗi ngày' });
+}
+
+function tile(label: string) {
+  return screen.getAllByRole('term').find((term) => term.textContent === label)?.parentElement
+    ?.textContent;
 }
 
 beforeEach(() => {
@@ -201,6 +241,144 @@ describe('AnalyticsScreen', () => {
     await vi.waitFor(() => {
       expect(screen.queryByRole('region', { name: 'Theo trang' })).toBeNull();
     });
+  });
+
+  it('keeps today’s bar in the tab order when another range loads, and labels the old numbers by theirs meanwhile', async () => {
+    const user = userEvent.setup();
+    const pending = pendingReports();
+    renderScreen(report({ period: { from: '2026-09-25', to: '2026-10-24' }, daily: dailyOf(30) }), {
+      range: '30d',
+      pageId: null,
+    });
+    const ranges = screen.getByRole('group', { name: 'Khoảng thời gian' });
+
+    await user.click(within(ranges).getByRole('button', { name: '7 ngày' }));
+    // Still the 30 days on screen, dimmed: their own range names them.
+    expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(30);
+    expect(tile('Lượt xem')).toBe('Lượt xem3.21430 ngày trước: 2.870');
+    pending.resolve(report());
+    await vi.waitFor(() => {
+      expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(7);
+    });
+    expect(tile('Lượt xem')).toBe('Lượt xem3.2147 ngày trước: 2.870');
+    const tabStops = () =>
+      within(chart())
+        .getAllByRole('button', { name: /khách ·/ })
+        .map((bar) => bar.tabIndex);
+    expect(tabStops()).toEqual([-1, -1, -1, -1, -1, -1, 0]);
+    within(chart()).getByRole('button', { name: 'Xem dạng bảng' }).focus();
+    await user.tab();
+    expect(within(chart()).getByRole('button', { name: /^Thứ 7, 24\/10/ })).toHaveFocus();
+
+    // Longer again: today's bar, not the seventh of ninety.
+    await user.click(within(ranges).getByRole('button', { name: '90 ngày' }));
+    pending.resolve(
+      report({ period: { from: '2026-07-27', to: '2026-10-24' }, daily: dailyOf(90) }),
+    );
+    await vi.waitFor(() => {
+      expect(tabStops()).toHaveLength(90);
+    });
+    expect(tabStops().indexOf(0)).toBe(89);
+  });
+
+  it('keeps the table view when the range changes', async () => {
+    const user = userEvent.setup();
+    const pending = pendingReports();
+    renderScreen();
+    const toggle = within(chart()).getByRole('button', { name: 'Xem dạng bảng' });
+    // An action whose name says what it does, not a toggle whose name would contradict its state.
+    expect(toggle).not.toHaveAttribute('aria-pressed');
+    await user.click(toggle);
+    expect(within(chart()).getAllByRole('row')).toHaveLength(8);
+
+    await user.click(screen.getByRole('button', { name: '30 ngày' }));
+    pending.resolve(
+      report({ period: { from: '2026-09-25', to: '2026-10-24' }, daily: dailyOf(30) }),
+    );
+    await vi.waitFor(() => {
+      expect(within(chart()).getAllByRole('row')).toHaveLength(31);
+    });
+    expect(within(chart()).getByRole('button', { name: 'Xem biểu đồ' })).toBeInTheDocument();
+  });
+
+  it('shows "Theo trang" for a report of every page only, not while one page’s report is still shown', async () => {
+    const user = userEvent.setup();
+    const pending = pendingReports();
+    renderScreen(report({ pages: [] }), { range: '7d', pageId: PAGE_B });
+    expect(screen.queryByRole('region', { name: 'Theo trang' })).toBeNull();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Xem trang' }), '');
+    expect(screen.queryByRole('region', { name: 'Theo trang' })).toBeNull();
+    expect(screen.queryByText('Chưa trang nào có khách hoặc lead trong khoảng này.')).toBeNull();
+    pending.resolve(report());
+    expect(await screen.findByRole('region', { name: 'Theo trang' })).toHaveTextContent(
+      'Ưu đãi niềng răng tháng 11',
+    );
+  });
+
+  it('hides the tooltip on Escape, keeping the focus on the day', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    const today = within(chart()).getByRole('button', { name: /^Thứ 7, 24\/10/ });
+    act(() => {
+      today.focus();
+    });
+    const details = 'Thứ 7, 24/10316 khách · 6 lead · 1,9%';
+    expect(chart()).toHaveTextContent(details);
+    await user.keyboard('{Escape}');
+    expect(chart()).not.toHaveTextContent(details);
+    expect(today).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(chart()).toHaveTextContent('Thứ 6, 23/10360 khách');
+  });
+
+  it('keeps the tooltip inside the plot: above a short bar, over the top of a tall one', () => {
+    renderScreen(
+      report({
+        daily: VISITORS.map((visitors, index) => ({
+          day: `2026-10-${String(18 + index)}`,
+          views: visitors + 100,
+          visitors: index === 0 ? 40 : visitors,
+          leads: LEADS[index] ?? 0,
+        })),
+      }),
+    );
+    act(() => {
+      within(chart())
+        .getByRole('button', { name: /^Chủ nhật, 18\/10/ })
+        .focus();
+    });
+    const low = within(chart()).getByText('40 khách · 5 lead · 12,5%');
+    expect(low.style.bottom).not.toBe('');
+    expect(low.style.top).toBe('');
+    act(() => {
+      within(chart())
+        .getByRole('button', { name: /^Thứ 5, 22\/10/ })
+        .focus();
+    });
+    const tall = within(chart()).getByText('402 khách · 9 lead · 2,2%');
+    expect(tall.style.top).not.toBe('');
+    expect(tall.style.bottom).toBe('');
+  });
+
+  it('shows a newer server render over the report kept from an earlier visit', async () => {
+    const first = renderScreen();
+    expect(tile('Lead')).toBe('Lead487 ngày trước: 39 · không tính spam');
+    first.unmount();
+    // Back on "Hiệu quả" seconds later: a lead was moved to spam meanwhile.
+    vi.setSystemTime(LOADED_AT + 8_000);
+    renderWithProviders(
+      screenOf(
+        report({ totals: { views: 3214, visitors: 2408, leads: 47 } }),
+        { range: '7d', pageId: null },
+        LOADED_AT + 8_000,
+      ),
+      first.queryClient,
+    );
+    await vi.waitFor(() => {
+      expect(tile('Lead')).toBe('Lead477 ngày trước: 39 · không tính spam');
+    });
+    expect(apiMock).not.toHaveBeenCalled();
   });
 
   it('says so while there are no visitors yet', () => {

@@ -14,9 +14,18 @@ const VALUE_MAX = 40;
 /** Search engines by the second-level name of their host, e.g. "google" in "www.google.com.vn". */
 const SEARCH_ENGINES = ['google', 'bing', 'coccoc', 'yahoo', 'duckduckgo', 'yandex'] as const;
 
-/** Lowercase, trimmed, at most 40 characters; null when empty. */
+/**
+ * Lowercase, trimmed, at most 40 characters; null when empty. A run of spaces or control
+ * characters (a line break in a campaign tag) becomes one space.
+ */
 function clean(value: string | null): string | null {
-  const text = value?.trim().toLowerCase().slice(0, VALUE_MAX).trim() ?? '';
+  const text =
+    value
+      ?.replace(/[\s\p{Cc}]+/gu, ' ')
+      .trim()
+      .toLowerCase()
+      .slice(0, VALUE_MAX)
+      .trim() ?? '';
   return text === '' ? null : text;
 }
 
@@ -36,6 +45,17 @@ function referrerHost(referrer: string | null): string | null {
 function searchEngine(host: string): string | null {
   const labels = host.split('.');
   return SEARCH_ENGINES.find((name) => labels.includes(name)) ?? null;
+}
+
+/**
+ * Direct visits and each search engine's organic visits: a handful of pairs that nobody can
+ * multiply, so the daily cap of source pairs never folds them into "khác" (ADR-019).
+ */
+export function isStandardSource(pair: { source: string; medium: string }): boolean {
+  if (pair.source === DIRECT_LEAD_SOURCE.source) {
+    return pair.medium === DIRECT_LEAD_SOURCE.medium;
+  }
+  return pair.medium === 'organic' && SEARCH_ENGINES.some((name) => name === pair.source);
 }
 
 /**

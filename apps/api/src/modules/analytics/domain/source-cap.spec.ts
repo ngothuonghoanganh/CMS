@@ -33,4 +33,38 @@ describe('SourceCapRegistry', () => {
       await registry.pairFor('site-a', '2026-10-26', pair(99), () => Promise.resolve([])),
     ).toEqual(pair(99));
   });
+
+  it('never folds direct or search engine visits, nor lets them take a place', async () => {
+    const registry = new SourceCapRegistry();
+    const direct = { source: '(direct)', medium: '(none)' };
+    const google = { source: 'google', medium: 'organic' };
+    // Stored today: the standard pairs and 49 made-up campaign tags.
+    const stored = [direct, google, ...Array.from({ length: 49 }, (_, index) => pair(index))];
+    const today = () => Promise.resolve(stored);
+    expect(await registry.pairFor('site-a', '2026-10-25', pair(49), today)).toEqual(pair(49));
+    expect(await registry.pairFor('site-a', '2026-10-25', pair(50), today)).toEqual(
+      ANALYTICS_OTHER_SOURCE,
+    );
+    for (const standard of [direct, google, { source: 'coccoc', medium: 'organic' }]) {
+      expect(await registry.pairFor('site-a', '2026-10-25', standard, today)).toEqual(standard);
+    }
+    // Only a search engine's organic visits are standard; any other tag takes a place.
+    expect(
+      await registry.pairFor('site-a', '2026-10-25', { source: 'google', medium: 'cpc' }, today),
+    ).toEqual(ANALYTICS_OTHER_SOURCE);
+  });
+
+  it('keeps pairs apart whatever characters they hold', async () => {
+    const registry = new SourceCapRegistry();
+    const full = [
+      { source: 'a\nb', medium: 'c' },
+      ...Array.from({ length: 49 }, (_, index) => pair(index)),
+    ];
+    // Joined by a line break, these two would be the same pair.
+    expect(
+      await registry.pairFor('site-a', '2026-10-25', { source: 'a', medium: 'b\nc' }, () =>
+        Promise.resolve(full),
+      ),
+    ).toEqual(ANALYTICS_OTHER_SOURCE);
+  });
 });

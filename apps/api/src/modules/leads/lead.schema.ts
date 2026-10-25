@@ -156,7 +156,7 @@ export const LEAD_LIMITS_KEY_INDEX = 'lead_limits_key_unique';
 /** A rate-limit window (ADR-016): requests counted per key until `expiresAt`. */
 export interface LeadLimitRecord {
   _id: Types.ObjectId;
-  /** `clientLimitKey` or `siteLimitKey`; addresses are hashed. */
+  /** `clientLimitKey`, `siteLimitKey` or their page-view twins; addresses are keyed hashes. */
   key: string;
   count: number;
   expiresAt: Date;

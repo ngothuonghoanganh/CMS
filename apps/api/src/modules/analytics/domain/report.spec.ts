@@ -87,6 +87,25 @@ describe('buildAnalyticsReport', () => {
     ]);
   });
 
+  it('keeps source pairs apart whatever characters they hold', () => {
+    const report = buildAnalyticsReport(
+      input({
+        views: {
+          daily: [],
+          sources: [
+            { source: 'a\nb', medium: 'c', visitors: 10 },
+            { source: 'a', medium: 'b\nc', visitors: 5 },
+          ],
+          devices: [],
+        },
+      }),
+    );
+    expect(report.sources).toEqual([
+      { source: 'a\nb', medium: 'c', visitors: 10, leads: 0 },
+      { source: 'a', medium: 'b\nc', visitors: 5, leads: 0 },
+    ]);
+  });
+
   it('shows 20 source pairs at most', () => {
     const report = buildAnalyticsReport(
       input({
@@ -125,6 +144,22 @@ describe('buildAnalyticsReport', () => {
       { page: { id: PAGE_B, title: 'Cấy ghép Implant' }, visitors: 320, leads: 8 },
     ]);
     expect(buildAnalyticsReport(input({ ...counts, onePage: true })).pages).toEqual([]);
+  });
+
+  it('puts the page with more leads first even with fewer visitors', () => {
+    const pages = buildAnalyticsReport(
+      input({
+        pageVisitors: [
+          { pageId: PAGE_A, visitors: 1400 },
+          { pageId: PAGE_B, visitors: 320 },
+        ],
+        leads: { daily: [], sources: [], pages: [{ pageId: PAGE_B, leads: 8 }] },
+      }),
+    ).pages;
+    expect(pages.map((row) => [row.page.title, row.leads])).toEqual([
+      ['Cấy ghép Implant', 8],
+      ['Ưu đãi niềng răng tháng 11', 0],
+    ]);
   });
 
   it('counts visitors by device', () => {

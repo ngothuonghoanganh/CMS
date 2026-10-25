@@ -3,6 +3,7 @@ import { type PageView, vnDayOf } from '@plp/contracts';
 import { type Env, siteOrigin } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
+import { addressKeySecret } from '../../shared/renderer-channel/address-key.js';
 import type { RendererClient } from '../../shared/renderer-channel/renderer-request.js';
 import { deviceFromUserAgent } from '../leads/domain/lead-intake-rules.js';
 import { normalizeLeadSource } from '../leads/domain/lead-source.js';
@@ -23,6 +24,8 @@ import { visitorHash } from './domain/visitor-hash.js';
  */
 @Injectable()
 export class PageViewCollector {
+  private readonly addressSecret: Buffer;
+
   constructor(
     @InjectEnv() private readonly env: Env,
     private readonly sites: SitesRepository,
@@ -30,7 +33,9 @@ export class PageViewCollector {
     private readonly limits: LeadLimitsRepository,
     private readonly analytics: AnalyticsRepository,
     private readonly sourceCap: SourceCapRegistry,
-  ) {}
+  ) {
+    this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
+  }
 
   async record(subdomain: string, view: PageView, client: RendererClient): Promise<void> {
     if (!isCountableUserAgent(client.userAgent)) {
@@ -90,7 +95,11 @@ export class PageViewCollector {
       const windowEnd = new Date(
         now.getTime() + this.env.PAGE_VIEW_LIMIT_PER_CLIENT_WINDOW_MINUTES * 60_000,
       );
-      const client = await this.limits.hit(pageViewClientKey(siteId, ip), now, windowEnd);
+      const client = await this.limits.hit(
+        pageViewClientKey(this.addressSecret, siteId, ip),
+        now,
+        windowEnd,
+      );
       if (client.count > this.env.PAGE_VIEW_LIMIT_PER_CLIENT) {
         return false;
       }

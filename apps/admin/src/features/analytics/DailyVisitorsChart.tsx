@@ -17,6 +17,9 @@ import styles from './Analytics.module.css';
 
 export interface DailyVisitorsChartProps {
   daily: AnalyticsReport['daily'];
+  /** The same numbers as a table; the screen keeps the choice when the filters change. */
+  asTable: boolean;
+  onAsTableChange: (asTable: boolean) => void;
 }
 
 type Day = AnalyticsReport['daily'][number];
@@ -38,14 +41,24 @@ function tooltipPlacement(index: number, count: number): { left: string; transfo
 }
 
 /**
+ * Above a bar while there is room; over the top of a tall one, so the tooltip never leaves the
+ * plot for the card's header and its controls. `share` is the bar's height over the axis.
+ */
+function tooltipHeight(share: number): { top: string } | { bottom: string } {
+  return share > 0.6
+    ? { top: `calc(${String((1 - share) * 100)}% + 8px)` }
+    : { bottom: `calc(${String(share * 100)}% + 8px)` };
+}
+
+/**
  * "Khách duy nhất mỗi ngày" (board 11): one bar per day, one series. Each bar answers pointer and
  * keyboard alike (arrow keys move between days); the table view holds the same numbers.
  */
-export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
+export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVisitorsChartProps) {
   const headingId = useId();
-  const [asTable, setAsTable] = useState(false);
   const [active, setActive] = useState<number | null>(null);
-  // Roving focus: one bar is in the tab order, today's at first.
+  // Roving focus: one bar is in the tab order, today's at first. Another report remounts the chart
+  // (its key), so the index always points into the days shown.
   const [focusIndex, setFocusIndex] = useState(daily.length - 1);
   const slots = useRef<Array<HTMLButtonElement | null>>([]);
   const ticks = niceTicks(Math.max(0, ...daily.map((day) => day.visitors)));
@@ -62,6 +75,12 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // The tooltip covers its neighbours: Escape hides it and leaves focus where it is (WCAG 1.4.13).
+    if (event.key === 'Escape' && active !== null) {
+      event.preventDefault();
+      setActive(null);
+      return;
+    }
     const moves: Record<string, number> = {
       ArrowLeft: focusIndex - 1,
       ArrowRight: focusIndex + 1,
@@ -91,9 +110,8 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
           <Button
             variant="ghost"
             size="sm"
-            aria-pressed={asTable}
             onClick={() => {
-              setAsTable((value) => !value);
+              onAsTableChange(!asTable);
             }}
           >
             {asTable ? 'Xem biểu đồ' : 'Xem dạng bảng'}
@@ -206,7 +224,7 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
                 className={styles.tooltip}
                 aria-hidden="true"
                 style={{
-                  bottom: `calc(${(activeDay.visitors / top) * 100}% + 8px)`,
+                  ...tooltipHeight(activeDay.visitors / top),
                   ...tooltipPlacement(active, daily.length),
                 }}
               >

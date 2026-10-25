@@ -9,7 +9,7 @@ import {
   type Site,
 } from '@plp/contracts';
 import { Button, Callout, Field, SegmentedControl, Select, Spinner } from '@plp/ui';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
@@ -32,6 +32,12 @@ const RANGE_OPTIONS = analyticsRanges.map((range) => ({
   label: `${range.slice(0, -1)} ngày`,
 }));
 
+/** A report with the filters it answers: what is on screen is labelled by what it shows. */
+interface ShownReport {
+  filters: AnalyticsFilters;
+  report: AnalyticsReport;
+}
+
 export interface AnalyticsScreenProps {
   site: Site;
   /** Every page of the site, for "Tất cả trang" and its pages. */
@@ -53,7 +59,9 @@ export function AnalyticsScreen({
   initialReport,
   loadedAt,
 }: AnalyticsScreenProps) {
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState(initialFilters);
+  const [asTable, setAsTable] = useState(false);
 
   // The URL mirrors the filters so a reload or a shared link keeps them; replacing the entry keeps
   // the server from rendering the page again.
@@ -65,24 +73,46 @@ export function AnalyticsScreen({
     }
   }, [search]);
 
+  // Coming back to "Hiệu quả" renders it again on the server. That report is newer than one the
+  // app may have kept from an earlier visit (a lead moved to spam since), so it takes its place.
+  useEffect(() => {
+    const key = analyticsQueryKeys.report(site.id, initialFilters);
+    if ((queryClient.getQueryState(key)?.dataUpdatedAt ?? 0) < loadedAt) {
+      queryClient.setQueryData<ShownReport>(
+        key,
+        { filters: initialFilters, report: initialReport },
+        { updatedAt: loadedAt },
+      );
+    }
+  }, [queryClient, site.id, initialFilters, initialReport, loadedAt]);
+
   const report = useQuery({
     queryKey: analyticsQueryKeys.report(site.id, filters),
-    queryFn: ({ signal }) =>
-      api(endpoints.analyticsReport, [site.id], { query: analyticsQuery(filters), signal }),
-    initialData: () => (sameAnalyticsFilters(filters, initialFilters) ? initialReport : undefined),
+    queryFn: async ({ signal }): Promise<ShownReport> => ({
+      filters,
+      report: await api(endpoints.analyticsReport, [site.id], {
+        query: analyticsQuery(filters),
+        signal,
+      }),
+    }),
+    initialData: () =>
+      sameAnalyticsFilters(filters, initialFilters)
+        ? { filters: initialFilters, report: initialReport }
+        : undefined,
     initialDataUpdatedAt: loadedAt,
+    // The previous report stays, dimmed, while the next one loads.
     placeholderData: keepPreviousData,
   });
-  const data = report.data;
+  const shown = report.data;
 
   return (
     <PageContainer>
       <PageHeader
         title="Hiệu quả"
         description={
-          data === undefined
+          shown === undefined
             ? 'Không tính lượt xem bản nháp và người trong workspace'
-            : `${periodLabel(data.period)} · không tính lượt xem bản nháp và người trong workspace`
+            : `${periodLabel(shown.report.period)} · không tính lượt xem bản nháp và người trong workspace`
         }
         actions={
           <div className={styles.filters}>
@@ -135,7 +165,7 @@ export function AnalyticsScreen({
         </Callout>
       ) : null}
 
-      {data === undefined ? (
+      {shown === undefined ? (
         report.isError ? null : (
           <Spinner label="Đang tải số liệu" />
         )
@@ -145,13 +175,19 @@ export function AnalyticsScreen({
           data-refreshing={report.isPlaceholderData}
           aria-busy={report.isPlaceholderData}
         >
-          <KpiTiles report={data} range={filters.range} />
-          <DailyVisitorsChart key={`${filters.range}-${filters.pageId ?? ''}`} daily={data.daily} />
+          <KpiTiles report={shown.report} range={shown.filters.range} />
+          {/* A new report brings new days: the chart starts again from today's bar. */}
+          <DailyVisitorsChart
+            key={`${shown.filters.range}-${shown.filters.pageId ?? ''}`}
+            daily={shown.report.daily}
+            asTable={asTable}
+            onAsTableChange={setAsTable}
+          />
           <div className={styles.columns}>
-            <SourceTable sources={data.sources} />
+            <SourceTable sources={shown.report.sources} />
             <div className={styles.side}>
-              {filters.pageId === null ? <PageBreakdown pages={data.pages} /> : null}
-              <DeviceSplit devices={data.devices} />
+              {shown.filters.pageId === null ? <PageBreakdown pages={shown.report.pages} /> : null}
+              <DeviceSplit devices={shown.report.devices} />
             </div>
           </div>
           <p className={styles.method}>

@@ -588,6 +588,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Rollback về một release không có form thì form biến mất khỏi trang live; lead cũ vẫn trỏ đúng release của chúng.
 - **Amended 2026-10-25 (B2):**
   - **Địa chỉ của khách:** renderer chỉ tin phần tử cuối của `X-Forwarded-For` khi `TRUST_PROXY=true`, tức có edge proxy phía trước nối địa chỉ vào. Không có thì không gửi địa chỉ nào, và mọi khách của một site chung một bucket (5 lead mỗi 10 phút cho cả site), cùng mặc định an toàn như ADR-004. Production phải đặt `TRUST_PROXY=true` sau edge proxy.
+    - **Amended 2026-10-25 (B6):** bucket của một địa chỉ dùng HMAC theo site (`addressKey`, khóa suy ra từ `RENDERER_API_SECRET`) thay cho SHA-256 thường. Database không còn chứa gì dò ngược ra địa chỉ được (ADR-019).
   - **Chữ ký:** HMAC phủ timestamp, method, path, địa chỉ, user agent và đúng các byte của body, nối bằng xuống dòng (`rendererSignaturePayload` trong contracts). API bật `rawBody` để kiểm đúng các byte đó. Một chữ ký không dùng lại được cho route khác.
   - **Kênh renderer:** decorator `@RendererRequest()` gộp `@Public()`, metadata và guard kiểm chữ ký. `OriginGuard` chỉ bỏ qua kiểm Origin khi có metadata đó.
   - **Số điện thoại:** `leadPhoneSchema` nhận 10 số bắt đầu bằng 0, hoặc +84 và 9 số; khoảng trắng, dấu chấm, gạch ngang được bỏ; lưu dạng 10 số bắt đầu bằng 0.
@@ -791,12 +792,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Route `/_e` của renderer luôn trả 204. Nó bỏ qua view từ site khác, body không phải JSON hợp lệ hoặc lớn hơn 2 KB, rồi chuyển tiếp có ký tới `POST /public/sites/:subdomain/events`; API cũng luôn trả 204.
     - Không bao giờ log nội dung view, chỉ log status.
   - **Bot:** danh sách trong `isCountableUserAgent`. Trình duyệt trong app Facebook và Zalo là người thật nên vẫn được đếm. Tên hãng điện thoại có chữ "bot" (CUBOT) không bị coi là bot.
-  - **Rate limit:** biến môi trường `PAGE_VIEW_LIMIT_PER_CLIENT` (60), `PAGE_VIEW_LIMIT_PER_CLIENT_WINDOW_MINUTES` (10), `PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR` (20.000). Dùng chung bảng `lead_limits`, khóa địa chỉ được hash.
+  - **Rate limit:** biến môi trường `PAGE_VIEW_LIMIT_PER_CLIENT` (60), `PAGE_VIEW_LIMIT_PER_CLIENT_WINDOW_MINUTES` (10), `PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR` (20.000). Dùng chung bảng `lead_limits`.
+    - Khóa địa chỉ là HMAC-SHA256 của `siteId` và địa chỉ (`addressKey`). Khóa bí mật suy ra từ `RENDERER_API_SECRET` bằng HKDF, nên không nằm trong database.
+    - Lý do: SHA-256 thường của một địa chỉ IPv4 bị dò ngược trong vài phút bằng cách hash cả 2^32 địa chỉ. Khóa theo site nên một người cũng không bị nối giữa các site.
+    - Khóa rate limit của lead (ADR-016) đổi theo cách này.
   - **Lưu trữ:**
     - `analytics_salts` mỗi ngày Việt Nam một bản, unique theo ngày, tự xóa sau 2 ngày.
     - `analytics_seen` unique `(siteId, pageId, day, hash)`. Chèn bằng upsert, nên lần thấy đầu tiên cộng một khách.
-    - `analytics_daily` unique `(siteId, pageId, day, source, medium, device)`, cộng bằng `bulkWrite` upsert cho dòng cấp site và dòng cấp trang. Có thêm index `(siteId, day)` cho phần "Theo trang". TTL 400 ngày.
+    - `analytics_daily` unique `(siteId, pageId, day, source, medium, device)`, cộng bằng `bulkWrite` upsert cho dòng cấp site và dòng cấp trang. TTL 400 ngày.
+    - Mọi báo cáo đọc theo prefix của index unique này, kể cả "Theo trang": `pageId: {$ne: null}` quét ngày của từng trang và bỏ qua dòng cấp site. Không cần index `(siteId, day)` riêng; đo bằng `explain` thì số key quét bằng số dòng khớp.
   - **Trần cặp nguồn:** giữ trong bộ nhớ của mỗi instance API. View đầu tiên trong ngày của một site đọc các cặp đã lưu. Cặp thứ 51 trở đi trong ngày ghi vào `(other) / (other)`, màn 11 hiện là "khác". Khi chạy nhiều instance, một site có thể lưu nhiều hơn 50 cặp một chút.
+    - Truy cập trực tiếp `(direct)/(none)` và lượt tìm kiếm tự nhiên của các công cụ tìm kiếm (`google`, `bing`, `coccoc`, `yahoo`, `duckduckgo`, `yandex` với kênh `organic`) luôn giữ tên và không chiếm chỗ trong 50 cặp. Nhờ vậy utm bịa ra không đẩy được chúng vào "khác".
+    - Cặp của chiến dịch vẫn có thể bị đẩy vào "khác" nếu ai đó gửi đủ 50 cặp utm rác trong một ngày. Đây là giới hạn được chấp nhận, vì beacon vốn giả mạo được.
+    - Giá trị nguồn bỏ ký tự điều khiển: xuống dòng thành một khoảng trắng. Khóa của một cặp là `JSON.stringify([source, medium])`, nên hai cặp khác nhau không bao giờ trùng khóa.
   - **Báo cáo** (mọi thành viên):
     - Khoảng 7, 30 hoặc 90 ngày gồm hôm nay, so với cùng số ngày ngay trước đó.
     - Ba aggregation: view của site hoặc của trang, khách theo trang, lead. Thêm một lần đọc tiêu đề trang.
@@ -805,7 +813,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Màn 11:**
     - Biểu đồ cột một chuỗi (màu `--chart-bar`, cột đang chọn `--chart-bar-emphasis`) và thanh thiết bị hai màu `--chart-series-1/2`. Các màu được kiểm bằng validator của skill dataviz: mọi mark ≥ 3:1, hai màu thiết bị CVD ΔE 26.
     - Mỗi ngày là một nút: rê chuột hoặc phím mũi tên đều hiện tooltip, và có chế độ "Xem dạng bảng".
-    - Bộ lọc nằm trên URL. Khi tải lại số liệu, số cũ được làm mờ thay vì hiện khung trống.
+    - Bộ lọc nằm trên URL. Khi tải lại số liệu, số cũ được làm mờ thay vì hiện khung trống. Số cũ vẫn mang nhãn khoảng thời gian và trang của chính nó, vì cache giữ báo cáo cùng bộ lọc đã tạo ra nó.
+    - Báo cáo mới tới thì biểu đồ dựng lại, và cột hôm nay là điểm dừng Tab. Lựa chọn "Xem dạng bảng" được giữ khi đổi bộ lọc.
+    - Quay lại màn bằng sidebar: bản render mới của server thay báo cáo cũ trong cache. Chuyển lead vào hoặc ra khỏi spam, hay xóa dữ liệu một người, thì báo cáo được đọc lại.
+    - Tooltip đóng bằng Escape mà focus vẫn ở cột đó (WCAG 1.4.13), và không ra khỏi vùng biểu đồ. Trên màn cảm ứng, chạm vào cột thì tooltip ở lại, và dòng gợi ý đổi thành "Chạm vào cột".
+    - Nhãn ngày theo độ rộng thật của biểu đồ (container query):
+      - Rộng: một dòng.
+      - Hẹp: thứ nằm trên ngày.
+      - Điện thoại: khoảng 7 ngày chỉ có thứ; 30 và 90 ngày chỉ có ngày, với một nửa số nhãn.
+      - Nhãn hôm nay không tràn khỏi biểu đồ.
   - **Thành viên:** "Xem site live", "Xem trang live" và "Mở trang live" trong admin thêm `?plp_internal=1` (`internalVisitUrl`). Mã QR và nút sao chép giữ địa chỉ gốc.
   - **Trọng lượng trang live:**
     - Script đếm view chỉ import `@plp/contracts/page-view`, một module không có zod.

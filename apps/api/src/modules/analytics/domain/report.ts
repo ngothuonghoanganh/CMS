@@ -9,6 +9,7 @@ import {
   vnDaySpan,
 } from '@plp/contracts';
 import type { LeadAnalyticsRows } from '../../leads/leads.repository.js';
+import { sourcePairKey } from './source-cap.js';
 
 /** Views of the site, or of one page, as the daily totals hold them. */
 export interface ViewRows {
@@ -70,7 +71,7 @@ export function buildAnalyticsReport(input: ReportInput): AnalyticsReport {
 
   const pairs = new Map<string, AnalyticsReport['sources'][number]>();
   const pairOf = (source: string, medium: string) => {
-    const key = `${source}\n${medium}`;
+    const key = sourcePairKey({ source, medium });
     let row = pairs.get(key);
     if (row === undefined) {
       row = { source, medium, visitors: 0, leads: 0 };

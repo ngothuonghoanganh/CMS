@@ -8,6 +8,7 @@ import {
   vnDayOf,
   vnDayStart,
 } from '@plp/contracts';
+import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { pageView, sendPageView } from '../../../test/analytics.js';
@@ -99,13 +100,87 @@ describe('analytics', () => {
     const page = await report(live.site, `?pageId=${live.pageId}`);
     expect(page.totals).toEqual({ views: 3, visitors: 2, leads: 0 });
     expect(page.pages).toEqual([]);
-    // Neither the address nor the browser is stored anywhere.
+    // Neither the address nor the browser is stored anywhere, not even as a plain hash that
+    // hashing every IPv4 address would undo: the rate limits key addresses with a secret.
     const stored = JSON.stringify([
       await t.connection.collection('analytics_seen').find().toArray(),
       await t.connection.collection('analytics_daily').find().toArray(),
+      await t.connection.collection('lead_limits').find().toArray(),
     ]);
     expect(stored).not.toContain('203.0.113');
     expect(stored).not.toContain('Mozilla');
+    for (const ip of ['203.0.113.7', '203.0.113.9']) {
+      expect(stored).not.toContain(createHash('sha256').update(ip).digest('hex'));
+    }
+  });
+
+  it('counts a visitor of two pages once on the site, and each page with its own leads', async () => {
+    const live = await liveSite();
+    const implantSlug = uniqueSlug('implant');
+    const implant = await createLivePage(
+      owner,
+      live.site.id,
+      implantSlug,
+      'Cấy ghép Implant',
+      'Cấy ghép Implant',
+    );
+    await view(live);
+    await sendPageView(t, live.site.subdomain, pageView(`/${implantSlug}`)).expect(204);
+    const lead = (pageId: string, releaseId: string) =>
+      storedLead({ workspaceId, siteId: live.site.id, pageId, releaseId });
+    await insertLeads(t, [
+      lead(live.pageId, live.releaseId),
+      lead(implant.pageId, implant.published.release.id),
+      lead(implant.pageId, implant.published.release.id),
+    ]);
+
+    const site = await report(live.site);
+    expect(site.totals).toEqual({ views: 2, visitors: 1, leads: 3 });
+    expect(site.pages).toEqual([
+      { page: { id: implant.pageId, title: 'Cấy ghép Implant' }, visitors: 1, leads: 2 },
+      { page: { id: live.pageId, title: 'Đăng ký tư vấn' }, visitors: 1, leads: 1 },
+    ]);
+    expect((await report(live.site, `?pageId=${implant.pageId}`)).totals).toEqual({
+      views: 1,
+      visitors: 1,
+      leads: 2,
+    });
+    expect((await report(live.site, `?pageId=${live.pageId}`)).totals).toEqual({
+      views: 1,
+      visitors: 1,
+      leads: 1,
+    });
+  });
+
+  it('compares with the views of the days before, and names this period’s sources and devices only', async () => {
+    const live = await liveSite();
+    // Eight days ago belongs to the 7 days before, on the site and on its page.
+    const earlier = addVnDays(vnDayOf(new Date()), -8);
+    await t.connection.collection('analytics_daily').insertMany(
+      [null, new Types.ObjectId(live.pageId)].map((pageId) => ({
+        workspaceId: new Types.ObjectId(workspaceId),
+        siteId: new Types.ObjectId(live.site.id),
+        pageId,
+        day: earlier,
+        source: 'cu',
+        medium: 'cpc',
+        device: 'mobile',
+        views: 4,
+        visitors: 3,
+        expiresAt: vnDayStart(addVnDays(earlier, 400)),
+      })),
+    );
+    await view(live);
+
+    for (const query of ['', `?pageId=${live.pageId}`]) {
+      const result = await report(live.site, query);
+      expect(result.totals).toEqual({ views: 1, visitors: 1, leads: 0 });
+      expect(result.previousTotals).toEqual({ views: 4, visitors: 3, leads: 0 });
+      expect(result.sources).toEqual([
+        { source: '(direct)', medium: '(none)', visitors: 1, leads: 0 },
+      ]);
+      expect(result.devices).toEqual({ mobile: 0, desktop: 1 });
+    }
   });
 
   it('counts the visitor again once the day’s salt changes', async () => {
@@ -219,6 +294,27 @@ describe('analytics', () => {
       .collection('analytics_daily')
       .findOne({ siteId, pageId: null, day, ...ANALYTICS_OTHER_SOURCE });
     expect(other).toMatchObject({ views: 1, visitors: 1 });
+
+    // Made-up campaign tags cannot crowd out direct and search engine visits.
+    await sendPageView(t, live.site.subdomain, pageView(`/${live.slug}`), {
+      ip: '203.0.113.31',
+    }).expect(204);
+    await sendPageView(
+      t,
+      live.site.subdomain,
+      pageView(`/${live.slug}`, { referrer: 'https://www.google.com/' }),
+      { ip: '203.0.113.32' },
+    ).expect(204);
+    for (const standard of [
+      { source: '(direct)', medium: '(none)' },
+      { source: 'google', medium: 'organic' },
+    ]) {
+      expect(
+        await t.connection
+          .collection('analytics_daily')
+          .findOne({ siteId, pageId: null, day, ...standard }),
+      ).toMatchObject({ views: 1, visitors: 1 });
+    }
   });
 
   it('reports leads not suspected of spam, with their source and page, against the period before', async () => {
@@ -310,7 +406,7 @@ describe('analytics rate limits', () => {
   beforeAll(async () => {
     t = await createTestApp('plp_test_analytics_limits', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
-      env: { PAGE_VIEW_LIMIT_PER_CLIENT: 3, PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR: 6 },
+      env: { PAGE_VIEW_LIMIT_PER_CLIENT: 3, PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR: 8 },
     });
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
@@ -321,22 +417,29 @@ describe('analytics rate limits', () => {
     await t.close();
   });
 
-  it('counts 3 views per address and 6 per site, then drops the others quietly', async () => {
+  it('counts 3 views per address and 8 per site, then drops the others quietly', async () => {
     const site = await createSite(owner, workspaceId);
     const slug = uniqueSlug('trang');
     await createLivePage(owner, site.id, slug);
-    const send = (ip: string | null) =>
-      sendPageView(t, site.subdomain, pageView(`/${slug}`), { ip, userAgent: DESKTOP_UA }).expect(
-        204,
-      );
-    for (let index = 0; index < 5; index += 1) {
-      await send('203.0.113.7');
-    }
-    // Without a trusted address only the site's limit applies.
-    for (let index = 0; index < 5; index += 1) {
-      await send(null);
-    }
-    const response = await owner.get(`/sites/${site.id}/analytics`).expect(200);
-    expect(analyticsReportSchema.parse(response.body).totals.views).toBe(6);
+    const sendFive = async (ip: string | null) => {
+      for (let index = 0; index < 5; index += 1) {
+        await sendPageView(t, site.subdomain, pageView(`/${slug}`), {
+          ip,
+          userAgent: DESKTOP_UA,
+        }).expect(204);
+      }
+    };
+    const views = async () => {
+      const response = await owner.get(`/sites/${site.id}/analytics`).expect(200);
+      return analyticsReportSchema.parse(response.body).totals.views;
+    };
+    await sendFive('203.0.113.7');
+    expect(await views()).toBe(3);
+    // Without a trusted address only the site's limit applies: no shared bucket of 3.
+    await sendFive(null);
+    expect(await views()).toBe(8);
+    // The site's limit holds for every address.
+    await sendFive('203.0.113.8');
+    expect(await views()).toBe(8);
   });
 });

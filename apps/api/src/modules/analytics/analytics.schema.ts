@@ -91,11 +91,10 @@ export const analyticsDailySchema = new Schema<AnalyticsDailyRecord>(
   },
   { collection: 'analytics_daily', versionKey: false },
 );
-// One row per site or page, day, pair and device; the site and page reports read its prefix.
+// One row per site or page, day, pair and device. Every report reads its prefix, "Theo trang" too:
+// `pageId: {$ne: null}` scans each page's days and skips the site's own rows.
 analyticsDailySchema.index(
   { siteId: 1, pageId: 1, day: 1, source: 1, medium: 1, device: 1 },
   { unique: true, name: 'analytics_daily_unique' },
 );
-// "Theo trang": the page rows of a site over a period.
-analyticsDailySchema.index({ siteId: 1, day: 1 }, { name: 'analytics_daily_site_day' });
 analyticsDailySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });

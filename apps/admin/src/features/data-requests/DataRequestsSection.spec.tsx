@@ -3,6 +3,7 @@ import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, downloadFile } from '../../lib/api';
+import { analyticsQueryKeys } from '../analytics/queries';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { DataRequestsSection } from './DataRequestsSection';
 import {
@@ -290,7 +291,10 @@ describe('DataRequestsSection', () => {
     it('answers the person, then deletes their data after a confirmation', async () => {
       const user = userEvent.setup();
       serve(dataRequestDetail());
-      renderSection([dataRequest()]);
+      const { queryClient } = renderSection([dataRequest()]);
+      // The person's leads leave "Hiệu quả" too: a report kept from a visit there is read again.
+      const analytics = analyticsQueryKeys.report(SITE_ID, { range: '7d', pageId: null });
+      queryClient.setQueryData(analytics, { kept: true });
 
       await user.click(screen.getByRole('button', { name: 'Xử lý yêu cầu của Lê Mai Anh' }));
       const dialog = await screen.findByRole('dialog', { name: 'Xóa toàn bộ dữ liệu' });
@@ -324,6 +328,7 @@ describe('DataRequestsSection', () => {
       expect(
         await within(dialog).findByText(/Dữ liệu của người này đã được xóa/),
       ).toBeInTheDocument();
+      expect(queryClient.getQueryState(analytics)?.isInvalidated).toBe(true);
       expect(within(dialog).queryByRole('heading', { name: 'Xử lý' })).toBeNull();
       expect(within(dialog).getByRole('heading', { name: 'Nhật ký' })).toHaveFocus();
     });
