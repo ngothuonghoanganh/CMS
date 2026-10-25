@@ -656,15 +656,17 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Số điện thoại và email được chuẩn hóa như của lead (E.164, chữ thường). Yêu cầu lưu kèm khóa tìm `search { phone, email }` theo dạng của lead.
     - `receivedAt` nằm trong 30 ngày qua và không ở tương lai, cho phép đồng hồ trình duyệt nhanh tối đa 5 phút. Form và API dùng chung `receivedAtProblem` trong contracts.
     - Hai hạn được tính một lần lúc ghi nhận (`dataRequestDeadlines` trong contracts) và lưu lại. Sau này đổi hằng số thì yêu cầu cũ giữ hạn cũ.
-  - **Lead của người yêu cầu:** cùng quy tắc "một người" của hộp thư: cùng số điện thoại hoặc cùng email, so trực tiếp, nhưng không có lead xuất phát. Danh sách đếm lead cho cả trang kết quả bằng một aggregation, dừng ở 999.
+  - **Lead của người yêu cầu:** cùng quy tắc "một người" của hộp thư: cùng số điện thoại hoặc cùng email, so trực tiếp, nhưng không có lead xuất phát. Danh sách đếm lead cho cả trang kết quả bằng một aggregation. Mỗi người được đếm bằng một pipeline con (`$unionWith`) dùng index tìm kiếm và dừng ở 1.000, nên số hiện ra dừng ở "999+" mà không đọc hết lead.
   - **Các bước:**
     - "Đã phản hồi người yêu cầu": `open` → `responded`, chỉ một lần.
     - "Xuất dữ liệu" chỉ có ở yêu cầu xem dữ liệu chưa hoàn tất. File JSON hoặc CSV giống "Xuất dữ liệu người này". Mỗi lần xuất ghi vào nhật ký của yêu cầu và activity `lead.exported`.
     - "Hoàn tất" từ `open` hoặc `responded`; hoàn tất cũng tính là đã phản hồi. Theo loại yêu cầu:
       - Xóa: xóa mọi lead của người đó, che thông tin liên hệ và bỏ khóa tìm, ghi `lead.person_deleted` và `data_request.completed`, tất cả trong một transaction. Thông tin che: họ tên còn chữ cái đầu ("L. M. A."), số điện thoại còn nhóm đầu và nhóm cuối ("0987 *** 223"), email còn hai ký tự đầu và tên miền.
+      - Các yêu cầu khác của cùng người trong site (theo cùng quy tắc so trực tiếp, kể cả yêu cầu đang mở) cũng bị che và bỏ khóa tìm, trong cùng transaction: dữ liệu đã xóa thì không yêu cầu nào giữ lại. "Xóa dữ liệu người này" ở hộp thư làm đúng như vậy. Yêu cầu đang mở vẫn mở để Owner trả lời, nhưng không còn lead nào để xuất hay sửa.
       - Rút đồng ý nhận ưu đãi: đặt `consent.marketingWithdrawnAt` cho các lead của người đó đã chọn nhận ưu đãi và chưa rút. Lead và bằng chứng đồng ý được giữ.
       - Xem dữ liệu, sửa thông tin: Owner xác nhận đã gửi bản sao hoặc đã sửa xong.
-    - Xóa và rút đồng ý phải bấm xác nhận thêm một lần.
+    - Xóa và rút đồng ý phải bấm xác nhận thêm một lần; nút "Xác nhận" đọc kèm hậu quả. Dialog không đóng khi một bước đang chạy, và mỗi lần mở là một trạng thái mới, nên một xác nhận đã bấm không mang sang yêu cầu khác.
+    - Hạn được so với đồng hồ, cập nhật mỗi 30 giây khi màn hình vẫn mở, nên "Quá hạn" hiện ra mà không cần tải lại.
     - Hai lần hoàn tất cùng lúc thì một lần nhận 409. Lần thua không để lại gì, vì nó nằm trong transaction.
   - **Nhật ký:** mỗi mục là `{ at, actor, action, count }`, không có dữ liệu cá nhân, nên vẫn giữ sau khi xóa. Tối đa 50 mục (`$slice`). Lệnh hoàn tất là update pipeline; mọi giá trị do người gõ được bọc `$literal`, để không bao giờ bị đọc thành biểu thức.
   - **Sửa thông tin (Owner):** chi tiết lead có nút "Sửa thông tin", gọi `PATCH /leads/:leadId/contact`.

@@ -308,6 +308,102 @@ describe('data requests', () => {
     expect(list.items[0]).toMatchObject({ masked: true, leads: null, completedCount: 3 });
   });
 
+  it('masks the person’s other requests when their data is deleted', async () => {
+    const form = await formSite();
+    await seedPerson(form);
+    const seen = await record(form.site, { email: EMAIL, type: 'access' });
+    await step(seen.id, 'complete');
+    const pending = await record(form.site, {
+      name: '',
+      phone: '',
+      email: EMAIL,
+      type: 'withdraw_marketing',
+    });
+    const someoneElse = await record(form.site, {
+      name: 'Phạm Gia Huy',
+      phone: '0912 448 019',
+      type: 'rectify',
+    });
+    const deletion = await record(form.site, { email: EMAIL });
+
+    await step(deletion.id, 'complete');
+
+    const stored = await t.connection
+      .collection('data_requests')
+      .find({ siteId: new Types.ObjectId(form.site.id) })
+      .toArray();
+    const byId = new Map(stored.map((doc) => [String(doc['_id']), doc]));
+    for (const id of [seen.id, pending.id, deletion.id]) {
+      const doc = byId.get(id);
+      expect(doc).toMatchObject({ masked: true, search: null });
+      const text = JSON.stringify(doc);
+      for (const trace of ['987106223', 'mai.anh', 'Lê Mai Anh']) {
+        expect(text).not.toContain(trace);
+      }
+    }
+    // Still open: the owner answers it, but nothing of the person is left to export or change.
+    expect(byId.get(pending.id)).toMatchObject({
+      status: 'open',
+      contact: { email: 'ma***@gmail.com' },
+    });
+    expect(byId.get(someoneElse.id)).toMatchObject({
+      masked: false,
+      contact: { name: 'Phạm Gia Huy' },
+    });
+    const list = dataRequestListResponseSchema.parse(
+      (await owner.get(`/sites/${form.site.id}/data-requests`).expect(200)).body,
+    );
+    expect(list.items.find((item) => item.id === pending.id)).toMatchObject({
+      masked: true,
+      leads: null,
+    });
+  });
+
+  it('masks the person’s requests when their data is deleted from the inbox', async () => {
+    const form = await formSite();
+    await seedPerson(form);
+    const request = await record(form.site, { type: 'rectify' });
+    const lead = leadListResponseSchema
+      .parse((await owner.get(`/sites/${form.site.id}/leads?range=all`).expect(200)).body)
+      .items.find((item) => item.name === 'Lê Mai Anh');
+    if (!lead) {
+      throw new Error('Lê Mai Anh was not stored');
+    }
+
+    // A lead with the requested phone number: the same person as the request.
+    await owner.delete(`/leads/${lead.id}/person`).expect(200);
+
+    const masked = dataRequestDetailSchema.parse(
+      (await owner.get(`/data-requests/${request.id}`).expect(200)).body,
+    );
+    expect(masked).toMatchObject({
+      masked: true,
+      status: 'open',
+      contact: { name: 'L. M. A.', phone: '0987 *** 223', email: null },
+      leads: null,
+      matches: [],
+    });
+  });
+
+  it('counts at most 999+ leads per person in the list, and each lead once', async () => {
+    const form = await formSite();
+    await insertLeads(
+      t,
+      Array.from({ length: 1001 }, (_, index) =>
+        storedLead({ ...form.ids, name: `Khách ${String(index)}`, phone: PHONE, email: EMAIL }),
+      ),
+    );
+    await record(form.site, { email: EMAIL });
+    await record(form.site, { name: 'Không có lead', phone: '0933 000 999', type: 'rectify' });
+    const list = dataRequestListResponseSchema.parse(
+      (await owner.get(`/sites/${form.site.id}/data-requests`).expect(200)).body,
+    );
+    expect(list.items.map((item) => item.leads)).toEqual([
+      { count: 0, capped: false },
+      { count: 999, capped: true },
+    ]);
+  });
+
   it('deletes once when two completions of a deletion race', async () => {
     const form = await formSite();
     await seedPerson(form);
@@ -329,17 +425,30 @@ describe('data requests', () => {
   it('records the withdrawn marketing consent on the person’s leads', async () => {
     const form = await formSite();
     await seedPerson(form);
+    // Withdrawn by an earlier request: that date is the evidence and stays.
+    const earlier = new Date('2026-10-01T03:00:00.000Z');
+    await insertLeads(t, [
+      storedLead({
+        ...form.ids,
+        name: 'Lê Mai Anh (cũ)',
+        phone: PHONE,
+        marketing: true,
+        marketingWithdrawnAt: earlier,
+      }),
+    ]);
     const request = await record(form.site, { email: EMAIL, type: 'withdraw_marketing' });
 
     const completed = await step(request.id, 'complete');
 
-    // The two leads of the person that had it; Phạm Gia Huy keeps his.
+    // The two leads of the person that still had it; Phạm Gia Huy keeps his.
     expect(completed).toMatchObject({ completedCount: 2, masked: false });
-    const withdrawn = completed?.matches.filter((lead) => lead.marketingWithdrawnAt !== null);
-    expect(withdrawn?.map((lead) => lead.name).sort()).toEqual(['Lê Mai Anh', 'Mai Anh']);
-    expect(withdrawn?.every((lead) => lead.marketingWithdrawnAt === completed?.completedAt)).toBe(
-      true,
+    const withdrawnNow = completed?.matches.filter(
+      (lead) => lead.marketingWithdrawnAt === completed.completedAt,
     );
+    expect(withdrawnNow?.map((lead) => lead.name).sort()).toEqual(['Lê Mai Anh', 'Mai Anh']);
+    expect(
+      completed?.matches.find((lead) => lead.name === 'Lê Mai Anh (cũ)')?.marketingWithdrawnAt,
+    ).toBe(earlier.toISOString());
     const other = await t.connection
       .collection('leads')
       .findOne({ 'fields.name': 'Phạm Gia Huy', siteId: new Types.ObjectId(form.site.id) });
@@ -448,9 +557,12 @@ describe('data requests', () => {
         throw new Error('Phạm Gia Huy was not stored');
       }
 
+      const stored = { _id: new Types.ObjectId(lead.id) };
+      const before = await t.connection.collection('leads').findOne(stored);
+
       const response = await owner
         .patch(`/leads/${lead.id}/contact`, {
-          name: 'Phạm Gia Huy',
+          name: 'Phạm Huy Hoàng',
           phone: '0912 448 020',
           email: 'Huy.Pham@Gmail.com',
         })
@@ -458,18 +570,25 @@ describe('data requests', () => {
 
       expect(response.headers['cache-control']).toBe('no-store');
       expect(leadDetailSchema.parse(response.body)).toMatchObject({
+        name: 'Phạm Huy Hoàng',
         phone: '+84912448020',
         email: 'huy.pham@gmail.com',
         personLeads: { count: 1, capped: false },
       });
-      const found = leadListResponseSchema.parse(
-        (
-          await owner
-            .post(`/sites/${form.site.id}/leads/search`, { q: '0912 448 020', range: 'all' })
-            .expect(200)
-        ).body,
-      );
-      expect(found.items.map((item) => item.id)).toEqual([lead.id]);
+      async function search(q: string): Promise<string[]> {
+        const list = leadListResponseSchema.parse(
+          (await owner.post(`/sites/${form.site.id}/leads/search`, { q, range: 'all' }).expect(200))
+            .body,
+        );
+        return list.items.map((item) => item.id);
+      }
+      expect(await search('0912 448 020')).toEqual([lead.id]);
+      expect(await search('pham huy hoang')).toEqual([lead.id]);
+      expect(await search('Phạm Gia Huy')).toEqual([]);
+      // The consent evidence is what the visitor agreed to; correcting the contact leaves it.
+      const after = await t.connection.collection('leads').findOne(stored);
+      expect(after?.['consent']).toEqual(before?.['consent']);
+      expect(after?.['releaseId']).toEqual(before?.['releaseId']);
       const request = await record(form.site, { name: '', phone: '', email: 'huy.pham@gmail.com' });
       expect(request.leads).toEqual({ count: 1, capped: false });
     });

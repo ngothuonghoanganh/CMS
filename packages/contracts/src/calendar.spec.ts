@@ -66,10 +66,12 @@ describe('businessDeadline', () => {
     expect(businessDeadline(received, 20)).toEqual(vn('2026-11-20T23:59:59.999'));
   });
 
-  it('counts from the day of receipt, whatever the hour', () => {
+  it('counts from the day of receipt in Vietnam, whatever the hour', () => {
     expect(businessDeadline(vn('2026-10-23T23:30:00'), 2)).toEqual(vn('2026-10-27T23:59:59.999'));
-    // 00:30 on Saturday in Vietnam is still Friday in UTC.
-    expect(businessDeadline(vn('2026-10-24T00:30:00'), 2)).toEqual(vn('2026-10-27T23:59:59.999'));
+    // 00:30 on Tuesday in Vietnam is still Monday in UTC: a UTC day would end a day early.
+    expect(businessDeadline(vn('2026-10-27T00:30:00'), 2)).toEqual(vn('2026-10-29T23:59:59.999'));
+    // 06:59 on Monday in Vietnam is Sunday in UTC: a UTC day would not count Monday as received.
+    expect(businessDeadline(vn('2026-10-26T06:59:00'), 2)).toEqual(vn('2026-10-28T23:59:59.999'));
   });
 
   it('starts on the Monday after a request received at the weekend', () => {

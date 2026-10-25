@@ -18,6 +18,7 @@ import { UsersRepository } from '../auth/users.repository.js';
 import { phoneSearchKey } from '../leads/domain/lead-search.js';
 import { CAPPED_COUNT_LIMIT, toCappedCount } from '../leads/lead-dto.js';
 import { type LeadFile, LeadExportService } from '../leads/lead-export.service.js';
+import { LeadPersonService } from '../leads/lead-person.service.js';
 import { type LeadPerson, LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
@@ -66,6 +67,7 @@ export class DataRequestsService {
     private readonly users: UsersRepository,
     private readonly activity: ActivityRepository,
     private readonly exports: LeadExportService,
+    private readonly people: LeadPersonService,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -175,9 +177,10 @@ export class DataRequestsService {
   }
 
   /**
-   * Completes the request. A deletion deletes the person's leads and masks the contact, a
-   * withdrawal stamps the withdrawn marketing consent on their leads; each in one transaction with
-   * the completion and the activity, so neither can happen without the other.
+   * Completes the request. A deletion deletes the person's leads and masks the contact of each of
+   * their requests in the site; a withdrawal stamps the withdrawn marketing consent on their
+   * leads. Each in one transaction with the completion and the activity, so neither can happen
+   * without the other.
    */
   async complete(user: AuthenticatedUser, requestId: string): Promise<DataRequestDetail> {
     const { scope, site, request } = await this.requestAccess(user, requestId);
@@ -187,12 +190,8 @@ export class DataRequestsService {
       const at = new Date();
       let count: number | null = null;
       if (person !== null && request.type === 'delete') {
-        count = await this.leads.deletePerson(scope, site._id, person, tx);
-        await this.activity.record(
-          scope,
-          { siteId: site._id, type: 'lead.person_deleted', data: { count } },
-          tx,
-        );
+        // The person's other requests are masked with their leads (this one is completed below).
+        count = await this.people.deletePersonIn(scope, site._id, person, tx);
       } else if (person !== null && request.type === 'withdraw_marketing') {
         count = await this.leads.withdrawMarketing(scope, site._id, person, at, tx);
       }

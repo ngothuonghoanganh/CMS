@@ -96,3 +96,55 @@ describe('LeadsRepository.streamMatching', () => {
     expect(await idleCursors(siteId)).toBe(0);
   });
 });
+
+/** Lead counts of a page of data requests (ADR-017): one aggregation, bounded per person. */
+describe('LeadsRepository.countPeople', () => {
+  let t: TestApp;
+  let scope: WorkspaceScope;
+  let workspaceId: string;
+
+  beforeAll(async () => {
+    t = await createTestApp('plp_test_leads_count_people');
+    const owner = await signedUpClient(t.app);
+    workspaceId = owner.workspaceId;
+    scope = await scopeOf(t, owner.me, workspaceId);
+  });
+
+  afterAll(async () => {
+    await t.close();
+  });
+
+  it('stops each count at the limit, counts a lead matching twice once, and keeps the order', async () => {
+    const siteId = new Types.ObjectId();
+    const ids = {
+      workspaceId,
+      siteId: siteId.toHexString(),
+      pageId: new Types.ObjectId().toHexString(),
+      releaseId: new Types.ObjectId().toHexString(),
+    };
+    await insertLeads(t, [
+      ...Array.from({ length: 7 }, (_, index) =>
+        storedLead({ ...ids, name: `Khách ${String(index)}`, phone: '+84987106223' }),
+      ),
+      // Both the phone number and the email of the second person: one lead.
+      storedLead({ ...ids, phone: '+84912448019', email: 'huy@gmail.com' }),
+      // Another site's lead with the same number is not this site's.
+      storedLead({ ...ids, siteId: new Types.ObjectId().toHexString(), phone: '+84912448019' }),
+    ]);
+    const leads = t.app.get(LeadsRepository);
+
+    const counts = await leads.countPeople(
+      scope,
+      siteId,
+      [
+        { leadId: null, phone: '84987106223', email: null },
+        { leadId: null, phone: '84912448019', email: 'huy@gmail.com' },
+        { leadId: null, phone: null, email: 'nobody@gmail.com' },
+      ],
+      5,
+    );
+
+    expect(counts).toEqual([5, 1, 0]);
+    expect(await leads.countPeople(scope, siteId, [], 5)).toEqual([]);
+  });
+});

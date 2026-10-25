@@ -416,9 +416,10 @@ export class LeadsRepository {
   }
 
   /**
-   * How many leads of the site belong to each person (`limit` at most, so "999+" stays bounded),
-   * in one aggregation for a page of data requests rather than one count each. A lead matching a
-   * person by both phone number and email counts once.
+   * How many leads of the site belong to each person, counting at most `limit` each (the caller
+   * shows "999+"), in one aggregation for a page of data requests rather than one count each.
+   * Each person is counted by their own sub-pipeline, which uses the search indexes and stops at
+   * `limit`; a lead matching by both phone number and email counts once.
    */
   async countPeople(
     scope: WorkspaceScope,
@@ -426,43 +427,29 @@ export class LeadsRepository {
     people: readonly LeadPerson[],
     limit: number,
   ): Promise<number[]> {
-    const phones = [...new Set(people.flatMap((person) => person.phone ?? []))];
-    const emails = [...new Set(people.flatMap((person) => person.email ?? []))];
-    if (phones.length === 0 && emails.length === 0) {
-      return people.map(() => 0);
+    if (people.length === 0) {
+      return [];
     }
-    const scoped = { workspaceId: scope.workspaceId, siteId };
-    // One row per distinct (phone, email) pair among the matching leads.
-    const pairs = await this.leads
-      .aggregate<{ _id: { phone: string | null; email: string | null }; count: number }>([
-        {
-          $match: {
-            $or: [
-              ...(phones.length === 0 ? [] : [{ ...scoped, 'search.phone': { $in: phones } }]),
-              ...(emails.length === 0 ? [] : [{ ...scoped, 'search.email': { $in: emails } }]),
+    const counted = await this.leads
+      .aggregate<{ person: number; count: number }>([
+        // Starts from nothing; each person's count is unioned in.
+        { $match: { _id: { $in: [] } } },
+        ...people.map((person, index) => ({
+          $unionWith: {
+            coll: this.leads.collection.collectionName,
+            pipeline: [
+              { $match: { workspaceId: scope.workspaceId, siteId, ...personFilter(person) } },
+              { $limit: limit },
+              { $count: 'count' },
+              { $set: { person: index } },
             ],
           },
-        },
-        {
-          $group: {
-            _id: { phone: '$search.phone', email: { $ifNull: ['$search.email', null] } },
-            count: { $sum: 1 },
-          },
-        },
+        })),
       ])
       .exec();
-    return people.map((person) => {
-      let count = 0;
-      for (const pair of pairs) {
-        if (
-          (person.phone !== null && pair._id.phone === person.phone) ||
-          (person.email !== null && pair._id.email === person.email)
-        ) {
-          count += pair.count;
-        }
-      }
-      return Math.min(count, limit);
-    });
+    // `$count` emits nothing for a person without leads.
+    const byPerson = new Map(counted.map((row) => [row.person, row.count]));
+    return people.map((_person, index) => byPerson.get(index) ?? 0);
   }
 
   /** How many leads of the site belong to the person, counting at most `limit`. */

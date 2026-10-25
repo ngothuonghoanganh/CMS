@@ -94,5 +94,15 @@ test.describe('B5 · requests from people who sent a form', () => {
     await expect(list.getByRole('row').filter({ hasText: 'Phạm Gia Huy' })).toContainText(
       '0912 448 020',
     );
+
+    // On a phone the requests table scrolls inside its card; the page never scrolls sideways.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(`/sites/${site.id}/privacy`);
+    await expect(requests.getByRole('row').filter({ hasText: 'L. M. A.' })).toBeAttached();
+    const widths = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(widths.scroll).toBe(widths.client);
   });
 });

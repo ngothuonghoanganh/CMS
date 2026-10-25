@@ -75,4 +75,26 @@ describe('RadioCardGroup', () => {
       expect(radio).not.toBeChecked();
     }
   });
+
+  it('describes every radio with a message about the group, such as a missing choice', () => {
+    render(
+      <>
+        <RadioCardGroup
+          legend="Mục tiêu của trang"
+          options={goals}
+          value={null}
+          onChange={vi.fn()}
+          describedBy="goal-error"
+          invalid
+        />
+        <p id="goal-error">Chọn mục tiêu của trang</p>
+      </>,
+    );
+    const [lead, , event] = screen.getAllByRole('radio');
+    expect(lead).toHaveAccessibleDescription(
+      'Khách để lại tên và số điện thoại để được gọi lại. Chọn mục tiêu của trang',
+    );
+    expect(event).toHaveAccessibleDescription('Chọn mục tiêu của trang');
+    expect(lead).toHaveAttribute('aria-invalid', 'true');
+  });
 });

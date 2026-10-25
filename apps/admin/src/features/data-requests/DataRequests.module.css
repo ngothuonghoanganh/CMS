@@ -34,6 +34,9 @@
 }
 
 .tableScroll {
+  /* Positioned: the visually hidden header text is absolute and must scroll with the table, not
+     widen the page. */
+  position: relative;
   overflow-x: auto;
 }
 
@@ -176,6 +179,12 @@
   font-weight: 600;
 }
 
+.blockTitle:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+  border-radius: 2px;
+}
+
 .note {
   margin: 0;
   font-size: var(--text-body-sm);
@@ -202,8 +211,21 @@
   border-radius: var(--radius-md);
 }
 
+/* Opens the lead in the inbox, styled like the inbox's own lead names. */
 .matchName {
   font-weight: 600;
+  color: var(--color-primary-ink);
+  text-decoration: none;
+}
+
+.matchName:hover {
+  text-decoration: underline;
+}
+
+.matchName:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+  border-radius: 2px;
 }
 
 .logTime {

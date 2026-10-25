@@ -10,6 +10,7 @@ import {
 } from '../../shared/persistence/keyset.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
+import type { LeadPerson } from '../leads/leads.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   DATA_REQUEST_MODEL,
@@ -17,6 +18,7 @@ import {
   type DataRequestLogRecord,
   type DataRequestRecord,
 } from './data-request.schema.js';
+import { maskContact } from './domain/mask-contact.js';
 
 export type NewDataRequest = Pick<
   DataRequestRecord,
@@ -184,5 +186,44 @@ export class DataRequestsRepository {
       )
       .lean<DataRequestRecord>()
       .exec();
+  }
+
+  /**
+   * Masks every request of the person in the site that still shows their contact, and drops its
+   * search keys: once their data is deleted, no request may keep it (ADR-017). The same direct
+   * match as a person's leads. Requests are recorded by hand, so a person has few; each is masked
+   * from its own contact. Returns how many changed.
+   */
+  async maskPerson(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    tx: Tx,
+  ): Promise<number> {
+    const keys = [
+      ...(person.phone === null ? [] : [{ 'search.phone': person.phone }]),
+      ...(person.email === null ? [] : [{ 'search.email': person.email }]),
+    ];
+    if (keys.length === 0) {
+      return 0;
+    }
+    const requests = await this.requests
+      .find({ workspaceId: scope.workspaceId, siteId, masked: false, $or: keys }, { contact: 1 })
+      .session(tx)
+      .lean<Pick<DataRequestRecord, '_id' | 'contact'>[]>()
+      .exec();
+    if (requests.length === 0) {
+      return 0;
+    }
+    await this.requests.bulkWrite(
+      requests.map((request) => ({
+        updateOne: {
+          filter: { _id: request._id, workspaceId: scope.workspaceId },
+          update: { $set: { contact: maskContact(request.contact), masked: true, search: null } },
+        },
+      })),
+      { session: tx },
+    );
+    return requests.length;
   }
 }

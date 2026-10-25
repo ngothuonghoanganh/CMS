@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RendererSignatureGuard } from '../../shared/renderer-channel/renderer-request.js';
 import { ActivityModule } from '../activity/activity.module.js';
+import { DataRequestsCoreModule } from '../data-requests/data-requests-core.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
@@ -19,6 +20,7 @@ import { PublicLeadsController } from './public-leads.controller.js';
 @Module({
   imports: [
     ActivityModule,
+    DataRequestsCoreModule,
     LeadsCoreModule,
     NotificationsModule,
     PagesModule,
@@ -35,7 +37,7 @@ import { PublicLeadsController } from './public-leads.controller.js';
     LeadPersonService,
     RendererSignatureGuard,
   ],
-  // Data requests (ADR-017) reuse the access checks and a person's export.
-  exports: [LeadAccessService, LeadExportService],
+  // Data requests (ADR-017) reuse the access checks, a person's export and their deletion.
+  exports: [LeadAccessService, LeadExportService, LeadPersonService],
 })
 export class LeadsModule {}

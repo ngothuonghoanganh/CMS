@@ -124,6 +124,8 @@ export interface StoredLeadInput {
   spam?: boolean;
   /** Ticked the optional marketing checkbox. */
   marketing?: boolean;
+  /** When the person withdrew that consent; null (the default) when they did not. */
+  marketingWithdrawnAt?: Date | null;
   createdAt?: Date;
   /** The email notification; leads stored before ADR-018 had none (the default). */
   notification?: {
@@ -154,7 +156,11 @@ export function storedLead(input: StoredLeadInput): Record<string, unknown> {
     releaseVersion: input.releaseVersion ?? 1,
     submissionId: null,
     fields,
-    consent: { marketing: input.marketing ?? false, at: createdAt, marketingWithdrawnAt: null },
+    consent: {
+      marketing: input.marketing ?? false,
+      at: createdAt,
+      marketingWithdrawnAt: input.marketingWithdrawnAt ?? null,
+    },
     source: { source: 'zalo', medium: 'oa', campaign: null },
     device: 'mobile',
     status: input.status ?? 'new',

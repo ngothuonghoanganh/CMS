@@ -24,6 +24,7 @@ import { api } from '../../lib/api';
 import { formatDayMonth, formatTime } from '../../lib/format';
 import { cx } from '../shell/cx';
 import { problemMessage } from '../shell/problem-message';
+import { useNow } from '../shell/use-now';
 import { DataRequestDialog } from './DataRequestDialog';
 import {
   dataRequestStatusView,
@@ -37,7 +38,7 @@ import styles from './DataRequests.module.css';
 
 export interface DataRequestsSectionProps {
   siteId: string;
-  /** The first page the server loaded, and when (epoch ms): deadlines are judged against it. */
+  /** The first page the server loaded, and when (epoch ms). */
   initial: DataRequestListResponse;
   loadedAt: number;
 }
@@ -89,11 +90,13 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
     initialDataUpdatedAt: loadedAt,
   });
   const items = list.data.pages.flatMap((page) => page.items);
+  // Deadlines pass while the screen stays open: they are judged against the clock, not the load.
+  const now = useNow(loadedAt);
 
   function row(request: DataRequest) {
-    const status = dataRequestStatusView(request, loadedAt);
+    const status = dataRequestStatusView(request, now);
     const name = requesterName(request);
-    const [first, ...rest] = deadlineLines(request, loadedAt);
+    const [first, ...rest] = deadlineLines(request, now);
     return (
       <tr key={request.id}>
         <td>
@@ -112,9 +115,12 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
         </td>
         <td>
           {first === undefined ? (
-            <span className={styles.sub} aria-label="Không còn hạn">
-              —
-            </span>
+            <>
+              <span className={styles.sub} aria-hidden="true">
+                —
+              </span>
+              <VisuallyHidden>Không còn hạn</VisuallyHidden>
+            </>
           ) : (
             <div className={styles.deadlines}>
               <span className={cx(styles.deadlineMain, first.overdue && styles.overdue)}>
@@ -191,18 +197,37 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
 
       {list.isError ? (
         <div className={styles.empty}>
-          <Callout tone="danger" role="alert" title="Chưa tải thêm được yêu cầu">
+          <Callout
+            tone="danger"
+            role="alert"
+            title={
+              list.isFetchNextPageError
+                ? 'Chưa tải thêm được yêu cầu'
+                : 'Chưa tải lại được danh sách yêu cầu'
+            }
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  void (list.isFetchNextPageError ? list.fetchNextPage() : list.refetch());
+                }}
+              >
+                Thử lại
+              </Button>
+            }
+          >
             {problemMessage(list.error)}
           </Callout>
         </div>
       ) : null}
 
-      {items.length === 0 ? (
+      {items.length === 0 && !list.isError ? (
         <p className={styles.empty}>
           Chưa có yêu cầu nào. Khi người gửi form nhờ xem, sửa hoặc xóa dữ liệu qua email hay điện
           thoại, hãy ghi nhận ở đây để theo dõi hạn xử lý.
         </p>
-      ) : (
+      ) : items.length === 0 ? null : (
         <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
@@ -251,12 +276,14 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
         />
       )}
       {openId === null ? null : (
+        // One instance per request: a confirmation or a result never carries over to another.
         <DataRequestDialog
+          key={openId}
           siteId={siteId}
           requestId={openId}
           open={requestOpen}
           onOpenChange={setRequestOpen}
-          now={loadedAt}
+          now={now}
         />
       )}
     </Card>

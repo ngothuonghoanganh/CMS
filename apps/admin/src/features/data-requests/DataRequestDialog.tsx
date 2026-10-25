@@ -77,8 +77,14 @@ export function DataRequestDialog({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const headingId = useId();
+  const warningId = `${headingId}-warning`;
   const [confirming, setConfirming] = useState(false);
   const confirmRef = useRef<HTMLButtonElement>(null);
+  // A step takes its own button away: keyboard focus then moves to the part that changed.
+  const focusNext = useRef<'steps' | 'log' | 'complete' | null>(null);
+  const stepsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const logHeadingRef = useRef<HTMLHeadingElement>(null);
+  const completeRef = useRef<HTMLButtonElement>(null);
   const detailKey = dataRequestQueryKeys.detail(siteId, requestId);
   const detail = useQuery({
     queryKey: detailKey,
@@ -90,8 +96,20 @@ export function DataRequestDialog({
   useEffect(() => {
     if (confirming) {
       confirmRef.current?.focus();
+      return;
     }
-  }, [confirming]);
+    const target = focusNext.current;
+    focusNext.current = null;
+    const element =
+      target === 'steps'
+        ? stepsHeadingRef.current
+        : target === 'log'
+          ? logHeadingRef.current
+          : target === 'complete'
+            ? completeRef.current
+            : null;
+    element?.focus();
+  }, [confirming, request]);
 
   function updated(next: DataRequestDetail) {
     queryClient.setQueryData(detailKey, next);
@@ -101,6 +119,7 @@ export function DataRequestDialog({
   const respond = useMutation({
     mutationFn: () => api(endpoints.respondDataRequest, [requestId]),
     onSuccess: (next) => {
+      focusNext.current = 'steps';
       updated(next);
       toast({ tone: 'success', title: 'Đã ghi nhận việc phản hồi người yêu cầu' });
     },
@@ -113,6 +132,7 @@ export function DataRequestDialog({
   const complete = useMutation({
     mutationFn: () => api(endpoints.completeDataRequest, [requestId]),
     onSuccess: (next) => {
+      focusNext.current = 'log';
       setConfirming(false);
       updated(next);
       // Leads were deleted or changed: the inbox, its badge and the dashboard read them again.
@@ -237,7 +257,12 @@ export function DataRequestDialog({
 
         {done ? null : (
           <section className={styles.block} aria-labelledby={`${headingId}-steps`}>
-            <h3 id={`${headingId}-steps`} className={styles.blockTitle}>
+            <h3
+              id={`${headingId}-steps`}
+              ref={stepsHeadingRef}
+              tabIndex={-1}
+              className={styles.blockTitle}
+            >
               Xử lý
             </h3>
             {confirming && asks !== null ? (
@@ -245,10 +270,14 @@ export function DataRequestDialog({
                 tone={request.type === 'delete' ? 'danger' : 'warning'}
                 title={COMPLETE_LABELS[request.type]}
               >
-                <p className={styles.note}>{asks}</p>
+                <p id={warningId} className={styles.note}>
+                  {asks}
+                </p>
                 <div className={styles.actions}>
                   <Button
                     ref={confirmRef}
+                    // Focus lands here: the consequences are read with the button.
+                    aria-describedby={warningId}
                     variant={request.type === 'delete' ? 'danger' : 'primary'}
                     size="sm"
                     loading={complete.isPending}
@@ -261,7 +290,9 @@ export function DataRequestDialog({
                   <Button
                     variant="secondary"
                     size="sm"
+                    disabled={complete.isPending}
                     onClick={() => {
+                      focusNext.current = 'complete';
                       setConfirming(false);
                     }}
                   >
@@ -314,6 +345,7 @@ export function DataRequestDialog({
                   </DropdownMenu>
                 ) : null}
                 <Button
+                  ref={completeRef}
                   variant={request.type === 'delete' ? 'danger' : 'primary'}
                   size="sm"
                   loading={complete.isPending}
@@ -345,7 +377,12 @@ export function DataRequestDialog({
         )}
 
         <section className={styles.block} aria-labelledby={`${headingId}-log`}>
-          <h3 id={`${headingId}-log`} className={styles.blockTitle}>
+          <h3
+            id={`${headingId}-log`}
+            ref={logHeadingRef}
+            tabIndex={-1}
+            className={styles.blockTitle}
+          >
             Nhật ký
           </h3>
           <ol className={styles.log} aria-labelledby={`${headingId}-log`}>
@@ -363,25 +400,36 @@ export function DataRequestDialog({
     );
   }
 
+  // A step that changes the request finishes before the dialog closes, like ConfirmDialog.
+  const busy = respond.isPending || complete.isPending;
+
+  /** Every way out (Escape, ✕, "Đóng"): an armed confirmation or an old result does not stay. */
+  function close() {
+    if (busy) {
+      return;
+    }
+    setConfirming(false);
+    respond.reset();
+    complete.reset();
+    exportFile.reset();
+    onOpenChange(false);
+  }
+
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) {
-          setConfirming(false);
+        if (next) {
+          onOpenChange(true);
+        } else {
+          close();
         }
-        onOpenChange(next);
       }}
       size="lg"
       title={request === undefined ? 'Yêu cầu về dữ liệu' : dataRequestTypeLabels[request.type]}
       description={request === undefined ? undefined : requesterName(request)}
       footer={
-        <Button
-          variant="secondary"
-          onClick={() => {
-            onOpenChange(false);
-          }}
-        >
+        <Button variant="secondary" disabled={busy} onClick={close}>
           Đóng
         </Button>
       }

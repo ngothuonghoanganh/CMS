@@ -77,6 +77,7 @@ export function RecordDataRequestDialog({
 }: RecordDataRequestDialogProps) {
   const { toast } = useToast();
   const formId = useId();
+  const typeErrorId = `${formId}-type-error`;
   const form = useSchemaForm(dataRequestContactSchema, { name: '', phone: '', email: '' });
   const [type, setType] = useState<DataRequestType | null>(null);
   const [typeError, setTypeError] = useState<string | null>(null);
@@ -233,13 +234,16 @@ export function RecordDataRequestDialog({
             options={TYPE_OPTIONS}
             value={type}
             minColumnWidth={240}
+            // Focus goes to the first radio: the reason is read with it, like a field's error.
+            describedBy={typeError === null ? undefined : typeErrorId}
+            invalid={typeError !== null}
             onChange={(value) => {
               setType(value);
               setTypeError(null);
             }}
           />
           {typeError === null ? null : (
-            <p className={styles.fieldError} role="alert">
+            <p id={typeErrorId} className={styles.fieldError}>
               <AlertCircleIcon size={14} strokeWidth={2} />
               {typeError}
             </p>
