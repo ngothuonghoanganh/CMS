@@ -56,6 +56,10 @@ function only(sections: readonly SectionInstance[], type: SectionType): SectionI
   return first;
 }
 
+/** Goals whose pages collect contacts with the lead form (ADR-016); the others end with a band. */
+const FORM_GOALS: readonly PageGoal[] = ['lead', 'promo', 'event', 'waitlist'];
+const BAND_GOALS: readonly PageGoal[] = ['product', 'about'];
+
 const briefs = [
   { briefName: 'empty', brief: EMPTY_BRIEF },
   { briefName: 'full', brief: FULL_BRIEF },
@@ -134,8 +138,12 @@ describe('buildCompositionFromGoal', () => {
       ),
     );
     expect(only(composition.sections, 'hero').colorScheme).toBe('soft');
-    expect(only(composition.sections, 'cta_band').colorScheme).toBe('brand');
+    // The form follows the body rhythm: soft after the light FAQ.
+    expect(only(composition.sections, 'lead_form').colorScheme).toBe('soft');
     expect(only(composition.sections, 'footer').colorScheme).toBe('dark');
+    expect(only(build('product', EMPTY_BRIEF, 'calm').sections, 'cta_band').colorScheme).toBe(
+      'brand',
+    );
     expect(only(build('lead', EMPTY_BRIEF, 'bold').sections, 'hero').colorScheme).toBe('brand');
   });
 
@@ -151,14 +159,45 @@ describe('buildCompositionFromGoal', () => {
     expect(hero.samplePaths).toContain('primaryCta.label');
 
     const phoneLink = { kind: 'phone', phone: FULL_BRIEF.phone };
-    expect(getAtPath(hero.content, 'primaryCta.link')).toEqual(phoneLink);
     expect(getAtPath(only(sections, 'navbar').content, 'cta.link')).toEqual(phoneLink);
-    expect(getAtPath(only(sections, 'cta_band').content, 'cta.link')).toEqual(phoneLink);
+    if (FORM_GOALS.includes(goal)) {
+      // The Hero button leads to the form instead of calling (ADR-016).
+      expect(getAtPath(hero.content, 'primaryCta.link')).toEqual({
+        kind: 'section',
+        sectionId: only(sections, 'lead_form').id,
+      });
+      expect(sections.some((section) => section.type === 'cta_band')).toBe(false);
+    } else {
+      expect(getAtPath(hero.content, 'primaryCta.link')).toEqual(phoneLink);
+      expect(getAtPath(only(sections, 'cta_band').content, 'cta.link')).toEqual(phoneLink);
+    }
 
     const footer = only(sections, 'footer');
     expect(footer.content.phone).toBe(FULL_BRIEF.phone);
     expect(footer.samplePaths).not.toContain('phone');
     expect(footer.samplePaths).toContain('address');
+  });
+
+  it.each(FORM_GOALS)('puts exactly one lead form on a "%s" page, after the Hero', (goal) => {
+    const { sections } = build(goal, EMPTY_BRIEF);
+    const form = only(sections, 'lead_form');
+    const hero = only(sections, 'hero');
+    expect(sections.indexOf(form)).toBeGreaterThan(sections.indexOf(hero));
+    expect(getAtPath(hero.content, 'primaryCta.link')).toEqual({
+      kind: 'section',
+      sectionId: form.id,
+    });
+  });
+
+  it('asks email on event and waitlist forms, where the board asks for it', () => {
+    for (const goal of ['event', 'waitlist'] as const) {
+      expect(only(build(goal, EMPTY_BRIEF).sections, 'lead_form').content.showEmail).toBe(true);
+    }
+    for (const goal of ['lead', 'promo'] as const) {
+      expect(only(build(goal, EMPTY_BRIEF).sections, 'lead_form').content.showEmail).toBe(false);
+    }
+    // "Hero + form email": the waitlist form comes right after the Hero.
+    expect(build('waitlist', EMPTY_BRIEF).sections[2]?.type).toBe('lead_form');
   });
 
   it.each(pageGoalIds)('keeps every text of "%s" marked as sample without a brief', (goal) => {
@@ -168,7 +207,12 @@ describe('buildCompositionFromGoal', () => {
     }
     const hero = only(sections, 'hero');
     expect(hero.samplePaths).toEqual(expect.arrayContaining(['heading', 'subheading']));
-    expect(getAtPath(hero.content, 'primaryCta.link')).toEqual({ kind: 'none' });
+    // Without a phone the Hero still leads to the form; without a form it leads nowhere yet.
+    expect(getAtPath(hero.content, 'primaryCta.link')).toEqual(
+      FORM_GOALS.includes(goal)
+        ? { kind: 'section', sectionId: only(sections, 'lead_form').id }
+        : { kind: 'none' },
+    );
     expect(only(sections, 'footer').samplePaths).toContain('phone');
   });
 
@@ -215,13 +259,20 @@ describe('buildCompositionFromGoal', () => {
   });
 
   it('trims brief values and ignores blank ones', () => {
-    const hero = only(
-      build('lead', { offer: '   ', audience: '  khách văn phòng.  ', phone: ' ' }).sections,
-      'hero',
-    );
+    const blank = { offer: '   ', audience: '  khách văn phòng.  ', phone: ' ' };
+    const hero = only(build('product', blank).sections, 'hero');
     expect(hero.samplePaths).toContain('heading');
     expect(hero.content.subheading).toMatch(/^Dành cho khách văn phòng\. /);
     expect(getAtPath(hero.content, 'primaryCta.link')).toEqual({ kind: 'none' });
+    expect(getAtPath(only(build('lead', blank).sections, 'navbar').content, 'cta.link')).toEqual({
+      kind: 'none',
+    });
+  });
+
+  it.each(BAND_GOALS)('keeps the call-to-action band on a "%s" page', (goal) => {
+    const { sections } = build(goal, EMPTY_BRIEF);
+    expect(only(sections, 'cta_band').type).toBe('cta_band');
+    expect(sections.some((section) => section.type === 'lead_form')).toBe(false);
   });
 });
 
@@ -247,7 +298,7 @@ describe('goal outline and recommendations', () => {
       'Lợi ích chính',
       'Cảm nhận khách hàng',
       'Câu hỏi thường gặp',
-      'Dải kêu gọi đặt lịch tư vấn',
+      'Form đăng ký tư vấn',
       'Chân trang & liên hệ',
     ]);
   });

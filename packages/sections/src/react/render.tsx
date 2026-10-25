@@ -6,6 +6,7 @@ import { ctaBandContentSchema } from '../schema/sections/cta-band.js';
 import { faqContentSchema } from '../schema/sections/faq.js';
 import { footerContentSchema } from '../schema/sections/footer.js';
 import { heroContentSchema } from '../schema/sections/hero.js';
+import { leadFormContentSchema } from '../schema/sections/lead-form.js';
 import { navbarContentSchema } from '../schema/sections/navbar.js';
 import { testimonialsContentSchema } from '../schema/sections/testimonials.js';
 import type { RenderContext } from './context.js';
@@ -15,6 +16,7 @@ import { CtaBandSection } from './sections/CtaBand.js';
 import { FaqSection } from './sections/Faq.js';
 import { FooterSection } from './sections/Footer.js';
 import { HeroSection } from './sections/Hero.js';
+import { LeadFormSection } from './sections/LeadForm.js';
 import { NavbarSection } from './sections/Navbar.js';
 import { TestimonialsSection } from './sections/Testimonials.js';
 import type { SectionProps } from './types.js';
@@ -50,6 +52,8 @@ export function renderSectionContent(section: SectionInstance, ctx: RenderContex
       return renderWith(testimonialsContentSchema, TestimonialsSection, section, ctx);
     case 'faq':
       return renderWith(faqContentSchema, FaqSection, section, ctx);
+    case 'lead_form':
+      return renderWith(leadFormContentSchema, LeadFormSection, section, ctx);
     case 'cta_band':
       return renderWith(ctaBandContentSchema, CtaBandSection, section, ctx);
     case 'footer':

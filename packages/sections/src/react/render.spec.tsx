@@ -13,9 +13,12 @@ import { describe, expect, it } from 'vitest';
 import type { FieldDescriptor, LeafField } from '../schema/define.js';
 import { setAtPath } from '../schema/paths.js';
 import { collectLeaves, createSectionInstance, getSectionDefinition } from '../schema/registry.js';
+import { type LeadFormContent, leadFormContentSchema } from '../schema/sections/lead-form.js';
 import { themePresets } from '../schema/themes.js';
 import type { RenderContext } from './context.js';
+import type { LeadFormViewProps } from './lead-form-view.js';
 import frame from './frame.module.css';
+import { LeadFormView } from './lead-form-view.js';
 import { MAIN_CONTENT_ID, PageView } from './PageView.js';
 import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
@@ -41,6 +44,7 @@ function liveCtx(overrides: Partial<RenderContext> = {}): RenderContext {
     site: { name: 'Smile Care', logo: null },
     images: { [ASSET_ID]: IMAGE },
     pagePaths: {},
+    leadCapture: null,
     ...overrides,
   };
 }
@@ -65,6 +69,10 @@ function render(target: SectionInstance, ctx: RenderContext): string {
       {renderSectionContent(target, ctx)}
     </SectionFrame>,
   );
+}
+
+function sampleLeadForm(target: SectionInstance): LeadFormContent {
+  return leadFormContentSchema.parse(target.content);
 }
 
 /** A CSS Module class name; fails loudly instead of comparing against `undefined`. */
@@ -453,6 +461,106 @@ describe('section specifics', () => {
     expect(sample).not.toContain('tel:');
     expect(sample).toContain('Số điện thoại');
     expect(render(footer, editCtx())).not.toContain('tel:');
+  });
+});
+
+describe('lead form', () => {
+  const CAPTURE = {
+    requiredText: 'Tôi đồng ý để Smile Care xử lý họ tên và số điện thoại của tôi.',
+    marketingText: 'Nhận ưu đãi qua Zalo',
+    policyUrl: 'https://smilecare.vn/chinh-sach',
+  };
+  const RELEASE_ID = 'c3'.repeat(12);
+
+  it('posts a plain form to /_lead with the release the visitor sees', () => {
+    const form = section('lead_form');
+    const markup = render(
+      form,
+      liveCtx({
+        leadCapture: CAPTURE,
+        leadSubmission: { releaseId: RELEASE_ID, render: () => 'interactive form' },
+      }),
+    );
+    // A host with an interactive form renders it instead of the plain view.
+    expect(markup).toContain('interactive form');
+
+    const plain = renderToStaticMarkup(
+      <LeadFormView
+        sectionId={form.id}
+        content={sampleLeadForm(form)}
+        capture={CAPTURE}
+        releaseId={RELEASE_ID}
+      />,
+    );
+    expect(plain).toContain('<form');
+    expect(plain).toContain('method="post"');
+    expect(plain).toContain('action="/_lead"');
+    expect(plain).toContain(`name="releaseId" value="${RELEASE_ID}"`);
+    // The honeypot: out of the tab order, whatever the attribute order.
+    expect(plain).toMatch(/<input(?=[^>]*name="website")(?=[^>]*tabindex="-1")[^>]*>/);
+    expect(plain).toContain('href="https://smilecare.vn/chinh-sach"');
+    expect(plain).toContain('Nhận ưu đãi qua Zalo');
+    // The consent box is never ticked in advance (rule 10).
+    expect(plain).not.toContain('checked');
+    expect(plain).not.toContain('disabled');
+    expect(count(plain, '<h2')).toBe(1);
+    expect(plain).not.toContain('<h1');
+  });
+
+  it('hands the interactive form exactly what the plain view needs', () => {
+    const form = section('lead_form');
+    const seen: LeadFormViewProps[] = [];
+    render(
+      form,
+      liveCtx({
+        leadCapture: CAPTURE,
+        leadSubmission: {
+          releaseId: RELEASE_ID,
+          render: (view) => {
+            seen.push(view);
+            return null;
+          },
+        },
+      }),
+    );
+    expect(seen).toEqual([
+      {
+        sectionId: form.id,
+        content: sampleLeadForm(form),
+        capture: CAPTURE,
+        releaseId: RELEASE_ID,
+      },
+    ]);
+  });
+
+  it('cannot send from a preview', () => {
+    const markup = render(section('lead_form'), liveCtx({ leadCapture: CAPTURE }));
+    expect(markup).not.toContain('action=');
+    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('Bản xem trước: form không gửi đi.');
+  });
+
+  it('asks email and a message only when they are turned on', () => {
+    const base = section('lead_form');
+    const plain = render(base, liveCtx({ leadCapture: CAPTURE }));
+    expect(plain).not.toContain('name="email"');
+    expect(plain).not.toContain('name="message"');
+    const full = render(
+      withContent(withContent(base, 'showEmail', true), 'showMessage', true),
+      liveCtx({ leadCapture: CAPTURE }),
+    );
+    expect(full).toContain('name="email"');
+    expect(full).toContain('<textarea');
+    expect(full).toContain('(không bắt buộc)');
+  });
+
+  it('draws the form on the canvas without controls or links', () => {
+    const edit = render(section('lead_form'), editCtx({ leadCapture: CAPTURE }));
+    expect(edit).not.toContain('<form');
+    expect(edit).not.toContain('<input');
+    expect(edit).not.toContain('<a ');
+    expect(edit).toContain('Chính sách quyền riêng tư');
+    expect(render(section('lead_form'), editCtx())).toContain('chưa được thiết lập');
   });
 });
 

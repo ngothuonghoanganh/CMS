@@ -17,6 +17,7 @@ import { ctaBandSection } from './sections/cta-band.js';
 import { faqSection } from './sections/faq.js';
 import { footerSection } from './sections/footer.js';
 import { heroSection } from './sections/hero.js';
+import { leadFormSection } from './sections/lead-form.js';
 import { navbarSection } from './sections/navbar.js';
 import { testimonialsSection } from './sections/testimonials.js';
 
@@ -33,6 +34,7 @@ export const sectionDefinitions: { readonly [T in SectionType]: AnySectionDefini
   benefits: widen(benefitsSection),
   testimonials: widen(testimonialsSection),
   faq: widen(faqSection),
+  lead_form: widen(leadFormSection),
   cta_band: widen(ctaBandSection),
   footer: widen(footerSection),
 };
@@ -49,6 +51,11 @@ export function pageCapturesLeads(composition: Composition): boolean {
   return composition.sections.some(
     (section) => getSectionDefinition(section.type).capturesLeads === true,
   );
+}
+
+/** The page's lead form; a page holds at most one (it is a singleton). */
+export function leadFormSectionOf(composition: Composition): SectionInstance | null {
+  return composition.sections.find((section) => section.type === 'lead_form') ?? null;
 }
 
 export function getVariant(

@@ -10,6 +10,7 @@ import { loginRequestSchema, meResponseSchema, signupRequestSchema } from './aut
 import { checksResultSchema } from './checks.js';
 import { cursorQuerySchema } from './common.js';
 import { healthResponseSchema } from './health.js';
+import { publicLeadRequestSchema, publicLeadResponseSchema } from './lead.js';
 import {
   createPageRequestSchema,
   pageDetailResponseSchema,
@@ -351,6 +352,17 @@ export const endpoints = {
     request: null,
     query: null,
     response: sitemapResponseSchema,
+  }),
+  /**
+   * A visitor's lead (ADR-016), relayed by the renderer's `/_lead` route and signed with the
+   * renderer channel headers; 201 for a new lead, 200 when the submission was already received.
+   */
+  publicSubmitLead: endpoint({
+    method: 'POST',
+    path: (subdomain: string) => `/public/sites/${e(subdomain)}/leads`,
+    request: publicLeadRequestSchema,
+    query: null,
+    response: publicLeadResponseSchema,
   }),
   publicPreview: endpoint({
     method: 'GET',

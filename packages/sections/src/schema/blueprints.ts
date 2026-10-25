@@ -15,6 +15,7 @@ import type { CtaBandContent } from './sections/cta-band.js';
 import type { FaqContent } from './sections/faq.js';
 import type { FooterContent } from './sections/footer.js';
 import type { HeroContent } from './sections/hero.js';
+import type { LeadFormContent } from './sections/lead-form.js';
 import type { NavbarContent } from './sections/navbar.js';
 import type { TestimonialsContent } from './sections/testimonials.js';
 
@@ -127,6 +128,7 @@ interface ContentByType {
   benefits: BenefitsContent;
   testimonials: TestimonialsContent;
   faq: FaqContent;
+  lead_form: LeadFormContent;
   cta_band: CtaBandContent;
   footer: FooterContent;
 }
@@ -179,9 +181,10 @@ const footer: BlueprintSection = {
 };
 
 /**
- * Forms, pricing tables, speakers and maps do not exist in MVP A. Each goal keeps the board's
- * outline where a section fits and drops the rest; a form becomes a call-to-action band whose
- * button calls the phone number from the brief.
+ * Pricing tables, speakers and maps do not exist. Each goal keeps the board's outline where a
+ * section fits and drops the rest. Goals that collect contacts (lead, promo, event, waitlist) get
+ * the lead form where the board places it, and the Hero button leads to it (ADR-016); the others
+ * end with a call-to-action band that calls the phone number from the brief.
  */
 function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[] {
   const name = siteName.trim();
@@ -237,13 +240,13 @@ function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[
           },
         },
         {
-          type: 'cta_band',
-          variant: 'band',
-          label: 'Dải kêu gọi đặt lịch tư vấn',
+          type: 'lead_form',
+          variant: 'stacked',
+          label: 'Form đăng ký tư vấn',
           sample: {
-            heading: 'Đặt lịch tư vấn miễn phí',
-            text: 'Liên hệ để được tư vấn và chọn lịch hẹn phù hợp với bạn.',
-            cta: { label: 'Đặt lịch tư vấn', link: { kind: 'none' } },
+            heading: 'Đăng ký tư vấn miễn phí',
+            description: 'Để lại tên và số điện thoại, chúng tôi sẽ gọi lại trong giờ làm việc.',
+            submitLabel: 'Gửi đăng ký',
           },
         },
         footer,
@@ -307,13 +310,15 @@ function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[
           },
         },
         {
-          type: 'cta_band',
-          variant: 'band',
-          label: 'Dải kêu gọi nhận ưu đãi',
+          type: 'lead_form',
+          variant: 'stacked',
+          label: 'Form nhận ưu đãi',
           sample: {
             heading: 'Nhận ưu đãi trước khi hết hạn',
-            text: 'Số suất có hạn. Liên hệ ngay để giữ ưu đãi cho bạn.',
-            cta: { label: 'Nhận ưu đãi', link: { kind: 'none' } },
+            description: 'Số suất có hạn. Để lại tên và số điện thoại để giữ ưu đãi cho bạn.',
+            submitLabel: 'Nhận ưu đãi',
+            successTitle: 'Đã giữ ưu đãi cho bạn',
+            successMessage: 'Chúng tôi sẽ gọi lại để xác nhận ưu đãi trong giờ làm việc.',
           },
         },
         footer,
@@ -358,13 +363,16 @@ function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[
           },
         },
         {
-          type: 'cta_band',
-          variant: 'band',
-          label: 'Dải kêu gọi đăng ký tham dự',
+          type: 'lead_form',
+          variant: 'stacked',
+          label: 'Form đăng ký tham dự',
           sample: {
             heading: 'Đăng ký tham dự',
-            text: 'Số chỗ có hạn. Đăng ký sớm để giữ chỗ cho bạn.',
-            cta: { label: 'Đăng ký ngay', link: { kind: 'none' } },
+            description: 'Số chỗ có hạn. Đăng ký sớm để giữ chỗ cho bạn.',
+            showEmail: true,
+            submitLabel: 'Đăng ký tham dự',
+            successTitle: 'Đã nhận đăng ký tham dự',
+            successMessage: 'Chúng tôi sẽ gửi thông tin tham dự cho bạn trước ngày diễn ra.',
           },
         },
         {
@@ -463,6 +471,19 @@ function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[
           },
         },
         {
+          type: 'lead_form',
+          variant: 'stacked',
+          label: 'Form đăng ký giữ chỗ',
+          sample: {
+            heading: 'Đừng bỏ lỡ ngày ra mắt',
+            description: 'Để lại thông tin để có tên trong danh sách chờ.',
+            showEmail: true,
+            submitLabel: 'Đăng ký giữ chỗ',
+            successTitle: 'Bạn đã có tên trong danh sách chờ',
+            successMessage: 'Chúng tôi sẽ báo cho bạn ngay khi dịch vụ ra mắt.',
+          },
+        },
+        {
           type: 'benefits',
           variant: 'grid',
           label: 'Lợi ích',
@@ -488,16 +509,6 @@ function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[
               ),
               faq('Đăng ký sớm được gì?', 'Nêu quyền lợi dành cho người đăng ký sớm.'),
             ],
-          },
-        },
-        {
-          type: 'cta_band',
-          variant: 'band',
-          label: 'Dải kêu gọi đăng ký',
-          sample: {
-            heading: 'Đừng bỏ lỡ ngày ra mắt',
-            text: 'Liên hệ để có tên trong danh sách chờ.',
-            cta: { label: 'Đăng ký giữ chỗ', link: { kind: 'none' } },
           },
         },
         footer,
@@ -631,6 +642,7 @@ function applyBrief(
   goal: PageGoal,
   content: Record<string, unknown>,
   brief: Brief,
+  formSectionId: string | null,
 ): { content: Record<string, unknown>; briefPaths: string[] } {
   let next = content;
   const briefPaths: string[] = [];
@@ -654,7 +666,10 @@ function applyBrief(
     write('phone', capText(brief.phone, textMaxLength('footer', 'phone')), true);
   }
   const ctaPath = primaryCtaPaths[type];
-  if (ctaPath !== undefined && brief.phone !== '') {
+  if (type === 'hero' && formSectionId !== null) {
+    // The page collects contacts: its main button leads to the form (ADR-016).
+    write('primaryCta.link', { kind: 'section', sectionId: formSectionId }, false);
+  } else if (ctaPath !== undefined && brief.phone !== '') {
     write(`${ctaPath}.link`, { kind: 'phone', phone: brief.phone }, false);
   }
   return { content: next, briefPaths };
@@ -691,12 +706,20 @@ export function buildCompositionFromGoal({
     style,
     sections.map((entry) => entry.type),
   );
+  // Ids first, in page order, so the Hero can link to a form placed after it.
+  const ids = sections.map(() => newId());
+  const formIndex = sections.findIndex((entry) => entry.type === 'lead_form');
+  const formSectionId = formIndex === -1 ? null : (ids[formIndex] ?? null);
   return {
     version: 1,
     sections: sections.map((entry, index): SectionInstance => {
-      const instance = createSectionInstance(entry.type, entry.variant, newId());
+      const id = ids[index];
+      if (id === undefined) {
+        throw new Error(`No section id for position ${index}`);
+      }
+      const instance = createSectionInstance(entry.type, entry.variant, id);
       const sampled: Record<string, unknown> = { ...instance.content, ...entry.sample };
-      const { content, briefPaths } = applyBrief(entry.type, goal, sampled, values);
+      const { content, briefPaths } = applyBrief(entry.type, goal, sampled, values, formSectionId);
       const samplePaths = samplePathsOf({
         type: entry.type,
         variant: entry.variant,

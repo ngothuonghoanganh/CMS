@@ -1,0 +1,183 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.heading:focus {
+  outline: none;
+}
+
+.description {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.form {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  color: var(--plp-heading);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.optional {
+  color: var(--plp-muted);
+  font-weight: 400;
+}
+
+/* The muted border keeps 3:1 against the background on every scheme (WCAG 1.4.11). */
+.input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1.5px solid var(--plp-muted);
+  border-radius: 12px;
+  background: var(--plp-bg);
+  color: var(--plp-heading);
+  font: inherit;
+  font-size: 16px;
+}
+
+.textarea {
+  min-height: 96px;
+  padding-block: 12px;
+  resize: vertical;
+}
+
+.input:focus-visible,
+.checkbox:focus-visible {
+  outline: 3px solid var(--plp-link);
+  outline-offset: 2px;
+}
+
+.input[aria-invalid='true'],
+.checkbox[aria-invalid='true'] {
+  border-color: var(--plp-danger);
+  outline-color: var(--plp-danger);
+}
+
+.error,
+.formError {
+  margin: 0;
+  color: var(--plp-danger);
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  cursor: pointer;
+}
+
+.checkbox,
+.box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--plp-accent);
+}
+
+.box {
+  box-sizing: border-box;
+  border: 1.5px solid var(--plp-muted);
+  border-radius: 4px;
+}
+
+.policy {
+  color: var(--plp-link);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.policy:focus-visible {
+  outline: 3px solid var(--plp-link);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.note {
+  margin: 0;
+  color: var(--plp-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* The honeypot stays in the page for bots but out of sight and out of the tab order. */
+.trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.form .submit {
+  min-height: 52px;
+  font-size: 16px;
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.sent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 560px;
+  margin-inline: auto;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--plp-surface);
+}
+
+@container plp-page (min-width: 768px) {
+  .heading {
+    font-size: 28px;
+  }
+
+  .form .submit {
+    align-self: flex-start;
+  }
+}

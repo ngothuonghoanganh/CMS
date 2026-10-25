@@ -38,9 +38,24 @@ export const publicPageSchema = z.object({
 });
 export type PublicPage = z.infer<typeof publicPageSchema>;
 
+/**
+ * The consent texts of a page's lead form (ADR-017), with the business name filled in: the
+ * release snapshot on live pages and release previews, the current settings in a draft preview.
+ */
+export const publicLeadCaptureSchema = z.object({
+  requiredText: z.string(),
+  marketingText: z.string().nullable(),
+  policyUrl: z.url(),
+});
+export type PublicLeadCapture = z.infer<typeof publicLeadCaptureSchema>;
+
 export const publicPageDataSchema = z.object({
   site: publicSiteSchema,
   page: publicPageSchema,
+  /** The release shown; the lead form sends it back (ADR-016). Null in a draft preview. */
+  releaseId: idSchema.nullable(),
+  /** Null when the page has no form, or no consent settings yet (draft preview only). */
+  leadCapture: publicLeadCaptureSchema.nullable(),
   /** Every asset the composition references, by asset id. */
   assets: z.record(z.string(), publicImageSchema),
   /** Live path of every page the composition links to, null when that page is not live. */
@@ -103,3 +118,40 @@ export const revalidateRequestSchema = z.object({
   tags: z.array(z.string().min(1).max(256)).min(1).max(20),
 });
 export type RevalidateRequest = z.infer<typeof revalidateRequestSchema>;
+
+/**
+ * The renderer relays visitor requests (lead form, ADR-016) to the API with the visitor's address
+ * and user agent in internal headers, signed with HMAC-SHA256 so the API can trust them. The
+ * signature covers the method and path too, so a signed request cannot be replayed elsewhere.
+ */
+export const RENDERER_TIMESTAMP_HEADER = 'x-plp-renderer-timestamp';
+export const RENDERER_SIGNATURE_HEADER = 'x-plp-renderer-signature';
+export const CLIENT_IP_HEADER = 'x-plp-client-ip';
+export const CLIENT_UA_HEADER = 'x-plp-client-ua';
+export const RENDERER_MAX_SKEW_SECONDS = 300;
+/** User agents are cut to this length before signing; the API reads no more. */
+export const CLIENT_UA_MAX = 512;
+
+export interface RendererSignatureInput {
+  /** Unix seconds, as sent in `RENDERER_TIMESTAMP_HEADER`. */
+  timestamp: string;
+  method: string;
+  /** Request path without query string, e.g. "/public/sites/smilecare/leads". */
+  path: string;
+  /** "" when the renderer could not trust any address. */
+  clientIp: string;
+  userAgent: string;
+  body: string;
+}
+
+/** The exact text both apps sign; headers cannot hold line breaks, so lines keep fields apart. */
+export function rendererSignaturePayload(input: RendererSignatureInput): string {
+  return [
+    input.timestamp,
+    input.method.toUpperCase(),
+    input.path,
+    input.clientIp,
+    input.userAgent,
+    input.body,
+  ].join('\n');
+}

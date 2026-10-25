@@ -14,6 +14,8 @@ export interface ColorScheme {
   accentText: string;
   link: string;
   border: string;
+  /** Form errors (the lead form). */
+  danger: string;
 }
 
 export interface ThemePreset {
@@ -29,8 +31,8 @@ const SANS = 'var(--font-be-vietnam-pro), system-ui, sans-serif';
 const SERIF = 'var(--font-lora), Georgia, serif';
 
 /**
- * Every pair a section draws (heading/text/muted/link on background and surface, accentText on
- * accent, accent against background and surface) meets WCAG AA; themes.spec.ts enforces it.
+ * Every pair a section draws (heading/text/muted/link/danger on background and surface, accentText
+ * on accent, accent against background and surface) meets WCAG AA; themes.spec.ts enforces it.
  */
 export const themePresets: Record<ThemePresetId, ThemePreset> = {
   mint: {
@@ -50,6 +52,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#FFFFFF',
         link: '#0F5E55',
         border: '#D3E5E1',
+        danger: '#B42318',
       },
       soft: {
         label: 'Bạc hà',
@@ -62,6 +65,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#FFFFFF',
         link: '#0F5E55',
         border: '#BFE6DE',
+        danger: '#B42318',
       },
       brand: {
         label: 'Thương hiệu',
@@ -74,6 +78,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#0B2E2A',
         link: '#FFFFFF',
         border: '#2D6E64',
+        danger: '#FFE4E0',
       },
       dark: {
         label: 'Tối',
@@ -86,6 +91,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#0B2E2A',
         link: '#FFFFFF',
         border: '#2D4A46',
+        danger: '#FFB4A9',
       },
     },
   },
@@ -106,6 +112,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#FFFFFF',
         link: '#4338CA',
         border: '#DADCF2',
+        danger: '#B42318',
       },
       soft: {
         label: 'Oải hương',
@@ -118,6 +125,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#FFFFFF',
         link: '#3730A3',
         border: '#C7CBFF',
+        danger: '#B42318',
       },
       brand: {
         label: 'Thương hiệu',
@@ -130,6 +138,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#1B1A33',
         link: '#FFFFFF',
         border: '#5B55C2',
+        danger: '#FFE4E0',
       },
       dark: {
         label: 'Tối',
@@ -142,6 +151,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#15172B',
         link: '#FFFFFF',
         border: '#343858',
+        danger: '#FFB4A9',
       },
     },
   },
@@ -162,6 +172,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#FFFFFF',
         link: '#A33D19',
         border: '#F1D9CD',
+        danger: '#B42318',
       },
       soft: {
         label: 'Đào',
@@ -174,6 +185,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#FFFFFF',
         link: '#A33D19',
         border: '#F5CDB8',
+        danger: '#B42318',
       },
       brand: {
         label: 'Thương hiệu',
@@ -186,6 +198,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#3A1A12',
         link: '#FFFFFF',
         border: '#C2603A',
+        danger: '#FFE4E0',
       },
       dark: {
         label: 'Tối',
@@ -198,6 +211,7 @@ export const themePresets: Record<ThemePresetId, ThemePreset> = {
         accentText: '#2B1510',
         link: '#FFFFFF',
         border: '#4F2E25',
+        danger: '#FFB4A9',
       },
     },
   },

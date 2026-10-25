@@ -12,6 +12,7 @@ export function schemeStyle(scheme: ColorScheme): CSSProperties {
     '--plp-accent-text': scheme.accentText,
     '--plp-link': scheme.link,
     '--plp-border': scheme.border,
+    '--plp-danger': scheme.danger,
   };
 }
 

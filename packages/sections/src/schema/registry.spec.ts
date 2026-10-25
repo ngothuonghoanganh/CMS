@@ -7,6 +7,7 @@ import {
   getSectionDefinition,
   insertionIndex,
   listMinimum,
+  leadFormSectionOf,
   pageCapturesLeads,
   samplePathsOf,
   validateComposition,
@@ -178,8 +179,13 @@ describe('section registry', () => {
     expect(canMoveSection(sections, 2, 0)).toBe(false);
   });
 
-  it('finds no lead-collecting section on a page of the MVP A sections', () => {
-    expect(pageCapturesLeads(page(sectionTypes))).toBe(false);
+  it('finds the lead form, the only section that collects personal data', () => {
+    const withForm = page(['navbar', 'hero', 'lead_form', 'footer']);
+    expect(pageCapturesLeads(withForm)).toBe(true);
+    expect(leadFormSectionOf(withForm)?.type).toBe('lead_form');
+    const others = page(sectionTypes.filter((type) => type !== 'lead_form'));
+    expect(pageCapturesLeads(others)).toBe(false);
+    expect(leadFormSectionOf(others)).toBeNull();
     expect(pageCapturesLeads({ version: 1, sections: [] })).toBe(false);
   });
 });
