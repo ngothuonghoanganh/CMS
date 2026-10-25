@@ -26,8 +26,9 @@ test.describe('B1 · Dữ liệu cá nhân & đồng ý', () => {
     await settings.getByRole('textbox', { name: /Tên doanh nghiệp/ }).fill(BUSINESS);
     await settings.getByRole('textbox', { name: /Email nhận yêu cầu/ }).fill('dulieu@smilecare.vn');
     await policy.fill('smilecare.vn/chinh-sach');
-    // Enter submits from the keyboard; the form checks every field before calling the API.
-    await policy.press('Enter');
+    // Pressing the button keeps focus in the field: its blur check cannot push the button away
+    // before the click lands, and the submit checks every field.
+    await settings.getByRole('button', { name: 'Lưu cài đặt' }).click();
     await expect(
       settings.getByText('Đường dẫn phải bắt đầu bằng http:// hoặc https://'),
     ).toBeVisible();
@@ -37,7 +38,7 @@ test.describe('B1 · Dữ liệu cá nhân & đồng ý', () => {
       label: '24 tháng',
     });
     await settings.getByRole('button', { name: 'Lưu cài đặt' }).click();
-    await expect(page.getByText('Đã lưu cài đặt dữ liệu cá nhân')).toBeVisible();
+    await expect(page.getByText('Đã lưu cài đặt dữ liệu cá nhân', { exact: true })).toBeVisible();
     await expect(settings.getByText(/Trang có form đang live giữ nội dung đồng ý/)).toBeVisible();
 
     await page.reload();
