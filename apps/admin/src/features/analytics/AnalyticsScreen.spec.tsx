@@ -162,20 +162,47 @@ describe('AnalyticsScreen', () => {
     expect(within(rows[5] ?? chart).getByRole('rowheader')).toHaveTextContent('Thứ 5, 22/10');
   });
 
-  it('keeps a tapped day once the finger lifts, and lets a hovered one go with the pointer', () => {
+  it('keeps a day tapped by a finger or a pen, and lets a hover or a scroll go', () => {
     renderScreen();
-    const chart = screen.getByRole('region', { name: 'Khách duy nhất mỗi ngày' });
-    const bars = within(chart).getByRole('group', { name: /^Khách duy nhất mỗi ngày/ });
-    const thursday = within(chart).getByRole('button', { name: /^Thứ 5, 22\/10/ });
+    const bars = within(chart()).getByRole('group', { name: /^Khách duy nhất mỗi ngày/ });
+    const thursday = within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ });
     const details = 'Thứ 5, 22/10402 khách · 9 lead · 2,2%';
+    const tap = (pointerType: string, pointerId: number) => {
+      fireEvent.pointerEnter(thursday, { pointerType, pointerId });
+      fireEvent.pointerUp(thursday, { pointerType, pointerId });
+      // Lifting a finger or a pen also leaves the chart.
+      fireEvent.pointerLeave(bars, { pointerType, pointerId });
+    };
 
-    fireEvent.pointerEnter(thursday, { pointerType: 'touch' });
-    fireEvent.pointerLeave(bars, { pointerType: 'touch' });
-    expect(chart).toHaveTextContent(details);
+    tap('touch', 2);
+    expect(chart()).toHaveTextContent(details);
+    fireEvent.pointerLeave(bars, { pointerType: 'mouse', pointerId: 1 });
+    expect(chart()).not.toHaveTextContent(details);
 
-    fireEvent.pointerEnter(thursday, { pointerType: 'mouse' });
-    fireEvent.pointerLeave(bars, { pointerType: 'mouse' });
-    expect(chart).not.toHaveTextContent(details);
+    tap('pen', 3);
+    expect(chart()).toHaveTextContent(details);
+
+    // A touch that turns into a scroll is cancelled: nothing stays over the chart.
+    fireEvent.pointerEnter(thursday, { pointerType: 'touch', pointerId: 4 });
+    fireEvent.pointerCancel(thursday, { pointerType: 'touch', pointerId: 4 });
+    fireEvent.pointerLeave(bars, { pointerType: 'touch', pointerId: 4 });
+    expect(chart()).not.toHaveTextContent(details);
+
+    // A mouse click is no tap: moving away hides the day.
+    tap('mouse', 1);
+    expect(chart()).not.toHaveTextContent(details);
+  });
+
+  it('hides a tooltip opened by hover on Escape, wherever the focus is', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    fireEvent.pointerEnter(within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ }), {
+      pointerType: 'mouse',
+    });
+    expect(chart()).toHaveTextContent('Thứ 5, 22/10402 khách');
+    expect(document.body).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(chart()).not.toHaveTextContent('Thứ 5, 22/10402 khách');
   });
 
   it('lists sources, pages and devices', () => {
@@ -299,6 +326,57 @@ describe('AnalyticsScreen', () => {
       expect(within(chart()).getAllByRole('row')).toHaveLength(31);
     });
     expect(within(chart()).getByRole('button', { name: 'Xem biểu đồ' })).toBeInTheDocument();
+  });
+
+  it('keeps the focus on the chart’s controls while a new report arrives', async () => {
+    const user = userEvent.setup();
+    const pending = pendingReports();
+    renderScreen();
+    const ranges = screen.getByRole('group', { name: 'Khoảng thời gian' });
+
+    // The toggle, reached while the next range loads.
+    await user.click(within(ranges).getByRole('button', { name: '30 ngày' }));
+    within(chart()).getByRole('button', { name: 'Xem dạng bảng' }).focus();
+    pending.resolve(
+      report({ period: { from: '2026-09-25', to: '2026-10-24' }, daily: dailyOf(30) }),
+    );
+    await vi.waitFor(() => {
+      expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(30);
+    });
+    expect(within(chart()).getByRole('button', { name: 'Xem dạng bảng' })).toHaveFocus();
+
+    // A bar whose day the next report still has keeps the focus and the tab stop.
+    await user.click(within(ranges).getByRole('button', { name: '7 ngày' }));
+    const thursday = within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ });
+    act(() => {
+      thursday.focus();
+    });
+    pending.resolve(report());
+    await vi.waitFor(() => {
+      expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(7);
+    });
+    expect(within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ })).toHaveFocus();
+    expect(within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ }).tabIndex).toBe(0);
+  });
+
+  it('hands the focus to today’s bar when the next report no longer has the focused day', async () => {
+    const pending = pendingReports();
+    const user = userEvent.setup();
+    renderScreen(report({ period: { from: '2026-07-27', to: '2026-10-24' }, daily: dailyOf(90) }), {
+      range: '90d',
+      pageId: null,
+    });
+    await user.click(screen.getByRole('button', { name: '7 ngày' }));
+    act(() => {
+      within(chart())
+        .getByRole('button', { name: /^Thứ 2, 03\/08/ })
+        .focus();
+    });
+    pending.resolve(report());
+    await vi.waitFor(() => {
+      expect(within(chart()).getByRole('button', { name: /^Thứ 7, 24\/10/ })).toHaveFocus();
+    });
+    expect(within(chart()).getByRole('button', { name: /^Thứ 7, 24\/10/ }).tabIndex).toBe(0);
   });
 
   it('shows "Theo trang" for a report of every page only, not while one page’s report is still shown', async () => {

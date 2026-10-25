@@ -28,6 +28,13 @@ describe('normalizeLeadSource', () => {
     ).toEqual({ source: 'face book', medium: 'c p c', campaign: null });
   });
 
+  it('never cuts an emoji in half at the 40th character', () => {
+    const tag = `${'u'.repeat(39)}🔥 sale`;
+    expect(
+      normalizeLeadSource({ ...NONE, utmSource: tag, utmCampaign: tag, siteHost: SITE_HOST }),
+    ).toEqual({ source: 'u'.repeat(39), medium: '(none)', campaign: 'u'.repeat(39) });
+  });
+
   it('uses campaign tags first, lowercased and cut to 40 characters', () => {
     expect(
       normalizeLeadSource({

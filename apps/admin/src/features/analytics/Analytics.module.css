@@ -241,6 +241,16 @@
   align-items: flex-end;
 }
 
+/*
+ * Held at the edge, today's label reaches back toward the one before it (13 days back of 90):
+ * every other label gives way until the chart has room for both.
+ */
+@container (max-width: 660px) {
+  .xLabelMinor {
+    visibility: hidden;
+  }
+}
+
 /* A narrow chart stacks the weekday over the date so neighbouring labels never collide. */
 @container (max-width: 560px) {
   .xDay {
@@ -252,18 +262,13 @@
 
 /*
  * Narrower still, a label keeps one line: the weekday in a week, whose dates the period above
- * gives, and the date beyond, where every other label gives way. A day's leads stay in the
- * tooltip and the table.
+ * gives, and the date beyond. A day's leads stay in the tooltip and the table.
  */
 @container (max-width: 400px) {
   .xLeads,
   .xAxis:not(.xAxisSparse) .xDate,
   .xAxisSparse .xWeekday {
     display: none;
-  }
-
-  .xLabelMinor {
-    visibility: hidden;
   }
 }
 

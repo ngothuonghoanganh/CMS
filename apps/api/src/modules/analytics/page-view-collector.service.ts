@@ -15,7 +15,7 @@ import { AnalyticsRepository } from './analytics.repository.js';
 import { pageViewClientKey, pageViewSiteKey } from './domain/page-view-limits.js';
 import { SourceCapRegistry } from './domain/source-cap.js';
 import { isCountableUserAgent } from './domain/user-agents.js';
-import { visitorHash } from './domain/visitor-hash.js';
+import { visitorHash, visitorHashSecret } from './domain/visitor-hash.js';
 
 /**
  * Counts the views of live pages that the renderer relays (ADR-019). A view that is not counted (a
@@ -25,6 +25,7 @@ import { visitorHash } from './domain/visitor-hash.js';
 @Injectable()
 export class PageViewCollector {
   private readonly addressSecret: Buffer;
+  private readonly visitorSecret: Buffer;
 
   constructor(
     @InjectEnv() private readonly env: Env,
@@ -35,6 +36,7 @@ export class PageViewCollector {
     private readonly sourceCap: SourceCapRegistry,
   ) {
     this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
+    this.visitorSecret = visitorHashSecret(env.RENDERER_API_SECRET);
   }
 
   async record(subdomain: string, view: PageView, client: RendererClient): Promise<void> {
@@ -55,7 +57,7 @@ export class PageViewCollector {
     }
     const day = vnDayOf(now);
     const salt = await this.analytics.saltOf(day);
-    const hash = visitorHash({
+    const hash = visitorHash(this.visitorSecret, {
       salt,
       siteId: site._id,
       ip: client.ip,

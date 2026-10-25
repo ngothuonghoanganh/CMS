@@ -1,8 +1,8 @@
 'use client';
 
-import type { AnalyticsReport } from '@plp/contracts';
+import type { AnalyticsReport, VnDay } from '@plp/contracts';
 import { Button, Card, VisuallyHidden } from '@plp/ui';
-import { type KeyboardEvent, useId, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cx } from '../shell/cx';
 import {
   chartDayParts,
@@ -52,35 +52,63 @@ function tooltipHeight(share: number): { top: string } | { bottom: string } {
 
 /**
  * "Khách duy nhất mỗi ngày" (board 11): one bar per day, one series. Each bar answers pointer and
- * keyboard alike (arrow keys move between days); the table view holds the same numbers.
+ * keyboard alike (arrow keys move between days); the table view holds the same numbers. The chart
+ * stays mounted as reports change, so focus on its controls survives a new range.
  */
 export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVisitorsChartProps) {
   const headingId = useId();
-  const [active, setActive] = useState<number | null>(null);
-  // Roving focus: one bar is in the tab order, today's at first. Another report remounts the chart
-  // (its key), so the index always points into the days shown.
-  const [focusIndex, setFocusIndex] = useState(daily.length - 1);
+  // Days rather than positions: another report may bring other days.
+  const [activeDay, setActiveDay] = useState<VnDay | null>(null);
+  // Roving focus: one bar is in the tab order. Today's until a bar takes focus; a report without
+  // that day gives the tab stop back to today.
+  const [focusDay, setFocusDay] = useState<VnDay | null>(null);
   const slots = useRef<Array<HTMLButtonElement | null>>([]);
+  // The bar that has focus; kept when a new report removes it, so focus can move to today's bar.
+  const focusedBar = useRef<HTMLButtonElement | null>(null);
+  // A finger or pen that just lifted from a tap: its leaving keeps the tapped day shown.
+  const lifted = useRef<number | null>(null);
   const ticks = niceTicks(Math.max(0, ...daily.map((day) => day.visitors)));
   const top = ticks.at(-1) ?? 1;
   // Beyond a week only some days carry a label, and each label is wider than its day.
   const sparse = labelEvery(daily.length) > 1;
-  const activeDay = active === null ? undefined : daily[active];
+  const focused = daily.findIndex((day) => day.day === focusDay);
+  const focusIndex = focused === -1 ? daily.length - 1 : focused;
+  const active = daily.findIndex((day) => day.day === activeDay);
+  const shownDay = daily[active];
   const empty = daily.every((day) => day.visitors === 0);
 
+  // A report without the focused day removed its bar and focus fell to the page: today's bar
+  // takes it, so a keyboard user keeps their place in the chart.
+  useLayoutEffect(() => {
+    const bar = focusedBar.current;
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (bar !== null && !bar.isConnected && lost) {
+      slots.current[daily.length - 1]?.focus();
+    }
+  });
+
+  // The tooltip covers its neighbours: Escape hides it however it opened, hover included, and
+  // leaves focus where it is (WCAG 1.4.13).
+  useEffect(() => {
+    if (activeDay === null) {
+      return undefined;
+    }
+    function onEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setActiveDay(null);
+      }
+    }
+    document.addEventListener('keydown', onEscape);
+    return () => {
+      document.removeEventListener('keydown', onEscape);
+    };
+  }, [activeDay]);
+
   function moveTo(index: number) {
-    const next = Math.min(Math.max(index, 0), daily.length - 1);
-    setFocusIndex(next);
-    slots.current[next]?.focus();
+    slots.current[Math.min(Math.max(index, 0), daily.length - 1)]?.focus();
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    // The tooltip covers its neighbours: Escape hides it and leaves focus where it is (WCAG 1.4.13).
-    if (event.key === 'Escape' && active !== null) {
-      event.preventDefault();
-      setActive(null);
-      return;
-    }
     const moves: Record<string, number> = {
       ArrowLeft: focusIndex - 1,
       ArrowRight: focusIndex + 1,
@@ -182,10 +210,16 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
               role="group"
               aria-label="Khách duy nhất mỗi ngày. Dùng phím mũi tên để xem từng ngày."
               onKeyDown={onKeyDown}
+              onPointerUp={(event) => {
+                lifted.current = event.pointerType === 'mouse' ? null : event.pointerId;
+              }}
               onPointerLeave={(event) => {
-                // A lifted finger leaves too: the tapped day stays shown until another is tapped.
-                if (event.pointerType !== 'touch') {
-                  setActive(null);
+                // A finger or pen lifting after a tap leaves too, and the tapped day stays shown.
+                // Any other leave hides it: a mouse moving away, a touch that became a scroll.
+                const tapped = lifted.current === event.pointerId;
+                lifted.current = null;
+                if (!tapped) {
+                  setActiveDay(null);
                 }
               }}
             >
@@ -200,14 +234,19 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
                   className={cx(styles.slot, index === active && styles.slotActive)}
                   aria-label={`${tooltipDayLabel(day.day)}: ${dayDetails(day)}`}
                   onPointerEnter={() => {
-                    setActive(index);
+                    setActiveDay(day.day);
                   }}
-                  onFocus={() => {
-                    setActive(index);
-                    setFocusIndex(index);
+                  onFocus={(event) => {
+                    focusedBar.current = event.currentTarget;
+                    setActiveDay(day.day);
+                    setFocusDay(day.day);
                   }}
-                  onBlur={() => {
-                    setActive(null);
+                  onBlur={(event) => {
+                    setActiveDay(null);
+                    // Focus moved elsewhere on the page; a bar that a new report removed keeps it.
+                    if (event.currentTarget.isConnected) {
+                      focusedBar.current = null;
+                    }
                   }}
                 >
                   <span
@@ -218,18 +257,18 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
               ))}
             </div>
             {empty ? <p className={styles.empty}>Chưa có khách nào trong khoảng này.</p> : null}
-            {activeDay === undefined || active === null ? null : (
+            {shownDay === undefined ? null : (
               // The focused bar's name already says this; the tooltip is for the eyes.
               <div
                 className={styles.tooltip}
                 aria-hidden="true"
                 style={{
-                  ...tooltipHeight(activeDay.visitors / top),
+                  ...tooltipHeight(shownDay.visitors / top),
                   ...tooltipPlacement(active, daily.length),
                 }}
               >
-                <span className={styles.tooltipDay}>{tooltipDayLabel(activeDay.day)}</span>
-                {dayDetails(activeDay)}
+                <span className={styles.tooltipDay}>{tooltipDayLabel(shownDay.day)}</span>
+                {dayDetails(shownDay)}
               </div>
             )}
           </div>

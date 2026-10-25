@@ -147,8 +147,12 @@ test.describe('B6 · Hiệu quả', () => {
       { name: '30 ngày', days: 30 },
       { name: '90 ngày', days: 90 },
     ];
-    // A phone; a narrow window with the sidebar; the width of the boards.
-    for (const width of [375, 600, 900, 1440]) {
+    // The chart is the window less 82px without the sidebar, less 379px with it (900px and up).
+    // Besides a phone (375), a narrow window with the sidebar (900) and the boards (1440), these
+    // put the chart just past each width where its labels change: 403px (485), 563px (645) and
+    // 566px (945) where 90 days crowd most, and 668px (750) where every label is back. Label
+    // widths depend on the dates, so a crowded layout fails on most days, not every one.
+    for (const width of [375, 485, 600, 645, 750, 900, 945, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(`/sites/${site.id}/analytics`);
       for (const range of ranges) {

@@ -112,6 +112,22 @@ describe('analytics', () => {
     for (const ip of ['203.0.113.7', '203.0.113.9']) {
       expect(stored).not.toContain(createHash('sha256').update(ip).digest('hex'));
     }
+    // Nor can the day's salt, stored next to the hashes, test a guessed address: the visitor hash
+    // is keyed with a secret the database never holds.
+    const salt = String(
+      (await t.connection.collection('analytics_salts').findOne({ day: today }))?.['salt'],
+    );
+    const guess = createHash('sha256')
+      .update([salt, live.site.id, '203.0.113.7', DESKTOP_UA].join('\n'))
+      .digest('base64url');
+    const hashes = (
+      await t.connection
+        .collection('analytics_seen')
+        .find({ siteId: new Types.ObjectId(live.site.id) })
+        .toArray()
+    ).map((row) => String(row['hash']));
+    expect(hashes).toHaveLength(4);
+    expect(hashes).not.toContain(guess);
   });
 
   it('counts a visitor of two pages once on the site, and each page with its own leads', async () => {

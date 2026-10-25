@@ -176,9 +176,7 @@ export function AnalyticsScreen({
           aria-busy={report.isPlaceholderData}
         >
           <KpiTiles report={shown.report} range={shown.filters.range} />
-          {/* A new report brings new days: the chart starts again from today's bar. */}
           <DailyVisitorsChart
-            key={`${shown.filters.range}-${shown.filters.pageId ?? ''}`}
             daily={shown.report.daily}
             asTable={asTable}
             onAsTableChange={setAsTable}

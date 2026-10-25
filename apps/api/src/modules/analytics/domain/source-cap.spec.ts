@@ -54,6 +54,35 @@ describe('SourceCapRegistry', () => {
     ).toEqual(ANALYTICS_OTHER_SOURCE);
   });
 
+  it('loads a site’s pairs once while views arrive together, and keeps to 50', async () => {
+    const registry = new SourceCapRegistry();
+    const stored = vi.fn(async () => {
+      await new Promise((done) => setTimeout(done, 5));
+      return [] as SourcePair[];
+    });
+    const pairs = await Promise.all(
+      Array.from({ length: 60 }, (_, index) =>
+        registry.pairFor('site-a', '2026-10-25', pair(index), stored),
+      ),
+    );
+    expect(stored).toHaveBeenCalledTimes(1);
+    expect(pairs.slice(0, 50)).toEqual(Array.from({ length: 50 }, (_, index) => pair(index)));
+    expect(pairs.slice(50)).toEqual(Array.from({ length: 10 }, () => ANALYTICS_OTHER_SOURCE));
+  });
+
+  it('loads again after a load fails, which the waiting views see', async () => {
+    const registry = new SourceCapRegistry();
+    const stored = vi
+      .fn<() => Promise<SourcePair[]>>()
+      .mockRejectedValueOnce(new Error('database unavailable'))
+      .mockResolvedValue([]);
+    await expect(registry.pairFor('site-a', '2026-10-25', pair(1), stored)).rejects.toThrow(
+      'database unavailable',
+    );
+    expect(await registry.pairFor('site-a', '2026-10-25', pair(1), stored)).toEqual(pair(1));
+    expect(stored).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps pairs apart whatever characters they hold', async () => {
     const registry = new SourceCapRegistry();
     const full = [

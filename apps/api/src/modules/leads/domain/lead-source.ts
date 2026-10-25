@@ -16,7 +16,7 @@ const SEARCH_ENGINES = ['google', 'bing', 'coccoc', 'yahoo', 'duckduckgo', 'yand
 
 /**
  * Lowercase, trimmed, at most 40 characters; null when empty. A run of spaces or control
- * characters (a line break in a campaign tag) becomes one space.
+ * characters (a line break in a campaign tag) becomes one space, and a cut never splits an emoji.
  */
 function clean(value: string | null): string | null {
   const text =
@@ -25,6 +25,7 @@ function clean(value: string | null): string | null {
       .trim()
       .toLowerCase()
       .slice(0, VALUE_MAX)
+      .replace(/[\uD800-\uDBFF]$/, '')
       .trim() ?? '';
   return text === '' ? null : text;
 }
