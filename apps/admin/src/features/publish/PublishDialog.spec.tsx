@@ -182,6 +182,55 @@ describe('PublishDialog', () => {
         .map((item) => item.textContent),
     ).toEqual(['Giao diện site: giao diện', 'Giao diện site: logo']);
     expect(publishButton()).toBeEnabled();
+
+    // The publish names the chips it showed, so the server refuses a look nobody saw.
+    apiMock.mockResolvedValueOnce(publishResponse());
+    await userEvent.setup().click(publishButton());
+    await screen.findByRole('heading', { name: 'v13 đã live' });
+    const { options } = lastCallTo(apiMock, endpoints.publish) as {
+      options: { body: { acknowledgedSiteChanges: string[] } };
+    };
+    expect(options.body.acknowledgedSiteChanges).toEqual([
+      'Giao diện site: giao diện',
+      'Giao diện site: logo',
+    ]);
+  });
+
+  it('reloads the page and checks when the site settings changed during the publish', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await screen.findByRole('heading', { name: 'Xuất bản 2 thay đổi' });
+    apiMock.mockRejectedValueOnce(
+      new ApiError(409, {
+        type: 'about:blank',
+        title: 'Cài đặt site vừa thay đổi',
+        status: 409,
+        code: 'site_changed',
+      }),
+    );
+    apiMock.mockResolvedValueOnce({
+      page: livePage({
+        siteChanges: [{ kind: 'site', label: 'Giao diện site: giao diện', sectionId: null }],
+      }),
+      draft: {
+        slug: 'uu-dai-thang-11',
+        composition: { version: 1, sections: [] },
+        seo: { title: '', description: '', shareImageAssetId: null, noindex: false },
+        revision: 5,
+        updatedAt: '2026-10-24T08:00:00.000Z',
+        updatedBy: { id: '64b000000000000000000004', name: 'Ngọc Anh' },
+      },
+      checks: checks(),
+    });
+    await user.click(publishButton());
+
+    expect(await screen.findByText('Trang vừa thay đổi trong lúc xuất bản')).toBeInTheDocument();
+    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [PAGE_ID]);
+    expect(
+      within(screen.getByRole('list', { name: 'Các thay đổi' })).getByText(
+        'Giao diện site: giao diện',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('enables publishing only once every warning is skipped, with the reason linked', async () => {
@@ -256,6 +305,7 @@ describe('PublishDialog', () => {
         expectedRevision: 5,
         expectedPublishedReleaseId: LIVE_RELEASE.id,
         acknowledgedWarnings: [altWarning.fingerprint],
+        acknowledgedSiteChanges: [],
         note: 'Đổi ảnh hero',
       },
       headers: { 'idempotency-key': expect.stringMatching(/^[0-9a-f-]{36}$/) as unknown },

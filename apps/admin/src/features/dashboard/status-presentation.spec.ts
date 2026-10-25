@@ -44,6 +44,16 @@ describe('presentPageStatus', () => {
     expect(presentPageStatus(page, now).subtext).toBe('2 thay đổi chưa xuất bản');
   });
 
+  it('reminds about the site look when a restored draft equals the live content', () => {
+    const page = pageFixture({
+      status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+      siteChanges: [{ kind: 'site', label: 'Giao diện site: giao diện', sectionId: null }],
+    });
+    expect(presentPageStatus(page, now).subtext).toBe(
+      'Giao diện site đã đổi · xuất bản lại để áp dụng',
+    );
+  });
+
   it('counts unpublished changes for a live page with changes', () => {
     const page = pageFixture({
       status: { kind: 'live_with_changes', changeCount: 4, changes: [] },

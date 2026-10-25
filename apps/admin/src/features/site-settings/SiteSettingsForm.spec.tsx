@@ -95,12 +95,12 @@ describe('SiteSettingsForm', () => {
     // Saving is not publishing: live pages keep the look they were published with (ADR-015).
     expect(
       screen.getByText(
-        'Các trang đang live vẫn giữ giao diện cũ cho tới khi bạn xuất bản lại từng trang.',
+        'Trang nào đang live sẽ giữ giao diện cũ cho tới khi bạn xuất bản lại trang đó. Bản nháp và xem trước dùng cài đặt mới ngay.',
       ),
     ).toBeInTheDocument();
     // The note belongs to that save; the next edit starts over.
     await user.type(nameInput(), ' mới');
-    expect(screen.queryByText(/vẫn giữ giao diện cũ/)).toBeNull();
+    expect(screen.queryByText(/giữ giao diện cũ/)).toBeNull();
   });
 
   it('checks the name before saving', async () => {

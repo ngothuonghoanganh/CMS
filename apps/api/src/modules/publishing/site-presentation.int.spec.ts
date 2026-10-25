@@ -3,6 +3,7 @@ import {
   historyResponseSchema,
   type PageSummary,
   previewLinkResponseSchema,
+  problemSchema,
   type PublicPageData,
   publicPreviewResponseSchema,
   resolveResponseSchema,
@@ -18,10 +19,12 @@ import { signedUpClient, TestClient } from '../../../test/client.js';
 import { cleanSeo, composition, heroSection, sampleSection } from '../../../test/compositions.js';
 import {
   createPage,
+  currentPublishBody,
   editHeroHeading,
   getPage,
   listPages,
   publish,
+  publishRequest,
   RecordingRevalidationClient,
   replaceDraft,
   uniqueSlug,
@@ -249,6 +252,26 @@ describe('site settings snapshotted into releases', () => {
       expect(await resolvePage(site, slug)).toEqual(published);
       expect((await listed(site.id, pageId)).siteChanges).toEqual(reminder);
     });
+  });
+
+  it('refuses to publish site settings the publisher did not see', async () => {
+    const { site, slug, pageId, v1 } = await livePageOnStyledSite();
+    // The publish dialog is opened while the site still has the live look.
+    const seen = await currentPublishBody(client, pageId);
+    expect(seen.acknowledgedSiteChanges).toEqual([]);
+    const published = await resolvePage(site, slug);
+
+    await updateSite(site, { themePresetId: 'sunset' });
+    const response = await publishRequest(client, pageId, seen).expect(409);
+    expect(problemSchema.parse(response.body).code).toBe('site_changed');
+    // Nothing went live: same pointer and the same public page.
+    expect((await getPage(client, pageId)).page.liveRelease?.id).toBe(v1.release.id);
+    expect(await resolvePage(site, slug)).toEqual(published);
+
+    // Once the new look has been shown, the publish goes through.
+    const reviewed = await currentPublishBody(client, pageId);
+    expect(reviewed.acknowledgedSiteChanges).toEqual(['Giao diện site: giao diện']);
+    await publishRequest(client, pageId, reviewed).expect(201);
   });
 
   it('adds site chips after the page changes in the change summary', async () => {

@@ -128,7 +128,7 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
     await expect(
       page
         .getByRole('status')
-        .filter({ hasText: 'Các trang đang live vẫn giữ giao diện cũ cho tới khi bạn xuất bản' }),
+        .filter({ hasText: 'Trang nào đang live sẽ giữ giao diện cũ cho tới khi bạn xuất bản' }),
     ).toBeVisible();
 
     // Saving is not publishing (ADR-015): the very next request still gets the published look,

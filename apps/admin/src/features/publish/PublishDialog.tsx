@@ -65,11 +65,14 @@ export interface PublishDialogProps extends PublishDialogRenderProps {
   site: Pick<Site, 'id' | 'defaultOrigin'>;
 }
 
-function isPointerOrRevisionConflict(error: unknown): error is ApiError {
+/** The draft, the live pointer or the site settings changed since the dialog loaded them. */
+function isStaleConflict(error: unknown): error is ApiError {
   return (
     error instanceof ApiError &&
     error.status === 409 &&
-    (error.code === 'revision_conflict' || error.code === 'pointer_conflict')
+    (error.code === 'revision_conflict' ||
+      error.code === 'pointer_conflict' ||
+      error.code === 'site_changed')
   );
 }
 
@@ -237,6 +240,8 @@ function PublishSession({
           expectedRevision: prepared.revision,
           expectedPublishedReleaseId: prepared.page.liveRelease?.id ?? null,
           acknowledgedWarnings: currentAcknowledgements(prepared.checks, state.acknowledged),
+          // The site-settings chips shown in this dialog (ADR-015).
+          acknowledgedSiteChanges: prepared.page.siteChanges.map((change) => change.label),
           note: state.note.trim(),
         },
         headers: { [IDEMPOTENCY_KEY_HEADER]: idempotencyKey },
@@ -249,7 +254,7 @@ function PublishSession({
         result: { response, previousLive: prepared.page.liveRelease, qrCode },
       });
     } catch (error) {
-      if (isPointerOrRevisionConflict(error)) {
+      if (isStaleConflict(error)) {
         await prepare({
           fresh: true,
           notice: {

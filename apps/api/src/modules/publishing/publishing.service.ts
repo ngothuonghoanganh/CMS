@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  ChangeItem,
   ChecksResult,
   CursorQuery,
   HistoryEntry,
@@ -64,6 +65,12 @@ function sameRelease(current: ObjectId | null, expected: string | null): boolean
   return current === null ? expected === null : current.toHexString() === expected;
 }
 
+/** Whether the site-settings chips are the ones the user saw, in any order. */
+function sameLabels(changes: readonly ChangeItem[], seen: readonly string[]): boolean {
+  const expected = new Set(seen);
+  return changes.length === expected.size && changes.every((change) => expected.has(change.label));
+}
+
 function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId): UserRef {
   const user = users.get(id.toHexString());
   if (!user) {
@@ -79,6 +86,8 @@ type HistoryRow =
 interface CommittedRelease {
   release: ReleaseRecord;
   activityId: ObjectId;
+  /** The site as the publish transaction read it (its settings are in the release). */
+  site: SiteRecord;
 }
 
 export interface PublishOutcome {
@@ -149,6 +158,7 @@ export class PublishingService {
         idempotencyKey,
         note: input.note,
         warningsAcknowledged: checks.warnings.map((warning) => warning.fingerprint),
+        acknowledgedSiteChanges: input.acknowledgedSiteChanges,
       });
     } catch (error) {
       const raced =
@@ -172,7 +182,8 @@ export class PublishingService {
     }
 
     const revalidation = await this.pointer.revalidate(site, committed.activityId);
-    const summary = await this.summaryOf(scope, site, page._id);
+    // The site as the transaction read it, so the summary compares the new release with it.
+    const summary = await this.summaryOf(scope, committed.site, page._id);
     return {
       response: {
         release: toReleaseSummary(committed.release, {
@@ -197,7 +208,15 @@ export class PublishingService {
     scope: WorkspaceScope,
     site: SiteRecord,
     page: PageRecord,
-    meta: { idempotencyKey: string; note: string; warningsAcknowledged: string[] },
+    {
+      acknowledgedSiteChanges,
+      ...meta
+    }: {
+      idempotencyKey: string;
+      note: string;
+      warningsAcknowledged: string[];
+      acknowledgedSiteChanges: string[];
+    },
   ): Promise<CommittedRelease> {
     const from = await this.liveReleaseOf(scope, page);
     const pageChanges = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
@@ -216,6 +235,12 @@ export class PublishingService {
         from === null
           ? []
           : diffSitePresentation(releasePresentation(from, current), sitePresentation);
+      if (!sameLabels(siteChanges, acknowledgedSiteChanges)) {
+        throw new AppError(409, 'site_changed', 'Cài đặt site vừa thay đổi', {
+          detail:
+            'Giao diện site đã được đổi trong lúc bạn xuất bản. Xem lại thay đổi rồi xuất bản.',
+        });
+      }
       const release = await this.releases.insert(
         scope,
         {
@@ -236,7 +261,7 @@ export class PublishingService {
         { scope, page, from, target: release, reason: null, activityType: 'page.published' },
         tx,
       );
-      return { release, activityId };
+      return { release, activityId, site: current };
     });
   }
 

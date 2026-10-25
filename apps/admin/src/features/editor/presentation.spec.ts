@@ -8,6 +8,7 @@ import {
   liveStatusView,
   livePathOf,
   lowerFirst,
+  pendingChangeCount,
   publishButtonLabel,
   saveStatusView,
   siteChangesNotice,
@@ -102,6 +103,16 @@ describe('editor presentation', () => {
         }),
       ).text,
     ).toBe('Live v12 · Giao diện site đã đổi');
+    // A draft restored from live has the live content, but the site look may still differ.
+    expect(
+      liveStatusView(
+        pageSummary({
+          status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ).text,
+    ).toBe('Live v12 · Giao diện site đã đổi');
     expect(liveStatusView(pageSummary()).text).toBe('Chưa xuất bản');
     expect(
       liveStatusView(pageSummary({ status: { kind: 'unpublished', changeCount: 0, changes: [] } }))
@@ -160,9 +171,38 @@ describe('editor presentation', () => {
         pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
       ),
     ).toBe('Xuất bản');
+    // Applying the site's new look is a change too (ADR-015).
+    expect(
+      publishButtonLabel(
+        pageSummary({
+          status: { kind: 'live', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ),
+    ).toBe('Xuất bản thay đổi');
     expect(livePathOf({ liveRelease })).toBe('/uu-dai-thang-11');
     expect(livePathOf({ liveRelease: { ...liveRelease, slug: '' } })).toBe('/');
     expect(livePathOf({ liveRelease: null })).toBeNull();
+  });
+
+  it('counts the draft changes and the site settings the next publish applies', () => {
+    const live = { kind: 'live_with_changes' as const, changeCount: 3, changes: [] };
+    expect(pendingChangeCount(pageSummary({ status: live, liveRelease }))).toBe(3);
+    expect(
+      pendingChangeCount(pageSummary({ status: live, siteChanges: [siteChange], liveRelease })),
+    ).toBe(4);
+    expect(
+      pendingChangeCount(
+        pageSummary({
+          status: { kind: 'live', changeCount: 0, changes: [] },
+          siteChanges: [siteChange],
+          liveRelease,
+        }),
+      ),
+    ).toBe(1);
+    // A page that was never published has nothing live to change.
+    expect(pendingChangeCount(pageSummary())).toBe(0);
   });
 
   it('shortens URLs and lowercases item labels', () => {

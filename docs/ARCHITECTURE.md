@@ -478,6 +478,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `evaluateDraft` so các release đang trỏ (đã nạp bằng một `$in`) với site đã nạp, nên không thêm truy vấn nào.
     - Chip theo thứ tự cố định: "Giao diện site: giao diện", "Giao diện site: logo", "Giao diện site: tên site", "Giao diện site: ảnh chia sẻ".
     - Admin hiện nhắc ở dòng phụ của dashboard ("Giao diện site đã đổi · xuất bản lại để áp dụng" cho trang `live`; trang `live_with_changes` giữ số thay đổi), ở dòng trạng thái và dải thông báo của editor, thành chip trong hộp thoại publish, và trong ghi chú sau khi lưu cài đặt site.
+  - **Chốt khi publish:** request publish gửi `acknowledgedSiteChanges`, là nhãn các chip site mà hộp thoại đã hiện. Trong transaction, nếu cài đặt site vừa đọc cho ra chip khác thì publish trả 409 `site_changed` và không tạo release; hộp thoại tải lại rồi người dùng xem lại. Như vậy release không bao giờ đưa lên live một giao diện chưa ai xem, giống chốt revision và pointer (ADR-006). Bản tóm tắt trả về sau publish so với site đọc trong chính transaction đó.
   - **`changeSummary`** của release gồm chip site khi snapshot khác snapshot của release live trước đó. Lần publish đầu, hoặc sau khi gỡ trang, không có chip site. Publish lại bản nháp không đổi chỉ để áp dụng cài đặt site là hợp lệ; release đó chỉ có chip site.
   - **Sửa cài đặt site** không revalidate renderer: thay đổi không tới trang live nào (trừ release cũ, xem bên dưới).
   - **Release cũ (trước ADR-015)** không có `sitePresentation`. Chúng chỉ có trong database dev local; MVP A không có dữ liệu production.
@@ -488,6 +489,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Rollback về release cũ cũng đưa giao diện site lúc đó trở lại.
   - Áp dụng cài đặt site mới cho cả site cần publish lại từng trang.
+  - Owner đổi cài đặt site đúng lúc người khác đang publish thì lần publish đó bị từ chối một lần và phải xem lại.
   - Release cũ trong database dev vẫn đổi theo site, và chỉ thấy thay đổi khi cache renderer tự làm mới, vì sửa site không revalidate. Publish lại một lần thì trang có snapshot.
 
 ---
@@ -499,12 +501,12 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 | Lát      | Nội dung                                                        | Màn         | Trạng thái |
 | -------- | --------------------------------------------------------------- | ----------- | ---------- |
 | Nền móng | Monorepo, docker compose, CI, tài liệu                          | —           | Xong       |
-| S1       | Auth, workspace, site, khung admin, dashboard                   | 01, Sidebar | Kế tiếp    |
-| S2       | Registry 7 section, theme, editor ba vùng, autosave, asset      | 03, 04      |            |
-| S3       | Preview, kiểm tra, publish, renderer, revalidate                | 05, 09      |            |
-| S4       | Lịch sử, rollback, undo, gỡ trang, khôi phục nháp, activity     | 06, 01      |            |
-| S5       | SEO, redirect, sitemap, robots, cài đặt site, tên miền mặc định | 07, 08      |            |
-| S6       | Tạo trang theo mục tiêu                                         | 02          |            |
+| S1       | Auth, workspace, site, khung admin, dashboard                   | 01, Sidebar | Xong       |
+| S2       | Registry 7 section, theme, editor ba vùng, autosave, asset      | 03, 04      | Xong       |
+| S3       | Preview, kiểm tra, publish, renderer, revalidate                | 05, 09      | Xong       |
+| S4       | Lịch sử, rollback, undo, gỡ trang, khôi phục nháp, activity     | 06, 01      | Xong       |
+| S5       | SEO, redirect, sitemap, robots, cài đặt site, tên miền mặc định | 07, 08      | Xong       |
+| S6       | Tạo trang theo mục tiêu                                         | 02          | Xong       |
 
 **Hoàn thành MVP A** khi một E2E chạy xanh toàn bộ chuỗi:
 

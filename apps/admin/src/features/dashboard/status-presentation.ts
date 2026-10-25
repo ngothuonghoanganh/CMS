@@ -39,10 +39,12 @@ function subtextOf(page: PageSummary): string {
       if (event?.type === 'rolled_back') {
         return restoredLine(page);
       }
-      // After "Quay về bản live" the revision differs (rule 2) but nothing changed in content.
-      return page.status.changeCount === 0
-        ? SAME_AS_LIVE
-        : `${page.status.changeCount} thay đổi chưa xuất bản`;
+      // After "Quay về bản live" the revision differs (rule 2) but nothing changed in content;
+      // a publish would then only apply the site's new look, if any (ADR-015).
+      if (page.status.changeCount === 0) {
+        return hasSiteChanges(page) ? SITE_CHANGED_REMINDER : SAME_AS_LIVE;
+      }
+      return `${page.status.changeCount} thay đổi chưa xuất bản`;
     case 'live':
       // The only thing a publish would change is the site's look (ADR-015): say so first.
       if (hasSiteChanges(page)) {

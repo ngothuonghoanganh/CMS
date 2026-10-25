@@ -5,6 +5,7 @@ import type {
   PageSummary,
   PublishResponse,
 } from '@plp/contracts';
+import { pendingChangeCount } from '../editor/presentation';
 
 /**
  * State of one session of the publish dialog (screen 05), as a pure reducer so the rules
@@ -169,7 +170,7 @@ export function publishTitle(page: PageSummary): string {
   if (isFirstPublish(page)) {
     return 'Xuất bản trang';
   }
-  const count = page.status.changeCount + page.siteChanges.length;
+  const count = pendingChangeCount(page);
   if (page.liveRelease === null || count === 0) {
     return 'Xuất bản lại trang';
   }

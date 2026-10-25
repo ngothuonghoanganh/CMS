@@ -8,6 +8,7 @@ export const errorCodes = [
   'conflict',
   'revision_conflict',
   'pointer_conflict',
+  'site_changed',
   'slug_taken',
   'subdomain_taken',
   'email_taken',

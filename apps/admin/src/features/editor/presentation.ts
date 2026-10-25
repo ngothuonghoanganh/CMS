@@ -127,6 +127,19 @@ export function hasSiteChanges(page: Pick<PageSummary, 'siteChanges'>): boolean 
 }
 
 /**
+ * How much the next publish changes on the live page: the draft's changes plus the site settings
+ * it applies (ADR-015). The top bar badge and the publish dialog title both count this.
+ */
+export function pendingChangeCount(page: Pick<PageSummary, 'status' | 'siteChanges'>): number {
+  return page.status.kind === 'draft' ? 0 : page.status.changeCount + page.siteChanges.length;
+}
+
+/** Status line text of a live page whose content equals live: the site look may still differ. */
+function sameContentText(page: Pick<PageSummary, 'siteChanges'>): string {
+  return hasSiteChanges(page) ? SITE_CHANGED : SAME_AS_LIVE;
+}
+
+/**
  * The editor's draft notice adds this while the live page shows older site settings; null when
  * it shows the current ones (or nothing is live).
  */
@@ -151,7 +164,7 @@ export function liveStatusView(page: PageSummary): LiveStatusView {
         // After "Quay về bản live" the revision differs but the content equals the live release.
         text:
           page.status.changeCount === 0
-            ? `Live v${version} · ${SAME_AS_LIVE}`
+            ? `Live v${version} · ${sameContentText(page)}`
             : `Live v${version} · ${page.status.changeCount} thay đổi chưa xuất bản`,
       };
     case 'live':
@@ -186,9 +199,7 @@ export function checksSummaryView(checks: ChecksResult): ChecksSummaryView {
 
 /** "Xuất bản thay đổi" (with the count beside it) only when there are changes to publish. */
 export function publishButtonLabel(page: PageSummary): string {
-  return page.status.kind === 'draft' || page.status.changeCount === 0
-    ? 'Xuất bản'
-    : 'Xuất bản thay đổi';
+  return pendingChangeCount(page) === 0 ? 'Xuất bản' : 'Xuất bản thay đổi';
 }
 
 /** "https://go.smilecare.vn/uu-dai/" → "go.smilecare.vn/uu-dai". */
