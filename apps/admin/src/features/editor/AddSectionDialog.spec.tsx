@@ -26,6 +26,19 @@ describe('AddSectionDialog', () => {
     ).toBeInTheDocument();
   });
 
+  it('places a new section before the footer even when the open group has nothing to add', async () => {
+    const user = userEvent.setup();
+    // "Thêm section" at the end of the structure asks for the last index.
+    renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={5} />, {
+      store: makeStore(),
+    });
+    // The page already has its footer: the group offers nothing selectable.
+    await user.click(categoryNav().getByRole('button', { name: /^Chân trang/ }));
+    expect(screen.getByRole('dialog', { name: 'Thêm section' })).toHaveAccessibleDescription(
+      'Chèn sau Câu hỏi thường gặp · vị trí 5 / 6',
+    );
+  });
+
   it('filters by name and description, ignoring Vietnamese accents', async () => {
     const user = userEvent.setup();
     renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {

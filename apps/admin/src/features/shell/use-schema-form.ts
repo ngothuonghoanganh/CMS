@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { type MouseEvent, useState } from 'react';
 import type { z } from 'zod';
 
 export type FieldErrors<F extends string> = Partial<Record<F, string>>;
@@ -117,4 +117,14 @@ export function firstInvalidField<F extends string>(
   errors: FieldErrors<F>,
 ): F | undefined {
   return order.find((field) => errors[field] !== undefined);
+}
+
+/**
+ * `onMouseDown` of a submit button below fields checked on blur. Pressing it would first move
+ * focus out of the field being edited, and the message that check shows can push the button away
+ * from the pointer before the click lands, so the form would not submit. Keeping focus in place
+ * lets the click submit; the submit checks every field anyway. Keyboard use is unaffected.
+ */
+export function keepFieldFocus(event: MouseEvent<HTMLElement>): void {
+  event.preventDefault();
 }

@@ -172,6 +172,18 @@
   background: var(--plp-surface);
 }
 
+/* Board 09: a round accent badge with a tick above the confirmation. */
+.sentIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--plp-accent);
+  color: var(--plp-accent-text);
+}
+
 @container plp-page (min-width: 768px) {
   .heading {
     font-size: 28px;

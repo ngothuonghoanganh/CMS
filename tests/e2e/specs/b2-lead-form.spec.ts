@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { LEAD_PHONE_MESSAGE } from '@plp/contracts';
 import { Editor } from '../support/editor.js';
 import {
   configurePrivacyViaApi,
@@ -64,9 +65,7 @@ test.describe('B2 · lead form', () => {
     const phone = form.getByRole('textbox', { name: 'Số điện thoại' });
     await phone.fill('090123456');
     await form.getByRole('button', { name: 'Gửi đăng ký' }).click();
-    await expect(
-      form.getByText('Số điện thoại cần 10 chữ số và bắt đầu bằng 0, ví dụ 0901 234 567.'),
-    ).toBeVisible();
+    await expect(form.getByText(LEAD_PHONE_MESSAGE)).toBeVisible();
     await expect(phone).toBeFocused();
     await phone.fill('0901 234 567');
     await form.getByRole('button', { name: 'Gửi đăng ký' }).click();

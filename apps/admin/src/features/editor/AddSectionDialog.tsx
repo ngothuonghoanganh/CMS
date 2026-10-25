@@ -1,7 +1,7 @@
 'use client';
 
 import { MAX_SECTIONS } from '@plp/contracts';
-import { getSectionDefinition, insertionIndex } from '@plp/sections/schema';
+import { bodyInsertionIndex, getSectionDefinition, insertionIndex } from '@plp/sections/schema';
 import { Badge, Button, Dialog, InfoCircleIcon, Input, SearchIcon, VisuallyHidden } from '@plp/ui';
 import { useMemo, useRef, useState } from 'react';
 import styles from './AddSectionDialog.module.css';
@@ -48,7 +48,10 @@ export function AddSectionDialog({ open, onOpenChange, requestedIndex }: AddSect
       : matches.length === 0
         ? `Không tìm thấy section phù hợp với “${trimmedQuery}”.`
         : `${matches.length} section phù hợp với “${trimmedQuery}”.`;
-  const index = selected ? insertionIndex(sections, selected.type, requestedIndex) : requestedIndex;
+  // With nothing selectable in the open group, show where a section of the page body would go.
+  const index = selected
+    ? insertionIndex(sections, selected.type, requestedIndex)
+    : bodyInsertionIndex(sections, requestedIndex);
   const previous = sections[index - 1];
   const position = `vị trí ${index + 1} / ${sections.length + 1}`;
 

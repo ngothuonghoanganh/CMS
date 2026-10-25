@@ -594,6 +594,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Không có JavaScript:** form POST urlencoded tới `/_lead`. Nhận xong thì 303 sang `GET /_lead?status=received&back=/slug` (post/redirect/get); lỗi thì trả trang HTML kèm thông báo. Trang kết quả không chứa nội dung của site và chỉ cho link quay về một đường dẫn trong site.
   - **Không lưu những gì form không hỏi:** email, lời nhắn và đồng ý ưu đãi bị bỏ khi form của release không có các ô đó.
   - Đổi thời gian lưu thì tính lại `expiresAt` sau khi lưu cài đặt, ngoài transaction. Lệnh này idempotent: lưu lại lần nữa sẽ sửa những lead còn sót nếu lần trước lỗi.
+- **Amended 2026-10-25 (B2.1, chủ sản phẩm chốt):**
+  - **Số điện thoại của lead lưu dạng E.164**, mã quốc gia mặc định là Việt Nam (+84):
+    - Số không có mã quốc gia là số Việt Nam: 0 rồi 9 chữ số (di động) hoặc 10 chữ số (máy bàn, ví dụ 028 3822 1234). Lưu thành `+84…`.
+    - Số có mã quốc gia (`+`, `00` hoặc `84`) được nhận cho mọi nước. Sau +84 phải là 9–10 chữ số; số 0 thường bị giữ lại ("+84 0901…") thì được bỏ.
+    - Thay cho quy tắc "10 chữ số bắt đầu bằng 0" của bản B2.
+  - **Nút của thanh điều hướng** trên trang tạo theo mục tiêu vẫn gọi số điện thoại trong brief. Người dùng đổi đích của nút trong editor ("Khi bấm, đưa tới"), giống mọi nút khác.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -673,6 +679,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Lịch thử lại nằm trong bộ nhớ của instance API: instance tắt giữa chừng thì lead chờ tới lần khởi động sau. Scale ngang hoặc cần giao nhận chắc chắn hơn thì phải có hàng đợi thật.
   - Production cần nhà cung cấp SMTP có SPF và DKIM cho domain gửi; chọn khi deploy.
   - Google Sheets, Meta Conversions API hay Zalo OA là nơi nhận mới, mỗi cái cần ADR riêng.
+- **Amended 2026-10-25 (quyết định trước B3):** hộp thư mặc định lọc "7 ngày qua" như thiết kế, và có thêm lựa chọn "Toàn bộ thời gian". Badge "N mới" ở sidebar và dòng "chưa xử lý" ở dashboard mở hộp thư với trạng thái "Mới" và "Toàn bộ thời gian", để số trên badge khớp với danh sách mở ra.
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 
@@ -698,6 +705,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Lượt xem không chạy JavaScript không được tính.
   - Lead bị xóa theo thời gian lưu thì số lead của kỳ cũ giảm theo. Thời gian lưu ngắn nhất (6 tháng) dài hơn khoảng xem lớn nhất cộng kỳ so sánh (180 ngày), nên màn 11 không bị ảnh hưởng.
   - Renderer có route mới `/_e` (ADR-009, ADR-011).
+- **Amended 2026-10-25 (quyết định trước B6):**
+  - **Rate limit của beacon:** khi biết địa chỉ khách thì 60 lần mỗi 10 phút cho mỗi địa chỉ trên một site. Không biết địa chỉ (renderer không có proxy tin cậy) thì bỏ giới hạn theo địa chỉ, chỉ giữ giới hạn 20.000 lần mỗi giờ cho cả site, vì một bucket chung sẽ làm mất gần hết lượt xem thật.
+  - **Bot:** không đếm user agent của crawler, công cụ xem trước link (Facebook, Zalo…), thư viện HTTP và trình duyệt headless (`HeadlessChrome`). E2E đặt user agent của trình duyệt thật.
 
 ---
 
@@ -725,15 +735,16 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 
 **MVP B:**
 
-| Lát        | Nội dung                                                                         | Màn             | Trạng thái |
-| ---------- | -------------------------------------------------------------------------------- | --------------- | ---------- |
-| Quyết định | ADR-016…019, quy tắc 10–11                                                       | —               | Xong       |
-| B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar   | 12 (phần trên)  | Xong       |
-| B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint | 02, 04, 05, 09  | Xong       |
-| B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người | 10, 01, Sidebar | Chưa làm   |
-| B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                     | 10, 05, 03      | Chưa làm   |
-| B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                    | 12 (phần dưới)  | Chưa làm   |
-| B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                         | 11              | Chưa làm   |
+| Lát        | Nội dung                                                                                                              | Màn             | Trạng thái |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- | --------------- | ---------- |
+| Quyết định | ADR-016…019, quy tắc 10–11                                                                                            | —               | Xong       |
+| B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar                                        | 12 (phần trên)  | Xong       |
+| B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint                                      | 02, 04, 05, 09  | Xong       |
+| B2.1       | Sửa sau QA: số điện thoại E.164 (+84 mặc định), nút lưu không bị hụt khi validate, nhãn "Thêm section", icon xác nhận | 03, 04, 09, 12  | Xong       |
+| B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người                                      | 10, 01, Sidebar | Chưa làm   |
+| B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                                                          | 10, 05, 03      | Chưa làm   |
+| B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                                                         | 12 (phần dưới)  | Chưa làm   |
+| B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                                                              | 11              | Chưa làm   |
 
 **Hoàn thành MVP B** khi một E2E chạy xanh toàn bộ chuỗi:
 

@@ -9,7 +9,7 @@ import { api, ApiError } from '../../lib/api';
 import { AssetField } from '../assets';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { fieldError } from '../shell/use-schema-form';
+import { fieldError, keepFieldFocus } from '../shell/use-schema-form';
 import { ThemePicker } from '../theme';
 import {
   hasChanges,
@@ -204,7 +204,12 @@ export function SiteSettingsForm({ site, assets, canEdit }: SiteSettingsFormProp
           <Button variant="secondary" disabled={!changed || save.isPending} onClick={reset}>
             Hủy thay đổi
           </Button>
-          <Button type="submit" loading={save.isPending} disabled={!changed}>
+          <Button
+            type="submit"
+            loading={save.isPending}
+            disabled={!changed}
+            onMouseDown={keepFieldFocus}
+          >
             Lưu cài đặt
           </Button>
         </div>

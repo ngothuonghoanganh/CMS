@@ -12,7 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
+import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import {
   LIVE_FORMS_KEEP_CONSENT,
   parseRetention,
@@ -214,7 +214,7 @@ export function PrivacySettingsForm({
       ) : null}
       {canEdit ? (
         <div className={styles.actions}>
-          <Button type="submit" loading={save.isPending}>
+          <Button type="submit" loading={save.isPending} onMouseDown={keepFieldFocus}>
             Lưu cài đặt
           </Button>
         </div>

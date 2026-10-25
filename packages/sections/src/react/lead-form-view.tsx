@@ -126,7 +126,7 @@ export function LeadFormView({
             inputMode="tel"
             name={names.phone}
             autoComplete="tel"
-            maxLength={20}
+            maxLength={24}
             required
             {...invalidProps(sectionId, 'phone', errors.phone)}
           />
@@ -240,6 +240,20 @@ export interface LeadFormSentProps {
 export function LeadFormSent({ content, headingRef }: LeadFormSentProps) {
   return (
     <div className={styles.sent} role="status">
+      <span className={styles.sentIcon} aria-hidden="true">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </span>
       <h2 ref={headingRef} tabIndex={-1} className={styles.heading}>
         {content.successTitle}
       </h2>

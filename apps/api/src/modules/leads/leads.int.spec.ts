@@ -92,7 +92,7 @@ describe('lead intake', () => {
       pageId: new Types.ObjectId(pageId),
       releaseId: new Types.ObjectId(releaseId),
       releaseVersion: 1,
-      fields: { name: 'Nguyễn Thu Hà', phone: '0901234567', email: null, message: null },
+      fields: { name: 'Nguyễn Thu Hà', phone: '+84901234567', email: null, message: null },
       consent: { marketing: false, marketingWithdrawnAt: null },
       source: { source: 'facebook', medium: 'cpc', campaign: 'uu-dai-t11' },
       device: 'mobile',
