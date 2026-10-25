@@ -10,6 +10,7 @@ import { siteQueryKeys } from '../dashboard/queries';
 import { finalizeSlug, normalizeSlugTyping } from '../seo/seo-presentation';
 import { pageHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { keepFieldFocus } from '../shell/use-schema-form';
 import { PageSlugField } from './PageSlugField';
 import { useSlugAvailability } from './use-slug-availability';
 import { suggestSlug } from './wizard-state';
@@ -149,7 +150,7 @@ function BlankPageForm({ site, host, onOpenChange }: Omit<BlankPageDialogProps, 
         >
           Hủy
         </Button>
-        <Button type="submit" loading={create.isPending}>
+        <Button type="submit" loading={create.isPending} onMouseDown={keepFieldFocus}>
           Tạo trang trống
         </Button>
       </div>

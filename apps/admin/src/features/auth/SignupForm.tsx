@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
+import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import styles from './AuthForm.module.css';
 
 type SignupField = keyof SignupRequest;
@@ -125,7 +125,12 @@ export function SignupForm({ next }: SignupFormProps) {
           {formError}
         </Callout>
       )}
-      <Button type="submit" fullWidth loading={signup.isPending || signup.isSuccess}>
+      <Button
+        type="submit"
+        fullWidth
+        loading={signup.isPending || signup.isSuccess}
+        onMouseDown={keepFieldFocus}
+      >
         Tạo tài khoản
       </Button>
     </form>

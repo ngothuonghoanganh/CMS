@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { rendererSignaturePayload } from '@plp/contracts';
+import { LEAD_PHONE_MESSAGE, rendererSignaturePayload } from '@plp/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, POST } from './route';
 
@@ -150,7 +150,7 @@ describe('POST /_lead from the page script', () => {
     expect(response.status).toBe(422);
     const body = (await response.json()) as { issues: { path: string[]; message: string }[] };
     expect(body.issues.map((issue) => [issue.path[0], issue.message])).toEqual([
-      ['phone', 'Số điện thoại cần 10 chữ số và bắt đầu bằng 0, ví dụ 0901 234 567.'],
+      ['phone', LEAD_PHONE_MESSAGE],
       ['consent', 'Bạn cần đồng ý để gửi đăng ký'],
     ]);
     expect(fetchMock).not.toHaveBeenCalled();

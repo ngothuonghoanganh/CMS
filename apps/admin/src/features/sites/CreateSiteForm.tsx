@@ -17,7 +17,7 @@ import { api, ApiError } from '../../lib/api';
 import { defaultHostPreview } from '../../lib/site-url';
 import { siteHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
+import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import { ThemePicker } from '../theme';
 import {
   type SubdomainAvailabilityState,
@@ -221,7 +221,11 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
             Hủy
           </ButtonLink>
         )}
-        <Button type="submit" loading={create.isPending || create.isSuccess}>
+        <Button
+          type="submit"
+          loading={create.isPending || create.isSuccess}
+          onMouseDown={keepFieldFocus}
+        >
           Tạo site
         </Button>
       </div>

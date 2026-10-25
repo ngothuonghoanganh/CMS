@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
+import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import styles from './AuthForm.module.css';
 
 const fieldIds = { email: 'login-email', password: 'login-password' } as const;
@@ -93,7 +93,12 @@ export function LoginForm({ next }: LoginFormProps) {
           {formError}
         </Callout>
       )}
-      <Button type="submit" fullWidth loading={login.isPending || login.isSuccess}>
+      <Button
+        type="submit"
+        fullWidth
+        loading={login.isPending || login.isSuccess}
+        onMouseDown={keepFieldFocus}
+      >
         Đăng nhập
       </Button>
     </form>

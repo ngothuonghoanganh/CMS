@@ -6,7 +6,7 @@ import {
   SUGGESTED_MARKETING_CONSENT_TEXT,
   SUGGESTED_REQUIRED_CONSENT_TEXT,
 } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -95,6 +95,12 @@ describe('PrivacyScreen', () => {
       },
     });
     expect(screen.getByText(/Trang có form đang live giữ nội dung đồng ý/)).toBeInTheDocument();
+  });
+
+  it('keeps focus in the field when the save button is pressed, so its check cannot move the button', () => {
+    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={empty} canEdit />);
+    // `fireEvent` returns false when the handler prevented the default (moving focus).
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Lưu cài đặt' }))).toBe(false);
   });
 
   it('checks the business name and the policy link before saving', async () => {
