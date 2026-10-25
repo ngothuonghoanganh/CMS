@@ -23,7 +23,14 @@ const apiMock = vi.mocked(api) as unknown as Mock<
 >;
 
 function initial(): EditorInitialData {
-  return { detail: pageDetail(), site, assets: [asset], pages: [], role: 'owner' };
+  return {
+    detail: pageDetail(),
+    site,
+    assets: [asset],
+    pages: [],
+    role: 'owner',
+    leadCapture: null,
+  };
 }
 
 function noPublishDialog() {

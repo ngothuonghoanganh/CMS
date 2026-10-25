@@ -9,6 +9,7 @@ import {
   mobileOrderSchema,
   type PageDetailResponse,
   type PageSummary,
+  type PublicLeadCapture,
   type Role,
   type SaveDraftResponse,
   type SectionInstance,
@@ -80,6 +81,8 @@ export interface EditorInit {
   site: Site;
   assets: readonly Asset[];
   role: Role;
+  /** Consent texts of the site's current settings, drawn in a lead form (ADR-017). */
+  leadCapture: PublicLeadCapture | null;
   /** Section id generator; defaults to 12 lowercase alphanumerics from `crypto.randomUUID()`. */
   newId?: () => string;
 }
@@ -107,6 +110,7 @@ export interface EditorState {
   site: Site;
   assetsById: Readonly<Record<string, Asset>>;
   role: Role;
+  leadCapture: PublicLeadCapture | null;
   /** Local counter of draft changes. Everything is saved when it equals `savedVersion`. */
   draftVersion: number;
   savedVersion: number;
@@ -326,6 +330,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
       site: init.site,
       assetsById: indexAssets(init.assets),
       role: init.role,
+      leadCapture: init.leadCapture,
       draftVersion: 0,
       savedVersion: 0,
       mergeKey: null,

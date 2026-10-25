@@ -8,6 +8,7 @@ import {
 import { makeStore } from './test-fixtures';
 
 const SEO_HREF = '/sites/s/pages/p/seo';
+const PRIVACY_HREF = '/sites/s/privacy';
 
 function panel(html: string): HTMLElement {
   const root = document.createElement('aside');
@@ -49,7 +50,7 @@ describe('focus target', () => {
     focusTarget(
       store,
       { kind: 'section', sectionId: 'hero00000001', fieldPath: 'heading' },
-      { navigate: vi.fn(), seoHref: SEO_HREF },
+      { navigate: vi.fn(), seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
     );
     expect(store.getState().selection).toEqual({
       sectionId: 'hero00000001',
@@ -64,9 +65,27 @@ describe('focus target', () => {
   it('opens the SEO settings for SEO and slug targets', () => {
     const navigate = vi.fn();
     const store = makeStore();
-    focusTarget(store, { kind: 'seo', field: 'description' }, { navigate, seoHref: SEO_HREF });
+    focusTarget(
+      store,
+      { kind: 'seo', field: 'description' },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+    );
     expect(navigate).toHaveBeenLastCalledWith(`${SEO_HREF}?focus=description`);
-    focusTarget(store, { kind: 'slug' }, { navigate, seoHref: SEO_HREF });
+    focusTarget(
+      store,
+      { kind: 'slug' },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+    );
     expect(navigate).toHaveBeenLastCalledWith(`${SEO_HREF}?focus=slug`);
+  });
+
+  it('opens "Dữ liệu & đồng ý" when a form misses its consent settings', () => {
+    const navigate = vi.fn();
+    focusTarget(
+      makeStore(),
+      { kind: 'privacy', sectionId: 'form00000001' },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+    );
+    expect(navigate).toHaveBeenCalledWith(PRIVACY_HREF);
   });
 });

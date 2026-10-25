@@ -1,4 +1,10 @@
-import type { ConsentVersion, RetentionMonths } from '@plp/contracts';
+import {
+  type ConsentVersion,
+  fillControllerName,
+  type PrivacySettings,
+  type PublicLeadCapture,
+  type RetentionMonths,
+} from '@plp/contracts';
 import { formatDate } from '../../lib/format';
 
 /** Choices of "Tự động xóa lead và bằng chứng đồng ý sau", in the order of board 12. */
@@ -40,3 +46,19 @@ export const LIVE_FORMS_KEEP_CONSENT =
 
 /** ADR-017: deleting a lead here cannot reach copies already sent out. */
 export const RETENTION_NOTE = 'Lead được xóa ở đây không tự xóa khỏi email thông báo đã gửi đi.';
+
+/**
+ * The consent texts a form shows with the current settings, as the canvas draws them; null until
+ * both the settings and a consent version exist. A live page shows its release's snapshot instead.
+ */
+export function leadCaptureViewOf(settings: PrivacySettings): PublicLeadCapture | null {
+  const { privacy, currentConsent } = settings;
+  if (privacy === null || currentConsent === null) {
+    return null;
+  }
+  return {
+    requiredText: fillControllerName(currentConsent.requiredText, privacy.controllerName),
+    marketingText: currentConsent.marketingText,
+    policyUrl: privacy.policyUrl,
+  };
+}

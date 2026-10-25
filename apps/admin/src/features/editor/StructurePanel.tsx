@@ -234,8 +234,12 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
   const errors = useMemo(() => {
     const bySection = new Map<string, string>();
     for (const item of blocking) {
-      if (item.target.kind === 'section' && !bySection.has(item.target.sectionId)) {
-        bySection.set(item.target.sectionId, item.title);
+      const target = item.target;
+      // A form missing its consent settings is pointed at through the settings (ADR-017).
+      const sectionId =
+        target.kind === 'section' || target.kind === 'privacy' ? target.sectionId : null;
+      if (sectionId !== null && !bySection.has(sectionId)) {
+        bySection.set(sectionId, item.title);
       }
     }
     return bySection;

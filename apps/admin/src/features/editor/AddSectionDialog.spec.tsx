@@ -71,10 +71,15 @@ describe('AddSectionDialog', () => {
     renderEditor(<AddSectionDialog open onOpenChange={vi.fn()} requestedIndex={2} />, {
       store: makeStore(),
     });
+    // A promotion page collects contacts with the form (ADR-016), not the band.
+    await user.click(categoryNav().getByRole('button', { name: /^Form & liên hệ/ }));
+    expect(
+      within(screen.getByRole('button', { name: /^Form đăng ký/ })).getByText('Hợp mục tiêu'),
+    ).toBeInTheDocument();
     await user.click(categoryNav().getByRole('button', { name: /^Kêu gọi hành động/ }));
     expect(
-      within(screen.getByRole('button', { name: /^Dải kêu gọi/ })).getByText('Hợp mục tiêu'),
-    ).toBeInTheDocument();
+      within(screen.getByRole('button', { name: /^Dải kêu gọi/ })).queryByText('Hợp mục tiêu'),
+    ).toBeNull();
   });
 
   it('inserts the chosen variant at the requested index and selects it', async () => {

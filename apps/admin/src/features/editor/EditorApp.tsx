@@ -7,6 +7,7 @@ import {
   endpoints,
   type PageDetailResponse,
   type PageSummary,
+  type PublicLeadCapture,
   type Role,
   type SaveDraftResponse,
   type Site,
@@ -16,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
+import { privacyHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ThemePickerDialog } from '../theme';
 import { AddSectionDialog } from './AddSectionDialog';
@@ -51,6 +53,8 @@ export interface EditorInitialData {
   pages: PageSummary[];
   /** The user's role in the site's workspace. */
   role: Role;
+  /** Consent texts of the site's current settings, for a lead form on the canvas (ADR-017). */
+  leadCapture: PublicLeadCapture | null;
 }
 
 /** Props handed to the publish dialog mounted into the editor. */
@@ -123,6 +127,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
   const [publishOpen, setPublishOpen] = useState(false);
   const [previewPending, setPreviewPending] = useState(false);
   const seoHref = `/sites/${siteId}/pages/${pageId}/seo`;
+  const privacy = privacyHref(siteId);
   const navigate = guard.navigate;
 
   const services = useMemo<EditorServices>(
@@ -135,11 +140,11 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
       },
       announce,
       focusTarget: (target) => {
-        focusTarget(store, target, { navigate, seoHref });
+        focusTarget(store, target, { navigate, seoHref, privacyHref: privacy });
       },
       navigate,
     }),
-    [siteId, pageId, pagesQuery.data, announce, store, navigate, seoHref],
+    [siteId, pageId, pagesQuery.data, announce, store, navigate, seoHref, privacy],
   );
 
   /**
@@ -274,6 +279,7 @@ export function EditorApp({ initial, renderPublishDialog }: EditorAppProps) {
       site: initial.site,
       assets: initial.assets,
       role: initial.role,
+      leadCapture: initial.leadCapture,
     }),
   );
   return (

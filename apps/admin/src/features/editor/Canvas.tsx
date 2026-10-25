@@ -58,6 +58,8 @@ export function Canvas() {
   const site = useEditor((state) => state.site);
   const assetsById = useEditor((state) => state.assetsById);
   const page = useEditor((state) => state.page);
+  // Current settings: the canvas shows what the next publish will freeze (ADR-017).
+  const leadCapture = useEditor((state) => state.leadCapture);
   const selectedId = useEditor((state) => state.selection.sectionId);
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLElement>(null);
@@ -97,8 +99,9 @@ export function Canvas() {
       images,
       pagePaths,
       onTextChange,
+      leadCapture,
     }),
-    [site.name, site.logoAssetId, images, pagePaths, onTextChange],
+    [site.name, site.logoAssetId, images, pagePaths, onTextChange, leadCapture],
   );
 
   const wrapSection = useCallback(
