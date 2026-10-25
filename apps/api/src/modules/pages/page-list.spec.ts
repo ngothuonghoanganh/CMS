@@ -29,7 +29,7 @@ function listed(
 }
 
 describe('page list helpers', () => {
-  it('counts every status', () => {
+  it('counts every status; "live" includes the live pages with changes', () => {
     const pages = [
       listed('live'),
       listed('live'),
@@ -39,11 +39,26 @@ describe('page list helpers', () => {
     ];
     expect(countPages(pages)).toEqual({
       all: 5,
-      live: 2,
+      live: 3,
       live_with_changes: 1,
       draft: 1,
       unpublished: 1,
     });
+  });
+
+  it('filters "live" on both live kinds and "live_with_changes" on changed pages only', () => {
+    const live = listed('live');
+    const changed = listed('live_with_changes');
+    const draft = listed('draft');
+    const unpublished = listed('unpublished');
+    const pages = [live, changed, draft, unpublished];
+    expect(filterPages(pages, { status: 'live' })).toEqual([live, changed]);
+    expect(filterPages(pages, { status: 'live_with_changes' })).toEqual([changed]);
+    expect(filterPages(pages, { status: 'unpublished' })).toEqual([unpublished]);
+    const counts = countPages(pages);
+    for (const status of ['live', 'live_with_changes', 'draft', 'unpublished'] as const) {
+      expect(counts[status]).toBe(filterPages(pages, { status }).length);
+    }
   });
 
   it('computes attention and the most recently updated page needing it', () => {

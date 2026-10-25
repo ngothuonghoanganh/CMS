@@ -16,9 +16,9 @@ function trimOrigin(origin: string): string {
   return origin.replace(/\/+$/, '');
 }
 
-/** Absolute URL of a page path on the site; the home page path is "" (or "/"). */
+/** Absolute URL of a sitemap path; the API sends it with a leading slash ("/", "/uu-dai"). */
 function pageUrl(origin: string, path: string): string {
-  return `${trimOrigin(origin)}/${path.replace(/^\/+/, '')}`;
+  return `${trimOrigin(origin)}${path}`;
 }
 
 /** XML sitemap (sitemaps.org 0.9) of the site's live, indexable pages. */

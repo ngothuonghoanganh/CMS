@@ -2,7 +2,7 @@
 
 import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { Callout, ConfirmDialog, useToast } from '@plp/ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
 import styles from './DraftNotice.module.css';
 import { useEditor, useEditorStoreApi } from './editor-context';
@@ -31,8 +31,12 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After a restore the action is gone (nothing left to discard); focus lands on the notice.
+  const noticeRef = useRef<HTMLDivElement>(null);
   const live = page.liveRelease;
-  const canRestore = page.status.kind === 'live_with_changes' && live !== null;
+  // A draft restored from live has a new revision but no changes (rule 2): nothing to discard.
+  const canRestore =
+    page.status.kind === 'live_with_changes' && page.status.changeCount > 0 && live !== null;
 
   async function restore() {
     if (!live) {
@@ -83,6 +87,8 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
   return (
     <>
       <Callout
+        ref={noticeRef}
+        tabIndex={-1}
         tone="warning"
         variant="banner"
         action={
@@ -109,6 +115,7 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
           title={`Quay về bản live v${live.version}?`}
           description={`Bản nháp sẽ được thay bằng nội dung của v${live.version} đang live. ${page.status.changeCount} thay đổi chưa xuất bản sẽ mất và không hoàn tác được.`}
           confirmLabel="Quay về bản live"
+          fallbackFocusRef={noticeRef}
           tone="danger"
           pending={pending}
           error={error}

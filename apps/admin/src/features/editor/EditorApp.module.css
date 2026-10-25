@@ -9,7 +9,8 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 272px minmax(0, 1fr) 320px;
+  /* As rendered on the editor board: its structure column grows to fit the row summaries. */
+  grid-template-columns: 336px minmax(0, 1fr) 320px;
 }
 
 .workspace > * {

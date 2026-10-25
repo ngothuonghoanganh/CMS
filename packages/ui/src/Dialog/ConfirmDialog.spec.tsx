@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { DropdownMenu, DropdownMenuItem } from '../DropdownMenu/DropdownMenu';
 import { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 
 type Overrides = Partial<Omit<ConfirmDialogProps, 'open' | 'onOpenChange'>>;
@@ -88,6 +89,103 @@ describe('ConfirmDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Hủy' }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
+  });
+
+  it('returns focus to the menu trigger when opened from a menu item', async () => {
+    const user = userEvent.setup();
+    function MenuHarness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <DropdownMenu
+            trigger={
+              <button type="button" aria-label="Tùy chọn khác cho Trang chủ">
+                …
+              </button>
+            }
+          >
+            <DropdownMenuItem
+              onSelect={() => {
+                setOpen(true);
+              }}
+            >
+              Gỡ xuất bản
+            </DropdownMenuItem>
+          </DropdownMenu>
+          <ConfirmDialog
+            open={open}
+            onOpenChange={setOpen}
+            title="Gỡ trang khỏi site?"
+            confirmLabel="Gỡ xuất bản"
+            reason={{}}
+            onConfirm={vi.fn()}
+          />
+        </>
+      );
+    }
+    render(<MenuHarness />);
+    const trigger = screen.getByRole('button', { name: 'Tùy chọn khác cho Trang chủ' });
+    for (const close of ['{Escape}', 'Hủy']) {
+      await user.click(trigger);
+      await user.click(await screen.findByRole('menuitem', { name: 'Gỡ xuất bản' }));
+      expect(await screen.findByRole('alertdialog', { name: 'Gỡ trang khỏi site?' })).toBeVisible();
+      expect(screen.getByRole('textbox')).toHaveFocus();
+      if (close === 'Hủy') {
+        await user.click(screen.getByRole('button', { name: 'Hủy' }));
+      } else {
+        await user.keyboard(close);
+      }
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(trigger).toHaveFocus();
+    }
+  });
+
+  it('falls back to a provided element when the confirmed action removed the opener', async () => {
+    const user = userEvent.setup();
+    function RefHarness() {
+      const [open, setOpen] = useState(false);
+      const [done, setDone] = useState(false);
+      const fallback = useRef<HTMLParagraphElement>(null);
+      return (
+        <>
+          <p ref={fallback} tabIndex={-1}>
+            Bản nháp
+          </p>
+          {done ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(true);
+              }}
+            >
+              Quay về bản live
+            </button>
+          )}
+          <ConfirmDialog
+            open={open}
+            onOpenChange={setOpen}
+            title="Quay về bản live?"
+            confirmLabel="Xác nhận"
+            fallbackFocusRef={fallback}
+            onConfirm={() => {
+              setDone(true);
+              setOpen(false);
+            }}
+          />
+        </>
+      );
+    }
+    render(<RefHarness />);
+    const opener = screen.getByRole('button', { name: 'Quay về bản live' });
+    await user.click(opener);
+    await user.keyboard('{Escape}');
+    // The opener still exists: focus goes back to it.
+    expect(opener).toHaveFocus();
+
+    await user.click(opener);
+    await user.click(screen.getByRole('button', { name: 'Xác nhận' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Bản nháp')).toHaveFocus();
   });
 
   it('starts with an empty reason every time it opens', async () => {

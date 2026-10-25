@@ -7,7 +7,7 @@ vi.mock('../../lib/public-api', () => ({ getSitemap: vi.fn() }));
 
 const SITEMAP = {
   origin: 'http://smilecare.localhost:3101',
-  entries: [{ path: '', lastModified: '2026-10-24T08:00:00.000Z' }],
+  entries: [{ path: '/', lastModified: '2026-10-24T08:00:00.000Z' }],
 };
 
 function request(path: string, host: string): Request {

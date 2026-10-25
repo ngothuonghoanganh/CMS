@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   Asset,
+  AssetListQuery,
   AssetListResponse,
-  CursorQuery,
   UpdateAssetRequest,
   UserRef,
 } from '@plp/contracts';
@@ -52,11 +52,28 @@ export class AssetsService {
     });
   }
 
+  /**
+   * The site's library newest first, or with `ids` only those assets of the site, in the requested
+   * order; ids of another site or workspace are left out.
+   */
   async listForSite(
     scope: WorkspaceScope,
     siteId: ObjectId,
-    query: CursorQuery,
+    query: AssetListQuery,
   ): Promise<AssetListResponse> {
+    if (query.ids !== undefined) {
+      const ids = [...new Set(query.ids)];
+      const found = await this.assets.findForSite(
+        scope,
+        siteId,
+        ids.map((id) => toObjectId(id, ASSET_NOT_FOUND)),
+      );
+      const records = ids.flatMap((id) => {
+        const record = found.get(id);
+        return record ? [record] : [];
+      });
+      return { items: await this.toDtos(records), nextCursor: null };
+    }
     const page = await this.assets.listForSite(scope, siteId, query.cursor, query.limit);
     return { items: await this.toDtos(page.items), nextCursor: page.nextCursor };
   }

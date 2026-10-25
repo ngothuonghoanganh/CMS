@@ -59,13 +59,17 @@ export interface CallOptions<E> {
   signal?: AbortSignal;
 }
 
-function toQueryString(query: unknown): string {
+/**
+ * Query string of the defined values. An empty string is a value: the home page slug is "", so
+ * `{ slug: '' }` must reach the API as `?slug=`. Leave a parameter out with `undefined`.
+ */
+export function toQueryString(query: unknown): string {
   if (query === undefined || query === null || typeof query !== 'object') {
     return '';
   }
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null) {
       params.set(key, String(value));
     }
   }

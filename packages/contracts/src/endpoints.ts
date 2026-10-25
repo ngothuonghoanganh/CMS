@@ -1,6 +1,11 @@
 import type { z } from 'zod';
 import { activityListResponseSchema } from './activity.js';
-import { assetListResponseSchema, assetSchema, updateAssetRequestSchema } from './asset.js';
+import {
+  assetListQuerySchema,
+  assetListResponseSchema,
+  assetSchema,
+  updateAssetRequestSchema,
+} from './asset.js';
 import { loginRequestSchema, meResponseSchema, signupRequestSchema } from './auth.js';
 import { checksResultSchema } from './checks.js';
 import { cursorQuerySchema } from './common.js';
@@ -18,6 +23,7 @@ import {
 } from './page.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
 import {
+  pathStatusResponseSchema,
   publicPreviewResponseSchema,
   resolveQuerySchema,
   resolveResponseSchema,
@@ -249,11 +255,12 @@ export const endpoints = {
   }),
 
   // Assets
+  /** Pages the library, or looks up specific assets with `ids` (see `assetListQuerySchema`). */
   listAssets: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/assets`,
     request: null,
-    query: cursorQuerySchema,
+    query: assetListQuerySchema,
     response: assetListResponseSchema,
   }),
   /** multipart/form-data: `file` plus the fields of `uploadAssetFieldsSchema`. */
@@ -279,6 +286,14 @@ export const endpoints = {
     request: null,
     query: resolveQuerySchema,
     response: resolveResponseSchema,
+  }),
+  /** 200 when a live page or a redirect answers at `path`, 404 otherwise; no page data. */
+  publicPathStatus: endpoint({
+    method: 'GET',
+    path: (subdomain: string) => `/public/sites/${e(subdomain)}/path-status`,
+    request: null,
+    query: resolveQuerySchema,
+    response: pathStatusResponseSchema,
   }),
   publicSitemap: endpoint({
     method: 'GET',

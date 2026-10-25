@@ -20,7 +20,7 @@ import {
 } from '@plp/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type CSSProperties, type ReactNode, useRef } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { DateInput } from '../../lib/format';
 import { slugPath } from '../../lib/site-url';
 import { cx } from '../shell/cx';
@@ -42,8 +42,8 @@ export interface PageTableProps {
   now: DateInput;
   /** Thumbnail color of published pages, from the site theme. */
   thumbnailColor: string;
-  /** Opens the unpublish dialog; `trigger` is the menu button, to focus again when it closes. */
-  onUnpublish: (page: UnpublishablePage, trigger: HTMLElement | null) => void;
+  /** Opens the unpublish dialog; focus returns to the row's menu button when it closes. */
+  onUnpublish: (page: UnpublishablePage) => void;
 }
 
 function RowActions({
@@ -56,7 +56,6 @@ function RowActions({
   onUnpublish: PageTableProps['onUnpublish'];
 }) {
   const router = useRouter();
-  const menuTrigger = useRef<HTMLButtonElement>(null);
   const live = unpublishable(page);
   const { liveUrl } = page;
   return (
@@ -67,7 +66,6 @@ function RowActions({
       <DropdownMenu
         trigger={
           <IconButton
-            ref={menuTrigger}
             aria-label={`Tùy chọn khác cho ${page.title}`}
             icon={<MoreHorizontalIcon size={18} />}
           />
@@ -106,7 +104,7 @@ function RowActions({
               tone="danger"
               icon={<EyeOffIcon size={18} />}
               onSelect={() => {
-                onUnpublish(live, menuTrigger.current);
+                onUnpublish(live);
               }}
             >
               Gỡ xuất bản

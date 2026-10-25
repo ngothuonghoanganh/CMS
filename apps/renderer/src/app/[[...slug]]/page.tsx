@@ -4,7 +4,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { SitePage } from '../../components/SitePage';
 import { pageMetadata } from '../../lib/metadata';
 import { getResolved } from '../../lib/public-api';
-import { currentSubdomain } from '../../lib/request-host';
+import { currentLiveRelease, currentSubdomain } from '../../lib/request-host';
 import { sameSiteLocation, slugFromSegments } from '../../lib/routing';
 
 /**
@@ -29,7 +29,7 @@ async function resolveRequest(params: PublicPageProps['params']): Promise<Resolu
   if (slug === null || subdomain === null) {
     return { kind: 'not_found' };
   }
-  const resolved = await getResolved(subdomain, slug);
+  const resolved = await getResolved(subdomain, slug, await currentLiveRelease());
   if (resolved === null) {
     return { kind: 'not_found' };
   }

@@ -29,6 +29,16 @@ describe('presentPageStatus', () => {
     });
   });
 
+  it('says the content equals live when a restored draft has no changes', () => {
+    const page = pageFixture({
+      status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+    });
+    expect(presentPageStatus(page, now)).toMatchObject({
+      badge: 'live_with_changes',
+      subtext: 'Nội dung giống bản live',
+    });
+  });
+
   it('says the live version was restored after a rollback, with who restored it and when', () => {
     const page = pageFixture({
       liveRelease: {
@@ -64,14 +74,26 @@ describe('presentPageStatus', () => {
     });
   });
 
-  it('keeps the change count for a live page with changes even after a rollback', () => {
+  it('says which version was restored after a rollback, while the draft is ahead (§2.1.8)', () => {
     const page = pageFixture({
       status: { kind: 'live_with_changes', changeCount: 1, changes: [] },
       lastPointerEvent: pointerEvent({ type: 'rolled_back', version: 11, by: minh }),
     });
     expect(presentPageStatus(page, now)).toMatchObject({
-      subtext: '1 thay đổi chưa xuất bản',
+      badge: 'live_with_changes',
+      subtext: 'Đã khôi phục về v11',
       authorLine: 'khôi phục bởi Minh',
+    });
+  });
+
+  it('counts the changes again once a rollback is undone', () => {
+    const page = pageFixture({
+      status: { kind: 'live_with_changes', changeCount: 2, changes: [] },
+      lastPointerEvent: pointerEvent({ type: 'rollback_undone', version: 12, by: minh }),
+    });
+    expect(presentPageStatus(page, now)).toMatchObject({
+      badge: 'live_with_changes',
+      subtext: '2 thay đổi chưa xuất bản',
     });
   });
 

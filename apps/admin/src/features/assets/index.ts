@@ -5,6 +5,7 @@ export {
   type AssetSelection,
   selectionOf,
 } from './AssetPickerDialog';
+export { loadAssetsByIds } from './load-assets-by-ids';
 export {
   ACCEPTED_IMAGE_TYPES,
   formatBytes,

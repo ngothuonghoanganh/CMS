@@ -1,5 +1,6 @@
 import type { PageStatusKind, PageSummary, PointerEvent } from '@plp/contracts';
 import { type DateInput, formatDayMonth, formatRelativeTime } from '../../lib/format';
+import { SAME_AS_LIVE } from '../editor/presentation';
 
 export type ChecksTone = 'danger' | 'warning' | 'success' | 'muted';
 
@@ -21,18 +22,26 @@ function isRestore(event: PointerEvent | null): boolean {
   return event?.type === 'rolled_back' || event?.type === 'rollback_undone';
 }
 
+function restoredLine(page: PageSummary): string {
+  const version = page.lastPointerEvent?.version ?? page.liveRelease?.version;
+  return version === undefined ? 'Đã khôi phục' : `Đã khôi phục về v${version}`;
+}
+
 function subtextOf(page: PageSummary): string {
   const event = page.lastPointerEvent;
   switch (page.status.kind) {
     case 'live_with_changes':
-      return `${page.status.changeCount} thay đổi chưa xuất bản`;
-    case 'live': {
-      if (isRestore(event)) {
-        const version = event?.version ?? page.liveRelease?.version;
-        return version === undefined ? 'Đã khôi phục' : `Đã khôi phục về v${version}`;
+      // A rollback leaves the draft ahead of the restored release, so the page is "Có thay đổi"
+      // (rule 2); the line says which version was restored (ARCHITECTURE §2.1.8).
+      if (event?.type === 'rolled_back') {
+        return restoredLine(page);
       }
-      return 'Bản nháp trùng bản live';
-    }
+      // After "Quay về bản live" the revision differs (rule 2) but nothing changed in content.
+      return page.status.changeCount === 0
+        ? SAME_AS_LIVE
+        : `${page.status.changeCount} thay đổi chưa xuất bản`;
+    case 'live':
+      return isRestore(event) ? restoredLine(page) : 'Bản nháp trùng bản live';
     case 'draft':
       return 'Chưa từng xuất bản';
     case 'unpublished':

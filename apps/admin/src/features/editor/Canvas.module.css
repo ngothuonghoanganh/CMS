@@ -110,6 +110,12 @@
   font-size: var(--text-body-sm);
 }
 
+/* The selected section's chip and toolbar sit over the top of the section; keep the
+   placeholder's text and button below them instead of underneath. */
+.selected .hidden {
+  padding-top: 64px;
+}
+
 .hiddenAction {
   min-height: 36px;
   padding: 0 12px;

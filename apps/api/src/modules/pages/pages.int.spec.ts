@@ -342,9 +342,10 @@ describe('pages and drafts', () => {
         'Bảng giá',
         'Bản nháp trống',
       ]);
+      // "Live" counts every page that is currently live, including the one with changes.
       expect(all.counts).toEqual({
         all: 3,
-        live: 1,
+        live: 2,
         live_with_changes: 1,
         draft: 1,
         unpublished: 0,
@@ -368,6 +369,10 @@ describe('pages and drafts', () => {
       const filtered = await listPages(client, listSite.id, '?status=live_with_changes');
       expect(filtered.items.map((item) => item.id)).toEqual([changed.pageId]);
       expect(filtered.counts.all).toBe(3);
+      const allLive = await listPages(client, listSite.id, '?status=live');
+      expect(allLive.items.map((item) => item.id)).toEqual([changed.pageId, live.pageId]);
+      const drafts = await listPages(client, listSite.id, '?status=draft');
+      expect(drafts.items.map((item) => item.id)).toEqual([draft.page.id]);
       const searched = await listPages(client, listSite.id, `?q=${encodeURIComponent('BẢNG')}`);
       expect(searched.items.map((item) => item.id)).toEqual([live.pageId]);
       const bySlug = await listPages(client, listSite.id, '?q=khai-tr');

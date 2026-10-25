@@ -266,7 +266,9 @@ export class PublishingService {
 
   /**
    * Undo of a rollback: moves the pointer back to the release live before it, while that rollback
-   * is still the page's latest pointer event (ADR-006).
+   * is still the page's latest pointer event (ADR-006). The check runs again inside the
+   * transaction, so a publish or rollback committed in between makes the undo fail with
+   * `undo_not_available`, even when the pointer is back on the rollback's target.
    */
   async undo(user: AuthenticatedUser, activityId: string): Promise<PointerMoveResponse> {
     const id = toObjectId(activityId, ACTIVITY_NOT_FOUND);
@@ -297,8 +299,12 @@ export class PublishingService {
     ]);
     const reason =
       rollback.reason === null ? 'Hoàn tác khôi phục' : `Hoàn tác khôi phục: ${rollback.reason}`;
-    const undoId = await this.pointer.transaction(scope, site._id, (tx) =>
-      this.pointer.movePointer(
+    const undoId = await this.pointer.transaction(scope, site._id, async (tx) => {
+      const latestInTx = await this.activity.latestPointerEvents(scope, [pageId], tx);
+      if (!isUndoable(rollback, latestInTx.get(pageId.toHexString()))) {
+        throw undoNotAvailable();
+      }
+      return this.pointer.movePointer(
         {
           scope,
           page,
@@ -309,8 +315,8 @@ export class PublishingService {
           onConflict: undoNotAvailable,
         },
         tx,
-      ),
-    );
+      );
+    });
     return this.pointerMoved(scope, site, page._id, undoId);
   }
 

@@ -1,6 +1,4 @@
 import {
-  type Asset,
-  type AssetListResponse,
   type Composition,
   imageRefSchema,
   MAX_PAGES_PER_SITE,
@@ -11,12 +9,10 @@ import {
 } from '@plp/contracts';
 import { collectLeaves } from '@plp/sections/schema';
 
-/** Page size of the page and asset lists (the API maximum). */
+/** Page size of the page list (the API maximum). */
 export const LIST_LIMIT = 50;
 /** A site has at most 200 pages, so the page list never needs more than four requests. */
 const MAX_PAGE_REQUESTS = Math.ceil(MAX_PAGES_PER_SITE / LIST_LIMIT);
-/** Upper bound when looking for the assets a draft uses in the newest-first library. */
-const MAX_ASSET_REQUESTS = 6;
 
 /** Every page of the site, for the page-link pickers (bounded by MAX_PAGES_PER_SITE). */
 export async function loadAllPages(
@@ -55,29 +51,4 @@ export function referencedAssetIds(composition: Composition, seo: Seo, site: Sit
     }
   }
   return ids;
-}
-
-/**
- * The first page of the asset library, plus further pages while an asset used by the draft is
- * still missing (bounded). There is no "get assets by ids" endpoint in MVP A.
- */
-export async function loadEditorAssets(
-  needed: ReadonlySet<string>,
-  fetchPage: (cursor: string | null) => Promise<AssetListResponse>,
-): Promise<Asset[]> {
-  const assets: Asset[] = [];
-  const missing = new Set(needed);
-  let cursor: string | null = null;
-  for (let request = 0; request < MAX_ASSET_REQUESTS; request += 1) {
-    const response = await fetchPage(cursor);
-    for (const asset of response.items) {
-      assets.push(asset);
-      missing.delete(asset.id);
-    }
-    if (missing.size === 0 || response.nextCursor === null) {
-      break;
-    }
-    cursor = response.nextCursor;
-  }
-  return assets;
 }

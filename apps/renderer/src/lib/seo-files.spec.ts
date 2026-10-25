@@ -4,11 +4,11 @@ import { robotsTxt, sitemapXml } from './seo-files';
 describe('sitemapXml', () => {
   it('lists every entry with an absolute location and lastmod', () => {
     const xml = sitemapXml({
-      origin: 'https://smilecare.payload.site',
+      origin: 'https://smilecare.payload.site/',
       entries: [
-        { path: '', lastModified: '2026-10-20T08:00:00.000Z' },
+        { path: '/', lastModified: '2026-10-20T08:00:00.000Z' },
         { path: '/uu-dai', lastModified: '2026-10-24T09:30:00.000Z' },
-        { path: 'nieng-rang', lastModified: '2026-10-22T10:00:00.000Z' },
+        { path: '/nieng-rang', lastModified: '2026-10-22T10:00:00.000Z' },
       ],
     });
     expect(xml).toBe(
@@ -35,7 +35,7 @@ describe('sitemapXml', () => {
   it('escapes XML special characters', () => {
     const xml = sitemapXml({
       origin: 'https://a.payload.site',
-      entries: [{ path: 'x&y<z>', lastModified: '2026-10-24T09:30:00.000Z' }],
+      entries: [{ path: '/x&y<z>', lastModified: '2026-10-24T09:30:00.000Z' }],
     });
     expect(xml).toContain('<loc>https://a.payload.site/x&amp;y&lt;z&gt;</loc>');
   });

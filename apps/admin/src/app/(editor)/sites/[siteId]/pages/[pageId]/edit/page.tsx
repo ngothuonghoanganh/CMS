@@ -2,12 +2,8 @@ import { endpoints } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
-import {
-  LIST_LIMIT,
-  loadAllPages,
-  loadEditorAssets,
-  referencedAssetIds,
-} from '../../../../../../../features/editor';
+import { loadAssetsByIds } from '../../../../../../../features/assets';
+import { LIST_LIMIT, loadAllPages, referencedAssetIds } from '../../../../../../../features/editor';
 import { EditorWithPublish } from '../../../../../../../features/publish/EditorWithPublish';
 import { ApiError } from '../../../../../../../lib/api-core';
 import { requireMe, serverApi } from '../../../../../../../lib/server-api';
@@ -60,12 +56,9 @@ export default async function EditPage({ params }: EditPageProps) {
   if (!membership) {
     notFound();
   }
-  const assets = await loadEditorAssets(
+  const assets = await loadAssetsByIds(
     referencedAssetIds(detail.draft.composition, detail.draft.seo, site),
-    (cursor) =>
-      serverApi(endpoints.listAssets, [siteId], {
-        query: { limit: LIST_LIMIT, ...(cursor === null ? {} : { cursor }) },
-      }),
+    (ids) => serverApi(endpoints.listAssets, [siteId], { query: { ids } }),
   );
 
   return <EditorWithPublish initial={{ detail, site, assets, pages, role: membership.role }} />;

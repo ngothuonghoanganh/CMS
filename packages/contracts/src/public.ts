@@ -57,6 +57,18 @@ export const resolveResponseSchema = z.discriminatedUnion('kind', [
 ]);
 export type ResolveResponse = z.infer<typeof resolveResponseSchema>;
 
+/**
+ * What answers at a path, without any page data. The renderer's proxy asks this before rendering
+ * so a miss is served as the server-rendered not-found page with status 404 (ADR-009). A live page
+ * names its live release, which the renderer adds to the page's cache key: when the pointer
+ * moves, the next request cannot be served the previous release.
+ */
+export const pathStatusResponseSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('page'), releaseId: idSchema }),
+  z.object({ kind: z.literal('redirect') }),
+]);
+export type PathStatusResponse = z.infer<typeof pathStatusResponseSchema>;
+
 export const publicPreviewResponseSchema = z.object({
   data: publicPageDataSchema,
   preview: z.object({
@@ -69,7 +81,11 @@ export type PublicPreviewResponse = z.infer<typeof publicPreviewResponseSchema>;
 
 export const sitemapResponseSchema = z.object({
   origin: z.url(),
-  entries: z.array(z.object({ path: z.string(), lastModified: isoDateTimeSchema })),
+  /**
+   * Live, indexable pages. `path` is absolute with a leading slash: "/" for the home page,
+   * "/uu-dai" otherwise, so a URL is `${origin}${path}`.
+   */
+  entries: z.array(z.object({ path: z.string().startsWith('/'), lastModified: isoDateTimeSchema })),
 });
 export type SitemapResponse = z.infer<typeof sitemapResponseSchema>;
 

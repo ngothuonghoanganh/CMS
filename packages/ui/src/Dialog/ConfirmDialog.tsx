@@ -26,6 +26,12 @@ export interface ConfirmDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Element that opens the dialog; it receives focus again on close. */
   trigger?: ReactElement | undefined;
+  /**
+   * Element to focus when the dialog closes and the element that opened it no longer exists, e.g.
+   * the confirmed action removed it. Focus otherwise returns to the opener (for a menu item, to
+   * its menu's trigger).
+   */
+  fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
   title: ReactNode;
   description?: ReactNode;
   /** Extra explanation under the description, e.g. what stays unchanged. */
@@ -134,8 +140,17 @@ function ConfirmBody({ props, reasonRef }: ConfirmBodyProps) {
  * required, otherwise on "Hủy".
  */
 export function ConfirmDialog(props: ConfirmDialogProps) {
-  const { open, onOpenChange, trigger, title, description, reason, pending = false } = props;
-  const focus = useReturnFocus();
+  const {
+    open,
+    onOpenChange,
+    trigger,
+    fallbackFocusRef,
+    title,
+    description,
+    reason,
+    pending = false,
+  } = props;
+  const focus = useReturnFocus(fallbackFocusRef);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const hasDescription = hasContent(description);
   return (

@@ -119,11 +119,13 @@ export class ActivityRepository {
 
   /**
    * The newest pointer event (`POINTER_EVENT_TYPES`) of each page, keyed by page id hex, in one
-   * aggregation. Pages without any pointer event are absent from the map.
+   * aggregation. Pages without any pointer event are absent from the map. Pass `tx` to read
+   * inside a transaction (e.g. the undo re-check right before it moves the pointer).
    */
   async latestPointerEvents(
     scope: WorkspaceScope,
     pageIds: readonly ObjectId[],
+    tx?: Tx,
   ): Promise<Map<string, ActivityRecord>> {
     const unique = [...new Map(pageIds.map((id) => [id.toHexString(), id])).values()];
     if (unique.length === 0) {
@@ -141,6 +143,7 @@ export class ActivityRepository {
         { $sort: { pageId: 1, createdAt: -1, _id: -1 } },
         { $group: { _id: '$pageId', latest: { $first: '$$ROOT' } } },
       ])
+      .session(tx ?? null)
       .exec();
     return new Map(groups.map((group) => [group._id.toHexString(), group.latest]));
   }

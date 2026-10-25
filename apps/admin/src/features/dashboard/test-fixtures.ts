@@ -96,7 +96,8 @@ export function pageListFixture(
     nextCursor: null,
     counts: {
       all: items.length,
-      live: count('live'),
+      // As the API counts: "Live" includes the live pages with changes.
+      live: count('live') + count('live_with_changes'),
       live_with_changes: count('live_with_changes'),
       draft: count('draft'),
       unpublished: count('unpublished'),

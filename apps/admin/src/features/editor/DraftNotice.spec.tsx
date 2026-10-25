@@ -62,8 +62,10 @@ describe('DraftNotice', () => {
     const ensureSaved = vi.fn(() =>
       Promise.resolve({ ...currentSaveResponse(store.getState()), revision: 4 }),
     );
+    // The API keeps rule 2: the restored draft has a new revision, so it is "live with changes"
+    // without any change.
     const restored: PageDetailResponse = pageDetail(sampleComposition(), {
-      status: { kind: 'live', changeCount: 0, changes: [] },
+      status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
       liveRelease,
     });
     restored.draft.revision = 5;
@@ -82,6 +84,24 @@ describe('DraftNotice', () => {
     });
     expect(store.getState().draft.composition.sections).toHaveLength(5);
     expect(store.getState().history.past).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Hủy thay đổi, quay về bản live' })).toBeNull();
+    // The action that opened the dialog is gone; focus stays on the notice, not on <body>.
+    await waitFor(() => {
+      expect(document.querySelector('[data-tone="warning"][tabindex="-1"]')).toHaveFocus();
+    });
+  });
+
+  it('offers no restore when the draft content already equals the live release', () => {
+    const store = makeStore({
+      detail: pageDetail(sampleComposition(), {
+        status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+        liveRelease,
+        latestVersion: 12,
+        liveUrl: 'https://go.smilecare.vn/uu-dai-thang-11',
+      }),
+    });
+    renderEditor(<DraftNotice ensureSaved={vi.fn()} />, { store });
+    expect(screen.getByText(/Bạn đang sửa/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Hủy thay đổi, quay về bản live' })).toBeNull();
   });
 

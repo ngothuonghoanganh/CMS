@@ -237,7 +237,8 @@
 
 .aside {
   display: flex;
-  flex: 2 1 340px;
+  /* The board's 340 px content box plus padding and border, so the goals keep two columns. */
+  flex: 2 1 386px;
   flex-direction: column;
   gap: 16px;
   min-width: 0;

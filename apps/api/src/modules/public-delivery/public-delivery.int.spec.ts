@@ -1,4 +1,5 @@
 import {
+  pathStatusResponseSchema,
   PREVIEW_TTL_SECONDS,
   previewLinkResponseSchema,
   problemSchema,
@@ -191,9 +192,63 @@ describe('public delivery and previews', () => {
     });
   });
 
+  describe('GET /public/sites/:subdomain/path-status', () => {
+    function pathStatus(subdomain: string, path: string) {
+      return visitor.get(`/public/sites/${subdomain}/path-status?path=${encodeURIComponent(path)}`);
+    }
+
+    it('says what answers at a path, like resolve, without page data', async () => {
+      const statusSite = await createSite(client, workspaceId);
+      const oldSlug = uniqueSlug('cu');
+      const newSlug = uniqueSlug('moi');
+      const { pageId } = await createLivePage(client, statusSite.id, oldSlug);
+      await replaceDraft(client, pageId, publishableDraft(newSlug));
+      const second = await publish(client, pageId);
+      const draftOnly = await createPage(client, statusSite.id);
+      await replaceDraft(client, draftOnly.page.id, publishableDraft(draftOnly.page.slug));
+
+      const live = await pathStatus(statusSite.subdomain, `/${newSlug}/`).expect(200);
+      expect(pathStatusResponseSchema.parse(live.body)).toEqual({
+        kind: 'page',
+        releaseId: second.release.id,
+      });
+      expect(live.body).toEqual({ kind: 'page', releaseId: second.release.id });
+      const moved = await pathStatus(statusSite.subdomain, oldSlug).expect(200);
+      expect(pathStatusResponseSchema.parse(moved.body)).toEqual({ kind: 'redirect' });
+
+      const draft = await pathStatus(statusSite.subdomain, draftOnly.page.slug).expect(404);
+      expect(problemSchema.parse(draft.body).code).toBe('not_found');
+      await pathStatus(statusSite.subdomain, 'khong-co').expect(404);
+      await pathStatus('khong-co-site-nay', '').expect(404);
+    });
+
+    it('names the live release, which follows every pointer move', async () => {
+      const statusSite = await createSite(client, workspaceId);
+      const slug = uniqueSlug('uu-dai');
+      const { pageId, published: first } = await createLivePage(client, statusSite.id, slug);
+      await editHeroHeading(client, pageId, 'Bản 2');
+      const second = await publish(client, pageId);
+      const releaseAt = async () =>
+        pathStatusResponseSchema.parse(
+          (await pathStatus(statusSite.subdomain, slug).expect(200)).body,
+        );
+      expect(await releaseAt()).toEqual({ kind: 'page', releaseId: second.release.id });
+
+      await client
+        .post(`/pages/${pageId}/pointer`, {
+          targetReleaseId: first.release.id,
+          expectedCurrentReleaseId: second.release.id,
+          reason: 'Bản 2 sai giá',
+        })
+        .expect(200);
+      expect(await releaseAt()).toEqual({ kind: 'page', releaseId: first.release.id });
+    });
+  });
+
   describe('GET /public/sites/:subdomain/sitemap', () => {
     it('lists live pages that may be indexed, with the release time', async () => {
       const mapSite = await createSite(client, workspaceId);
+      const home = await createLivePage(client, mapSite.id, '');
       const indexed = await createLivePage(client, mapSite.id, uniqueSlug('co-index'));
       const hidden = await createLivePage(client, mapSite.id, uniqueSlug('noindex'));
       const detail = await getPage(client, hidden.pageId);
@@ -209,7 +264,9 @@ describe('public delivery and previews', () => {
       const response = await visitor.get(`/public/sites/${mapSite.subdomain}/sitemap`).expect(200);
       expect(sitemapResponseSchema.parse(response.body)).toEqual({
         origin: mapSite.defaultOrigin,
+        // Paths start with a slash; the home page is "/".
         entries: [
+          { path: '/', lastModified: home.published.release.createdAt },
           {
             path: `/${indexed.published.release.slug}`,
             lastModified: indexed.published.release.createdAt,

@@ -1,6 +1,6 @@
 import { type Asset, endpoints, type Site } from '@plp/contracts';
 import type { Metadata } from 'next';
-import { LIST_LIMIT, loadEditorAssets } from '../../../../../features/editor';
+import { loadAssetsByIds } from '../../../../../features/assets';
 import { PageContainer, PageHeader } from '../../../../../features/shell/PageHeader';
 import { loadSiteContext } from '../../../../../features/shell/site-context';
 import { SiteSettingsForm } from '../../../../../features/site-settings/SiteSettingsForm';
@@ -10,23 +10,14 @@ interface SettingsPageProps {
   params: Promise<{ siteId: string }>;
 }
 
-/** The logo and the default share image (bounded scan of the newest-first library). */
-async function loadSiteImages(site: Site): Promise<Asset[]> {
-  const ids = new Set<string>();
-  for (const id of [site.logoAssetId, site.defaultShareImageAssetId]) {
-    if (id !== null) {
-      ids.add(id);
-    }
-  }
-  if (ids.size === 0) {
-    return [];
-  }
-  const assets = await loadEditorAssets(ids, (cursor) =>
-    serverApi(endpoints.listAssets, [site.id], {
-      query: { limit: LIST_LIMIT, ...(cursor === null ? {} : { cursor }) },
-    }),
+/** The logo and the default share image, looked up by id. */
+function loadSiteImages(site: Site): Promise<Asset[]> {
+  const ids = [site.logoAssetId, site.defaultShareImageAssetId].filter(
+    (id): id is string => id !== null,
   );
-  return assets.filter((asset) => ids.has(asset.id));
+  return loadAssetsByIds(ids, (lookup) =>
+    serverApi(endpoints.listAssets, [site.id], { query: { ids: lookup } }),
+  );
 }
 
 export async function generateMetadata({ params }: SettingsPageProps): Promise<Metadata> {

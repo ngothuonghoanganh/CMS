@@ -24,7 +24,7 @@ import {
 } from '@plp/ui';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { newPageHref, siteHref } from '../shell/navigation';
@@ -84,26 +84,6 @@ export function Dashboard({
 
   const [unpublishTarget, setUnpublishTarget] = useState<UnpublishablePage | null>(null);
   const [unpublishOpen, setUnpublishOpen] = useState(false);
-  // The dialog opens from a menu item that no longer exists when it closes, so focus goes back
-  // to the row's menu button instead.
-  const unpublishReturnFocus = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const target = unpublishReturnFocus.current;
-    if (unpublishOpen || target === null) {
-      return;
-    }
-    // Runs after the dialog's own focus handling on close.
-    const timer = setTimeout(() => {
-      unpublishReturnFocus.current = null;
-      if (target.isConnected) {
-        target.focus();
-      }
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [unpublishOpen]);
 
   // The URL mirrors the filters so a reload or a shared link keeps them. Replacing the entry
   // (rather than navigating) keeps the server from rendering the page again.
@@ -148,7 +128,8 @@ export function Dashboard({
   const pages = lists.flatMap((list) => list.items);
   const { counts } = summary;
   const loadingPages = pagesQuery.isPlaceholderData || pagesQuery.data === undefined;
-  const anyReleased = counts.live + counts.live_with_changes + counts.unpublished > 0;
+  // `counts.live` already includes the live pages with changes.
+  const anyReleased = counts.live + counts.unpublished > 0;
   const thumbnailColor = themePresets[site.themePresetId].schemes.brand.background;
 
   const setupSteps: SetupStep[] = [
@@ -288,8 +269,7 @@ export function Dashboard({
               pages={pages}
               now={now}
               thumbnailColor={thumbnailColor}
-              onUnpublish={(page, trigger) => {
-                unpublishReturnFocus.current = trigger;
+              onUnpublish={(page) => {
                 setUnpublishTarget(page);
                 setUnpublishOpen(true);
               }}

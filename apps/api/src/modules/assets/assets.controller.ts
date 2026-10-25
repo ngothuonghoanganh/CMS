@@ -11,9 +11,9 @@ import {
 } from '@nestjs/common';
 import {
   type Asset,
+  type AssetListQuery,
+  assetListQuerySchema,
   type AssetListResponse,
-  type CursorQuery,
-  cursorQuerySchema,
   type UpdateAssetRequest,
   updateAssetRequestSchema,
   uploadAssetFieldsSchema,
@@ -42,7 +42,7 @@ export class AssetsController {
   async listForSite(
     @CurrentUser() user: AuthenticatedUser,
     @Param('siteId') siteId: string,
-    @Query(new ZodPipe(cursorQuerySchema)) query: CursorQuery,
+    @Query(new ZodPipe(assetListQuerySchema)) query: AssetListQuery,
   ): Promise<AssetListResponse> {
     const { scope, site } = await this.sites.access(user, siteId);
     return this.assets.listForSite(scope, site._id, query);

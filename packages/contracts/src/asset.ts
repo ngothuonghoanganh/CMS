@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
+import { cursorQuerySchema, idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 
 export const assetMimeTypes = [
   'image/jpeg',
@@ -45,6 +45,29 @@ export const assetListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 export type AssetListResponse = z.infer<typeof assetListResponseSchema>;
+
+/** Most asset ids one `ids` lookup accepts. */
+export const MAX_ASSET_IDS_PER_LOOKUP = 50;
+
+/**
+ * Asset library query. Without `ids` it pages the library newest first. With `ids`
+ * (comma-separated, at most 50 valid asset ids) it returns only those assets of the site, in the
+ * requested order without duplicates, ignores `cursor`/`limit` and answers `nextCursor: null`.
+ * Ids of another site or workspace are simply absent from the result.
+ */
+export const assetListQuerySchema = cursorQuerySchema.extend({
+  ids: z
+    .string()
+    .transform((value) => value.split(','))
+    // Splitting always yields at least one item; an empty value fails as an invalid id.
+    .pipe(
+      z
+        .array(idSchema)
+        .max(MAX_ASSET_IDS_PER_LOOKUP, `Tra cứu tối đa ${MAX_ASSET_IDS_PER_LOOKUP} ảnh mỗi lần`),
+    )
+    .optional(),
+});
+export type AssetListQuery = z.infer<typeof assetListQuerySchema>;
 
 /** Text fields of the multipart upload (`file` is the binary part). */
 export const uploadAssetFieldsSchema = z

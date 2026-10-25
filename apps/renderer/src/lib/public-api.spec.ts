@@ -7,6 +7,7 @@ vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 
 const SITE_ID = 'a'.repeat(24);
 const PAGE_ID = 'b'.repeat(24);
+const RELEASE_ID = 'c'.repeat(24);
 
 const pageData: PublicPageData = {
   site: {
@@ -58,10 +59,11 @@ describe('getResolved', () => {
   it('tags the entry with the site tag and a 5-minute safety lifetime', async () => {
     const resolved: ResolveResponse = { kind: 'page', data: pageData };
     const fetchMock = stubFetch(200, resolved);
-    await expect(getResolved('smilecare', '')).resolves.toEqual(resolved);
+    await expect(getResolved('smilecare', '', RELEASE_ID)).resolves.toEqual(resolved);
     expect(cacheTag).toHaveBeenCalledWith('site:smilecare');
     expect(cacheLife).toHaveBeenCalledWith(SITE_CACHE_LIFE);
     expect(SITE_CACHE_LIFE.revalidate).toBe(300);
+    // The live release only keys the cache entry; the API resolves by site and path alone.
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'http://api.test/public/sites/smilecare/resolve?path=',
     );
@@ -69,7 +71,7 @@ describe('getResolved', () => {
 
   it('passes the slug as the path query', async () => {
     const fetchMock = stubFetch(200, { kind: 'redirect', location: '/moi' });
-    await expect(getResolved('smilecare', 'cu')).resolves.toEqual({
+    await expect(getResolved('smilecare', 'cu', '')).resolves.toEqual({
       kind: 'redirect',
       location: '/moi',
     });
@@ -80,13 +82,13 @@ describe('getResolved', () => {
 
   it('returns a tagged null for a 404 so the miss is cached and revalidated with the site', async () => {
     stubFetch(404, { code: 'not_found' });
-    await expect(getResolved('smilecare', 'chua-co')).resolves.toBeNull();
+    await expect(getResolved('smilecare', 'chua-co', '')).resolves.toBeNull();
     expect(cacheTag).toHaveBeenCalledWith('site:smilecare');
   });
 
   it('throws on other API errors instead of caching them', async () => {
     stubFetch(503, { code: 'internal' });
-    await expect(getResolved('smilecare', '')).rejects.toThrow('HTTP 503');
+    await expect(getResolved('smilecare', '', RELEASE_ID)).rejects.toThrow('HTTP 503');
   });
 });
 
@@ -94,7 +96,7 @@ describe('getSitemap', () => {
   it('is tagged by site and returns null for an unknown site', async () => {
     const sitemap: SitemapResponse = {
       origin: 'http://smilecare.localhost:3101',
-      entries: [{ path: '', lastModified: '2026-10-24T08:00:00.000Z' }],
+      entries: [{ path: '/', lastModified: '2026-10-24T08:00:00.000Z' }],
     };
     const fetchMock = stubFetch(200, sitemap);
     await expect(getSitemap('smilecare')).resolves.toEqual(sitemap);

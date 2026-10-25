@@ -1,6 +1,6 @@
 import { endpoints, type PageDetailResponse, seoFieldSchema, type Site } from '@plp/contracts';
 import type { Metadata } from 'next';
-import { LIST_LIMIT, loadEditorAssets } from '../../../../../../../features/editor';
+import { loadAssetsByIds } from '../../../../../../../features/assets';
 import { loadPageDetail } from '../../../../../../../features/page-header/load-page-detail';
 import type { SeoFocus } from '../../../../../../../features/seo/SeoForm';
 import { SeoScreen } from '../../../../../../../features/seo/SeoScreen';
@@ -20,23 +20,15 @@ function focusOf(value: string | string[] | undefined): SeoFocus | null {
   return field.success ? field.data : null;
 }
 
-/** The share images the page shows: its own and the site default (bounded library scan). */
+/** The share images the page shows: its own and the site default, looked up by id. */
 async function loadShareImages(site: Site, detail: PageDetailResponse) {
-  const ids = new Set<string>();
-  for (const id of [detail.draft.seo.shareImageAssetId, site.defaultShareImageAssetId]) {
-    if (id !== null) {
-      ids.add(id);
-    }
-  }
-  const assets =
-    ids.size === 0
-      ? []
-      : await loadEditorAssets(ids, (cursor) =>
-          serverApi(endpoints.listAssets, [site.id], {
-            query: { limit: LIST_LIMIT, ...(cursor === null ? {} : { cursor }) },
-          }),
-        );
-  return { assets: assets.filter((asset) => ids.has(asset.id)), loadedAt: Date.now() };
+  const ids = [detail.draft.seo.shareImageAssetId, site.defaultShareImageAssetId].filter(
+    (id): id is string => id !== null,
+  );
+  const assets = await loadAssetsByIds(ids, (lookup) =>
+    serverApi(endpoints.listAssets, [site.id], { query: { ids: lookup } }),
+  );
+  return { assets, loadedAt: Date.now() };
 }
 
 export async function generateMetadata({ params }: SeoPageProps): Promise<Metadata> {

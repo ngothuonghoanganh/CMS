@@ -7,7 +7,6 @@ import {
   livePathOf,
   lowerFirst,
   publishButtonLabel,
-  relativeTime,
   saveStatusView,
 } from './presentation';
 import { emptyChecks, pageSummary, RELEASE_ID } from './test-fixtures';
@@ -32,11 +31,14 @@ function item(severity: 'blocking' | 'warning') {
 }
 
 describe('editor presentation', () => {
-  it('formats relative save times', () => {
-    expect(relativeTime('2026-10-24T09:59:30.000Z', NOW)).toBe('vừa xong');
-    expect(relativeTime('2026-10-24T09:55:00.000Z', NOW)).toBe('5 phút trước');
-    expect(relativeTime('2026-10-24T07:00:00.000Z', NOW)).toBe('3 giờ trước');
-    expect(relativeTime('2026-10-20T07:00:00.000Z', NOW)).toMatch(/^\d{2}\/10\/2026$/);
+  it('formats relative save times with the shared admin formatter', () => {
+    const at = (iso: string) => saveStatusView('saved', iso, null, NOW).text;
+    expect(at('2026-10-24T09:59:30.000Z')).toBe('Đã lưu bản nháp · vừa xong');
+    expect(at('2026-10-24T09:55:00.000Z')).toBe('Đã lưu bản nháp · 5 phút trước');
+    expect(at('2026-10-24T07:00:00.000Z')).toBe('Đã lưu bản nháp · 3 giờ trước');
+    // NOW is 17:00 in Asia/Ho_Chi_Minh; the day before reads like the dashboard.
+    expect(at('2026-10-23T09:20:00.000Z')).toBe('Đã lưu bản nháp · hôm qua, 16:20');
+    expect(at('2026-10-20T07:00:00.000Z')).toBe('Đã lưu bản nháp · 20/10');
   });
 
   it('describes every save state', () => {
@@ -70,6 +72,16 @@ describe('editor presentation', () => {
         }),
       ),
     ).toEqual({ kind: 'live_with_changes', text: 'Live v12 · 4 thay đổi chưa xuất bản' });
+    // "Quay về bản live" leaves a new revision with the live content: no "0 thay đổi".
+    expect(
+      liveStatusView(
+        pageSummary({
+          status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+          liveRelease,
+          latestVersion: 12,
+        }),
+      ),
+    ).toEqual({ kind: 'live_with_changes', text: 'Live v12 · Nội dung giống bản live' });
     expect(
       liveStatusView(
         pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
@@ -101,9 +113,26 @@ describe('editor presentation', () => {
     expect(publishButtonLabel(pageSummary())).toBe('Xuất bản');
     expect(
       publishButtonLabel(
-        pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
+        pageSummary({
+          status: { kind: 'live_with_changes', changeCount: 3, changes: [] },
+          liveRelease,
+        }),
       ),
     ).toBe('Xuất bản thay đổi');
+    // Nothing differs from live (no changes, or the draft was restored from live): no count.
+    expect(
+      publishButtonLabel(
+        pageSummary({
+          status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+          liveRelease,
+        }),
+      ),
+    ).toBe('Xuất bản');
+    expect(
+      publishButtonLabel(
+        pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
+      ),
+    ).toBe('Xuất bản');
     expect(livePathOf({ liveRelease })).toBe('/uu-dai-thang-11');
     expect(livePathOf({ liveRelease: { ...liveRelease, slug: '' } })).toBe('/');
     expect(livePathOf({ liveRelease: null })).toBeNull();

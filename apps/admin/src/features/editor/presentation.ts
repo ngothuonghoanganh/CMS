@@ -1,4 +1,5 @@
 import type { ChecksResult, PageStatusKind, PageSummary } from '@plp/contracts';
+import { formatRelativeTime } from '../../lib/format';
 import type { Device, SaveFailure, SaveState, VisibilityGroup } from './store';
 
 /** Display copy for editor states. Pure functions, unit-tested. */
@@ -50,29 +51,6 @@ export const groupLabels: Record<VisibilityGroup, string> = {
   mobile: 'điện thoại',
 };
 
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-
-function pad(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-/** "vừa xong", "5 phút trước", "2 giờ trước", then "24/10/2026". */
-export function relativeTime(iso: string, now: Date): string {
-  const then = new Date(iso);
-  const elapsed = Math.max(0, now.getTime() - then.getTime());
-  if (elapsed < MINUTE) {
-    return 'vừa xong';
-  }
-  if (elapsed < HOUR) {
-    return `${Math.floor(elapsed / MINUTE)} phút trước`;
-  }
-  if (elapsed < 24 * HOUR) {
-    return `${Math.floor(elapsed / HOUR)} giờ trước`;
-  }
-  return `${pad(then.getDate())}/${pad(then.getMonth() + 1)}/${then.getFullYear()}`;
-}
-
 export interface SaveStatusView {
   tone: 'success' | 'muted' | 'danger' | 'warning';
   text: string;
@@ -94,7 +72,7 @@ export function saveStatusView(
         text:
           lastSavedAt === null || now === null
             ? 'Đã lưu bản nháp'
-            : `Đã lưu bản nháp · ${relativeTime(lastSavedAt, now)}`,
+            : `Đã lưu bản nháp · ${formatRelativeTime(lastSavedAt, now)}`,
         canRetry: false,
       };
     case 'saving':
@@ -109,6 +87,9 @@ export function saveStatusView(
   }
 }
 
+/** Subtext of a live page whose draft has a new revision but the same content as live. */
+export const SAME_AS_LIVE = 'Nội dung giống bản live';
+
 export interface LiveStatusView {
   kind: PageStatusKind;
   text: string;
@@ -120,7 +101,11 @@ export function liveStatusView(page: PageSummary): LiveStatusView {
     case 'live_with_changes':
       return {
         kind: 'live_with_changes',
-        text: `Live v${version} · ${page.status.changeCount} thay đổi chưa xuất bản`,
+        // After "Quay về bản live" the revision differs but the content equals the live release.
+        text:
+          page.status.changeCount === 0
+            ? `Live v${version} · ${SAME_AS_LIVE}`
+            : `Live v${version} · ${page.status.changeCount} thay đổi chưa xuất bản`,
       };
     case 'live':
       return { kind: 'live', text: `Live v${version}` };
@@ -149,8 +134,11 @@ export function checksSummaryView(checks: ChecksResult): ChecksSummaryView {
   return { tone: blocking > 0 ? 'danger' : 'warning', text: parts.join(' · ') };
 }
 
+/** "Xuất bản thay đổi" (with the count beside it) only when there are changes to publish. */
 export function publishButtonLabel(page: PageSummary): string {
-  return page.status.kind === 'draft' ? 'Xuất bản' : 'Xuất bản thay đổi';
+  return page.status.kind === 'draft' || page.status.changeCount === 0
+    ? 'Xuất bản'
+    : 'Xuất bản thay đổi';
 }
 
 /** "https://go.smilecare.vn/uu-dai/" → "go.smilecare.vn/uu-dai". */

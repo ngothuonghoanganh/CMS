@@ -195,7 +195,8 @@ describe('Dashboard', () => {
     });
 
     expect(screen.getByText('1 trang có thay đổi chưa xuất bản')).toBeInTheDocument();
-    expect(screen.getByText('2 lỗi đang chặn xuất bản')).toBeInTheDocument();
+    // `pagesWithBlockingErrors` counts pages, whatever their number of errors.
+    expect(screen.getByText('2 trang có lỗi chặn xuất bản')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Mở trang “Ưu đãi niềng răng”' })).toHaveAttribute(
       'href',
       `${DASHBOARD_PATH}/pages/${livePage.id}/edit`,
@@ -265,11 +266,10 @@ describe('Dashboard', () => {
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    await vi.waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: `Tùy chọn khác cho ${livePage.title}` }),
-      ).toHaveFocus();
-    });
+    // The dialog itself returns focus to the row's menu button (the menu item is gone).
+    expect(
+      screen.getByRole('button', { name: `Tùy chọn khác cho ${livePage.title}` }),
+    ).toHaveFocus();
   });
 
   it('does not offer unpublishing or the live page for a draft', async () => {

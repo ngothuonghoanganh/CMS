@@ -205,6 +205,55 @@ describe('assets', () => {
     it('rejects a forged cursor', async () => {
       await owner.get(`/sites/${siteId}/assets?cursor=forged`).expect(422);
     });
+
+    it('looks up assets by ids in the requested order, only within the site', async () => {
+      const { client, workspaceId: ownWorkspace } = await signedUpClient(t.app);
+      const site = await createSite(client, ownWorkspace);
+      const otherSite = await createSite(client, ownWorkspace);
+      const first = await uploadImage(client, site.id, { alt: 'Một' });
+      const second = await uploadImage(client, site.id, { alt: 'Hai' });
+      await uploadImage(client, site.id, { alt: 'Không hỏi tới' });
+      const ofOtherSite = await uploadImage(client, otherSite.id);
+      const ofOtherWorkspace = await uploadImage(owner, siteId);
+      const unknown = new Types.ObjectId().toHexString();
+
+      const ids = [first.id, unknown, ofOtherSite.id, second.id, ofOtherWorkspace.id, first.id];
+      const response = await client
+        .get(`/sites/${site.id}/assets`)
+        .query({ ids: ids.join(','), limit: 1, cursor: 'ignored-with-ids' })
+        .expect(200);
+      const list = assetListResponseSchema.parse(response.body);
+      expect(list.items.map((asset) => asset.id)).toEqual([first.id, second.id]);
+      expect(list.items[1]).toMatchObject({ alt: 'Hai', url: second.url });
+      expect(list.nextCursor).toBeNull();
+    });
+
+    it('validates the ids lookup: valid ids only, at most 50', async () => {
+      const invalid = await owner.get(`/sites/${siteId}/assets?ids=abc`).expect(422);
+      expect(problemSchema.parse(invalid.body).issues?.[0]?.path).toEqual(['ids', 0]);
+      await owner.get(`/sites/${siteId}/assets?ids=`).expect(422);
+      const tooMany = Array.from({ length: 51 }, () => new Types.ObjectId().toHexString());
+      const response = await owner
+        .get(`/sites/${siteId}/assets`)
+        .query({ ids: tooMany.join(',') })
+        .expect(422);
+      expect(problemSchema.parse(response.body).issues?.[0]).toMatchObject({
+        path: ['ids'],
+        message: 'Tra cứu tối đa 50 ảnh mỗi lần',
+      });
+      const fifty = tooMany.slice(0, 50).join(',');
+      await owner.get(`/sites/${siteId}/assets`).query({ ids: fifty }).expect(200);
+    });
+
+    it('answers 404 for the ids lookup on a site of another workspace', async () => {
+      const asset = await uploadImage(owner, siteId);
+      const { client } = await signedUpClient(t.app);
+      const response = await client
+        .get(`/sites/${siteId}/assets`)
+        .query({ ids: asset.id })
+        .expect(404);
+      expect(problemSchema.parse(response.body).code).toBe('not_found');
+    });
   });
 
   describe('update', () => {

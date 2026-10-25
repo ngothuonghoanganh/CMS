@@ -9,7 +9,7 @@ import {
   type Site,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { publishableDraft } from '../../../test/compositions.js';
@@ -24,6 +24,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { createSite } from '../../../test/resources.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 
 describe('rollback, undo, unpublish, redirects and history', () => {
   let t: TestApp;
@@ -201,6 +202,40 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       const response = await client.post(`/activity/${rollback.activityId}/undo`).expect(409);
       expect(problemSchema.parse(response.body).code).toBe('undo_not_available');
       expect((await getPage(client, pageId)).page.liveRelease?.version).toBe(3);
+    });
+
+    it('re-checks inside its transaction: a publish and rollback committed meanwhile win', async () => {
+      const { pageId, v1 } = await twoVersions();
+      const rollback = await moveTo(pageId, v1.release.id, 'Sai giá');
+      const runner = t.app.get(TransactionRunner, { strict: false });
+      const realRun = runner.run.bind(runner);
+      let concurrent: PointerMoveResponse | null = null;
+      // Between the undo's first check and its transaction, another tab publishes v3 and rolls
+      // back to v1 again. The pointer is on v1 as the first rollback left it, but that rollback
+      // is no longer the page's latest pointer event.
+      const spy = vi.spyOn(runner, 'run').mockImplementationOnce(async (work) => {
+        await editHeroHeading(client, pageId, 'Bản 3');
+        await publish(client, pageId);
+        concurrent = await moveTo(pageId, v1.release.id, 'Lại sai giá');
+        return realRun(work);
+      });
+      try {
+        const response = await client.post(`/activity/${rollback.activityId}/undo`).expect(409);
+        expect(problemSchema.parse(response.body).code).toBe('undo_not_available');
+      } finally {
+        spy.mockRestore();
+      }
+      expect(concurrent).not.toBeNull();
+      const detail = await getPage(client, pageId);
+      expect(detail.page.liveRelease?.version).toBe(1);
+      expect(detail.page.lastPointerEvent).toMatchObject({ type: 'rolled_back', version: 1 });
+      const events = await client.get(`/sites/${site.id}/activity?limit=5`).expect(200);
+      expect(
+        activityListResponseSchema
+          .parse(events.body)
+          .items.filter((item) => item.page?.id === pageId)
+          .map((item) => item.type),
+      ).not.toContain('page.rollback_undone');
     });
 
     it('is only available for rollbacks', async () => {

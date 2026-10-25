@@ -1,5 +1,6 @@
 import { Controller, Get, Header, Param, Query } from '@nestjs/common';
 import {
+  type PathStatusResponse,
   type PublicPreviewResponse,
   type ResolveResponse,
   resolveQuerySchema,
@@ -24,6 +25,14 @@ export class PublicDeliveryController {
     @Query(new ZodPipe(resolveQuerySchema)) query: ResolveQuery,
   ): Promise<ResolveResponse> {
     return this.delivery.resolve(subdomain, query.path);
+  }
+
+  @Get('sites/:subdomain/path-status')
+  pathStatus(
+    @Param('subdomain') subdomain: string,
+    @Query(new ZodPipe(resolveQuerySchema)) query: ResolveQuery,
+  ): Promise<PathStatusResponse> {
+    return this.delivery.pathStatus(subdomain, query.path);
   }
 
   @Get('sites/:subdomain/sitemap')

@@ -10,6 +10,7 @@ import {
 import {
   AlertCircleIcon,
   ArrowRightIcon,
+  ArrowUpIcon,
   Button,
   ButtonLink,
   Callout,
@@ -469,6 +470,7 @@ function PublishSession({
           </Button>
           <Button
             loading={state.submitting}
+            leadingIcon={<ArrowUpIcon size={18} />}
             disabled={disabledReason !== null}
             aria-describedby={disabledReason === null ? undefined : reasonId}
             onClick={() => {

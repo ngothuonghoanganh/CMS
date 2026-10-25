@@ -129,6 +129,10 @@ export const pageDetailResponseSchema = z.object({
 export type PageDetailResponse = z.infer<typeof pageDetailResponseSchema>;
 
 export const pageListQuerySchema = z.object({
+  /**
+   * `live` lists every page that is currently live, with or without unpublished changes;
+   * `live_with_changes` lists only the live pages whose draft differs from the live release.
+   */
   status: pageStatusKindSchema.optional(),
   q: z.string().trim().max(80).optional(),
   cursor: z.string().max(200).optional(),
@@ -136,6 +140,12 @@ export const pageListQuerySchema = z.object({
 });
 export type PageListQuery = z.input<typeof pageListQuerySchema>;
 
+/**
+ * Page counts of the dashboard chips ("Tất cả · 6", "Live · 3", "Có thay đổi · 1", …). They match
+ * the `status` filter of `pageListQuerySchema`, so the chips overlap like the filters do:
+ * `live` = pages with status `live` + pages with status `live_with_changes` (everything currently
+ * live), and `live_with_changes` is the subset of those with unpublished changes.
+ */
 export const pageCountsSchema = z.object({
   all: z.number().int().nonnegative(),
   live: z.number().int().nonnegative(),

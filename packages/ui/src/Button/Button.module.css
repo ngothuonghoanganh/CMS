@@ -72,14 +72,15 @@
   color: var(--color-ink);
 }
 
+/* Tertiary actions ("Sửa", "Xem bản này", "Xem thêm…") read as links on the boards. */
 .ghost {
   background: transparent;
-  color: var(--color-ink-2);
+  color: var(--color-primary-ink);
 }
 
 .ghost:hover {
-  background: var(--color-hover);
-  color: var(--color-ink);
+  background: var(--color-primary-tint);
+  color: var(--color-primary-pressed);
 }
 
 .danger {

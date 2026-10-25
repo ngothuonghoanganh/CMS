@@ -1,6 +1,7 @@
 import type { PublicPreviewResponse } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { cache } from 'react';
 import { PreviewBanner } from '../../../components/PreviewBanner';
 import { SitePage } from '../../../components/SitePage';
@@ -24,6 +25,8 @@ interface PreviewPageProps {
  * per request so the metadata and the page share one uncached API call.
  */
 const loadPreview = cache(async (token: string): Promise<PublicPreviewResponse | null> => {
+  // A preview is always the latest draft for this request; nothing of it can be prerendered.
+  await connection();
   if (!isPlausiblePreviewToken(token)) {
     return null;
   }

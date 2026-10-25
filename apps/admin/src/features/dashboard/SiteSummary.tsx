@@ -52,7 +52,8 @@ export function SiteSummary({ site, attention }: SiteSummaryProps) {
             {pagesWithBlockingErrors > 0 ? (
               <li>
                 <span className={styles.blockingDot} aria-hidden="true" />
-                {pagesWithBlockingErrors} lỗi đang chặn xuất bản
+                {/* The API counts pages, not errors: one page can have several blocking errors. */}
+                {pagesWithBlockingErrors} trang có lỗi chặn xuất bản
               </li>
             ) : null}
           </ul>

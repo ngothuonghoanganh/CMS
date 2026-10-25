@@ -17,6 +17,7 @@ import { RevalidationModule } from './modules/revalidation/revalidation.module.j
 import { SitesModule } from './modules/sites/sites.module.js';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 import { EnvModule } from './shared/env.js';
+import { serializeRequest } from './shared/log-redaction.js';
 import { OriginGuard } from './shared/origin.guard.js';
 import { PersistenceModule } from './shared/persistence/persistence.module.js';
 import { ProblemFilter } from './shared/problem.filter.js';
@@ -43,6 +44,8 @@ export class AppModule {
               'req.headers.authorization',
               'res.headers["set-cookie"]',
             ],
+            // `req.url` and the route params of /public/preview/{token} carry a preview token.
+            serializers: { req: serializeRequest },
           },
         }),
         MongooseModule.forRoot(env.MONGODB_URI),

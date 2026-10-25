@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  type PathStatusResponse,
   type PublicImage,
   type PublicPageData,
   type PublicPreviewResponse,
@@ -81,21 +82,45 @@ export class PublicDeliveryService {
         data: await this.pageData(site, live._id, release),
       });
     }
-    const redirect = await this.redirects.findPublic(site._id, slug);
-    if (redirect) {
-      const target = await this.pages.findPublicById(redirect.pageId);
-      if (
-        target?.siteId.equals(site._id) &&
-        target.publishedSlug !== null &&
-        target.publishedSlug !== slug
-      ) {
-        return resolveResponseSchema.parse({
-          kind: 'redirect',
-          location: livePath(target.publishedSlug),
-        });
-      }
+    const location = await this.redirectLocation(site, slug);
+    if (location !== null) {
+      return resolveResponseSchema.parse({ kind: 'redirect', location });
     }
     throw notFound(PUBLIC_PAGE_NOT_FOUND);
+  }
+
+  /**
+   * The same decision as `resolve` without loading the release: a live page, a redirect or 404.
+   * Cheap enough for the renderer's proxy to ask on every page request.
+   */
+  async pathStatus(subdomain: string, path: string): Promise<PathStatusResponse> {
+    const site = await this.siteOrNotFound(subdomain);
+    const slug = slugFromPath(path);
+    const live = await this.pages.findPublicLiveBySlug(site._id, slug);
+    if (live) {
+      return { kind: 'page', releaseId: live.publishedReleaseId.toHexString() };
+    }
+    if ((await this.redirectLocation(site, slug)) !== null) {
+      return { kind: 'redirect' };
+    }
+    throw notFound(PUBLIC_PAGE_NOT_FOUND);
+  }
+
+  /** Live path of the page an old slug redirects to; null when there is none or it is not live. */
+  private async redirectLocation(site: SiteRecord, slug: string): Promise<string | null> {
+    const redirect = await this.redirects.findPublic(site._id, slug);
+    if (!redirect) {
+      return null;
+    }
+    const target = await this.pages.findPublicById(redirect.pageId);
+    if (
+      target?.siteId.equals(site._id) &&
+      target.publishedSlug !== null &&
+      target.publishedSlug !== slug
+    ) {
+      return livePath(target.publishedSlug);
+    }
+    return null;
   }
 
   /** Live pages that may be indexed, with the time their release was published. */

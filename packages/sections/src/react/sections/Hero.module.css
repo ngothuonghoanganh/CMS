@@ -11,9 +11,13 @@
 }
 
 .eyebrow {
+  align-self: flex-start;
   margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--plp-surface);
   color: var(--plp-link);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -55,6 +59,10 @@
 .centered .text {
   align-items: center;
   max-width: 720px;
+}
+
+.centered .eyebrow {
+  align-self: center;
 }
 
 .centered .actions {
@@ -106,9 +114,21 @@
   color: #ffffff;
 }
 
+/* Over a photo the eyebrow is plain white text, like the heading. */
+.background:has(.backgroundImage img) .eyebrow {
+  padding-inline: 0;
+  background: transparent;
+}
+
 @container plp-page (max-width: 767px) {
   .mediaFirst .media {
     order: -1;
+  }
+
+  /* Phones: one full-width button per row, within reach of the thumb. */
+  .actions {
+    flex-direction: column;
+    align-self: stretch;
   }
 }
 
