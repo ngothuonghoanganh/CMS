@@ -7,6 +7,7 @@ import {
   getSectionDefinition,
   insertionIndex,
   listMinimum,
+  pageCapturesLeads,
   samplePathsOf,
   validateComposition,
 } from './registry.js';
@@ -175,5 +176,10 @@ describe('section registry', () => {
     expect(canMoveSection(sections, 1, 2)).toBe(true);
     expect(canMoveSection(sections, 2, 3)).toBe(false);
     expect(canMoveSection(sections, 2, 0)).toBe(false);
+  });
+
+  it('finds no lead-collecting section on a page of the MVP A sections', () => {
+    expect(pageCapturesLeads(page(sectionTypes))).toBe(false);
+    expect(pageCapturesLeads({ version: 1, sections: [] })).toBe(false);
   });
 });

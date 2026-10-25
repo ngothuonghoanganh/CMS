@@ -104,6 +104,11 @@ export interface SectionDefinition<C extends Record<string, unknown> = Record<st
    * every page keeps valid header/main/footer landmarks. Editors cannot move these sections.
    */
   position?: 'first' | 'last';
+  /**
+   * The section collects personal data (the lead form): a page holding it needs the site's consent
+   * settings, and its releases snapshot them (ADR-016, ADR-017).
+   */
+  capturesLeads?: true;
   /** Fresh sample content for a newly added section. */
   sampleContent(): C;
   /** One line for the page structure list, e.g. the heading or "3 nhận xét". */

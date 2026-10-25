@@ -10,6 +10,8 @@ export const activityTypes = [
   'page.unpublished',
   'page.draft_restored',
   'asset.uploaded',
+  'privacy.updated',
+  'consent.version_created',
 ] as const;
 export const activityTypeSchema = z.enum(activityTypes);
 export type ActivityType = z.infer<typeof activityTypeSchema>;
@@ -46,7 +48,10 @@ export const activityItemSchema = z.object({
   actor: userRefSchema,
   siteId: idSchema,
   page: z.object({ id: idSchema, title: z.string() }).nullable(),
-  /** Versions involved: `version` for publish/restore, `from`/`to` for pointer moves. */
+  /**
+   * Versions involved: `version` for publish/restore and for a new consent text version,
+   * `from`/`to` for pointer moves.
+   */
   data: z.object({
     version: z.number().int().positive().nullable(),
     fromVersion: z.number().int().positive().nullable(),

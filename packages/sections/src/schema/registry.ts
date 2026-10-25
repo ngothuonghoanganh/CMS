@@ -44,6 +44,13 @@ export function getSectionDefinition(type: SectionType): AnySectionDefinition {
   return sectionDefinitions[type];
 }
 
+/** True when the page has a section that collects personal data, i.e. a lead form (ADR-017). */
+export function pageCapturesLeads(composition: Composition): boolean {
+  return composition.sections.some(
+    (section) => getSectionDefinition(section.type).capturesLeads === true,
+  );
+}
+
 export function getVariant(
   definition: AnySectionDefinition,
   variantId: string,

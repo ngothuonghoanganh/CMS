@@ -17,6 +17,14 @@ function isHttpUrl(value: string): boolean {
   return URL.canParse(value);
 }
 
+/** A required absolute http(s) address, e.g. the privacy policy link (ADR-017). */
+export const httpUrlSchema = z
+  .string()
+  .trim()
+  .min(1, 'Nhập đường dẫn')
+  .max(2000, 'Đường dẫn tối đa 2000 ký tự')
+  .refine(isHttpUrl, 'Đường dẫn phải bắt đầu bằng http:// hoặc https://');
+
 export const phoneSchema = z
   .string()
   .trim()

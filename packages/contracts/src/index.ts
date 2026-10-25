@@ -11,6 +11,7 @@ export * from './goals.js';
 export * from './health.js';
 export * from './page.js';
 export * from './preview.js';
+export * from './privacy.js';
 export * from './public.js';
 export * from './release.js';
 export * from './site.js';
