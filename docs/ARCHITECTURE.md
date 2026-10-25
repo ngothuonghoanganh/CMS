@@ -248,6 +248,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - Giới hạn này đúng với mọi cách deploy và giữ được qua nhiều instance API.
       - Người khác biết email có thể khóa đăng nhập của tài khoản đó tối đa một cửa sổ. Đây là đánh đổi có chủ đích để chặn dò mật khẩu.
 - **Amended 2026-10-25 (MVP B):** quyền với lead, cài đặt dữ liệu cá nhân và yêu cầu về dữ liệu nằm ở ADR-017. Editor xem và xử lý lead; chỉ Owner sửa cài đặt, xuất và xóa dữ liệu.
+- **Amended 2026-10-26 (test toàn dự án):** session hết hiệu lực đúng lúc `expiresAt`. Guard so với thời điểm của từng request, không đợi TTL monitor của MongoDB (chạy khoảng mỗi phút) xóa bản ghi. Integration test giữ điều này.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -385,6 +386,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Tên type là `lead_form`, theo quy ước snake_case của `sectionTypes`.
   - Section có cờ `capturesLeads`; `RenderContext` có thêm `leadCapture` (bắt buộc) và `leadSubmission` (chỉ trang live).
   - Mỗi color scheme có thêm màu `danger` cho lỗi của form; `themes.spec` kiểm AA trên nền và surface.
+- **Amended 2026-10-26 (test toàn dự án):** chữ gợi ý của ô trống trên canvas (tên field) dùng màu `muted`, không làm mờ, nên đạt AA như mọi màu chữ khác (`themes.spec`).
+  - Trong nút và trên ảnh của Hero, chữ gợi ý giữ màu của chữ thật ở đó, vì `muted` không đạt AA trên nền đó.
+  - Chữ gợi ý in nghiêng, để ô để trống không bị nhầm với nội dung đã nhập.
+  - `placeholder.spec.ts` kiểm các quy tắc CSS này.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -406,6 +411,25 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Back/Forward của trình duyệt** là điều hướng phía client: không có `beforeunload`. Một listener `popstate` được gắn khi module providers gốc nạp, trước khi App Router gắn listener của nó, nên chạy trước. Khi còn thay đổi chưa lưu, editor chặn sự kiện, đặt lại history entry của editor (giữ state của router) và mở hộp thoại rời trang sẵn có.
   - Editor unmount thì lưu ngay thay đổi đang chờ, trừ khi người dùng chọn "Rời trang, bỏ thay đổi".
   - Back/Forward dựng lại màn từ payload router đã cache, có thể cũ hơn server. Editor và màn SEO đọc lại trang một lần khi mount và thay draft khi người dùng chưa sửa gì; đã sửa thì để 409 của lần lưu sau báo xung đột.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Lần đọc lại khi mount chờ các lần lưu đang chạy:** editor và màn SEO đọc lại trang sau khi mọi lần lưu của cùng trang đang chạy trong tab kết thúc, dù thành công hay lỗi.
+    - Màn vừa rời (ví dụ Back từ "SEO & chia sẻ") lưu thay đổi đang chờ lúc unmount.
+    - Trước đây lần đọc có thể đi trước lần lưu đó và giữ revision cũ, nên lần lưu sau báo xung đột giả.
+  - **Canvas hiện đúng chữ của bản nháp sau mỗi lần commit,** kể cả khi giá trị trong store không đổi:
+    - chữ gõ quá giới hạn của field bị cắt;
+    - khoảng trắng được chuẩn hóa;
+    - field bị xóa hết hiện lại chữ gợi ý (Chromium để lại một `<br>`).
+  - **Dữ liệu server trong cache (TanStack Query):**
+    - TanStack bỏ qua `initialData` khi key đã có dữ liệu. Vì vậy màn được server render lại (link ở sidebar, mũi tên quay lại của editor) ghi dữ liệu của lần render đó vào cache khi cache cũ hơn (`adoptServerRender`).
+    - Quy tắc này áp dụng cho:
+      - danh sách trang và hoạt động gần đây (màn 01);
+      - trang và lịch sử phiên bản;
+      - danh sách lead và lead đang mở;
+      - danh sách yêu cầu dữ liệu;
+      - số đếm lead và báo cáo "Hiệu quả" (đã có từ trước).
+    - Danh sách được thay bắt đầu lại từ trang đầu.
+    - Quy tắc so `dataUpdatedAt` của cache (đồng hồ trình duyệt) với `loadedAt` của server, nên đồng hồ trình duyệt lệch nhiều thì có thể chọn sai.
+    - Mỗi lần lưu bản nháp thành công đánh dấu danh sách trang và các màn của trang đó là cũ, nhưng không đọc lại ngay. Chúng được đọc lại khi hiện ra, kể cả khi nút Back của trình duyệt dựng lại một bản render cũ hơn cache.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
@@ -474,6 +498,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Với rollback hoặc undo đưa trang về một release cũ hơn: lúc con trỏ được chuyển.
     - Đọc sự kiện con trỏ mới nhất của mọi trang live trong một aggregation, nên `lastmod` không bao giờ lùi lại.
   - **"Xem site live"** mở trang chủ khi trang có slug rỗng đang live, nếu không thì mở trang được publish gần nhất. Nút ẩn khi site chưa có trang nào live. API trả địa chỉ này trong `liveSiteUrl` của danh sách trang.
+  - **Tra trang live theo slug** (renderer phân giải trang, mỗi lượt xem được chuyển tiếp) truy vấn kèm `$type: 'string'`.
+    - MongoDB chỉ dùng index partial khi truy vấn kéo theo điều kiện của index đó. Nhờ vậy `pages_published_slug_unique` phục vụ tra cứu bằng một lần dò.
+    - Trước đây tra cứu đọc mọi trang của site.
 
 ### ADR-012 — Asset
 
@@ -505,6 +532,21 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (MVP B):**
   - Thêm module `privacy`, `leads`, `notifications`, `analytics`.
   - Log redaction phủ cả body của `POST /public/sites/:subdomain/leads` và route `/_lead` của renderer; test kiểm tra không có trường nào của lead xuất hiện trong log.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Log của request:** test dùng chính cấu hình logger của app và ghi log vào bộ nhớ.
+    - Test kiểm các giá trị sau đều bị che: cookie và `set-cookie`, `authorization`, `x-plp-client-ip`, `x-plp-client-ua`, chữ ký renderer, token preview trong đường dẫn, và `q` trong URL, query và `Referer`.
+    - Không giá trị nào của lead xuất hiện trong log.
+  - **TTL index:** một integration test liệt kê đúng tập collection có TTL index trên `expiresAt`: `sessions`, `login_attempts`, `leads`, `lead_limits`, `analytics_salts`, `analytics_seen`, `analytics_daily`.
+    - Thêm collection tự xóa thì phải sửa test này cùng lúc.
+    - TTL index lỡ thêm vào collection không được xóa (release, activity…) cũng bị phát hiện.
+  - **Governance:** dependency-cruiser phân giải các package của workspace về source qua `tsconfig.governance.json`. Nhờ vậy import qua tên `@plp/*` không còn biến mất khỏi đồ thị.
+    - `scripts/check-governance.mjs` kiểm:
+      - cấu hình trỏ đúng file đó;
+      - mọi export vào `dist/` có path tới đúng file nguồn;
+      - không có file `.tsx` trong `packages/sections/src/schema`.
+    - Quy tắc "API không có React" và "schema không có React" xét cả chuỗi import, cả import chỉ lấy type và cả file `.tsx`.
+    - `@plp/contracts` không import package nào khác; chỉ admin và renderer import `@plp/sections/react`.
+  - **Lint:** luật React hooks áp dụng cả cho code React dùng chung (`packages/sections/src/react`, `packages/ui`).
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -624,6 +666,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-26 (test toàn dự án):**
   - **Form không JavaScript:** trang báo lỗi giữ `utm_source`, `utm_medium` và `utm_campaign` của trang trên link "Quay lại form", nên lead gửi lại vẫn đúng nguồn. Ngoài ba tham số này, link không giữ gì khác của địa chỉ.
   - **Form có JavaScript:** nút gửi không bị `disabled` trong lúc gửi, chỉ có `aria-disabled` và `aria-busy`. Gửi bị từ chối (429, 404, mất mạng) thì focus vẫn ở nút, cạnh thông báo lỗi.
+  - **Thời gian điền** (spam "gửi quá nhanh") tính từ lúc trang bắt đầu tải: `performance.now()` của script lúc gửi. Trước đây tính từ lúc script của form mount.
+    - Form do server vẽ điền được trong lúc script còn tải, nhiều giây trên mạng chậm. Đo từ lúc mount vì vậy làm người thật bị coi là spam. Cách đo mới không bao giờ đo một người nhanh hơn thực tế.
+    - Đánh đổi: bot điều khiển trình duyệt, đợi trang tải xong rồi điền ngay, có thể qua bước này. Honeypot và rate limit vẫn chặn.
+    - Giá trị gửi tối đa là 24 giờ; tab để mở lâu hơn vẫn gửi được.
+  - **Bước 4 chạy trước bước 3:** gửi lại cùng `submissionId` của một lead đã nhận trả 200, kể cả khi khách đã vượt giới hạn, và không tính vào giới hạn.
+    - Lệnh kiểm truy vấn kèm `$type: 'string'`, để index unique-partial phục vụ. Nhờ vậy lệnh kiểm chỉ là một lần dò index, dù site có bao nhiêu lead.
+  - **User agent dài:** renderer cắt user agent ở 512 ký tự, rồi ký đúng giá trị header gửi đi. Headers bỏ khoảng trắng ở hai đầu, nên phần cắt kết thúc bằng khoảng trắng tới API ngắn hơn một ký tự. Trước đây chữ ký không khớp và lead bị từ chối.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -782,6 +831,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Activity** `lead.recipients_changed` ghi số địa chỉ còn lại sau mỗi lần thêm hoặc bỏ, không ghi email.
   - **Index ngoại lệ:** `leads_notification_sweep (notification.status, notification.updatedAt)` không bắt đầu bằng `siteId`, vì lượt quét lúc khởi động đi qua mọi site.
   - **Thử nghiệm:** integration test thay SMTP bằng bộ ghi thư và rút ngắn thời gian chờ giữa các lần thử. Một test gửi thật qua Mailpit. E2E đọc thư qua HTTP API của Mailpit.
+- **Amended 2026-10-26 (test toàn dự án):** **giành lead lỗi**, tức database không trả lời lúc chuyển `pending` → `sending`.
+  - Không tính lần thử; lead vẫn `pending`.
+  - Thử giành lại một lần sau lần chờ đầu (1 phút). Lỗi nữa thì lượt quét lúc khởi động xử lý.
+  - Trước đây lead kẹt ở `pending` tới lần khởi động sau, và không có nút "Gửi lại".
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 

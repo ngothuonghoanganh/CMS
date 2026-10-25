@@ -30,13 +30,19 @@ import {
   useToast,
   VisuallyHidden,
 } from '@plp/ui';
-import { keepPreviousData, useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api, downloadFile } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { leadsHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 import { useDebouncedValue } from '../shell/use-debounced-value';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
@@ -113,6 +119,7 @@ export function LeadInbox({
   initialRecipientsOpen,
   loadedAt,
 }: LeadInboxProps) {
+  const queryClient = useQueryClient();
   const now = useNow(loadedAt);
   const { toast } = useToast();
   useLeadCounts(site.id, leadCounts, loadedAt);
@@ -139,6 +146,19 @@ export function LeadInbox({
     }
   }, [search]);
 
+  // Coming back renders the inbox again on the server: its list is newer than one the cache kept
+  // from an earlier visit (leads arrive from the forms), as the counts of the badge are.
+  useEffect(() => {
+    if (initialList !== null) {
+      adoptServerRender(
+        queryClient,
+        leadQueryKeys.list(site.id, initialFilters),
+        serverFirstPage(initialList),
+        loadedAt,
+      );
+    }
+  }, [queryClient, site.id, initialFilters, initialList, loadedAt]);
+
   const check = leadFilterQuery(filters);
   const listQuery = useInfiniteQuery({
     queryKey: leadQueryKeys.list(site.id, filters),
@@ -160,7 +180,7 @@ export function LeadInbox({
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialData: () =>
       initialList !== null && sameFilters(filters, initialFilters)
-        ? { pages: [initialList], pageParams: [FIRST_PAGE] }
+        ? serverFirstPage(initialList)
         : undefined,
     initialDataUpdatedAt: loadedAt,
     placeholderData: keepPreviousData,

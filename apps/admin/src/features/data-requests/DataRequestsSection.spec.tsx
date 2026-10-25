@@ -204,6 +204,28 @@ describe('DataRequestsSection', () => {
     expect(within(section()).queryByRole('table')).toBeNull();
   });
 
+  it('shows the lead counts of a newer server render over the list an earlier visit cached', async () => {
+    const first = renderSection([dataRequest()]);
+    expect(within(rowOf('Lê Mai Anh')).getByText('0987 106 223 · 1 lead')).toBeInTheDocument();
+    first.unmount();
+
+    // The person sends the form again, and coming back renders the page again seconds later.
+    vi.setSystemTime(LOADED_AT + 5_000);
+    renderWithProviders(
+      <DataRequestsSection
+        siteId={SITE_ID}
+        initial={dataRequestList([dataRequest({ leads: { count: 2, capped: false } })])}
+        loadedAt={LOADED_AT + 5_000}
+      />,
+      first.queryClient,
+    );
+
+    await vi.waitFor(() => {
+      expect(within(rowOf('Lê Mai Anh')).getByText('0987 106 223 · 2 lead')).toBeInTheDocument();
+    });
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
   describe('Ghi nhận yêu cầu', () => {
     it('shows the deadlines of the receipt and records the request', async () => {
       // Friday 23/10/2026, 10:15 in Vietnam.

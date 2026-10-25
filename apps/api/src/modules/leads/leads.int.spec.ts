@@ -251,6 +251,29 @@ describe('lead intake', () => {
     expect(await storedLeads(site)).toHaveLength(2);
   });
 
+  it('answers a submission sent again with its first result, even over the limit, uncounted', async () => {
+    const { site, releaseId } = await formSite();
+    const ip = '198.51.100.30';
+    const first = leadBody(releaseId);
+    await submitLead(t, site.subdomain, first, { ip }).expect(201);
+    for (let index = 1; index < CLIENT_LIMIT; index += 1) {
+      await submitLead(t, site.subdomain, leadBody(releaseId), { ip }).expect(201);
+    }
+    await submitLead(t, site.subdomain, leadBody(releaseId), { ip }).expect(429);
+    const counted = () =>
+      t.connection
+        .collection('lead_limits')
+        .find({ key: { $regex: site.id } }, { projection: { _id: 0, key: 1, count: 1 } })
+        .sort({ key: 1 })
+        .toArray();
+    const before = await counted();
+
+    // The answer to the first send was lost on the way; the page script sends it again.
+    await submitLead(t, site.subdomain, first, { ip }).expect(200);
+    expect(await counted()).toEqual(before);
+    expect(await storedLeads(site)).toHaveLength(CLIENT_LIMIT);
+  });
+
   it('keeps suspected spam, flagged, with the same answer', async () => {
     const { site, releaseId } = await formSite();
     await submitLead(t, site.subdomain, leadBody(releaseId, { honeypot: 'https://spam.example' }), {

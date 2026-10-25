@@ -39,6 +39,7 @@ import { formatDate, formatDateTime } from '../../lib/format';
 import { analyticsQueryKeys } from '../analytics/queries';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { adoptServerRender } from '../shell/server-render';
 import { ConsentEvidenceDialog } from './ConsentEvidenceDialog';
 import { EditLeadContactDialog } from './EditLeadContactDialog';
 import {
@@ -96,6 +97,13 @@ export function LeadDetailPanel({
   // "Gửi lại" leaves once pressed: keyboard focus then moves to the section, not the page.
   const focusDelivery = useRef(false);
   const detailKey = leadQueryKeys.detail(siteId, leadId);
+  // A link to the lead renders the inbox again on the server: that detail is newer than one the
+  // cache kept from an earlier visit (its email went out since).
+  useEffect(() => {
+    if (initialDetail !== undefined) {
+      adoptServerRender(queryClient, leadQueryKeys.detail(siteId, leadId), initialDetail, loadedAt);
+    }
+  }, [queryClient, siteId, leadId, initialDetail, loadedAt]);
   const detail = useQuery({
     queryKey: detailKey,
     queryFn: ({ signal }) => api(endpoints.getLead, [leadId], { signal }),

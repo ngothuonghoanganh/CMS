@@ -6,9 +6,10 @@ import {
   publishingActivityTypes,
   type Site,
 } from '@plp/contracts';
+import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { Dashboard } from './Dashboard';
@@ -41,19 +42,24 @@ const DASHBOARD_PATH = `/sites/${SITE_ID}`;
 const livePage = pageFixture();
 const draftPage = draftPageFixture({ checks: { blocking: 0, warnings: 3 } });
 
-function renderDashboard({
-  pages = pageListFixture([livePage, draftPage]),
-  activity = { items: [activityFixture()], nextCursor: null },
-  filters = { status: null, q: '' },
-  leadCounts = NO_LEADS,
-  site = siteFixture(),
-}: {
-  pages?: PageListResponse;
-  activity?: ActivityListResponse;
-  filters?: DashboardFilters;
-  leadCounts?: LeadCounts;
-  site?: Site;
-} = {}) {
+function renderDashboard(
+  {
+    pages = pageListFixture([livePage, draftPage]),
+    activity = { items: [activityFixture()], nextCursor: null },
+    filters = { status: null, q: '' },
+    leadCounts = NO_LEADS,
+    site = siteFixture(),
+    loadedAt = Date.now(),
+  }: {
+    pages?: PageListResponse;
+    activity?: ActivityListResponse;
+    filters?: DashboardFilters;
+    leadCounts?: LeadCounts;
+    site?: Site;
+    loadedAt?: number;
+  } = {},
+  queryClient?: QueryClient,
+) {
   return renderWithProviders(
     <Dashboard
       site={site}
@@ -62,9 +68,19 @@ function renderDashboard({
       initialPages={pages}
       initialActivity={activity}
       initialLeadCounts={leadCounts}
-      loadedAt={Date.now()}
+      loadedAt={loadedAt}
     />,
+    queryClient,
   );
+}
+
+/** The row of the live page, the first of the list. */
+function livePageRow(): HTMLElement {
+  const row = screen.getAllByRole('row')[1];
+  if (row === undefined) {
+    throw new Error('missing rows');
+  }
+  return row;
 }
 
 function filterGroup(): HTMLElement {
@@ -432,5 +448,87 @@ describe('Dashboard', () => {
     ]);
     await user.click(screen.getByRole('menuitem', { name: 'SEO & chia sẻ' }));
     expect(router.push).toHaveBeenCalledWith(`${DASHBOARD_PATH}/pages/${draftPage.id}/seo`);
+  });
+
+  describe('rendered again by the server', () => {
+    const LOADED_AT = Date.parse('2026-10-24T12:00:00.000Z');
+    const edited = {
+      ...livePage,
+      status: { kind: 'live_with_changes' as const, changeCount: 2, changes: [] },
+    };
+
+    beforeEach(() => {
+      // Only the clock is fixed, so the list cached on the first visit is still fresh.
+      vi.useFakeTimers({ toFake: ['Date'], now: LOADED_AT });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('shows the newer list and activity over what an earlier visit cached', async () => {
+      const first = renderDashboard({ loadedAt: LOADED_AT });
+      expect(within(livePageRow()).getByText('Bản nháp trùng bản live')).toBeInTheDocument();
+      first.unmount();
+
+      // Back from the editor seconds later: autosave refreshed no list, another member published
+      // a page meanwhile, and the server rendered the dashboard again with both.
+      vi.setSystemTime(LOADED_AT + 5_000);
+      renderDashboard(
+        {
+          pages: pageListFixture([edited, draftPage]),
+          activity: {
+            items: [
+              activityFixture({
+                id: '64b000000000000000000302',
+                data: {
+                  version: 13,
+                  fromVersion: 12,
+                  toVersion: 13,
+                  count: null,
+                  revalidationFailed: false,
+                },
+              }),
+              activityFixture(),
+            ],
+            nextCursor: null,
+          },
+          loadedAt: LOADED_AT + 5_000,
+        },
+        first.queryClient,
+      );
+
+      await vi.waitFor(() => {
+        expect(within(livePageRow()).getByText('2 thay đổi chưa xuất bản')).toBeInTheDocument();
+      });
+      expect(
+        within(filterGroup()).getByRole('button', { name: 'Có thay đổi · 1' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('xuất bản v13 của “Ưu đãi niềng răng tháng 11”', { exact: false }),
+      ).toBeInTheDocument();
+      expect(apiMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps a list read after the server render it is given', async () => {
+      const first = renderDashboard({ loadedAt: LOADED_AT });
+      // The list is read again (an unpublish elsewhere on the screen refreshes it).
+      vi.setSystemTime(LOADED_AT + 5_000);
+      apiMock.mockResolvedValue(pageListFixture([edited, draftPage]));
+      await first.queryClient.invalidateQueries({ queryKey: siteQueryKeys.pages(SITE_ID) });
+      await vi.waitFor(() => {
+        expect(within(livePageRow()).getByText('2 thay đổi chưa xuất bản')).toBeInTheDocument();
+      });
+      first.unmount();
+
+      // The browser's back button restores the older server render.
+      vi.setSystemTime(LOADED_AT + 8_000);
+      renderDashboard({ loadedAt: LOADED_AT }, first.queryClient);
+
+      expect(
+        first.queryClient.getQueryData(siteQueryKeys.pageList(SITE_ID, { status: null, q: '' })),
+      ).toEqual({ pages: [pageListFixture([edited, draftPage])], pageParams: [null] });
+      expect(within(livePageRow()).getByText('2 thay đổi chưa xuất bản')).toBeInTheDocument();
+    });
   });
 });

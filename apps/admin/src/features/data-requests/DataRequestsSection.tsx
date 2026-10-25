@@ -19,11 +19,12 @@ import {
   VisuallyHidden,
 } from '@plp/ui';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDayMonth, formatTime } from '../../lib/format';
 import { cx } from '../shell/cx';
 import { problemMessage } from '../shell/problem-message';
+import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
 import { DataRequestDialog } from './DataRequestDialog';
@@ -75,6 +76,16 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
     setOpenId(requestId);
     setRequestOpen(true);
   }
+  // Coming back renders the list again on the server: its lead counts are newer than a list the
+  // cache kept from an earlier visit, which new leads or a deletion in the inbox do not refresh.
+  useEffect(() => {
+    adoptServerRender(
+      queryClient,
+      dataRequestQueryKeys.list(siteId),
+      serverFirstPage(initial),
+      loadedAt,
+    );
+  }, [queryClient, siteId, initial, loadedAt]);
   const list = useInfiniteQuery({
     queryKey: dataRequestQueryKeys.list(siteId),
     queryFn: ({ pageParam, signal }) =>
@@ -87,7 +98,7 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
-    initialData: { pages: [initial], pageParams: [null] },
+    initialData: serverFirstPage(initial),
     initialDataUpdatedAt: loadedAt,
   });
   const items = list.data.pages.flatMap((page) => page.items);

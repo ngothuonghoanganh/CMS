@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@plp/contracts": ["./packages/contracts/src/index.ts"],
+      "@plp/contracts/page-view": ["./packages/contracts/src/page-view.ts"],
+      "@plp/sections/schema": ["./packages/sections/src/schema/index.ts"],
+      "@plp/sections/react": ["./packages/sections/src/react/index.ts"],
+      "@plp/ui": ["./packages/ui/src/index.ts"],
+      "@plp/ui/tokens.css": ["./packages/ui/src/tokens.css"]
+    }
+  },
+  "include": ["packages/*/src"]
+}

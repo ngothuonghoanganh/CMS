@@ -2,12 +2,12 @@ import type { Asset, AssetListResponse } from '@plp/contracts';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { api, uploadAsset } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
 import { asset, SITE_ID } from '../editor/test-fixtures';
-import { AssetPickerDialog } from './AssetPickerDialog';
+import { AssetPickerDialog, type AssetSelection } from './AssetPickerDialog';
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
@@ -38,6 +38,24 @@ function setup() {
     { wrapper },
   );
   return { onSelect, onOpenChange, user: userEvent.setup({ applyAccept: false }) };
+}
+
+/** An image field: the picker stays mounted between openings, as in the editor and SEO page. */
+function ImageField({ onSelect }: { onSelect: (selection: AssetSelection) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        Thay ảnh
+      </button>
+      <AssetPickerDialog open={open} onOpenChange={setOpen} siteId={SITE_ID} onSelect={onSelect} />
+    </>
+  );
 }
 
 beforeEach(() => {
@@ -123,6 +141,50 @@ describe('AssetPickerDialog', () => {
       { assetId: asset.id, alt: 'Bác sĩ tư vấn cho khách hàng', decorative: false },
       asset,
     );
+  });
+
+  it.each(['Hủy', 'Đóng', 'Escape'])(
+    'forgets the highlighted image when closed with %s',
+    async (way) => {
+      const onSelect = vi.fn();
+      render(<ImageField onSelect={onSelect} />, { wrapper });
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'Thay ảnh' }));
+      const tile = await screen.findByRole('button', { name: /Bác sĩ tư vấn cho khách hàng/ });
+      await user.click(tile);
+      expect(tile).toHaveAttribute('aria-pressed', 'true');
+
+      if (way === 'Escape') {
+        await user.keyboard('{Escape}');
+      } else {
+        await user.click(screen.getByRole('button', { name: way }));
+      }
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      await user.click(screen.getByRole('button', { name: 'Thay ảnh' }));
+      expect(
+        await screen.findByRole('button', { name: /Bác sĩ tư vấn cho khách hàng/ }),
+      ).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: 'Chọn ảnh' })).toBeDisabled();
+      expect(onSelect).not.toHaveBeenCalled();
+    },
+  );
+
+  it('forgets the image it chose, so reopening starts with nothing highlighted', async () => {
+    const onSelect = vi.fn();
+    render(<ImageField onSelect={onSelect} />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Thay ảnh' }));
+    await user.click(await screen.findByRole('button', { name: /Bác sĩ tư vấn cho khách hàng/ }));
+    await user.click(screen.getByRole('button', { name: 'Chọn ảnh' }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Thay ảnh' }));
+    expect(
+      await screen.findByRole('button', { name: /Bác sĩ tư vấn cho khách hàng/ }),
+    ).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Chọn ảnh' })).toBeDisabled();
   });
 
   it('loads more assets with the cursor', async () => {

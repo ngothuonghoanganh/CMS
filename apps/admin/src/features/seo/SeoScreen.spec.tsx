@@ -1,7 +1,12 @@
-import { type Composition, endpoints, type PageDetailResponse } from '@plp/contracts';
+import {
+  type Composition,
+  endpoints,
+  type PageDetailResponse,
+  type PageSummary,
+} from '@plp/contracts';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
 import { renderWithProviders } from '../shell/test-utils';
@@ -45,6 +50,18 @@ function renderScreen(composition?: Composition) {
   );
   return detail;
 }
+
+// jsdom has no pointer capture; Radix menus call it while handling pointer events.
+beforeAll(() => {
+  for (const method of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCapture']) {
+    if (!Reflect.has(Element.prototype, method)) {
+      Object.defineProperty(Element.prototype, method, {
+        configurable: true,
+        value: method === 'hasPointerCapture' ? () => false : () => undefined,
+      });
+    }
+  }
+});
 
 beforeEach(() => {
   apiMock.mockReset();
@@ -144,5 +161,63 @@ describe('SeoScreen', () => {
     expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
     // Nothing is saved: the only request is the check for a newer draft.
     expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).toEqual([endpoints.getPage]);
+  });
+
+  it('keeps the focus in the header when the page is unpublished from it', async () => {
+    const user = userEvent.setup();
+    const detail = pageDetail(undefined, {
+      status: { kind: 'live', changeCount: 0, changes: [] },
+      liveRelease: {
+        id: '64b000000000000000000201',
+        version: 12,
+        slug: 'uu-dai-thang-11',
+        publishedAt: '2026-10-24T06:02:00.000Z',
+      },
+      latestVersion: 12,
+      liveUrl: 'https://smilecare.payload.site/uu-dai-thang-11',
+    });
+    const unpublished: PageSummary = {
+      ...detail.page,
+      status: { kind: 'unpublished', changeCount: 0, changes: [] },
+      liveRelease: null,
+      liveUrl: null,
+    };
+    answerApi(
+      (endpoint) =>
+        endpoint === endpoints.movePointer
+          ? Promise.resolve({
+              activityId: '64b000000000000000000401',
+              page: unpublished,
+              revalidation: 'ok',
+            })
+          : Promise.reject(new Error('unexpected call')),
+      detail,
+    );
+    renderWithProviders(
+      <SeoScreen
+        initial={{ detail, site, assets: [], role: 'owner' }}
+        loadedAt={Date.now()}
+        focus={null}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Gỡ xuất bản' }));
+    const dialog = screen.getByRole('alertdialog');
+    await user.type(within(dialog).getByRole('textbox', { name: /Lý do/ }), 'Hết chương trình');
+    const confirm = within(dialog).getAllByRole('button', { name: 'Gỡ xuất bản' }).at(-1);
+    if (confirm === undefined) {
+      throw new Error('confirm button missing');
+    }
+    await user.click(confirm);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    // The header's links ask before leaving here: "Mở editor" must still take the focus.
+    expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+    });
   });
 });

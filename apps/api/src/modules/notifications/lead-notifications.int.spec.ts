@@ -260,6 +260,61 @@ describe('lead notifications', () => {
     expect(leadEmails('Mất kết nối')).toHaveLength(1);
   });
 
+  it('claims the lead again later when the database fails at the claim', async () => {
+    const form = await formSite();
+    const claim = vi
+      .spyOn(t.app.get(LeadsRepository), 'claimNotification')
+      .mockRejectedValueOnce(new Error('database unreachable'));
+    try {
+      const leadId = await send(form, { name: 'Chưa giành được' });
+      const lead = await settled(leadId, 'sent');
+      // The claim that failed counted no attempt.
+      expect(lead.notification).toMatchObject({ attempts: 1, lastErrorCode: null });
+      expect(leadEmails('Chưa giành được')).toHaveLength(1);
+    } finally {
+      claim.mockRestore();
+    }
+  });
+
+  it('tries the claim once more only, then leaves the lead to the startup sweep', async () => {
+    const form = await formSite();
+    const claimedAt: number[] = [];
+    const unreachable = (): Promise<never> => {
+      claimedAt.push(Date.now());
+      return Promise.reject(new Error('database unreachable'));
+    };
+    const claim = vi
+      .spyOn(t.app.get(LeadsRepository), 'claimNotification')
+      .mockImplementationOnce(unreachable)
+      .mockImplementationOnce(unreachable);
+    try {
+      const leadId = await send(form, { name: 'Chờ khởi động' });
+      await vi.waitFor(
+        () => {
+          expect(claim).toHaveBeenCalledTimes(2);
+        },
+        { timeout: 5000, interval: 20 },
+      );
+      // The second claim waits like a retry (20 ms here): one at once would meet the same outage.
+      const [first = 0, second = 0] = claimedAt;
+      expect(second - first).toBeGreaterThanOrEqual(15);
+      // Well past the wait before a third claim, which never comes.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(claim).toHaveBeenCalledTimes(2);
+      expect((await detail(leadId)).notification).toMatchObject({
+        status: 'pending',
+        attempts: 0,
+      });
+      expect(leadEmails('Chờ khởi động')).toEqual([]);
+
+      await t.app.get(LeadNotifier).onApplicationBootstrap();
+      expect((await settled(leadId, 'sent')).notification).toMatchObject({ attempts: 1 });
+      expect(leadEmails('Chờ khởi động')).toHaveLength(1);
+    } finally {
+      claim.mockRestore();
+    }
+  });
+
   it('lets one instance only take a notification for an attempt', async () => {
     const form = await formSite();
     const lead = storedLead({
@@ -306,18 +361,22 @@ describe('lead notifications', () => {
 
     await t.app.get(LeadNotifier).onApplicationBootstrap();
 
+    const notificationOf = async (name: string): Promise<unknown> =>
+      (await t.connection.collection('leads').findOne({ 'fields.name': name }))?.['notification'];
+    // An email is recorded before its outcome is written: wait for the outcome.
     await vi.waitFor(
-      () => {
-        expect(leadEmails('Đang chờ')).toHaveLength(1);
-        expect(leadEmails('Gửi dở')).toHaveLength(1);
+      async () => {
+        expect(await notificationOf('Đang chờ')).toMatchObject({ status: 'sent', attempts: 1 });
+        expect(await notificationOf('Gửi dở')).toMatchObject({ status: 'sent', attempts: 2 });
       },
       { timeout: 5000, interval: 20 },
     );
+    expect(leadEmails('Đang chờ')).toHaveLength(1);
+    expect(leadEmails('Gửi dở')).toHaveLength(1);
     // Another instance may still be sending this one; it is not taken.
     expect(leadEmails('Đang gửi')).toEqual([]);
+    expect(await notificationOf('Đang gửi')).toMatchObject({ status: 'sending', attempts: 1 });
     expect(leadEmails('Đã gửi')).toEqual([]);
-    const stuck = await t.connection.collection('leads').findOne({ 'fields.name': 'Gửi dở' });
-    expect(stuck?.['notification']).toMatchObject({ status: 'sent', attempts: 2 });
   });
 
   it('does not email the addresses of another site', async () => {

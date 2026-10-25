@@ -5,6 +5,7 @@ import {
   type LeadListResponse,
   updateLeadRequestSchema,
 } from '@plp/contracts';
+import type { QueryClient } from '@tanstack/react-query';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -68,6 +69,7 @@ interface Setup {
   /** The detail the server rendered the page with. */
   initialDetail?: LeadDetail | null;
   counts?: LeadCounts;
+  loadedAt?: number;
 }
 
 /** The first path argument of a call, e.g. the lead id of `getLead`. */
@@ -138,18 +140,22 @@ function serve(details: LeadDetail[], list: LeadListResponse) {
   });
 }
 
-function renderInbox({
-  list = leadList([ha, bao], {
-    counts: { inbox: { count: 2, capped: false }, spam: { count: 1, capped: false } },
-  }),
-  filters = DEFAULT_LEAD_FILTERS,
-  canManage = true,
-  leadId = null,
-  details = [leadDetail(), baoDetail],
-  initialDetail = null,
-  counts = NO_LEADS,
-  recipientsOpen = false,
-}: Setup = {}) {
+function renderInbox(
+  {
+    list = leadList([ha, bao], {
+      counts: { inbox: { count: 2, capped: false }, spam: { count: 1, capped: false } },
+    }),
+    filters = DEFAULT_LEAD_FILTERS,
+    canManage = true,
+    leadId = null,
+    details = [leadDetail(), baoDetail],
+    initialDetail = null,
+    counts = NO_LEADS,
+    recipientsOpen = false,
+    loadedAt = LOADED_AT,
+  }: Setup = {},
+  queryClient?: QueryClient,
+) {
   serve(details, list);
   return renderWithProviders(
     <LeadInbox
@@ -162,8 +168,9 @@ function renderInbox({
       pageRefs={pageRefs}
       leadCounts={counts}
       initialRecipientsOpen={recipientsOpen}
-      loadedAt={LOADED_AT}
+      loadedAt={loadedAt}
     />,
+    queryClient,
   );
 }
 
@@ -711,5 +718,68 @@ describe('LeadInbox', () => {
       queryClient,
     );
     expect(queryClient.getQueryData(leadQueryKeys.counts(SITE_ID))).toEqual(fresh);
+  });
+
+  it('shows the leads of a newer server render over the list an earlier visit cached', async () => {
+    const first = renderInbox();
+    expect(screen.getByText('2 / 2 lead')).toBeInTheDocument();
+    first.unmount();
+
+    // A lead arrives, and the sidebar's "Leads" renders the inbox again seconds later.
+    vi.setSystemTime(LOADED_AT + 5_000);
+    const lan = leadItem({
+      id: '64b000000000000000000403',
+      name: 'Phạm Ngọc Lan',
+      phone: '+84912345678',
+      createdAt: '2026-10-24T09:50:02.000Z',
+    });
+    renderInbox(
+      {
+        list: leadList([lan, ha, bao], {
+          counts: { inbox: { count: 3, capped: false }, spam: { count: 1, capped: false } },
+        }),
+        loadedAt: LOADED_AT + 5_000,
+      },
+      first.queryClient,
+    );
+
+    expect(await screen.findByRole('link', { name: 'Phạm Ngọc Lan' })).toBeInTheDocument();
+    expect(screen.getByText('3 / 3 lead')).toBeInTheDocument();
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a newer server render of the lead it opens over the detail an earlier visit cached', async () => {
+    const sending = leadDetail({
+      notification: {
+        status: 'sending',
+        attempts: 1,
+        lastErrorCode: null,
+        sentAt: null,
+        recipients: null,
+        rejectedRecipients: null,
+      },
+    });
+    const first = renderInbox({ leadId: LEAD_ID, initialDetail: sending });
+    const panel = screen.getByRole('complementary', { name: 'Nguyễn Thu Hà' });
+    expect(within(panel).getByRole('region', { name: 'Đã gửi tới' })).toHaveTextContent(
+      'Đang gửi email thông báo',
+    );
+    first.unmount();
+
+    // Seconds later a link to the lead (from "Yêu cầu từ người gửi form") renders the inbox
+    // again, once the email went out.
+    vi.setSystemTime(LOADED_AT + 5_000);
+    renderInbox(
+      { leadId: LEAD_ID, initialDetail: leadDetail(), loadedAt: LOADED_AT + 5_000 },
+      first.queryClient,
+    );
+
+    const again = screen.getByRole('complementary', { name: 'Nguyễn Thu Hà' });
+    await vi.waitFor(() => {
+      expect(within(again).getByRole('region', { name: 'Đã gửi tới' })).toHaveTextContent(
+        'Email thông báo · 2 người nhận',
+      );
+    });
+    expect(apiMock).not.toHaveBeenCalled();
   });
 });

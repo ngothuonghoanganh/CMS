@@ -82,9 +82,19 @@
   box-shadow: 0 0 0 2px var(--plp-accent);
 }
 
+/*
+ * An empty text shows its field's name. Muted keeps AA on the background and the surface of every
+ * scheme (themes.spec); in a button the label's own color is the one that keeps it. Contrast cannot
+ * tell it from real text there, so the slant does: a field left empty never looks filled in.
+ */
 .editable:empty::before {
   content: attr(data-placeholder);
-  opacity: 0.6;
+  color: var(--plp-muted);
+  font-style: italic;
+}
+
+.button .editable:empty::before {
+  color: inherit;
 }
 
 .imagePlaceholder {

@@ -1,6 +1,6 @@
 'use client';
 
-import { LEAD_ROUTE } from '@plp/contracts';
+import { LEAD_FILL_MS_MAX, LEAD_ROUTE } from '@plp/contracts';
 import {
   leadFieldId,
   type LeadFormErrorField,
@@ -56,13 +56,8 @@ function issuesOf(body: unknown) {
  */
 export function LeadFormClient(props: LeadFormViewProps) {
   const [state, setState] = useState<FormState>(IDLE);
-  const shownAt = useRef<number | null>(null);
   const submissionId = useRef<string | null>(null);
   const sentHeading = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    shownAt.current = performance.now();
-  }, []);
 
   useEffect(() => {
     if (state.sent) {
@@ -92,8 +87,11 @@ export function LeadFormClient(props: LeadFormViewProps) {
       },
       {
         submissionId: submissionId.current,
-        elapsedMs:
-          shownAt.current === null ? null : Math.round(performance.now() - shownAt.current),
+        // Counted from the page's navigation, not from when this script mounted: the form drawn on
+        // the server can be filled in while the script loads, seconds on a slow connection, and a
+        // person must never look faster than they were (ADR-016). A tab left open for days still
+        // sends, at the cap.
+        elapsedMs: Math.min(Math.round(performance.now()), LEAD_FILL_MS_MAX),
         source: leadSourceFrom(window.location.href, document.referrer),
       },
     );

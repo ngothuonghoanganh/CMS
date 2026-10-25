@@ -1,9 +1,20 @@
 import type { ErrorCode, SaveDraftRequest, SaveDraftResponse } from '@plp/contracts';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { ApiError, api } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
-import { emptyChecks, makeStore, pageSummary } from './test-fixtures';
-import { createDraftSaver, DraftConflictError } from './use-draft-saver';
+import { siteQueryKeys } from '../dashboard/queries';
+import { pageQueryKeys } from '../history/queries';
+import { createTestQueryClient } from '../shell/test-utils';
+import { emptyChecks, makeStore, PAGE_ID, pageSummary, SITE_ID } from './test-fixtures';
+import {
+  createDraftSaver,
+  DraftConflictError,
+  runningSavesSettled,
+  useDraftSaver,
+} from './use-draft-saver';
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
@@ -273,5 +284,92 @@ describe('draft saver', () => {
     stop();
     await vi.advanceTimersByTimeAsync(0);
     expect(saveMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runningSavesSettled', () => {
+  it('waits for every save of the page from any screen, and also ends when one fails', async () => {
+    const seo = setup();
+    const editor = setup();
+    const seoSave = deferred<SaveDraftResponse>();
+    const editorSave = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(seoSave.promise).mockReturnValueOnce(editorSave.promise);
+    // "SEO & chia sẻ": its autosave is on its way when Back stops the saver.
+    seo.store.getState().updateSeo({ title: 'Niềng răng trong suốt' });
+    await vi.advanceTimersByTimeAsync(1500);
+    seo.stop();
+    editor.store.getState().setSpacing(HERO, 'compact');
+    const editorSaved = editor.saver.ensureSaved();
+
+    const settled = vi.fn();
+    void runningSavesSettled(PAGE_ID).then(settled);
+    editorSave.resolve(response(4));
+    await expect(editorSaved).resolves.toMatchObject({ revision: 4 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).not.toHaveBeenCalled();
+
+    seoSave.reject(problem(409, 'revision_conflict'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toHaveBeenCalledTimes(1);
+    editor.stop();
+  });
+
+  it('also waits for a save that started after one that ends first', async () => {
+    const editor = setup();
+    const seo = setup();
+    const editorSave = deferred<SaveDraftResponse>();
+    const seoSave = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(editorSave.promise).mockReturnValueOnce(seoSave.promise);
+    editor.store.getState().setSpacing(HERO, 'compact');
+    const editorSaved = editor.saver.ensureSaved();
+    seo.store.getState().updateSeo({ title: 'Niềng răng trong suốt' });
+    const seoSaved = seo.saver.ensureSaved();
+
+    const settled = vi.fn();
+    void runningSavesSettled(PAGE_ID).then(settled);
+    editorSave.resolve(response(4));
+    await expect(editorSaved).resolves.toMatchObject({ revision: 4 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).not.toHaveBeenCalled();
+
+    seoSave.resolve(response(5));
+    await expect(seoSaved).resolves.toMatchObject({ revision: 5 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toHaveBeenCalledTimes(1);
+    editor.stop();
+    seo.stop();
+  });
+});
+
+describe('useDraftSaver', () => {
+  it('marks the page lists and the page screens stale after a save, without reading them', async () => {
+    const store = makeStore();
+    const queryClient = createTestQueryClient();
+    const list = siteQueryKeys.pageList(SITE_ID, { status: null, q: '' });
+    const summary = pageQueryKeys.summary(SITE_ID, PAGE_ID);
+    const otherPage = pageQueryKeys.summary(SITE_ID, '64b0000000000000000000ff');
+    const linkTargets = [...siteQueryKeys.pages(SITE_ID), 'link-targets'];
+    for (const key of [list, summary, otherPage, linkTargets]) {
+      queryClient.setQueryData(key, { cached: true });
+    }
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result, unmount } = renderHook(() => useDraftSaver(store), { wrapper });
+
+    saveMock.mockRejectedValueOnce(problem(503, 'internal'));
+    store.getState().setSpacing(HERO, 'compact');
+    await act(() => expect(result.current.ensureSaved()).rejects.toThrow());
+    expect(queryClient.getQueryState(list)?.isInvalidated).toBe(false);
+
+    saveMock.mockResolvedValueOnce(response(4));
+    await act(() => result.current.ensureSaved());
+    expect(queryClient.getQueryState(list)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(summary)?.isInvalidated).toBe(true);
+    // The editor's own link targets and other pages are left alone.
+    expect(queryClient.getQueryState(linkTargets)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(otherPage)?.isInvalidated).toBe(false);
+    // Nothing read now: only the two saves went out.
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    unmount();
   });
 });

@@ -1,5 +1,10 @@
-import { endpoints, type HistoryResponse, type PageSummary } from '@plp/contracts';
-import { screen, waitFor, within } from '@testing-library/react';
+import {
+  endpoints,
+  type HistoryEntry,
+  type HistoryResponse,
+  type PageSummary,
+} from '@plp/contracts';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -40,24 +45,53 @@ const rolledBackPage = historyPage({
   },
 });
 
-const rolledBackHistory = historyFixture(
-  [
-    {
-      kind: 'pointer',
-      activityId: '64b0000000000000000000f1',
-      type: 'rolled_back',
-      fromVersion: 12,
-      toVersion: 11,
-      reason: 'Giá mới chưa duyệt',
-      by: ngocAnh,
-      at: '2026-10-24T10:20:00.000Z',
-      undoable: true,
-    },
-    releaseEntry(12),
-    releaseEntry(11),
-  ],
-  { liveReleaseId: releaseId(11) },
-);
+const rollbackEntry: HistoryEntry = {
+  kind: 'pointer',
+  activityId: '64b0000000000000000000f1',
+  type: 'rolled_back',
+  fromVersion: 12,
+  toVersion: 11,
+  reason: 'Giá mới chưa duyệt',
+  by: ngocAnh,
+  at: '2026-10-24T10:20:00.000Z',
+  undoable: true,
+};
+
+const rolledBackHistory = historyFixture([rollbackEntry, releaseEntry(12), releaseEntry(11)], {
+  liveReleaseId: releaseId(11),
+});
+
+const undoneEntry: HistoryEntry = {
+  kind: 'pointer',
+  activityId: '64b0000000000000000000f2',
+  type: 'rollback_undone',
+  fromVersion: 11,
+  toVersion: 12,
+  reason: null,
+  by: ngocAnh,
+  at: '2026-10-24T10:25:00.000Z',
+  undoable: false,
+};
+
+/** The answer of "Hoàn tác khôi phục": v12 is live again. */
+const undone = { activityId: undoneEntry.activityId, page: historyPage(), revalidation: 'ok' };
+
+/** The screen as it opens on `history`, with the page summary that goes with it. */
+function renderAt(page: PageSummary, history: HistoryResponse) {
+  return renderWithProviders(
+    <HistoryScreen
+      site={siteFixture()}
+      initialPage={page}
+      initialHistory={history}
+      loadedAt={LOADED_AT}
+      restoreReleaseId={null}
+    />,
+  );
+}
+
+function listHeading(): HTMLElement {
+  return screen.getByRole('heading', { level: 2, name: 'Phiên bản đã xuất bản' });
+}
 
 interface ServerState {
   page: PageSummary;
@@ -456,5 +490,272 @@ describe('HistoryScreen', () => {
     });
     expect(opened.opener).toBeNull();
     open.mockRestore();
+  });
+
+  it('continues from the list when "Hoàn tác khôi phục" takes the banner away', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: rolledBackPage, history: rolledBackHistory };
+    serve(server);
+    renderAt(rolledBackPage, rolledBackHistory);
+    const undo = screen.getByRole('button', { name: 'Hoàn tác khôi phục' });
+    act(() => {
+      undo.focus();
+    });
+
+    server.page = historyPage();
+    server.history = historyFixture([undoneEntry, ...rolledBackHistory.items]);
+    apiMock.mockImplementationOnce(() => Promise.resolve(undone));
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Đã hoàn tác khôi phục')).toBeInTheDocument();
+    expect(undo).not.toBeInTheDocument();
+    expect(listHeading()).toHaveFocus();
+  });
+
+  it('continues from the list when the history removes the banner before the page read ends', async () => {
+    const user = userEvent.setup();
+    let answerPage: () => void = () => undefined;
+    const pageHeld = new Promise<void>((resolve) => {
+      answerPage = resolve;
+    });
+    renderAt(rolledBackPage, rolledBackHistory);
+    apiMock.mockImplementation(async (endpoint) => {
+      if (endpoint === endpoints.undoActivity) {
+        return undone;
+      }
+      if (endpoint === endpoints.history) {
+        return historyFixture([undoneEntry, ...rolledBackHistory.items]);
+      }
+      if (endpoint === endpoints.getPage) {
+        await pageHeld;
+        return { page: historyPage(), draft: { revision: 9 }, checks: {} };
+      }
+      throw new Error('unexpected call');
+    });
+    const undo = screen.getByRole('button', { name: 'Hoàn tác khôi phục' });
+    act(() => {
+      undo.focus();
+    });
+    await user.keyboard('{Enter}');
+
+    // The refresh waits for the page read, but the history already took the banner away.
+    await waitFor(() => {
+      expect(undo).not.toBeInTheDocument();
+    });
+    await act(async () => {
+      answerPage();
+      await pageHeld;
+    });
+    expect(await screen.findByText('Đã hoàn tác khôi phục')).toBeInTheDocument();
+    expect(listHeading()).toHaveFocus();
+  });
+
+  it('continues from the list after an undo while the rollback panel stays open', async () => {
+    const user = userEvent.setup();
+    const history = historyFixture(
+      [rollbackEntry, releaseEntry(12), releaseEntry(11), releaseEntry(10)],
+      { liveReleaseId: releaseId(11) },
+    );
+    const server: ServerState = { page: rolledBackPage, history };
+    serve(server);
+    renderAt(rolledBackPage, history);
+    await user.click(within(card('v10')).getByRole('button', { name: 'Khôi phục bản này' }));
+    expect(screen.getByRole('heading', { name: 'Khôi phục v10 thành bản live?' })).toHaveFocus();
+
+    server.page = historyPage();
+    server.history = historyFixture([undoneEntry, ...history.items]);
+    apiMock.mockImplementationOnce(() => Promise.resolve(undone));
+    await user.click(screen.getByRole('button', { name: 'Hoàn tác khôi phục' }));
+
+    expect(await screen.findByText('Đã hoàn tác khôi phục')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Khôi phục v10 thành bản live?' })).toBeVisible();
+    expect(listHeading()).toHaveFocus();
+  });
+
+  it('continues from the list when the rollback was undone elsewhere meanwhile', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: rolledBackPage, history: rolledBackHistory };
+    serve(server);
+    renderAt(rolledBackPage, rolledBackHistory);
+
+    // A teammate undid it first: the refreshed history has no banner any more.
+    server.page = historyPage();
+    server.history = historyFixture([undoneEntry, ...rolledBackHistory.items]);
+    apiMock.mockImplementationOnce(() =>
+      Promise.reject(apiError(409, 'pointer_conflict', 'Trang live vừa được thay đổi')),
+    );
+    await user.click(screen.getByRole('button', { name: 'Hoàn tác khôi phục' }));
+
+    expect(await screen.findByText('Chưa hoàn tác được')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Hoàn tác khôi phục' })).toBeNull();
+    });
+    expect(listHeading()).toHaveFocus();
+  });
+
+  it('leaves the focus where it is when the history after an undo could not be read', async () => {
+    const user = userEvent.setup();
+    serve({ page: rolledBackPage, history: rolledBackHistory });
+    renderAt(rolledBackPage, rolledBackHistory);
+
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.undoActivity) {
+        return Promise.resolve(undone);
+      }
+      if (endpoint === endpoints.getPage) {
+        return Promise.resolve({ page: historyPage(), draft: { revision: 9 }, checks: {} });
+      }
+      return Promise.reject(new TypeError('Failed to fetch'));
+    });
+    const undo = screen.getByRole('button', { name: 'Hoàn tác khôi phục' });
+    await user.click(undo);
+    expect(await screen.findByText('Đã hoàn tác khôi phục')).toBeInTheDocument();
+    expect(await screen.findByText(/Không tải lại được lịch sử/)).toBeInTheDocument();
+    // The banner (out of date) and its button are still there, and so is the focus.
+    expect(undo).toHaveFocus();
+
+    // Later, the rollback panel takes the focus as it opens, and keeps it.
+    await user.click(within(card('v12')).getByRole('button', { name: 'Khôi phục bản này' }));
+    expect(screen.getByRole('heading', { name: 'Khôi phục v12 thành bản live?' })).toHaveFocus();
+  });
+
+  it('keeps the focus in the header when the page is unpublished from it', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: historyPage(), history: initialHistory };
+    serve(server);
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Gỡ xuất bản' }));
+    const dialog = screen.getByRole('alertdialog');
+    await user.type(within(dialog).getByRole('textbox', { name: /Lý do/ }), 'Hết chương trình');
+
+    const unpublished = historyPage({
+      status: { kind: 'unpublished', changeCount: 0, changes: [] },
+      liveRelease: null,
+      liveUrl: null,
+    });
+    server.page = unpublished;
+    server.history = historyFixture(
+      [
+        {
+          kind: 'pointer',
+          activityId: '64b0000000000000000000f3',
+          type: 'unpublished',
+          fromVersion: 12,
+          toVersion: null,
+          reason: 'Hết chương trình',
+          by: ngocAnh,
+          at: '2026-10-24T12:00:00.000Z',
+          undoable: false,
+        },
+        ...initialHistory.items,
+      ],
+      { liveReleaseId: null },
+    );
+    apiMock.mockImplementationOnce(() =>
+      Promise.resolve({
+        activityId: '64b0000000000000000000f3',
+        page: unpublished,
+        revalidation: 'ok',
+      }),
+    );
+    const confirm = within(dialog).getAllByRole('button', { name: 'Gỡ xuất bản' }).at(-1);
+    if (confirm === undefined) {
+      throw new Error('confirm button missing');
+    }
+    await user.click(confirm);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    // "Tùy chọn khác" exists for a live page only: focus goes to "Mở editor" beside it.
+    expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+    });
+  });
+
+  it('keeps the focus in the header when a teammate unpublished first and the read catches up', async () => {
+    const user = userEvent.setup();
+    const unpublished = historyPage({
+      status: { kind: 'unpublished', changeCount: 0, changes: [] },
+      liveRelease: null,
+      liveUrl: null,
+    });
+    renderScreen();
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.movePointer) {
+        return Promise.reject(apiError(409, 'pointer_conflict', 'Trang live vừa được thay đổi'));
+      }
+      if (endpoint === endpoints.getPage) {
+        // The read answers after the dialog closed and gave the focus back to its menu button.
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ page: unpublished, draft: { revision: 9 }, checks: {} });
+          }, 40);
+        });
+      }
+      if (endpoint === endpoints.history) {
+        return Promise.resolve(historyFixture(initialHistory.items, { liveReleaseId: null }));
+      }
+      return Promise.reject(new Error('unexpected call'));
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Gỡ xuất bản' }));
+    const dialog = screen.getByRole('alertdialog');
+    await user.type(within(dialog).getByRole('textbox', { name: /Lý do/ }), 'Hết chương trình');
+    const confirm = within(dialog).getAllByRole('button', { name: 'Gỡ xuất bản' }).at(-1);
+    if (confirm === undefined) {
+      throw new Error('confirm button missing');
+    }
+    await user.click(confirm);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+    });
+    expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+  });
+
+  it('shows the newer page and history over what an earlier visit cached', async () => {
+    const first = renderScreen();
+    expect(screen.getByText('4 thay đổi chưa xuất bản')).toBeInTheDocument();
+    first.unmount();
+
+    // Back on the screen seconds later: autosave changed the draft since, and a teammate
+    // published v13; the server rendered the screen again with both.
+    vi.setSystemTime(LOADED_AT + 5_000);
+    renderWithProviders(
+      <HistoryScreen
+        site={siteFixture()}
+        initialPage={historyPage({
+          status: { kind: 'live_with_changes', changeCount: 1, changes: [] },
+          liveRelease: {
+            id: releaseId(13),
+            version: 13,
+            slug: 'uu-dai-thang-11',
+            publishedAt: '2026-10-24T11:59:00.000Z',
+          },
+          latestVersion: 13,
+        })}
+        initialHistory={historyFixture([releaseEntry(13), ...initialHistory.items], {
+          liveReleaseId: releaseId(13),
+        })}
+        loadedAt={LOADED_AT + 5_000}
+        restoreReleaseId={null}
+      />,
+      first.queryClient,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('1 thay đổi chưa xuất bản')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Đã xuất bản · 3' })).toBeInTheDocument();
+    expect(within(card('v13')).getByText('ĐANG LIVE')).toBeInTheDocument();
+    expect(apiMock).not.toHaveBeenCalled();
   });
 });

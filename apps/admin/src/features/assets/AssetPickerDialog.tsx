@@ -305,21 +305,24 @@ export function AssetPickerDialog({
 }: AssetPickerDialogProps) {
   const [selected, setSelected] = useState<Asset | null>(null);
 
+  // The field that opens the picker keeps it mounted: every way of closing ("Hủy", ✕, Escape, a
+  // choice) drops the highlighted image, so the next opening starts without one.
+  function changeOpen(next: boolean) {
+    if (!next) {
+      setSelected(null);
+    }
+    onOpenChange(next);
+  }
+
   function choose(asset: Asset) {
     onSelect(selectionOf(asset), asset);
-    setSelected(null);
-    onOpenChange(false);
+    changeOpen(false);
   }
 
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          setSelected(null);
-        }
-        onOpenChange(next);
-      }}
+      onOpenChange={changeOpen}
       size="lg"
       fallbackFocusRef={fallbackFocusRef}
       title={title ?? 'Chọn ảnh'}
@@ -329,7 +332,7 @@ export function AssetPickerDialog({
           <Button
             variant="secondary"
             onClick={() => {
-              onOpenChange(false);
+              changeOpen(false);
             }}
           >
             Hủy

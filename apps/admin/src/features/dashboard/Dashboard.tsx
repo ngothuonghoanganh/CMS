@@ -23,7 +23,12 @@ import {
   SegmentedControl,
   VisuallyHidden,
 } from '@plp/ui';
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import Link from 'next/link';
 import { internalVisitUrl } from '../../lib/site-url';
 import { useEffect, useState } from 'react';
@@ -33,6 +38,7 @@ import { cx } from '../shell/cx';
 import { leadRecipientsHref, newPageHref, privacyHref, siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
+import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 import { useDebouncedValue } from '../shell/use-debounced-value';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
@@ -82,6 +88,7 @@ export function Dashboard({
   initialLeadCounts,
   loadedAt,
 }: DashboardProps) {
+  const queryClient = useQueryClient();
   const now = useNow(loadedAt);
   const leadCounts = useLeadCounts(site.id, initialLeadCounts, loadedAt).data;
   const [status, setStatus] = useState(initialFilters.status);
@@ -101,6 +108,23 @@ export function Dashboard({
     }
   }, [status, q]);
 
+  // Coming back renders the dashboard again on the server: its pages and activity are newer than
+  // what the cache kept from an earlier visit, which autosave or another member does not refresh.
+  useEffect(() => {
+    adoptServerRender(
+      queryClient,
+      siteQueryKeys.pageList(site.id, initialFilters),
+      serverFirstPage(initialPages),
+      loadedAt,
+    );
+    adoptServerRender(
+      queryClient,
+      siteQueryKeys.recentActivity(site.id),
+      initialActivity,
+      loadedAt,
+    );
+  }, [queryClient, site.id, initialFilters, initialPages, initialActivity, loadedAt]);
+
   const pagesQuery = useInfiniteQuery({
     queryKey: siteQueryKeys.pageList(site.id, filters),
     queryFn: ({ pageParam, signal }) =>
@@ -115,9 +139,7 @@ export function Dashboard({
     initialPageParam: FIRST_PAGE,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialData: () =>
-      sameFilters(filters, initialFilters)
-        ? { pages: [initialPages], pageParams: [FIRST_PAGE] }
-        : undefined,
+      sameFilters(filters, initialFilters) ? serverFirstPage(initialPages) : undefined,
     initialDataUpdatedAt: loadedAt,
     placeholderData: keepPreviousData,
   });

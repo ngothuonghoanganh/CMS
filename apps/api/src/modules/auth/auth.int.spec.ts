@@ -1,8 +1,12 @@
 import { meResponseSchema, problemSchema, SESSION_COOKIE } from '@plp/contracts';
+import { Types } from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
+import { createSite } from '../../../test/resources.js';
+import { hashSessionToken, newSessionToken } from './session-token.js';
+import { SessionsRepository } from './sessions.repository.js';
 
 describe('auth', () => {
   let t: TestApp;
@@ -89,6 +93,45 @@ describe('auth', () => {
   it('requires a session on protected routes', async () => {
     const response = await request(t.app.getHttpServer()).get('/auth/me').expect(401);
     expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('refuses an expired session to reads and writes, before the TTL monitor removes it', async () => {
+    const { client, me, workspaceId } = await signedUpClient(t.app);
+    const site = await createSite(client, workspaceId, { name: 'Nha khoa Smile Care' });
+    // MongoDB deletes the record up to a minute or more after `expiresAt`; until then only the
+    // guard's expiry check refuses it. Expired a moment ago, so a guard comparing with a "now"
+    // taken earlier (at startup, say) lets it through.
+    await t.connection
+      .collection('sessions')
+      .updateMany(
+        { userId: new Types.ObjectId(me.user.id) },
+        { $set: { expiresAt: new Date(Date.now() - 1) } },
+      );
+
+    const meResponse = await client.get('/auth/me').expect(401);
+    expect(problemSchema.parse(meResponse.body).code).toBe('unauthenticated');
+    const rename = await client.patch(`/sites/${site.id}`, { name: 'Đổi tên' }).expect(401);
+    expect(problemSchema.parse(rename.body).code).toBe('unauthenticated');
+    const stored = await t.connection
+      .collection('sites')
+      .findOne({ _id: new Types.ObjectId(site.id) });
+    expect(stored?.['name']).toBe('Nha khoa Smile Care');
+  });
+
+  it('finds a session until its expiry and never after', async () => {
+    const sessions = t.app.get(SessionsRepository);
+    const tokenHash = hashSessionToken(newSessionToken());
+    // An hour ahead, so the TTL monitor leaves the record alone and only the query decides.
+    const expiresAt = new Date(Date.now() + 3_600_000);
+    await sessions.create(new Types.ObjectId(), tokenHash, expiresAt);
+
+    expect(await sessions.findActive(tokenHash, new Date())).toMatchObject({
+      tokenHash,
+      expiresAt,
+    });
+    expect(await sessions.findActive(tokenHash, new Date(expiresAt.getTime() - 1))).not.toBeNull();
+    expect(await sessions.findActive(tokenHash, expiresAt)).toBeNull();
+    expect(await sessions.findActive(tokenHash, new Date(expiresAt.getTime() + 1))).toBeNull();
   });
 
   it('rejects state-changing requests that do not come from the admin origin', async () => {

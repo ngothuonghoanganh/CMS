@@ -30,6 +30,7 @@ import { PageDetailHeader } from '../page-header/PageDetailHeader';
 import { pageHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
 import {
@@ -68,8 +69,11 @@ function clearRestoreParam() {
   }
 }
 
-/** Where keyboard focus goes once the rollback panel closes. */
-type PanelFocus = { kind: 'opener'; releaseId: string } | { kind: 'banner' };
+/**
+ * Where keyboard focus goes once the element holding it goes away: the rollback panel as it
+ * closes, or the banner's undo button with the banner.
+ */
+type FocusRequest = { kind: 'opener'; releaseId: string } | { kind: 'banner' } | { kind: 'list' };
 
 function RollbackBanner({
   entry,
@@ -146,7 +150,20 @@ export function HistoryScreen({
   const [copyOpen, setCopyOpen] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const panelFocus = useRef<PanelFocus | null>(null);
+  const focusRequest = useRef<FocusRequest | null>(null);
+
+  // Coming back renders the screen again on the server: the page's status and its history are
+  // newer than what the cache kept from an earlier visit, which autosave or a teammate's publish
+  // does not refresh.
+  useEffect(() => {
+    adoptServerRender(queryClient, pageQueryKeys.summary(site.id, pageId), initialPage, loadedAt);
+    adoptServerRender(
+      queryClient,
+      pageQueryKeys.history(site.id, pageId),
+      serverFirstPage(initialHistory),
+      loadedAt,
+    );
+  }, [queryClient, site.id, pageId, initialPage, initialHistory, loadedAt]);
 
   const pageQuery = useQuery({
     queryKey: pageQueryKeys.summary(site.id, pageId),
@@ -168,7 +185,7 @@ export function HistoryScreen({
       }),
     initialPageParam: FIRST_PAGE,
     getNextPageParam: (last) => last.nextCursor,
-    initialData: { pages: [initialHistory], pageParams: [FIRST_PAGE] },
+    initialData: serverFirstPage(initialHistory),
     initialDataUpdatedAt: loadedAt,
   });
   const lists = historyQuery.data.pages;
@@ -198,14 +215,23 @@ export function HistoryScreen({
   }
 
   // The panel held focus when it closed: continue from the button that opened it (or the list),
-  // or from the banner that now confirms the rollback.
+  // or from the banner that now confirms the rollback. An undo takes the banner away with the
+  // button that held focus, panel open or not: continue from the list.
   const panelOpen = selected !== null;
   useEffect(() => {
-    const request = panelFocus.current;
-    if (request === null || panelOpen) {
+    const request = focusRequest.current;
+    if (request === null || (panelOpen && request.kind !== 'list')) {
       return;
     }
-    panelFocus.current = null;
+    focusRequest.current = null;
+    if (request.kind === 'list') {
+      // Only when focus went away with the banner. The banner stays when the history could not be
+      // read again: the request then waits, and must not take the focus from a panel opened later.
+      if (document.activeElement === null || document.activeElement === document.body) {
+        headingRef.current?.focus();
+      }
+      return;
+    }
     if (request.kind === 'banner' && bannerRef.current !== null) {
       bannerRef.current.focus();
       return;
@@ -221,6 +247,8 @@ export function HistoryScreen({
     mutationFn: (activityId: string) => api(endpoints.undoActivity, [activityId]),
     onSuccess: async (result) => {
       setPage(result.page);
+      // Asked for before the refresh, like a rollback: the history it brings removes the banner.
+      focusRequest.current = { kind: 'list' };
       await refreshSite();
       const version = result.page.liveRelease?.version;
       toast({
@@ -236,6 +264,8 @@ export function HistoryScreen({
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 409) {
+        // The live page moved meanwhile: the refreshed history may no longer have the banner.
+        focusRequest.current = { kind: 'list' };
         void refreshSite();
         toast({
           tone: 'warning',
@@ -253,7 +283,7 @@ export function HistoryScreen({
     setPage(result.page);
     // Asked for before the refresh: the history it brings closes the panel and shows the banner in
     // one render, which may come before the other reads finish.
-    panelFocus.current = { kind: 'banner' };
+    focusRequest.current = { kind: 'banner' };
     await refreshSite();
     closePanel();
     if (result.revalidation === 'failed') {
@@ -386,7 +416,7 @@ export function HistoryScreen({
             release={selected}
             liveReleaseId={liveReleaseId}
             onCancel={() => {
-              panelFocus.current = { kind: 'opener', releaseId: selected.id };
+              focusRequest.current = { kind: 'opener', releaseId: selected.id };
               closePanel();
             }}
             onRolledBack={onRolledBack}
