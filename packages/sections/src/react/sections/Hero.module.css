@@ -1,0 +1,161 @@
+.root {
+  display: grid;
+  gap: 32px;
+  align-items: center;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eyebrow {
+  align-self: flex-start;
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--plp-surface);
+  color: var(--plp-link);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subheading {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.media {
+  min-width: 0;
+}
+
+/* Centered */
+.centered {
+  justify-items: center;
+  text-align: center;
+}
+
+.centered .text {
+  align-items: center;
+  max-width: 720px;
+}
+
+.centered .eyebrow {
+  align-self: center;
+}
+
+.centered .actions {
+  justify-content: center;
+}
+
+/* Background image: the overlay keeps white text readable on any photo. */
+.background {
+  position: relative;
+  isolation: isolate;
+  min-height: 420px;
+  padding: 40px 24px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--plp-surface);
+}
+
+.background .text {
+  max-width: 640px;
+}
+
+.backgroundImage {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+
+.backgroundImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+/* Only a chosen photo gets the overlay; the edit placeholder keeps the scheme's colors. */
+.overPhoto .backgroundImage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 15, 20, 0.62);
+}
+
+.overPhoto .heading,
+.overPhoto .subheading,
+.overPhoto .eyebrow {
+  color: #ffffff;
+}
+
+/* Over a photo the eyebrow is plain white text, like the heading. */
+.overPhoto .eyebrow {
+  padding-inline: 0;
+  background: transparent;
+}
+
+/*
+ * The scheme's link color (a dark teal, indigo or orange in the light and soft schemes) is far
+ * below AA on the overlay, so the outlined button and every focus ring turn white there. White on
+ * the overlay is at least 5.5:1 whatever the photo.
+ */
+.overPhoto .secondaryOverPhoto {
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+.overPhoto .ctaOverPhoto:focus-visible {
+  outline-color: #ffffff;
+}
+
+@container plp-page (max-width: 767px) {
+  .mediaFirst .media {
+    order: -1;
+  }
+
+  /* Phones: one full-width button per row, within reach of the thumb. */
+  .actions {
+    flex-direction: column;
+    align-self: stretch;
+  }
+}
+
+@container plp-page (min-width: 768px) {
+  .heading {
+    font-size: 44px;
+  }
+
+  .split {
+    grid-template-columns: 1.1fr 1fr;
+    gap: 48px;
+  }
+
+  .background {
+    min-height: 520px;
+    padding: 64px;
+    align-content: center;
+  }
+}

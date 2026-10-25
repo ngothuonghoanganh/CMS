@@ -14,7 +14,7 @@ loadEnvConfig(
 const env = parseAdminEnv(process.env);
 
 const config: NextConfig = {
-  transpilePackages: ['@plp/ui'],
+  transpilePackages: ['@plp/ui', '@plp/sections'],
   // The browser talks to the API through the admin origin, so the session cookie stays first-party.
   rewrites() {
     return Promise.resolve([

@@ -1,0 +1,56 @@
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: var(--target-min);
+  box-sizing: border-box;
+}
+
+.box {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  /* Centers the 18px box on the first 44px-tall label line. */
+  margin: 13px 0 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.box:disabled {
+  cursor: not-allowed;
+}
+
+.box:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The label fills the 44px target height next to the box. */
+.label {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-min);
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+  cursor: pointer;
+}
+
+.box:disabled + .text .label {
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+.description {
+  margin-top: -8px;
+  padding-bottom: 8px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}

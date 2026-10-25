@@ -1,0 +1,51 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 720px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.root .cta {
+  margin-top: 6px;
+  min-height: 52px;
+  padding: 0 28px;
+}
+
+@container plp-page (max-width: 767px) {
+  .root .cta {
+    align-self: stretch;
+  }
+}
+
+@container plp-page (min-width: 768px) {
+  .root {
+    gap: 16px;
+  }
+
+  .heading {
+    font-size: 32px;
+  }
+
+  .text {
+    font-size: 17px;
+  }
+}

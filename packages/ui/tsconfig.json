@@ -1,7 +1,7 @@
 {
-  "extends": "@plp/config/tsconfig.node.json",
+  "extends": "@plp/config/tsconfig.react.json",
   "compilerOptions": {
-    "noEmit": true
+    "types": ["node", "@testing-library/jest-dom/vitest"]
   },
-  "include": ["src"]
+  "include": ["src", "vitest.config.ts"]
 }

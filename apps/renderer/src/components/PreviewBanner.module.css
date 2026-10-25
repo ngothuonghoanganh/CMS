@@ -1,0 +1,57 @@
+/* Sticky rather than fixed: it stays on top while scrolling without covering the page's first section. */
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: var(--renderer-ink);
+  color: var(--renderer-on-ink);
+  font-family: var(--renderer-font);
+  font-size: 14px;
+  line-height: 1.45;
+  box-shadow: 0 2px 10px var(--renderer-shadow);
+}
+
+.inner {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: 10px 16px;
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.version {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--renderer-accent);
+  color: var(--renderer-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.expiry,
+.note {
+  color: var(--renderer-on-ink-muted);
+}
+
+.note {
+  margin: 4px 0 0;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    padding-inline: 40px;
+  }
+}

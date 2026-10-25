@@ -1,0 +1,137 @@
+.panel {
+  display: flex;
+  flex: 2 1 340px;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* The heading receives focus from script when the panel opens; it is not interactive. */
+.title:focus {
+  outline: none;
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.thumb {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  height: 76px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-badge-bg);
+}
+
+.thumbTarget {
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.line {
+  width: 70%;
+  height: 6px;
+  border-radius: 2px;
+  opacity: 0.9;
+}
+
+.lineShort {
+  width: 45%;
+  height: 5px;
+  border-radius: 2px;
+  opacity: 0.7;
+}
+
+.caption {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.value {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.target {
+  color: var(--color-primary-ink);
+}
+
+.arrow {
+  color: var(--color-muted);
+}
+
+.bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+.bullets li {
+  display: flex;
+  gap: 10px;
+}
+
+.bulletIcon {
+  flex: none;
+  color: var(--color-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px 16px;
+  padding-top: 4px;
+}
+
+.hint {
+  flex: 1 1 160px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

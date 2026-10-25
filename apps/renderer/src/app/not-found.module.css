@@ -1,0 +1,45 @@
+.main {
+  display: grid;
+  place-content: center;
+  min-height: 80vh;
+  padding: 48px 20px;
+  background: var(--renderer-paper);
+  color: var(--renderer-text);
+  font-family: var(--renderer-font);
+  text-align: center;
+}
+
+.title {
+  margin: 0 0 12px;
+  color: var(--renderer-ink);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.text {
+  max-width: 32em;
+  margin: 0 auto 24px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 10px;
+  background: var(--renderer-brand);
+  color: var(--renderer-on-brand);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link:focus-visible {
+  outline: 3px solid var(--renderer-ink);
+  outline-offset: 3px;
+}

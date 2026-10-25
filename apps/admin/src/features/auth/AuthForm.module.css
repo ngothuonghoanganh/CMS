@@ -1,0 +1,9 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form > button[type='submit'] {
+  margin-top: 4px;
+}

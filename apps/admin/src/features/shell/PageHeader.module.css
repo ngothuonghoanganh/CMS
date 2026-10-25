@@ -1,0 +1,59 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.wide {
+  max-width: 1120px;
+  gap: 24px;
+}
+
+.narrow {
+  max-width: 960px;
+  gap: 20px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.context {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--color-ink-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

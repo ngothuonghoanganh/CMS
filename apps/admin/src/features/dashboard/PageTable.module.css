@@ -1,0 +1,148 @@
+.table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-muted);
+  text-align: left;
+}
+
+.table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table th:last-child,
+.table td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pageCell {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.thumbnail {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 64px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 9px;
+  border-radius: var(--radius-xs);
+}
+
+/* A schematic hero: heading, text and button bars. */
+.thumbnail span {
+  display: block;
+  border-radius: 2px;
+  background: var(--color-surface);
+}
+
+.thumbnail span:nth-child(1) {
+  width: 70%;
+  height: 5px;
+  opacity: 0.9;
+}
+
+.thumbnail span:nth-child(2) {
+  width: 45%;
+  height: 4px;
+  opacity: 0.6;
+}
+
+.thumbnail span:nth-child(3) {
+  width: 28%;
+  height: 6px;
+  margin-top: 2px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.title:hover {
+  color: var(--color-primary-ink);
+  text-decoration: underline;
+}
+
+.slug {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.statusCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.sub {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.version {
+  font-weight: 500;
+}
+
+.checks {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+}
+
+.checks-danger {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.checks-warning {
+  color: var(--color-warning-ink);
+}
+
+.checks-success {
+  color: var(--color-success-ink);
+}
+
+.checks-muted {
+  color: var(--color-muted);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

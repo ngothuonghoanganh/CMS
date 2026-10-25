@@ -6,3 +6,4 @@ packages:
 # Dependencies allowed to run install scripts; every other build script stays blocked.
 allowBuilds:
   '@swc/core': true
+  argon2: true

@@ -1,0 +1,29 @@
+.skeleton {
+  display: block;
+  background: var(--color-divider);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.text {
+  border-radius: var(--radius-xs);
+}
+
+.block {
+  border-radius: var(--radius-md);
+}
+
+.circle {
+  border-radius: var(--radius-pill);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

@@ -1,0 +1,99 @@
+.card {
+  display: flex;
+  flex: 2 1 420px;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.empty {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: var(--text-body);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 7px;
+  border-radius: var(--radius-pill);
+}
+
+.tone-success {
+  background: var(--color-success);
+}
+
+.tone-warning {
+  background: var(--color-warning);
+}
+
+.tone-muted {
+  background: var(--color-subtle);
+}
+
+.tone-primary {
+  background: var(--color-primary);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.actor {
+  font-weight: 600;
+}
+
+.when {
+  color: var(--color-muted);
+}
+
+.revalidation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  color: var(--color-warning-ink);
+}
+
+.historyLink {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-primary-ink);
+  text-decoration: none;
+}
+
+.historyLink:hover {
+  color: var(--color-primary-pressed);
+  text-decoration: underline;
+}

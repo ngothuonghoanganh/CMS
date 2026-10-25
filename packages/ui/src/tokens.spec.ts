@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -35,6 +36,20 @@ const textPairs: ReadonlyArray<readonly [string, string]> = [
   ['color-warning-ink', 'color-warning-soft'],
   ['color-danger', 'color-danger-soft'],
   ['color-neutral-badge-ink', 'color-neutral-badge-bg'],
+  // Added with the base components (badges, callouts, cards, buttons, segmented controls).
+  ['color-warning-ink', 'color-warning-badge-bg'],
+  ['color-warning-strong-ink', 'color-warning-soft'],
+  ['color-danger-ink', 'color-danger-soft'],
+  ['color-success-strong-ink', 'color-success-soft'],
+  ['color-primary-pressed', 'color-primary-soft'],
+  ['color-primary-ink', 'color-primary-tint'],
+  ['color-on-primary', 'color-danger'],
+  ['color-on-primary', 'color-danger-ink'],
+  ['color-on-primary', 'color-primary-ink'],
+  ['color-ink-2', 'color-hover'],
+  ['color-muted', 'color-hover'],
+  ['color-muted', 'color-surface-subtle'],
+  ['color-muted', 'color-border'],
 ];
 
 describe('admin tokens', () => {
@@ -44,5 +59,18 @@ describe('admin tokens', () => {
 
   it('keeps the focus outline visible against surfaces (3:1)', () => {
     expect(contrast(token('color-primary'), token('color-surface'))).toBeGreaterThanOrEqual(3);
+  });
+
+  // Non-text pairs that identify a control or its state (WCAG 1.4.11): input borders on cards and
+  // the canvas, the switch's off track and its white thumb, the selected segment's edge on the
+  // group, and the drag handle icon on a selected structure row.
+  it.each([
+    ['color-border-control', 'color-surface'],
+    ['color-border-control', 'color-canvas'],
+    ['color-border-control', 'color-surface-subtle'],
+    ['color-border-control', 'color-hover'],
+    ['color-muted', 'color-primary-soft'],
+  ] as const)('%s against %s keeps 3:1 for controls', (foreground, background) => {
+    expect(contrast(token(foreground), token(background))).toBeGreaterThanOrEqual(3);
   });
 });

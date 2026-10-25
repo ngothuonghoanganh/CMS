@@ -1,0 +1,47 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 18px 20px;
+}
+
+.details {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.host {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.kind {
+  font-weight: 700;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.later {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}

@@ -1,0 +1,36 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--color-canvas);
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* As rendered on the editor board: its structure column grows to fit the row summaries. */
+  grid-template-columns: 336px minmax(0, 1fr) 320px;
+}
+
+.workspace > * {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Narrow windows stack the three columns and let the page scroll. */
+@media (max-width: 1023px) {
+  .app {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .workspace {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workspace > * {
+    overflow: visible;
+  }
+}

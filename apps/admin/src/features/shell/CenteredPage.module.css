@@ -1,0 +1,35 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: 32px 16px 56px;
+  background: var(--color-canvas);
+}
+
+.header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.main {
+  width: 100%;
+  min-width: 0;
+}
+
+.sm {
+  max-width: 440px;
+}
+
+.md {
+  max-width: 640px;
+}
+
+@media (min-width: 768px) {
+  .page {
+    padding-top: 64px;
+  }
+}

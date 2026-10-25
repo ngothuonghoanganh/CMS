@@ -1,0 +1,12 @@
+.address {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-ink-2);
+}
+
+.url {
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}

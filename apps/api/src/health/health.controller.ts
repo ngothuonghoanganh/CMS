@@ -2,7 +2,9 @@ import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { healthResponseSchema, type HealthResponse } from '@plp/contracts';
 import type { Connection } from 'mongoose';
+import { Public } from '../modules/auth/public.decorator.js';
 
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(@InjectConnection() private readonly connection: Connection) {}

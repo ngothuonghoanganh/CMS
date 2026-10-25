@@ -1,0 +1,43 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--color-ink-2);
+}
+
+.footer {
+  margin: 20px 0 0;
+  text-align: center;
+  font-size: var(--text-body);
+  color: var(--color-ink-2);
+}
+
+.footer a {
+  color: var(--color-primary-ink);
+  font-weight: 600;
+}
+
+.footer a:hover {
+  color: var(--color-primary-pressed);
+}

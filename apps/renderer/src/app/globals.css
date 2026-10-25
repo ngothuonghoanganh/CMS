@@ -1,0 +1,26 @@
+/*
+ * The page itself is drawn by @plp/sections with its own theme variables (--plp-*). These few
+ * colors belong to the renderer's own chrome only: skip link, preview banner and 404 page. They are
+ * the sample theme's ink, mint and accent (docs/design/plp-ux-v1/README.md).
+ */
+:root {
+  --renderer-font: var(--font-be-vietnam-pro), system-ui, sans-serif;
+  --renderer-ink: #0b2e2a;
+  --renderer-text: #2d4a46;
+  --renderer-paper: #ffffff;
+  --renderer-brand: #0f5e55;
+  --renderer-on-brand: #ffffff;
+  --renderer-accent: #f2a33a;
+  --renderer-on-ink: #ffffff;
+  --renderer-on-ink-muted: #cfe9e3;
+  --renderer-shadow: rgb(11 46 42 / 25%);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+}

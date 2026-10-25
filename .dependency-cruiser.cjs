@@ -71,6 +71,7 @@ module.exports = {
           '\\.module\\.ts$',
           '\\.int\\.spec\\.ts$',
           '^apps/api/src/health/',
+          '^apps/api/src/shared/persistence/',
         ],
       },
       to: { path: 'node_modules/(mongoose|@nestjs/mongoose)/' },

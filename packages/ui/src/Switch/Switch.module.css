@@ -1,0 +1,78 @@
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.root {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  /* The off track keeps 3:1 against the panel and the white thumb (WCAG 1.4.11). */
+  background: var(--color-border-control);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease;
+}
+
+.root:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.root[data-state='checked'] {
+  background: var(--color-primary);
+}
+
+.root:disabled {
+  background: var(--color-border);
+  cursor: not-allowed;
+}
+
+.root[data-state='checked']:disabled {
+  background: var(--color-disabled);
+}
+
+.thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-knob);
+  transition: transform var(--duration-normal) ease;
+}
+
+.thumb[data-state='checked'] {
+  transform: translateX(18px);
+}

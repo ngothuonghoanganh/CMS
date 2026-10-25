@@ -1,0 +1,72 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.subdomain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.host {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  min-height: 20px;
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+}
+
+.checking,
+.available,
+.failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checking {
+  color: var(--color-muted);
+}
+
+.available {
+  color: var(--color-success-ink);
+  font-weight: 500;
+}
+
+.failed {
+  color: var(--color-warning-ink);
+}
+
+.theme {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+}
+
+.themeHelp {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}

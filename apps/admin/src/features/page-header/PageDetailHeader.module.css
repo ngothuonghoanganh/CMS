@@ -1,0 +1,62 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.breadcrumb {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--color-muted);
+  text-decoration: none;
+}
+
+.crumb:hover {
+  color: var(--color-ink);
+  text-decoration: underline;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.titleBlock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.subtext {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}

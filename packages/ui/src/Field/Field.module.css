@@ -1,0 +1,104 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* A hidden label leaves only the counter, if any, in the row. */
+.labelRowHidden {
+  justify-content: flex-end;
+}
+
+.labelRowHidden:not(:has(.counter)) {
+  display: contents;
+}
+
+.label {
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-ink);
+}
+
+.note {
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.counter {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-muted);
+}
+
+.counter-warning {
+  color: var(--color-warning-ink);
+}
+
+.counter-danger {
+  color: var(--color-danger);
+}
+
+/* The live region of `announceMessages`: laid out like the field, and no room when empty. */
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.messages:empty {
+  margin-top: -6px;
+}
+
+.help {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.messageIcon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.warning {
+  color: var(--color-warning-ink);
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

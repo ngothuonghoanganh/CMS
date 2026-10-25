@@ -1,0 +1,156 @@
+.page {
+  container-type: inline-size;
+  container-name: plp-page;
+  font-family: var(--plp-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.section {
+  background: var(--plp-bg);
+  color: var(--plp-text);
+  padding-inline: 20px;
+}
+
+.compact {
+  padding-block: 32px;
+}
+.normal {
+  padding-block: 48px;
+}
+.spacious {
+  padding-block: 72px;
+}
+
+@container plp-page (min-width: 768px) {
+  .section {
+    padding-inline: 40px;
+  }
+  .compact {
+    padding-block: 40px;
+  }
+  .normal {
+    padding-block: 72px;
+  }
+  .spacious {
+    padding-block: 112px;
+  }
+  .hideDesktop {
+    display: none;
+  }
+}
+
+@container plp-page (max-width: 767px) {
+  .hideMobile {
+    display: none;
+  }
+}
+
+.inner {
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
+/* The navigation bar stays a compact strip whatever spacing preset it carries. */
+.section[data-section-type='navbar'] {
+  border-bottom: 1px solid var(--plp-border);
+}
+.section[data-section-type='navbar'].compact {
+  padding-block: 8px;
+}
+.section[data-section-type='navbar'].normal {
+  padding-block: 12px;
+}
+.section[data-section-type='navbar'].spacious {
+  padding-block: 20px;
+}
+
+.preLine {
+  white-space: pre-line;
+}
+
+.editable {
+  outline: none;
+  border-radius: 4px;
+  cursor: text;
+}
+
+.editable:hover {
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+.editable:focus {
+  box-shadow: 0 0 0 2px var(--plp-accent);
+}
+
+.editable:empty::before {
+  content: attr(data-placeholder);
+  opacity: 0.6;
+}
+
+.imagePlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 200px;
+  border: 1.5px dashed var(--plp-border);
+  border-radius: 12px;
+  background: var(--plp-surface);
+  color: var(--plp-muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 16px;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: none;
+  border: 1.5px solid transparent;
+}
+
+.buttonPrimary {
+  background: var(--plp-accent);
+  color: var(--plp-accent-text);
+}
+
+.buttonSecondary {
+  background: transparent;
+  color: var(--plp-link);
+  border-color: currentColor;
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--plp-link);
+  outline-offset: 3px;
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--plp-link);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.textLink:focus-visible {
+  outline: 3px solid var(--plp-link);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
