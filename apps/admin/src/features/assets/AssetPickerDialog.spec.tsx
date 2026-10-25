@@ -141,5 +141,9 @@ describe('AssetPickerDialog', () => {
       signal: expect.any(AbortSignal) as AbortSignal,
     });
     expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
+    // The button went away with the last page: the first image it brought has the focus.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Phòng khám/ })).toHaveFocus();
+    });
   });
 });

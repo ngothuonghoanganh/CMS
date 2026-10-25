@@ -318,6 +318,9 @@ describe('LeadInbox', () => {
     });
     expect(await screen.findByText('Đã lưu ghi chú')).toBeInTheDocument();
     expect(note).toHaveValue('hẹn gọi lại sau 18h');
+    // "Lưu ghi chú" is gone: the note keeps the focus.
+    expect(within(panel).queryByRole('button', { name: 'Lưu ghi chú' })).toBeNull();
+    expect(note).toHaveFocus();
     // The status saved before stays: the note did not overwrite it.
     expect(within(panel).getByRole('combobox', { name: 'Trạng thái lead' })).toHaveValue(
       'contacted',
@@ -498,6 +501,30 @@ describe('LeadInbox', () => {
     expect(screen.getByRole('link', { name: 'Nguyễn Thu Hà' })).toBeInTheDocument();
     expect(screen.getByText('2 / 2 lead')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tải thêm' })).not.toBeInTheDocument();
+    // "Tải thêm" went away with the last page: the first lead it brought has the focus.
+    expect(screen.getByRole('link', { name: 'Trần Quốc Bảo' })).toHaveFocus();
+  });
+
+  it('brings a lead opened by its link into view and focus, below the list on a phone', async () => {
+    renderInbox({ leadId: ha.id, initialDetail: leadDetail() });
+    const panel = await screen.findByRole('complementary', { name: 'Nguyễn Thu Hà' });
+    await vi.waitFor(() => {
+      expect(within(panel).getByRole('heading', { name: 'Nguyễn Thu Hà' })).toHaveFocus();
+    });
+  });
+
+  it('hands the focus to the first lead once "Bỏ bộ lọc" brings them back', async () => {
+    const user = userEvent.setup();
+    renderInbox({
+      filters: { ...DEFAULT_LEAD_FILTERS, status: 'won' },
+      list: leadList([], {
+        counts: { inbox: { count: 0, capped: false }, spam: { count: 0, capped: false } },
+      }),
+    });
+    serve([leadDetail(), baoDetail], leadList([ha, bao]));
+
+    await user.click(await screen.findByRole('button', { name: 'Bỏ bộ lọc' }));
+    expect(await screen.findByRole('link', { name: 'Nguyễn Thu Hà' })).toHaveFocus();
   });
 
   it('exports the leads of the current filters and warns when the file is cut', async () => {

@@ -56,3 +56,29 @@ export async function inspectImage(buffer: Buffer): Promise<InspectedImage> {
     height: size.height,
   };
 }
+
+/**
+ * The image as it is published: encoded again without the metadata a photo carries (EXIF, XMP and
+ * IPTC: GPS position, camera, author, capture time), turned upright since its orientation tag
+ * goes too, with its colour profile and every animation frame kept. Anyone can download a public
+ * image, so nothing in it may tell where, when or by whom it was taken (ADR-012).
+ */
+export async function withoutMetadata(buffer: Buffer, mimeType: AssetMimeType): Promise<Buffer> {
+  const image = sharp(buffer, { animated: true }).autoOrient().keepIccProfile();
+  try {
+    switch (mimeType) {
+      case 'image/jpeg':
+        return await image.jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+      case 'image/png':
+        return await image.png().toBuffer();
+      case 'image/webp':
+        return await image.webp({ quality: 90 }).toBuffer();
+      case 'image/avif':
+        return await image.avif({ quality: 70 }).toBuffer();
+      case 'image/gif':
+        return await image.gif().toBuffer();
+    }
+  } catch (error) {
+    throw unsupported(error);
+  }
+}

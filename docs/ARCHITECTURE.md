@@ -201,6 +201,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Styling dùng CSS Modules + CSS custom properties. Không Tailwind, không Ant Design, không GrapesJS hay builder tự do nào.
   - Radix chỉ dùng trong admin cho a11y của dialog, menu, popover, tabs, switch.
   - Production có thể dùng bất kỳ storage tương thích S3 nào.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - `docker compose` chỉ mở cổng trên `127.0.0.1`. MongoDB chạy không xác thực, còn Mailpit giữ thư thông báo lead và link xác nhận, nên không dịch vụ nào được nghe thấy từ mạng. `localhost` vẫn dùng được như cũ.
+  - `multer` được ép lên 2.5.0 (`overrides` của pnpm), để vá lỗi DoS GHSA-q7qp-rjg7-q26m. `@nestjs/platform-express` 12.2.0 vẫn khai báo 2.4.0. Bỏ override khi Nest khai báo bản đã vá.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -296,6 +299,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - `publishedSlug` là projection của pointer, chỉ ghi trong `movePointer`. Ngoài ra không lưu bản sao trạng thái nào.
   - Không có điểm lưu bản nháp.
+- **Amended 2026-10-26 (test toàn dự án):** "Sao chép vào bản nháp" (lịch sử) đọc bản nháp ngay khi hộp thoại mở.
+  - Hộp thoại báo đúng số thay đổi sẽ mất, và gửi chính revision đó làm `baseRevision`.
+  - Bản nháp được lưu ở nơi khác sau lúc đó sẽ làm server trả 409 `revision_conflict`. Hộp thoại đọc lại và cho xác nhận lần nữa, không bao giờ ghi đè mà người dùng không biết.
 
 ### ADR-006 — Kiểm tra, publish, rollback, gỡ trang
 
@@ -461,6 +467,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Slug bị cấm là mọi đường dẫn mà renderer hoặc Next tự trả lời: `_preview`, `_next`, `api`, `healthz`, `index` (Next coi là `/`), `404`, `500`, `sitemap.xml`, `robots.txt`, `favicon.ico`. Một trang publish ở các slug này sẽ không bao giờ hiện ở URL của nó.
   - Unit test của renderer đối chiếu danh sách này với các route cấp một của app, nên route mới không thể che một slug publish được.
 - **Amended 2026-10-25 (MVP B):** thêm `_lead` và `_e` vào danh sách slug bị cấm (ADR-016, ADR-019).
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Redirect 308 của slug cũ giữ query của khách** (utm, `gclid`, `fbclid`), ở proxy và ở trang dự phòng. Quảng cáo và link đã chia sẻ trước khi đổi slug vẫn giữ nguồn chiến dịch.
+  - **`lastmod` trong sitemap** là lúc nội dung đó bắt đầu live:
+    - Với publish: lúc tạo release.
+    - Với rollback hoặc undo đưa trang về một release cũ hơn: lúc con trỏ được chuyển.
+    - Đọc sự kiện con trỏ mới nhất của mọi trang live trong một aggregation, nên `lastmod` không bao giờ lùi lại.
+  - **"Xem site live"** mở trang chủ khi trang có slug rỗng đang live, nếu không thì mở trang được publish gần nhất. Nút ẩn khi site chưa có trang nào live. API trả địa chỉ này trong `liveSiteUrl` của danh sách trang.
 
 ### ADR-012 — Asset
 
@@ -472,6 +485,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Không có API xóa asset trong MVP A.
 - **Reason:** Validate tập trung một chỗ.
 - **Consequences:** Băng thông upload đi qua API; SVG bị loại để tránh script.
+- **Amended 2026-10-26 (test toàn dự án):** ảnh tải lên được mã hóa lại trước khi lưu.
+  - Bỏ hết metadata: EXIF, XMP, IPTC, tức vị trí GPS, máy chụp, tác giả, thời gian chụp. Ai cũng tải được ảnh public, nên ảnh không được tiết lộ chụp ở đâu, khi nào, bởi ai.
+  - Ảnh được xoay theo hướng EXIF, giữ ICC profile và mọi khung của ảnh động.
+  - JPEG chất lượng 90 (mozjpeg), WebP 90, AVIF 70; PNG và GIF không mất dữ liệu.
+  - `bytes` là kích thước đã lưu. Ảnh 12 MP mất khoảng 1–2,5 giây.
 
 ### ADR-013 — Boundary, lỗi, logging, quality gate
 
@@ -603,6 +621,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Số có mã quốc gia (`+`, `00` hoặc `84`) được nhận cho mọi nước. Sau +84 phải là 9–10 chữ số; số 0 thường bị giữ lại ("+84 0901…") thì được bỏ.
     - Thay cho quy tắc "10 chữ số bắt đầu bằng 0" của bản B2.
   - **Nút của thanh điều hướng** trên trang tạo theo mục tiêu vẫn gọi số điện thoại trong brief. Người dùng đổi đích của nút trong editor ("Khi bấm, đưa tới"), giống mọi nút khác.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Form không JavaScript:** trang báo lỗi giữ `utm_source`, `utm_medium` và `utm_campaign` của trang trên link "Quay lại form", nên lead gửi lại vẫn đúng nguồn. Ngoài ba tham số này, link không giữ gì khác của địa chỉ.
+  - **Form có JavaScript:** nút gửi không bị `disabled` trong lúc gửi, chỉ có `aria-disabled` và `aria-busy`. Gửi bị từ chối (429, 404, mất mạng) thì focus vẫn ở nút, cạnh thông báo lỗi.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -676,6 +697,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Quyền:** chỉ Owner xem và xử lý yêu cầu. Editor không thấy phần này; màn 12 ghi rõ.
   - **Danh sách:** yêu cầu ghi nhận gần nhất ở trên, 20 mục mỗi trang. Index `data_requests_site (siteId, createdAt, _id)`.
   - **Chưa có thời gian lưu cho yêu cầu:** yêu cầu là bằng chứng đã xử lý nên không tự xóa. Yêu cầu xóa chỉ giữ thông tin đã che. Thời gian giữ yêu cầu cần người phụ trách pháp lý xác nhận trước khi ra mắt.
+- **Amended 2026-10-26 (test toàn dự án):** thời gian lưu luôn theo cài đặt cuối cùng, kể cả khi có thay đổi đúng lúc.
+  - Lead tới trong lúc Owner đổi thời gian lưu: sau khi lưu lead, phần nhận lead đọc lại thời gian lưu hiện tại và sửa `expiresAt` nếu khác. Cài đặt được commit trước khi tính lại mọi lead, nên hoặc lần tính lại đó đã gồm lead này, hoặc lần đọc lại thấy giá trị mới.
+  - Hai lần lưu cùng lúc: sau khi tính lại, lần lưu đọc lại giá trị đã lưu và tính lại lần nữa nếu khác. Lead theo giá trị được lưu sau cùng.
 
 ### ADR-018 — Hộp thư lead và email thông báo
 

@@ -2,7 +2,7 @@
 
 import type { Asset } from '@plp/contracts';
 import { Button, ImageIcon } from '@plp/ui';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, type RefObject, useRef, useState } from 'react';
 import { type AssetSelection, AssetPickerDialog } from './AssetPickerDialog';
 import styles from './assets.module.css';
 
@@ -31,6 +31,8 @@ export interface AssetFieldProps {
   /** Hides "Gỡ ảnh" when an image is required. */
   removable?: boolean | undefined;
   disabled?: boolean | undefined;
+  /** The "Chọn ảnh" / "Thay ảnh" button, for a parent that moves focus to it. */
+  chooseRef?: RefObject<HTMLButtonElement | null> | undefined;
 }
 
 /**
@@ -46,14 +48,18 @@ export function AssetField({
   recommendedSize,
   removable = true,
   disabled = false,
+  chooseRef,
 }: AssetFieldProps) {
   const [open, setOpen] = useState(false);
+  const ownChooseRef = useRef<HTMLButtonElement>(null);
+  const choose = chooseRef ?? ownChooseRef;
   return (
     <fieldset className={styles.field}>
       <legend className={styles.fieldLabel}>{label}</legend>
       <div className={styles.fieldRow}>
         <AssetThumb asset={value} />
         <Button
+          ref={choose}
           variant="secondary"
           size="sm"
           disabled={disabled}
@@ -70,6 +76,8 @@ export function AssetField({
             disabled={disabled}
             onClick={() => {
               onChange(null, null);
+              // "Gỡ ảnh" goes away with the image: focus stays on the button next to it.
+              choose.current?.focus();
             }}
           >
             Gỡ ảnh

@@ -1,5 +1,5 @@
 import { type DataRequestDetail, endpoints } from '@plp/contracts';
-import { act, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, downloadFile } from '../../lib/api';
@@ -171,6 +171,33 @@ describe('DataRequestsSection', () => {
     expect(await within(section()).findByText('Lê Mai Anh')).toBeInTheDocument();
   });
 
+  it('hands the focus to the first request "Tải thêm" brought, as the button goes away', async () => {
+    const user = userEvent.setup();
+    const first = Array.from({ length: 20 }, (_, index) =>
+      dataRequest({
+        id: `64b0000000000000000007${String(index).padStart(2, '0')}`,
+        contact: { name: `Người ${String(index + 1)}`, phone: '+84987106223', email: null },
+      }),
+    );
+    const later = dataRequest({
+      id: '64b000000000000000000799',
+      contact: { name: 'Người 21', phone: '+84987106224', email: null },
+    });
+    renderWithProviders(
+      <DataRequestsSection
+        siteId={SITE_ID}
+        initial={dataRequestList(first, 'cursor-2')}
+        loadedAt={LOADED_AT}
+      />,
+    );
+    apiMock.mockResolvedValueOnce(dataRequestList([later]));
+
+    await user.click(within(section()).getByRole('button', { name: 'Tải thêm' }));
+    expect(await within(section()).findByText('Người 21')).toBeInTheDocument();
+    expect(within(section()).queryByRole('button', { name: 'Tải thêm' })).toBeNull();
+    expect(within(rowOf('Người 21')).getAllByRole('button')[0]).toHaveFocus();
+  });
+
   it('explains the list while it is empty', () => {
     renderSection([]);
     expect(within(section()).getByText(/Chưa có yêu cầu nào/)).toBeInTheDocument();
@@ -199,6 +226,10 @@ describe('DataRequestsSection', () => {
       await user.type(within(dialog).getByRole('textbox', { name: /Họ tên/ }), 'Lê Mai Anh');
       await user.type(within(dialog).getByRole('textbox', { name: 'Số điện thoại' }), '0987106223');
       await user.click(within(dialog).getByRole('radio', { name: /Xóa toàn bộ dữ liệu/ }));
+      // Pressing it keeps focus in the field, so the field's check cannot move it from the pointer.
+      expect(fireEvent.mouseDown(within(dialog).getByRole('button', { name: 'Ghi nhận' }))).toBe(
+        false,
+      );
       await user.click(within(dialog).getByRole('button', { name: 'Ghi nhận' }));
 
       expect(lastCallTo(apiMock, endpoints.createDataRequest).options).toEqual({

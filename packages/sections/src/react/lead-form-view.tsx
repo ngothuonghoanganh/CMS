@@ -214,10 +214,14 @@ export function LeadFormView({
             {formError}
           </p>
         )}
+        {/* Only a preview cannot send. While sending the button stays focusable (the client drops
+            a second submit): disabling it would drop focus to the page, and a refused send would
+            leave the visitor nowhere near the form. */}
         <button
           type="submit"
           className={[frame.button, frame.buttonPrimary, styles.submit].join(' ')}
-          disabled={!canSend || submitting}
+          disabled={!canSend}
+          aria-disabled={submitting || undefined}
           aria-busy={submitting || undefined}
         >
           {content.submitLabel}

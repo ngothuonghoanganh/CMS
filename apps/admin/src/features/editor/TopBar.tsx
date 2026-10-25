@@ -22,7 +22,7 @@ import {
   VisuallyHidden,
   WarningTriangleIcon,
 } from '@plp/ui';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { useClientNow } from '../shell/use-now';
 import { useEditor, useEditorStoreApi } from './editor-context';
 import { GuardedLink } from './GuardedLink';
@@ -65,12 +65,13 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
     saveState === 'error' && saveError !== null && saveError.kind !== 'retryable'
       ? saveError.message
       : null;
+  const statusRef = useRef<HTMLSpanElement>(null);
   return (
     <span className={styles.save} data-tone={view.tone}>
       {saveState === 'saving' ? <Spinner size={12} /> : null}
       {saveState === 'saved' ? <CheckIcon size={14} strokeWidth={2.2} /> : null}
       {view.tone === 'danger' ? <AlertCircleIcon size={14} strokeWidth={2} /> : null}
-      <span role="status" className={styles.saveText}>
+      <span ref={statusRef} role="status" tabIndex={-1} className={styles.saveText}>
         {view.text}
         {issue === null ? null : <span className={styles.saveIssue}> · {issue}</span>}
       </span>
@@ -78,7 +79,15 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
       {view.canRetry ? (
         <>
           <span aria-hidden="true">·</span>
-          <button type="button" className={styles.retry} onClick={onRetry}>
+          <button
+            type="button"
+            className={styles.retry}
+            onClick={() => {
+              // The button goes away while saving: focus moves to the status it reports in.
+              statusRef.current?.focus();
+              onRetry();
+            }}
+          >
             Thử lại
           </button>
         </>

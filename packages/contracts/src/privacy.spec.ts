@@ -110,6 +110,14 @@ describe('fillControllerName', () => {
     ).toBe('Smile Care và đối tác của Smile Care');
   });
 
+  it('writes a business name with dollar signs exactly as typed', () => {
+    for (const name of ['Tiệm Nail $& Spa $$', "Kid$'s Corner", 'Café $` 24h', 'Giá $1']) {
+      expect(fillControllerName(SUGGESTED_REQUIRED_CONSENT_TEXT, name)).toBe(
+        `Tôi đồng ý để ${name} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`,
+      );
+    }
+  });
+
   it('leaves a text without the placeholder unchanged', () => {
     expect(fillControllerName('Tôi đồng ý.', 'Smile Care')).toBe('Tôi đồng ý.');
   });

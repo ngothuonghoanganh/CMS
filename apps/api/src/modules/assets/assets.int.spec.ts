@@ -67,7 +67,41 @@ describe('assets', () => {
       const object = await fetch(asset.url);
       expect(object.status).toBe(200);
       expect(object.headers.get('content-type')).toBe('image/png');
-      expect(Buffer.from(await object.arrayBuffer()).equals(png)).toBe(true);
+      const served = Buffer.from(await object.arrayBuffer());
+      expect(served).toHaveLength(asset.bytes);
+      expect(await sharp(served).metadata()).toMatchObject({
+        format: 'png',
+        width: 32,
+        height: 20,
+      });
+    });
+
+    it('publishes a photo without its GPS position, camera or author', async () => {
+      const photo = await sharp({
+        create: { width: 30, height: 12, channels: 3, background: '#f2a33a' },
+      })
+        .jpeg()
+        .withExif({
+          IFD0: { Make: 'QA-Phone', Artist: 'Nguyen Van QA' },
+          IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '10/1 46/1 30/1' },
+        })
+        .withMetadata({ orientation: 6 })
+        .toBuffer();
+      const response = await uploadRequest(
+        owner,
+        siteId,
+        photo,
+        { alt: 'Khách hàng tại nhà' },
+        'IMG_0042.jpg',
+      ).expect(201);
+      const asset = assetSchema.parse(response.body);
+      expect(asset).toMatchObject({ mimeType: 'image/jpeg', width: 12, height: 30 });
+
+      const served = Buffer.from(await (await fetch(asset.url)).arrayBuffer());
+      const metadata = await sharp(served).metadata();
+      expect(metadata).toMatchObject({ width: 12, height: 30 });
+      expect(metadata.exif).toBeUndefined();
+      expect(served.toString('latin1')).not.toContain('Nguyen Van QA');
     });
 
     it('reads the size of other supported formats', async () => {

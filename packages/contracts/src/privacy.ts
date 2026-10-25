@@ -19,7 +19,8 @@ export const DEFAULT_RETENTION_MONTHS = 12;
 export const CONTROLLER_NAME_PLACEHOLDER = '{Tên doanh nghiệp}';
 
 export function fillControllerName(text: string, controllerName: string): string {
-  return text.replaceAll(CONTROLLER_NAME_PLACEHOLDER, controllerName);
+  // A function, so "$&", "$$" or "$'" in a business name are written as typed, not expanded.
+  return text.replaceAll(CONTROLLER_NAME_PLACEHOLDER, () => controllerName);
 }
 
 /** Starting points from the design (board 12); not legal advice. */

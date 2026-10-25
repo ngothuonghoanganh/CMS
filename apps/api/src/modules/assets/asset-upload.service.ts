@@ -10,7 +10,7 @@ import { SitesService } from '../sites/sites.service.js';
 import { ASSET_STORAGE, type AssetStorage, assetStorageKey } from './asset-storage.js';
 import { AssetsRepository } from './assets.repository.js';
 import { AssetsService } from './assets.service.js';
-import { inspectImage } from './image-inspection.js';
+import { inspectImage, withoutMetadata } from './image-inspection.js';
 
 /** Text fields of the multipart upload after `uploadAssetFieldsSchema` parsed them. */
 export type UploadAssetFieldValues = z.output<typeof uploadAssetFieldsSchema>;
@@ -53,6 +53,7 @@ export class AssetUploadService {
       ]);
     }
     const image = await inspectImage(file.buffer);
+    const body = await withoutMetadata(file.buffer, image.mimeType);
     const assetId = newObjectId();
     const storageKey = assetStorageKey({
       workspaceId: scope.workspaceId,
@@ -60,7 +61,7 @@ export class AssetUploadService {
       assetId,
       extension: image.extension,
     });
-    await this.storage.put(storageKey, file.buffer, image.mimeType);
+    await this.storage.put(storageKey, body, image.mimeType);
 
     let record;
     try {
@@ -72,7 +73,7 @@ export class AssetUploadService {
             siteId: site._id,
             storageKey,
             mimeType: image.mimeType,
-            bytes: file.buffer.length,
+            bytes: body.length,
             width: image.width,
             height: image.height,
             alt: fields.decorative ? null : fields.alt,

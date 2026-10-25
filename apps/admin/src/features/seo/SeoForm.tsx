@@ -6,7 +6,7 @@ import {
   SEO_TITLE_RECOMMENDED_MAX,
 } from '@plp/contracts';
 import { Field, Input, Switch, Textarea, WarningTriangleIcon } from '@plp/ui';
-import { useEffect, useId } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { slugPath } from '../../lib/site-url';
 import { saveStatusView, useEditor, useEditorStoreApi } from '../editor';
 import { finalizeSlug, redirectedLiveSlug, seoTitleHint, SLUG_MAX } from './seo-presentation';
@@ -52,8 +52,15 @@ function SaveIndicator({ onRetry }: { onRetry: () => void }) {
   const lastSavedAt = useEditor((state) => state.lastSavedAt);
   const saveError = useEditor((state) => state.saveError);
   const view = saveStatusView(saveState, lastSavedAt, saveError, null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
   return (
-    <p role="status" className={styles.saveStatus} data-tone={view.tone}>
+    <p
+      ref={statusRef}
+      role="status"
+      tabIndex={-1}
+      className={styles.saveStatus}
+      data-tone={view.tone}
+    >
       {view.text}
       {saveState === 'error' && saveError !== null && saveError.kind !== 'retryable'
         ? ` · ${saveError.message}`
@@ -61,7 +68,15 @@ function SaveIndicator({ onRetry }: { onRetry: () => void }) {
       {view.canRetry ? (
         <>
           {' · '}
-          <button type="button" className={styles.retry} onClick={onRetry}>
+          <button
+            type="button"
+            className={styles.retry}
+            onClick={() => {
+              // The button goes away while saving: focus moves to the status it reports in.
+              statusRef.current?.focus();
+              onRetry();
+            }}
+          >
             Thử lại
           </button>
         </>

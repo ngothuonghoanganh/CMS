@@ -30,6 +30,7 @@ import { PageDetailHeader } from '../page-header/PageDetailHeader';
 import { pageHref } from '../shell/navigation';
 import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
 import {
   latestRollback,
@@ -173,6 +174,11 @@ export function HistoryScreen({
   const lists = historyQuery.data.pages;
   const newest = lists[0] ?? initialHistory;
   const items = lists.flatMap((list) => list.items);
+  const { listRef: newItemsRef, expectMore } = useFocusNewItems<HTMLElement>(
+    items.length,
+    'ol > li',
+    'button',
+  );
   const { liveReleaseId, releaseCount } = newest;
   const selected = restorableRelease(items, selectedId, liveReleaseId);
   const rollback = latestRollback(items);
@@ -245,8 +251,10 @@ export function HistoryScreen({
 
   async function onRolledBack(result: PointerMoveResponse) {
     setPage(result.page);
-    await refreshSite();
+    // Asked for before the refresh: the history it brings closes the panel and shows the banner in
+    // one render, which may come before the other reads finish.
     panelFocus.current = { kind: 'banner' };
+    await refreshSite();
     closePanel();
     if (result.revalidation === 'failed') {
       toast({
@@ -287,7 +295,7 @@ export function HistoryScreen({
       </div>
 
       <div className={styles.columns}>
-        <section aria-labelledby="releases-heading" className={styles.list}>
+        <section ref={newItemsRef} aria-labelledby="releases-heading" className={styles.list}>
           <div className={styles.listHeading}>
             <h2 id="releases-heading" ref={headingRef} tabIndex={-1} className={styles.heading}>
               Phiên bản đã xuất bản
@@ -361,6 +369,7 @@ export function HistoryScreen({
               className={styles.more}
               loading={historyQuery.isFetchingNextPage}
               onClick={() => {
+                expectMore();
                 void historyQuery.fetchNextPage();
               }}
             >
@@ -395,6 +404,7 @@ export function HistoryScreen({
           release={copyTarget}
           open={copyOpen}
           onOpenChange={setCopyOpen}
+          onPageRead={setPage}
           onRestored={(detail) => {
             setPage(detail.page);
             void refreshSite();

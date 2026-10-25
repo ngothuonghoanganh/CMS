@@ -1,4 +1,6 @@
 # Local and CI infrastructure. Start with `pnpm infra:up`; the apps run on the host.
+# Every port is published on 127.0.0.1 only: MongoDB has no authentication, and Mailpit keeps lead
+# notifications and confirmation links, so none of them may be reachable from the network.
 name: plp
 
 services:
@@ -8,7 +10,7 @@ services:
     # Port 27117 avoids clashing with a native mongod on 27017; the member host matches the published port.
     command: ['mongod', '--replSet', 'rs0', '--bind_ip_all', '--port', '27117']
     ports:
-      - '27117:27117'
+      - '127.0.0.1:27117:27117'
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -32,8 +34,8 @@ services:
       RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-plp-dev-secret}
       RUSTFS_CONSOLE_ENABLE: 'true'
     ports:
-      - '9100:9000'
-      - '9101:9001'
+      - '127.0.0.1:9100:9000'
+      - '127.0.0.1:9101:9001'
     volumes:
       - storage-data:/data
 
@@ -65,8 +67,8 @@ services:
       MP_SMTP_AUTH_ACCEPT_ANY: 'true'
       MP_SMTP_AUTH_ALLOW_INSECURE: 'true'
     ports:
-      - '1125:1025'
-      - '8125:8025'
+      - '127.0.0.1:1125:1025'
+      - '127.0.0.1:8125:8025'
     healthcheck:
       test: ['CMD', '/mailpit', 'readyz']
       interval: 5s

@@ -186,6 +186,31 @@ describe('LeadRecipientsDialog', () => {
     );
     renderDialog();
     expect(await screen.findByText('Đã đủ 5 địa chỉ. Bỏ một địa chỉ để thêm.')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Thêm email nhận lead' })).toBeDisabled();
+    const field = screen.getByRole('textbox', { name: 'Thêm email nhận lead' });
+    expect(field).toHaveAttribute('aria-disabled', 'true');
+    expect(field).toHaveAttribute('readonly');
+    expect(screen.getByRole('button', { name: 'Thêm' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps the focus in the dialog when the address added is the fifth', async () => {
+    const user = userEvent.setup();
+    const four = Array.from({ length: 4 }, (_, index) =>
+      recipient({ id: `64b00000000000000000060${index}`, email: `nv${index}@smilecare.vn` }),
+    );
+    serve(four);
+    renderDialog();
+    const field = await screen.findByRole('textbox', { name: 'Thêm email nhận lead' });
+    await user.type(field, 'nv4@smilecare.vn');
+    // The list the dialog reads after adding holds five.
+    serve([...four, recipient({ id: '64b000000000000000000604', email: 'nv4@smilecare.vn' })]);
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Đã đủ 5 địa chỉ. Bỏ một địa chỉ để thêm.')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Thêm email nhận lead' })).toHaveFocus();
+    // Enter again adds nothing.
+    await user.keyboard('{Enter}');
+    expect(
+      apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.addLeadRecipient),
+    ).toHaveLength(1);
   });
 });

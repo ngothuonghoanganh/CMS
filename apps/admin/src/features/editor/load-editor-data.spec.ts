@@ -9,6 +9,7 @@ function pagesResponse(nextCursor: string | null): PageListResponse {
     nextCursor,
     counts: { all: 1, live: 0, live_with_changes: 0, draft: 1, unpublished: 0 },
     attention: { pagesWithChanges: 0, pagesWithBlockingErrors: 0, firstPage: null },
+    liveSiteUrl: null,
   };
 }
 

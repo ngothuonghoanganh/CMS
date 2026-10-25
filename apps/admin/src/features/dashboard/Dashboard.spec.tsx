@@ -90,15 +90,43 @@ beforeEach(() => {
 });
 
 describe('Dashboard', () => {
+  it('hands the focus to the first page "Xem thêm trang" brought, as it goes away', async () => {
+    const user = userEvent.setup();
+    renderDashboard({ pages: pageListFixture([livePage], { nextCursor: 'cursor-2' }) });
+    apiMock.mockResolvedValueOnce(pageListFixture([draftPage]));
+
+    await user.click(screen.getByRole('button', { name: 'Xem thêm trang' }));
+    const added = await screen.findByRole('link', { name: 'Webinar chăm sóc răng trẻ em' });
+    expect(screen.queryByRole('button', { name: 'Xem thêm trang' })).toBeNull();
+    expect(added).toHaveFocus();
+  });
+
+  it('opens the live home page from "Xem site live", and offers nothing while no page is live', () => {
+    const { unmount } = renderDashboard({
+      pages: pageListFixture([livePage, draftPage], {
+        liveSiteUrl: 'https://smilecare.payload.site/',
+      }),
+    });
+    expect(screen.getByRole('link', { name: /Xem site live/ })).toHaveAttribute(
+      'href',
+      'https://smilecare.payload.site/?plp_internal=1',
+    );
+    unmount();
+
+    renderDashboard({ pages: pageListFixture([draftPage]) });
+    expect(screen.queryByRole('link', { name: /Xem site live/ })).toBeNull();
+  });
+
   it('shows the header, the summary and the pages loaded by the server', () => {
     renderDashboard();
 
     expect(screen.getByText('Mây Xanh Agency / Nha khoa Smile Care')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Trang' })).toBeInTheDocument();
-    // Opened from the admin: that browser's views are not counted (ADR-019).
+    // A live page of the site, opened from the admin: that browser's views are not counted
+    // (ADR-019).
     expect(screen.getByRole('link', { name: /Xem site live/ })).toHaveAttribute(
       'href',
-      'https://smilecare.payload.site/?plp_internal=1',
+      'https://smilecare.payload.site/uu-dai-thang-11?plp_internal=1',
     );
     expect(screen.getByRole('link', { name: 'Tạo trang' })).toHaveAttribute(
       'href',

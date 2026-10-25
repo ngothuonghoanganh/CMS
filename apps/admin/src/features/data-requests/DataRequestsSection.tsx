@@ -24,6 +24,7 @@ import { api } from '../../lib/api';
 import { formatDayMonth, formatTime } from '../../lib/format';
 import { cx } from '../shell/cx';
 import { problemMessage } from '../shell/problem-message';
+import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
 import { DataRequestDialog } from './DataRequestDialog';
 import {
@@ -90,6 +91,11 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
     initialDataUpdatedAt: loadedAt,
   });
   const items = list.data.pages.flatMap((page) => page.items);
+  const { listRef: newItemsRef, expectMore } = useFocusNewItems<HTMLTableSectionElement>(
+    items.length,
+    'tr',
+    'button',
+  );
   // Deadlines pass while the screen stays open: they are judged against the clock, not the load.
   const now = useNow(loadedAt);
 
@@ -242,7 +248,7 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
                 </th>
               </tr>
             </thead>
-            <tbody>{items.map(row)}</tbody>
+            <tbody ref={newItemsRef}>{items.map(row)}</tbody>
           </table>
         </div>
       )}
@@ -254,6 +260,7 @@ export function DataRequestsSection({ siteId, initial, loadedAt }: DataRequestsS
             size="sm"
             loading={list.isFetchingNextPage}
             onClick={() => {
+              expectMore();
               void list.fetchNextPage();
             }}
           >

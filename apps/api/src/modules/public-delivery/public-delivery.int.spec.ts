@@ -1,5 +1,6 @@
 import {
   pathStatusResponseSchema,
+  pointerMoveResponseSchema,
   PREVIEW_TTL_SECONDS,
   previewLinkResponseSchema,
   problemSchema,
@@ -11,6 +12,7 @@ import {
   sitemapResponseSchema,
 } from '@plp/contracts';
 import { Logger } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
@@ -283,6 +285,45 @@ describe('public delivery and previews', () => {
         ],
       });
       await visitor.get('/public/sites/khong-co-site-nay/sitemap').expect(404);
+    });
+
+    it('dates a page by when its content went live: a rollback and its undo move it forward', async () => {
+      const mapSite = await createSite(client, workspaceId);
+      const slug = uniqueSlug('uu-dai');
+      const { pageId, published: first } = await createLivePage(client, mapSite.id, slug);
+      await editHeroHeading(client, pageId, 'Bản 2');
+      const second = await publish(client, pageId);
+      const lastModified = async () => {
+        const response = await visitor
+          .get(`/public/sites/${mapSite.subdomain}/sitemap`)
+          .expect(200);
+        return sitemapResponseSchema.parse(response.body).entries[0]?.lastModified ?? '';
+      };
+      const pointerEvent = async (type: string) => {
+        const record = await t.connection
+          .collection('activity')
+          .findOne({ pageId: new Types.ObjectId(pageId), type }, { sort: { createdAt: -1 } });
+        return record?.['createdAt'] instanceof Date ? record['createdAt'].toISOString() : '';
+      };
+      expect(await lastModified()).toBe(second.release.createdAt);
+
+      const rolledBack = await client
+        .post(`/pages/${pageId}/pointer`, {
+          targetReleaseId: first.release.id,
+          expectedCurrentReleaseId: second.release.id,
+          reason: 'Bản 2 sai giá',
+        })
+        .expect(200);
+      // v1 is older than what crawlers saw, but the page changed now.
+      const afterRollback = await lastModified();
+      expect(afterRollback).toBe(await pointerEvent('page.rolled_back'));
+      expect(afterRollback > second.release.createdAt).toBe(true);
+
+      const { activityId } = pointerMoveResponseSchema.parse(rolledBack.body);
+      await client.post(`/activity/${activityId}/undo`, {}).expect(200);
+      const afterUndo = await lastModified();
+      expect(afterUndo).toBe(await pointerEvent('page.rollback_undone'));
+      expect(afterUndo > afterRollback).toBe(true);
     });
   });
 

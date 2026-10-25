@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeHtml, leadResultHtml, safeBackPath } from './lead-result-page';
+import { campaignQuery, escapeHtml, leadResultHtml, safeBackPath } from './lead-result-page';
 import {
   checkLeadRequest,
   leadProblemsOf,
@@ -71,6 +71,27 @@ describe('leadRequestCandidate and checkLeadRequest', () => {
         { path: ['releaseId'], code: 'invalid_string', message: 'Mã định danh không hợp lệ' },
       ]),
     ).toEqual({ fields: { phone: 'A' }, other: ['Mã định danh không hợp lệ'] });
+  });
+});
+
+describe('campaignQuery', () => {
+  it('keeps the campaign tags of a page, and nothing else of its address', () => {
+    expect(
+      campaignQuery(
+        new URLSearchParams(
+          'utm_source=zalo&utm_medium=oa&utm_campaign=Tháng 11 & Tết&fbclid=abc&email=a@b.vn',
+        ),
+      ),
+    ).toBe('utm_source=zalo&utm_medium=oa&utm_campaign=Th%C3%A1ng+11+');
+    expect(campaignQuery(new URLSearchParams('utm_source=&gclid=1'))).toBe('');
+  });
+
+  it('is linked back to, escaped, from a refused form', () => {
+    const html = leadResultHtml('invalid', '/uu-dai', [], 'utm_source=zalo&utm_medium=oa');
+    expect(html).toContain('href="/uu-dai?utm_source=zalo&amp;utm_medium=oa"');
+    expect(leadResultHtml('invalid', '//evil.example', [], 'utm_source=x')).toContain(
+      'href="/?utm_source=x"',
+    );
   });
 });
 

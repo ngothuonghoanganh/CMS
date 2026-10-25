@@ -13,8 +13,9 @@ import {
   Skeleton,
 } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
-import { useId, useRef, useState } from 'react';
+import { type RefObject, useId, useRef, useState } from 'react';
 import { ApiError, uploadAsset } from '../../lib/api';
+import { useFocusNewItems } from '../shell/use-focus-new-items';
 import styles from './assets.module.css';
 import {
   ACCEPTED_IMAGE_TYPES,
@@ -47,6 +48,8 @@ export interface AssetPickerDialogProps {
   title?: string | undefined;
   /** Shown under the title, e.g. "Khuyên dùng 1200 × 630 px". */
   recommendedSize?: string | undefined;
+  /** Where focus goes on close when the choice replaced the button that opened the dialog. */
+  fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
 }
 
 function uploadErrorMessage(error: unknown): { alt?: string; general: string | null } {
@@ -196,6 +199,11 @@ function AssetGrid({
 }) {
   const query = useSiteAssets(siteId, open);
   const assets = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const { listRef: newItemsRef, expectMore } = useFocusNewItems<HTMLUListElement>(
+    assets.length,
+    'li',
+    'button',
+  );
 
   if (query.isPending) {
     return (
@@ -239,7 +247,7 @@ function AssetGrid({
   }
   return (
     <>
-      <ul className={styles.grid}>
+      <ul ref={newItemsRef} className={styles.grid}>
         {assets.map((asset) => {
           const name = asset.alt ?? 'Ảnh trang trí';
           return (
@@ -268,6 +276,7 @@ function AssetGrid({
             variant="secondary"
             loading={query.isFetchingNextPage}
             onClick={() => {
+              expectMore();
               void query.fetchNextPage();
             }}
           >
@@ -292,6 +301,7 @@ export function AssetPickerDialog({
   onSelect,
   title,
   recommendedSize,
+  fallbackFocusRef,
 }: AssetPickerDialogProps) {
   const [selected, setSelected] = useState<Asset | null>(null);
 
@@ -311,6 +321,7 @@ export function AssetPickerDialog({
         onOpenChange(next);
       }}
       size="lg"
+      fallbackFocusRef={fallbackFocusRef}
       title={title ?? 'Chọn ảnh'}
       description={recommendedSize ? `Khuyên dùng ${recommendedSize}.` : undefined}
       footer={

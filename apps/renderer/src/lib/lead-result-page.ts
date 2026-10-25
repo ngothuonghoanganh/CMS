@@ -25,6 +25,24 @@ export function safeBackPath(value: string | null): string {
   return value !== null && /^\/[a-z0-9-]*$/.test(value) ? value : '/';
 }
 
+const CAMPAIGN_TAGS = ['utm_source', 'utm_medium', 'utm_campaign'] as const;
+
+/**
+ * The campaign tags of the page a form was on, as a query to keep on the way back to it: a lead
+ * sent again after a refusal is then attributed like the first try (ADR-016). Only these tags go
+ * along, encoded; nothing else of the visitor's address does.
+ */
+export function campaignQuery(params: URLSearchParams): string {
+  const kept = new URLSearchParams();
+  for (const name of CAMPAIGN_TAGS) {
+    const value = params.get(name);
+    if (value !== null && value !== '') {
+      kept.set(name, value);
+    }
+  }
+  return kept.toString();
+}
+
 export type LeadResultKind = 'received' | Exclude<RelayOutcome['kind'], 'received'>;
 
 const COPY: Record<LeadResultKind, { title: string; text: string; back: string }> = {
@@ -59,8 +77,10 @@ export function leadResultHtml(
   kind: LeadResultKind,
   backPath: string,
   messages: readonly string[] = [],
+  campaign = '',
 ): string {
   const copy = COPY[kind];
+  const back = `${safeBackPath(backPath)}${campaign === '' ? '' : `?${campaign}`}`;
   const list =
     messages.length === 0
       ? ''
@@ -84,7 +104,7 @@ a{color:#0f5e55;font-weight:600}
 <h1>${escapeHtml(copy.title)}</h1>
 <p>${escapeHtml(copy.text)}</p>
 ${list}
-<p><a href="${escapeHtml(safeBackPath(backPath))}">${escapeHtml(copy.back)}</a></p>
+<p><a href="${escapeHtml(back)}">${escapeHtml(copy.back)}</a></p>
 </main>
 </body>
 </html>`;

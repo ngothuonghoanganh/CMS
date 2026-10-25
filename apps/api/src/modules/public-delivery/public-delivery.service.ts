@@ -14,6 +14,8 @@ import {
 import { pageCapturesLeads } from '@plp/sections/schema';
 import { notFound } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import type { ActivityType } from '@plp/contracts';
+import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import { AssetsService } from '../assets/assets.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
@@ -50,6 +52,12 @@ export function slugFromPath(path: string): string {
 }
 
 /** What visitors see of a lead capture: the texts and the policy link, nothing internal. */
+/** Pointer moves that make an existing, older release live again. */
+const RELEASE_RESTORED: ReadonlySet<ActivityType> = new Set([
+  'page.rolled_back',
+  'page.rollback_undone',
+]);
+
 function publicLeadCapture(capture: LeadCapture | null): PublicLeadCapture | null {
   return (
     capture && {
@@ -103,6 +111,7 @@ export class PublicDeliveryService {
     private readonly assetsService: AssetsService,
     private readonly previews: PreviewTokens,
     private readonly consentVersions: ConsentVersionsRepository,
+    private readonly activity: ActivityRepository,
   ) {}
 
   /**
@@ -168,14 +177,24 @@ export class PublicDeliveryService {
     return null;
   }
 
-  /** Live pages that may be indexed, with the time their release was published. */
+  /**
+   * Live pages that may be indexed, with the time their content went live: the publish, or the
+   * rollback or undo that made an older release live again. Crawlers then see a change whenever
+   * the page changed, never a time that goes back.
+   */
   async sitemap(subdomain: string): Promise<SitemapResponse> {
     const site = await this.siteOrNotFound(subdomain);
     const live = await this.pages.listPublicLiveForSite(site._id);
-    const releases = await this.releases.findPublicForSite(
-      site._id,
-      live.map((page) => page.publishedReleaseId),
-    );
+    const [releases, moves] = await Promise.all([
+      this.releases.findPublicForSite(
+        site._id,
+        live.map((page) => page.publishedReleaseId),
+      ),
+      this.activity.latestPublicPointerEvents(
+        site._id,
+        live.map((page) => page._id),
+      ),
+    ]);
     const entries = live
       .flatMap((page) => {
         const release = releases.get(page.publishedReleaseId.toHexString());
@@ -184,9 +203,14 @@ export class PublicDeliveryService {
             `Live page ${page._id.toHexString()} points to missing release ${page.publishedReleaseId.toHexString()}`,
           );
         }
+        const move = moves.get(page._id.toHexString());
+        const wentLive =
+          move !== undefined && RELEASE_RESTORED.has(move.type)
+            ? move.createdAt
+            : release.createdAt;
         return release.seo.noindex
           ? []
-          : [{ path: livePath(page.publishedSlug), lastModified: release.createdAt.toISOString() }];
+          : [{ path: livePath(page.publishedSlug), lastModified: wentLive.toISOString() }];
       })
       .sort((a, b) => a.path.localeCompare(b.path));
     return sitemapResponseSchema.parse({ origin: this.sitesService.defaultOrigin(site), entries });

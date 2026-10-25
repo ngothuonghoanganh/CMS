@@ -222,4 +222,27 @@ describe('ConfirmDialog', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
+
+  it('cannot confirm while what it acts on is not ready, but can still be cancelled', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={onOpenChange}
+        title="Sao chép v11 vào bản nháp?"
+        description="Đang kiểm tra bản nháp hiện tại…"
+        confirmLabel="Sao chép vào bản nháp"
+        confirmDisabled
+        onConfirm={onConfirm}
+      />,
+    );
+    const confirm = screen.getByRole('button', { name: 'Sao chép vào bản nháp' });
+    expect(confirm).toBeDisabled();
+    await user.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Hủy' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

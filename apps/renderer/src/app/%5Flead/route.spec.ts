@@ -221,7 +221,8 @@ describe('POST /_lead without JavaScript', () => {
     const html = await response.text();
     expect(html).toContain('Bạn cần đồng ý để gửi đăng ký');
     expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
-    expect(html).toContain('href="/uu-dai"');
+    // Back to the form with the page's campaign tags, so the lead sent again keeps its source.
+    expect(html).toContain('href="/uu-dai?utm_source=facebook&amp;utm_medium=cpc"');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

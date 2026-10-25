@@ -27,7 +27,7 @@ import { type SubmitEvent, useId, useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
+import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import { dataRequestTypeDescriptions } from './data-request-presentation';
 import styles from './DataRequests.module.css';
 
@@ -168,7 +168,12 @@ export function RecordDataRequestDialog({
           >
             Hủy
           </Button>
-          <Button type="submit" form={formId} loading={record.isPending}>
+          <Button
+            type="submit"
+            form={formId}
+            loading={record.isPending}
+            onMouseDown={keepFieldFocus}
+          >
             Ghi nhận
           </Button>
         </>

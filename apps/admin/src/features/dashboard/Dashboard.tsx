@@ -34,6 +34,7 @@ import { leadRecipientsHref, newPageHref, privacyHref, siteHref } from '../shell
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
 import { useDebouncedValue } from '../shell/use-debounced-value';
+import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
 import {
   type DashboardFilters,
@@ -132,7 +133,13 @@ export function Dashboard({
   const lists = pagesQuery.data?.pages ?? [];
   const summary = lists[0] ?? initialPages;
   const pages = lists.flatMap((list) => list.items);
-  const { counts } = summary;
+  const { listRef: newItemsRef, expectMore } = useFocusNewItems<HTMLDivElement>(
+    pages.length,
+    'tbody tr',
+    'a[href]',
+  );
+  // `liveSiteUrl`: the home page when it is live, else the page published last; null while none is.
+  const { counts, liveSiteUrl } = summary;
   const loadingPages = pagesQuery.isPlaceholderData || pagesQuery.data === undefined;
   // `counts.live` already includes the live pages with changes.
   const anyReleased = counts.live + counts.unpublished > 0;
@@ -188,16 +195,18 @@ export function Dashboard({
         title="Trang"
         actions={
           <>
-            <ButtonLink
-              href={internalVisitUrl(site.defaultOrigin)}
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="secondary"
-              trailingIcon={<ExternalLinkIcon size={16} />}
-            >
-              Xem site live
-              <VisuallyHidden> (mở trong thẻ mới)</VisuallyHidden>
-            </ButtonLink>
+            {liveSiteUrl === null ? null : (
+              <ButtonLink
+                href={internalVisitUrl(liveSiteUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="secondary"
+                trailingIcon={<ExternalLinkIcon size={16} />}
+              >
+                Xem site live
+                <VisuallyHidden> (mở trong thẻ mới)</VisuallyHidden>
+              </ButtonLink>
+            )}
             <ButtonLink as={Link} href={newPageHref(site.id)} leadingIcon={<PlusIcon size={16} />}>
               Tạo trang
             </ButtonLink>
@@ -286,6 +295,7 @@ export function Dashboard({
           />
         ) : (
           <div
+            ref={newItemsRef}
             className={cx(styles.tableScroll, loadingPages && styles.loading)}
             aria-busy={loadingPages}
           >
@@ -308,6 +318,7 @@ export function Dashboard({
               variant="secondary"
               loading={pagesQuery.isFetchingNextPage}
               onClick={() => {
+                expectMore();
                 void pagesQuery.fetchNextPage();
               }}
             >

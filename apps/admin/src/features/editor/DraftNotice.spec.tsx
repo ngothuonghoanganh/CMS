@@ -1,5 +1,5 @@
 import { type Asset, endpoints, type PageDetailResponse } from '@plp/contracts';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { ApiError, api } from '../../lib/api';
@@ -226,6 +226,27 @@ describe('ConflictDialog', () => {
     });
     expect(store.getState()).toMatchObject({ saveState: 'saved', baseRevision: 8 });
     expect(store.getState().draft.composition.sections[1]?.spacing).toBe('normal');
+  });
+
+  it('takes the focus when it opens, so typing cannot go on editing the draft behind it', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    renderEditor(
+      <>
+        <input aria-label="Tiêu đề" />
+        <ConflictDialog />
+      </>,
+      { store },
+    );
+    await user.click(screen.getByRole('textbox', { name: 'Tiêu đề' }));
+
+    act(() => {
+      store.getState().markConflict();
+    });
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Trang vừa được cập nhật ở nơi khác',
+    });
+    expect(within(dialog).getByRole('button', { name: 'Tải lại bản mới nhất' })).toHaveFocus();
   });
 
   it('loads the images the reloaded draft uses before showing it', async () => {

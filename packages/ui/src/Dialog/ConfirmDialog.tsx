@@ -48,6 +48,8 @@ export interface ConfirmDialogProps {
   reason?: ConfirmReasonOptions | undefined;
   /** The action is running: confirm shows a spinner and the dialog cannot be dismissed. */
   pending?: boolean | undefined;
+  /** Confirming is not possible yet, e.g. while what it acts on is still loading. */
+  confirmDisabled?: boolean | undefined;
   /** Actionable error from the last attempt, shown above the buttons. */
   error?: ReactNode;
   /** Called with the trimmed reason (empty string without `reason`). Close the dialog yourself. */
@@ -60,7 +62,15 @@ interface ConfirmBodyProps {
 }
 
 function ConfirmBody({ props, reasonRef }: ConfirmBodyProps) {
-  const { reason, pending = false, error, tone = 'default', confirmLabel, onConfirm } = props;
+  const {
+    reason,
+    pending = false,
+    confirmDisabled = false,
+    error,
+    tone = 'default',
+    confirmLabel,
+    onConfirm,
+  } = props;
   const [reasonText, setReasonText] = useState('');
   const hintId = useId();
   const trimmed = reasonText.trim();
@@ -120,7 +130,7 @@ function ConfirmBody({ props, reasonRef }: ConfirmBodyProps) {
           <Button
             variant={tone === 'danger' ? 'danger' : 'primary'}
             loading={pending}
-            disabled={missingReason}
+            disabled={missingReason || confirmDisabled}
             aria-describedby={missingReason ? hintId : undefined}
             onClick={() => {
               onConfirm(reason ? trimmed : '');

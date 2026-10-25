@@ -106,6 +106,7 @@ export function LeadDetailPanel({
   const lead = detail.data;
   const loaded = lead !== undefined;
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   // A new key opens "Sửa thông tin" with the lead as it is now.
@@ -141,6 +142,8 @@ export function LeadDetailPanel({
       refreshLists();
       if (body.note !== undefined) {
         setNoteDraft(null);
+        // "Lưu ghi chú" goes away once saved: focus returns to the note.
+        noteRef.current?.focus();
         toast({ tone: 'success', title: 'Đã lưu ghi chú' });
       }
       if (body.spam !== undefined) {
@@ -442,6 +445,7 @@ export function LeadDetailPanel({
         >
           <Field label="Ghi chú nội bộ" counter={{ length: note.length, max: LEAD_NOTE_MAX }}>
             <Textarea
+              ref={noteRef}
               rows={2}
               value={note}
               maxLength={LEAD_NOTE_MAX}

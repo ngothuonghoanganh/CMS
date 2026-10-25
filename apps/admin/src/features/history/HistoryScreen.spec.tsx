@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { SITE_ID, siteFixture } from '../dashboard/test-fixtures';
-import { renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { HistoryScreen } from './HistoryScreen';
 import {
   historyFixture,
@@ -62,13 +62,19 @@ const rolledBackHistory = historyFixture(
 interface ServerState {
   page: PageSummary;
   history: HistoryResponse;
+  /** The draft revision the page read answers; 9 unless a test saves the draft elsewhere. */
+  revision?: number;
 }
 
 /** Answers the screen's reads from `server`, so a test can change what the API returns. */
 function serve(server: ServerState) {
   apiMock.mockImplementation((endpoint) => {
     if (endpoint === endpoints.getPage) {
-      return Promise.resolve({ page: server.page, draft: { revision: 9 }, checks: {} });
+      return Promise.resolve({
+        page: server.page,
+        draft: { revision: server.revision ?? 9 },
+        checks: {},
+      });
     }
     if (endpoint === endpoints.history) {
       return Promise.resolve(server.history);
@@ -249,6 +255,78 @@ describe('HistoryScreen', () => {
     expect(screen.getByText('HOÀN TÁC')).toBeInTheDocument();
   });
 
+  it('focuses the banner as soon as the history shows the rollback, before the page re-read ends', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: historyPage(), history: initialHistory };
+    serve(server);
+    renderScreen();
+    await user.click(within(card('v11')).getByRole('button', { name: 'Khôi phục bản này' }));
+    const panel = screen.getByRole('region', { name: 'Khôi phục v11 thành bản live?' });
+    await user.type(within(panel).getByRole('textbox', { name: /Lý do/ }), 'Giá mới chưa duyệt');
+
+    server.page = rolledBackPage;
+    server.history = rolledBackHistory;
+    let finishPageRead: () => void = () => undefined;
+    const pageRead = new Promise<void>((resolve) => {
+      finishPageRead = resolve;
+    });
+    apiMock.mockImplementation(async (endpoint) => {
+      if (endpoint === endpoints.movePointer) {
+        return { activityId: '64b0000000000000000000f1', page: rolledBackPage, revalidation: 'ok' };
+      }
+      if (endpoint === endpoints.history) {
+        return server.history;
+      }
+      if (endpoint === endpoints.getPage) {
+        // The page summary answers last, after the history has re-rendered the screen.
+        await pageRead;
+        return { page: server.page, draft: { revision: 9 }, checks: {} };
+      }
+      throw new Error('unexpected call');
+    });
+    await user.click(within(panel).getByRole('button', { name: 'Khôi phục v11' }));
+
+    const banner = screen.getByRole('status');
+    await waitFor(() => {
+      expect(banner).toHaveTextContent('v11 đang live tại');
+    });
+    await waitFor(() => {
+      expect(banner.firstElementChild).toHaveFocus();
+    });
+    finishPageRead();
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: /Khôi phục v/ })).not.toBeInTheDocument();
+    });
+    expect(banner.firstElementChild).toHaveFocus();
+  });
+
+  it('hands the focus to the first older entry "Xem thêm" brought, as it goes away', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.history
+        ? Promise.resolve(historyFixture([releaseEntry(11)], { releaseCount: 2 }))
+        : Promise.reject(new Error('unexpected call')),
+    );
+    renderWithProviders(
+      <HistoryScreen
+        site={siteFixture()}
+        initialPage={historyPage()}
+        initialHistory={historyFixture([releaseEntry(12)], {
+          nextCursor: 'cursor-2',
+          releaseCount: 2,
+        })}
+        loadedAt={LOADED_AT}
+        restoreReleaseId={null}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Xem thêm 1 phiên bản cũ hơn' }));
+    await waitFor(() => {
+      expect(within(card('v11')).getAllByRole('button')[0]).toHaveFocus();
+    });
+    expect(screen.queryByRole('button', { name: /Xem thêm/ })).toBeNull();
+  });
+
   it('returns focus to "Khôi phục bản này" when the panel is cancelled', async () => {
     const user = userEvent.setup();
     serve({ page: historyPage(), history: initialHistory });
@@ -270,22 +348,20 @@ describe('HistoryScreen', () => {
     expect(within(card('v11')).getByRole('button', { name: 'Khôi phục bản này' })).toHaveFocus();
   });
 
-  it('copies a release into the draft from the current revision and offers the editor', async () => {
+  it('copies a release into the draft from the revision read when the dialog opened', async () => {
     const user = userEvent.setup();
     serve({ page: historyPage(), history: initialHistory });
     renderScreen();
 
     await user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
-    expect(dialog).toHaveTextContent('4 thay đổi chưa xuất bản sẽ mất.');
+    expect(
+      await within(dialog).findByText(/4 thay đổi chưa xuất bản sẽ mất\./),
+    ).toBeInTheDocument();
 
-    apiMock
-      .mockImplementationOnce(() =>
-        Promise.resolve({ page: historyPage(), draft: { revision: 9 } }),
-      )
-      .mockImplementationOnce(() =>
-        Promise.resolve({ page: historyPage(), draft: { revision: 10 } }),
-      );
+    apiMock.mockImplementationOnce(() =>
+      Promise.resolve({ page: historyPage(), draft: { revision: 10 } }),
+    );
     await user.click(within(dialog).getByRole('button', { name: 'Sao chép vào bản nháp' }));
 
     expect(await screen.findByText('Đã sao chép v11 vào bản nháp')).toBeInTheDocument();
@@ -294,6 +370,70 @@ describe('HistoryScreen', () => {
     });
     await user.click(screen.getByRole('button', { name: 'Mở editor' }));
     expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+  });
+
+  it('says what a draft saved since the screen loaded will lose before copying over it', async () => {
+    const user = userEvent.setup();
+    // The screen loaded with the draft equal to the live page; another tab saved since.
+    serve({
+      page: historyPage({ status: { kind: 'live_with_changes', changeCount: 2, changes: [] } }),
+      history: initialHistory,
+    });
+    renderWithProviders(
+      <HistoryScreen
+        site={siteFixture()}
+        initialPage={historyPage({ status: { kind: 'live', changeCount: 0, changes: [] } })}
+        initialHistory={initialHistory}
+        loadedAt={LOADED_AT}
+        restoreReleaseId={null}
+      />,
+    );
+
+    await user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(
+      await within(dialog).findByText(/2 thay đổi chưa xuất bản sẽ mất\./),
+    ).toBeInTheDocument();
+  });
+
+  it('never overwrites a draft saved elsewhere after the dialog read it', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: historyPage(), history: initialHistory };
+    serve(server);
+    renderScreen();
+
+    await user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(
+      await within(dialog).findByText(/4 thay đổi chưa xuất bản sẽ mất\./),
+    ).toBeInTheDocument();
+
+    // A teammate saves the draft before the owner confirms.
+    server.page = historyPage({
+      status: { kind: 'live_with_changes', changeCount: 6, changes: [] },
+    });
+    server.revision = 10;
+    apiMock.mockImplementationOnce(() =>
+      Promise.reject(apiError(409, 'revision_conflict', 'Bản nháp đã thay đổi')),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Bản nháp vừa được lưu ở nơi khác.',
+    );
+    expect(
+      await within(dialog).findByText(/6 thay đổi chưa xuất bản sẽ mất\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Đã sao chép v11 vào bản nháp')).not.toBeInTheDocument();
+
+    apiMock.mockImplementationOnce(() =>
+      Promise.resolve({ page: historyPage(), draft: { revision: 11 } }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    expect(await screen.findByText('Đã sao chép v11 vào bản nháp')).toBeInTheDocument();
+    expect(lastCallTo(apiMock, endpoints.restoreDraft).options).toEqual({
+      body: { baseRevision: 10, releaseId: releaseId(11) },
+    });
   });
 
   it('opens a signed preview of a release in a new tab', async () => {

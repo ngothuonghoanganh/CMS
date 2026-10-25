@@ -18,6 +18,8 @@ import {
 import { configurePrivacy, saveConsentVersion, savePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
+import { addMonthsUtc } from './domain/lead-intake-rules.js';
+import { LeadLimitsRepository } from './lead-limits.repository.js';
 import { LeadsRepository } from './leads.repository.js';
 
 const CLIENT_LIMIT = 3;
@@ -337,6 +339,79 @@ describe('lead intake', () => {
 
     const later = await submitLead(t, site.subdomain, leadBody(releaseId), { ip: '198.51.100.30' });
     expect(later.status).toBe(201);
+  });
+
+  it('gives a lead sent while the retention period changes the period saved, not the one read', async () => {
+    const { site, releaseId } = await formSite();
+    await savePrivacy(client, site.id, { retentionMonths: null });
+    const limits = t.app.get(LeadLimitsRepository);
+    const hit = limits.hit.bind(limits);
+    let reached: () => void = () => undefined;
+    const atLimits = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let resume: () => void = () => undefined;
+    const paused = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const spy = vi.spyOn(limits, 'hit').mockImplementationOnce(async (key, now, windowEnd) => {
+      reached();
+      await paused;
+      return hit(key, now, windowEnd);
+    });
+    try {
+      // The intake has read the site (no expiry) and waits before storing the lead, while the
+      // owner saves 6 months and every stored lead is recomputed.
+      const sending = submitLead(t, site.subdomain, leadBody(releaseId)).then(
+        (response) => response,
+      );
+      await atLimits;
+      await savePrivacy(client, site.id, { retentionMonths: 6 });
+      resume();
+      expect((await sending).status).toBe(201);
+    } finally {
+      spy.mockRestore();
+    }
+    const [lead] = await storedLeads(site);
+    expect((lead?.['expiresAt'] as Date | null)?.getTime()).toBe(
+      addMonthsUtc(lead?.['createdAt'] as Date, 6).getTime(),
+    );
+  });
+
+  it('follows the period saved last when two saves recompute out of order', async () => {
+    const { site, releaseId } = await formSite();
+    await submitLead(t, site.subdomain, leadBody(releaseId), { ip: '198.51.100.40' }).expect(201);
+    const leads = t.app.get(LeadsRepository);
+    const recompute = leads.recomputeExpiry.bind(leads);
+    let reached: () => void = () => undefined;
+    const atRecompute = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let resume: () => void = () => undefined;
+    const paused = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const spy = vi
+      .spyOn(leads, 'recomputeExpiry')
+      .mockImplementationOnce(async (scope, siteId, months) => {
+        reached();
+        await paused;
+        return recompute(scope, siteId, months);
+      });
+    try {
+      // 6 months is saved first but recomputes last, after 24 months was saved and applied.
+      const first = savePrivacy(client, site.id, { retentionMonths: 6 });
+      await atRecompute;
+      await savePrivacy(client, site.id, { retentionMonths: 24 });
+      resume();
+      await first;
+    } finally {
+      spy.mockRestore();
+    }
+    const [lead] = await storedLeads(site);
+    expect((lead?.['expiresAt'] as Date | null)?.getTime()).toBe(
+      addMonthsUtc(lead?.['createdAt'] as Date, 24).getTime(),
+    );
   });
 
   it("keeps the visitor's data out of the error log", async () => {

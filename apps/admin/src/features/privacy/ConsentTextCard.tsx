@@ -135,6 +135,8 @@ export function ConsentTextCard({
       save.reset();
       setTexts(textsOf(settings.currentConsent));
       setErrors(NO_ERRORS);
+      // "Tải bản mới nhất" goes away with its notice: focus moves to the text to edit again.
+      requiredRef.current?.focus();
       void queryClient.invalidateQueries({ queryKey: consentVersionsQueryKey(siteId) });
       if (settings.currentConsent !== null) {
         onSaved(settings.currentConsent);
@@ -151,6 +153,9 @@ export function ConsentTextCard({
   }
 
   function submit() {
+    if (!changed) {
+      return;
+    }
     const nextErrors: TextErrors = {
       requiredText: fieldError(requiredTextSchema, texts.requiredText),
       marketingText: texts.marketing
@@ -306,7 +311,8 @@ export function ConsentTextCard({
           )}
         </p>
         {canEdit ? (
-          <Button loading={save.isPending} disabled={!changed} onClick={submit}>
+          // Nothing to save until the text differs; still focusable, as it is right after a save.
+          <Button loading={save.isPending} aria-disabled={!changed || undefined} onClick={submit}>
             {`Lưu thành bản ${nextVersion}`}
           </Button>
         ) : null}

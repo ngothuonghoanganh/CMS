@@ -533,6 +533,22 @@ describe('lead form', () => {
     ]);
   });
 
+  it('keeps the send button focusable while sending, so a refusal finds the visitor on it', () => {
+    const form = section('lead_form');
+    const sending = renderToStaticMarkup(
+      <LeadFormView
+        sectionId={form.id}
+        content={sampleLeadForm(form)}
+        capture={CAPTURE}
+        releaseId={RELEASE_ID}
+        submitting
+      />,
+    );
+    expect(sending).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*aria-disabled="true")[^>]*>/);
+    expect(sending).toContain('aria-busy="true"');
+    expect(sending).not.toContain('disabled=""');
+  });
+
   it('confirms a sent lead in the section, with a decorative tick', () => {
     const markup = renderToStaticMarkup(
       <LeadFormSent content={sampleLeadForm(section('lead_form'))} />,
