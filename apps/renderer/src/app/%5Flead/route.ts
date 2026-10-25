@@ -6,6 +6,7 @@ import { relayLead, type RelayOutcome } from '../../lib/lead-relay';
 import { checkLeadRequest, leadRequestCandidate, leadSourceFrom } from '../../lib/lead-request';
 import { leadResultHtml, safeBackPath } from '../../lib/lead-result-page';
 import { readBodyWithin } from '../../lib/request-body';
+import { isCrossSite } from '../../lib/same-site';
 
 // `/_lead` (ADR-016): the folder is "%5Flead" because "_lead" would be a private folder. Response
 // headers (noindex, no-referrer) come from next.config.ts; every answer here is also no-store.
@@ -43,21 +44,6 @@ function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
     // Not JSON: answered as 400 by the caller, like any other malformed body.
     return { ok: false };
   }
-}
-
-/**
- * Only a form on this site posts here. A browser names the posting page's origin; a request from
- * another site is refused. `Origin: null` (an opaque origin) is not proof either way.
- */
-function isCrossSite(request: Request, host: string | null): boolean {
-  if (request.headers.get('sec-fetch-site') === 'cross-site') {
-    return true;
-  }
-  const origin = request.headers.get('origin');
-  if (origin === null || origin === 'null') {
-    return false;
-  }
-  return !URL.canParse(origin) || new URL(origin).host !== host;
 }
 
 /** The page the form was on, from the Referer when it is this site; "/" otherwise. */

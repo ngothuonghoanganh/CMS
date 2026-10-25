@@ -1,3 +1,5 @@
+import { INTERNAL_VISIT_PARAM } from '@plp/contracts';
+
 /**
  * Display helpers for public site addresses: a site's `defaultOrigin` ("https://smile.payload.site")
  * and a page's `liveUrl` ("https://smile.payload.site/uu-dai"). The API builds those URLs; the admin
@@ -32,4 +34,15 @@ export function slugPath(slug: string): string {
  */
 export function defaultHostPreview(originTemplate: string, subdomain: string): string {
   return originTemplate.replace('{subdomain}', subdomain).replace(PROTOCOL, '').replace(/\/+$/, '');
+}
+
+/**
+ * A live page opened from the admin ("Xem trang live"): the page's script then flags this browser
+ * as a member's and never counts its views (ADR-019). Addresses to share (QR code, copy) stay
+ * plain.
+ */
+export function internalVisitUrl(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set(INTERNAL_VISIT_PARAM, '1');
+  return parsed.toString();
 }

@@ -321,7 +321,11 @@ describe('PublishDialog', () => {
       'href',
       `/sites/${SITE_ID}/pages/${PAGE_ID}/history?restore=${LIVE_RELEASE.id}`,
     );
-    expect(screen.getByRole('link', { name: /Mở trang live/ })).toHaveAttribute('href', LIVE_URL);
+    // The member's own visit is not counted; the QR code keeps the address to share.
+    expect(screen.getByRole('link', { name: /Mở trang live/ })).toHaveAttribute(
+      'href',
+      `${LIVE_URL}?plp_internal=1`,
+    );
     expect(
       screen.queryByText('Trang live có thể mất tới 5 phút để cập nhật.'),
     ).not.toBeInTheDocument();

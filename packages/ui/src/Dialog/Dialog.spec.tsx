@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Button } from '../Button/Button';
+import { ToastProvider, useToast } from '../Toast/Toast';
 import { Dialog } from './Dialog';
 
 function PublishFlow() {
@@ -116,5 +117,49 @@ describe('Dialog', () => {
     }
     render(<WithSearch />);
     expect(await screen.findByRole('textbox', { name: 'Tìm section' })).toHaveFocus();
+  });
+
+  it('closes once on Escape when it is the top layer', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog open onOpenChange={onOpenChange} title="Nơi nhận lead">
+        <Button>Thêm</Button>
+      </Dialog>,
+    );
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('closes on Escape while a toast shows, which would otherwise take the key', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    function SavedInDialog() {
+      const { toast } = useToast();
+      return (
+        <Dialog open onOpenChange={onOpenChange} title="Nơi nhận lead">
+          <Button
+            onClick={() => {
+              toast({ tone: 'success', title: 'Đã gửi thư xác nhận' });
+            }}
+          >
+            Thêm
+          </Button>
+        </Dialog>
+      );
+    }
+    render(
+      <ToastProvider>
+        <SavedInDialog />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Thêm' }));
+    expect(await screen.findByText('Đã gửi thư xác nhận')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
   });
 });

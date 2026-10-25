@@ -64,6 +64,10 @@ export const PhoneIcon = createIcon(
   'phone',
   <path d="M6.6 4h2.6l1.3 3.6-1.8 1.4a11 11 0 0 0 6.3 6.3l1.4-1.8 3.6 1.3v2.6A1.6 1.6 0 0 1 18.4 19 15 15 0 0 1 5 5.6 1.6 1.6 0 0 1 6.6 4z" />,
 );
+export const ChartBarIcon = createIcon(
+  'chart-bar',
+  <path d="M5 20V12M10 20V6M15 20v-9M20 20V9M3 20h18" />,
+);
 export const ClockIcon = createIcon(
   'clock',
   <>

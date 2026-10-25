@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { LeadNotificationErrorCode, LeadStatus, RetentionMonths } from '@plp/contracts';
+import type {
+  InstantWindow,
+  LeadNotificationErrorCode,
+  LeadStatus,
+  RetentionMonths,
+  VnDay,
+} from '@plp/contracts';
 import type { QueryFilter, Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import {
@@ -88,6 +94,15 @@ export interface LeadContact {
   name: string;
   phone: string;
   email: string | null;
+}
+
+/** Leads not suspected of spam, as board 11 counts them (ADR-019). */
+export interface LeadAnalyticsRows {
+  /** Per Vietnamese day. */
+  daily: Array<{ day: VnDay; leads: number }>;
+  /** Per source pair and per page, over the current period only. */
+  sources: Array<{ source: string; medium: string; leads: number }>;
+  pages: Array<{ pageId: string; leads: number }>;
 }
 
 /** Changes from the inbox; absent fields stay as they are. */
@@ -283,6 +298,73 @@ export class LeadsRepository {
       ])
       .exec();
     return new Map(groups.map((group) => [group._id.toHexString(), group.count]));
+  }
+
+  /**
+   * Leads not suspected of spam for board 11 (ADR-019), in one aggregation on the inbox index: per
+   * Vietnamese day over `window`, per source pair and per page from `currentFrom` on. Moving a lead
+   * in or out of spam shows at once.
+   */
+  async analyticsRows(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    pageId: ObjectId | null,
+    window: InstantWindow,
+    currentFrom: Date,
+  ): Promise<LeadAnalyticsRows> {
+    const [result] = await this.leads
+      .aggregate<{
+        daily: Array<{ _id: VnDay; leads: number }>;
+        sources: Array<{ _id: { source: string; medium: string }; leads: number }>;
+        pages: Array<{ _id: ObjectId; leads: number }>;
+      }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            siteId,
+            'spam.suspected': false,
+            createdAt: { $gte: window.from, $lt: window.to },
+            ...(pageId === null ? {} : { pageId }),
+          },
+        },
+        {
+          $facet: {
+            daily: [
+              {
+                $group: {
+                  // Vietnam has no daylight saving time: +07:00 all year (calendar.ts).
+                  _id: {
+                    $dateToString: { date: '$createdAt', format: '%Y-%m-%d', timezone: '+07:00' },
+                  },
+                  leads: { $sum: 1 },
+                },
+              },
+            ],
+            sources: [
+              { $match: { createdAt: { $gte: currentFrom } } },
+              {
+                $group: {
+                  _id: { source: '$source.source', medium: '$source.medium' },
+                  leads: { $sum: 1 },
+                },
+              },
+            ],
+            pages: [
+              { $match: { createdAt: { $gte: currentFrom } } },
+              { $group: { _id: '$pageId', leads: { $sum: 1 } } },
+            ],
+          },
+        },
+      ])
+      .exec();
+    return {
+      daily: (result?.daily ?? []).map((row) => ({ day: row._id, leads: row.leads })),
+      sources: (result?.sources ?? []).map((row) => ({ ...row._id, leads: row.leads })),
+      pages: (result?.pages ?? []).map((row) => ({
+        pageId: row._id.toHexString(),
+        leads: row.leads,
+      })),
+    };
   }
 
   /** Applies inbox changes and returns the lead as it is now; null when it no longer exists. */

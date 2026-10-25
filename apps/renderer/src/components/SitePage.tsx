@@ -1,6 +1,6 @@
 import type { PublicPageData } from '@plp/contracts';
-import { PageView, type RenderContext } from '@plp/sections/react';
-import { LeadFormClient } from './LeadFormClient';
+import { LeadFormView, PageView, type RenderContext } from '@plp/sections/react';
+import { LeadFormSlot } from './LeadFormSlot';
 
 /** Whether the page's lead form sends: on live pages only, never in previews (ADR-016). */
 export type LeadSubmissionMode = 'live' | 'off';
@@ -20,7 +20,8 @@ export function liveRenderContext(
       ? {
           leadSubmission: {
             releaseId: data.releaseId,
-            render: (view) => <LeadFormClient {...view} />,
+            // The static form is drawn here, on the server; only its script loads on the page.
+            render: (view) => <LeadFormSlot {...view} fallback={<LeadFormView {...view} />} />,
           },
         }
       : {}),

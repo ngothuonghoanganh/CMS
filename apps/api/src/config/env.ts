@@ -53,6 +53,14 @@ const envSchema = z.object({
   LEAD_LIMIT_PER_CLIENT_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
   /** Leads one site accepts per hour, whoever sends them; protects storage from a flood. */
   LEAD_LIMIT_PER_SITE_PER_HOUR: z.coerce.number().int().min(1).default(300),
+  /**
+   * Page views one visitor address counts on one site per window (ADR-019). Views over a limit
+   * are not counted; the visitor never notices.
+   */
+  PAGE_VIEW_LIMIT_PER_CLIENT: z.coerce.number().int().min(1).default(60),
+  PAGE_VIEW_LIMIT_PER_CLIENT_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
+  /** Page views one site counts per hour, whoever sends them. */
+  PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR: z.coerce.number().int().min(1).default(20_000),
 
   /**
    * SMTP server for lead notifications and recipient confirmations (ADR-018), e.g.

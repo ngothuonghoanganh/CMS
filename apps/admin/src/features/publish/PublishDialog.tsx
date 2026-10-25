@@ -30,7 +30,7 @@ import Link from 'next/link';
 import { useEffect, useEffectEvent, useId, useReducer, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { formatRelativeTime } from '../../lib/format';
-import { displayUrl } from '../../lib/site-url';
+import { displayUrl, internalVisitUrl } from '../../lib/site-url';
 import { siteQueryKeys } from '../dashboard/queries';
 import { CopyAddressButton } from '../domain/CopyAddressButton';
 import { DraftConflictError, type PublishDialogRenderProps } from '../editor';
@@ -321,7 +321,7 @@ function PublishSession({
               Tiếp tục chỉnh sửa
             </Button>
             <ButtonLink
-              href={response.liveUrl}
+              href={internalVisitUrl(response.liveUrl)}
               target="_blank"
               rel="noopener noreferrer"
               trailingIcon={<ExternalLinkIcon size={16} />}

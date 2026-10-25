@@ -57,18 +57,27 @@ export interface VisitorOptions {
   unsigned?: boolean;
 }
 
-/**
- * `POST /public/sites/:subdomain/leads` as the renderer sends it: JSON body, the visitor's address
- * and user agent, and the HMAC over them. Signs with `createHmac` directly rather than the API's
- * own helper, so the test does not reuse the code under test.
- */
+/** `POST /public/sites/:subdomain/leads` as the renderer sends it (see `rendererPost`). */
 export function submitLead(
   t: TestApp,
   subdomain: string,
   body: unknown,
   options: VisitorOptions = {},
 ) {
-  const path = endpoints.publicSubmitLead.path(subdomain);
+  return rendererPost(t, endpoints.publicSubmitLead.path(subdomain), body, options);
+}
+
+/**
+ * A request as the renderer relays it: JSON body, the visitor's address and user agent, and the
+ * HMAC over them. Signs with `createHmac` directly rather than the API's own helper, so the test
+ * does not reuse the code under test.
+ */
+export function rendererPost(
+  t: TestApp,
+  path: string,
+  body: unknown,
+  options: VisitorOptions = {},
+) {
   const raw = JSON.stringify(body);
   const clientIp = options.ip === undefined ? '203.0.113.7' : (options.ip ?? '');
   const userAgent = options.userAgent ?? DESKTOP_UA;

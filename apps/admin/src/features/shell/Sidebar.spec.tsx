@@ -106,8 +106,10 @@ describe('Sidebar', () => {
       'href',
       `/sites/${SITE_ID}/leads`,
     );
-    // "Hiệu quả" comes with a later MVP B slice.
-    expect(screen.queryByRole('link', { name: /Hiệu quả/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Hiệu quả' })).toHaveAttribute(
+      'href',
+      `/sites/${SITE_ID}/analytics`,
+    );
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Owner');
   });
 

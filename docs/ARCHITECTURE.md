@@ -785,6 +785,32 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (quyết định trước B6):**
   - **Rate limit của beacon:** khi biết địa chỉ khách thì 60 lần mỗi 10 phút cho mỗi địa chỉ trên một site. Không biết địa chỉ (renderer không có proxy tin cậy) thì bỏ giới hạn theo địa chỉ, chỉ giữ giới hạn 20.000 lần mỗi giờ cho cả site, vì một bucket chung sẽ làm mất gần hết lượt xem thật.
   - **Bot:** không đếm user agent của crawler, công cụ xem trước link (Facebook, Zalo…), thư viện HTTP và trình duyệt headless (`HeadlessChrome`). E2E đặt user agent của trình duyệt thật.
+- **Amended 2026-10-25 (B6):**
+  - **Thu:**
+    - Script chỉ chạy ở trang live (không ở preview, không ở trang 404). Nó gửi `navigator.sendBeacon('/_e', JSON)` một lần mỗi lần tải trang, kèm `path` và nguồn (utm, referrer).
+    - Route `/_e` của renderer luôn trả 204. Nó bỏ qua view từ site khác, body không phải JSON hợp lệ hoặc lớn hơn 2 KB, rồi chuyển tiếp có ký tới `POST /public/sites/:subdomain/events`; API cũng luôn trả 204.
+    - Không bao giờ log nội dung view, chỉ log status.
+  - **Bot:** danh sách trong `isCountableUserAgent`. Trình duyệt trong app Facebook và Zalo là người thật nên vẫn được đếm. Tên hãng điện thoại có chữ "bot" (CUBOT) không bị coi là bot.
+  - **Rate limit:** biến môi trường `PAGE_VIEW_LIMIT_PER_CLIENT` (60), `PAGE_VIEW_LIMIT_PER_CLIENT_WINDOW_MINUTES` (10), `PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR` (20.000). Dùng chung bảng `lead_limits`, khóa địa chỉ được hash.
+  - **Lưu trữ:**
+    - `analytics_salts` mỗi ngày Việt Nam một bản, unique theo ngày, tự xóa sau 2 ngày.
+    - `analytics_seen` unique `(siteId, pageId, day, hash)`. Chèn bằng upsert, nên lần thấy đầu tiên cộng một khách.
+    - `analytics_daily` unique `(siteId, pageId, day, source, medium, device)`, cộng bằng `bulkWrite` upsert cho dòng cấp site và dòng cấp trang. Có thêm index `(siteId, day)` cho phần "Theo trang". TTL 400 ngày.
+  - **Trần cặp nguồn:** giữ trong bộ nhớ của mỗi instance API. View đầu tiên trong ngày của một site đọc các cặp đã lưu. Cặp thứ 51 trở đi trong ngày ghi vào `(other) / (other)`, màn 11 hiện là "khác". Khi chạy nhiều instance, một site có thể lưu nhiều hơn 50 cặp một chút.
+  - **Báo cáo** (mọi thành viên):
+    - Khoảng 7, 30 hoặc 90 ngày gồm hôm nay, so với cùng số ngày ngay trước đó.
+    - Ba aggregation: view của site hoặc của trang, khách theo trang, lead. Thêm một lần đọc tiêu đề trang.
+    - Bảng nguồn ghép lead theo cặp nguồn đã chuẩn hóa như lead, tối đa 20 dòng, nhiều khách trước.
+    - "Theo trang" chỉ có khi xem tất cả trang. Lọc theo một trang của site khác thì ra số 0.
+  - **Màn 11:**
+    - Biểu đồ cột một chuỗi (màu `--chart-bar`, cột đang chọn `--chart-bar-emphasis`) và thanh thiết bị hai màu `--chart-series-1/2`. Các màu được kiểm bằng validator của skill dataviz: mọi mark ≥ 3:1, hai màu thiết bị CVD ΔE 26.
+    - Mỗi ngày là một nút: rê chuột hoặc phím mũi tên đều hiện tooltip, và có chế độ "Xem dạng bảng".
+    - Bộ lọc nằm trên URL. Khi tải lại số liệu, số cũ được làm mờ thay vì hiện khung trống.
+  - **Thành viên:** "Xem site live", "Xem trang live" và "Mở trang live" trong admin thêm `?plp_internal=1` (`internalVisitUrl`). Mã QR và nút sao chép giữ địa chỉ gốc.
+  - **Trọng lượng trang live:**
+    - Script đếm view chỉ import `@plp/contracts/page-view`, một module không có zod.
+    - Script của form được tải lười (`React.lazy`, fallback là form tĩnh vẽ ở server, vẫn gửi được khi tắt JavaScript).
+    - Kết quả đo trên build production: trang không có form không còn tải chunk 38 KB gzip của schema và form. Chỉ còn phần nền của framework và khoảng 1 KB của script đếm view.
 
 ---
 
@@ -821,7 +847,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 | B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người                                      | 10, 01, Sidebar | Xong       |
 | B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                                                          | 10, 05, 03      | Xong       |
 | B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                                                         | 12 (phần dưới)  | Xong       |
-| B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                                                              | 11              | Chưa làm   |
+| B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                                                              | 11              | Xong       |
 
 **Hoàn thành MVP B** khi một E2E chạy xanh toàn bộ chuỗi:
 

@@ -24,7 +24,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import Link from 'next/link';
 import { type Ref, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
-import { displayUrl } from '../../lib/site-url';
+import { displayUrl, internalVisitUrl } from '../../lib/site-url';
 import { siteQueryKeys } from '../dashboard/queries';
 import { PageDetailHeader } from '../page-header/PageDetailHeader';
 import { pageHref } from '../shell/navigation';
@@ -109,7 +109,7 @@ function RollbackBanner({
         ) : null}
         {liveUrl === null ? null : (
           <ButtonLink
-            href={liveUrl}
+            href={internalVisitUrl(liveUrl)}
             target="_blank"
             rel="noopener noreferrer"
             size="sm"

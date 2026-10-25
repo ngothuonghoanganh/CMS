@@ -25,6 +25,7 @@ import {
 } from '@plp/ui';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { internalVisitUrl } from '../../lib/site-url';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { useLeadCounts } from '../leads/queries';
@@ -188,7 +189,7 @@ export function Dashboard({
         actions={
           <>
             <ButtonLink
-              href={site.defaultOrigin}
+              href={internalVisitUrl(site.defaultOrigin)}
               target="_blank"
               rel="noopener noreferrer"
               variant="secondary"

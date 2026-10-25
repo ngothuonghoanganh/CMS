@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { CSSProperties, ReactNode } from 'react';
 import type { DateInput } from '../../lib/format';
-import { slugPath } from '../../lib/site-url';
+import { internalVisitUrl, slugPath } from '../../lib/site-url';
 import { cx } from '../shell/cx';
 import { pageHref } from '../shell/navigation';
 import { type ChecksTone, presentPageStatus } from './status-presentation';
@@ -75,7 +75,7 @@ function RowActions({
           <DropdownMenuItem
             icon={<ExternalLinkIcon size={18} />}
             onSelect={() => {
-              window.open(liveUrl, '_blank', 'noopener,noreferrer');
+              window.open(internalVisitUrl(liveUrl), '_blank', 'noopener,noreferrer');
             }}
           >
             Xem trang live

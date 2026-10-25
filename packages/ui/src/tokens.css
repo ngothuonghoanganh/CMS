@@ -49,6 +49,18 @@
   --color-neutral-badge-bg: #eceef2;
   --color-neutral-badge-ink: #474e5c;
 
+  /*
+   * Charts ("Hiệu quả", board 11), checked with the dataviz palette validator on the card surface:
+   * every mark keeps 3:1 (WCAG 1.4.11), and the two series colors stay apart for colorblind
+   * readers (CVD ΔE 26). A single series uses the bar color, its focused bar the emphasis.
+   */
+  --chart-bar: #7c80ec;
+  --chart-bar-emphasis: #4338ca;
+  --chart-series-1: #4338ca;
+  --chart-series-2: #14a394;
+  --chart-grid: #eef0f3;
+  --chart-axis: #cdd2da;
+
   /* Disabled controls and the modal backdrop */
   --color-disabled: #a8aeb9;
   --color-overlay: rgba(21, 23, 28, 0.48);
