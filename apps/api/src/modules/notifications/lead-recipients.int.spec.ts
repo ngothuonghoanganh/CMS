@@ -163,6 +163,40 @@ describe('lead recipients', () => {
     expect(problemSchema.parse(done.body).title).toBe('Địa chỉ này đã xác nhận nhận lead');
   });
 
+  it('caps confirmation emails at 5 per site and address, and 50 per workspace, a day', async () => {
+    const site = await createSite(owner, workspaceId);
+    const added = await add(site, 'gioi-han@smilecare.vn');
+    for (let index = 0; index < 4; index += 1) {
+      await owner.post(`/sites/${site.id}/lead-recipients/${added.id}/resend`).expect(200);
+    }
+    const refused = await owner
+      .post(`/sites/${site.id}/lead-recipients/${added.id}/resend`)
+      .expect(429);
+    expect(problemSchema.parse(refused.body)).toMatchObject({
+      code: 'rate_limited',
+      title: 'Đã gửi quá nhiều thư xác nhận',
+    });
+    expect(t.emails.to('gioi-han@smilecare.vn')).toHaveLength(5);
+    // Removing and adding the address again does not reset its count.
+    await owner.delete(`/sites/${site.id}/lead-recipients/${added.id}`).expect(204);
+    await owner
+      .post(`/sites/${site.id}/lead-recipients`, { email: 'gioi-han@smilecare.vn' })
+      .expect(429);
+    expect(await list(site)).toEqual([]);
+
+    const busy = await signedUpClient(t.app);
+    const busySite = await createSite(busy.client, busy.workspaceId);
+    await t.connection.collection('lead_limits').insertOne({
+      key: `recipient-invite:workspace:${busy.workspaceId}`,
+      count: 50,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    await busy.client
+      .post(`/sites/${busySite.id}/lead-recipients`, { email: 'moi@smilecare.vn' })
+      .expect(429);
+    expect(t.emails.to('moi@smilecare.vn')).toEqual([]);
+  });
+
   it('lets a link work for 7 days only', async () => {
     const site = await createSite(owner, workspaceId);
     await add(site, 'cu@smilecare.vn');

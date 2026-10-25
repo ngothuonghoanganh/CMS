@@ -118,9 +118,25 @@ describe('LeadRecipientsDialog', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Thêm' }));
     expect(await screen.findByText('Địa chỉ này đã có trong nơi nhận lead')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Thêm email nhận lead' })).toHaveAttribute(
-      'aria-invalid',
-      'true',
+    const field = screen.getByRole('textbox', { name: 'Thêm email nhận lead' });
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    // Focus returns to the field, which reads its error out.
+    expect(field).toHaveFocus();
+    expect(field).toHaveAccessibleDescription(/Địa chỉ này đã có trong nơi nhận lead/);
+  });
+
+  it('asks for an address when "Thêm" is pressed with an empty field', async () => {
+    const user = userEvent.setup();
+    serve([]);
+    renderDialog();
+    await user.click(screen.getByRole('button', { name: 'Thêm' }));
+    const field = screen.getByRole('textbox', { name: 'Thêm email nhận lead' });
+    expect(field).toHaveFocus();
+    expect(field).toHaveAccessibleDescription(/Nhập email nhận lead/);
+    expect(apiMock).not.toHaveBeenCalledWith(
+      endpoints.addLeadRecipient,
+      expect.anything(),
+      expect.anything(),
     );
   });
 

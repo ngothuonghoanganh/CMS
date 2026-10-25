@@ -11,9 +11,10 @@ import {
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
-import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
+import { LeadLimitsRepository } from '../leads/lead-limits.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import {
   type LeadRecipientRecord,
@@ -24,13 +25,19 @@ import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { confirmationExpiry } from './domain/notification-rules.js';
+import {
+  confirmationExpiry,
+  INVITE_LIMITS_PER_DAY,
+  type InviteLimit,
+  inviteLimitKeys,
+} from './domain/notification-rules.js';
 import { EmailSender, EmailSendError } from './email-sender.js';
 import { recipientConfirmationEmail } from './email-templates.js';
 import { toLeadRecipientDto } from './recipient-dto.js';
 
 export const RECIPIENT_NOT_FOUND = 'Không tìm thấy địa chỉ nhận lead';
 const LINK_EXPIRED = 'Liên kết xác nhận không còn hiệu lực';
+const DAY_MS = 86_400_000;
 
 /** A confirmation link's secret and what the database keeps of it. */
 function newConfirmationToken(): { token: string; tokenHash: string } {
@@ -58,6 +65,7 @@ export class LeadRecipientsService {
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
+    private readonly limits: LeadLimitsRepository,
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<LeadRecipientListResponse> {
@@ -74,6 +82,7 @@ export class LeadRecipientsService {
     const { scope, site } = await this.sitesService.access(user, siteId);
     this.access.requireOwner(scope);
     const now = new Date();
+    await this.countInvite(scope, site._id, email, now);
     const { token, tokenHash } = newConfirmationToken();
     const recipient: LeadRecipientRecord = {
       _id: newObjectId(),
@@ -126,6 +135,7 @@ export class LeadRecipientsService {
       throw new AppError(409, 'conflict', 'Địa chỉ này đã xác nhận nhận lead');
     }
     const now = new Date();
+    await this.countInvite(scope, site._id, recipient.email, now);
     const { token, tokenHash } = newConfirmationToken();
     const invite = { tokenHash, tokenExpiresAt: confirmationExpiry(now) };
     if (!(await this.sites.renewRecipientInvite(scope, site._id, id, invite))) {
@@ -163,6 +173,31 @@ export class LeadRecipientsService {
       });
     }
     return confirmed;
+  }
+
+  /**
+   * Counts one confirmation email against the daily limits (`INVITE_LIMITS_PER_DAY`) before
+   * anything is stored or sent; over a limit answers 429 (ADR-018).
+   */
+  private async countInvite(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    email: string,
+    now: Date,
+  ): Promise<void> {
+    const keys = inviteLimitKeys(email, { workspaceId: scope.workspaceId, siteId });
+    const windowEnd = new Date(now.getTime() + DAY_MS);
+    const counted = await Promise.all(
+      (Object.keys(INVITE_LIMITS_PER_DAY) as InviteLimit[]).map(async (limit) => ({
+        limit,
+        count: (await this.limits.hit(keys[limit], now, windowEnd)).count,
+      })),
+    );
+    if (counted.some(({ limit, count }) => count > INVITE_LIMITS_PER_DAY[limit])) {
+      throw new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
+        detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
+      });
+    }
   }
 
   /** Emails the confirmation link; returns when it went out, or null when it could not be sent. */

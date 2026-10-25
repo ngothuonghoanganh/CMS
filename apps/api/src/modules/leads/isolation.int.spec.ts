@@ -1,4 +1,5 @@
 import { leadDetailSchema, leadListResponseSchema, problemSchema, type Site } from '@plp/contracts';
+import { Types } from 'mongoose';
 import type { Test } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
@@ -71,6 +72,22 @@ describe('workspace isolation of leads', () => {
     await expectNotFound(ownerB.patch(`/leads/${leadId}`, { status: 'won', note: 'chen ngang' }));
     await expectNotFound(ownerB.post(`/leads/${leadId}/person/export`, { format: 'json' }));
     await expectNotFound(ownerB.delete(`/leads/${leadId}/person`));
+  });
+
+  it('refuses to send the email of a lead of site A again for workspace B', async () => {
+    await t.connection.collection('leads').updateOne(
+      { _id: new Types.ObjectId(leadId) },
+      {
+        $set: {
+          'notification.status': 'failed',
+          'notification.attempts': 3,
+          'notification.lastErrorCode': 'smtp_unavailable',
+        },
+      },
+    );
+    await expectNotFound(ownerB.post(`/leads/${leadId}/notification/retry`));
+    const lead = leadDetailSchema.parse((await ownerA.get(`/leads/${leadId}`).expect(200)).body);
+    expect(lead.notification).toMatchObject({ status: 'failed', attempts: 3 });
   });
 
   it('does not let a filter of site B reach the pages of site A', async () => {

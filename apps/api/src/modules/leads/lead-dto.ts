@@ -61,7 +61,8 @@ export function toLeadListItem(row: LeadListRow, pageTitle: string): LeadListIte
     page: { id: row.pageId.toHexString(), title: pageTitle },
     source: { ...row.source },
     status: row.status,
-    notificationFailed: row.notification?.status === 'failed',
+    // A lead in spam is never emailed: its failure is not one to fix (ADR-016).
+    notificationFailed: row.notification?.status === 'failed' && !row.spam.suspected,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -76,6 +77,7 @@ function toNotification(notification: LeadRecord['notification']): LeadDetail['n
     lastErrorCode: notification.lastErrorCode,
     sentAt: notification.sentAt?.toISOString() ?? null,
     recipients: notification.recipients,
+    rejectedRecipients: notification.rejectedRecipients ?? null,
   };
 }
 

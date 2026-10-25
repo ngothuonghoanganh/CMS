@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   LEAD_NOTIFICATION_MAX_ATTEMPTS,
   type LeadRecipientStatus,
@@ -89,4 +90,27 @@ export function recipientStatus(
   return recipient.tokenExpiresAt !== null && recipient.tokenExpiresAt > now
     ? 'pending'
     : 'expired';
+}
+
+/**
+ * Confirmation emails go to addresses that never agreed to anything, with a site name an owner
+ * chose: they are capped per day so the feature cannot be used to flood or phish someone
+ * (ADR-018). One site re-sending to one address is held tightly; an agency adding its own address
+ * to many client sites stays well under the cap across sites.
+ */
+export const INVITE_LIMITS_PER_DAY = { siteAddress: 5, address: 30, workspace: 50 } as const;
+
+export type InviteLimit = keyof typeof INVITE_LIMITS_PER_DAY;
+
+/** Rate-limit keys of a confirmation email; the address is hashed so none is stored. */
+export function inviteLimitKeys(
+  email: string,
+  ids: { workspaceId: { toHexString(): string }; siteId: { toHexString(): string } },
+): Record<InviteLimit, string> {
+  const address = createHash('sha256').update(email.toLowerCase()).digest('hex');
+  return {
+    siteAddress: `recipient-invite:site:${ids.siteId.toHexString()}:${address}`,
+    address: `recipient-invite:address:${address}`,
+    workspace: `recipient-invite:workspace:${ids.workspaceId.toHexString()}`,
+  };
 }

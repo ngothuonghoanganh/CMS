@@ -1,5 +1,5 @@
 import { endpoints } from '@plp/contracts';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -24,10 +24,15 @@ describe('ConfirmRecipient', () => {
     const user = userEvent.setup();
     apiMock.mockResolvedValue({ siteName: 'Nha khoa Smile Care', email: 'sales@smilecare.vn' });
     renderWithProviders(<ConfirmRecipient />);
+    // Let effects run: opening the link (a mail scanner may) must not confirm anything.
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(apiMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
 
+    expect(apiMock).toHaveBeenCalledTimes(1);
     expect(lastCallTo(apiMock, endpoints.confirmLeadRecipient).options).toEqual({
       body: { token: TOKEN },
     });

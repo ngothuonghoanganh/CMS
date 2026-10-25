@@ -123,6 +123,27 @@ describe('StructurePanel', () => {
     ).toBeVisible();
   });
 
+  it('says a form has no lead destination yet in a short badge (ADR-018)', () => {
+    const store = makeStore();
+    store.getState().setServerState({
+      checks: {
+        ...emptyChecks,
+        blocking: [
+          {
+            code: 'lead_destination_missing',
+            severity: 'blocking',
+            fingerprint: 'z',
+            title: 'Form đăng ký chưa có nơi nhận lead',
+            description: '',
+            target: { kind: 'lead_recipients', sectionId: BENEFITS },
+          },
+        ],
+      },
+    });
+    renderEditor(<StructurePanel onOpenTheme={vi.fn()} />, { store });
+    expect(within(rows()[2] ?? document.body).getByText('Chưa chọn nơi nhận lead')).toBeVisible();
+  });
+
   it('adds after the selected section, or at the end before the footer', async () => {
     const user = userEvent.setup();
     const openAddSection = vi.fn();

@@ -8,7 +8,7 @@ import {
 } from '@plp/contracts';
 import { Badge, Button, Callout, Dialog, Field, Input, Spinner, useToast } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type SubmitEvent, useState } from 'react';
+import { type SubmitEvent, useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { recipientStatusLabels, recipientStatusTones } from './lead-presentation';
@@ -37,6 +37,8 @@ export function LeadRecipientsDialog({
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
+  // A refused address puts the cursor back in the field, where the reason is read out.
+  const emailRef = useRef<HTMLInputElement>(null);
   const key = leadQueryKeys.recipients(siteId);
   const recipients = useQuery({
     queryKey: key,
@@ -78,6 +80,7 @@ export function LeadRecipientsDialog({
           ? (error.fieldErrors()['email'] ?? error.problem.title)
           : problemMessage(error),
       );
+      emailRef.current?.focus();
     },
   });
 
@@ -112,6 +115,7 @@ export function LeadRecipientsDialog({
     event.preventDefault();
     if (email.trim() === '') {
       setEmailError('Nhập email nhận lead');
+      emailRef.current?.focus();
       return;
     }
     add.mutate(email);
@@ -189,6 +193,7 @@ export function LeadRecipientsDialog({
               className={styles.recipientField}
             >
               <Input
+                ref={emailRef}
                 type="email"
                 autoComplete="email"
                 placeholder="ten@congty.vn"

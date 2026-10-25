@@ -28,10 +28,11 @@ export type NewLead = Omit<
 
 /** How one notification attempt ended. */
 export interface NotificationOutcome {
-  status: 'sent' | 'pending' | 'failed';
+  status: 'sent' | 'pending' | 'failed' | 'skipped';
   lastErrorCode: LeadNotificationErrorCode | null;
   sentAt: Date | null;
   recipients: number | null;
+  rejectedRecipients: number | null;
   at: Date;
 }
 
@@ -56,6 +57,7 @@ export interface LeadAccessRef {
 /** What a row of the inbox shows; the message, note and consent stay in the database. */
 export type LeadListRow = Pick<LeadRecord, '_id' | 'pageId' | 'source' | 'status' | 'createdAt'> & {
   fields: Pick<LeadRecord['fields'], 'name' | 'phone'>;
+  spam: Pick<LeadRecord['spam'], 'suspected'>;
   notification?: Pick<LeadNotificationRecord, 'status'>;
 };
 
@@ -66,6 +68,7 @@ const LIST_PROJECTION = {
   createdAt: 1,
   'fields.name': 1,
   'fields.phone': 1,
+  'spam.suspected': 1,
   'notification.status': 1,
 } as const;
 
@@ -327,6 +330,7 @@ export class LeadsRepository {
             'notification.lastErrorCode': outcome.lastErrorCode,
             'notification.sentAt': outcome.sentAt,
             'notification.recipients': outcome.recipients,
+            'notification.rejectedRecipients': outcome.rejectedRecipients,
             'notification.updatedAt': outcome.at,
           },
         },
@@ -372,7 +376,7 @@ export class LeadsRepository {
 
   /**
    * "Gửi lại" on a failed notification: it starts over with no attempt counted. Null when it is
-   * not failed (sent meanwhile) or the lead is gone.
+   * not failed (sent meanwhile), the lead was moved to spam (never emailed), or it is gone.
    */
   resetFailedNotification(
     scope: WorkspaceScope,
@@ -381,7 +385,12 @@ export class LeadsRepository {
   ): Promise<LeadRecord | null> {
     return this.leads
       .findOneAndUpdate(
-        { _id: leadId, workspaceId: scope.workspaceId, 'notification.status': 'failed' },
+        {
+          _id: leadId,
+          workspaceId: scope.workspaceId,
+          'notification.status': 'failed',
+          'spam.suspected': false,
+        },
         {
           $set: {
             'notification.status': 'pending',

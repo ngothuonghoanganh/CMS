@@ -90,6 +90,9 @@ export function LeadDetailPanel({
   const { toast } = useToast();
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const deliveryHeadingRef = useRef<HTMLHeadingElement>(null);
+  // "Gửi lại" leaves once pressed: keyboard focus then moves to the section, not the page.
+  const focusDelivery = useRef(false);
   const detailKey = leadQueryKeys.detail(siteId, leadId);
   const detail = useQuery({
     queryKey: detailKey,
@@ -109,6 +112,14 @@ export function LeadDetailPanel({
       headingRef.current?.focus();
     }
   }, [focusOnShow, loaded]);
+
+  const deliveryStatus = detail.data?.notification?.status;
+  useEffect(() => {
+    if (focusDelivery.current && deliveryStatus !== 'failed') {
+      focusDelivery.current = false;
+      deliveryHeadingRef.current?.focus();
+    }
+  }, [deliveryStatus]);
 
   function refreshLists() {
     void queryClient.invalidateQueries({ queryKey: leadQueryKeys.lists(siteId) });
@@ -175,6 +186,7 @@ export function LeadDetailPanel({
   const retry = useMutation({
     mutationFn: () => api(endpoints.retryLeadNotification, [leadId]),
     onSuccess: (updated) => {
+      focusDelivery.current = true;
       queryClient.setQueryData(detailKey, updated);
       refreshLists();
       toast({ tone: 'success', title: 'Đang gửi lại email thông báo' });
@@ -185,6 +197,7 @@ export function LeadDetailPanel({
     },
     onError: (error) => {
       reportUnexpected('Retrying a lead notification failed', error);
+      focusDelivery.current = true;
       void queryClient.invalidateQueries({ queryKey: detailKey });
       toast({ tone: 'danger', title: 'Chưa gửi lại được', description: problemMessage(error) });
     },
@@ -240,7 +253,7 @@ export function LeadDetailPanel({
   const noteChanged = noteDraft !== null && noteDraft.trim() !== lead.note;
   const pendingStatus = update.isPending ? update.variables.status : undefined;
   const { consent } = lead;
-  const delivery = notificationView(lead.notification);
+  const delivery = notificationView(lead.notification, lead.spam.suspected);
 
   return (
     <aside className={styles.detail} aria-labelledby={headingId}>
@@ -370,25 +383,29 @@ export function LeadDetailPanel({
 
         {delivery === null ? null : (
           <section className={styles.delivery} aria-labelledby={`${headingId}-delivery`}>
-            <h3 id={`${headingId}-delivery`} className={styles.deliveryTitle}>
+            <h3
+              id={`${headingId}-delivery`}
+              ref={deliveryHeadingRef}
+              tabIndex={-1}
+              className={styles.deliveryTitle}
+            >
               Đã gửi tới
             </h3>
-            <div
-              className={styles.deliveryRow}
-              data-kind={delivery.kind}
-              role={delivery.kind === 'failed' ? 'status' : undefined}
-            >
-              {delivery.kind === 'sent' ? (
-                <CheckIcon size={16} strokeWidth={2.4} className={styles.evidenceYes} />
-              ) : delivery.kind === 'failed' ? (
-                <AlertCircleIcon size={16} strokeWidth={2} className={styles.deliveryFailed} />
-              ) : null}
-              <span className={styles.deliveryText}>{delivery.text}</span>
-              {delivery.kind === 'sent' && delivery.at !== '' ? (
-                <time dateTime={delivery.at} className={styles.muted}>
-                  {formatDateTime(delivery.at)}
-                </time>
-              ) : null}
+            <div className={styles.deliveryRow} data-kind={delivery.kind}>
+              {/* Polite: the outcome of "Gửi lại" arrives a few seconds after the press. */}
+              <span className={styles.deliveryStatus} role="status">
+                {delivery.kind === 'sent' ? (
+                  <CheckIcon size={16} strokeWidth={2.4} className={styles.evidenceYes} />
+                ) : delivery.kind === 'failed' ? (
+                  <AlertCircleIcon size={16} strokeWidth={2} className={styles.deliveryFailed} />
+                ) : null}
+                <span className={styles.deliveryText}>{delivery.text}</span>
+                {delivery.kind === 'sent' && delivery.at !== '' ? (
+                  <time dateTime={delivery.at} className={styles.muted}>
+                    {formatDateTime(delivery.at)}
+                  </time>
+                ) : null}
+              </span>
               {delivery.kind === 'failed' ? (
                 <Button
                   variant="secondary"
@@ -402,6 +419,9 @@ export function LeadDetailPanel({
                 </Button>
               ) : null}
             </div>
+            {delivery.kind === 'sent' && delivery.warning !== null ? (
+              <p className={styles.deliveryWarning}>{delivery.warning}</p>
+            ) : null}
           </section>
         )}
 

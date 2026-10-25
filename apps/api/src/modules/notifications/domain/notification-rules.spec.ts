@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   confirmationExpiry,
+  inviteLimitKeys,
   nextAttemptDelay,
   NOTIFICATION_RETRY_DELAYS_MS,
   recipientStatus,
@@ -59,5 +60,21 @@ describe('recipients', () => {
     expect(
       recipientStatus({ confirmedAt: null, invitedAt: null, tokenExpiresAt: later }, now),
     ).toBe('unsent');
+  });
+});
+
+describe('inviteLimitKeys', () => {
+  const ids = {
+    workspaceId: { toHexString: () => 'w1' },
+    siteId: { toHexString: () => 's1' },
+  };
+
+  it('counts per site and address, per address and per workspace, with the address hashed', () => {
+    const keys = inviteLimitKeys('Sales@SmileCare.vn', ids);
+    expect(keys.siteAddress).toMatch(/^recipient-invite:site:s1:[0-9a-f]{64}$/);
+    expect(keys.address).toMatch(/^recipient-invite:address:[0-9a-f]{64}$/);
+    expect(keys.workspace).toBe('recipient-invite:workspace:w1');
+    expect(JSON.stringify(keys)).not.toContain('smilecare');
+    expect(inviteLimitKeys('sales@smilecare.vn', ids)).toEqual(keys);
   });
 });

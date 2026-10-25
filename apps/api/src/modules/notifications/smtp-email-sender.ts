@@ -3,7 +3,12 @@ import { createTransport } from 'nodemailer';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { smtpErrorCode } from './domain/notification-rules.js';
-import { type EmailMessage, EmailSender, EmailSendError } from './email-sender.js';
+import {
+  type EmailDelivery,
+  type EmailMessage,
+  EmailSender,
+  EmailSendError,
+} from './email-sender.js';
 
 /** A slow or silent server fails the attempt instead of holding it for minutes. */
 const TIMEOUTS = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000 };
@@ -21,9 +26,10 @@ export class SmtpEmailSender extends EmailSender implements OnModuleDestroy {
     );
   }
 
-  async send(message: EmailMessage): Promise<void> {
+  async send(message: EmailMessage): Promise<EmailDelivery> {
+    let info;
     try {
-      await this.transport.sendMail({
+      info = await this.transport.sendMail({
         to: [...message.to],
         subject: message.subject,
         text: message.text,
@@ -32,6 +38,12 @@ export class SmtpEmailSender extends EmailSender implements OnModuleDestroy {
     } catch (error) {
       throw new EmailSendError(smtpErrorCode(error), { cause: error });
     }
+    const rejected = info.rejected.length;
+    return {
+      accepted: info.accepted.length,
+      rejected,
+      rejectionCode: rejected === 0 ? null : smtpErrorCode(info.rejectedErrors?.[0]),
+    };
   }
 
   onModuleDestroy(): void {

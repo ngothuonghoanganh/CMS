@@ -74,6 +74,7 @@ export function leadDetail(overrides: Partial<LeadDetail> = {}): LeadDetail {
       lastErrorCode: null,
       sentAt: '2026-10-24T09:42:09.000Z',
       recipients: 2,
+      rejectedRecipients: 0,
     },
     createdAt: '2026-10-24T09:42:00.000Z',
     expiresAt: '2027-10-24T09:42:00.000Z',

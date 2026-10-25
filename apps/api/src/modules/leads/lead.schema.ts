@@ -23,8 +23,10 @@ export interface LeadNotificationRecord {
   attempts: number;
   lastErrorCode: LeadNotificationErrorCode | null;
   sentAt: Date | null;
-  /** How many confirmed addresses the email went to. */
+  /** How many confirmed addresses the SMTP server accepted the email for. */
   recipients: number | null;
+  /** Addresses refused one by one while the others were accepted. */
+  rejectedRecipients?: number | null;
   /** Last change; a `sending` this old means its sender stopped (the startup sweep). */
   updatedAt: Date;
 }
@@ -105,6 +107,7 @@ export const leadSchema = new Schema<LeadRecord>(
       lastErrorCode: { type: String, enum: [...leadNotificationErrorCodes, null], default: null },
       sentAt: { type: Date, default: null },
       recipients: { type: Number, default: null },
+      rejectedRecipients: { type: Number, default: null },
       updatedAt: { type: Date, required: true },
     },
     createdAt: { type: Date, required: true },

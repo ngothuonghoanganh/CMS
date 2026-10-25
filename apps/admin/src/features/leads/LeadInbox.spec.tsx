@@ -121,6 +121,7 @@ function serve(details: LeadDetail[], list: LeadListResponse) {
           lastErrorCode: null,
           sentAt: null,
           recipients: null,
+          rejectedRecipients: null,
         },
       };
       byId.set(current.id, retried);
@@ -605,6 +606,7 @@ describe('LeadInbox', () => {
         lastErrorCode: 'smtp_unavailable',
         sentAt: null,
         recipients: null,
+        rejectedRecipients: null,
       },
     });
     renderInbox({
@@ -622,9 +624,29 @@ describe('LeadInbox', () => {
       expect(lastCallTo(apiMock, endpoints.retryLeadNotification).args).toEqual([LEAD_ID]);
     });
     expect(await screen.findByText('Đang gửi lại email thông báo')).toBeInTheDocument();
-    expect(within(panel).getByRole('region', { name: 'Đã gửi tới' })).toHaveTextContent(
-      'Đang gửi email thông báo',
-    );
+    const after = within(panel).getByRole('region', { name: 'Đã gửi tới' });
+    // The outcome is read out politely, and keyboard focus stays in the section.
+    expect(within(after).getByRole('status')).toHaveTextContent('Đang gửi email thông báo');
+    expect(within(after).getByRole('heading', { name: 'Đã gửi tới' })).toHaveFocus();
+  });
+
+  it('never offers to email a lead in spam, even one whose email failed before', async () => {
+    const failedSpam = leadDetail({
+      spam: { suspected: true, reasons: [] },
+      notification: {
+        status: 'failed',
+        attempts: 3,
+        lastErrorCode: 'smtp_unavailable',
+        sentAt: null,
+        recipients: null,
+        rejectedRecipients: null,
+      },
+    });
+    renderInbox({ details: [failedSpam, baoDetail] });
+    const { panel } = await openLead();
+    const delivery = within(panel).getByRole('region', { name: 'Đã gửi tới' });
+    expect(delivery).toHaveTextContent('Không gửi email: lead nghi ngờ spam');
+    expect(within(delivery).queryByRole('button', { name: 'Gửi lại' })).not.toBeInTheDocument();
   });
 
   it('gives the sidebar badge the counts loaded with the inbox, when they are newer', () => {

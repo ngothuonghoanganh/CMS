@@ -109,37 +109,57 @@ export const notificationErrorLabels: Record<LeadNotificationErrorCode, string> 
 
 /** The "Đã gửi tới" line of a lead (ADR-018); null for a lead stored before notifications. */
 export type NotificationView =
-  | { kind: 'sent'; text: string; at: string }
+  | { kind: 'sent'; text: string; at: string; warning: string | null }
   | { kind: 'waiting'; text: string }
   | { kind: 'failed'; text: string }
   | { kind: 'skipped'; text: string };
 
-export function notificationView(notification: LeadNotification | null): NotificationView | null {
+/**
+ * `spam`: the lead is in "Nghi ngờ spam" now. Spam is never emailed, so a lead there shows that
+ * instead of a failure to fix.
+ */
+export function notificationView(
+  notification: LeadNotification | null,
+  spam: boolean,
+): NotificationView | null {
   if (notification === null) {
     return null;
   }
+  if (notification.status === 'sent') {
+    const refused = notification.rejectedRecipients ?? 0;
+    return {
+      kind: 'sent',
+      text: `Email thông báo · ${notification.recipients ?? 0} người nhận`,
+      at: notification.sentAt ?? '',
+      warning:
+        refused === 0
+          ? null
+          : `${refused} địa chỉ bị máy chủ thư từ chối. Kiểm tra lại trong "Nơi nhận lead".`,
+    };
+  }
+  if (spam) {
+    return { kind: 'skipped', text: 'Không gửi email: lead nghi ngờ spam' };
+  }
   switch (notification.status) {
-    case 'sent':
-      return {
-        kind: 'sent',
-        text: `Email thông báo · ${notification.recipients ?? 0} người nhận`,
-        at: notification.sentAt ?? '',
-      };
     case 'pending':
-    case 'sending':
+    case 'sending': {
+      // While sending, `attempts` already counts the attempt that is running.
+      const attempt =
+        notification.status === 'sending' ? notification.attempts : notification.attempts + 1;
       return {
         kind: 'waiting',
         text:
-          notification.attempts === 0
+          attempt <= 1
             ? 'Đang gửi email thông báo'
-            : `Đang thử gửi lại email thông báo (lần ${notification.attempts + 1})`,
+            : `Đang thử gửi lại email thông báo (lần ${attempt})`,
       };
+    }
     case 'failed':
       return {
         kind: 'failed',
         text: `Lỗi đồng bộ · ${notificationErrorLabels[notification.lastErrorCode ?? 'unknown']}`,
       };
     case 'skipped':
-      return { kind: 'skipped', text: 'Không gửi email: lead nghi ngờ spam' };
+      return { kind: 'skipped', text: 'Không gửi email: lead từng bị nghi ngờ spam' };
   }
 }

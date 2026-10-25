@@ -96,7 +96,9 @@ export const leadNotificationSchema = z.object({
   attempts: z.number().int().nonnegative(),
   lastErrorCode: leadNotificationErrorCodeSchema.nullable(),
   sentAt: isoDateTimeSchema.nullable(),
-  /** How many confirmed addresses the email went to. */
+  /** How many confirmed addresses the SMTP server accepted the email for. */
   recipients: z.number().int().nonnegative().nullable(),
+  /** Addresses the SMTP server refused (e.g. a deleted mailbox) while it accepted the others. */
+  rejectedRecipients: z.number().int().nonnegative().nullable(),
 });
 export type LeadNotification = z.infer<typeof leadNotificationSchema>;

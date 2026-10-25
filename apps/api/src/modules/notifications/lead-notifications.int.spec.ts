@@ -26,6 +26,7 @@ import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient, RECIPIENT_EMAIL } from '../../../test/recipients.js';
 import { addEditor, createSite } from '../../../test/resources.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { LeadNotifier } from './lead-notifier.service.js';
 
 const MINUTE = 60_000;
@@ -128,6 +129,7 @@ describe('lead notifications', () => {
       attempts: 1,
       lastErrorCode: null,
       recipients: 2,
+      rejectedRecipients: 0,
     });
     const [email] = leadEmails('Trần Quốc Bảo');
     expect(email?.to).toEqual([RECIPIENT_EMAIL, 'hong@smilecare.vn']);
@@ -193,6 +195,69 @@ describe('lead notifications', () => {
     const leadId = await send(form, { name: 'Võ Ngọc Trâm' });
     const failed = await settled(leadId, 'failed');
     expect(failed.notification).toMatchObject({ attempts: 1, lastErrorCode: 'no_recipients' });
+  });
+
+  it('never emails a lead a member moved to spam before its email went out', async () => {
+    const form = await formSite();
+    // The first attempt is on its way when the lead moves to spam, and fails; the next one skips it.
+    const first = t.emails.holdNext();
+    t.emails.failNext('smtp_unavailable');
+    const leadId = await send(form, { name: 'Spam trễ' });
+    await first.started;
+    await owner.patch(`/leads/${leadId}`, { spam: true }).expect(200);
+    first.release();
+    await vi.waitFor(
+      async () => {
+        expect((await detail(leadId)).notification).toMatchObject({
+          status: 'skipped',
+          attempts: 2,
+        });
+      },
+      { timeout: 5000, interval: 20 },
+    );
+    expect(leadEmails('Spam trễ')).toEqual([]);
+    // "Gửi lại" never applies to spam.
+    await owner.post(`/leads/${leadId}/notification/retry`).expect(409);
+  });
+
+  it('refuses "Gửi lại" for a failed lead that was moved to spam', async () => {
+    const form = await formSite();
+    t.emails.failNext('smtp_rejected', 'smtp_rejected', 'smtp_rejected');
+    const leadId = await send(form, { name: 'Lỗi rồi spam' });
+    await settled(leadId, 'failed');
+    await owner.patch(`/leads/${leadId}`, { spam: true }).expect(200);
+    const list = leadListResponseSchema.parse(
+      (await owner.get(`/sites/${form.site.id}/leads?folder=spam`).expect(200)).body,
+    );
+    expect(list.items.find((item) => item.id === leadId)?.notificationFailed).toBe(false);
+    await owner.post(`/leads/${leadId}/notification/retry`).expect(409);
+    expect(leadEmails('Lỗi rồi spam')).toEqual([]);
+  });
+
+  it('records a send as sent, with the addresses the server refused while it took the others', async () => {
+    const form = await formSite();
+    await addConfirmedRecipient(t, owner, form.site.id, 'da-nghi@smilecare.vn');
+    t.emails.refuse('da-nghi@smilecare.vn');
+    const leadId = await send(form, { name: 'Đỗ Hải Yến' });
+    const lead = await settled(leadId, 'sent');
+    expect(lead.notification).toMatchObject({
+      attempts: 1,
+      recipients: 1,
+      rejectedRecipients: 1,
+      lastErrorCode: 'smtp_rejected',
+    });
+    expect(leadEmails('Đỗ Hải Yến').map((email) => email.to)).toEqual([[RECIPIENT_EMAIL]]);
+  });
+
+  it('records an attempt the database interrupted and tries again', async () => {
+    const form = await formSite();
+    vi.spyOn(t.app.get(SitesRepository), 'findNotificationSite').mockRejectedValueOnce(
+      new Error('database unreachable'),
+    );
+    const leadId = await send(form, { name: 'Mất kết nối' });
+    const lead = await settled(leadId, 'sent');
+    expect(lead.notification).toMatchObject({ attempts: 2, lastErrorCode: null });
+    expect(leadEmails('Mất kết nối')).toHaveLength(1);
   });
 
   it('lets one instance only take a notification for an attempt', async () => {

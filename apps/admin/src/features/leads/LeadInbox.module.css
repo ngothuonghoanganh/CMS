@@ -450,8 +450,37 @@
   font-size: var(--text-body-sm);
 }
 
+.deliveryStatus {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .deliveryText {
-  flex: 1 1 160px;
+  flex: 1 1 auto;
+}
+
+.deliveryTitle:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.deliveryWarning {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-warning-ink);
+}
+
+/* The name and "Lỗi đồng bộ" on one line, the page title below (board 10). */
+.leadNameRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .deliveryRow[data-kind='failed'] .deliveryText {

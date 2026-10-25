@@ -115,6 +115,7 @@ export class LeadIntakeService {
           lastErrorCode: null,
           sentAt: null,
           recipients: null,
+          rejectedRecipients: null,
           updatedAt: now,
         },
         createdAt: now,

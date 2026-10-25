@@ -705,6 +705,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Trạng thái suy ra, không lưu: `confirmed`, `pending` (liên kết còn hạn), `expired`, `unsent` (thư xác nhận chưa gửi được, bấm "Gửi lại").
     - Thêm địa chỉ không thất bại khi thư xác nhận không gửi được. Địa chỉ ở trạng thái `unsent` cho tới khi gửi lại.
     - "Gửi lại" tạo liên kết mới; liên kết cũ hết tác dụng.
+    - **Giới hạn thư xác nhận:** trong 24 giờ, mỗi cặp site và địa chỉ nhận tối đa 5 thư, mỗi địa chỉ tối đa 30 thư từ mọi site, mỗi workspace gửi tối đa 50 thư. Vượt giới hạn thì trả 429 và không lưu hay gửi gì.
+      - Lý do: thư xác nhận đi tới người chưa đồng ý, kèm tên site do Owner tự đặt, nên không được để thành công cụ gửi thư hàng loạt hay lừa đảo.
+      - Agency thêm cùng một email cho nhiều site khách vẫn nằm dưới giới hạn.
+      - Bộ đếm dùng chung bảng `lead_limits`, khóa chứa sha256 của địa chỉ. Bỏ rồi thêm lại một địa chỉ không đặt lại bộ đếm.
   - **Xác nhận:** liên kết `{ADMIN_ORIGIN}/lead-recipients/confirm#token=…`. Bí mật nằm trong fragment nên không tới server hay log nào.
     - Trang xác nhận không cần đăng nhập. Người nhận phải bấm nút: mở liên kết (kể cả bằng trình quét link) không xác nhận gì.
     - Mỗi liên kết dùng một lần. Sau khi xác nhận, trang xóa bí mật khỏi thanh địa chỉ.
@@ -714,10 +718,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Các mã lỗi khác: `smtp_unavailable`, `smtp_rejected`, `timeout`, `unknown`.
     - Mỗi lần thử giành lead bằng điều kiện `pending` → `sending` và tăng `attempts`; kết quả chỉ ghi khi `attempts` còn khớp lần giành đó.
     - "Gửi lại" (Owner và Editor) đưa lead `failed` về `pending` với `attempts = 0`. Admin đọc lại lead một lần sau 3 giây, không polling.
+    - **Spam không bao giờ được gửi email**, kể cả lead một thành viên chuyển vào spam sau khi nhận. Lần thử kế tiếp giành lead xong thì đánh dấu `skipped`. "Gửi lại" không áp dụng cho lead trong spam, và badge "Lỗi đồng bộ" không hiện cho chúng.
+    - **Một phần địa chỉ bị từ chối**, ví dụ hộp thư đã bị xóa: lead vẫn là `sent`. `recipients` là số địa chỉ máy chủ nhận, `rejectedRecipients` là số bị từ chối, `lastErrorCode` ghi lý do. Chi tiết lead nhắc kiểm tra "Nơi nhận lead". Gửi lại sẽ lặp thư tới những địa chỉ đã nhận, nên không gửi lại.
+    - **Database lỗi giữa chừng:**
+      - Lỗi sau khi giành lead mà trước khi gửi: ghi một lần thử thất bại (`unknown`) và hẹn lần sau. Nếu ghi cũng lỗi, thử ghi thêm một lần; sau đó lượt quét lúc khởi động xử lý.
+      - Thư đã gửi mà ghi kết quả lỗi: thử ghi lại một lần và không gửi lại.
   - **Email:** gửi tới mọi địa chỉ đã xác nhận trong một thư.
     - Chủ đề: `[{tên site}] Lead mới: {họ tên}`. Nội dung có số điện thoại dạng Việt Nam, email và lời nhắn nếu có, trang và phiên bản, nguồn, giờ Việt Nam, và liên kết `…/leads?lead={id}&range=all`.
     - Phần HTML escape mọi giá trị khách nhập.
-  - **Check:** blocking `lead_destination_missing`, target `{ kind: 'lead_recipients', sectionId }`. "Sửa ngay" mở hộp thư lead với "Nơi nhận lead" đang mở (`?recipients=open`).
+  - **Check:** blocking `lead_destination_missing`, target `{ kind: 'lead_recipients', sectionId }`. "Sửa ngay" mở hộp thư lead với "Nơi nhận lead" đang mở (`?recipients=open`). Badge trên dòng section trong editor ghi "Chưa chọn nơi nhận lead".
     - Mục passed "Có nơi nhận lead" chỉ có trên trang có form.
     - Site trả thêm `confirmedLeadRecipients` và `privacyConfigured`. Checklist của màn 01 dùng hai trường này cho "Thêm chính sách quyền riêng tư" và "Chọn nơi nhận lead (email)". Bước "Kết nối tên miền riêng" vẫn ẩn.
   - **Activity** `lead.recipients_changed` ghi số địa chỉ còn lại sau mỗi lần thêm hoặc bỏ, không ghi email.

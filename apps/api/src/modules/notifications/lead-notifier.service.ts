@@ -8,6 +8,7 @@ import {
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
+import type { LeadRecord } from '../leads/lead.schema.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { confirmedRecipientsOf } from '../sites/site.schema.js';
@@ -17,7 +18,7 @@ import {
   NOTIFICATION_SWEEP_LIMIT,
   STALE_SENDING_MS,
 } from './domain/notification-rules.js';
-import { EmailSender, EmailSendError } from './email-sender.js';
+import { type EmailDelivery, EmailSender, EmailSendError } from './email-sender.js';
 import { leadNotificationEmail } from './email-templates.js';
 
 /** Injection token of the waits between attempts; tests shorten them. */
@@ -83,43 +84,108 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private schedule(leadId: ObjectId, delayMs: number): void {
+    this.later(delayMs, leadId, () => this.attempt(leadId));
+  }
+
+  /** Runs `task` after `delayMs`, unless the module stops first; failures are logged. */
+  private later(delayMs: number, leadId: ObjectId, task: () => Promise<void>): void {
     if (this.stopped) {
       return;
     }
     const timer = setTimeout(() => {
       this.timers.delete(timer);
-      const attempt = this.attempt(leadId)
+      const running = task()
         .catch((error: unknown) => {
           this.logger.error(
             { err: error, leadId: leadId.toHexString() },
-            'Lead notification attempt crashed',
+            'Lead notification task failed',
           );
         })
         .finally(() => {
-          this.running.delete(attempt);
+          this.running.delete(running);
         });
-      this.running.add(attempt);
+      this.running.add(running);
     }, delayMs);
     // Pending retries never keep the process alive; a restart sweeps them up.
     timer.unref();
     this.timers.add(timer);
   }
 
-  /** One attempt: claim, send, record how it went, and schedule the next attempt if any. */
+  /** One attempt: claim the lead, deliver, and record how it went. */
   private async attempt(leadId: ObjectId): Promise<void> {
     const lead = await this.leads.claimNotification(leadId, new Date());
     if (lead?.notification === undefined) {
       return;
     }
     const { attempts } = lead.notification;
+    try {
+      await this.deliver(lead, attempts);
+    } catch (error) {
+      // The database failed between the claim and the outcome. Record a failed attempt rather
+      // than leave the lead `sending` until the next restart.
+      this.logger.error(
+        { err: error, leadId: lead._id.toHexString() },
+        'Lead notification attempt crashed',
+      );
+      await this.recover(lead._id, attempts, true);
+    }
+  }
+
+  /**
+   * Records an attempt that crashed and schedules the next one. When the database still fails,
+   * tries once more after the next wait; past that the startup sweep takes the lead on.
+   */
+  private async recover(leadId: ObjectId, attempts: number, retry: boolean): Promise<void> {
+    const delay = nextAttemptDelay(attempts, this.retryDelays);
+    try {
+      await this.leads.finishNotification(leadId, attempts, {
+        status: delay === null ? 'failed' : 'pending',
+        lastErrorCode: 'unknown',
+        sentAt: null,
+        recipients: null,
+        rejectedRecipients: null,
+        at: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(
+        { err: error, leadId: leadId.toHexString() },
+        'Lead notification outcome not recorded',
+      );
+      if (retry) {
+        this.later(delay ?? this.retryDelays.at(-1) ?? 0, leadId, () =>
+          this.recover(leadId, attempts, false),
+        );
+      }
+      return;
+    }
+    if (delay !== null) {
+      this.schedule(leadId, delay);
+    }
+  }
+
+  /**
+   * Sends the email of a claimed lead and records the outcome. A database error before the email
+   * goes out propagates (the attempt is then recorded as failed); after it, `recordSent` copes.
+   */
+  private async deliver(lead: LeadRecord, attempts: number): Promise<void> {
+    const outcome = { sentAt: null, recipients: null, rejectedRecipients: null };
+    if (lead.spam.suspected) {
+      // Moved to spam by a member after intake: spam is never emailed (ADR-016).
+      await this.leads.finishNotification(lead._id, attempts, {
+        ...outcome,
+        status: 'skipped',
+        lastErrorCode: null,
+        at: new Date(),
+      });
+      return;
+    }
     const site = await this.sites.findNotificationSite(lead.siteId);
     const recipients = site === null ? [] : confirmedRecipientsOf(site).map((item) => item.email);
     if (site === null || recipients.length === 0) {
       await this.leads.finishNotification(lead._id, attempts, {
+        ...outcome,
         status: 'failed',
         lastErrorCode: 'no_recipients',
-        sentAt: null,
-        recipients: null,
         at: new Date(),
       });
       this.logger.warn(
@@ -144,16 +210,16 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
       },
       leadUrl: `${this.env.ADMIN_ORIGIN}/sites/${lead.siteId.toHexString()}/leads?lead=${lead._id.toHexString()}&range=all`,
     });
+    let delivery: EmailDelivery;
     try {
-      await this.sender.send({ to: recipients, ...email });
+      delivery = await this.sender.send({ to: recipients, ...email });
     } catch (error) {
       const code = error instanceof EmailSendError ? error.code : 'unknown';
       const delay = nextAttemptDelay(attempts, this.retryDelays);
       await this.leads.finishNotification(lead._id, attempts, {
+        ...outcome,
         status: delay === null ? 'failed' : 'pending',
         lastErrorCode: code,
-        sentAt: null,
-        recipients: null,
         at: new Date(),
       });
       this.logger.warn(
@@ -165,12 +231,47 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
       }
       return;
     }
-    await this.leads.finishNotification(lead._id, attempts, {
-      status: 'sent',
-      lastErrorCode: null,
-      sentAt: new Date(),
-      recipients: recipients.length,
-      at: new Date(),
-    });
+    await this.recordSent(lead._id, attempts, delivery, new Date(), true);
+  }
+
+  /**
+   * Records an email the server took. When the database fails, tries once more later: the email
+   * must not go out again. Some addresses may have refused while others accepted; sending again
+   * would repeat it to the others, so the lead is `sent` and shows the refusal.
+   */
+  private async recordSent(
+    leadId: ObjectId,
+    attempts: number,
+    delivery: EmailDelivery,
+    sentAt: Date,
+    retry: boolean,
+  ): Promise<void> {
+    try {
+      await this.leads.finishNotification(leadId, attempts, {
+        status: 'sent',
+        lastErrorCode: delivery.rejectionCode,
+        sentAt,
+        recipients: delivery.accepted,
+        rejectedRecipients: delivery.rejected,
+        at: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(
+        { err: error, leadId: leadId.toHexString() },
+        'Lead notification sent but not recorded',
+      );
+      if (retry) {
+        this.later(this.retryDelays[0] ?? 0, leadId, () =>
+          this.recordSent(leadId, attempts, delivery, sentAt, false),
+        );
+      }
+      return;
+    }
+    if (delivery.rejected > 0) {
+      this.logger.warn(
+        { leadId: leadId.toHexString(), code: delivery.rejectionCode, rejected: delivery.rejected },
+        'Some addresses refused a lead notification',
+      );
+    }
   }
 }
