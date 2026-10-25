@@ -15,7 +15,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 
 **Payload Landing Page** giúp SME, marketer và agency tạo landing page bằng section có hướng dẫn rồi xuất bản an toàn. Một agency là một workspace quản lý nhiều site khách hàng.
 
-**MVP A (publish-first), đang làm:**
+**MVP A (publish-first), đã xong:**
 
 - Auth, workspace, site có subdomain mặc định `{site}.{BASE_DOMAIN}`.
 - Page và section builder có hướng dẫn (7 section), asset, autosave.
@@ -23,9 +23,18 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - SEO, redirect, sitemap/robots, màn tên miền mặc định, tạo trang theo mục tiêu.
 - Tương ứng màn 01–09 trong thiết kế.
 
-**Ngoài phạm vi MVP A:**
+**MVP B (convert), đang làm:**
 
-- Form, lead, analytics, consent (MVP B, màn 10–12).
+- Section Form đăng ký, thu lead có bằng chứng đồng ý, chống spam (ADR-016).
+- Đồng ý và dữ liệu cá nhân: đơn vị thu thập dữ liệu, nội dung đồng ý có phiên bản, thời gian lưu, yêu cầu từ người gửi form (ADR-017).
+- Hộp thư lead và email thông báo (ADR-018).
+- Hiệu quả trang, đo không dùng cookie (ADR-019).
+- Tương ứng màn 10–12, cộng các phần MVP A đang ẩn ở màn 01, 02, 04, 05, 09 và sidebar.
+
+**Ngoài phạm vi MVP B:**
+
+- Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
+- Form có trường tùy ý, captcha của bên thứ ba, banner cookie, tạo trang chính sách từ mẫu.
 - Custom domain, mời thành viên, billing, template library, AI.
 - Free styling, điểm lưu bản nháp, rich text, màu thương hiệu tự nhập.
 
@@ -65,6 +74,13 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
    - Sắp xếp bằng kéo thả, nút lên/xuống và phím tắt (WCAG 2.5.7).
    - Nội dung giống nhau trên mọi thiết bị; chỉ ẩn/hiện và thứ tự trên mobile được tùy chỉnh.
 9. **Chất lượng:** mọi thay đổi hành vi phải có test. Không nuốt lỗi. Không dùng `any`.
+10. **Lead và đồng ý:**
+    - Ô đồng ý không bao giờ được tick sẵn. Thiếu đồng ý bắt buộc thì API từ chối lead.
+    - Form trên trang live hiện nội dung đồng ý của release đang trỏ; lead lưu tham chiếu tới release đó làm bằng chứng.
+    - Phiên bản nội dung đồng ý bất biến; sửa là tạo phiên bản mới.
+    - Lead tự xóa theo thời gian lưu của site. Xóa dữ liệu một người là xóa thật.
+    - Dữ liệu cá nhân của lead không vào log, activity hay số liệu Hiệu quả.
+11. **Đo lường:** không đặt cookie, không lưu IP, không tính lượt xem preview.
 
 ### 2.1 Diễn giải thiết kế thành quy tắc
 
@@ -89,6 +105,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
    - Màn 07: tùy chỉnh riêng mạng xã hội.
    - Màn 08: "Thêm tên miền".
    - Màn 02: "Duyệt thư viện mẫu", AI.
+   - **MVP B mở lại:** ba mục sidebar, lead 7 ngày và mục checklist "Chọn nơi nhận lead" ở màn 01, nhóm Form ở màn 04, lỗi nơi nhận lead ở màn 05. Vẫn ẩn: nhóm Bảng giá và "Form + bản đồ" ở màn 04, "Section đã lưu", và các nơi nhận Google Sheets, Meta ở màn 10.
 10. **Theme preset:** mỗi preset có 4 color scheme (Sáng, Nhạt/"Bạc hà", Thương hiệu, Tối), tất cả qua test AA. Site có logo và ảnh chia sẻ mặc định.
 
 ---
@@ -168,6 +185,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
   Thêm vào ở các lát sau, cũng theo bản mới nhất lúc cài: argon2, jose, @aws-sdk/client-s3, file-type, sharp, zustand, immer, @tanstack/react-query, @dnd-kit, radix-ui (chỉ trong admin), qrcode.
 
+  MVP B thêm `nodemailer` (API, ADR-018) và Mailpit trong docker compose cho dev và CI. Phiên bản ghi vào bảng trên khi cài.
+
 - **Reason và ngoại lệ:**
   - **TypeScript 6.0.3, không 7.0.2.** TS 7 là bản native port; typescript-eslint 8.72 khai báo peer `typescript <6.1.0`. Tắt lint có type thì vi phạm quality gate.
   - **mongoose 9.11.3, không 9.11.4.** Chính sách supply-chain mặc định của pnpm 12 giữ lại bản phát hành dưới 24 giờ.
@@ -223,6 +242,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Hệ quả:
       - Giới hạn này đúng với mọi cách deploy và giữ được qua nhiều instance API.
       - Người khác biết email có thể khóa đăng nhập của tài khoản đó tối đa một cửa sổ. Đây là đánh đổi có chủ đích để chặn dò mật khẩu.
+- **Amended 2026-10-25 (MVP B):** quyền với lead, cài đặt dữ liệu cá nhân và yêu cầu về dữ liệu nằm ở ADR-017. Editor xem và xử lý lead; chỉ Owner sửa cài đặt, xuất và xóa dữ liệu.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -234,7 +254,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   workspaces  { name, createdAt, createdBy }
   memberships { workspaceId, userId, role: 'owner'|'editor' }                 // unique(workspaceId,userId)
   sites       { workspaceId, name, subdomain(unique global), themePresetId,
-                logoAssetId|null, defaultShareImageAssetId|null, createdAt }
+                logoAssetId|null, defaultShareImageAssetId|null, createdAt,
+                privacy|null,                                                     // ADR-017
+                leadRecipients: [{ email, confirmedAt|null, tokenHash|null,
+                                   tokenExpiresAt|null }] }                       // ADR-018, ≤ 5
   assets      { workspaceId, siteId, storageKey, mimeType, bytes, width, height,
                 alt: string|null, decorative: boolean, uploadedBy, createdAt }  // alt≠rỗng XOR decorative
   pages       { workspaceId, siteId, title, goal|null,
@@ -244,6 +267,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   releases    { workspaceId, siteId, pageId, version, slug, composition, seo,
                 sitePresentation: { name, themePresetId, logoAssetId|null,
                                     defaultShareImageAssetId|null },              // ADR-015
+                leadCapture|null,                                                 // ADR-017
                 sourceRevision, createdBy, createdAt, note, changeSummary, checks,
                 idempotencyKey }                                                  // BẤT BIẾN
   redirects   { workspaceId, siteId, fromSlug, pageId, createdAt }               // unique(siteId,fromSlug)
@@ -251,12 +275,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   sessions    { tokenHash, userId, expiresAt, createdAt }
   ```
 
+  - Collection của MVP B: `leads`, `lead_limits` (ADR-016); `consent_versions`, `data_requests` (ADR-017); `analytics_daily`, `analytics_seen`, `analytics_salts` (ADR-019).
   - **Index:**
     - `pages`: unique(siteId, draft.slug); unique-partial(siteId, publishedSlug).
     - `releases`: unique(pageId, version); unique(pageId, idempotencyKey).
   - Repository của release chỉ có `insert` và `find*`.
   - `seo = { title, description, shareImageAssetId|null, noindex }`. Title để trống thì dùng heading của Hero, rồi tên site; ảnh chia sẻ để trống thì dùng ảnh mặc định của site. Với trang live, tên site và ảnh mặc định lấy từ `sitePresentation` của release (ADR-015).
-  - Activity `type`: `site.created`, `page.created`, `page.published`, `page.rolled_back`, `page.rollback_undone`, `page.unpublished`, `page.draft_restored`, `asset.uploaded`.
+  - Activity `type`: `site.created`, `page.created`, `page.published`, `page.rolled_back`, `page.rollback_undone`, `page.unpublished`, `page.draft_restored`, `asset.uploaded`. MVP B thêm `privacy.updated`, `consent.version_created`, `lead.recipients_changed`, `lead.exported`, `lead.person_deleted`, `data_request.created`, `data_request.completed` (ADR-017, ADR-018); `data` của chúng chỉ chứa id và số lượng, không chứa dữ liệu cá nhân.
   - **`derivePageStatus`** là hàm thuần, chạy phía server (quy tắc 2).
   - **`diffSnapshots`** so theo section instance id (thêm, xóa, sửa, đổi chỗ), từng field SEO và slug. Kết quả là các chip như "Sửa: Hero", dùng cho trạng thái, hộp thoại publish và `changeSummary`.
   - **`evaluateDraft`** = trạng thái + checks. Autosave, màn danh sách và editor đều dùng hàm này. Màn danh sách nạp các release đang trỏ bằng một truy vấn `$in`, phân trang ≤ 50.
@@ -299,6 +324,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Production bắt buộc chạy MongoDB replica set.
   - Redirect trỏ theo `pageId` và phân giải lúc request, nên không có chuỗi hay vòng redirect.
+- **Amended 2026-10-25 (MVP B):**
+  - Blocking thêm `consent_not_configured` (ADR-016, ADR-017) và `lead_destination_missing` (ADR-018). Cả hai chỉ áp dụng cho trang có section form.
+  - Bước 4 của publish đọc thêm cài đặt dữ liệu cá nhân và phiên bản đồng ý để chụp `leadCapture` (ADR-017) trong cùng transaction.
 
 ### ADR-007 — Section registry, composition, theme
 
@@ -344,6 +372,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (sau review MVP A):**
   - **Số mục tối thiểu theo variant:** `list.min` là mức sàn của field; variant có thể nâng lên bằng `listMin`. Lợi ích: Lưới 3–6, Xen kẽ 2–6. Cảm nhận khách hàng: Thẻ 3–6, Trích dẫn nổi bật từ 1 (hiện mục đầu). `validateComposition` cưỡng chế, nên lưu và publish đều từ chối; đổi sang variant cần nhiều mục hơn thì editor thêm mục mẫu.
   - **Field bị variant ẩn vẫn là dữ liệu:** đổi variant giữ giá trị của chúng, nên `collectLeaves(section, { includeHidden: true })` là cách duy nhất để tìm asset được tham chiếu và đánh dấu nội dung mẫu. Kiểm tra publish và panel chỉ xét field variant hiện tại hiển thị.
+- **Amended 2026-10-25 (MVP B):** thêm section thứ 8 là Form đăng ký (`leadForm`, nhóm "Form & liên hệ"), mỗi trang tối đa một. Nội dung đồng ý không nằm trong content của section mà được truyền vào component từ `leadCapture` (ADR-016, ADR-017).
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -397,6 +426,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Next 16 chỉ render page ở chế độ blocking cho request có `User-Agent` (`htmlLimitedBots` bị bỏ qua khi thiếu header này). Không có nó, `permanentRedirect` trong page thành một shell 200 không có `Location`.
     - Vì vậy `path-status` trả thêm `location` cho `kind: 'redirect'`, và proxy trả 308 trước khi render, chung một truy vấn với kiểm tra 404.
     - `permanentRedirect` trong page chỉ còn là đường dự phòng khi bước kiểm tra của proxy lỗi.
+- **Amended 2026-10-25 (MVP B):**
+  - DTO public có thêm `releaseId` để form gửi kèm release khách đang xem (ADR-016). Id không mở quyền truy cập nào (ADR-003).
+  - Renderer có thêm hai route không cache: `POST /_lead` (gửi form, ADR-016) và `POST /_e` (beacon, ADR-019). Cả hai gọi API qua kênh ký HMAC của ADR-016.
 
 ### ADR-010 — Preview link có chữ ký
 
@@ -422,6 +454,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (sau review MVP A):**
   - Slug bị cấm là mọi đường dẫn mà renderer hoặc Next tự trả lời: `_preview`, `_next`, `api`, `healthz`, `index` (Next coi là `/`), `404`, `500`, `sitemap.xml`, `robots.txt`, `favicon.ico`. Một trang publish ở các slug này sẽ không bao giờ hiện ở URL của nó.
   - Unit test của renderer đối chiếu danh sách này với các route cấp một của app, nên route mới không thể che một slug publish được.
+- **Amended 2026-10-25 (MVP B):** thêm `_lead` và `_e` vào danh sách slug bị cấm (ADR-016, ADR-019).
 
 ### ADR-012 — Asset
 
@@ -445,6 +478,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Gate:** `format:check`, `lint`, `typecheck`, `test:unit`, `test:int`, `build`, `test:e2e`, `governance`.
 - **Reason:** Quy tắc 9.
 - **Consequences:** Integration test chạy trên MongoDB replica set thật từ docker compose (local và CI); mỗi file test dùng một database riêng rồi xóa.
+- **Amended 2026-10-25 (MVP B):**
+  - Thêm module `privacy`, `leads`, `notifications`, `analytics`.
+  - Log redaction phủ cả body của `POST /public/sites/:subdomain/leads` và route `/_lead` của renderer; test kiểm tra không có trường nào của lead xuất hiện trong log.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -492,6 +528,152 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Owner đổi cài đặt site đúng lúc người khác đang publish thì lần publish đó bị từ chối một lần và phải xem lại.
   - Release cũ trong database dev vẫn đổi theo site, và chỉ thấy thay đổi khi cache renderer tự làm mới, vì sửa site không revalidate. Publish lại một lần thì trang có snapshot.
 
+### ADR-016 — Form đăng ký và thu lead
+
+- **Date:** 2026-10-25 · **Status:** Accepted
+- **Decision:**
+  - **Section `leadForm`** ("Form đăng ký", nhóm "Form & liên hệ"): `singleton`, không có vị trí cố định, một variant.
+    - Trường cố định: Họ và tên, Số điện thoại (bắt buộc, `phoneSchema`). Email và Lời nhắn bật/tắt được; khi bật thì không bắt buộc. Không có trường tùy ý.
+    - Content sửa được: tiêu đề, mô tả, chữ trên nút, tiêu đề và lời nhắn sau khi gửi.
+    - Ô đồng ý và link chính sách không nằm trong content; component nhận chúng qua props từ `leadCapture` (ADR-017).
+  - **Component vẫn chỉ hiển thị (ADR-007):** render `<form method="post" action="/_lead">` thuần, có label, ô ẩn `releaseId` và một ô honeypot.
+    - Renderer bọc form bằng một client component, truyền qua context của `@plp/sections/react`, để validate tại chỗ, gửi bằng `fetch` và hiện trạng thái "Đã nhận đăng ký" ngay trong section.
+    - Canvas của admin dùng cùng component, không gắn phần gửi.
+    - Không có JavaScript thì form vẫn POST được; renderer trả một trang kết quả đơn giản (đã nhận, hoặc lỗi kèm link quay lại), `noindex`, `no-store`.
+  - **Đường gửi:** trình duyệt → `POST /_lead` cùng origin trên renderer → API `POST /public/sites/:subdomain/leads`.
+    - Cùng origin nên không cần CORS, và trang public vẫn cache như cũ.
+    - **Kênh renderer → API:** renderer chuyển IP và user agent của khách bằng header nội bộ, ký HMAC-SHA256 kèm timestamp (cửa sổ 5 phút) bằng `RENDERER_API_SECRET`. API chỉ tin các header này khi chữ ký đúng. Renderer xóa header cùng tên do client gửi.
+  - **API nhận lead:**
+    1. Nạp release theo `releaseId` trong site của subdomain. Trang của release đó phải đang live (pointer khác `null`), nếu không thì 404. Release có thể cũ hơn release đang trỏ khi khách mở trang trước một lần publish; lead lưu đúng release khách đã thấy.
+    2. Validate bằng Zod theo cấu hình form của release đó, không theo draft. Thiếu đồng ý bắt buộc thì 422 (quy tắc 10).
+    3. Rate limit trong MongoDB (`lead_limits`, TTL index), cách làm như `login_attempts`: mỗi IP 5 lead trong 10 phút cho một site, mỗi site 300 lead trong một giờ. Vượt thì 429 và không lưu.
+    4. `submissionId` do script sinh, unique theo site: gửi lại vì mạng chập chờn thì trả kết quả cũ, không tạo lead trùng.
+  - **Spam:** ô honeypot có giá trị, hoặc từ lúc mở form tới lúc gửi dưới 3 giây (thời điểm do script đặt; không có script thì bỏ qua bước này).
+    - Lead vẫn được lưu với `spam.suspected = true` và lý do, nằm trong thư mục "Nghi ngờ spam".
+    - Lead nghi ngờ spam không được gửi email (ADR-018) và không tính vào số lead.
+    - Không dùng captcha của bên thứ ba.
+  - **Nguồn và thiết bị:**
+    - Script chép `utm_source`, `utm_medium`, `utm_campaign` và `document.referrer` vào ô ẩn. Không có script thì đọc utm từ header `Referer` của request POST.
+    - Chuẩn hóa thành `source / medium`, chữ thường, tối đa 40 ký tự: có utm thì dùng utm; referrer từ công cụ tìm kiếm thành `{tên} / organic`; referrer ngoài site khác thành `{domain} / referral`; không có gì thì "trực tiếp".
+    - Thiết bị là `mobile` hoặc `desktop`, suy từ user agent bằng một hàm thuần trong API, không thêm thư viện.
+  - **Mô hình:**
+
+    ```ts
+    leads { workspaceId, siteId, pageId, releaseId, releaseVersion, submissionId|null,
+            fields: { name, phone, email|null, message|null },
+            consent: { marketing: boolean, at, marketingWithdrawnAt|null },          // ADR-017
+            source: { source, medium, campaign|null }, device: 'mobile'|'desktop',
+            status: 'new'|'contacted'|'scheduled'|'unreachable'|'won', note,
+            spam: { suspected: boolean, reasons: string[] },
+            notification: { status, attempts, lastErrorCode|null, sentAt|null },   // ADR-018
+            createdAt, expiresAt|null }                                           // ADR-017
+    ```
+
+    - Index bắt đầu bằng `siteId`; unique-partial `(siteId, submissionId)`; TTL trên `expiresAt`.
+    - Đồng ý bắt buộc không có cờ riêng: lead chỉ tồn tại khi khách đã đồng ý.
+
+  - **Check:** blocking `consent_not_configured` khi trang có form mà site thiếu tên doanh nghiệp, link chính sách hoặc phiên bản đồng ý (ADR-017).
+  - **Tạo trang theo mục tiêu:** `lead`, `promo`, `event`, `waitlist` đặt section form ở vị trí của thiết kế, thay cho dải kêu gọi hành động; nút chính của Hero trỏ tới section form. Trang đã tạo không đổi.
+- **Reason:** Màn 09, 04, 05 và 02 của thiết kế; quy tắc 10. Gửi qua renderer giữ form chạy được khi không có JavaScript, không mở CORS cho API và cho API biết IP thật của khách để rate limit.
+- **Consequences:**
+  - Renderer có route mới `/_lead` (ADR-009, ADR-011) và cần `RENDERER_API_SECRET`, API cũng vậy.
+  - Rate limit ở MongoDB nên đúng khi có nhiều instance API.
+  - Mục tiêu "Danh sách chờ" vẫn bắt buộc số điện thoại; muốn chỉ thu email cần quyết định mới.
+  - Rollback về một release không có form thì form biến mất khỏi trang live; lead cũ vẫn trỏ đúng release của chúng.
+
+### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
+
+- **Date:** 2026-10-25 · **Status:** Accepted
+- **Decision:**
+  - **Cài đặt của site** (`sites.privacy`; chỉ Owner sửa, Editor xem):
+    - `{ controllerName, requestEmail, policyUrl, retentionMonths: 6|12|24|null }`.
+    - `controllerName` là đơn vị thu thập dữ liệu; `policyUrl` chỉ nhận `http:`/`https:`; `retentionMonths = null` là không tự xóa, mặc định 12.
+  - **Phiên bản đồng ý** (`consent_versions`, bất biến, repository chỉ có `insert` và `find*`):
+    - `{ workspaceId, siteId, version, requiredText, marketingText|null, createdBy, createdAt }`, unique(siteId, version).
+    - `requiredText` được chứa `{Tên doanh nghiệp}`, thay bằng `controllerName` khi hiển thị. `marketingText = null` là form không có ô nhận ưu đãi; ô này luôn tách riêng và không bắt buộc.
+    - Lưu là tạo `version + 1`; phiên bản hiện hành là bản có version lớn nhất.
+    - Site mới chưa có phiên bản nào. Màn 12 gợi ý nội dung của thiết kế, kèm lưu ý "không phải tư vấn pháp lý".
+  - **Snapshot vào release (cùng cơ chế với ADR-015):**
+    - Release có section form thì có `leadCapture = { consentVersionId, consentVersion, controllerName, policyUrl, requiredText, marketingText|null }`, trong đó `requiredText` đã thay tên doanh nghiệp. Release không có form thì `leadCapture = null`.
+    - Publish đọc `sites.privacy` và phiên bản đồng ý hiện hành trong cùng transaction với `sitePresentation`.
+    - Form của trang live và preview của một release dùng snapshot. Canvas và preview bản nháp dùng cài đặt hiện tại.
+    - **Nhắc việc:** khi release đang live có form và snapshot khác cài đặt hiện tại, `siteChanges` thêm chip theo thứ tự cố định: "Dữ liệu cá nhân: nội dung đồng ý", "Dữ liệu cá nhân: tên doanh nghiệp", "Dữ liệu cá nhân: chính sách". `acknowledgedSiteChanges` và 409 `site_changed` áp dụng như ADR-015.
+  - **Bằng chứng đồng ý** của một lead là `releaseId` (chứa đúng chữ khách đã thấy), `consent.at` và lựa chọn ô ưu đãi. Màn 10 hiện "Nội dung đồng ý bản N · lúc HH:MM:SS · Xem nội dung".
+  - **Thời gian lưu:**
+    - `leads.expiresAt = createdAt + retentionMonths`; TTL index của MongoDB tự xóa.
+    - Đổi thời gian lưu thì một lệnh `updateMany` tính lại `expiresAt` cho mọi lead của site.
+    - Xóa lead là xóa cả bằng chứng trong lead. Release vẫn giữ nội dung đồng ý, vì nội dung đó không chứa dữ liệu cá nhân.
+  - **Quyền với lead (mở rộng ADR-004):**
+    - Owner và Editor: xem hộp thư, đổi trạng thái, ghi chú, chuyển vào hoặc ra khỏi spam.
+    - Chỉ Owner: cài đặt dữ liệu cá nhân, phiên bản đồng ý, nơi nhận lead, xuất CSV, xuất và xóa dữ liệu một người, xử lý yêu cầu về dữ liệu.
+  - **Yêu cầu từ người gửi form** (`data_requests`):
+    - `{ workspaceId, siteId, contact: { name, phone|null, email|null }, type: 'access'|'rectify'|'delete'|'withdraw_marketing', receivedAt, respondBy, completeBy, status: 'open'|'responded'|'completed', log[≤ 50], createdBy }`.
+    - Owner ghi nhận yêu cầu bằng tay (nhận qua email hay điện thoại). Lead liên quan được tìm theo số điện thoại hoặc email đã chuẩn hóa, trong site.
+    - Xử lý bằng các thao tác của hộp thư: xuất dữ liệu (JSON và CSV), sửa trường, xóa thật, rút đồng ý nhận ưu đãi (`consent.marketingWithdrawnAt`).
+    - **Hạn:** phản hồi trong 2 ngày làm việc, hoàn tất trong 20 ngày làm việc. Ngày làm việc là thứ Hai tới thứ Sáu theo giờ Việt Nam, chưa trừ ngày lễ. Hai con số lấy từ mockup, là hằng số trong contracts, và phải được người phụ trách pháp lý xác nhận trước khi ra mắt.
+    - Yêu cầu xóa đã hoàn tất chỉ giữ `contact` ở dạng che (`0987 *** 223`): đủ chứng minh đã xử lý mà không giữ lại dữ liệu.
+- **Reason:** Màn 12, quy tắc 1 và quy tắc 10. Nội dung đồng ý là thứ khách thấy trên trang live, nên chỉ đổi khi publish. Lead trỏ về đúng release, nên bằng chứng không bao giờ lệch với chữ khách đã đồng ý.
+- **Consequences:**
+  - Đổi nội dung đồng ý phải publish lại từng trang có form. Trang chưa publish lại vẫn dùng bản cũ, và lead ghi đúng bản đó.
+  - Dữ liệu đã gửi đi qua email (ADR-018) không bị xóa theo; màn 12 nói rõ điều này.
+  - Không có trang chính sách tạo từ mẫu: site phải có link chính sách trước khi publish trang có form.
+
+### ADR-018 — Hộp thư lead và email thông báo
+
+- **Date:** 2026-10-25 · **Status:** Accepted
+- **Decision:**
+  - **Hộp thư (màn 10):**
+    - Hai thư mục: Hộp thư (không spam) và Nghi ngờ spam. Sắp theo `createdAt` giảm dần, phân trang bằng cursor, 50 mục mỗi trang.
+    - Lọc theo trang, trạng thái và khoảng thời gian (7 ngày, 30 ngày, hoặc tùy chọn tối đa 365 ngày).
+    - Tìm theo số điện thoại hoặc email đã chuẩn hóa (khớp đầu chuỗi, có index), và theo tên (chữ thường, bỏ dấu) trong phạm vi đã lọc.
+    - Chi tiết lead: trang và version, nguồn, thiết bị, bằng chứng đồng ý, trạng thái gửi thông báo, ghi chú nội bộ (tối đa 1000 ký tự).
+    - "N mới" ở sidebar và "Lead 7 ngày" ở màn 01 đếm lead không spam bằng truy vấn trên index, có chặn trên.
+  - **Xuất CSV (Owner):**
+    - UTF-8 có BOM để Excel đọc đúng tiếng Việt.
+    - Ô bắt đầu bằng `=`, `+`, `-`, `@`, tab hoặc CR được thêm `'` phía trước, chống formula injection.
+    - Theo bộ lọc đang chọn, tối đa 10.000 dòng mỗi lần, stream thay vì nạp hết vào bộ nhớ. Ghi activity `lead.exported` kèm số dòng.
+  - **Nơi nhận lead:** `sites.leadRecipients`, tối đa 5 email.
+    - Mỗi địa chỉ mới nhận một email xác nhận. Token ngẫu nhiên, DB chỉ lưu sha256, hết hạn sau 7 ngày. Chỉ địa chỉ đã xác nhận mới nhận lead, nên form không thể dùng để gửi thư tới một hộp thư chưa đồng ý nhận.
+    - Blocking `lead_destination_missing` khi trang có form mà site không có địa chỉ nào đã xác nhận. Badge "Chưa chọn nơi nhận lead" trong editor dùng cùng check.
+    - Thêm hoặc bỏ địa chỉ ghi activity `lead.recipients_changed`.
+  - **Gửi email:**
+    - SMTP qua `nodemailer`, cấu hình bằng `SMTP_URL` và `LEAD_EMAIL_FROM`. Dev, integration test và E2E dùng Mailpit trong docker compose.
+    - API trả lời khách ngay sau khi lưu lead, rồi gửi email ở nền. Thử tối đa 3 lần: ngay, sau 1 phút, sau 5 phút.
+    - `lead.notification.status`: `pending` → `sending` → `sent` hoặc `failed`, kèm mã lỗi, không kèm nội dung. Mỗi lần gửi giành lead bằng update có điều kiện trên status, nên nhiều instance không gửi trùng.
+    - `failed` hiện "Lỗi đồng bộ" ở màn 10, có nút "Gửi lại".
+    - Khi API khởi động, quét một lần các lead còn `pending` hoặc `sending` quá 10 phút (tối đa 500, cũ nhất trước) để gửi lại. Không có vòng lặp polling hay hàng đợi riêng.
+    - Email gồm tên, số điện thoại, email, lời nhắn, trang, nguồn và link tới lead trong admin. Log chỉ ghi id lead và mã lỗi.
+- **Reason:** Màn 10, 05 và 01. Email là nơi nhận đơn giản nhất mà vẫn báo ngay cho người bán. Xác nhận địa chỉ ngăn việc dùng form để gửi thư rác tới người khác.
+- **Consequences:**
+  - Lịch thử lại nằm trong bộ nhớ của instance API: instance tắt giữa chừng thì lead chờ tới lần khởi động sau. Scale ngang hoặc cần giao nhận chắc chắn hơn thì phải có hàng đợi thật.
+  - Production cần nhà cung cấp SMTP có SPF và DKIM cho domain gửi; chọn khi deploy.
+  - Google Sheets, Meta Conversions API hay Zalo OA là nơi nhận mới, mỗi cái cần ADR riêng.
+
+### ADR-019 — Hiệu quả trang, đo không dùng cookie
+
+- **Date:** 2026-10-25 · **Status:** Accepted
+- **Decision:**
+  - **Thu:** trang live (không phải preview, không phải 404) chạy một script nhỏ, gửi `navigator.sendBeacon('/_e', { path, referrer, utm })` một lần mỗi lần tải trang.
+    - Renderer chuyển tiếp tới API `POST /public/sites/:subdomain/events` qua kênh ký HMAC của ADR-016. API phân giải `path` sang trang đang live; không có thì không đếm.
+    - Request không có user agent, hoặc user agent là bot đã biết, không được đếm.
+    - Beacon có rate limit theo IP như lead. Vượt giới hạn thì trả 204 và không đếm, vì đây là số liệu chứ không phải thao tác của người dùng.
+  - **Khách duy nhất:** `sha256(salt của ngày + siteId + IP + user agent)`.
+    - Salt ngẫu nhiên, đổi mỗi ngày theo giờ Việt Nam (`analytics_salts`), tự xóa sau 2 ngày. Không lưu IP hay user agent; salt bị xóa thì không còn cách nối hash với một người.
+    - `analytics_seen { siteId, pageId|null, day, hash }`, unique, TTL 2 ngày, đánh dấu "đã thấy hôm nay" ở cấp site và cấp trang. Lần đầu thấy thì tăng `visitors`.
+    - Số khách của nhiều ngày là tổng khách từng ngày; một người quay lại vào ngày khác được tính là khách mới. Màn 11 ghi rõ cách tính.
+  - **Tổng hợp:** `analytics_daily { workspaceId, siteId, pageId|null, day, source, medium, device, views, visitors }`, cập nhật bằng upsert `$inc`, giữ 13 tháng (TTL). `pageId = null` là dòng cấp site.
+    - Nguồn chuẩn hóa như lead (ADR-016). Mỗi site mỗi ngày có tối đa 50 cặp nguồn/kênh; vượt thì gộp vào "khác".
+    - Không lưu sự kiện thô.
+  - **Lead và tỷ lệ chuyển đổi** đếm thẳng từ `leads` không spam, bằng aggregate trên index `(siteId, createdAt)`. Chuyển lead vào hoặc ra khỏi spam được phản ánh ngay. Tỷ lệ chuyển đổi = lead ÷ khách duy nhất.
+  - **Màn 11:** khoảng 7, 30 hoặc 90 ngày, so với kỳ ngay trước; lọc theo trang; biểu đồ khách theo ngày; bảng nguồn; theo trang; thiết bị.
+  - **Người trong workspace:** link "Xem trang live" trong admin thêm tham số `plp_internal=1`. Script lưu cờ này vào `localStorage` của trình duyệt, xóa tham số khỏi URL, và từ đó không gửi beacon. Lượt xem của thành viên từ trình duyệt khác vẫn được tính; màn 11 ghi rõ.
+- **Reason:** Màn 11 và quy tắc 11. Hash theo ngày không cần cookie, nên không cần banner đồng ý cookie.
+- **Consequences:**
+  - Số khách duy nhất của khoảng nhiều ngày cao hơn số người thật, và không so được với công cụ đo bằng cookie.
+  - Lượt xem không chạy JavaScript không được tính.
+  - Lead bị xóa theo thời gian lưu thì số lead của kỳ cũ giảm theo. Thời gian lưu ngắn nhất (6 tháng) dài hơn khoảng xem lớn nhất cộng kỳ so sánh (180 ngày), nên màn 11 không bị ảnh hưởng.
+  - Renderer có route mới `/_e` (ADR-009, ADR-011).
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -515,3 +697,25 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 3. Sửa nháp → trang live không đổi.
 4. Publish v2 → rollback về v1.
 5. Undo → trang live là v2.
+
+**MVP B:**
+
+| Lát        | Nội dung                                                                         | Màn             | Trạng thái |
+| ---------- | -------------------------------------------------------------------------------- | --------------- | ---------- |
+| Quyết định | ADR-016…019, quy tắc 10–11                                                       | —               | Xong       |
+| B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar   | 12 (phần trên)  | Chưa làm   |
+| B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint | 02, 04, 05, 09  | Chưa làm   |
+| B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người | 10, 01, Sidebar | Chưa làm   |
+| B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                     | 10, 05, 03      | Chưa làm   |
+| B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                    | 12 (phần dưới)  | Chưa làm   |
+| B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                         | 11              | Chưa làm   |
+
+**Hoàn thành MVP B** khi một E2E chạy xanh toàn bộ chuỗi:
+
+1. Owner nhập đơn vị thu thập dữ liệu, link chính sách, nội dung đồng ý và một email nhận lead, rồi xác nhận email đó trong Mailpit.
+2. Tạo trang theo mục tiêu "Thu lead" → publish.
+3. Khách mở trang live và gửi form có tick đồng ý.
+4. Email thông báo tới Mailpit.
+5. Lead có trong hộp thư, với bằng chứng đồng ý đúng bản đã publish.
+6. Màn Hiệu quả có lượt xem và 1 lead.
+7. Owner ghi nhận yêu cầu xóa và xóa dữ liệu người đó: lead biến mất và số lead về 0.
