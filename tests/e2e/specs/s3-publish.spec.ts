@@ -2,9 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { Editor } from '../support/editor.js';
 import { fetchPublic, firstHeading } from '../support/public-site.js';
 import {
-  configurePrivacyViaApi,
   createPageViaApi,
   promoPage,
+  setUpLeadCaptureViaApi,
   setUpSite,
 } from '../support/setup.js';
 import { siteOrigin } from '../urls.js';
@@ -13,7 +13,7 @@ import { siteOrigin } from '../urls.js';
 async function openNewPage(page: Page) {
   const { site } = await setUpSite(page.request);
   // The promotion page has a lead form, which needs the site's consent settings (ADR-016).
-  await configurePrivacyViaApi(page.request, site.id);
+  await setUpLeadCaptureViaApi(page.request, site.id);
   const created = await createPageViaApi(
     page.request,
     site.id,

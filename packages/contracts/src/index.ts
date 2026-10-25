@@ -12,6 +12,7 @@ export * from './goals.js';
 export * from './health.js';
 export * from './lead.js';
 export * from './lead-inbox.js';
+export * from './lead-recipients.js';
 export * from './page.js';
 export * from './preview.js';
 export * from './privacy.js';

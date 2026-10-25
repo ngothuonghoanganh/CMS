@@ -60,6 +60,10 @@ export const siteSchema = z.object({
   defaultShareImageAssetId: idSchema.nullable(),
   /** Public origin of the default domain, e.g. https://smilecare.payload.site */
   defaultOrigin: z.url(),
+  /** The owner saved the personal data settings (ADR-017). */
+  privacyConfigured: z.boolean(),
+  /** Addresses that confirmed they receive leads (ADR-018); a form needs at least one. */
+  confirmedLeadRecipients: z.number().int().nonnegative(),
   createdAt: isoDateTimeSchema,
 });
 export type Site = z.infer<typeof siteSchema>;

@@ -31,6 +31,7 @@ export const leadQueryKeys = {
     ] as const,
   detail: (siteId: string, leadId: string) => ['sites', siteId, 'leads', 'detail', leadId] as const,
   pageRefs: (siteId: string) => ['sites', siteId, 'page-refs'] as const,
+  recipients: (siteId: string) => ['sites', siteId, 'lead-recipients'] as const,
 };
 
 /**

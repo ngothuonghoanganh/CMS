@@ -17,6 +17,8 @@ export const errorCodes = [
   'undo_not_available',
   'page_limit_reached',
   'site_limit_reached',
+  'recipient_exists',
+  'recipient_limit_reached',
   'rate_limited',
   'payload_too_large',
   'unsupported_media_type',

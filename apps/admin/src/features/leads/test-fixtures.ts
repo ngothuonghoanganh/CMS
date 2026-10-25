@@ -22,6 +22,7 @@ export function leadItem(overrides: Partial<LeadListItem> = {}): LeadListItem {
     page: { id: PAGE_ID, title: 'Ưu đãi niềng răng tháng 11' },
     source: { source: 'facebook', medium: 'cpc', campaign: 'uu-dai-t11' },
     status: 'new',
+    notificationFailed: false,
     createdAt: '2026-10-24T09:42:00.000Z',
     ...overrides,
   };
@@ -66,6 +67,13 @@ export function leadDetail(overrides: Partial<LeadDetail> = {}): LeadDetail {
       marketingText: 'Nhận thông tin ưu đãi qua Zalo hoặc SMS (không bắt buộc)',
       marketing: false,
       marketingWithdrawnAt: null,
+    },
+    notification: {
+      status: 'sent',
+      attempts: 1,
+      lastErrorCode: null,
+      sentAt: '2026-10-24T09:42:09.000Z',
+      recipients: 2,
     },
     createdAt: '2026-10-24T09:42:00.000Z',
     expiresAt: '2027-10-24T09:42:00.000Z',

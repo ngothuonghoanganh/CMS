@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { Editor } from '../support/editor.js';
 import { createSiteThroughForm, signUpThroughForm } from '../support/flows.js';
 import { fetchPublic, firstHeading } from '../support/public-site.js';
-import { configurePrivacyViaApi, newAccount, newSubdomain } from '../support/setup.js';
+import { newAccount, newSubdomain, setUpLeadCaptureViaApi } from '../support/setup.js';
 import { siteOrigin } from '../urls.js';
 
 const V1 = 'Niềng răng trong suốt giảm 30%';
@@ -19,7 +19,7 @@ test('MVP A: sign up → site → page by goal → edit → preview → publish 
   const origin = siteOrigin(subdomain);
   const siteId = await createSiteThroughForm(page, { name: 'Nha khoa Smile Care', subdomain });
   // The promotion page has a lead form (MVP B), which needs the site's consent settings first.
-  await configurePrivacyViaApi(page.request, siteId);
+  await setUpLeadCaptureViaApi(page.request, siteId);
   await page.getByRole('link', { name: 'Tạo trang đầu tiên' }).click();
   await page.getByRole('radio', { name: 'Ưu đãi có thời hạn' }).check();
   await page.getByRole('button', { name: 'Tiếp tục' }).click();

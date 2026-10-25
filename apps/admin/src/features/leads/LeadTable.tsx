@@ -6,7 +6,7 @@ import {
   leadSourceLabel,
   leadStatusLabels,
 } from '@plp/contracts';
-import { Badge } from '@plp/ui';
+import { AlertCircleIcon, Badge } from '@plp/ui';
 import type { MouseEvent } from 'react';
 import { formatDateTime } from '../../lib/format';
 import { cx } from '../shell/cx';
@@ -57,6 +57,12 @@ export function LeadTable({ leads, selectedId, now, hrefOf, onSelect }: LeadTabl
                   >
                     {lead.name}
                   </a>
+                  {lead.notificationFailed ? (
+                    <span className={styles.syncError}>
+                      <AlertCircleIcon size={13} strokeWidth={2} />
+                      Lỗi đồng bộ
+                    </span>
+                  ) : null}
                   <span className={styles.sub}>{lead.page.title}</span>
                 </div>
               </td>

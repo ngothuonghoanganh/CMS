@@ -11,6 +11,8 @@ export const checkTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('page') }),
   /** The site's personal data and consent settings a form needs (ADR-017). */
   z.object({ kind: z.literal('privacy'), sectionId: z.string() }),
+  /** The confirmed email addresses a form's leads go to (ADR-018). */
+  z.object({ kind: z.literal('lead_recipients'), sectionId: z.string() }),
 ]);
 export type CheckTarget = z.infer<typeof checkTargetSchema>;
 
@@ -24,6 +26,7 @@ export const blockingCheckCodes = [
   'no_visible_section_desktop',
   'no_visible_section_mobile',
   'consent_not_configured',
+  'lead_destination_missing',
 ] as const;
 
 export const warningCheckCodes = [
@@ -47,6 +50,7 @@ export const passedCheckCodes = [
   'images_described',
   'no_sample_content',
   'privacy_policy',
+  'lead_destination',
 ] as const;
 
 export const checkItemSchema = z.object({

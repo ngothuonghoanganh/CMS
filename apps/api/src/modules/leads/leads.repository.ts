@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { LeadStatus, RetentionMonths } from '@plp/contracts';
+import type { LeadNotificationErrorCode, LeadStatus, RetentionMonths } from '@plp/contracts';
 import type { QueryFilter, Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import {
@@ -14,12 +14,29 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { LeadCriteria } from './domain/lead-filters.js';
 import { type LeadQuery, type LeadSearchKeys, leadSearchKeys } from './domain/lead-search.js';
-import { LEAD_MODEL, type LeadRecord, LEADS_SUBMISSION_INDEX } from './lead.schema.js';
+import {
+  LEAD_MODEL,
+  type LeadNotificationRecord,
+  type LeadRecord,
+  LEADS_SUBMISSION_INDEX,
+} from './lead.schema.js';
 
 export type NewLead = Omit<
   LeadRecord,
-  '_id' | 'workspaceId' | 'siteId' | 'status' | 'note' | 'search'
->;
+  '_id' | 'workspaceId' | 'siteId' | 'status' | 'note' | 'search' | 'notification'
+> & { notification: LeadNotificationRecord };
+
+/** How one notification attempt ended. */
+export interface NotificationOutcome {
+  status: 'sent' | 'pending' | 'failed';
+  lastErrorCode: LeadNotificationErrorCode | null;
+  sentAt: Date | null;
+  recipients: number | null;
+  at: Date;
+}
+
+/** A lead whose notification is waiting for an attempt. */
+export type NotificationBacklogRow = Pick<LeadRecord, '_id' | 'notification'>;
 
 /** Another request with the same `submissionId` stored the lead first. */
 export class SubmissionTakenError extends Error {
@@ -39,6 +56,7 @@ export interface LeadAccessRef {
 /** What a row of the inbox shows; the message, note and consent stay in the database. */
 export type LeadListRow = Pick<LeadRecord, '_id' | 'pageId' | 'source' | 'status' | 'createdAt'> & {
   fields: Pick<LeadRecord['fields'], 'name' | 'phone'>;
+  notification?: Pick<LeadNotificationRecord, 'status'>;
 };
 
 const LIST_PROJECTION = {
@@ -48,6 +66,7 @@ const LIST_PROJECTION = {
   createdAt: 1,
   'fields.name': 1,
   'fields.phone': 1,
+  'notification.status': 1,
 } as const;
 
 /**
@@ -263,6 +282,112 @@ export class LeadsRepository {
             ...(changes.status === undefined ? {} : { status: changes.status }),
             ...(changes.note === undefined ? {} : { note: changes.note }),
             ...(changes.spam === undefined ? {} : { 'spam.suspected': changes.spam }),
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .lean<LeadRecord>()
+      .exec();
+  }
+
+  /**
+   * Takes a pending notification for one attempt and counts it. Unscoped: the sender runs in the
+   * background. Null when the notification is not pending: already sent or failed, or another
+   * instance of the API took it first (ADR-018).
+   */
+  claimNotification(leadId: ObjectId, now: Date): Promise<LeadRecord | null> {
+    return this.leads
+      .findOneAndUpdate(
+        { _id: leadId, 'notification.status': 'pending' },
+        {
+          $set: { 'notification.status': 'sending', 'notification.updatedAt': now },
+          $inc: { 'notification.attempts': 1 },
+        },
+        { returnDocument: 'after' },
+      )
+      .lean<LeadRecord>()
+      .exec();
+  }
+
+  /**
+   * Records how the attempt that claimed the lead ended. `attempts` is the count at that claim,
+   * so an attempt the startup sweep gave to someone else cannot overwrite theirs.
+   */
+  async finishNotification(
+    leadId: ObjectId,
+    attempts: number,
+    outcome: NotificationOutcome,
+  ): Promise<void> {
+    await this.leads
+      .updateOne(
+        { _id: leadId, 'notification.status': 'sending', 'notification.attempts': attempts },
+        {
+          $set: {
+            'notification.status': outcome.status,
+            'notification.lastErrorCode': outcome.lastErrorCode,
+            'notification.sentAt': outcome.sentAt,
+            'notification.recipients': outcome.recipients,
+            'notification.updatedAt': outcome.at,
+          },
+        },
+      )
+      .exec();
+  }
+
+  /**
+   * Notifications waiting for an attempt, and those whose sender stopped mid-way (`sending`
+   * since before `staleBefore`), oldest first: the backlog an API instance takes on at startup.
+   */
+  findNotificationBacklog(staleBefore: Date, limit: number): Promise<NotificationBacklogRow[]> {
+    return this.leads
+      .find(
+        {
+          $or: [
+            { 'notification.status': 'pending' },
+            { 'notification.status': 'sending', 'notification.updatedAt': { $lt: staleBefore } },
+          ],
+        },
+        { notification: 1 },
+      )
+      .sort({ 'notification.updatedAt': 1 })
+      .limit(limit)
+      .lean<NotificationBacklogRow[]>()
+      .exec();
+  }
+
+  /** Puts a notification whose sender stopped back in the queue; false when it moved on. */
+  async requeueStaleNotification(leadId: ObjectId, staleBefore: Date): Promise<boolean> {
+    const result = await this.leads
+      .updateOne(
+        {
+          _id: leadId,
+          'notification.status': 'sending',
+          'notification.updatedAt': { $lt: staleBefore },
+        },
+        { $set: { 'notification.status': 'pending', 'notification.updatedAt': new Date() } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /**
+   * "Gửi lại" on a failed notification: it starts over with no attempt counted. Null when it is
+   * not failed (sent meanwhile) or the lead is gone.
+   */
+  resetFailedNotification(
+    scope: WorkspaceScope,
+    leadId: ObjectId,
+    now: Date,
+  ): Promise<LeadRecord | null> {
+    return this.leads
+      .findOneAndUpdate(
+        { _id: leadId, workspaceId: scope.workspaceId, 'notification.status': 'failed' },
+        {
+          $set: {
+            'notification.status': 'pending',
+            'notification.attempts': 0,
+            'notification.lastErrorCode': null,
+            'notification.updatedAt': now,
           },
         },
         { returnDocument: 'after' },

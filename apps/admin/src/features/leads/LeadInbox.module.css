@@ -419,3 +419,113 @@
     max-width: 100%;
   }
 }
+
+/* "Lỗi đồng bộ" next to a lead whose email notification failed (board 10). */
+.syncError {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deliveryTitle {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+}
+
+.deliveryRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-body-sm);
+}
+
+.deliveryText {
+  flex: 1 1 160px;
+}
+
+.deliveryRow[data-kind='failed'] .deliveryText {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.deliveryFailed {
+  flex: none;
+  color: var(--color-danger);
+}
+
+.recipients {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.recipientsEmpty,
+.recipientsNote {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.recipientList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.recipientRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.recipientRow:last-child {
+  border-bottom: 0;
+}
+
+.recipientEmail {
+  flex: 1 1 180px;
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.recipientActions {
+  display: flex;
+  gap: 4px;
+}
+
+.recipientForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.recipientField {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+/* The button lines up with the input under the field's label. */
+.recipientForm > button {
+  margin-top: 26px;
+}

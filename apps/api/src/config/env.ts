@@ -54,6 +54,14 @@ const envSchema = z.object({
   /** Leads one site accepts per hour, whoever sends them; protects storage from a flood. */
   LEAD_LIMIT_PER_SITE_PER_HOUR: z.coerce.number().int().min(1).default(300),
 
+  /**
+   * SMTP server for lead notifications and recipient confirmations (ADR-018), e.g.
+   * "smtp://localhost:1125" (Mailpit) or "smtps://user:pass@smtp.example.com:465".
+   */
+  SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+  /** Sender of those emails, e.g. "Payload Landing Page <no-reply@payload.site>". */
+  LEAD_EMAIL_FROM: z.string().trim().min(3).max(200),
+
   S3_ENDPOINT: z.url(),
   S3_REGION: z.string().min(1),
   S3_BUCKET: z.string().min(3),

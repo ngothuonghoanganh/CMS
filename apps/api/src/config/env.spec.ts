@@ -9,6 +9,8 @@ const valid = {
   REVALIDATE_SECRET: 'r'.repeat(32),
   PREVIEW_SECRET: 'p'.repeat(32),
   RENDERER_API_SECRET: 'r'.repeat(32),
+  SMTP_URL: 'smtp://localhost:1125',
+  LEAD_EMAIL_FROM: 'Payload Landing Page <no-reply@payload.site>',
   S3_ENDPOINT: 'http://localhost:9100',
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'plp-assets',
@@ -34,6 +36,15 @@ describe('parseEnv', () => {
   it('fails fast with the name of a missing variable', () => {
     const { MONGODB_URI: _missing, ...rest } = valid;
     expect(() => parseEnv(rest)).toThrow(/MONGODB_URI/);
+  });
+
+  it('needs an SMTP server for lead emails, smtp or smtps only (ADR-018)', () => {
+    const { SMTP_URL: _missing, ...rest } = valid;
+    expect(() => parseEnv(rest)).toThrow(/SMTP_URL/);
+    expect(() => parseEnv({ ...valid, SMTP_URL: 'http://localhost:1125' })).toThrow(/SMTP_URL/);
+    expect(
+      parseEnv({ ...valid, SMTP_URL: 'smtps://user:pass@smtp.example.com:465' }).SMTP_URL,
+    ).toBe('smtps://user:pass@smtp.example.com:465');
   });
 
   it('rejects short secrets', () => {

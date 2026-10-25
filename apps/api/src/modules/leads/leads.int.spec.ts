@@ -15,6 +15,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { configurePrivacy, saveConsentVersion, savePrivacy } from '../../../test/privacy.js';
+import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
 import { LeadsRepository } from './leads.repository.js';
 
@@ -48,6 +49,7 @@ describe('lead intake', () => {
   async function formSite(draft?: ReturnType<typeof formDraft>) {
     const site = await createSite(client, workspaceId);
     await configurePrivacy(client, site.id);
+    await addConfirmedRecipient(t, client, site.id);
     const slug = uniqueSlug('dang-ky');
     const { pageId, published } = await createLiveFormPage(
       client,
@@ -113,6 +115,7 @@ describe('lead intake', () => {
     const site = await createSite(client, workspaceId);
     await savePrivacy(client, site.id);
     await saveConsentVersion(client, site.id, 0, { marketingText: null });
+    await addConfirmedRecipient(t, client, site.id);
     const slug = uniqueSlug('khong-email');
     const { published } = await createLiveFormPage(client, site.id, slug);
     await submitLead(

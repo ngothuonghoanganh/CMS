@@ -20,7 +20,9 @@ import {
   spamReasons,
 } from './domain/lead-intake-rules.js';
 import { normalizeLeadSource } from './domain/lead-source.js';
+import { LeadNotifier } from '../notifications/lead-notifier.service.js';
 import { LeadLimitsRepository } from './lead-limits.repository.js';
+import type { LeadRecord } from './lead.schema.js';
 import { LeadsRepository, SubmissionTakenError } from './leads.repository.js';
 
 export const FORM_NOT_FOUND = 'Form này không còn nhận đăng ký';
@@ -50,6 +52,7 @@ export class LeadIntakeService {
     private readonly releases: ReleasesRepository,
     private readonly leads: LeadsRepository,
     private readonly limits: LeadLimitsRepository,
+    private readonly notifier: LeadNotifier,
   ) {}
 
   async submit(
@@ -74,12 +77,14 @@ export class LeadIntakeService {
     await this.countRequest(site._id, client.ip, now);
 
     const reasons = spamReasons({ honeypot: input.honeypot, elapsedMs: input.elapsedMs });
+    const spam = reasons.length > 0;
     // Null keeps leads until deleted by hand; the default only applies without settings, which a
     // form's release cannot have (it snapshotted them).
     const privacy = sitePrivacyOf(site);
     const retention = privacy === null ? DEFAULT_RETENTION_MONTHS : privacy.retentionMonths;
+    let stored: LeadRecord;
     try {
-      await this.leads.insertPublic(site, {
+      stored = await this.leads.insertPublic(site, {
         pageId: release.pageId,
         releaseId: release._id,
         releaseVersion: release.version,
@@ -102,7 +107,16 @@ export class LeadIntakeService {
           siteHost: new URL(siteOrigin(this.env, site.subdomain)).host,
         }),
         device: deviceFromUserAgent(client.userAgent),
-        spam: { suspected: reasons.length > 0, reasons },
+        spam: { suspected: spam, reasons },
+        // Spam is never emailed (ADR-018).
+        notification: {
+          status: spam ? 'skipped' : 'pending',
+          attempts: 0,
+          lastErrorCode: null,
+          sentAt: null,
+          recipients: null,
+          updatedAt: now,
+        },
         createdAt: now,
         expiresAt: retention === null ? null : addMonthsUtc(now, retention),
       });
@@ -111,6 +125,10 @@ export class LeadIntakeService {
         return { replayed: true };
       }
       throw error;
+    }
+    if (!spam) {
+      // The visitor gets the answer now; the email goes out in the background.
+      this.notifier.enqueue(stored._id);
     }
     return { replayed: false };
   }

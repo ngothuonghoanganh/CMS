@@ -14,6 +14,7 @@ export const activityTypes = [
   'consent.version_created',
   'lead.exported',
   'lead.person_deleted',
+  'lead.recipients_changed',
 ] as const;
 export const activityTypeSchema = z.enum(activityTypes);
 export type ActivityType = z.infer<typeof activityTypeSchema>;
@@ -52,8 +53,9 @@ export const activityItemSchema = z.object({
   page: z.object({ id: idSchema, title: z.string() }).nullable(),
   /**
    * Versions involved: `version` for publish/restore and for a new consent text version,
-   * `from`/`to` for pointer moves. `count` is how many leads an export or a deletion covered;
-   * activity never holds personal data (rule 10).
+   * `from`/`to` for pointer moves. `count` is how many leads an export or a deletion covered,
+   * or how many addresses receive leads after a change; activity never holds personal data
+   * (rule 10).
    */
   data: z.object({
     version: z.number().int().positive().nullable(),

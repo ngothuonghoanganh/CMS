@@ -78,6 +78,11 @@ export function parseLeadFilters(
   };
 }
 
+/** `?recipients=open`: "Nơi nhận lead" opens with the page. */
+export function parseRecipientsOpen(params: Partial<Record<string, SearchParamValue>>): boolean {
+  return single(params.recipients) === 'open';
+}
+
 /** The lead shown in the detail panel, from `?lead=`. */
 export function parseSelectedLead(
   params: Partial<Record<string, SearchParamValue>>,

@@ -3,6 +3,7 @@ import { LEAD_PHONE_MESSAGE } from '@plp/contracts';
 import { Editor } from '../support/editor.js';
 import {
   configurePrivacyViaApi,
+  confirmRecipientViaApi,
   createPageViaApi,
   PRIVACY,
   setUpSite,
@@ -41,12 +42,17 @@ test.describe('B2 · lead form', () => {
 
     // Without consent settings the form blocks publishing; "Sửa ngay" opens them.
     const dialog = await editor.openPublishDialog();
-    await expect(dialog.getByText('Form đăng ký chưa có nội dung đồng ý')).toBeVisible();
+    const consentCheck = dialog
+      .getByRole('listitem')
+      .filter({ hasText: 'Form đăng ký chưa có nội dung đồng ý' });
+    await expect(consentCheck).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Xuất bản v1' })).toBeDisabled();
-    await dialog.getByRole('button', { name: 'Sửa ngay' }).click();
+    await consentCheck.getByRole('button', { name: 'Sửa ngay' }).click();
     await expect(page).toHaveURL(new RegExp(`/sites/${site.id}/privacy$`));
 
     await configurePrivacyViaApi(page.request, site.id);
+    // A form also needs a confirmed address for its leads (ADR-018, see b4).
+    await confirmRecipientViaApi(page.request, site.id);
     await editor.goto(site.id, created.page.id);
     await expect(editor.canvas.getByText(FILLED_CONSENT)).toBeVisible();
     await editor.publish(1, 'Có form đăng ký');

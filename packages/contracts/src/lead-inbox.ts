@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type VnDay, vnDaySchema, vnDaySpan } from './calendar.js';
 import { idSchema, isoDateTimeSchema } from './common.js';
+import { leadNotificationSchema } from './lead-recipients.js';
 
 /**
  * The lead inbox (board 10, ADR-018). Owners and editors read leads and change their status, note
@@ -181,6 +182,8 @@ export const leadListItemSchema = z.object({
   page: leadPageRefSchema,
   source: leadSourceSchema,
   status: leadStatusSchema,
+  /** The email notification failed for good: the row shows "Lỗi đồng bộ" (ADR-018). */
+  notificationFailed: z.boolean(),
   createdAt: isoDateTimeSchema,
 });
 export type LeadListItem = z.infer<typeof leadListItemSchema>;
@@ -223,6 +226,8 @@ export const leadDetailSchema = z.object({
     marketing: z.boolean(),
     marketingWithdrawnAt: isoDateTimeSchema.nullable(),
   }),
+  /** The email notification (ADR-018); null for a lead stored before notifications existed. */
+  notification: leadNotificationSchema.nullable(),
   createdAt: isoDateTimeSchema,
   /** When the retention period deletes the lead; null when it is kept until deleted by hand. */
   expiresAt: isoDateTimeSchema.nullable(),

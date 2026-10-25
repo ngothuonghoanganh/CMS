@@ -18,6 +18,10 @@ export function testEnvInput(
     REVALIDATE_SECRET: 'test-revalidate-secret-0123456789abcdef',
     PREVIEW_SECRET: 'test-preview-secret-0123456789abcdef',
     RENDERER_API_SECRET: TEST_RENDERER_API_SECRET,
+    // Integration tests record emails instead of sending them (test/app.ts); the Mailpit test
+    // sends real ones here.
+    SMTP_URL: process.env['SMTP_URL'] ?? 'smtp://localhost:1125',
+    LEAD_EMAIL_FROM: 'Payload Landing Page <no-reply@payload.test>',
     S3_ENDPOINT: process.env['S3_ENDPOINT'] ?? 'http://localhost:9100',
     S3_REGION: process.env['S3_REGION'] ?? 'us-east-1',
     S3_BUCKET: process.env['S3_BUCKET'] ?? 'plp-assets',

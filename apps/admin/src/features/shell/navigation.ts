@@ -35,6 +35,11 @@ export function newLeadsHref(siteId: string): string {
   return leadsHref(siteId, '?status=new&range=all');
 }
 
+/** The inbox with "Nơi nhận lead" open (ADR-018): where a form's missing destination is fixed. */
+export function leadRecipientsHref(siteId: string): string {
+  return leadsHref(siteId, '?recipients=open');
+}
+
 /** "Dữ liệu & đồng ý" (ADR-017). */
 export function privacyHref(siteId: string): string {
   return `${siteHref(siteId)}/privacy`;

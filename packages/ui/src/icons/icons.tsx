@@ -50,6 +50,15 @@ export const ExternalLinkIcon = createIcon(
   'external-link',
   <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />,
 );
+/* "Nơi nhận lead" (board 10). */
+export const SlidersIcon = createIcon(
+  'sliders',
+  <>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </>,
+);
 export const DownloadIcon = createIcon('download', <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />);
 export const PhoneIcon = createIcon(
   'phone',

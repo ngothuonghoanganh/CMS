@@ -81,6 +81,9 @@ describe('activitySentence', () => {
     expect(sentence({ type: 'lead.exported', page: null, data: noVersions })).toBe(
       'Ngọc Anh xuất dữ liệu lead [primary]',
     );
+    expect(
+      sentence({ type: 'lead.recipients_changed', page: null, data: { ...noVersions, count: 2 } }),
+    ).toBe('Ngọc Anh đổi nơi nhận lead (còn 2 địa chỉ) [primary]');
   });
 
   it('describes changes to the personal data settings and consent texts (ADR-017)', () => {

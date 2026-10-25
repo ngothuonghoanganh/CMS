@@ -122,6 +122,16 @@ export class LeadsController {
     return this.inbox.update(user, leadId, body);
   }
 
+  @Post('leads/:leadId/notification/retry')
+  @HttpCode(200)
+  @Header('Cache-Control', NO_STORE)
+  retryNotification(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('leadId') leadId: string,
+  ): Promise<LeadDetail> {
+    return this.inbox.retryNotification(user, leadId);
+  }
+
   @Post('leads/:leadId/person/export')
   @HttpCode(200)
   async exportPerson(

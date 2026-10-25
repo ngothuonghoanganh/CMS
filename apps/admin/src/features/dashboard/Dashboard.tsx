@@ -29,7 +29,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { useLeadCounts } from '../leads/queries';
 import { cx } from '../shell/cx';
-import { newPageHref, siteHref } from '../shell/navigation';
+import { leadRecipientsHref, newPageHref, privacyHref, siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
 import { useDebouncedValue } from '../shell/use-debounced-value';
@@ -154,6 +154,17 @@ export function Dashboard({
                 setStatus('draft');
               },
             },
+    },
+    // Board 01 also lists a custom domain, which MVP A and B do not offer.
+    {
+      label: 'Thêm chính sách quyền riêng tư',
+      done: site.privacyConfigured,
+      action: { href: privacyHref(site.id) },
+    },
+    {
+      label: 'Chọn nơi nhận lead (email)',
+      done: site.confirmedLeadRecipients > 0,
+      action: { href: leadRecipientsHref(site.id) },
     },
   ];
 

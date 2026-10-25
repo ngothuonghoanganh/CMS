@@ -10,6 +10,7 @@ import { ActivityModule } from './modules/activity/activity.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { LeadsModule } from './modules/leads/leads.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { PagesModule } from './modules/pages/pages.module.js';
 import { PreviewModule } from './modules/preview/preview.module.js';
 import { PrivacyModule } from './modules/privacy/privacy.module.js';
@@ -60,6 +61,7 @@ export class AppModule {
         PagesModule,
         PublishingModule,
         LeadsModule,
+        NotificationsModule,
         PreviewModule,
         PrivacyModule,
         PublicDeliveryModule,

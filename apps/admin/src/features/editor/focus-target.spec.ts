@@ -9,6 +9,7 @@ import { makeStore } from './test-fixtures';
 
 const SEO_HREF = '/sites/s/pages/p/seo';
 const PRIVACY_HREF = '/sites/s/privacy';
+const RECIPIENTS_HREF = '/sites/s1/leads?recipients=open';
 
 function panel(html: string): HTMLElement {
   const root = document.createElement('aside');
@@ -50,7 +51,12 @@ describe('focus target', () => {
     focusTarget(
       store,
       { kind: 'section', sectionId: 'hero00000001', fieldPath: 'heading' },
-      { navigate: vi.fn(), seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+      {
+        navigate: vi.fn(),
+        seoHref: SEO_HREF,
+        privacyHref: PRIVACY_HREF,
+        recipientsHref: RECIPIENTS_HREF,
+      },
     );
     expect(store.getState().selection).toEqual({
       sectionId: 'hero00000001',
@@ -68,15 +74,25 @@ describe('focus target', () => {
     focusTarget(
       store,
       { kind: 'seo', field: 'description' },
-      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF, recipientsHref: RECIPIENTS_HREF },
     );
     expect(navigate).toHaveBeenLastCalledWith(`${SEO_HREF}?focus=description`);
     focusTarget(
       store,
       { kind: 'slug' },
-      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF, recipientsHref: RECIPIENTS_HREF },
     );
     expect(navigate).toHaveBeenLastCalledWith(`${SEO_HREF}?focus=slug`);
+  });
+
+  it('opens "Nơi nhận lead" when a form has no confirmed address (ADR-018)', () => {
+    const navigate = vi.fn();
+    focusTarget(
+      makeStore(),
+      { kind: 'lead_recipients', sectionId: 'form00000001' },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF, recipientsHref: RECIPIENTS_HREF },
+    );
+    expect(navigate).toHaveBeenCalledWith(RECIPIENTS_HREF);
   });
 
   it('opens "Dữ liệu & đồng ý" when a form misses its consent settings', () => {
@@ -84,7 +100,7 @@ describe('focus target', () => {
     focusTarget(
       makeStore(),
       { kind: 'privacy', sectionId: 'form00000001' },
-      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF },
+      { navigate, seoHref: SEO_HREF, privacyHref: PRIVACY_HREF, recipientsHref: RECIPIENTS_HREF },
     );
     expect(navigate).toHaveBeenCalledWith(PRIVACY_HREF);
   });

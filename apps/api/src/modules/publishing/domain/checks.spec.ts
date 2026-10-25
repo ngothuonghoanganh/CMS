@@ -36,6 +36,7 @@ function run(
     assets?: string[];
     revision?: number;
     leadCaptureGaps?: LeadCaptureGap[];
+    leadDestinationReady?: boolean;
   } = {},
 ) {
   const input: ChecksInput = {
@@ -49,6 +50,7 @@ function run(
     existingAssetIds: new Set(options.assets ?? [ASSET_ID]),
     otherLivePages: options.otherLivePages ?? [],
     leadCaptureGaps: options.leadCaptureGaps ?? [],
+    leadDestinationReady: options.leadDestinationReady ?? true,
   };
   return checksResultSchema.parse(evaluateChecks(input));
 }
@@ -73,10 +75,12 @@ describe('evaluateChecks: a clean draft', () => {
     expect(result.revision).toBe(12);
     expect(result.blocking).toEqual([]);
     expect(result.warnings).toEqual([]);
-    // The policy link only matters on a page with a form.
+    // The policy link and the lead destination only matter on a page with a form.
     expect(result.passed.map((item) => item.title)).toEqual(
       Object.values(PASSED_CHECK_TITLES).filter(
-        (title) => title !== PASSED_CHECK_TITLES.privacy_policy,
+        (title) =>
+          title !== PASSED_CHECK_TITLES.privacy_policy &&
+          title !== PASSED_CHECK_TITLES.lead_destination,
       ),
     );
     expect(result.passed.map((item) => item.title)).toEqual([
@@ -400,6 +404,27 @@ describe('evaluateChecks: lead form', () => {
   it('ignores missing settings on a page without a form', () => {
     const result = run([heroSection()], { leadCaptureGaps: ['privacy', 'consent'] });
     expect(result.blocking).toEqual([]);
+  });
+
+  it('blocks a form until a confirmed address receives its leads (ADR-018)', () => {
+    const result = run([heroSection(), form], { leadDestinationReady: false });
+    expect(only(result.blocking, 'lead_destination_missing')).toMatchObject({
+      title: 'Form đăng ký chưa có nơi nhận lead',
+      description:
+        'Khách gửi form sẽ không đến được ai. Thêm ít nhất một email nhận lead và bấm xác nhận trong thư gửi tới email đó.',
+      target: { kind: 'lead_recipients', sectionId: 'form00000001' },
+      fingerprint: 'lead_destination_missing:lead_recipients:form00000001',
+    });
+    expect(result.passed.map((passed) => passed.code)).not.toContain('lead_destination');
+    expect(run([heroSection(), form]).passed.map((passed) => passed.title)).toContain(
+      'Có nơi nhận lead',
+    );
+  });
+
+  it('needs no address on a page without a form', () => {
+    const result = run([heroSection()], { leadDestinationReady: false });
+    expect(result.blocking).toEqual([]);
+    expect(result.passed.map((passed) => passed.code)).not.toContain('lead_destination');
   });
 });
 

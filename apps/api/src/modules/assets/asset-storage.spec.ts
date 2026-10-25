@@ -13,6 +13,8 @@ function storage(publicBaseUrl: string): S3AssetStorage {
       REVALIDATE_SECRET: 'r'.repeat(32),
       PREVIEW_SECRET: 'p'.repeat(32),
       RENDERER_API_SECRET: 'r'.repeat(32),
+      SMTP_URL: 'smtp://localhost:1125',
+      LEAD_EMAIL_FROM: 'Payload Landing Page <no-reply@payload.site>',
       S3_ENDPOINT: 'http://localhost:9100',
       S3_REGION: 'us-east-1',
       S3_BUCKET: 'plp-assets',

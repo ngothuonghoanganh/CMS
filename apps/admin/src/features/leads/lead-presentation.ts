@@ -3,6 +3,9 @@ import {
   formatLeadPhone,
   type LeadCounts,
   type LeadDetail,
+  type LeadNotification,
+  type LeadNotificationErrorCode,
+  type LeadRecipientStatus,
   type LeadSource,
   leadSourceLabel,
   type LeadStatus,
@@ -80,4 +83,63 @@ export function zaloUrl(phone: string): string | null {
 export function consentMoment(at: DateInput): string {
   const seconds = String(new Date(at).getUTCSeconds()).padStart(2, '0');
   return `lúc ${formatTime(at)}:${seconds}`;
+}
+
+export const recipientStatusLabels: Record<LeadRecipientStatus, string> = {
+  confirmed: 'Đã xác nhận',
+  pending: 'Chờ xác nhận',
+  expired: 'Liên kết hết hạn',
+  unsent: 'Chưa gửi được thư',
+};
+
+export const recipientStatusTones: Record<LeadRecipientStatus, BadgeTone> = {
+  confirmed: 'success',
+  pending: 'info',
+  expired: 'warning',
+  unsent: 'danger',
+};
+
+export const notificationErrorLabels: Record<LeadNotificationErrorCode, string> = {
+  no_recipients: 'site chưa có email nhận lead nào đã xác nhận',
+  smtp_unavailable: 'không kết nối được máy chủ gửi thư',
+  smtp_rejected: 'máy chủ gửi thư từ chối thư',
+  timeout: 'máy chủ gửi thư không trả lời kịp',
+  unknown: 'lỗi không xác định',
+};
+
+/** The "Đã gửi tới" line of a lead (ADR-018); null for a lead stored before notifications. */
+export type NotificationView =
+  | { kind: 'sent'; text: string; at: string }
+  | { kind: 'waiting'; text: string }
+  | { kind: 'failed'; text: string }
+  | { kind: 'skipped'; text: string };
+
+export function notificationView(notification: LeadNotification | null): NotificationView | null {
+  if (notification === null) {
+    return null;
+  }
+  switch (notification.status) {
+    case 'sent':
+      return {
+        kind: 'sent',
+        text: `Email thông báo · ${notification.recipients ?? 0} người nhận`,
+        at: notification.sentAt ?? '',
+      };
+    case 'pending':
+    case 'sending':
+      return {
+        kind: 'waiting',
+        text:
+          notification.attempts === 0
+            ? 'Đang gửi email thông báo'
+            : `Đang thử gửi lại email thông báo (lần ${notification.attempts + 1})`,
+      };
+    case 'failed':
+      return {
+        kind: 'failed',
+        text: `Lỗi đồng bộ · ${notificationErrorLabels[notification.lastErrorCode ?? 'unknown']}`,
+      };
+    case 'skipped':
+      return { kind: 'skipped', text: 'Không gửi email: lead nghi ngờ spam' };
+  }
 }

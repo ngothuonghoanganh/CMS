@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  leadRecipientsHref,
   leadsHref,
   navCurrent,
   newLeadsHref,
@@ -58,5 +59,6 @@ describe('page routes', () => {
   it('opens the inbox with filters, and the new leads of every time for the badge', () => {
     expect(leadsHref(siteId, '?folder=spam')).toBe(`/sites/${siteId}/leads?folder=spam`);
     expect(newLeadsHref(siteId)).toBe(`/sites/${siteId}/leads?status=new&range=all`);
+    expect(leadRecipientsHref(siteId)).toBe(`/sites/${siteId}/leads?recipients=open`);
   });
 });

@@ -33,7 +33,7 @@ function StepLabel({ step }: { step: SetupStep }): ReactNode {
   );
 }
 
-/** "Thiết lập site": the MVP A setup steps with progress. */
+/** "Thiết lập site": the setup steps of board 01 with progress. */
 export function SetupChecklist({ steps }: { steps: readonly SetupStep[] }) {
   const done = steps.filter((step) => step.done).length;
   const percent = steps.length === 0 ? 0 : Math.round((done / steps.length) * 100);

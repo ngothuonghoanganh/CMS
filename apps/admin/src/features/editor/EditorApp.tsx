@@ -17,7 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
-import { privacyHref } from '../shell/navigation';
+import { leadRecipientsHref, privacyHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ThemePickerDialog } from '../theme';
 import { AddSectionDialog } from './AddSectionDialog';
@@ -128,6 +128,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
   const [previewPending, setPreviewPending] = useState(false);
   const seoHref = `/sites/${siteId}/pages/${pageId}/seo`;
   const privacy = privacyHref(siteId);
+  const recipients = leadRecipientsHref(siteId);
   const navigate = guard.navigate;
 
   const services = useMemo<EditorServices>(
@@ -140,11 +141,16 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
       },
       announce,
       focusTarget: (target) => {
-        focusTarget(store, target, { navigate, seoHref, privacyHref: privacy });
+        focusTarget(store, target, {
+          navigate,
+          seoHref,
+          privacyHref: privacy,
+          recipientsHref: recipients,
+        });
       },
       navigate,
     }),
-    [siteId, pageId, pagesQuery.data, announce, store, navigate, seoHref, privacy],
+    [siteId, pageId, pagesQuery.data, announce, store, navigate, seoHref, privacy, recipients],
   );
 
   /**

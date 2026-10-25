@@ -6,6 +6,7 @@ import {
   leadSourceLine,
   leadTimeLabel,
   newLeadsBadge,
+  notificationView,
   telUrl,
   zaloUrl,
 } from './lead-presentation';
@@ -58,5 +59,42 @@ describe('lead presentation', () => {
     expect(
       newLeadsBadge({ new: { count: 0, capped: false }, last7Days: { count: 3, capped: false } }),
     ).toBeNull();
+  });
+});
+
+describe('notificationView', () => {
+  const base = {
+    status: 'sent' as const,
+    attempts: 1,
+    lastErrorCode: null,
+    sentAt: '2026-10-24T09:42:09.000Z',
+    recipients: 2,
+  };
+
+  it('says where a lead was emailed, or why not (ADR-018)', () => {
+    expect(notificationView(base)).toEqual({
+      kind: 'sent',
+      text: 'Email thông báo · 2 người nhận',
+      at: '2026-10-24T09:42:09.000Z',
+    });
+    expect(notificationView({ ...base, status: 'pending', attempts: 0, sentAt: null })).toEqual({
+      kind: 'waiting',
+      text: 'Đang gửi email thông báo',
+    });
+    expect(notificationView({ ...base, status: 'pending', attempts: 1, sentAt: null })).toEqual({
+      kind: 'waiting',
+      text: 'Đang thử gửi lại email thông báo (lần 2)',
+    });
+    expect(
+      notificationView({ ...base, status: 'failed', lastErrorCode: 'no_recipients', sentAt: null }),
+    ).toEqual({
+      kind: 'failed',
+      text: 'Lỗi đồng bộ · site chưa có email nhận lead nào đã xác nhận',
+    });
+    expect(notificationView({ ...base, status: 'skipped', sentAt: null })).toEqual({
+      kind: 'skipped',
+      text: 'Không gửi email: lead nghi ngờ spam',
+    });
+    expect(notificationView(null)).toBeNull();
   });
 });

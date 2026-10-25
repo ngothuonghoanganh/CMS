@@ -235,9 +235,12 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
     const bySection = new Map<string, string>();
     for (const item of blocking) {
       const target = item.target;
-      // A form missing its consent settings is pointed at through the settings (ADR-017).
+      // A form missing its consent settings (ADR-017) or its lead destination (ADR-018) is
+      // pointed at through the site setting it needs.
       const sectionId =
-        target.kind === 'section' || target.kind === 'privacy' ? target.sectionId : null;
+        target.kind === 'section' || target.kind === 'privacy' || target.kind === 'lead_recipients'
+          ? target.sectionId
+          : null;
       if (sectionId !== null && !bySection.has(sectionId)) {
         bySection.set(sectionId, item.title);
       }

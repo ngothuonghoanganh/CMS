@@ -10,6 +10,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
+import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
 
 /** ADR-003: another workspace's leads answer 404, never 403, and stay untouched. */
@@ -31,6 +32,7 @@ describe('workspace isolation of leads', () => {
     ownerA = a.client;
     siteA = await createSite(ownerA, a.workspaceId);
     await configurePrivacy(ownerA, siteA.id);
+    await addConfirmedRecipient(t, ownerA, siteA.id);
     const { pageId, published } = await createLiveFormPage(ownerA, siteA.id, uniqueSlug('tu-van'));
     pageIdA = pageId;
     await submitLead(t, siteA.subdomain, leadBody(published.release.id)).expect(201);

@@ -123,6 +123,12 @@ export interface StoredLeadInput {
   status?: 'new' | 'contacted' | 'scheduled' | 'unreachable' | 'won';
   spam?: boolean;
   createdAt?: Date;
+  /** The email notification; leads stored before ADR-018 had none (the default). */
+  notification?: {
+    status: 'pending' | 'sending' | 'sent' | 'failed' | 'skipped';
+    attempts?: number;
+    updatedAt?: Date;
+  };
 }
 
 /**
@@ -153,6 +159,18 @@ export function storedLead(input: StoredLeadInput): Record<string, unknown> {
     note: '',
     spam: { suspected: input.spam ?? false, reasons: [] },
     search: leadSearchKeys(fields),
+    ...(input.notification === undefined
+      ? {}
+      : {
+          notification: {
+            status: input.notification.status,
+            attempts: input.notification.attempts ?? 0,
+            lastErrorCode: null,
+            sentAt: null,
+            recipients: null,
+            updatedAt: input.notification.updatedAt ?? createdAt,
+          },
+        }),
     createdAt,
     expiresAt: null,
   };

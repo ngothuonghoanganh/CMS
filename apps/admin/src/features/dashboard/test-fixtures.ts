@@ -25,6 +25,8 @@ export function siteFixture(overrides: Partial<Site> = {}): Site {
     logoAssetId: null,
     defaultShareImageAssetId: null,
     defaultOrigin: 'https://smilecare.payload.site',
+    privacyConfigured: false,
+    confirmedLeadRecipients: 0,
     createdAt: '2026-10-01T03:00:00.000Z',
     ...overrides,
   };
