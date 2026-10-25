@@ -31,7 +31,13 @@ describe('toActivityItem', () => {
       actor,
       siteId: record.siteId.toHexString(),
       page: null,
-      data: { version: null, fromVersion: null, toVersion: null, revalidationFailed: false },
+      data: {
+        version: null,
+        fromVersion: null,
+        toVersion: null,
+        count: null,
+        revalidationFailed: false,
+      },
       reason: null,
       undoable: false,
       createdAt: '2026-10-24T09:00:00.000Z',
@@ -60,10 +66,22 @@ describe('toActivityItem', () => {
       version: null,
       fromVersion: 4,
       toVersion: 3,
+      count: null,
       revalidationFailed: true,
     });
     expect(item.reason).toBe('Sai giá');
     expect(item.undoable).toBe(true);
+  });
+
+  it('maps how many leads an export covered, and no count for events stored before counts', () => {
+    const exported = activityRecord({
+      type: 'lead.exported',
+      data: { ...EMPTY_ACTIVITY_DATA, count: 48 },
+    });
+    expect(activityItemSchema.parse(toActivityItem(exported, actor, false)).data.count).toBe(48);
+    const { count: _count, ...before } = EMPTY_ACTIVITY_DATA;
+    const older = activityRecord({ data: before as typeof EMPTY_ACTIVITY_DATA });
+    expect(toActivityItem(older, actor, false).data.count).toBeNull();
   });
 
   it('fails loudly when a page event lost its title snapshot', () => {

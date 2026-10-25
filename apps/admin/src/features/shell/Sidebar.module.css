@@ -227,3 +227,7 @@
   font-size: var(--text-sm);
   color: var(--color-muted);
 }
+
+.navBadge {
+  flex: none;
+}

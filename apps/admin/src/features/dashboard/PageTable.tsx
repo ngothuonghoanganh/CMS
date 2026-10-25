@@ -1,6 +1,6 @@
 'use client';
 
-import type { PageSummary } from '@plp/contracts';
+import type { PageListItem, PageSummary } from '@plp/contracts';
 import {
   AlertCircleIcon,
   ButtonLink,
@@ -38,7 +38,7 @@ const checksIcons: Record<ChecksTone, ReactNode> = {
 
 export interface PageTableProps {
   siteId: string;
-  pages: readonly PageSummary[];
+  pages: readonly PageListItem[];
   now: DateInput;
   /** Thumbnail color of published pages, from the site theme. */
   thumbnailColor: string;
@@ -116,7 +116,12 @@ function RowActions({
   );
 }
 
-/** The page list of screen 01: page, status, live version, checks and actions. */
+/** "LEAD 7 NGÀY": a number for a live page or one with recent leads, "—" otherwise (board 01). */
+function leadsCell(page: PageListItem): string {
+  return page.leadsLast7Days > 0 || page.liveRelease !== null ? String(page.leadsLast7Days) : '—';
+}
+
+/** The page list of screen 01: page, status, live version, checks, recent leads and actions. */
 export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: PageTableProps) {
   return (
     <table className={styles.table}>
@@ -126,6 +131,9 @@ export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: P
           <th scope="col">TRẠNG THÁI</th>
           <th scope="col">PHIÊN BẢN LIVE</th>
           <th scope="col">KIỂM TRA</th>
+          <th scope="col" className={styles.leads}>
+            LEAD 7 NGÀY
+          </th>
           <th scope="col">
             <VisuallyHidden>Thao tác</VisuallyHidden>
           </th>
@@ -174,6 +182,7 @@ export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: P
                   {view.checks.label}
                 </span>
               </td>
+              <td className={styles.leads}>{leadsCell(page)}</td>
               <td>
                 <RowActions siteId={siteId} page={page} onUnpublish={onUnpublish} />
               </td>

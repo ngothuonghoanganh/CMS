@@ -1,5 +1,5 @@
-/** Site sections in the sidebar. Leads and "Hiệu quả" come with later MVP B slices. */
-export type SiteNavKey = 'pages' | 'domain' | 'privacy' | 'settings';
+/** Site sections in the sidebar. "Hiệu quả" comes with a later MVP B slice. */
+export type SiteNavKey = 'pages' | 'leads' | 'domain' | 'privacy' | 'settings';
 
 export interface SiteNavItem {
   key: SiteNavKey;
@@ -15,10 +15,24 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
   const base = siteHref(siteId);
   return [
     { key: 'pages', label: 'Trang', href: base },
+    { key: 'leads', label: 'Leads', href: leadsHref(siteId) },
     { key: 'domain', label: 'Tên miền', href: `${base}/domain` },
     { key: 'privacy', label: 'Dữ liệu & đồng ý', href: privacyHref(siteId) },
     { key: 'settings', label: 'Cài đặt site', href: `${base}/settings` },
   ];
+}
+
+/** The lead inbox (ADR-018), optionally with filters such as `?status=new&range=all`. */
+export function leadsHref(siteId: string, search = ''): string {
+  return `${siteHref(siteId)}/leads${search}`;
+}
+
+/**
+ * The inbox the badge "N mới" and the dashboard's "chưa xử lý" open: status "Mới" of every time,
+ * the leads they count (ADR-018).
+ */
+export function newLeadsHref(siteId: string): string {
+  return leadsHref(siteId, '?status=new&range=all');
 }
 
 /** "Dữ liệu & đồng ý" (ADR-017). */

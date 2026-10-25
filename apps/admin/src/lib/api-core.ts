@@ -77,7 +77,8 @@ export function toQueryString(query: unknown): string {
   return text === '' ? '' : `?${text}`;
 }
 
-async function toApiError(response: Response): Promise<ApiError> {
+/** The ApiError of a failed response, from its problem details when it has them. */
+export async function toApiError(response: Response): Promise<ApiError> {
   const text = await response.text();
   let parsed: unknown;
   try {

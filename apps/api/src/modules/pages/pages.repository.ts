@@ -31,6 +31,11 @@ export interface LivePageRow {
   publishedReleaseId: ObjectId;
 }
 
+export interface PageTitleRow {
+  _id: ObjectId;
+  title: string;
+}
+
 export interface CreatePageInput {
   siteId: ObjectId;
   title: string;
@@ -116,6 +121,29 @@ export class PagesRepository {
       .sort({ updatedAt: -1, _id: -1 })
       .limit(MAX_PAGES_PER_SITE + 1)
       .lean<PageRecord[]>()
+      .exec();
+    return withinPageLimit(siteId, pages);
+  }
+
+  /** Titles of some pages of the workspace, keyed by page id hex, in one `$in`. */
+  async findTitles(scope: WorkspaceScope, ids: readonly ObjectId[]): Promise<Map<string, string>> {
+    const unique = [...new Map(ids.map((id) => [id.toHexString(), id])).values()];
+    if (unique.length === 0) {
+      return new Map();
+    }
+    const pages = await this.pages
+      .find({ workspaceId: scope.workspaceId, _id: { $in: unique } }, { title: 1 })
+      .lean<PageTitleRow[]>()
+      .exec();
+    return new Map(pages.map((page) => [page._id.toHexString(), page.title]));
+  }
+
+  /** Id and title of every page of the site, e.g. to name the pages of leads. */
+  async listTitlesForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<PageTitleRow[]> {
+    const pages = await this.pages
+      .find({ workspaceId: scope.workspaceId, siteId }, { title: 1 })
+      .limit(MAX_PAGES_PER_SITE + 1)
+      .lean<PageTitleRow[]>()
       .exec();
     return withinPageLimit(siteId, pages);
   }

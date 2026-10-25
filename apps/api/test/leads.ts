@@ -9,7 +9,9 @@ import {
   RENDERER_TIMESTAMP_HEADER,
   rendererSignaturePayload,
 } from '@plp/contracts';
+import { Types } from 'mongoose';
 import request from 'supertest';
+import { leadSearchKeys } from '../src/modules/leads/domain/lead-search.js';
 import type { TestApp } from './app.js';
 import type { TestClient } from './client.js';
 import { formDraft } from './compositions.js';
@@ -106,4 +108,56 @@ export async function createLiveFormPage(
   const page = await createPage(client, siteId, { title: 'Đăng ký tư vấn', slug });
   await replaceDraft(client, page.page.id, draft);
   return { pageId: page.page.id, published: await publish(client, page.page.id) };
+}
+
+export interface StoredLeadInput {
+  workspaceId: string;
+  siteId: string;
+  pageId: string;
+  releaseId: string;
+  releaseVersion?: number;
+  name?: string;
+  /** E.164, as intake stores it. */
+  phone?: string;
+  email?: string | null;
+  status?: 'new' | 'contacted' | 'scheduled' | 'unreachable' | 'won';
+  spam?: boolean;
+  createdAt?: Date;
+}
+
+/**
+ * A lead as intake stores it, for inserting straight into the database: leads from days ago, or
+ * thousands at once. Search keys come from intake's own function, so search finds them like
+ * submitted leads.
+ */
+export function storedLead(input: StoredLeadInput): Record<string, unknown> {
+  const createdAt = input.createdAt ?? new Date();
+  const fields = {
+    name: input.name ?? 'Phạm Gia Huy',
+    phone: input.phone ?? '+84912448019',
+    email: input.email ?? null,
+    message: null,
+  };
+  return {
+    workspaceId: new Types.ObjectId(input.workspaceId),
+    siteId: new Types.ObjectId(input.siteId),
+    pageId: new Types.ObjectId(input.pageId),
+    releaseId: new Types.ObjectId(input.releaseId),
+    releaseVersion: input.releaseVersion ?? 1,
+    submissionId: null,
+    fields,
+    consent: { marketing: false, at: createdAt, marketingWithdrawnAt: null },
+    source: { source: 'zalo', medium: 'oa', campaign: null },
+    device: 'mobile',
+    status: input.status ?? 'new',
+    note: '',
+    spam: { suspected: input.spam ?? false, reasons: [] },
+    search: leadSearchKeys(fields),
+    createdAt,
+    expiresAt: null,
+  };
+}
+
+export async function insertLeads(t: TestApp, leads: Record<string, unknown>[]): Promise<void> {
+  await t.connection.collection('leads').insertMany(leads);
 }

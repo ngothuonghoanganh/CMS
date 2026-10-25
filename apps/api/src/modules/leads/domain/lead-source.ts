@@ -1,9 +1,4 @@
-/** Where a lead came from, as "source / medium" (ADR-016). */
-export interface LeadSource {
-  source: string;
-  medium: string;
-  campaign: string | null;
-}
+import { DIRECT_LEAD_SOURCE, type LeadSource } from '@plp/contracts';
 
 export interface LeadSourceInput {
   utmSource: string | null;
@@ -13,9 +8,6 @@ export interface LeadSourceInput {
   /** Host of the site itself: navigating between its pages is not a referral. */
   siteHost: string;
 }
-
-/** No campaign tags and no outside referrer; shown as "trực tiếp". */
-export const DIRECT_SOURCE = { source: '(direct)', medium: '(none)' } as const;
 
 const VALUE_MAX = 40;
 
@@ -55,13 +47,13 @@ export function normalizeLeadSource(input: LeadSourceInput): LeadSource {
   if (utmSource !== null) {
     return {
       source: utmSource,
-      medium: clean(input.utmMedium) ?? DIRECT_SOURCE.medium,
+      medium: clean(input.utmMedium) ?? DIRECT_LEAD_SOURCE.medium,
       campaign: clean(input.utmCampaign),
     };
   }
   const host = referrerHost(input.referrer);
   if (host === null || host === bareHost(input.siteHost.split(':')[0] ?? '')) {
-    return { ...DIRECT_SOURCE, campaign: null };
+    return { ...DIRECT_LEAD_SOURCE, campaign: null };
   }
   const engine = searchEngine(host);
   return engine === null

@@ -1,7 +1,8 @@
 import type {
   ActivityItem,
+  LeadCounts,
+  PageListItem,
   PageListResponse,
-  PageSummary,
   PointerEvent,
   Site,
 } from '@plp/contracts';
@@ -46,8 +47,8 @@ export function pointerEvent(overrides: Partial<PointerEvent> = {}): PointerEven
   };
 }
 
-/** A live page whose draft equals the live release. */
-export function pageFixture(overrides: Partial<PageSummary> = {}): PageSummary {
+/** A live page whose draft equals the live release, as a row of the page list. */
+export function pageFixture(overrides: Partial<PageListItem> = {}): PageListItem {
   return {
     id: pageId(),
     siteId: SITE_ID,
@@ -69,11 +70,12 @@ export function pageFixture(overrides: Partial<PageSummary> = {}): PageSummary {
     createdBy: minh,
     createdAt: '2026-09-01T03:00:00.000Z',
     updatedAt: '2026-10-24T06:00:00.000Z',
+    leadsLast7Days: 0,
     ...overrides,
   };
 }
 
-export function draftPageFixture(overrides: Partial<PageSummary> = {}): PageSummary {
+export function draftPageFixture(overrides: Partial<PageListItem> = {}): PageListItem {
   return pageFixture({
     title: 'Webinar chăm sóc răng trẻ em',
     slug: 'webinar-tre-em',
@@ -87,10 +89,10 @@ export function draftPageFixture(overrides: Partial<PageSummary> = {}): PageSumm
 }
 
 export function pageListFixture(
-  items: PageSummary[],
+  items: PageListItem[],
   overrides: Partial<PageListResponse> = {},
 ): PageListResponse {
-  const count = (kind: PageSummary['status']['kind']) =>
+  const count = (kind: PageListItem['status']['kind']) =>
     items.filter((item) => item.status.kind === kind).length;
   return {
     items,
@@ -115,10 +117,16 @@ export function activityFixture(overrides: Partial<ActivityItem> = {}): Activity
     actor: ngocAnh,
     siteId: SITE_ID,
     page: { id: '64b000000000000000000101', title: 'Ưu đãi niềng răng tháng 11' },
-    data: { version: 12, fromVersion: null, toVersion: 12, revalidationFailed: false },
+    data: { version: 12, fromVersion: null, toVersion: 12, count: null, revalidationFailed: false },
     reason: null,
     undoable: false,
     createdAt: '2026-10-24T06:02:00.000Z',
     ...overrides,
   };
 }
+
+/** No lead yet: the sidebar shows no badge and the dashboard card shows 0. */
+export const NO_LEADS: LeadCounts = {
+  new: { count: 0, capped: false },
+  last7Days: { count: 0, capped: false },
+};

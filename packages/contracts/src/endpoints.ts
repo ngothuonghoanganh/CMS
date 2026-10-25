@@ -12,6 +12,17 @@ import { cursorQuerySchema } from './common.js';
 import { healthResponseSchema } from './health.js';
 import { publicLeadRequestSchema, publicLeadResponseSchema } from './lead.js';
 import {
+  leadCountsSchema,
+  leadDetailSchema,
+  leadFiltersSchema,
+  leadListQuerySchema,
+  leadListResponseSchema,
+  pageRefListResponseSchema,
+  personDeleteResponseSchema,
+  personExportRequestSchema,
+  updateLeadRequestSchema,
+} from './lead-inbox.js';
+import {
   createPageRequestSchema,
   pageDetailResponseSchema,
   pageCountResponseSchema,
@@ -68,7 +79,7 @@ export interface EndpointDefinition<
   /** JSON body schema; null for no body (or multipart, see the endpoint's comment). */
   request: Req;
   query: Query;
-  /** Success body schema; null for 204 No Content. */
+  /** Success body schema; null for 204 No Content (or a file, see the endpoint's comment). */
   response: Res;
 }
 
@@ -197,6 +208,72 @@ export const endpoints = {
     response: consentVersionSchema,
   }),
 
+  // Lead inbox (ADR-018): members read and triage leads, the owner exports and deletes them
+  /** Newest first, with the folder counts for the same filters. */
+  listLeads: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/leads`,
+    request: null,
+    query: leadListQuerySchema,
+    response: leadListResponseSchema,
+  }),
+  /** The sidebar badge "N mới" and the dashboard card "Lead 7 ngày qua". */
+  leadCounts: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/lead-counts`,
+    request: null,
+    query: null,
+    response: leadCountsSchema,
+  }),
+  /**
+   * Owner only. A CSV file (UTF-8 with BOM) of the leads matching the filters, newest first, at
+   * most `LEAD_EXPORT_MAX_ROWS`; `EXPORT_TRUNCATED_HEADER` tells whether more matched.
+   */
+  exportLeads: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/leads/export`,
+    request: leadFiltersSchema,
+    query: null,
+    response: null,
+  }),
+  getLead: endpoint({
+    method: 'GET',
+    path: (leadId: string) => `/leads/${e(leadId)}`,
+    request: null,
+    query: null,
+    response: leadDetailSchema,
+  }),
+  /** Status, internal note, or moving to and from "Nghi ngờ spam". */
+  updateLead: endpoint({
+    method: 'PATCH',
+    path: (leadId: string) => `/leads/${e(leadId)}`,
+    request: updateLeadRequestSchema,
+    query: null,
+    response: leadDetailSchema,
+  }),
+  /**
+   * Owner only. A JSON or CSV file with every lead of the same person (phone number or email) in
+   * the site, consent evidence included; at most `LEAD_PERSON_EXPORT_MAX` leads.
+   */
+  exportLeadPerson: endpoint({
+    method: 'POST',
+    path: (leadId: string) => `/leads/${e(leadId)}/person/export`,
+    request: personExportRequestSchema,
+    query: null,
+    response: null,
+  }),
+  /**
+   * Owner only. Deletes every lead of the same person in the site. Copies already sent by email
+   * are not deleted (ADR-017).
+   */
+  deleteLeadPerson: endpoint({
+    method: 'DELETE',
+    path: (leadId: string) => `/leads/${e(leadId)}/person`,
+    request: null,
+    query: null,
+    response: personDeleteResponseSchema,
+  }),
+
   // Pages and drafts
   listPages: endpoint({
     method: 'GET',
@@ -204,6 +281,14 @@ export const endpoints = {
     request: null,
     query: pageListQuerySchema,
     response: pageListResponseSchema,
+  }),
+  /** Id and title of every page of the site, by title: the page filter of the lead inbox. */
+  listPageRefs: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/page-refs`,
+    request: null,
+    query: null,
+    response: pageRefListResponseSchema,
   }),
   /** `counts.all` of `listPages` without evaluating every page. */
   countPages: endpoint({

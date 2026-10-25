@@ -47,6 +47,21 @@ export function normalizeLeadPhone(value: string): string | null {
   return /^\+[1-9]\d{7,14}$/.test(compact) ? compact : null;
 }
 
+/**
+ * A stored (E.164) phone number for people: Vietnamese numbers in their national form, grouped
+ * like "0901 234 567" (mobile) or "028 3822 1234" (landline); other countries as stored.
+ */
+export function formatLeadPhone(phone: string): string {
+  const national = /^\+84(\d{9,10})$/.exec(phone)?.[1];
+  if (national === undefined) {
+    return phone;
+  }
+  const digits = `0${national}`;
+  return digits.length === 10
+    ? `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`
+    : `${digits.slice(0, 3)} ${digits.slice(3, 7)} ${digits.slice(7)}`;
+}
+
 /** A lead's phone number, stored as E.164 with Vietnam (+84) as the default country (ADR-016). */
 export const leadPhoneSchema = z
   .string()

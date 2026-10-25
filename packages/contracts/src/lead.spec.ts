@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONSENT_REQUIRED_MESSAGE,
+  formatLeadPhone,
   LEAD_PHONE_MESSAGE,
   leadPhoneSchema,
   normalizeLeadPhone,
@@ -57,6 +58,21 @@ describe('leadPhoneSchema', () => {
   it('exposes the same rule for code that only needs the number', () => {
     expect(normalizeLeadPhone('0901 234 567')).toBe('+84901234567');
     expect(normalizeLeadPhone('0901')).toBeNull();
+  });
+});
+
+describe('formatLeadPhone', () => {
+  it.each([
+    ['+84901234567', '0901 234 567'],
+    ['+842838221234', '028 3822 1234'],
+    ['+16505550100', '+16505550100'],
+    ['+6561234567', '+6561234567'],
+  ])('writes %j as %j', (stored, shown) => {
+    expect(formatLeadPhone(stored)).toBe(shown);
+  });
+
+  it('reads back what the schema stores', () => {
+    expect(formatLeadPhone(leadPhoneSchema.parse('+84 0901 234 567'))).toBe('0901 234 567');
   });
 });
 

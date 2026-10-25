@@ -1,6 +1,7 @@
 export * from './activity.js';
 export * from './asset.js';
 export * from './auth.js';
+export * from './calendar.js';
 export * from './checks.js';
 export * from './common.js';
 export * from './composition.js';
@@ -10,6 +11,7 @@ export * from './errors.js';
 export * from './goals.js';
 export * from './health.js';
 export * from './lead.js';
+export * from './lead-inbox.js';
 export * from './page.js';
 export * from './preview.js';
 export * from './privacy.js';

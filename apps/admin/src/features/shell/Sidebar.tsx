@@ -1,8 +1,15 @@
 'use client';
 
-import { type Membership, roleLabels, type SessionUser, type Site } from '@plp/contracts';
+import {
+  type LeadCounts,
+  type Membership,
+  roleLabels,
+  type SessionUser,
+  type Site,
+} from '@plp/contracts';
 import {
   Avatar,
+  Badge,
   ChevronUpDownIcon,
   DropdownMenu,
   DropdownMenuItem,
@@ -13,6 +20,7 @@ import {
   FileIcon,
   GlobeIcon,
   type IconComponent,
+  InboxIcon,
   LogoutIcon,
   PlusIcon,
   SettingsIcon,
@@ -22,8 +30,10 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { hostOf } from '../../lib/site-url';
+import { newLeadsBadge } from '../leads/lead-presentation';
+import { useLeadCounts } from '../leads/queries';
 import { Brand } from './Brand';
-import { navCurrent, siteHref, siteNavItems, type SiteNavKey } from './navigation';
+import { navCurrent, newLeadsHref, siteHref, siteNavItems, type SiteNavKey } from './navigation';
 import { siteInitial, siteTileStyle } from './site-tile';
 import { useLogout } from './use-logout';
 import { workspacePreferenceCookie } from './workspace-preference';
@@ -31,6 +41,7 @@ import styles from './Sidebar.module.css';
 
 const navIcons: Record<SiteNavKey, IconComponent> = {
   pages: FileIcon,
+  leads: InboxIcon,
   domain: GlobeIcon,
   privacy: ShieldCheckIcon,
   settings: SettingsIcon,
@@ -45,6 +56,8 @@ export interface SidebarProps {
   /** Sites of the current workspace. */
   sites: readonly Site[];
   pageCount: number;
+  /** Lead counts the server loaded; the badge then follows changes made in the inbox. */
+  leadCounts: LeadCounts;
   /** Called before navigating, so the mobile drawer can close. */
   onNavigate?: (() => void) | undefined;
 }
@@ -65,12 +78,14 @@ export function Sidebar({
   site,
   sites,
   pageCount,
+  leadCounts,
   onNavigate,
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const logout = useLogout();
   const workspace = membership.workspace;
+  const newLeads = newLeadsBadge(useLeadCounts(site.id, leadCounts).data);
 
   function go(href: string) {
     onNavigate?.();
@@ -183,7 +198,8 @@ export function Sidebar({
           return (
             <li key={item.key}>
               <Link
-                href={item.href}
+                // The badge counts new leads of every time: it opens exactly those (ADR-018).
+                href={item.key === 'leads' && newLeads !== null ? newLeadsHref(site.id) : item.href}
                 aria-current={navCurrent(pathname, item)}
                 className={styles.navLink}
                 {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
@@ -196,6 +212,14 @@ export function Sidebar({
                     <span className={styles.navCount}>
                       {pageCount} <VisuallyHidden>trang</VisuallyHidden>
                     </span>
+                  </>
+                ) : null}
+                {item.key === 'leads' && newLeads !== null ? (
+                  <>
+                    {' '}
+                    <Badge tone="primary" size="sm" className={styles.navBadge}>
+                      {newLeads}
+                    </Badge>
                   </>
                 ) : null}
               </Link>

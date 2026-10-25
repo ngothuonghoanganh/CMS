@@ -1,10 +1,16 @@
+import {
+  type LeadDevice,
+  leadDevices,
+  type LeadStatus,
+  leadStatuses,
+  type SpamReason,
+  spamReasons,
+} from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
-import type { LeadDevice, SpamReason } from './domain/lead-intake-rules.js';
+import type { LeadSearchKeys } from './domain/lead-search.js';
 
 export const LEAD_MODEL = 'Lead';
 export const LEADS_SUBMISSION_INDEX = 'leads_site_submission_unique';
-
-export type LeadStatus = 'new' | 'contacted' | 'scheduled' | 'unreachable' | 'won';
 
 /**
  * A visitor's submission of a lead form (ADR-016). Personal data: never logged, never copied into
@@ -28,6 +34,11 @@ export interface LeadRecord {
   status: LeadStatus;
   note: string;
   spam: { suspected: boolean; reasons: SpamReason[] };
+  /**
+   * Normalized phone, email and name for the inbox search and for finding a person's leads
+   * (ADR-018). Written on insert; leads stored before B3 have none and are not found by search.
+   */
+  search: LeadSearchKeys;
   createdAt: Date;
   /** Null when the site keeps leads until they are deleted by hand. */
   expiresAt: Date | null;
@@ -57,16 +68,17 @@ export const leadSchema = new Schema<LeadRecord>(
       medium: { type: String, required: true },
       campaign: { type: String, default: null },
     },
-    device: { type: String, enum: ['mobile', 'desktop'], required: true },
-    status: {
-      type: String,
-      enum: ['new', 'contacted', 'scheduled', 'unreachable', 'won'],
-      default: 'new',
-    },
+    device: { type: String, enum: leadDevices, required: true },
+    status: { type: String, enum: leadStatuses, default: 'new' },
     note: { type: String, default: '' },
     spam: {
       suspected: { type: Boolean, required: true },
-      reasons: { type: [String], enum: ['honeypot', 'too_fast'], default: [] },
+      reasons: { type: [String], enum: spamReasons, default: [] },
+    },
+    search: {
+      phone: { type: String, required: true },
+      email: { type: String, default: null },
+      name: { type: String, required: true },
     },
     createdAt: { type: Date, required: true },
     expiresAt: { type: Date, default: null },
@@ -82,6 +94,23 @@ leadSchema.index(
   },
 );
 leadSchema.index({ siteId: 1, createdAt: -1, _id: -1 });
+// The inbox (ADR-018): each folder newest first, also narrowed to a page or a status (the status
+// one also counts "N mới"). Every query starts inside one site.
+leadSchema.index(
+  { siteId: 1, 'spam.suspected': 1, createdAt: -1, _id: -1 },
+  { name: 'leads_inbox' },
+);
+leadSchema.index(
+  { siteId: 1, pageId: 1, 'spam.suspected': 1, createdAt: -1, _id: -1 },
+  { name: 'leads_inbox_page' },
+);
+leadSchema.index(
+  { siteId: 1, status: 1, 'spam.suspected': 1, createdAt: -1, _id: -1 },
+  { name: 'leads_inbox_status' },
+);
+// Search by the start of a phone number or an email, and a person's leads (ADR-017).
+leadSchema.index({ siteId: 1, 'search.phone': 1 }, { name: 'leads_search_phone' });
+leadSchema.index({ siteId: 1, 'search.email': 1 }, { name: 'leads_search_email' });
 // Leads without an expiry (null) are kept: the TTL monitor skips them.
 leadSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

@@ -1,4 +1,11 @@
-import { endpoints, idSchema, type MeResponse, type Membership, type Site } from '@plp/contracts';
+import {
+  endpoints,
+  idSchema,
+  type LeadCounts,
+  type MeResponse,
+  type Membership,
+  type Site,
+} from '@plp/contracts';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { ApiError } from '../../lib/api-core';
@@ -15,6 +22,8 @@ export interface SiteContext {
   sites: Site[];
   /** Number of pages of the site, for the sidebar. */
   pageCount: number;
+  /** "N mới" in the sidebar and the lead card of the dashboard (ADR-018). */
+  leadCounts: LeadCounts;
 }
 
 async function loadSite(siteId: string): Promise<Site> {
@@ -44,9 +53,10 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
     notFound();
   }
   // The count endpoint skips the page evaluation that `listPages` runs for statuses and checks.
-  const [siteList, pageCount] = await Promise.all([
+  const [siteList, pageCount, leadCounts] = await Promise.all([
     serverApi(endpoints.listSites, [site.workspaceId]),
     serverApi(endpoints.countPages, [site.id]),
+    serverApi(endpoints.leadCounts, [site.id]),
   ]);
-  return { me, membership, site, sites: siteList.items, pageCount: pageCount.count };
+  return { me, membership, site, sites: siteList.items, pageCount: pageCount.count, leadCounts };
 });

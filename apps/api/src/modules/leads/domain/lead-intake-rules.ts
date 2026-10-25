@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
-import { LEAD_SPAM_MIN_FILL_MS } from '@plp/contracts';
+import { LEAD_SPAM_MIN_FILL_MS, type LeadDevice, type SpamReason } from '@plp/contracts';
 import type { ObjectId } from '../../../shared/persistence/object-id.js';
-
-export type LeadDevice = 'mobile' | 'desktop';
 
 /** Phones and tablets count as "Điện thoại" on the analytics board; the rest as "Máy tính". */
 export function deviceFromUserAgent(userAgent: string): LeadDevice {
@@ -10,8 +8,6 @@ export function deviceFromUserAgent(userAgent: string): LeadDevice {
     ? 'mobile'
     : 'desktop';
 }
-
-export type SpamReason = 'honeypot' | 'too_fast';
 
 /**
  * Why a lead looks automated (ADR-016): the hidden field was filled, or the form was sent faster

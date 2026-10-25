@@ -44,19 +44,38 @@ function redactSecret(value: unknown, secret: string): unknown {
   return value;
 }
 
-/** The parts of pino's serialized request that can carry the token. */
+/** `q=` of a query string: a search, which in the lead inbox is a phone number, email or name. */
+const SEARCH_PARAM = /([?&]q=)[^&#]*/g;
+
+/** The URL with the value of any `q` search parameter replaced (rule 10). */
+export function redactSearch(url: string): string {
+  return url.replace(SEARCH_PARAM, `$1${REDACTED}`);
+}
+
+function redactSearchInQuery(query: unknown): unknown {
+  return typeof query === 'object' && query !== null && 'q' in query
+    ? { ...query, q: REDACTED }
+    : query;
+}
+
+/** The parts of pino's serialized request that can carry a token or a search. */
 export interface LoggableRequest {
   url: string;
+  query?: unknown;
   params?: unknown;
 }
 
 /**
- * pino-http request serializer (wrapped around the standard one): redacts the preview token in
- * `url` and wherever the router put it in `params` (`{ token }`, or Express 5's `{ splat: [...] }`
- * when middleware matched the path). It assigns redacted copies to the serialized request and
- * never touches the live Express request.
+ * pino-http request serializer (wrapped around the standard one). Redacts a search (`q`) in `url`
+ * and `query`, and the preview token in `url` and wherever the router put it in `params`
+ * (`{ token }`, or Express 5's `{ splat: [...] }` when middleware matched the path). It assigns
+ * redacted copies to the serialized request and never touches the live Express request.
  */
 export function serializeRequest<R extends LoggableRequest>(req: R): R {
+  req.url = redactSearch(req.url);
+  if (req.query !== undefined) {
+    req.query = redactSearchInQuery(req.query);
+  }
   const token = previewToken(req.url);
   if (token === null) {
     return req;

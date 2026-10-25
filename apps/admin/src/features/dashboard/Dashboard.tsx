@@ -3,6 +3,7 @@
 import {
   type ActivityListResponse,
   endpoints,
+  type LeadCounts,
   type PageListResponse,
   type Site,
 } from '@plp/contracts';
@@ -26,6 +27,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-qu
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
+import { useLeadCounts } from '../leads/queries';
 import { cx } from '../shell/cx';
 import { newPageHref, siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
@@ -59,6 +61,7 @@ export interface DashboardProps {
   initialFilters: DashboardFilters;
   initialPages: PageListResponse;
   initialActivity: ActivityListResponse;
+  initialLeadCounts: LeadCounts;
   /** When the server loaded the data (epoch ms); hydration uses it for identical relative times. */
   loadedAt: number;
 }
@@ -74,9 +77,11 @@ export function Dashboard({
   initialFilters,
   initialPages,
   initialActivity,
+  initialLeadCounts,
   loadedAt,
 }: DashboardProps) {
   const now = useNow(loadedAt);
+  const leadCounts = useLeadCounts(site.id, initialLeadCounts).data;
   const [status, setStatus] = useState(initialFilters.status);
   const [searchText, setSearchText] = useState(initialFilters.q);
   const q = normalizeSearch(useDebouncedValue(searchText, SEARCH_DEBOUNCE_MS));
@@ -188,7 +193,7 @@ export function Dashboard({
         }
       />
 
-      <SiteSummary site={site} attention={summary.attention} />
+      <SiteSummary site={site} attention={summary.attention} leadCounts={leadCounts} />
 
       <Card as="section" padding="none" aria-labelledby="pages-heading">
         <h2 id="pages-heading" className={styles.srOnly}>

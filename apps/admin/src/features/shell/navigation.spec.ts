@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { navCurrent, newPageHref, pageHref, siteNavItems } from './navigation';
+import {
+  leadsHref,
+  navCurrent,
+  newLeadsHref,
+  newPageHref,
+  pageHref,
+  siteNavItems,
+} from './navigation';
 
 const siteId = '64b000000000000000000001';
-const [pages, domain, privacy, settings] = siteNavItems(siteId);
+const [pages, leads, domain, privacy, settings] = siteNavItems(siteId);
 
 describe('siteNavItems', () => {
   it('lists the sections of a site in the order of the design', () => {
     expect(siteNavItems(siteId)).toEqual([
       { key: 'pages', label: 'Trang', href: `/sites/${siteId}` },
+      { key: 'leads', label: 'Leads', href: `/sites/${siteId}/leads` },
       { key: 'domain', label: 'Tên miền', href: `/sites/${siteId}/domain` },
       { key: 'privacy', label: 'Dữ liệu & đồng ý', href: `/sites/${siteId}/privacy` },
       { key: 'settings', label: 'Cài đặt site', href: `/sites/${siteId}/settings` },
@@ -17,10 +25,12 @@ describe('siteNavItems', () => {
 
 describe('navCurrent', () => {
   it('marks the current section page', () => {
-    if (!pages || !domain || !privacy || !settings) {
+    if (!pages || !leads || !domain || !privacy || !settings) {
       throw new Error('missing nav items');
     }
     expect(navCurrent(`/sites/${siteId}`, pages)).toBe('page');
+    expect(navCurrent(`/sites/${siteId}/leads`, leads)).toBe('page');
+    expect(navCurrent(`/sites/${siteId}/leads`, pages)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/domain`, domain)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/domain`, pages)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/privacy`, privacy)).toBe('page');
@@ -43,5 +53,10 @@ describe('page routes', () => {
     expect(pageHref(siteId, 'p1', 'seo')).toBe(`/sites/${siteId}/pages/p1/seo`);
     expect(pageHref(siteId, 'p1', 'history')).toBe(`/sites/${siteId}/pages/p1/history`);
     expect(newPageHref(siteId)).toBe(`/sites/${siteId}/pages/new`);
+  });
+
+  it('opens the inbox with filters, and the new leads of every time for the badge', () => {
+    expect(leadsHref(siteId, '?folder=spam')).toBe(`/sites/${siteId}/leads?folder=spam`);
+    expect(newLeadsHref(siteId)).toBe(`/sites/${siteId}/leads?status=new&range=all`);
   });
 });

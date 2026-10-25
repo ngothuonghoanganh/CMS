@@ -1,21 +1,23 @@
-import type { PageListResponse, Site } from '@plp/contracts';
+import type { LeadCounts, PageListResponse, Site } from '@plp/contracts';
 import { Badge, Card, CheckCircleIcon, LockIcon } from '@plp/ui';
 import Link from 'next/link';
 import { hostOf } from '../../lib/site-url';
-import { pageHref, siteHref } from '../shell/navigation';
+import { cappedCountLabel } from '../leads/lead-presentation';
+import { leadsHref, newLeadsHref, pageHref, siteHref } from '../shell/navigation';
 import styles from './SiteSummary.module.css';
 
 export interface SiteSummaryProps {
   site: Site;
   attention: PageListResponse['attention'];
+  leadCounts: LeadCounts;
 }
 
 function Arrow() {
   return <span aria-hidden="true">→</span>;
 }
 
-/** "Tóm tắt site": the live address and what needs attention. MVP A has no lead card. */
-export function SiteSummary({ site, attention }: SiteSummaryProps) {
+/** "Tóm tắt site": the live address, what needs attention and the leads of the last 7 days. */
+export function SiteSummary({ site, attention, leadCounts }: SiteSummaryProps) {
   const { pagesWithChanges, pagesWithBlockingErrors, firstPage } = attention;
   const allGood = pagesWithChanges === 0 && pagesWithBlockingErrors === 0;
   return (
@@ -64,6 +66,23 @@ export function SiteSummary({ site, attention }: SiteSummaryProps) {
             <Arrow />
           </Link>
         )}
+      </Card>
+
+      <Card className={styles.card}>
+        <span className={styles.label}>Lead 7 ngày qua</span>
+        <div className={styles.leadRow}>
+          <span className={styles.leadCount}>{cappedCountLabel(leadCounts.last7Days)}</span>
+          {leadCounts.new.count === 0 ? null : (
+            // "Chưa xử lý" counts the status "Mới" of every time, like the sidebar badge.
+            <Link href={newLeadsHref(site.id)} className={styles.pending}>
+              {cappedCountLabel(leadCounts.new)} chưa xử lý
+            </Link>
+          )}
+        </div>
+        <Link href={leadsHref(site.id)} className={styles.link}>
+          Mở hộp thư lead
+          <Arrow />
+        </Link>
       </Card>
     </section>
   );
