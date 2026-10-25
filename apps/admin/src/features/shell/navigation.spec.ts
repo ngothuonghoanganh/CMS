@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { navCurrent, newPageHref, pageHref, siteNavItems } from './navigation';
 
 const siteId = '64b000000000000000000001';
-const [pages, domain, settings] = siteNavItems(siteId);
+const [pages, domain, privacy, settings] = siteNavItems(siteId);
 
 describe('siteNavItems', () => {
-  it('lists the MVP A sections of a site', () => {
+  it('lists the sections of a site in the order of the design', () => {
     expect(siteNavItems(siteId)).toEqual([
       { key: 'pages', label: 'Trang', href: `/sites/${siteId}` },
       { key: 'domain', label: 'Tên miền', href: `/sites/${siteId}/domain` },
+      { key: 'privacy', label: 'Dữ liệu & đồng ý', href: `/sites/${siteId}/privacy` },
       { key: 'settings', label: 'Cài đặt site', href: `/sites/${siteId}/settings` },
     ]);
   });
@@ -16,12 +17,13 @@ describe('siteNavItems', () => {
 
 describe('navCurrent', () => {
   it('marks the current section page', () => {
-    if (!pages || !domain || !settings) {
+    if (!pages || !domain || !privacy || !settings) {
       throw new Error('missing nav items');
     }
     expect(navCurrent(`/sites/${siteId}`, pages)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/domain`, domain)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/domain`, pages)).toBeUndefined();
+    expect(navCurrent(`/sites/${siteId}/privacy`, privacy)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/settings`, settings)).toBe('page');
   });
 

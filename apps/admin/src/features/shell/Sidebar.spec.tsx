@@ -96,7 +96,12 @@ describe('Sidebar', () => {
       'href',
       `/sites/${SITE_ID}/settings`,
     );
-    expect(screen.queryByRole('link', { name: /Leads|Hiệu quả|Dữ liệu/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Dữ liệu & đồng ý' })).toHaveAttribute(
+      'href',
+      `/sites/${SITE_ID}/privacy`,
+    );
+    // Leads and "Hiệu quả" come with later MVP B slices.
+    expect(screen.queryByRole('link', { name: /Leads|Hiệu quả/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Owner');
   });
 
@@ -105,6 +110,15 @@ describe('Sidebar', () => {
     renderSidebar();
     expect(screen.getByRole('link', { name: 'Tên miền' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Trang 6 trang' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('marks "Dữ liệu & đồng ý" on the privacy page', () => {
+    pathname.current = `/sites/${SITE_ID}/privacy`;
+    renderSidebar();
+    expect(screen.getByRole('link', { name: 'Dữ liệu & đồng ý' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   });
 
   it('switches site and offers site creation to owners', async () => {

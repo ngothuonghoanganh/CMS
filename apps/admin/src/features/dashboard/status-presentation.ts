@@ -1,6 +1,6 @@
 import type { PageStatusKind, PageSummary, PointerEvent } from '@plp/contracts';
 import { type DateInput, formatDayMonth, formatRelativeTime } from '../../lib/format';
-import { hasSiteChanges, SAME_AS_LIVE, SITE_CHANGED_REMINDER } from '../editor/presentation';
+import { hasSiteChanges, SAME_AS_LIVE, siteChangedReminder } from '../editor/presentation';
 
 export type ChecksTone = 'danger' | 'warning' | 'success' | 'muted';
 
@@ -40,15 +40,15 @@ function subtextOf(page: PageSummary): string {
         return restoredLine(page);
       }
       // After "Quay về bản live" the revision differs (rule 2) but nothing changed in content;
-      // a publish would then only apply the site's new look, if any (ADR-015).
+      // a publish would then only apply the site's new settings, if any (ADR-015, ADR-017).
       if (page.status.changeCount === 0) {
-        return hasSiteChanges(page) ? SITE_CHANGED_REMINDER : SAME_AS_LIVE;
+        return hasSiteChanges(page) ? siteChangedReminder(page) : SAME_AS_LIVE;
       }
       return `${page.status.changeCount} thay đổi chưa xuất bản`;
     case 'live':
-      // The only thing a publish would change is the site's look (ADR-015): say so first.
+      // The only thing a publish would change is the site settings (ADR-015, 017): say so first.
       if (hasSiteChanges(page)) {
-        return SITE_CHANGED_REMINDER;
+        return siteChangedReminder(page);
       }
       return isRestore(event) ? restoredLine(page) : 'Bản nháp trùng bản live';
     case 'draft':

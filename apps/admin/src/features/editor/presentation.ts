@@ -115,28 +115,57 @@ export function saveStatusView(
 export const SAME_AS_LIVE = 'Nội dung giống bản live';
 
 /**
- * The site settings changed after the live release was published (`siteChanges`, ADR-015): the
- * live page keeps the look it was published with until it is published again.
+ * The site settings changed after the live release was published (`siteChanges`): the live page
+ * keeps the look (ADR-015) and, with a form, the consent settings (ADR-017) it was published with
+ * until it is published again.
  */
 export const SITE_CHANGED = 'Giao diện site đã đổi';
-/** Dashboard subtext of a live page whose site settings changed since it was published. */
-export const SITE_CHANGED_REMINDER = `${SITE_CHANGED} · xuất bản lại để áp dụng`;
+const PRIVACY_CHANGED = 'Dữ liệu cá nhân đã đổi';
+const SETTINGS_CHANGED = 'Cài đặt site đã đổi';
 
 export function hasSiteChanges(page: Pick<PageSummary, 'siteChanges'>): boolean {
   return page.siteChanges.length > 0;
 }
 
+interface SiteChangeWording {
+  /** "Giao diện site đã đổi" */
+  label: string;
+  /** What the live page keeps: "giao diện" in "vẫn dùng giao diện cũ". */
+  kept: string;
+}
+
+function siteChangeWording(page: Pick<PageSummary, 'siteChanges'>): SiteChangeWording {
+  const look = page.siteChanges.some((change) => change.kind === 'site');
+  const privacy = page.siteChanges.some((change) => change.kind === 'privacy');
+  if (look && privacy) {
+    return { label: SETTINGS_CHANGED, kept: 'cài đặt' };
+  }
+  return privacy
+    ? { label: PRIVACY_CHANGED, kept: 'nội dung đồng ý' }
+    : { label: SITE_CHANGED, kept: 'giao diện' };
+}
+
+/** Which settings changed: the look, the personal data and consent settings, or both. */
+export function siteChangedLabel(page: Pick<PageSummary, 'siteChanges'>): string {
+  return siteChangeWording(page).label;
+}
+
+/** Dashboard subtext of a live page whose site settings changed since it was published. */
+export function siteChangedReminder(page: Pick<PageSummary, 'siteChanges'>): string {
+  return `${siteChangedLabel(page)} · xuất bản lại để áp dụng`;
+}
+
 /**
  * How much the next publish changes on the live page: the draft's changes plus the site settings
- * it applies (ADR-015). The top bar badge and the publish dialog title both count this.
+ * it applies (ADR-015, ADR-017). The top bar badge and the publish dialog title both count this.
  */
 export function pendingChangeCount(page: Pick<PageSummary, 'status' | 'siteChanges'>): number {
   return page.status.kind === 'draft' ? 0 : page.status.changeCount + page.siteChanges.length;
 }
 
-/** Status line text of a live page whose content equals live: the site look may still differ. */
+/** Status line text of a live page whose content equals live: the site settings may differ. */
 function sameContentText(page: Pick<PageSummary, 'siteChanges'>): string {
-  return hasSiteChanges(page) ? SITE_CHANGED : SAME_AS_LIVE;
+  return hasSiteChanges(page) ? siteChangedLabel(page) : SAME_AS_LIVE;
 }
 
 /**
@@ -147,7 +176,8 @@ export function siteChangesNotice(page: Pick<PageSummary, 'siteChanges' | 'liveR
   if (!hasSiteChanges(page) || page.liveRelease === null) {
     return null;
   }
-  return `${SITE_CHANGED} sau khi xuất bản v${page.liveRelease.version}: trang live vẫn dùng giao diện cũ cho tới khi bạn xuất bản lại.`;
+  const { label, kept } = siteChangeWording(page);
+  return `${label} sau khi xuất bản v${page.liveRelease.version}: trang live vẫn dùng ${kept} cũ cho tới khi bạn xuất bản lại.`;
 }
 
 export interface LiveStatusView {
@@ -170,7 +200,9 @@ export function liveStatusView(page: PageSummary): LiveStatusView {
     case 'live':
       return {
         kind: 'live',
-        text: hasSiteChanges(page) ? `Live v${version} · ${SITE_CHANGED}` : `Live v${version}`,
+        text: hasSiteChanges(page)
+          ? `Live v${version} · ${siteChangedLabel(page)}`
+          : `Live v${version}`,
       };
     case 'draft':
       return { kind: 'draft', text: 'Chưa xuất bản' };
