@@ -66,7 +66,12 @@ export class SiteManagementService {
     return this.sitesService.toDto(site);
   }
 
-  /** Name, theme, logo and default share image; images must come from this site's library. */
+  /**
+   * Name, theme, logo and default share image; images must come from this site's library. Live
+   * pages keep the settings their release snapshotted until each one is published again
+   * (ADR-015), so nothing is revalidated here: the change reaches no live page (releases from
+   * before ADR-015 aside, which pick it up when the renderer cache expires).
+   */
   async update(user: AuthenticatedUser, siteId: string, input: UpdateSiteRequest): Promise<Site> {
     const { scope, site } = await this.sitesService.access(user, siteId);
     this.access.requireOwner(scope);

@@ -1,4 +1,5 @@
 import type {
+  ChangeItem,
   CheckCounts,
   Draft,
   LiveReleaseRef,
@@ -50,6 +51,7 @@ export function toLiveReleaseRef(release: ReleaseRecord): LiveReleaseRef {
 export interface PageSummaryInput {
   page: PageRecord;
   status: PageStatus;
+  siteChanges: ChangeItem[];
   liveRelease: ReleaseRecord | null;
   lastPointerEvent: PointerEvent | null;
   origin: string;
@@ -66,6 +68,7 @@ export function toPageSummary(input: PageSummaryInput): PageSummary {
     slug: page.draft.slug,
     goal: page.goal,
     status: input.status,
+    siteChanges: input.siteChanges,
     liveRelease: liveRelease ? toLiveReleaseRef(liveRelease) : null,
     latestVersion: page.releaseSeq,
     lastPointerEvent: input.lastPointerEvent,

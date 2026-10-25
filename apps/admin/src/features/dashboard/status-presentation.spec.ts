@@ -16,6 +16,34 @@ describe('presentPageStatus', () => {
     });
   });
 
+  it('reminds that a live page keeps its look after the site settings changed (ADR-015)', () => {
+    const page = pageFixture({
+      siteChanges: [{ kind: 'site', label: 'Giao diện site: logo', sectionId: null }],
+    });
+    expect(presentPageStatus(page, now)).toMatchObject({
+      badge: 'live',
+      subtext: 'Giao diện site đã đổi · xuất bản lại để áp dụng',
+      versionLine: 'v12 · 2 giờ trước',
+    });
+    // Also after a rollback to an older release, whose snapshot is older still.
+    const restored = pageFixture({
+      siteChanges: page.siteChanges,
+      lastPointerEvent: pointerEvent({ type: 'rolled_back', version: 12, by: minh }),
+    });
+    expect(presentPageStatus(restored, now)).toMatchObject({
+      subtext: 'Giao diện site đã đổi · xuất bản lại để áp dụng',
+      authorLine: 'khôi phục bởi Minh',
+    });
+  });
+
+  it('keeps the change count of a page with changes when the site settings changed too', () => {
+    const page = pageFixture({
+      status: { kind: 'live_with_changes', changeCount: 2, changes: [] },
+      siteChanges: [{ kind: 'site', label: 'Giao diện site: giao diện', sectionId: null }],
+    });
+    expect(presentPageStatus(page, now).subtext).toBe('2 thay đổi chưa xuất bản');
+  });
+
   it('counts unpublished changes for a live page with changes', () => {
     const page = pageFixture({
       status: { kind: 'live_with_changes', changeCount: 4, changes: [] },

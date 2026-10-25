@@ -142,6 +142,21 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
     [siteId, pageId, pagesQuery.data, announce, store, navigate, seoHref],
   );
 
+  /**
+   * After the site settings change, the live page's `siteChanges` (ADR-015) differ; the server
+   * derives them, so the summary is read again. A save that lands meanwhile brings its own.
+   */
+  async function refreshSummary() {
+    try {
+      const detail = await api(endpoints.getPage, [pageId]);
+      if (detail.draft.revision === store.getState().baseRevision) {
+        store.getState().setServerState({ page: detail.page });
+      }
+    } catch (error) {
+      console.error('Refreshing the page summary after a site change failed', error);
+    }
+  }
+
   async function preview() {
     setPreviewPending(true);
     try {
@@ -225,6 +240,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
         canEdit={role === 'owner'}
         onSiteUpdated={(updated) => {
           store.getState().setSite(updated);
+          void refreshSummary();
         }}
       />
       {renderPublishDialog({

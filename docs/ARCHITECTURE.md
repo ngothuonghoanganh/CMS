@@ -241,8 +241,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
                 draft: { slug, composition, seo, revision, updatedAt, updatedBy },
                 publishedReleaseId|null, publishedSlug|null,                    // chỉ movePointer được ghi
                 releaseSeq, createdAt, createdBy }
-  releases    { workspaceId, siteId, pageId, version, slug, composition, seo, sourceRevision,
-                createdBy, createdAt, note, changeSummary, checks, idempotencyKey } // BẤT BIẾN
+  releases    { workspaceId, siteId, pageId, version, slug, composition, seo,
+                sitePresentation: { name, themePresetId, logoAssetId|null,
+                                    defaultShareImageAssetId|null },              // ADR-015
+                sourceRevision, createdBy, createdAt, note, changeSummary, checks,
+                idempotencyKey }                                                  // BẤT BIẾN
   redirects   { workspaceId, siteId, fromSlug, pageId, createdAt }               // unique(siteId,fromSlug)
   activity    { workspaceId, siteId, pageId|null, actorId, type, data, reason|null, createdAt }
   sessions    { tokenHash, userId, expiresAt, createdAt }
@@ -252,7 +255,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `pages`: unique(siteId, draft.slug); unique-partial(siteId, publishedSlug).
     - `releases`: unique(pageId, version); unique(pageId, idempotencyKey).
   - Repository của release chỉ có `insert` và `find*`.
-  - `seo = { title, description, shareImageAssetId|null, noindex }`. Title để trống thì dùng heading của Hero; ảnh chia sẻ để trống thì dùng ảnh mặc định của site.
+  - `seo = { title, description, shareImageAssetId|null, noindex }`. Title để trống thì dùng heading của Hero, rồi tên site; ảnh chia sẻ để trống thì dùng ảnh mặc định của site. Với trang live, tên site và ảnh mặc định lấy từ `sitePresentation` của release (ADR-015).
   - Activity `type`: `site.created`, `page.created`, `page.published`, `page.rolled_back`, `page.rollback_undone`, `page.unpublished`, `page.draft_restored`, `asset.uploaded`.
   - **`derivePageStatus`** là hàm thuần, chạy phía server (quy tắc 2).
   - **`diffSnapshots`** so theo section instance id (thêm, xóa, sửa, đổi chỗ), từng field SEO và slug. Kết quả là các chip như "Sửa: Hero", dùng cho trạng thái, hộp thoại publish và `changeSummary`.
@@ -281,7 +284,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     1. Đã có release `(pageId, idempotencyKey)` thì trả lại release đó.
     2. Revision hoặc pointer lệch thì trả 409.
     3. Chạy lại checks; còn blocking hay còn warning chưa bỏ qua thì trả 422.
-    4. Transaction: insert release (`version = releaseSeq + 1`), rồi `movePointer`.
+    4. Transaction: đọc site để chụp `sitePresentation` (ADR-015), insert release (`version = releaseSeq + 1`), rồi `movePointer`.
     5. Sau khi commit, revalidate renderer.
   - **`movePointer(page, expectedCurrent, target|null, reason)`** là đường duy nhất được ghi `publishedReleaseId`/`publishedSlug`:
     1. Update có điều kiện `publishedReleaseId === expectedCurrent`.
@@ -388,7 +391,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Khóa cache theo release đang live:**
     - E2E cho thấy request ngay sau rollback hoặc undo đôi khi nhận bản cũ, dù webhook đã chạy xong và API đã trả bản mới. `'use cache'` của Next 16 có đường dùng lại kết quả mà không đối chiếu tag, chẳng hạn khi một request "nhập" vào lần đọc cùng khóa còn dang dở.
     - Vì vậy `path-status` trả thêm `releaseId` của trang live. Proxy chuyển giá trị này cho page qua request header nội bộ `x-plp-live-release` và luôn xóa header cùng tên do client gửi. `getResolved` nhận nó làm một phần khóa cache.
-    - Pointer dời thì khóa đổi, nên nội dung trang không phụ thuộc thời điểm revalidate. Tag theo subdomain vẫn làm mới phần dùng chung: link nội bộ, theme, logo, redirect và sitemap.
+    - Pointer dời thì khóa đổi, nên nội dung trang không phụ thuộc thời điểm revalidate. Tag theo subdomain vẫn làm mới phần dùng chung: link nội bộ, redirect và sitemap. Theme, logo và tên site nằm trong release (ADR-015), nên đi theo khóa này.
     - Hệ quả: khi bước kiểm tra của proxy lỗi, page quay về khóa chỉ theo tag như trước. Sitemap và robots vẫn chỉ dùng tag, nên vẫn có thể cũ trong khoảnh khắc nếu đúng lúc đó có một lần đọc sitemap còn dang dở.
   - **Redirect cũng do proxy trả (sau review MVP A):**
     - Next 16 chỉ render page ở chế độ blocking cho request có `User-Agent` (`htmlLimitedBots` bị bỏ qua khi thiếu header này). Không có nó, `permanentRedirect` trong page thành một shell 200 không có `Location`.
@@ -412,7 +415,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Decision:**
   - **Slug:** chữ thường không dấu, số và `-`; `""` là trang chủ. Cấm `_preview`, `api`, `sitemap.xml`, `robots.txt`.
   - **Sitemap và robots:** sinh theo host, chỉ gồm trang live không noindex.
-  - **Meta:** OG/Twitter lấy từ `release.seo`; canonical là `{subdomain}.{BASE_DOMAIN}/{slug}`.
+  - **Meta:** OG/Twitter lấy từ `release.seo`, tên site và ảnh chia sẻ mặc định lấy từ `release.sitePresentation` (ADR-015); canonical là `{subdomain}.{BASE_DOMAIN}/{slug}`.
   - **Màn 08:** chỉ hiển thị tên miền mặc định. Subdomain không đổi được sau khi tạo.
 - **Reason:** Quy tắc 7.
 - **Consequences:** Custom domain sẽ cần bảng `domains` và mở rộng phân giải host.
@@ -457,6 +460,35 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Giới hạn chịu được request đồng thời:** giới hạn được kiểm tra bên trong transaction tạo mới, sau một lần ghi vào document cha (`site.pageSeq` cho trang, `workspace.siteSeq` cho site). Hai lần tạo đồng thời ghi cùng một document nên MongoDB thử lại lần sau, và lần đó đếm được bản ghi của lần trước.
   - **Đọc vượt giới hạn thì báo lỗi:** các phép đọc theo site và theo workspace lấy thêm một bản ghi; dữ liệu vượt giới hạn thì trả 500 và log, không âm thầm cắt bớt.
   - **Giới hạn site:** mỗi workspace tối đa `MAX_SITES_PER_WORKSPACE = 100` site, vì mọi màn trong workspace nạp danh sách site cho bộ chuyển site. Tạo site thứ 101 trả `site_limit_reached`. Chủ sản phẩm đã xác nhận con số này ngày 2026-10-25.
+
+### ADR-015 — Cài đặt site được chụp vào release
+
+- **Date:** 2026-10-25 · **Status:** Accepted
+- **Decision:**
+  - **Snapshot:** mọi thứ cấp site hiện trên trang live được chụp vào release lúc publish: `sitePresentation = { name, themePresetId, logoAssetId|null, defaultShareImageAssetId|null }`.
+    - Publish đọc site **bên trong** transaction tạo release và dời pointer. Release vẫn bất biến.
+    - Asset id lưu dạng chuỗi, như `seo.shareImageAssetId`; asset được tra lúc phục vụ. MVP A không xóa asset (ADR-012), nên snapshot luôn trỏ tới asset còn tồn tại.
+  - **Nguồn của từng màn:**
+    - Resolve public của trang live và preview của một release dùng snapshot của release đó.
+    - Preview bản nháp và canvas của editor dùng site hiện tại, vì chúng cho thấy lần publish tới sẽ tạo ra gì.
+    - Fallback SEO (ảnh chia sẻ của trang → ảnh mặc định của site; tiêu đề → heading Hero → tên site) và `og:site_name` của trang live đều lấy từ snapshot.
+  - **Trạng thái không đổi (quy tắc 2):** vẫn chỉ so `draft.revision` với `sourceRevision`. Site khác snapshot thì trang vẫn `live` (hoặc `live_with_changes` nếu nháp có sửa).
+  - **Nhắc việc:** `PageSummary.siteChanges: ChangeItem[]` (kind `site`) là các cài đặt site khác snapshot của release đang live.
+    - Suy ra phía server, không lưu. Rỗng khi không có gì live hoặc không có gì khác.
+    - `evaluateDraft` so các release đang trỏ (đã nạp bằng một `$in`) với site đã nạp, nên không thêm truy vấn nào.
+    - Chip theo thứ tự cố định: "Giao diện site: giao diện", "Giao diện site: logo", "Giao diện site: tên site", "Giao diện site: ảnh chia sẻ".
+    - Admin hiện nhắc ở dòng phụ của dashboard ("Giao diện site đã đổi · xuất bản lại để áp dụng" cho trang `live`; trang `live_with_changes` giữ số thay đổi), ở dòng trạng thái và dải thông báo của editor, thành chip trong hộp thoại publish, và trong ghi chú sau khi lưu cài đặt site.
+  - **`changeSummary`** của release gồm chip site khi snapshot khác snapshot của release live trước đó. Lần publish đầu, hoặc sau khi gỡ trang, không có chip site. Publish lại bản nháp không đổi chỉ để áp dụng cài đặt site là hợp lệ; release đó chỉ có chip site.
+  - **Sửa cài đặt site** không revalidate renderer: thay đổi không tới trang live nào (trừ release cũ, xem bên dưới).
+  - **Release cũ (trước ADR-015)** không có `sitePresentation`. Chúng chỉ có trong database dev local; MVP A không có dữ liệu production.
+    - `releasePresentation(release, site)` đọc chúng như site hiện tại, đúng cách chúng được phục vụ trước đây. Chỉ trường bị thiếu mới đi đường này, không có catch-all.
+    - Vì vậy chúng không có nhắc việc, và lần publish kế tiếp không có chip site.
+    - Schema bắt buộc trường này cho mọi release mới.
+- **Reason:** Quy tắc 1 và nguyên tắc 4: trang live chỉ đổi khi publish, rollback, undo hoặc gỡ trang. Trước đây API lấy tên, theme, logo và ảnh chia sẻ từ bản ghi site hiện tại, nên đổi cài đặt site làm mọi trang live đổi theo ở lần làm mới cache kế tiếp mà không cần publish.
+- **Consequences:**
+  - Rollback về release cũ cũng đưa giao diện site lúc đó trở lại.
+  - Áp dụng cài đặt site mới cho cả site cần publish lại từng trang.
+  - Release cũ trong database dev vẫn đổi theo site, và chỉ thấy thay đổi khi cache renderer tự làm mới, vì sửa site không revalidate. Publish lại một lần thì trang có snapshot.
 
 ---
 

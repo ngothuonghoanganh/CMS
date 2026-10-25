@@ -45,6 +45,7 @@ import {
   liveSince,
   nextVersion,
   type PreparedPublish,
+  publishChanges,
   publishDisabledReason,
   publishFooterNote,
   type PublishNotice,
@@ -447,6 +448,7 @@ function PublishSession({
   const live = page.liveRelease;
   const since = liveSince(page);
   const version = nextVersion(page);
+  const changes = publishChanges(page);
 
   return (
     <Dialog
@@ -503,9 +505,9 @@ function PublishSession({
             <span className={styles.muted}>Sau khi xuất bản</span>
             <span className={cx(styles.strong, styles.next)}>v{version} · bản nháp hiện tại</span>
           </span>
-          {page.status.changes.length > 0 ? (
+          {changes.length > 0 ? (
             <ul className={styles.chips} aria-label="Các thay đổi">
-              {page.status.changes.map((change, index) => (
+              {changes.map((change, index) => (
                 <li key={`${change.label}-${index}`} className={styles.chip}>
                   {change.label}
                 </li>

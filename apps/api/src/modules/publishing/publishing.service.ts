@@ -26,13 +26,16 @@ import { PageEvaluator } from '../pages/page-evaluator.service.js';
 import type { PageRecord } from '../pages/page.schema.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { diffSnapshots } from './domain/diff-snapshots.js';
+import { diffSitePresentation } from './domain/site-presentation.js';
 import { emptyPageSnapshot } from './domain/snapshot.js';
 import { mergeKeysetPages } from './history-merge.js';
 import { pointerConflict, PointerService } from './pointer.service.js';
 import { RELEASE_NOT_FOUND, toReleaseSummary } from './release-dto.js';
+import { currentSitePresentation, releasePresentation } from './release-presentation.js';
 import type { ReleaseRecord } from './release.schema.js';
 import { IdempotencyKeyUsedError, ReleasesRepository } from './releases.repository.js';
 
@@ -96,6 +99,7 @@ export class PublishingService {
     private readonly activity: ActivityRepository,
     private readonly users: UsersRepository,
     private readonly sites: SitesService,
+    private readonly siteRecords: SitesRepository,
   ) {}
 
   async checks(user: AuthenticatedUser, pageId: string): Promise<ChecksResult> {
@@ -185,8 +189,9 @@ export class PublishingService {
 
   /**
    * Step 4 of publish, in one transaction: claim version `releaseSeq + 1` (guarded by revision,
-   * pointer and sequence), insert the release, then `movePointer` records the activity. Any failure
-   * aborts everything, so no release exists without its pointer move.
+   * pointer and sequence), snapshot the site settings, insert the release, then `movePointer`
+   * records the activity. Any failure aborts everything, so no release exists without its pointer
+   * move.
    */
   private async commitRelease(
     scope: WorkspaceScope,
@@ -195,11 +200,22 @@ export class PublishingService {
     meta: { idempotencyKey: string; note: string; warningsAcknowledged: string[] },
   ): Promise<CommittedRelease> {
     const from = await this.liveReleaseOf(scope, page);
-    const changeSummary = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
+    const pageChanges = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
     return this.pointer.transaction(scope, site._id, async (tx) => {
       if (!(await this.pages.claimReleaseVersion(scope, page, page.draft.revision, tx))) {
         throw await this.publishConflict(scope, page._id, page.draft.revision);
       }
+      // The site settings are read in the transaction that makes the release live (ADR-015).
+      const current = await this.siteRecords.findById(scope, site._id, tx);
+      if (!current) {
+        throw new Error(`Site ${site._id.toHexString()} of page ${page._id.toHexString()} is gone`);
+      }
+      const sitePresentation = currentSitePresentation(current);
+      // A first publish (or one after unpublishing) has no previously live look to differ from.
+      const siteChanges =
+        from === null
+          ? []
+          : diffSitePresentation(releasePresentation(from, current), sitePresentation);
       const release = await this.releases.insert(
         scope,
         {
@@ -209,8 +225,9 @@ export class PublishingService {
           slug: page.draft.slug,
           composition: page.draft.composition,
           seo: page.draft.seo,
+          sitePresentation,
           sourceRevision: page.draft.revision,
-          changeSummary,
+          changeSummary: [...pageChanges, ...siteChanges],
           ...meta,
         },
         tx,

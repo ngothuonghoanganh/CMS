@@ -6,6 +6,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { LIVE_PAGES_KEEP_LOOK } from '../site-settings/site-settings';
 import styles from './theme.module.css';
 import { ThemePicker } from './ThemePicker';
 
@@ -34,7 +35,7 @@ export function ThemePickerDialog({
       api(endpoints.updateSite, [site.id], { body: { themePresetId } }),
     onSuccess: (updated) => {
       onSiteUpdated(updated);
-      toast({ title: 'Đã đổi giao diện site', tone: 'success' });
+      toast({ title: 'Đã đổi giao diện site', description: LIVE_PAGES_KEEP_LOOK, tone: 'success' });
       onOpenChange(false);
     },
     onError: (error) => {

@@ -114,6 +114,29 @@ export function saveStatusView(
 /** Subtext of a live page whose draft has a new revision but the same content as live. */
 export const SAME_AS_LIVE = 'Nội dung giống bản live';
 
+/**
+ * The site settings changed after the live release was published (`siteChanges`, ADR-015): the
+ * live page keeps the look it was published with until it is published again.
+ */
+export const SITE_CHANGED = 'Giao diện site đã đổi';
+/** Dashboard subtext of a live page whose site settings changed since it was published. */
+export const SITE_CHANGED_REMINDER = `${SITE_CHANGED} · xuất bản lại để áp dụng`;
+
+export function hasSiteChanges(page: Pick<PageSummary, 'siteChanges'>): boolean {
+  return page.siteChanges.length > 0;
+}
+
+/**
+ * The editor's draft notice adds this while the live page shows older site settings; null when
+ * it shows the current ones (or nothing is live).
+ */
+export function siteChangesNotice(page: Pick<PageSummary, 'siteChanges' | 'liveRelease'>) {
+  if (!hasSiteChanges(page) || page.liveRelease === null) {
+    return null;
+  }
+  return `${SITE_CHANGED} sau khi xuất bản v${page.liveRelease.version}: trang live vẫn dùng giao diện cũ cho tới khi bạn xuất bản lại.`;
+}
+
 export interface LiveStatusView {
   kind: PageStatusKind;
   text: string;
@@ -132,7 +155,10 @@ export function liveStatusView(page: PageSummary): LiveStatusView {
             : `Live v${version} · ${page.status.changeCount} thay đổi chưa xuất bản`,
       };
     case 'live':
-      return { kind: 'live', text: `Live v${version}` };
+      return {
+        kind: 'live',
+        text: hasSiteChanges(page) ? `Live v${version} · ${SITE_CHANGED}` : `Live v${version}`,
+      };
     case 'draft':
       return { kind: 'draft', text: 'Chưa xuất bản' };
     case 'unpublished':

@@ -10,6 +10,7 @@ import {
   nextVersion,
   type PreparedPublish,
   publishDisabledReason,
+  publishChanges,
   publishFooterNote,
   publishReducer,
   type PublishState,
@@ -96,6 +97,26 @@ describe('publish dialog copy', () => {
         }),
       ),
     ).toBe('Xuất bản lại trang');
+  });
+
+  it('lists the site settings a publish applies after the draft changes (ADR-015)', () => {
+    const site = { kind: 'site' as const, label: 'Giao diện site: logo', sectionId: null };
+    const changed = livePage({ siteChanges: [site] });
+    expect(publishChanges(changed).map((change) => change.label)).toEqual([
+      'Sửa: Hero',
+      'Giao diện site: logo',
+    ]);
+    expect(publishTitle(changed)).toBe('Xuất bản 5 thay đổi');
+    // Republishing an unchanged draft only to apply the new site settings.
+    const siteOnly = livePage({
+      status: { kind: 'live', changeCount: 0, changes: [] },
+      siteChanges: [site],
+    });
+    expect(publishChanges(siteOnly)).toEqual([site]);
+    expect(publishTitle(siteOnly)).toBe('Xuất bản 1 thay đổi');
+    expect(publishTitle(livePage({ status: { kind: 'live', changeCount: 0, changes: [] } }))).toBe(
+      'Xuất bản lại trang',
+    );
   });
 
   it('knows a first publish and the version it creates', () => {

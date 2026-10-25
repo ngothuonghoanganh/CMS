@@ -163,6 +163,27 @@ describe('PublishDialog', () => {
     ).toBeInTheDocument();
   });
 
+  it('lists the site settings the publish applies to the live page (ADR-015)', async () => {
+    renderDialog({
+      page: livePage({
+        status: { kind: 'live', changeCount: 0, changes: [] },
+        siteChanges: [
+          { kind: 'site', label: 'Giao diện site: giao diện', sectionId: null },
+          { kind: 'site', label: 'Giao diện site: logo', sectionId: null },
+        ],
+      }),
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Xuất bản 2 thay đổi' })).toBeInTheDocument();
+    const chips = screen.getByRole('list', { name: 'Các thay đổi' });
+    expect(
+      within(chips)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Giao diện site: giao diện', 'Giao diện site: logo']);
+    expect(publishButton()).toBeEnabled();
+  });
+
   it('enables publishing only once every warning is skipped, with the reason linked', async () => {
     const user = userEvent.setup();
     renderDialog({ result: checks({ warnings: [altWarning, sampleWarning] }) });

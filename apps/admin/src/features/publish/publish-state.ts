@@ -1,4 +1,10 @@
-import type { ChecksResult, LiveReleaseRef, PageSummary, PublishResponse } from '@plp/contracts';
+import type {
+  ChangeItem,
+  ChecksResult,
+  LiveReleaseRef,
+  PageSummary,
+  PublishResponse,
+} from '@plp/contracts';
 
 /**
  * State of one session of the publish dialog (screen 05), as a pure reducer so the rules
@@ -150,12 +156,20 @@ export function isFirstPublish(page: PageSummary): boolean {
   return page.latestVersion === 0;
 }
 
+/**
+ * The chips of the dialog: the draft's changes, then the site settings this publish applies to
+ * the live page ("Giao diện site: logo", ADR-015).
+ */
+export function publishChanges(page: PageSummary): ChangeItem[] {
+  return [...page.status.changes, ...page.siteChanges];
+}
+
 /** Dialog title: "Xuất bản 4 thay đổi", or "Xuất bản trang" for a first publish. */
 export function publishTitle(page: PageSummary): string {
   if (isFirstPublish(page)) {
     return 'Xuất bản trang';
   }
-  const count = page.status.changeCount;
+  const count = page.status.changeCount + page.siteChanges.length;
   if (page.liveRelease === null || count === 0) {
     return 'Xuất bản lại trang';
   }

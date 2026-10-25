@@ -7,6 +7,11 @@ import { UsersRepository } from '../auth/users.repository.js';
 import { evaluateChecks, type LivePageRef } from '../publishing/domain/checks.js';
 import { referencedAssetIds } from '../publishing/domain/content-refs.js';
 import { derivePageStatus } from '../publishing/domain/page-status.js';
+import { diffSitePresentation } from '../publishing/domain/site-presentation.js';
+import {
+  currentSitePresentation,
+  releasePresentation,
+} from '../publishing/release-presentation.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
@@ -36,7 +41,8 @@ function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId, what: string
  * `evaluateDraft` of ADR-005: status + checks of pages, used by the page list, the editor,
  * autosave and publishing. Evaluating any number of pages of one site takes a constant number of
  * queries (live releases with one `$in`, pointer events with one aggregation, assets and users
- * with one query each), never one per page.
+ * with one query each), never one per page. `siteChanges` (ADR-015) compares those releases with
+ * the site the caller already loaded, so it adds no query.
  */
 @Injectable()
 export class PageEvaluator {
@@ -93,6 +99,7 @@ export class PageEvaluator {
     ]);
     const existingAssetIds = new Set(assets.keys());
     const origin = this.sites.defaultOrigin(site);
+    const presentation = currentSitePresentation(site);
     const live: LivePageRef[] = livePages.map((row) => ({
       id: row._id.toHexString(),
       title: row.title,
@@ -118,6 +125,11 @@ export class PageEvaluator {
       const summary = toPageSummary({
         page,
         status,
+        // The live page keeps its release's snapshot; the status ignores the site (ADR-015).
+        siteChanges:
+          liveRelease === null
+            ? []
+            : diffSitePresentation(releasePresentation(liveRelease, site), presentation),
         liveRelease,
         lastPointerEvent: event
           ? toPointerEvent(

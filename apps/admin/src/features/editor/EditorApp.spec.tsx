@@ -182,4 +182,55 @@ describe('EditorApp', () => {
       apiMock.mock.calls.find(([called]) => called === endpoints.createPreviewLink) ?? [];
     expect(endpoint?.path(...(args ?? []))).toBe('/pages/64b000000000000000000002/preview-links');
   });
+
+  it('reminds that the live page keeps its look after the site theme changes', async () => {
+    const user = userEvent.setup();
+    const live = {
+      status: { kind: 'live' as const, changeCount: 0, changes: [] },
+      liveRelease: {
+        id: '64b0000000000000000000e1',
+        version: 12,
+        slug: 'uu-dai-thang-11',
+        publishedAt: '2026-10-20T08:00:00.000Z',
+      },
+      latestVersion: 12,
+      liveUrl: 'https://smilecare.payload.site/uu-dai-thang-11',
+    };
+    const before = pageDetail(undefined, live);
+    // The server derives the reminder from the live release's snapshot (ADR-015).
+    const after = pageDetail(undefined, {
+      ...live,
+      siteChanges: [{ kind: 'site', label: 'Giao diện site: giao diện', sectionId: null }],
+    });
+    let reads = 0;
+    apiMock.mockImplementation((endpoint) => {
+      if (endpoint === endpoints.getPage) {
+        reads += 1;
+        return Promise.resolve(reads === 1 ? before : after);
+      }
+      return Promise.resolve(
+        endpoint === endpoints.updateSite ? { ...site, themePresetId: 'sunset' } : undefined,
+      );
+    });
+    render(
+      <EditorApp
+        initial={{ ...initial(), detail: before }}
+        renderPublishDialog={noPublishDialog}
+      />,
+      { wrapper },
+    );
+    await waitFor(() => {
+      expect(reads).toBe(1);
+    });
+    expect(screen.getByText('Live v12')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Giao diện site · màu & chữ/ }));
+    await user.click(screen.getByRole('radio', { name: 'Hoàng hôn' }));
+    await user.click(screen.getByRole('button', { name: 'Áp dụng giao diện' }));
+
+    expect(await screen.findByText('Live v12 · Giao diện site đã đổi')).toBeInTheDocument();
+    expect(screen.getByText(/Bạn đang sửa/)).toHaveTextContent(
+      'Giao diện site đã đổi sau khi xuất bản v12: trang live vẫn dùng giao diện cũ cho tới khi bạn xuất bản lại.',
+    );
+  });
 });

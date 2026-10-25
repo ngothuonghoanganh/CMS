@@ -69,6 +69,7 @@ export function pageSummary(overrides: Partial<PageSummary> = {}): PageSummary {
     slug: 'uu-dai-thang-11',
     goal: 'promo',
     status: { kind: 'draft', changeCount: 0, changes: [] },
+    siteChanges: [],
     liveRelease: null,
     latestVersion: 0,
     lastPointerEvent: null,
