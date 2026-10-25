@@ -1,4 +1,6 @@
-import type { SiteRecord } from '../sites/site.schema.js';
+import type { ConsentVersionRecord } from '../privacy/consent-version.schema.js';
+import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
+import { currentLeadCapture, type LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
 import type { ReleaseRecord } from './release.schema.js';
 
@@ -34,4 +36,33 @@ export function releasePresentation(
     return currentSitePresentation(site);
   }
   return release.sitePresentation;
+}
+
+/**
+ * The lead capture the next publish of a page with a form would freeze (ADR-017): the site's
+ * personal data settings and its latest consent version. Null while either is missing.
+ */
+export function currentSiteLeadCapture(
+  site: Pick<SiteRecord, 'privacy'>,
+  consent: ConsentVersionRecord | null,
+): LeadCapture | null {
+  return currentLeadCapture({
+    privacy: sitePrivacyOf(site),
+    consent: consent && {
+      id: consent._id.toHexString(),
+      version: consent.version,
+      requiredText: consent.requiredText,
+      marketingText: consent.marketingText,
+    },
+  });
+}
+
+/**
+ * The consent settings a release's form is served with: its snapshot (ADR-017). Releases without a
+ * form store null; releases published before ADR-017 lack the field, and none of them had a form.
+ */
+export function releaseLeadCapture(
+  release: Pick<ReleaseRecord, 'leadCapture'>,
+): LeadCapture | null {
+  return release.leadCapture ?? null;
 }

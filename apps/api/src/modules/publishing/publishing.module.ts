@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { PagesModule } from '../pages/pages.module.js';
+import { PrivacyCoreModule } from '../privacy/privacy-core.module.js';
 import { RevalidationModule } from '../revalidation/revalidation.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
 import { PointerService } from './pointer.service.js';
@@ -15,6 +16,7 @@ import { PublishingService } from './publishing.service.js';
     ActivityModule,
     AuthModule,
     PagesModule,
+    PrivacyCoreModule,
     PublishingCoreModule,
     RevalidationModule,
     SitesCoreModule,

@@ -12,6 +12,7 @@ import {
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import type { LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
 import { RELEASE_MODEL, RELEASES_IDEMPOTENCY_INDEX, type ReleaseRecord } from './release.schema.js';
 
@@ -23,6 +24,8 @@ export interface InsertReleaseInput {
   composition: Composition;
   seo: Seo;
   sitePresentation: SitePresentation;
+  /** Null for a page without a form (ADR-017). */
+  leadCapture: LeadCapture | null;
   sourceRevision: number;
   note: string;
   changeSummary: ChangeItem[];

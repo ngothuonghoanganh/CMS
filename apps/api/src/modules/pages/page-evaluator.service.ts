@@ -1,20 +1,25 @@
 import { Injectable } from '@nestjs/common';
 import type { ChecksResult, Draft, PageSummary, UserRef } from '@plp/contracts';
+import { pageCapturesLeads } from '@plp/sections/schema';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { ConsentVersionsRepository } from '../privacy/consent-versions.repository.js';
 import { evaluateChecks, type LivePageRef } from '../publishing/domain/checks.js';
 import { referencedAssetIds } from '../publishing/domain/content-refs.js';
+import { diffLeadCapture } from '../publishing/domain/lead-capture.js';
 import { derivePageStatus } from '../publishing/domain/page-status.js';
 import { diffSitePresentation } from '../publishing/domain/site-presentation.js';
 import {
+  currentSiteLeadCapture,
   currentSitePresentation,
+  releaseLeadCapture,
   releasePresentation,
 } from '../publishing/release-presentation.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
-import type { SiteRecord } from '../sites/site.schema.js';
+import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { toDraft, toPageSummary, toPointerEvent } from './page-dto.js';
@@ -41,8 +46,9 @@ function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId, what: string
  * `evaluateDraft` of ADR-005: status + checks of pages, used by the page list, the editor,
  * autosave and publishing. Evaluating any number of pages of one site takes a constant number of
  * queries (live releases with one `$in`, pointer events with one aggregation, assets and users
- * with one query each), never one per page. `siteChanges` (ADR-015) compares those releases with
- * the site the caller already loaded, so it adds no query.
+ * with one query each), never one per page. `siteChanges` (ADR-015, ADR-017) compares those
+ * releases with the site the caller already loaded and, when the site has consent settings or a
+ * page has a form, with its current consent version (one more query).
  */
 @Injectable()
 export class PageEvaluator {
@@ -53,6 +59,7 @@ export class PageEvaluator {
     private readonly assets: AssetsRepository,
     private readonly users: UsersRepository,
     private readonly sites: SitesService,
+    private readonly consentVersions: ConsentVersionsRepository,
   ) {}
 
   /** One page; loads the live pages of its site for the slug and link checks. */
@@ -82,7 +89,11 @@ export class PageEvaluator {
     const assetIds = [...new Set(pages.flatMap((page) => referencedAssetIds(page.draft)))]
       .filter(isObjectIdString)
       .map((id) => toObjectId(id));
-    const [liveReleases, pointerEvents, assets] = await Promise.all([
+    // Without saved settings no release ever snapshotted consent, and no page needs them yet.
+    const readsConsent =
+      sitePrivacyOf(site) !== null ||
+      pages.some((page) => pageCapturesLeads(page.draft.composition));
+    const [liveReleases, pointerEvents, assets, consent] = await Promise.all([
       this.releases.findByIds(
         scope,
         pages.flatMap((page) => (page.publishedReleaseId ? [page.publishedReleaseId] : [])),
@@ -92,6 +103,7 @@ export class PageEvaluator {
         pages.map((page) => page._id),
       ),
       this.assets.findForSite(scope, site._id, assetIds),
+      readsConsent ? this.consentVersions.findCurrent(scope, site._id) : null,
     ]);
     const users = await this.users.findRefs([
       ...pages.flatMap((page) => [page.createdBy, page.draft.updatedBy]),
@@ -100,6 +112,7 @@ export class PageEvaluator {
     const existingAssetIds = new Set(assets.keys());
     const origin = this.sites.defaultOrigin(site);
     const presentation = currentSitePresentation(site);
+    const capture = currentSiteLeadCapture(site, consent);
     const live: LivePageRef[] = livePages.map((row) => ({
       id: row._id.toHexString(),
       title: row.title,
@@ -129,7 +142,10 @@ export class PageEvaluator {
         siteChanges:
           liveRelease === null
             ? []
-            : diffSitePresentation(releasePresentation(liveRelease, site), presentation),
+            : [
+                ...diffSitePresentation(releasePresentation(liveRelease, site), presentation),
+                ...diffLeadCapture(releaseLeadCapture(liveRelease), capture),
+              ],
         liveRelease,
         lastPointerEvent: event
           ? toPointerEvent(

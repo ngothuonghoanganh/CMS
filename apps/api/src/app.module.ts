@@ -11,6 +11,7 @@ import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { PagesModule } from './modules/pages/pages.module.js';
 import { PreviewModule } from './modules/preview/preview.module.js';
+import { PrivacyModule } from './modules/privacy/privacy.module.js';
 import { PublicDeliveryModule } from './modules/public-delivery/public-delivery.module.js';
 import { PublishingModule } from './modules/publishing/publishing.module.js';
 import { RevalidationModule } from './modules/revalidation/revalidation.module.js';
@@ -62,6 +63,7 @@ export class AppModule {
         PagesModule,
         PublishingModule,
         PreviewModule,
+        PrivacyModule,
         PublicDeliveryModule,
         RevalidationModule,
       ],
