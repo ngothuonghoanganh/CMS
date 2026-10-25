@@ -77,7 +77,9 @@ describe('PrivacyScreen', () => {
       ...configured,
       privacy: { ...privacy, retentionMonths: 24 },
     } satisfies PrivacySettings);
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={configured} canEdit />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit dataRequests={null} />,
+    );
 
     await user.selectOptions(screen.getByRole('combobox', { name: /Tự động xóa lead/ }), '24');
     await user.click(screen.getByRole('button', { name: 'Lưu cài đặt' }));
@@ -98,14 +100,18 @@ describe('PrivacyScreen', () => {
   });
 
   it('keeps focus in the field when the save button is pressed, so its check cannot move the button', () => {
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={empty} canEdit />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={empty} canEdit dataRequests={null} />,
+    );
     // `fireEvent` returns false when the handler prevented the default (moving focus).
     expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Lưu cài đặt' }))).toBe(false);
   });
 
   it('checks the business name and the policy link before saving', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={empty} canEdit />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={empty} canEdit dataRequests={null} />,
+    );
 
     await user.type(screen.getByRole('textbox', { name: /Link chính sách/ }), 'smilecare.vn');
     await user.click(screen.getByRole('button', { name: 'Lưu cài đặt' }));
@@ -120,7 +126,12 @@ describe('PrivacyScreen', () => {
 
   it('suggests the design texts and previews them with the saved business name', () => {
     renderWithProviders(
-      <PrivacyScreen siteId={SITE_ID} settings={{ privacy, currentConsent: null }} canEdit />,
+      <PrivacyScreen
+        siteId={SITE_ID}
+        settings={{ privacy, currentConsent: null }}
+        canEdit
+        dataRequests={null}
+      />,
     );
     const card = consentCard();
     expect(within(card).getByText('Chưa có nội dung đồng ý')).toBeInTheDocument();
@@ -141,7 +152,9 @@ describe('PrivacyScreen', () => {
   it('saves an edited text as the next version', async () => {
     const user = userEvent.setup();
     apiMock.mockResolvedValueOnce(consentVersion(3, { marketingText: null }));
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={configured} canEdit />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit dataRequests={null} />,
+    );
     const card = consentCard();
     const save = within(card).getByRole('button', { name: 'Lưu thành bản 3' });
     // Nothing differs from Bản 2 yet.
@@ -173,7 +186,9 @@ describe('PrivacyScreen', () => {
     );
     const latest = consentVersion(3, { requiredText: 'Bản của người khác.' });
     apiMock.mockResolvedValueOnce({ ...configured, currentConsent: latest });
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={configured} canEdit />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit dataRequests={null} />,
+    );
     const card = consentCard();
 
     await user.type(within(card).getByRole('textbox', { name: /Đồng ý bắt buộc/ }), ' Thêm.');
@@ -189,10 +204,16 @@ describe('PrivacyScreen', () => {
   });
 
   it('shows editors the settings read-only', () => {
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={configured} canEdit={false} />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit={false} dataRequests={null} />,
+    );
     expect(
-      screen.getByText('Chỉ Owner của workspace được thay đổi dữ liệu cá nhân và đồng ý.'),
+      screen.getByText(
+        'Chỉ Owner của workspace được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu cầu từ người gửi form.',
+      ),
     ).toBeInTheDocument();
+    // Requests from people who sent a form are the owner's to handle (ADR-017).
+    expect(screen.queryByRole('region', { name: 'Yêu cầu từ người gửi form' })).toBeNull();
     expect(screen.getByRole('textbox', { name: /Tên doanh nghiệp/ })).toBeDisabled();
     expect(within(consentCard()).getByRole('textbox', { name: /Đồng ý bắt buộc/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Lưu cài đặt' })).toBeNull();
@@ -206,7 +227,9 @@ describe('PrivacyScreen', () => {
       items: [consentVersion(2), consentVersion(1, { marketingText: null })],
       nextCursor: null,
     });
-    renderWithProviders(<PrivacyScreen siteId={SITE_ID} settings={configured} canEdit />);
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit dataRequests={null} />,
+    );
 
     await user.click(screen.getByRole('button', { name: 'Xem các bản đã lưu' }));
     const dialog = await screen.findByRole('dialog', { name: 'Các bản nội dung đồng ý' });

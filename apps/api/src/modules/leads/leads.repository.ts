@@ -75,9 +75,19 @@ const LIST_PROJECTION = {
 /**
  * A person, as the leads of a site know them (ADR-017): every lead with their phone number or
  * email (`LeadSearchKeys` form), and the lead the owner started from, which always belongs to them.
+ * A data request may know only one of the phone number and the email.
  */
-export interface LeadPerson extends Pick<LeadSearchKeys, 'phone' | 'email'> {
+export interface LeadPerson {
   leadId: ObjectId | null;
+  phone: LeadSearchKeys['phone'] | null;
+  email: LeadSearchKeys['email'];
+}
+
+/** A lead's name, phone number (E.164) and email, as the owner corrected them. */
+export interface LeadContact {
+  name: string;
+  phone: string;
+  email: string | null;
 }
 
 /** Changes from the inbox; absent fields stay as they are. */
@@ -108,13 +118,13 @@ function searchFilter(search: LeadQuery): QueryFilter<LeadRecord> {
 }
 
 function personFilter(person: LeadPerson): QueryFilter<LeadRecord> {
-  return {
-    $or: [
-      ...(person.leadId === null ? [] : [{ _id: person.leadId }]),
-      { 'search.phone': person.phone },
-      ...(person.email === null ? [] : [{ 'search.email': person.email }]),
-    ],
-  };
+  const clauses: QueryFilter<LeadRecord>[] = [
+    ...(person.leadId === null ? [] : [{ _id: person.leadId }]),
+    ...(person.phone === null ? [] : [{ 'search.phone': person.phone }]),
+    ...(person.email === null ? [] : [{ 'search.email': person.email }]),
+  ];
+  // Nobody to look for matches no lead (`$or` needs at least one clause).
+  return clauses.length === 0 ? { _id: { $in: [] } } : { $or: clauses };
 }
 
 @Injectable()
@@ -405,6 +415,43 @@ export class LeadsRepository {
       .exec();
   }
 
+  /**
+   * How many leads of the site belong to each person, counting at most `limit` each (the caller
+   * shows "999+"), in one aggregation for a page of data requests rather than one count each.
+   * Each person is counted by their own sub-pipeline, which uses the search indexes and stops at
+   * `limit`; a lead matching by both phone number and email counts once.
+   */
+  async countPeople(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    people: readonly LeadPerson[],
+    limit: number,
+  ): Promise<number[]> {
+    if (people.length === 0) {
+      return [];
+    }
+    const counted = await this.leads
+      .aggregate<{ person: number; count: number }>([
+        // Starts from nothing; each person's count is unioned in.
+        { $match: { _id: { $in: [] } } },
+        ...people.map((person, index) => ({
+          $unionWith: {
+            coll: this.leads.collection.collectionName,
+            pipeline: [
+              { $match: { workspaceId: scope.workspaceId, siteId, ...personFilter(person) } },
+              { $limit: limit },
+              { $count: 'count' },
+              { $set: { person: index } },
+            ],
+          },
+        })),
+      ])
+      .exec();
+    // `$count` emits nothing for a person without leads.
+    const byPerson = new Map(counted.map((row) => [row.person, row.count]));
+    return people.map((_person, index) => byPerson.get(index) ?? 0);
+  }
+
   /** How many leads of the site belong to the person, counting at most `limit`. */
   countPerson(
     scope: WorkspaceScope,
@@ -432,6 +479,59 @@ export class LeadsRepository {
       .sort(NEWEST_FIRST)
       .limit(limit)
       .lean<LeadRecord[]>()
+      .exec();
+  }
+
+  /**
+   * Records that the person withdrew their marketing consent (ADR-017) on each of their leads that
+   * had it, and returns how many changed. The consent they gave stays as evidence.
+   */
+  async withdrawMarketing(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    person: LeadPerson,
+    at: Date,
+    tx: Tx,
+  ): Promise<number> {
+    const result = await this.leads
+      .updateMany(
+        {
+          workspaceId: scope.workspaceId,
+          siteId,
+          ...personFilter(person),
+          'consent.marketing': true,
+          'consent.marketingWithdrawnAt': null,
+        },
+        { $set: { 'consent.marketingWithdrawnAt': at } },
+      )
+      .session(tx)
+      .exec();
+    return result.modifiedCount;
+  }
+
+  /**
+   * Corrects the lead's name, phone number and email, with the search keys that find it and its
+   * person. Null when the lead no longer exists.
+   */
+  updateContact(
+    scope: WorkspaceScope,
+    id: ObjectId,
+    contact: LeadContact,
+  ): Promise<LeadRecord | null> {
+    return this.leads
+      .findOneAndUpdate(
+        { _id: id, workspaceId: scope.workspaceId },
+        {
+          $set: {
+            'fields.name': contact.name,
+            'fields.phone': contact.phone,
+            'fields.email': contact.email,
+            search: leadSearchKeys(contact),
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .lean<LeadRecord>()
       .exec();
   }
 

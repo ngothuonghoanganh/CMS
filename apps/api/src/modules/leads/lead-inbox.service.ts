@@ -5,6 +5,7 @@ import {
   type LeadFilters,
   type LeadListResponse,
   recentDaysWindow,
+  type updateLeadContactRequestSchema,
   type updateLeadRequestSchema,
 } from '@plp/contracts';
 import type { z } from 'zod';
@@ -15,6 +16,7 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
+import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { type LeadCriteria, leadCriteria } from './domain/lead-filters.js';
 import { LeadAccessService, personOfLead } from './lead-access.service.js';
@@ -33,6 +35,7 @@ import { LeadsRepository } from './leads.repository.js';
 /** A page of the inbox: the filters, optionally a search, and the keyset position. */
 export type LeadPageQuery = LeadFilters & { cursor?: string | undefined; limit: number };
 export type UpdateLeadValues = z.output<typeof updateLeadRequestSchema>;
+export type UpdateLeadContactValues = z.output<typeof updateLeadContactRequestSchema>;
 
 /** Leads not suspected of spam, of every page, status and time. */
 const INBOX: LeadCriteria = {
@@ -51,6 +54,7 @@ const INBOX: LeadCriteria = {
 export class LeadInboxService {
   constructor(
     private readonly sites: SitesService,
+    private readonly access: AccessService,
     private readonly leadAccess: LeadAccessService,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -118,6 +122,24 @@ export class LeadInboxService {
     const updated = await this.leads.update(scope, lead._id, input);
     if (!updated) {
       // Deleted (by the owner or its retention period) since it was read.
+      throw notFound(LEAD_NOT_FOUND);
+    }
+    return this.detail(scope, site, updated);
+  }
+
+  /**
+   * "Sửa thông tin", owner only: corrects the person's name, phone number or email, e.g. when they
+   * asked for it (ADR-017). The lead is then found under its new phone number and email.
+   */
+  async updateContact(
+    user: AuthenticatedUser,
+    leadId: string,
+    contact: UpdateLeadContactValues,
+  ): Promise<LeadDetail> {
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
+    this.access.requireOwner(scope);
+    const updated = await this.leads.updateContact(scope, lead._id, contact);
+    if (!updated) {
       throw notFound(LEAD_NOT_FOUND);
     }
     return this.detail(scope, site, updated);

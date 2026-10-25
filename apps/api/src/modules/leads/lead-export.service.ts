@@ -12,8 +12,10 @@ import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
+import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
 import { AccessService } from '../workspaces/access.service.js';
+import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   CSV_BOM,
   csvRecord,
@@ -26,7 +28,7 @@ import { leadCriteria } from './domain/lead-filters.js';
 import { LeadAccessService, personOfLead } from './lead-access.service.js';
 import { consentOf, pageTitleOf, toPersonExportLead } from './lead-dto.js';
 import type { LeadRecord } from './lead.schema.js';
-import { LeadsRepository } from './leads.repository.js';
+import { type LeadPerson, LeadsRepository } from './leads.repository.js';
 
 /** A file an export answers with; the controller sends `body` as an attachment. */
 export interface LeadFile {
@@ -107,10 +109,7 @@ export class LeadExportService {
     };
   }
 
-  /**
-   * "Xuất dữ liệu người này": every lead of the person in the site (at most
-   * `LEAD_PERSON_EXPORT_MAX`), with the consent text each one agreed to, as JSON or CSV.
-   */
+  /** "Xuất dữ liệu người này", from one of their leads. */
   async exportPerson(
     user: AuthenticatedUser,
     leadId: string,
@@ -118,13 +117,22 @@ export class LeadExportService {
   ): Promise<LeadFile> {
     const { scope, site, lead } = await this.leadAccess.access(user, leadId);
     this.access.requireOwner(scope);
+    return (await this.exportPersonFile(scope, site, personOfLead(lead), request)).file;
+  }
+
+  /**
+   * Every lead of the person in the site (at most `LEAD_PERSON_EXPORT_MAX`), with the consent text
+   * each one agreed to, as JSON or CSV; also answers a request to see the stored data (ADR-017).
+   * The caller checked that the user owns the workspace.
+   */
+  async exportPersonFile(
+    scope: WorkspaceScope,
+    site: SiteRecord,
+    person: LeadPerson,
+    request: PersonExportRequest,
+  ): Promise<{ file: LeadFile; count: number }> {
     const now = new Date();
-    const leads = await this.leads.listPerson(
-      scope,
-      site._id,
-      personOfLead(lead),
-      LEAD_PERSON_EXPORT_MAX + 1,
-    );
+    const leads = await this.leads.listPerson(scope, site._id, person, LEAD_PERSON_EXPORT_MAX + 1);
     const included = leads.slice(0, LEAD_PERSON_EXPORT_MAX);
     const [titles, captures] = await Promise.all([
       this.pages.findTitles(
@@ -154,10 +162,13 @@ export class LeadExportService {
         );
       });
       return {
-        filename: `${filename}.csv`,
-        contentType: CSV_TYPE,
-        body: CSV_BOM + csvRecord(PERSON_CSV_HEADER) + rows.join(''),
-        truncated,
+        file: {
+          filename: `${filename}.csv`,
+          contentType: CSV_TYPE,
+          body: CSV_BOM + csvRecord(PERSON_CSV_HEADER) + rows.join(''),
+          truncated,
+        },
+        count: included.length,
       };
     }
     const file: PersonExportFile = {
@@ -168,10 +179,13 @@ export class LeadExportService {
       ),
     };
     return {
-      filename: `${filename}.json`,
-      contentType: 'application/json; charset=utf-8',
-      body: JSON.stringify(file, null, 2),
-      truncated,
+      file: {
+        filename: `${filename}.json`,
+        contentType: 'application/json; charset=utf-8',
+        body: JSON.stringify(file, null, 2),
+        truncated,
+      },
+      count: included.length,
     };
   }
 }

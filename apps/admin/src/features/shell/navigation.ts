@@ -27,6 +27,11 @@ export function leadsHref(siteId: string, search = ''): string {
   return `${siteHref(siteId)}/leads${search}`;
 }
 
+/** One lead open in the inbox, whenever it arrived. */
+export function leadHref(siteId: string, leadId: string): string {
+  return leadsHref(siteId, `?lead=${encodeURIComponent(leadId)}&range=all`);
+}
+
 /**
  * The inbox the badge "N mới" and the dashboard's "chưa xử lý" open: status "Mới" of every time,
  * the leads they count (ADR-018).

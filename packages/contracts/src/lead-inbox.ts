@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type VnDay, vnDaySchema, vnDaySpan } from './calendar.js';
 import { idSchema, isoDateTimeSchema } from './common.js';
+import { leadEmailSchema, leadNameSchema, leadPhoneSchema } from './lead.js';
 import { leadNotificationSchema } from './lead-recipients.js';
 
 /**
@@ -248,6 +249,17 @@ export const updateLeadRequestSchema = z
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Không có thay đổi nào để lưu');
 export type UpdateLeadRequest = z.input<typeof updateLeadRequestSchema>;
+
+/**
+ * Owner only: corrects how a person is named and reached, e.g. for a request to correct their data
+ * (ADR-017). The same rules as the form: the phone number is stored as E.164.
+ */
+export const updateLeadContactRequestSchema = z.object({
+  name: leadNameSchema,
+  phone: leadPhoneSchema,
+  email: leadEmailSchema,
+});
+export type UpdateLeadContactRequest = z.input<typeof updateLeadContactRequestSchema>;
 
 export const leadCountsSchema = z.object({
   /** Status "Mới", spam excluded, all time: the sidebar badge and "chưa xử lý" (ADR-018). */
