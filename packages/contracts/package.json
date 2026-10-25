@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./page-view": {
+      "types": "./dist/page-view.d.ts",
+      "import": "./dist/page-view.js"
     }
   },
   "files": [

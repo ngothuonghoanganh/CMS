@@ -5,6 +5,7 @@ import { type Env, siteOrigin } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { addressKeySecret } from '../../shared/renderer-channel/address-key.js';
 import type { RendererClient } from '../../shared/renderer-channel/renderer-request.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { releaseLeadCapture } from '../publishing/release-presentation.js';
@@ -45,6 +46,8 @@ interface FormRelease {
  */
 @Injectable()
 export class LeadIntakeService {
+  private readonly addressSecret: Buffer;
+
   constructor(
     @InjectEnv() private readonly env: Env,
     private readonly sites: SitesRepository,
@@ -53,7 +56,9 @@ export class LeadIntakeService {
     private readonly leads: LeadsRepository,
     private readonly limits: LeadLimitsRepository,
     private readonly notifier: LeadNotifier,
-  ) {}
+  ) {
+    this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
+  }
 
   async submit(
     subdomain: string,
@@ -162,7 +167,11 @@ export class LeadIntakeService {
     const clientWindowEnd = new Date(
       now.getTime() + this.env.LEAD_LIMIT_PER_CLIENT_WINDOW_MINUTES * 60_000,
     );
-    const client = await this.limits.hit(clientLimitKey(siteId, ip), now, clientWindowEnd);
+    const client = await this.limits.hit(
+      clientLimitKey(this.addressSecret, siteId, ip),
+      now,
+      clientWindowEnd,
+    );
     if (client.count > this.env.LEAD_LIMIT_PER_CLIENT) {
       throw new AppError(429, 'rate_limited', RATE_LIMITED, { detail: RATE_LIMITED });
     }

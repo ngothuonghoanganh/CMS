@@ -73,4 +73,11 @@ describe('admin tokens', () => {
   ] as const)('%s against %s keeps 3:1 for controls', (foreground, background) => {
     expect(contrast(token(foreground), token(background))).toBeGreaterThanOrEqual(3);
   });
+
+  it.each(['chart-bar', 'chart-bar-emphasis', 'chart-series-1', 'chart-series-2'] as const)(
+    '%s keeps 3:1 on the card surface: a chart mark is read without its tooltip',
+    (mark) => {
+      expect(contrast(token(mark), token('color-surface'))).toBeGreaterThanOrEqual(3);
+    },
+  );
 });

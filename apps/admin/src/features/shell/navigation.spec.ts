@@ -10,13 +10,14 @@ import {
 } from './navigation';
 
 const siteId = '64b000000000000000000001';
-const [pages, leads, domain, privacy, settings] = siteNavItems(siteId);
+const [pages, leads, analytics, domain, privacy, settings] = siteNavItems(siteId);
 
 describe('siteNavItems', () => {
   it('lists the sections of a site in the order of the design', () => {
     expect(siteNavItems(siteId)).toEqual([
       { key: 'pages', label: 'Trang', href: `/sites/${siteId}` },
       { key: 'leads', label: 'Leads', href: `/sites/${siteId}/leads` },
+      { key: 'analytics', label: 'Hiệu quả', href: `/sites/${siteId}/analytics` },
       { key: 'domain', label: 'Tên miền', href: `/sites/${siteId}/domain` },
       { key: 'privacy', label: 'Dữ liệu & đồng ý', href: `/sites/${siteId}/privacy` },
       { key: 'settings', label: 'Cài đặt site', href: `/sites/${siteId}/settings` },
@@ -26,11 +27,13 @@ describe('siteNavItems', () => {
 
 describe('navCurrent', () => {
   it('marks the current section page', () => {
-    if (!pages || !leads || !domain || !privacy || !settings) {
+    if (!pages || !leads || !analytics || !domain || !privacy || !settings) {
       throw new Error('missing nav items');
     }
     expect(navCurrent(`/sites/${siteId}`, pages)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/leads`, leads)).toBe('page');
+    expect(navCurrent(`/sites/${siteId}/analytics`, analytics)).toBe('page');
+    expect(navCurrent(`/sites/${siteId}/analytics`, leads)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/leads`, pages)).toBeUndefined();
     expect(navCurrent(`/sites/${siteId}/domain`, domain)).toBe('page');
     expect(navCurrent(`/sites/${siteId}/domain`, pages)).toBeUndefined();

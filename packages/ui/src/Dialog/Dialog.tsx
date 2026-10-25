@@ -81,6 +81,15 @@ export function Dialog({
             }
           }}
           onCloseAutoFocus={focus.restoreFocus}
+          onKeyDown={(event) => {
+            // Radix gives Escape to the newest layer only. While a toast shows, that is the toast:
+            // it closes and lets the key through, so the dialog closes here too. When the dialog
+            // (or a menu inside it) handled the key, it is already marked as handled.
+            if (event.key === 'Escape' && !event.defaultPrevented && onOpenChange !== undefined) {
+              event.preventDefault();
+              onOpenChange(false);
+            }
+          }}
         >
           <div className={styles.header}>
             <div className={styles.heading}>

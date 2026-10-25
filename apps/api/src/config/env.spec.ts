@@ -31,6 +31,10 @@ describe('parseEnv', () => {
     expect(env.LEAD_LIMIT_PER_CLIENT).toBe(5);
     expect(env.LEAD_LIMIT_PER_CLIENT_WINDOW_MINUTES).toBe(10);
     expect(env.LEAD_LIMIT_PER_SITE_PER_HOUR).toBe(300);
+    // ADR-019: 60 views per visitor in 10 minutes, 20,000 per site per hour.
+    expect(env.PAGE_VIEW_LIMIT_PER_CLIENT).toBe(60);
+    expect(env.PAGE_VIEW_LIMIT_PER_CLIENT_WINDOW_MINUTES).toBe(10);
+    expect(env.PAGE_VIEW_LIMIT_PER_SITE_PER_HOUR).toBe(20_000);
   });
 
   it('fails fast with the name of a missing variable', () => {

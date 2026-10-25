@@ -95,9 +95,10 @@ describe('Dashboard', () => {
 
     expect(screen.getByText('Mây Xanh Agency / Nha khoa Smile Care')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Trang' })).toBeInTheDocument();
+    // Opened from the admin: that browser's views are not counted (ADR-019).
     expect(screen.getByRole('link', { name: /Xem site live/ })).toHaveAttribute(
       'href',
-      'https://smilecare.payload.site',
+      'https://smilecare.payload.site/?plp_internal=1',
     );
     expect(screen.getByRole('link', { name: 'Tạo trang' })).toHaveAttribute(
       'href',
@@ -367,7 +368,11 @@ describe('Dashboard', () => {
       'Gỡ xuất bản',
     ]);
     await user.click(screen.getByRole('menuitem', { name: 'Xem trang live' }));
-    expect(open).toHaveBeenCalledWith(livePage.liveUrl, '_blank', 'noopener,noreferrer');
+    expect(open).toHaveBeenCalledWith(
+      `${livePage.liveUrl ?? ''}?plp_internal=1`,
+      '_blank',
+      'noopener,noreferrer',
+    );
 
     await user.click(screen.getByRole('button', { name: `Tùy chọn khác cho ${livePage.title}` }));
     await user.click(screen.getByRole('menuitem', { name: 'Lịch sử phiên bản' }));

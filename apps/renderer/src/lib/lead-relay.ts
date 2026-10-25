@@ -1,15 +1,6 @@
-import {
-  CLIENT_IP_HEADER,
-  CLIENT_UA_HEADER,
-  CLIENT_UA_MAX,
-  endpoints,
-  type ProblemIssue,
-  problemSchema,
-  RENDERER_SIGNATURE_HEADER,
-  RENDERER_TIMESTAMP_HEADER,
-} from '@plp/contracts';
+import { endpoints, type ProblemIssue, problemSchema } from '@plp/contracts';
 import type { RendererEnv } from '../env';
-import { signRendererRequest } from './renderer-signature';
+import { sendSignedRelay } from './signed-relay';
 
 /** The API should answer well within this; a visitor waits on it. */
 const RELAY_TIMEOUT_MS = 10_000;
@@ -32,41 +23,20 @@ export interface RelayInput {
 }
 
 /**
- * Sends a visitor's lead to the API, signed (ADR-016). The headers are built here from scratch:
- * nothing the visitor sent, such as a forged client address, can reach the API. Failures are
- * logged with the status only, never the lead.
+ * Sends a visitor's lead to the API, signed (ADR-016; see `sendSignedRelay`). Failures are logged
+ * with the status only, never the lead.
  */
 export async function relayLead(input: RelayInput): Promise<RelayOutcome> {
-  const path = endpoints.publicSubmitLead.path(input.subdomain);
-  const body = JSON.stringify(input.body);
-  const timestamp = String(input.nowSeconds ?? Math.floor(Date.now() / 1000));
-  const userAgent = input.userAgent.slice(0, CLIENT_UA_MAX);
-  const clientIp = input.clientIp ?? '';
-  const headers = new Headers({
-    accept: 'application/json',
-    'content-type': 'application/json',
-    [RENDERER_TIMESTAMP_HEADER]: timestamp,
-    [RENDERER_SIGNATURE_HEADER]: signRendererRequest(input.env.RENDERER_API_SECRET, {
-      timestamp,
-      method: 'POST',
-      path,
-      clientIp,
-      userAgent,
-      body,
-    }),
-    [CLIENT_UA_HEADER]: userAgent,
-  });
-  if (clientIp !== '') {
-    headers.set(CLIENT_IP_HEADER, clientIp);
-  }
   let response: Response;
   try {
-    response = await fetch(`${input.env.API_PUBLIC_URL}${path}`, {
-      method: 'POST',
-      headers,
-      body,
-      cache: 'no-store',
-      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+    response = await sendSignedRelay({
+      path: endpoints.publicSubmitLead.path(input.subdomain),
+      body: input.body,
+      clientIp: input.clientIp,
+      userAgent: input.userAgent,
+      env: input.env,
+      timeoutMs: RELAY_TIMEOUT_MS,
+      ...(input.nowSeconds === undefined ? {} : { nowSeconds: input.nowSeconds }),
     });
   } catch (error) {
     console.error('Lead relay could not reach the API', {

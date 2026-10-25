@@ -1,5 +1,5 @@
-/** Site sections in the sidebar. "Hiệu quả" comes with a later MVP B slice. */
-export type SiteNavKey = 'pages' | 'leads' | 'domain' | 'privacy' | 'settings';
+/** Site sections in the sidebar, in the order of the design. */
+export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'privacy' | 'settings';
 
 export interface SiteNavItem {
   key: SiteNavKey;
@@ -16,6 +16,7 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
   return [
     { key: 'pages', label: 'Trang', href: base },
     { key: 'leads', label: 'Leads', href: leadsHref(siteId) },
+    { key: 'analytics', label: 'Hiệu quả', href: analyticsHref(siteId) },
     { key: 'domain', label: 'Tên miền', href: `${base}/domain` },
     { key: 'privacy', label: 'Dữ liệu & đồng ý', href: privacyHref(siteId) },
     { key: 'settings', label: 'Cài đặt site', href: `${base}/settings` },
@@ -25,6 +26,11 @@ export function siteNavItems(siteId: string): SiteNavItem[] {
 /** The lead inbox (ADR-018), optionally with filters such as `?status=new&range=all`. */
 export function leadsHref(siteId: string, search = ''): string {
   return `${siteHref(siteId)}/leads${search}`;
+}
+
+/** "Hiệu quả" (ADR-019), optionally with its range and page, such as `?range=30d`. */
+export function analyticsHref(siteId: string, search = ''): string {
+  return `${siteHref(siteId)}/analytics${search}`;
 }
 
 /** One lead open in the inbox, whenever it arrived. */

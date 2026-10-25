@@ -1,4 +1,5 @@
 export * from './activity.js';
+export * from './analytics.js';
 export * from './asset.js';
 export * from './auth.js';
 export * from './calendar.js';
@@ -15,6 +16,7 @@ export * from './lead.js';
 export * from './lead-inbox.js';
 export * from './lead-recipients.js';
 export * from './page.js';
+export * from './page-view.js';
 export * from './preview.js';
 export * from './privacy.js';
 export * from './public.js';

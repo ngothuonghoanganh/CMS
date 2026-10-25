@@ -10,6 +10,7 @@ import {
 import {
   Avatar,
   Badge,
+  ChartBarIcon,
   ChevronUpDownIcon,
   DropdownMenu,
   DropdownMenuItem,
@@ -42,6 +43,7 @@ import styles from './Sidebar.module.css';
 const navIcons: Record<SiteNavKey, IconComponent> = {
   pages: FileIcon,
   leads: InboxIcon,
+  analytics: ChartBarIcon,
   domain: GlobeIcon,
   privacy: ShieldCheckIcon,
   settings: SettingsIcon,

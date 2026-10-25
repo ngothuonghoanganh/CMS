@@ -19,7 +19,12 @@ describe('responseHeaderRules', () => {
     });
   });
 
-  it('keeps the lead route out of search engines, caches and Referer headers', () => {
+  it('keeps the lead and page view routes out of search engines, caches and Referer headers', () => {
+    expect(headersFor('/_e')).toEqual({
+      'X-Robots-Tag': 'noindex, nofollow',
+      'Referrer-Policy': 'no-referrer',
+      'Cache-Control': 'no-store',
+    });
     expect(headersFor('/_lead')).toEqual({
       'X-Robots-Tag': 'noindex, nofollow',
       'Referrer-Policy': 'no-referrer',

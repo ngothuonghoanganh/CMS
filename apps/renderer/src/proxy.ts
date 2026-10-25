@@ -10,7 +10,7 @@ import { getPathStatus } from './lib/public-api';
  * (`/_lead`, ADR-016) answer on their own.
  */
 export const config = {
-  matcher: ['/((?!_next/|_preview/|api/|(?:healthz|sitemap\\.xml|robots\\.txt|_lead)$).*)'],
+  matcher: ['/((?!_next/|_preview/|api/|(?:healthz|sitemap\\.xml|robots\\.txt|_lead|_e)$).*)'],
 };
 
 /**

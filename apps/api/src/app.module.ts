@@ -7,6 +7,7 @@ import { LoggerModule } from 'nestjs-pino';
 import type { Env } from './config/env.js';
 import { HealthModule } from './health/health.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
+import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { DataRequestsModule } from './modules/data-requests/data-requests.module.js';
@@ -63,6 +64,7 @@ export class AppModule {
         PublishingModule,
         LeadsModule,
         DataRequestsModule,
+        AnalyticsModule,
         NotificationsModule,
         PreviewModule,
         PrivacyModule,

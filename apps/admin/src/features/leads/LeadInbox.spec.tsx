@@ -9,6 +9,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, downloadFile } from '../../lib/api';
+import { analyticsQueryKeys } from '../analytics/queries';
 import { NO_LEADS, siteFixture } from '../dashboard/test-fixtures';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { DEFAULT_LEAD_FILTERS, type LeadInboxFilters } from './filters';
@@ -345,7 +346,10 @@ describe('LeadInbox', () => {
   });
 
   it('moves a lead to spam and back for editors, without the owner-only actions', async () => {
-    renderInbox({ canManage: false });
+    const { queryClient } = renderInbox({ canManage: false });
+    // "Hiệu quả" leaves spam out: a report kept from a visit there is read again.
+    const analytics = analyticsQueryKeys.report(SITE_ID, { range: '7d', pageId: null });
+    queryClient.setQueryData(analytics, { kept: true });
     expect(screen.queryByRole('button', { name: 'Xuất Excel / CSV' })).not.toBeInTheDocument();
     const { user, panel } = await openLead();
 
@@ -363,6 +367,7 @@ describe('LeadInbox', () => {
       });
     });
     expect(await screen.findByText('Đã chuyển vào Nghi ngờ spam')).toBeInTheDocument();
+    expect(queryClient.getQueryState(analytics)?.isInvalidated).toBe(true);
     expect(
       within(panel).getByText('Một thành viên đã chuyển lead này vào Nghi ngờ spam.'),
     ).toBeInTheDocument();

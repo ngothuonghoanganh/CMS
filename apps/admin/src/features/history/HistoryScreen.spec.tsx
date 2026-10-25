@@ -207,6 +207,11 @@ describe('HistoryScreen', () => {
         'v11 đang live tại smilecare.payload.site/uu-dai-thang-11 · khôi phục lúc 17:20 bởi Ngọc Anh',
       );
     });
+    // A member's own visit from here is flagged, so "Hiệu quả" does not count it (ADR-019).
+    expect(within(banner).getByRole('link', { name: /Xem trang live/ })).toHaveAttribute(
+      'href',
+      'https://smilecare.payload.site/uu-dai-thang-11?plp_internal=1',
+    );
     expect(screen.queryByRole('region', { name: /Khôi phục v/ })).not.toBeInTheDocument();
     // The panel that held focus is gone: focus moves to the confirmation, which was written into
     // a live region that was already on the page (so it is announced).

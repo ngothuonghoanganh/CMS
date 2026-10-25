@@ -4,6 +4,13 @@ import { PRIVACY } from './setup.js';
 /** The required consent text of a "Thu lead" page, filled with the business name (ADR-017). */
 export const FILLED_CONSENT = `Tôi đồng ý để ${PRIVACY.controllerName} xử lý họ tên và số điện thoại của tôi nhằm liên hệ tư vấn dịch vụ.`;
 
+/**
+ * A desktop browser people use: Playwright's own user agent says "HeadlessChrome", which is never
+ * counted as a view (ADR-019).
+ */
+export const VISITOR_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+
 export interface Visitor {
   name: string;
   phone: string;

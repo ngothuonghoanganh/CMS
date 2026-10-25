@@ -54,6 +54,23 @@ describe('PageDetailHeader', () => {
     expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).not.toBeInTheDocument();
   });
 
+  it('opens the live page from "Tùy chọn khác" as a member’s visit, not counted', async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderWithProviders(
+      <PageDetailHeader siteId={SITE_ID} page={pageFixture()} current="history" now={NOW} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Xem trang live' }));
+    expect(open).toHaveBeenCalledWith(
+      'https://smilecare.payload.site/uu-dai-thang-11?plp_internal=1',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    open.mockRestore();
+  });
+
   it('unpublishes a live page with a reason from "Tùy chọn khác"', async () => {
     const user = userEvent.setup();
     const page = pageFixture();

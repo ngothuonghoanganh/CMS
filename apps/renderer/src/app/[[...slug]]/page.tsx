@@ -1,6 +1,7 @@
 import type { PublicPageData } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
+import { PageViewBeacon } from '../../components/PageViewBeacon';
 import { SitePage } from '../../components/SitePage';
 import { pageMetadata } from '../../lib/metadata';
 import { getResolved } from '../../lib/public-api';
@@ -54,5 +55,11 @@ export default async function PublicPage({ params }: PublicPageProps) {
   if (resolution.kind === 'not_found') {
     notFound();
   }
-  return <SitePage data={resolution.data} submission="live" />;
+  // Only live pages count views: never previews or the not-found page (ADR-019).
+  return (
+    <>
+      <SitePage data={resolution.data} submission="live" />
+      <PageViewBeacon />
+    </>
+  );
 }

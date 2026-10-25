@@ -77,9 +77,10 @@ test.describe('S3 · preview and publish', () => {
     ).toBeVisible();
     const address = `${site.subdomain}.localhost:3101/uu-dai`;
     await expect(done.getByRole('img', { name: `Mã QR của ${address}` })).toBeVisible();
+    // A member's own visit is not counted (ADR-019); the QR code keeps the address to share.
     await expect(done.getByRole('link', { name: /Mở trang live/ })).toHaveAttribute(
       'href',
-      `${siteOrigin(site.subdomain)}/uu-dai`,
+      `${siteOrigin(site.subdomain)}/uu-dai?plp_internal=1`,
     );
 
     // The very next request to the public URL already serves v1.

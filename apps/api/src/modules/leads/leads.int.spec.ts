@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { problemSchema, publicLeadResponseSchema, type Site } from '@plp/contracts';
 import { Types } from 'mongoose';
@@ -289,6 +290,17 @@ describe('lead intake', () => {
     }).expect(429);
     expect(problemSchema.parse(siteLimited.body).code).toBe('rate_limited');
     expect(await storedLeads(site)).toHaveLength(SITE_LIMIT);
+    // The buckets key addresses with a secret: neither an address nor its plain hash is stored.
+    const keys = JSON.stringify(
+      await t.connection
+        .collection('lead_limits')
+        .find({ key: { $regex: site.id } })
+        .toArray(),
+    );
+    for (const ip of ['203.0.113.7', '198.51.100.20', '198.51.100.21', '198.51.100.22']) {
+      expect(keys).not.toContain(ip);
+      expect(keys).not.toContain(createHash('sha256').update(ip).digest('hex'));
+    }
 
     // An ended window starts over.
     await t.connection

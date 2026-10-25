@@ -24,6 +24,7 @@ import {
 } from '../dashboard/UnpublishDialog';
 import { pageHref, siteHref } from '../shell/navigation';
 import styles from './PageDetailHeader.module.css';
+import { internalVisitUrl } from '../../lib/site-url';
 
 export type PageView = 'seo' | 'history';
 
@@ -128,7 +129,7 @@ export function PageDetailHeader({
                   icon={<ExternalLinkIcon size={18} />}
                   onSelect={() => {
                     if (live.liveUrl !== null) {
-                      window.open(live.liveUrl, '_blank', 'noopener,noreferrer');
+                      window.open(internalVisitUrl(live.liveUrl), '_blank', 'noopener,noreferrer');
                     }
                   }}
                 >

@@ -19,7 +19,15 @@ describe('reserved slugs', () => {
   it('cover every top-level route of the renderer, so no page is published where it never shows', () => {
     const routes = topLevelRoutes();
     expect(routes).toEqual(
-      expect.arrayContaining(['_preview', '_lead', 'api', 'healthz', 'robots.txt', 'sitemap.xml']),
+      expect.arrayContaining([
+        '_preview',
+        '_lead',
+        '_e',
+        'api',
+        'healthz',
+        'robots.txt',
+        'sitemap.xml',
+      ]),
     );
     expect(reservedSlugs).toEqual(expect.arrayContaining(routes));
   });

@@ -20,6 +20,15 @@ export function responseHeaderRules(): HeaderRule[] {
       ],
     },
     {
+      // Page views (ADR-019): never indexed or cached.
+      source: '/_e',
+      headers: [
+        { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        { key: 'Referrer-Policy', value: 'no-referrer' },
+        { key: 'Cache-Control', value: 'no-store' },
+      ],
+    },
+    {
       // The lead route answers one visitor: never indexed or cached, no Referer onwards (ADR-016).
       source: '/_lead',
       headers: [

@@ -111,14 +111,18 @@ describe('proxy', () => {
 });
 
 describe('proxy matcher', () => {
-  it.each(['/', '/uu-dai', '/_leadx', '/lead'])('gates the page path %s', (url) => {
+  it.each(['/', '/uu-dai', '/_leadx', '/lead', '/_ex', '/e'])('gates the page path %s', (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true);
   });
 
-  it.each(['/_lead', '/_preview/abc', '/_next/static/x.js', '/api/revalidate', '/sitemap.xml'])(
-    'leaves %s to its own route',
-    (url) => {
-      expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false);
-    },
-  );
+  it.each([
+    '/_lead',
+    '/_e',
+    '/_preview/abc',
+    '/_next/static/x.js',
+    '/api/revalidate',
+    '/sitemap.xml',
+  ])('leaves %s to its own route', (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false);
+  });
 });

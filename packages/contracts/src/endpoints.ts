@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { activityListQuerySchema, activityListResponseSchema } from './activity.js';
+import { analyticsQuerySchema, analyticsReportSchema, pageViewSchema } from './analytics.js';
 import {
   assetListQuerySchema,
   assetListResponseSchema,
@@ -315,6 +316,27 @@ export const endpoints = {
     request: null,
     query: null,
     response: leadDetailSchema,
+  }),
+
+  // Analytics (ADR-019)
+  /**
+   * Renderer only, signed (ADR-016): one view of a live page. Always 204: a view that is not
+   * counted (a bot, a page that is not live, over the rate limit) is not an error for the visitor.
+   */
+  publicRecordPageView: endpoint({
+    method: 'POST',
+    path: (subdomain: string) => `/public/sites/${e(subdomain)}/events`,
+    request: pageViewSchema,
+    query: null,
+    response: null,
+  }),
+  /** Members: "Hiệu quả" for a range, of the site or one page. */
+  analyticsReport: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/analytics`,
+    request: null,
+    query: analyticsQuerySchema,
+    response: analyticsReportSchema,
   }),
 
   // Requests from people who sent a form (ADR-017): owner only

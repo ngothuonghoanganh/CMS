@@ -1,0 +1,463 @@
+/* "Hiệu quả" (board 11). Chart colors come from the chart tokens of @plp/ui. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageFilter {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+/* A refetch keeps the previous numbers on screen, dimmed: no skeleton, no layout jump. */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.content[data-refreshing='true'] {
+  opacity: 0.6;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.kpi dt {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.kpi dd {
+  margin: 0;
+}
+
+/* Proportional figures: a lone large number reads tighter than tabular digits. */
+.kpiValue {
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--color-ink);
+}
+
+.kpiNote {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cardHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.cardTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hint {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.hintTouch {
+  display: none;
+}
+
+@media (hover: none) {
+  .hintPointer {
+    display: none;
+  }
+
+  .hintTouch {
+    display: inline;
+  }
+}
+
+/*
+ * The daily chart: the y axis, the plot, and the day labels under it. The labels follow the
+ * chart's own width, which the sidebar and the window both change.
+ */
+.chart {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 200px auto;
+  column-gap: 10px;
+  margin-top: 8px;
+}
+
+.yAxis {
+  position: relative;
+  min-width: 24px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--color-muted);
+}
+
+.yTick {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  line-height: 1;
+}
+
+.plot {
+  position: relative;
+}
+
+.gridline {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--chart-grid);
+}
+
+.baseline {
+  background: var(--chart-axis);
+}
+
+.bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+/* The whole slot is the hit target, much larger than the bar. */
+.slot {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.slot:focus-visible {
+  border-radius: 4px;
+  outline: var(--focus-outline);
+  outline-offset: -2px;
+}
+
+/*
+ * At most 24px wide, rounded at the data end only, 2px of surface between neighbours. Ninety days
+ * on a phone leave under 3px a day: the gap shrinks there, so bars never thin to a hairline.
+ */
+.bar {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: min(24px, calc(100% - min(2px, 25%)));
+  border-radius: 4px 4px 0 0;
+  background: var(--chart-bar);
+  transform: translateX(-50%);
+  transition: background-color var(--duration-fast) ease;
+}
+
+.slotActive .bar {
+  background: var(--chart-bar-emphasis);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.xAxis {
+  display: flex;
+  grid-column: 2;
+  margin-top: 8px;
+}
+
+.xLabel {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  white-space: nowrap;
+  color: var(--color-ink-2);
+}
+
+.xLeads {
+  color: var(--color-muted);
+}
+
+/* Today's label ends at the plot's edge instead of spilling past it. */
+.xAxisSparse .xLabel:last-child {
+  align-items: flex-end;
+}
+
+/*
+ * Held at the edge, today's label reaches back toward the one before it (13 days back of 90):
+ * every other label gives way until the chart has room for both.
+ */
+@container (max-width: 660px) {
+  .xLabelMinor {
+    visibility: hidden;
+  }
+}
+
+/* A narrow chart stacks the weekday over the date so neighbouring labels never collide. */
+@container (max-width: 560px) {
+  .xDay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+/*
+ * Narrower still, a label keeps one line: the weekday in a week, whose dates the period above
+ * gives, and the date beyond. A day's leads stay in the tooltip and the table.
+ */
+@container (max-width: 400px) {
+  .xLeads,
+  .xAxis:not(.xAxisSparse) .xDate,
+  .xAxisSparse .xWeekday {
+    display: none;
+  }
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--color-on-primary);
+  pointer-events: none;
+}
+
+.tooltipDay {
+  display: block;
+  font-weight: 600;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+}
+
+.table th,
+.table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.table th {
+  font-weight: 400;
+  text-align: left;
+}
+
+/* Column headers. A row's own header, its day or its source, reads as the rest of the row. */
+.table thead th {
+  padding: 8px 10px;
+  border-bottom-color: var(--color-border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--color-muted);
+}
+
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.table th.number {
+  text-align: right;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.tableScroll {
+  position: relative;
+  overflow-x: auto;
+}
+
+/* Sources on the left; pages and devices stacked on the right. */
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.columns > :first-child {
+  flex: 3 1 420px;
+}
+
+.side {
+  display: flex;
+  flex: 2 1 320px;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.pageList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pageRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-body);
+}
+
+.pageTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageNumbers {
+  flex: none;
+  color: var(--color-ink-2);
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+/* Devices: two segments of one bar, 2px of surface between them. */
+.deviceBar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+}
+
+.deviceSegment {
+  height: 100%;
+}
+
+.deviceSegment:first-child {
+  border-radius: 999px 0 0 999px;
+}
+
+.deviceSegment:last-child {
+  border-radius: 0 999px 999px 0;
+}
+
+.deviceSegment:only-child {
+  border-radius: 999px;
+}
+
+.mobile {
+  background: var(--chart-series-1);
+}
+
+.desktop {
+  background: var(--chart-series-2);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-body-sm);
+  list-style: none;
+  color: var(--color-ink-2);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.method {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
