@@ -28,6 +28,16 @@ export interface LeadCaptureSettings {
   } | null;
 }
 
+/** What a form still needs before it can be published (`consent_not_configured`). */
+export type LeadCaptureGap = 'privacy' | 'consent';
+
+export function leadCaptureGaps({ privacy, consent }: LeadCaptureSettings): LeadCaptureGap[] {
+  return [
+    ...(privacy === null ? ['privacy' as const] : []),
+    ...(consent === null ? ['consent' as const] : []),
+  ];
+}
+
 /** The lead capture the next publish would freeze; null while the settings are incomplete. */
 export function currentLeadCapture({ privacy, consent }: LeadCaptureSettings): LeadCapture | null {
   if (privacy === null || consent === null) {

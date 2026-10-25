@@ -2,6 +2,12 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { Env } from './config/env.js';
 
+/**
+ * Options for creating the Nest application, shared by the server and integration tests.
+ * `rawBody` keeps the exact JSON bytes the renderer signed (ADR-016) as `req.rawBody`.
+ */
+export const NEST_APP_OPTIONS = { rawBody: true } as const;
+
 /** HTTP settings shared by the server and integration tests. */
 export function configureApp(
   app: NestExpressApplication,

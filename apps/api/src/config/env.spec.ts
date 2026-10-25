@@ -8,6 +8,7 @@ const valid = {
   RENDERER_INTERNAL_URL: 'http://localhost:3101',
   REVALIDATE_SECRET: 'r'.repeat(32),
   PREVIEW_SECRET: 'p'.repeat(32),
+  RENDERER_API_SECRET: 'r'.repeat(32),
   S3_ENDPOINT: 'http://localhost:9100',
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'plp-assets',
@@ -24,6 +25,10 @@ describe('parseEnv', () => {
     expect(env.COOKIE_SECURE).toBe(true);
     expect(env.LOG_LEVEL).toBe('info');
     expect(env.TRUST_PROXY_HOPS).toBe(0);
+    // ADR-016: 5 leads per visitor in 10 minutes, 300 per site per hour.
+    expect(env.LEAD_LIMIT_PER_CLIENT).toBe(5);
+    expect(env.LEAD_LIMIT_PER_CLIENT_WINDOW_MINUTES).toBe(10);
+    expect(env.LEAD_LIMIT_PER_SITE_PER_HOUR).toBe(300);
   });
 
   it('fails fast with the name of a missing variable', () => {
@@ -33,6 +38,9 @@ describe('parseEnv', () => {
 
   it('rejects short secrets', () => {
     expect(() => parseEnv({ ...valid, PREVIEW_SECRET: 'short' })).toThrow(/PREVIEW_SECRET/);
+    expect(() => parseEnv({ ...valid, RENDERER_API_SECRET: 'short' })).toThrow(
+      /RENDERER_API_SECRET/,
+    );
   });
 
   it('requires the {subdomain} placeholder in the public origin template', () => {

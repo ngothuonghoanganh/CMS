@@ -20,8 +20,10 @@ import {
   isCtaUsed,
   isLinkComplete,
   type LeafOccurrence,
+  leadFormSectionOf,
   validateComposition,
 } from '@plp/sections/schema';
+import type { LeadCaptureGap } from './lead-capture.js';
 import type { PageSnapshot } from './snapshot.js';
 
 type CheckCode = CheckItem['code'];
@@ -45,6 +47,8 @@ export interface ChecksInput {
   existingAssetIds: ReadonlySet<string>;
   /** Live pages of the site other than this one. */
   otherLivePages: readonly LivePageRef[];
+  /** Site settings a lead form needs and the site does not have yet (ADR-016, ADR-017). */
+  leadCaptureGaps: readonly LeadCaptureGap[];
 }
 
 export const PASSED_CHECK_TITLES: Record<PassedCode, string> = {
@@ -56,6 +60,7 @@ export const PASSED_CHECK_TITLES: Record<PassedCode, string> = {
   mobile_visible: 'Hiển thị tốt trên điện thoại',
   images_described: 'Ảnh có mô tả',
   no_sample_content: 'Không còn nội dung mẫu',
+  privacy_policy: 'Có liên kết chính sách quyền riêng tư',
 };
 
 /** Which findings make a passed group fail. `contrast_aa` holds by construction (ADR-007). */
@@ -68,7 +73,11 @@ const PASSED_GROUPS: Record<PassedCode, readonly CheckCode[]> = {
   mobile_visible: ['no_visible_section_mobile'],
   images_described: ['image_alt_missing'],
   no_sample_content: ['sample_content'],
+  privacy_policy: ['consent_not_configured'],
 };
+
+/** Passed groups that only mean something on a page with a lead form. */
+const FORM_PASSED_GROUPS: ReadonlySet<PassedCode> = new Set(['privacy_policy']);
 
 const REQUIRED_DESCRIPTION = 'Đây là nội dung bắt buộc. Điền vào trước khi xuất bản.';
 const LINK_DESCRIPTION =
@@ -87,6 +96,8 @@ function targetKey(target: CheckTarget): string {
       return 'slug';
     case 'page':
       return 'page';
+    case 'privacy':
+      return `privacy:${target.sectionId}`;
   }
 }
 
@@ -476,8 +487,35 @@ function checkSeo(findings: Findings, input: ChecksInput): void {
   }
 }
 
-function passedGroups(findings: Findings): PassedCheck[] {
+function leadCaptureGapDescription(gaps: readonly LeadCaptureGap[]): string {
+  const settings = gaps.includes('privacy');
+  const consent = gaps.includes('consent');
+  if (settings && consent) {
+    return 'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư, rồi lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.';
+  }
+  return settings
+    ? 'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư ở mục “Dữ liệu & đồng ý”.'
+    : 'Owner của workspace cần lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.';
+}
+
+/** A form collects personal data only with the site's consent settings (rule 10, ADR-017). */
+function checkLeadCapture(findings: Findings, input: ChecksInput): void {
+  const form = leadFormSectionOf(input.snapshot.composition);
+  if (form === null || input.leadCaptureGaps.length === 0) {
+    return;
+  }
+  findings.add(
+    'blocking',
+    'consent_not_configured',
+    { kind: 'privacy', sectionId: form.id },
+    'Form đăng ký chưa có nội dung đồng ý',
+    leadCaptureGapDescription(input.leadCaptureGaps),
+  );
+}
+
+function passedGroups(findings: Findings, hasForm: boolean): PassedCheck[] {
   return (Object.keys(PASSED_GROUPS) as PassedCode[])
+    .filter((code) => hasForm || !FORM_PASSED_GROUPS.has(code))
     .filter((code) => !PASSED_GROUPS[code].some((failing) => findings.has(failing)))
     .map((code) => ({ code, title: PASSED_CHECK_TITLES[code] }));
 }
@@ -508,12 +546,13 @@ export function evaluateChecks(input: ChecksInput): ChecksResult {
     });
     checkVisibility(findings, sections);
   }
+  checkLeadCapture(findings, input);
   checkSlug(findings, input);
   checkSeo(findings, input);
   return {
     revision: input.revision,
     blocking: findings.blocking,
     warnings: findings.warnings,
-    passed: passedGroups(findings),
+    passed: passedGroups(findings, leadFormSectionOf(input.snapshot.composition) !== null),
   };
 }

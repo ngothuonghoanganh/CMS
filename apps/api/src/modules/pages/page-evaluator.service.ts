@@ -16,6 +16,7 @@ import {
   currentSitePresentation,
   releaseLeadCapture,
   releasePresentation,
+  siteLeadCaptureGaps,
 } from '../publishing/release-presentation.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
@@ -113,6 +114,7 @@ export class PageEvaluator {
     const origin = this.sites.defaultOrigin(site);
     const presentation = currentSitePresentation(site);
     const capture = currentSiteLeadCapture(site, consent);
+    const leadCaptureGaps = siteLeadCaptureGaps(site, consent);
     const live: LivePageRef[] = livePages.map((row) => ({
       id: row._id.toHexString(),
       title: row.title,
@@ -133,6 +135,7 @@ export class PageEvaluator {
         snapshot: page.draft,
         existingAssetIds,
         otherLivePages: live.filter((ref) => ref.id !== pageId),
+        leadCaptureGaps,
       });
       const event = pointerEvents.get(pageId);
       const summary = toPageSummary({

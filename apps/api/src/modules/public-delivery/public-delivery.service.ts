@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   type PathStatusResponse,
   type PublicImage,
+  type PublicLeadCapture,
   type PublicPageData,
   type PublicPreviewResponse,
   publicPreviewResponseSchema,
@@ -10,21 +11,27 @@ import {
   type SitemapResponse,
   sitemapResponseSchema,
 } from '@plp/contracts';
+import { pageCapturesLeads } from '@plp/sections/schema';
 import { notFound } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import { AssetsService } from '../assets/assets.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { PreviewTokens } from '../preview/preview-tokens.js';
+import { ConsentVersionsRepository } from '../privacy/consent-versions.repository.js';
 import { imageOccurrences, linkedPageIds } from '../publishing/domain/content-refs.js';
+import type { LeadCapture } from '../publishing/domain/lead-capture.js';
 import { resolveSeo } from '../publishing/domain/resolve-seo.js';
 import type { SitePresentation } from '../publishing/domain/site-presentation.js';
 import type { PageSnapshot } from '../publishing/domain/snapshot.js';
 import { RedirectsRepository } from '../publishing/redirects.repository.js';
 import {
+  currentSiteLeadCapture,
   currentSitePresentation,
+  releaseLeadCapture,
   releasePresentation,
 } from '../publishing/release-presentation.js';
+import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
@@ -40,6 +47,36 @@ export function livePath(slug: string): string {
 /** The renderer sends the slug; tolerate surrounding slashes ("/uu-dai/" → "uu-dai"). */
 export function slugFromPath(path: string): string {
   return path.replace(/^\/+|\/+$/g, '');
+}
+
+/** What visitors see of a lead capture: the texts and the policy link, nothing internal. */
+function publicLeadCapture(capture: LeadCapture | null): PublicLeadCapture | null {
+  return (
+    capture && {
+      requiredText: capture.requiredText,
+      marketingText: capture.marketingText,
+      policyUrl: capture.policyUrl,
+    }
+  );
+}
+
+/** A release as the renderer shows it: its own snapshots (ADR-015, ADR-017). */
+function releaseShown(release: ReleaseRecord): ShownVersion {
+  return {
+    releaseId: release._id,
+    presentation: (site) => releasePresentation(release, site),
+    leadCapture: releaseLeadCapture(release),
+  };
+}
+
+/**
+ * Which version of the page is shown and the site settings it is shown with: a release with its
+ * snapshots, or a draft (no release) with the current settings its next publish will freeze.
+ */
+interface ShownVersion {
+  releaseId: ObjectId | null;
+  presentation: (site: SiteRecord) => SitePresentation;
+  leadCapture: LeadCapture | null;
 }
 
 function toObjectIds(ids: readonly (string | null)[]): ObjectId[] {
@@ -65,6 +102,7 @@ export class PublicDeliveryService {
     private readonly assets: AssetsRepository,
     private readonly assetsService: AssetsService,
     private readonly previews: PreviewTokens,
+    private readonly consentVersions: ConsentVersionsRepository,
   ) {}
 
   /**
@@ -84,7 +122,7 @@ export class PublicDeliveryService {
       }
       return resolveResponseSchema.parse({
         kind: 'page',
-        data: await this.pageData(site, live._id, release, releasePresentation(release, site)),
+        data: await this.pageData(site, live._id, release, releaseShown(release)),
       });
     }
     const location = await this.redirectLocation(site, slug);
@@ -178,8 +216,15 @@ export class PublicDeliveryService {
       if (!page?.siteId.equals(site._id)) {
         throw notFound(PUBLIC_PAGE_NOT_FOUND);
       }
+      const consent = pageCapturesLeads(page.draft.composition)
+        ? await this.consentVersions.findPublicCurrent(site._id)
+        : null;
       return publicPreviewResponseSchema.parse({
-        data: await this.pageData(site, page._id, page.draft, currentSitePresentation(site)),
+        data: await this.pageData(site, page._id, page.draft, {
+          releaseId: null,
+          presentation: currentSitePresentation,
+          leadCapture: consent && currentSiteLeadCapture(site, consent),
+        }),
         preview: { kind: 'draft', version: null, expiresAt },
       });
     }
@@ -188,7 +233,7 @@ export class PublicDeliveryService {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
     return publicPreviewResponseSchema.parse({
-      data: await this.pageData(site, release.pageId, release, releasePresentation(release, site)),
+      data: await this.pageData(site, release.pageId, release, releaseShown(release)),
       preview: { kind: 'release', version: release.version, expiresAt },
     });
   }
@@ -204,15 +249,17 @@ export class PublicDeliveryService {
   /**
    * Everything the renderer needs for one page: only the assets the composition references (with
    * public URLs), the live path of every linked page and the resolved SEO. The site's name, theme,
-   * logo and default share image come from `presentation`, never from the site record (ADR-015);
-   * the record only gives the site's identity and address.
+   * logo and default share image come from the shown version's presentation, never from the site
+   * record (ADR-015), and so do the form's consent texts (ADR-017); the record only gives the
+   * site's identity and address.
    */
   private async pageData(
     site: SiteRecord,
     pageId: ObjectId,
     snapshot: PageSnapshot,
-    presentation: SitePresentation,
+    shown: ShownVersion,
   ): Promise<PublicPageData> {
+    const presentation = shown.presentation(site);
     const imageIds = [
       ...new Set(
         imageOccurrences(snapshot.composition).flatMap(({ image }) =>
@@ -255,6 +302,8 @@ export class PublicDeliveryService {
         seo: resolveSeo(snapshot, presentation, origin, images),
         composition: snapshot.composition,
       },
+      releaseId: shown.releaseId?.toHexString() ?? null,
+      leadCapture: publicLeadCapture(shown.leadCapture),
       assets: Object.fromEntries(
         imageIds.flatMap((id) => {
           const image = images[id];

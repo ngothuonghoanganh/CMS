@@ -15,6 +15,7 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { LeadsRepository } from '../leads/leads.repository.js';
 import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
@@ -48,7 +49,8 @@ function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId): UserRef {
 /**
  * Personal data settings and consent versions of a site (ADR-017). Every member reads them; only
  * the owner changes them (ADR-004). Live pages keep what their release snapshotted until they are
- * published again, so nothing is revalidated here.
+ * published again, so nothing is revalidated here. A new retention period applies to the leads
+ * already stored too.
  */
 @Injectable()
 export class PrivacyService {
@@ -60,6 +62,7 @@ export class PrivacyService {
     private readonly activity: ActivityRepository,
     private readonly users: UsersRepository,
     private readonly transactions: TransactionRunner,
+    private readonly leads: LeadsRepository,
   ) {}
 
   async get(user: AuthenticatedUser, siteId: string): Promise<PrivacySettings> {
@@ -87,6 +90,9 @@ export class PrivacyService {
       await this.activity.record(scope, { siteId: site._id, type: 'privacy.updated' }, tx);
       return saved;
     });
+    // Outside the transaction: a site can hold many leads. The update is idempotent, so saving
+    // again repairs leads a failed attempt left behind (ADR-017).
+    await this.leads.recomputeExpiry(scope, site._id, input.retentionMonths);
     return this.settingsOf(updated, await this.versions.findCurrent(scope, site._id));
   }
 
