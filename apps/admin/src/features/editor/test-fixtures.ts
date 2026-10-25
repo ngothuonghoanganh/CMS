@@ -28,6 +28,8 @@ export const site: Site = {
   logoAssetId: null,
   defaultShareImageAssetId: null,
   defaultOrigin: 'https://smilecare.payload.site',
+  privacyConfigured: false,
+  confirmedLeadRecipients: 0,
   createdAt: '2026-10-01T08:00:00.000Z',
 };
 

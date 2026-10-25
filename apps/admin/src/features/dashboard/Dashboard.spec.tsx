@@ -4,6 +4,7 @@ import {
   type LeadCounts,
   type PageListResponse,
   publishingActivityTypes,
+  type Site,
 } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -45,15 +46,17 @@ function renderDashboard({
   activity = { items: [activityFixture()], nextCursor: null },
   filters = { status: null, q: '' },
   leadCounts = NO_LEADS,
+  site = siteFixture(),
 }: {
   pages?: PageListResponse;
   activity?: ActivityListResponse;
   filters?: DashboardFilters;
   leadCounts?: LeadCounts;
+  site?: Site;
 } = {}) {
   return renderWithProviders(
     <Dashboard
-      site={siteFixture()}
+      site={site}
       workspaceName="Mây Xanh Agency"
       initialFilters={filters}
       initialPages={pages}
@@ -288,6 +291,28 @@ describe('Dashboard', () => {
     );
   });
 
+  it('lists the privacy policy and the lead destination among the setup steps of board 01', () => {
+    renderDashboard();
+    expect(screen.getByRole('link', { name: 'Thêm chính sách quyền riêng tư' })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/privacy`,
+    );
+    expect(screen.getByRole('link', { name: 'Chọn nơi nhận lead (email)' })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/leads?recipients=open`,
+    );
+    expect(screen.getByText('1/4')).toBeInTheDocument();
+  });
+
+  it('ticks the setup steps the site has done', () => {
+    renderDashboard({
+      site: siteFixture({ privacyConfigured: true, confirmedLeadRecipients: 2 }),
+    });
+    expect(screen.getByText('Thêm chính sách quyền riêng tư')).toHaveClass(/doneLabel/);
+    expect(screen.getByText('Chọn nơi nhận lead (email)')).toHaveClass(/doneLabel/);
+    expect(screen.getByText('3/4')).toBeInTheDocument();
+  });
+
   it('invites to create the first page when the site has none', () => {
     renderDashboard({ pages: pageListFixture([]), activity: { items: [], nextCursor: null } });
 
@@ -300,7 +325,7 @@ describe('Dashboard', () => {
       'href',
       `${DASHBOARD_PATH}/pages/new`,
     );
-    expect(screen.getByText('0/2')).toBeInTheDocument();
+    expect(screen.getByText('0/4')).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 

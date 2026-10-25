@@ -26,6 +26,7 @@ import {
   SearchIcon,
   SegmentedControl,
   Select,
+  SlidersIcon,
   useToast,
   VisuallyHidden,
 } from '@plp/ui';
@@ -50,6 +51,7 @@ import {
 } from './filters';
 import { cappedCountLabel } from './lead-presentation';
 import { LeadDetailPanel } from './LeadDetailPanel';
+import { LeadRecipientsDialog } from './LeadRecipientsDialog';
 import { LeadTable } from './LeadTable';
 import { leadQueryKeys, useLeadCounts } from './queries';
 import styles from './LeadInbox.module.css';
@@ -79,6 +81,8 @@ export interface LeadInboxProps {
   pageRefs: readonly LeadPageRef[];
   /** Counts loaded with the list, so the sidebar badge matches the inbox it opened. */
   leadCounts: LeadCounts;
+  /** Open "Nơi nhận lead" right away: a publish check's "Sửa ngay" leads here (ADR-018). */
+  initialRecipientsOpen: boolean;
   /** When the server loaded the data (epoch ms). */
   loadedAt: number;
 }
@@ -105,6 +109,7 @@ export function LeadInbox({
   initialDetail,
   pageRefs,
   leadCounts,
+  initialRecipientsOpen,
   loadedAt,
 }: LeadInboxProps) {
   const now = useNow(loadedAt);
@@ -120,6 +125,7 @@ export function LeadInbox({
   // When the open lead goes away (deleted, gone, "Đóng"), focus moves to the empty panel instead
   // of dropping to the page.
   const focusEmptyPanel = useRef(false);
+  const [recipientsOpen, setRecipientsOpen] = useState(initialRecipientsOpen);
 
   // The URL mirrors the filters (not the search) and the open lead, so a reload or a shared link
   // keeps them. Replacing the entry (rather than navigating) keeps the server from rendering the
@@ -212,20 +218,37 @@ export function LeadInbox({
         title="Leads"
         description={`Mọi đăng ký từ form trên các trang của ${site.name}.`}
         actions={
-          canManage ? (
+          <>
             <Button
               variant="secondary"
-              leadingIcon={<DownloadIcon size={16} />}
-              loading={exportCsv.isPending}
-              disabled={!check.ok || folderCount?.count === 0}
+              leadingIcon={<SlidersIcon size={16} />}
               onClick={() => {
-                exportCsv.mutate();
+                setRecipientsOpen(true);
               }}
             >
-              Xuất Excel / CSV
+              Nơi nhận lead
             </Button>
-          ) : null
+            {canManage ? (
+              <Button
+                variant="secondary"
+                leadingIcon={<DownloadIcon size={16} />}
+                loading={exportCsv.isPending}
+                disabled={!check.ok || folderCount?.count === 0}
+                onClick={() => {
+                  exportCsv.mutate();
+                }}
+              >
+                Xuất Excel / CSV
+              </Button>
+            ) : null}
+          </>
         }
+      />
+      <LeadRecipientsDialog
+        siteId={site.id}
+        open={recipientsOpen}
+        onOpenChange={setRecipientsOpen}
+        canManage={canManage}
       />
 
       <div className={styles.toolbar}>

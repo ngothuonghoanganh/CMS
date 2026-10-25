@@ -1,5 +1,5 @@
 import type { Site } from '@plp/contracts';
-import type { SiteRecord } from './site.schema.js';
+import { confirmedRecipientsOf, type SiteRecord, sitePrivacyOf } from './site.schema.js';
 
 /** Maps a stored site to the contract `Site`; `defaultOrigin` comes from the origin template. */
 export function toSiteDto(site: SiteRecord, defaultOrigin: string): Site {
@@ -12,6 +12,8 @@ export function toSiteDto(site: SiteRecord, defaultOrigin: string): Site {
     logoAssetId: site.logoAssetId?.toHexString() ?? null,
     defaultShareImageAssetId: site.defaultShareImageAssetId?.toHexString() ?? null,
     defaultOrigin,
+    privacyConfigured: sitePrivacyOf(site) !== null,
+    confirmedLeadRecipients: confirmedRecipientsOf(site).length,
     createdAt: site.createdAt.toISOString(),
   };
 }

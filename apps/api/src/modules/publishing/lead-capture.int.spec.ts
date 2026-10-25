@@ -34,6 +34,7 @@ import {
   saveConsentVersion,
   savePrivacy,
 } from '../../../test/privacy.js';
+import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
 import type { LeadCapture } from './domain/lead-capture.js';
 
@@ -186,6 +187,7 @@ describe('consent settings snapshotted into releases', () => {
 
   it('blocks a form until the site has consent settings, pointing at them', async () => {
     const site = await createSite(client, workspaceId);
+    await addConfirmedRecipient(t, client, site.id);
     const slug = uniqueSlug('chua-dong-y');
     const page = await createPage(client, site.id, { slug });
     const draft = formDraft(slug);
@@ -224,6 +226,7 @@ describe('consent settings snapshotted into releases', () => {
   it('serves the snapshot on the live page and in a release preview, the settings in a draft preview', async () => {
     const site = await createSite(client, workspaceId);
     await configurePrivacy(client, site.id);
+    await addConfirmedRecipient(t, client, site.id);
     const slug = uniqueSlug('form-live');
     const { pageId, published } = await createLiveFormPage(client, site.id, slug);
     const snapshot = {
@@ -257,6 +260,7 @@ describe('consent settings snapshotted into releases', () => {
   it('applies new consent settings on publish, and rollback brings the old text back', async () => {
     const site = await createSite(client, workspaceId);
     await configurePrivacy(client, site.id);
+    await addConfirmedRecipient(t, client, site.id);
     const slug = uniqueSlug('form-v2');
     const { pageId, published: v1 } = await createLiveFormPage(client, site.id, slug);
     const seen = await currentPublishBody(client, pageId);

@@ -8,8 +8,9 @@ import {
   type updateLeadRequestSchema,
 } from '@plp/contracts';
 import type { z } from 'zod';
-import { notFound } from '../../shared/errors.js';
+import { AppError, notFound } from '../../shared/errors.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { LeadNotifier } from '../notifications/lead-notifier.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
@@ -54,6 +55,7 @@ export class LeadInboxService {
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
     private readonly releases: ReleasesRepository,
+    private readonly notifier: LeadNotifier,
   ) {}
 
   /**
@@ -119,6 +121,19 @@ export class LeadInboxService {
       throw notFound(LEAD_NOT_FOUND);
     }
     return this.detail(scope, site, updated);
+  }
+
+  /** "Gửi lại": a failed email notification starts over with three new attempts (ADR-018). */
+  async retryNotification(user: AuthenticatedUser, leadId: string): Promise<LeadDetail> {
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
+    const reset = await this.leads.resetFailedNotification(scope, lead._id, new Date());
+    if (!reset) {
+      throw new AppError(409, 'conflict', 'Email thông báo của lead này không ở trạng thái lỗi', {
+        detail: 'Tải lại để xem trạng thái mới nhất.',
+      });
+    }
+    this.notifier.enqueue(reset._id);
+    return this.detail(scope, site, reset);
   }
 
   private async detail(

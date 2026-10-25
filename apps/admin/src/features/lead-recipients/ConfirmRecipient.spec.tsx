@@ -1,0 +1,93 @@
+import { endpoints } from '@plp/contracts';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../lib/api';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { ConfirmRecipient } from './ConfirmRecipient';
+
+vi.mock(import('../../lib/api'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  api: vi.fn(),
+}));
+
+const apiMock = vi.mocked(api);
+const TOKEN = 'a'.repeat(43);
+
+beforeEach(() => {
+  apiMock.mockReset();
+  window.history.replaceState(null, '', `/lead-recipients/confirm#token=${TOKEN}`);
+});
+
+describe('ConfirmRecipient', () => {
+  it('confirms only on a click, then removes the secret from the address bar', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValue({ siteName: 'Nha khoa Smile Care', email: 'sales@smilecare.vn' });
+    renderWithProviders(<ConfirmRecipient />);
+    // Let effects run: opening the link (a mail scanner may) must not confirm anything.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(apiMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
+
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    expect(lastCallTo(apiMock, endpoints.confirmLeadRecipient).options).toEqual({
+      body: { token: TOKEN },
+    });
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'sales@smilecare.vn sẽ nhận email khi có lead mới từ Nha khoa Smile Care.',
+    );
+    expect(window.location.hash).toBe('');
+  });
+
+  it('explains a used or expired link', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValue(apiError(404, 'not_found', 'Liên kết xác nhận không còn hiệu lực'));
+    renderWithProviders(<ConfirmRecipient />);
+    await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Liên kết xác nhận không còn hiệu lực',
+    );
+  });
+
+  it('asks again for another link pasted into the same tab', async () => {
+    const user = userEvent.setup();
+    apiMock
+      .mockResolvedValueOnce({ siteName: 'Nha khoa Smile Care', email: 'sales@smilecare.vn' })
+      .mockRejectedValueOnce(apiError(404, 'not_found', 'Liên kết xác nhận không còn hiệu lực'));
+    renderWithProviders(<ConfirmRecipient />);
+    await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('sales@smilecare.vn');
+
+    // Only the fragment changes, so the page is not loaded again.
+    const other = 'b'.repeat(43);
+    act(() => {
+      window.history.replaceState(null, '', `/lead-recipients/confirm#token=${other}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
+    expect(lastCallTo(apiMock, endpoints.confirmLeadRecipient).options).toEqual({
+      body: { token: other },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Liên kết xác nhận không còn hiệu lực',
+    );
+
+    // The first link's error is not shown for a third one.
+    act(() => {
+      window.history.replaceState(null, '', `/lead-recipients/confirm#token=${'c'.repeat(43)}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('asks to open the email again when the link lost its secret', () => {
+    window.history.replaceState(null, '', '/lead-recipients/confirm#token=ngan');
+    renderWithProviders(<ConfirmRecipient />);
+    expect(screen.getByText('Liên kết không đầy đủ')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xác nhận nhận lead' })).not.toBeInTheDocument();
+  });
+});

@@ -70,6 +70,8 @@ export interface FocusTargetOptions {
   seoHref: string;
   /** "/sites/{siteId}/privacy": the consent settings a lead form needs (ADR-017). */
   privacyHref: string;
+  /** The inbox with "Nơi nhận lead" open: the addresses a form's leads go to (ADR-018). */
+  recipientsHref: string;
   /** Element containing the properties panel; defaults to `document`. */
   root?: ParentNode;
   /** Wait before focusing, so a closing dialog can return its focus first. */
@@ -80,7 +82,7 @@ export interface FocusTargetOptions {
  * Takes the user to the field a publish check points at: selects the section, lets the
  * properties panel render the field (expanding its list item), then scrolls to it and focuses it.
  * SEO and slug targets open the page's SEO settings with `?focus=title|description|…|slug`;
- * missing consent settings open "Dữ liệu & đồng ý".
+ * missing consent settings open "Dữ liệu & đồng ý", a missing lead destination "Nơi nhận lead".
  */
 export function focusTarget(
   store: EditorStore,
@@ -99,6 +101,9 @@ export function focusTarget(
       return;
     case 'privacy':
       options.navigate(options.privacyHref);
+      return;
+    case 'lead_recipients':
+      options.navigate(options.recipientsHref);
       return;
     case 'section': {
       if (!store.getState().select(target.sectionId, target.fieldPath)) {

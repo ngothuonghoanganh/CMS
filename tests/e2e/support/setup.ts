@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import {
+  confirmLeadRecipientResponseSchema,
   consentVersionSchema,
   type CreatePageRequest,
   endpoints,
+  leadRecipientSchema,
   type MeResponse,
   meResponseSchema,
   type PageDetailResponse,
@@ -15,6 +17,7 @@ import {
   SUGGESTED_REQUIRED_CONSENT_TEXT,
 } from '@plp/contracts';
 import { urls } from '../urls.js';
+import { confirmationLink, waitForEmail } from './mailpit.js';
 
 export const PASSWORD = 'MatKhau-e2e-an-toan-2026';
 
@@ -109,6 +112,47 @@ export async function configurePrivacyViaApi(
     requiredText: SUGGESTED_REQUIRED_CONSENT_TEXT,
     marketingText: SUGGESTED_MARKETING_CONSENT_TEXT,
   });
+}
+
+/** An address no other run uses, so its emails in Mailpit are this site's only. */
+export function newRecipientEmail(): string {
+  return `lead-${uniqueId()}@example.com`;
+}
+
+/**
+ * Adds an address to "Nơi nhận lead" as the owner and confirms it through the link Mailpit
+ * received, as its owner would (ADR-018).
+ */
+export async function confirmRecipientViaApi(
+  request: APIRequestContext,
+  siteId: string,
+  email = newRecipientEmail(),
+): Promise<string> {
+  await call(request, 'POST', endpoints.addLeadRecipient.path(siteId), leadRecipientSchema, {
+    email,
+  });
+  const link = confirmationLink(await waitForEmail(request, email, 'Xác nhận nhận lead'));
+  const token = new URL(link).hash.replace('#token=', '');
+  await call(
+    request,
+    'POST',
+    endpoints.confirmLeadRecipient.path(),
+    confirmLeadRecipientResponseSchema,
+    { token },
+  );
+  return email;
+}
+
+/**
+ * What a page with a form needs before it can be published: the personal data settings with a
+ * consent version (ADR-017), and a confirmed address its leads go to (ADR-018).
+ */
+export async function setUpLeadCaptureViaApi(
+  request: APIRequestContext,
+  siteId: string,
+): Promise<string> {
+  await configurePrivacyViaApi(request, siteId);
+  return confirmRecipientViaApi(request, siteId);
 }
 
 export interface SiteFixture {

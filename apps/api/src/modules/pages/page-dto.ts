@@ -37,6 +37,7 @@ export function toPointerEvent(record: ActivityRecord, by: UserRef): PointerEven
     case 'consent.version_created':
     case 'lead.exported':
     case 'lead.person_deleted':
+    case 'lead.recipients_changed':
       throw new Error(
         `Activity ${record._id.toHexString()} (${record.type}) is not a pointer event`,
       );

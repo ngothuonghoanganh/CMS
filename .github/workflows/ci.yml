@@ -33,7 +33,7 @@ jobs:
       - name: Prepare local environment
         run: cp .env.example .env
 
-      - name: Start MongoDB replica set and S3 storage
+      - name: Start MongoDB replica set, S3 storage and Mailpit
         run: docker compose up -d --wait
 
       - name: Format

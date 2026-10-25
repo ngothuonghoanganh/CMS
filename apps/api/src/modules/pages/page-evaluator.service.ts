@@ -20,7 +20,7 @@ import {
 } from '../publishing/release-presentation.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
-import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
+import { confirmedRecipientsOf, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { toDraft, toPageSummary, toPointerEvent } from './page-dto.js';
@@ -115,6 +115,7 @@ export class PageEvaluator {
     const presentation = currentSitePresentation(site);
     const capture = currentSiteLeadCapture(site, consent);
     const leadCaptureGaps = siteLeadCaptureGaps(site, consent);
+    const leadDestinationReady = confirmedRecipientsOf(site).length > 0;
     const live: LivePageRef[] = livePages.map((row) => ({
       id: row._id.toHexString(),
       title: row.title,
@@ -136,6 +137,7 @@ export class PageEvaluator {
         existingAssetIds,
         otherLivePages: live.filter((ref) => ref.id !== pageId),
         leadCaptureGaps,
+        leadDestinationReady,
       });
       const event = pointerEvents.get(pageId);
       const summary = toPageSummary({

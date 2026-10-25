@@ -49,6 +49,8 @@ export interface ChecksInput {
   otherLivePages: readonly LivePageRef[];
   /** Site settings a lead form needs and the site does not have yet (ADR-016, ADR-017). */
   leadCaptureGaps: readonly LeadCaptureGap[];
+  /** The site has at least one confirmed address its leads are emailed to (ADR-018). */
+  leadDestinationReady: boolean;
 }
 
 export const PASSED_CHECK_TITLES: Record<PassedCode, string> = {
@@ -61,6 +63,7 @@ export const PASSED_CHECK_TITLES: Record<PassedCode, string> = {
   images_described: 'Ảnh có mô tả',
   no_sample_content: 'Không còn nội dung mẫu',
   privacy_policy: 'Có liên kết chính sách quyền riêng tư',
+  lead_destination: 'Có nơi nhận lead',
 };
 
 /** Which findings make a passed group fail. `contrast_aa` holds by construction (ADR-007). */
@@ -74,10 +77,11 @@ const PASSED_GROUPS: Record<PassedCode, readonly CheckCode[]> = {
   images_described: ['image_alt_missing'],
   no_sample_content: ['sample_content'],
   privacy_policy: ['consent_not_configured'],
+  lead_destination: ['lead_destination_missing'],
 };
 
 /** Passed groups that only mean something on a page with a lead form. */
-const FORM_PASSED_GROUPS: ReadonlySet<PassedCode> = new Set(['privacy_policy']);
+const FORM_PASSED_GROUPS: ReadonlySet<PassedCode> = new Set(['privacy_policy', 'lead_destination']);
 
 const REQUIRED_DESCRIPTION = 'Đây là nội dung bắt buộc. Điền vào trước khi xuất bản.';
 const LINK_DESCRIPTION =
@@ -98,6 +102,8 @@ function targetKey(target: CheckTarget): string {
       return 'page';
     case 'privacy':
       return `privacy:${target.sectionId}`;
+    case 'lead_recipients':
+      return `lead_recipients:${target.sectionId}`;
   }
 }
 
@@ -513,6 +519,20 @@ function checkLeadCapture(findings: Findings, input: ChecksInput): void {
   );
 }
 
+function checkLeadDestination(findings: Findings, input: ChecksInput): void {
+  const form = leadFormSectionOf(input.snapshot.composition);
+  if (form === null || input.leadDestinationReady) {
+    return;
+  }
+  findings.add(
+    'blocking',
+    'lead_destination_missing',
+    { kind: 'lead_recipients', sectionId: form.id },
+    'Form đăng ký chưa có nơi nhận lead',
+    'Khách gửi form sẽ không đến được ai. Thêm ít nhất một email nhận lead và bấm xác nhận trong thư gửi tới email đó.',
+  );
+}
+
 function passedGroups(findings: Findings, hasForm: boolean): PassedCheck[] {
   return (Object.keys(PASSED_GROUPS) as PassedCode[])
     .filter((code) => hasForm || !FORM_PASSED_GROUPS.has(code))
@@ -547,6 +567,7 @@ export function evaluateChecks(input: ChecksInput): ChecksResult {
     checkVisibility(findings, sections);
   }
   checkLeadCapture(findings, input);
+  checkLeadDestination(findings, input);
   checkSlug(findings, input);
   checkSeo(findings, input);
   return {

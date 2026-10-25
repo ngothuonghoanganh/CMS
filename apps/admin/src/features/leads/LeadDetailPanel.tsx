@@ -14,6 +14,7 @@ import {
   type UpdateLeadRequest,
 } from '@plp/contracts';
 import {
+  AlertCircleIcon,
   Button,
   ButtonLink,
   Callout,
@@ -34,7 +35,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError, api, downloadFile } from '../../lib/api';
-import { formatDate } from '../../lib/format';
+import { formatDate, formatDateTime } from '../../lib/format';
 import { siteQueryKeys } from '../dashboard/queries';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ConsentEvidenceDialog } from './ConsentEvidenceDialog';
@@ -43,6 +44,7 @@ import {
   consentMoment,
   leadDetailMeta,
   leadSourceLine,
+  notificationView,
   spamReasonLabels,
   telUrl,
   zaloUrl,
@@ -63,6 +65,9 @@ export interface LeadDetailPanelProps {
   /** The lead was deleted or no longer exists; the inbox closes the panel. */
   onGone: () => void;
 }
+
+/** After "Gửi lại", when to read the lead again to show how the send went. */
+const RESULT_CHECK_MS = 3000;
 
 function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
@@ -85,6 +90,9 @@ export function LeadDetailPanel({
   const { toast } = useToast();
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const deliveryHeadingRef = useRef<HTMLHeadingElement>(null);
+  // "Gửi lại" leaves once pressed: keyboard focus then moves to the section, not the page.
+  const focusDelivery = useRef(false);
   const detailKey = leadQueryKeys.detail(siteId, leadId);
   const detail = useQuery({
     queryKey: detailKey,
@@ -104,6 +112,14 @@ export function LeadDetailPanel({
       headingRef.current?.focus();
     }
   }, [focusOnShow, loaded]);
+
+  const deliveryStatus = detail.data?.notification?.status;
+  useEffect(() => {
+    if (focusDelivery.current && deliveryStatus !== 'failed') {
+      focusDelivery.current = false;
+      deliveryHeadingRef.current?.focus();
+    }
+  }, [deliveryStatus]);
 
   function refreshLists() {
     void queryClient.invalidateQueries({ queryKey: leadQueryKeys.lists(siteId) });
@@ -167,6 +183,26 @@ export function LeadDetailPanel({
     },
   });
 
+  const retry = useMutation({
+    mutationFn: () => api(endpoints.retryLeadNotification, [leadId]),
+    onSuccess: (updated) => {
+      focusDelivery.current = true;
+      queryClient.setQueryData(detailKey, updated);
+      refreshLists();
+      toast({ tone: 'success', title: 'Đang gửi lại email thông báo' });
+      // The email goes out in the background: look once more shortly after, no polling.
+      setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: detailKey });
+      }, RESULT_CHECK_MS);
+    },
+    onError: (error) => {
+      reportUnexpected('Retrying a lead notification failed', error);
+      focusDelivery.current = true;
+      void queryClient.invalidateQueries({ queryKey: detailKey });
+      toast({ tone: 'danger', title: 'Chưa gửi lại được', description: problemMessage(error) });
+    },
+  });
+
   const remove = useMutation({
     mutationFn: () => api(endpoints.deleteLeadPerson, [leadId]),
     onSuccess: ({ deletedCount }) => {
@@ -217,6 +253,7 @@ export function LeadDetailPanel({
   const noteChanged = noteDraft !== null && noteDraft.trim() !== lead.note;
   const pendingStatus = update.isPending ? update.variables.status : undefined;
   const { consent } = lead;
+  const delivery = notificationView(lead.notification, lead.spam.suspected);
 
   return (
     <aside className={styles.detail} aria-labelledby={headingId}>
@@ -343,6 +380,50 @@ export function LeadDetailPanel({
             </button>
           </p>
         </section>
+
+        {delivery === null ? null : (
+          <section className={styles.delivery} aria-labelledby={`${headingId}-delivery`}>
+            <h3
+              id={`${headingId}-delivery`}
+              ref={deliveryHeadingRef}
+              tabIndex={-1}
+              className={styles.deliveryTitle}
+            >
+              Đã gửi tới
+            </h3>
+            <div className={styles.deliveryRow} data-kind={delivery.kind}>
+              {/* Polite: the outcome of "Gửi lại" arrives a few seconds after the press. */}
+              <span className={styles.deliveryStatus} role="status">
+                {delivery.kind === 'sent' ? (
+                  <CheckIcon size={16} strokeWidth={2.4} className={styles.evidenceYes} />
+                ) : delivery.kind === 'failed' ? (
+                  <AlertCircleIcon size={16} strokeWidth={2} className={styles.deliveryFailed} />
+                ) : null}
+                <span className={styles.deliveryText}>{delivery.text}</span>
+                {delivery.kind === 'sent' && delivery.at !== '' ? (
+                  <time dateTime={delivery.at} className={styles.muted}>
+                    {formatDateTime(delivery.at)}
+                  </time>
+                ) : null}
+              </span>
+              {delivery.kind === 'failed' ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={retry.isPending}
+                  onClick={() => {
+                    retry.mutate();
+                  }}
+                >
+                  Gửi lại
+                </Button>
+              ) : null}
+            </div>
+            {delivery.kind === 'sent' && delivery.warning !== null ? (
+              <p className={styles.deliveryWarning}>{delivery.warning}</p>
+            ) : null}
+          </section>
+        )}
 
         <form
           className={styles.noteForm}

@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { MAX_SECTIONS, type SectionInstance } from '@plp/contracts';
+import { type CheckItem, MAX_SECTIONS, type SectionInstance } from '@plp/contracts';
 import { canMoveSection, getSectionDefinition } from '@plp/sections/schema';
 import {
   ArrowDownIcon,
@@ -216,6 +216,11 @@ export interface StructurePanelProps {
   onOpenTheme: () => void;
 }
 
+/** Short badges for checks whose title is long for a row (board 03 and ADR-018). */
+const BADGE_LABELS: Partial<Record<CheckItem['code'], string>> = {
+  lead_destination_missing: 'Chưa chọn nơi nhận lead',
+};
+
 /** "CẤU TRÚC TRANG": the ordered sections, sortable by drag, buttons and keyboard. */
 export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
   const store = useEditorStoreApi();
@@ -235,11 +240,14 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
     const bySection = new Map<string, string>();
     for (const item of blocking) {
       const target = item.target;
-      // A form missing its consent settings is pointed at through the settings (ADR-017).
+      // A form missing its consent settings (ADR-017) or its lead destination (ADR-018) is
+      // pointed at through the site setting it needs.
       const sectionId =
-        target.kind === 'section' || target.kind === 'privacy' ? target.sectionId : null;
+        target.kind === 'section' || target.kind === 'privacy' || target.kind === 'lead_recipients'
+          ? target.sectionId
+          : null;
       if (sectionId !== null && !bySection.has(sectionId)) {
-        bySection.set(sectionId, item.title);
+        bySection.set(sectionId, BADGE_LABELS[item.code] ?? item.title);
       }
     }
     return bySection;

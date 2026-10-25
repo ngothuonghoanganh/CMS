@@ -57,6 +57,7 @@ const baoDetail = leadDetail({
 });
 
 interface Setup {
+  recipientsOpen?: boolean;
   list?: LeadListResponse;
   filters?: LeadInboxFilters;
   canManage?: boolean;
@@ -107,8 +108,30 @@ function serve(details: LeadDetail[], list: LeadListResponse) {
       }
       return Promise.resolve({ deletedCount: 2 });
     }
+    if (endpoint === endpoints.retryLeadNotification) {
+      const current = id === undefined ? undefined : byId.get(id);
+      if (current === undefined) {
+        return Promise.reject(apiError(404, 'not_found', 'Không tìm thấy lead'));
+      }
+      const retried: LeadDetail = {
+        ...current,
+        notification: {
+          status: 'pending',
+          attempts: 0,
+          lastErrorCode: null,
+          sentAt: null,
+          recipients: null,
+          rejectedRecipients: null,
+        },
+      };
+      byId.set(current.id, retried);
+      return Promise.resolve(retried);
+    }
     if (endpoint === endpoints.listLeads || endpoint === endpoints.searchLeads) {
       return Promise.resolve(list);
+    }
+    if (endpoint === endpoints.listLeadRecipients) {
+      return Promise.resolve({ items: [] });
     }
     return Promise.reject(new Error('unexpected call'));
   });
@@ -124,6 +147,7 @@ function renderInbox({
   details = [leadDetail(), baoDetail],
   initialDetail = null,
   counts = NO_LEADS,
+  recipientsOpen = false,
 }: Setup = {}) {
   serve(details, list);
   return renderWithProviders(
@@ -136,6 +160,7 @@ function renderInbox({
       initialDetail={initialDetail}
       pageRefs={pageRefs}
       leadCounts={counts}
+      initialRecipientsOpen={recipientsOpen}
       loadedAt={LOADED_AT}
     />,
   );
@@ -551,6 +576,79 @@ describe('LeadInbox', () => {
     });
   });
 
+  it('opens "Nơi nhận lead" from the header, or right away when a publish check sent the user', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderInbox();
+    await user.click(screen.getByRole('button', { name: 'Nơi nhận lead' }));
+    expect(await screen.findByRole('dialog', { name: 'Nơi nhận lead' })).toBeInTheDocument();
+    unmount();
+
+    renderInbox({ recipientsOpen: true });
+    expect(screen.getByRole('dialog', { name: 'Nơi nhận lead' })).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(lastCallTo(apiMock, endpoints.listLeadRecipients).args).toEqual([SITE_ID]);
+    });
+  });
+
+  it('shows where a lead was emailed (ADR-018)', async () => {
+    renderInbox();
+    const { panel } = await openLead();
+    const delivery = within(panel).getByRole('region', { name: 'Đã gửi tới' });
+    expect(delivery).toHaveTextContent('Email thông báo · 2 người nhận');
+    expect(delivery).toHaveTextContent('24/10/2026 16:42');
+  });
+
+  it('marks a lead whose email failed and sends it again from its detail', async () => {
+    const failed = leadDetail({
+      notification: {
+        status: 'failed',
+        attempts: 3,
+        lastErrorCode: 'smtp_unavailable',
+        sentAt: null,
+        recipients: null,
+        rejectedRecipients: null,
+      },
+    });
+    renderInbox({
+      list: leadList([leadItem({ notificationFailed: true }), bao]),
+      details: [failed, baoDetail],
+    });
+    expect(within(row('Nguyễn Thu Hà')).getByText('Lỗi đồng bộ')).toBeInTheDocument();
+    expect(within(row('Trần Quốc Bảo')).queryByText('Lỗi đồng bộ')).not.toBeInTheDocument();
+
+    const { user, panel } = await openLead();
+    const delivery = within(panel).getByRole('region', { name: 'Đã gửi tới' });
+    expect(delivery).toHaveTextContent('Lỗi đồng bộ · không kết nối được máy chủ gửi thư');
+    await user.click(within(delivery).getByRole('button', { name: 'Gửi lại' }));
+    await vi.waitFor(() => {
+      expect(lastCallTo(apiMock, endpoints.retryLeadNotification).args).toEqual([LEAD_ID]);
+    });
+    expect(await screen.findByText('Đang gửi lại email thông báo')).toBeInTheDocument();
+    const after = within(panel).getByRole('region', { name: 'Đã gửi tới' });
+    // The outcome is read out politely, and keyboard focus stays in the section.
+    expect(within(after).getByRole('status')).toHaveTextContent('Đang gửi email thông báo');
+    expect(within(after).getByRole('heading', { name: 'Đã gửi tới' })).toHaveFocus();
+  });
+
+  it('never offers to email a lead in spam, even one whose email failed before', async () => {
+    const failedSpam = leadDetail({
+      spam: { suspected: true, reasons: [] },
+      notification: {
+        status: 'failed',
+        attempts: 3,
+        lastErrorCode: 'smtp_unavailable',
+        sentAt: null,
+        recipients: null,
+        rejectedRecipients: null,
+      },
+    });
+    renderInbox({ details: [failedSpam, baoDetail] });
+    const { panel } = await openLead();
+    const delivery = within(panel).getByRole('region', { name: 'Đã gửi tới' });
+    expect(delivery).toHaveTextContent('Không gửi email: lead nghi ngờ spam');
+    expect(within(delivery).queryByRole('button', { name: 'Gửi lại' })).not.toBeInTheDocument();
+  });
+
   it('gives the sidebar badge the counts loaded with the inbox, when they are newer', () => {
     const { queryClient } = renderWithProviders(<span />);
     // What the sidebar cached when the admin opened, before three more leads arrived.
@@ -574,6 +672,7 @@ describe('LeadInbox', () => {
         initialDetail={null}
         pageRefs={pageRefs}
         leadCounts={fresh}
+        initialRecipientsOpen={false}
         loadedAt={LOADED_AT}
       />,
       queryClient,

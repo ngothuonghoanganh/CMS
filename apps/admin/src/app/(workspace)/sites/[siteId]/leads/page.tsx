@@ -1,5 +1,9 @@
 import type { Metadata } from 'next';
-import { parseLeadFilters, parseSelectedLead } from '../../../../../features/leads/filters';
+import {
+  parseLeadFilters,
+  parseRecipientsOpen,
+  parseSelectedLead,
+} from '../../../../../features/leads/filters';
 import { LeadInbox } from '../../../../../features/leads/LeadInbox';
 import { loadLeadInboxData } from '../../../../../features/leads/load-leads';
 import { loadSiteContext } from '../../../../../features/shell/site-context';
@@ -33,6 +37,7 @@ export default async function LeadsPage({ params, searchParams }: LeadsPageProps
       initialDetail={data.detail}
       pageRefs={data.pageRefs.items}
       leadCounts={leadCounts}
+      initialRecipientsOpen={parseRecipientsOpen(query)}
       loadedAt={data.loadedAt}
     />
   );

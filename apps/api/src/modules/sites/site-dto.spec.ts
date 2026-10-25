@@ -40,8 +40,40 @@ describe('toSiteDto', () => {
       logoAssetId: null,
       defaultShareImageAssetId: null,
       defaultOrigin: 'https://smilecare.payload.site',
+      privacyConfigured: false,
+      confirmedLeadRecipients: 0,
       createdAt: '2026-10-24T08:30:00.000Z',
     });
+  });
+
+  it('says whether the privacy settings exist and how many addresses confirmed (ADR-018)', () => {
+    const at = new Date('2026-10-24T08:30:00.000Z');
+    const recipient = {
+      email: 'sales@smilecare.vn',
+      addedAt: at,
+      invitedAt: at,
+      tokenHash: null,
+      tokenExpiresAt: null,
+    };
+    const dto = toSiteDto(
+      siteRecord({
+        privacy: {
+          controllerName: 'Smile Care',
+          requestEmail: null,
+          policyUrl: 'https://smilecare.vn/chinh-sach',
+          retentionMonths: 12,
+          updatedAt: at,
+          updatedBy: newObjectId(),
+        },
+        leadRecipients: [
+          { ...recipient, _id: newObjectId(), confirmedAt: at },
+          { ...recipient, _id: newObjectId(), email: 'cho@smilecare.vn', confirmedAt: null },
+        ],
+      }),
+      'http://smilecare.localhost:3101',
+    );
+    expect(dto).toMatchObject({ privacyConfigured: true, confirmedLeadRecipients: 1 });
+    expect(dto).not.toHaveProperty('leadRecipients');
   });
 
   it('keeps the image references and leaves internal fields out', () => {

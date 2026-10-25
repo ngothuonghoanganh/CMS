@@ -6,6 +6,7 @@ import {
   leadSourceLine,
   leadTimeLabel,
   newLeadsBadge,
+  notificationView,
   telUrl,
   zaloUrl,
 } from './lead-presentation';
@@ -58,5 +59,72 @@ describe('lead presentation', () => {
     expect(
       newLeadsBadge({ new: { count: 0, capped: false }, last7Days: { count: 3, capped: false } }),
     ).toBeNull();
+  });
+});
+
+describe('notificationView', () => {
+  const base = {
+    status: 'sent' as const,
+    attempts: 1,
+    lastErrorCode: null,
+    sentAt: '2026-10-24T09:42:09.000Z',
+    recipients: 2,
+    rejectedRecipients: 0,
+  };
+  const waiting = { ...base, sentAt: null, recipients: null, rejectedRecipients: null };
+
+  it('says where a lead was emailed, and which addresses refused it (ADR-018)', () => {
+    expect(notificationView(base, false)).toEqual({
+      kind: 'sent',
+      text: 'Email thông báo · 2 người nhận',
+      at: '2026-10-24T09:42:09.000Z',
+      warning: null,
+    });
+    expect(
+      notificationView({ ...base, recipients: 1, rejectedRecipients: 1 }, false),
+    ).toMatchObject({
+      text: 'Email thông báo · 1 người nhận',
+      warning: '1 địa chỉ bị máy chủ thư từ chối. Kiểm tra lại trong "Nơi nhận lead".',
+    });
+  });
+
+  it('numbers the attempt being sent or waited for', () => {
+    const view = (status: 'pending' | 'sending', attempts: number) =>
+      notificationView({ ...waiting, status, attempts }, false);
+    expect(view('pending', 0)).toEqual({ kind: 'waiting', text: 'Đang gửi email thông báo' });
+    expect(view('sending', 1)).toEqual({ kind: 'waiting', text: 'Đang gửi email thông báo' });
+    expect(view('pending', 1)).toEqual({
+      kind: 'waiting',
+      text: 'Đang thử gửi lại email thông báo (lần 2)',
+    });
+    expect(view('sending', 2)).toEqual({
+      kind: 'waiting',
+      text: 'Đang thử gửi lại email thông báo (lần 2)',
+    });
+    expect(view('sending', 3)).toEqual({
+      kind: 'waiting',
+      text: 'Đang thử gửi lại email thông báo (lần 3)',
+    });
+  });
+
+  it('shows why sending failed, and that spam is never emailed', () => {
+    const failed = {
+      ...waiting,
+      status: 'failed' as const,
+      lastErrorCode: 'no_recipients' as const,
+    };
+    expect(notificationView(failed, false)).toEqual({
+      kind: 'failed',
+      text: 'Lỗi đồng bộ · site chưa có email nhận lead nào đã xác nhận',
+    });
+    expect(notificationView(failed, true)).toEqual({
+      kind: 'skipped',
+      text: 'Không gửi email: lead nghi ngờ spam',
+    });
+    expect(notificationView({ ...waiting, status: 'skipped', attempts: 0 }, false)).toEqual({
+      kind: 'skipped',
+      text: 'Không gửi email: lead từng bị nghi ngờ spam',
+    });
+    expect(notificationView(null, false)).toBeNull();
   });
 });

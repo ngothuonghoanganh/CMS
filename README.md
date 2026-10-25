@@ -19,7 +19,7 @@ are in [`AGENTS.md`](AGENTS.md).
 corepack enable pnpm
 pnpm install
 cp .env.example .env
-pnpm infra:up      # MongoDB 9 replica set (:27117) + RustFS S3 storage (:9100, console :9101)
+pnpm infra:up      # MongoDB 9 replica set (:27117), RustFS S3 storage (:9100, console :9101), Mailpit (SMTP :1125, web :8125)
 pnpm dev
 ```
 
@@ -28,6 +28,7 @@ pnpm dev
 | Admin    | http://localhost:3100 | Management UI and editor (proxies `/api`) |
 | Renderer | http://localhost:3101 | Public pages, serves published releases   |
 | API      | http://localhost:4100 | NestJS API (`GET /health`)                |
+| Mailpit  | http://localhost:8125 | Emails the API sent; nothing leaves       |
 
 `pnpm infra:down` stops the containers; data stays in Docker volumes.
 

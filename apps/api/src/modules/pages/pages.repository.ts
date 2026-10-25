@@ -344,6 +344,12 @@ export class PagesRepository {
   /* Public delivery and signed previews have no user: these lookups are unscoped. The site always
      comes from the request host or a signed token, and callers check that records belong to it. */
 
+  /** A page's title for a background job that has no member scope, e.g. a lead email. */
+  async findPublicTitle(id: ObjectId): Promise<string | null> {
+    const page = await this.pages.findById(id, { title: 1 }).lean<PageTitleRow>().exec();
+    return page?.title ?? null;
+  }
+
   findPublicById(id: ObjectId): Promise<PageRecord | null> {
     return this.pages.findById(id).lean<PageRecord>().exec();
   }

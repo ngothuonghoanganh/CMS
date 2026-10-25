@@ -32,6 +32,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { configurePrivacy, PRIVACY_SETTINGS, saveConsentVersion } from '../../../test/privacy.js';
+import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addEditor, createSite } from '../../../test/resources.js';
 import { addMonthsUtc } from './domain/lead-intake-rules.js';
 
@@ -78,6 +79,7 @@ describe('lead inbox', () => {
   async function inboxSite(): Promise<{ site: Site } & FormPage> {
     const site = await createSite(owner, workspaceId);
     await configurePrivacy(owner, site.id);
+    await addConfirmedRecipient(t, owner, site.id);
     return { site, ...(await formPage(site)) };
   }
 

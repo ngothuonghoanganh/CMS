@@ -29,6 +29,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { configurePrivacy, PRIVACY_SETTINGS } from '../../../test/privacy.js';
+import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addEditor, createSite } from '../../../test/resources.js';
 
 const BOM = '﻿';
@@ -60,6 +61,7 @@ describe('lead exports and a person’s data', () => {
   async function formSite() {
     const site = await createSite(owner, workspaceId);
     await configurePrivacy(owner, site.id);
+    await addConfirmedRecipient(t, owner, site.id);
     const slug = uniqueSlug('tu-van');
     const { pageId, published } = await createLiveFormPage(
       owner,

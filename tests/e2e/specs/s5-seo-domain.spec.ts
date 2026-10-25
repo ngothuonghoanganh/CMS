@@ -3,9 +3,9 @@ import { resolveResponseSchema, type ThemePresetId } from '@plp/contracts';
 import { Editor } from '../support/editor.js';
 import { fetchPublic } from '../support/public-site.js';
 import {
-  configurePrivacyViaApi,
   createPageViaApi,
   promoPage,
+  setUpLeadCaptureViaApi,
   setUpSite,
 } from '../support/setup.js';
 import { siteOrigin, urls } from '../urls.js';
@@ -41,7 +41,7 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
   }) => {
     const { site } = await setUpSite(page.request);
     // The promotion page has a lead form, which needs the site's consent settings (ADR-016).
-    await configurePrivacyViaApi(page.request, site.id);
+    await setUpLeadCaptureViaApi(page.request, site.id);
     const origin = siteOrigin(site.subdomain);
     const created = await createPageViaApi(page.request, site.id, promoPage('uu-dai', 'Ưu đãi'));
     // A page that is never published stays out of the sitemap.
@@ -121,7 +121,7 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
   }) => {
     const { site } = await setUpSite(page.request);
     // The promotion page has a lead form, which needs the site's consent settings (ADR-016).
-    await configurePrivacyViaApi(page.request, site.id);
+    await setUpLeadCaptureViaApi(page.request, site.id);
     const created = await createPageViaApi(page.request, site.id, promoPage('uu-dai', 'Ưu đãi'));
     const editor = new Editor(page);
     await editor.goto(site.id, created.page.id);

@@ -17,6 +17,23 @@ export interface SitePrivacyRecord {
   updatedBy: Types.ObjectId;
 }
 
+/**
+ * An address the site's leads are emailed to (ADR-018). It receives nothing until its owner opens
+ * the confirmation link; the database keeps only a hash of the link's secret.
+ */
+export interface LeadRecipientRecord {
+  _id: Types.ObjectId;
+  /** Lowercase. */
+  email: string;
+  addedAt: Date;
+  /** When the last confirmation email went out; null when it could not be sent. */
+  invitedAt: Date | null;
+  confirmedAt: Date | null;
+  /** sha256 (hex) of the current link's secret; null once confirmed. */
+  tokenHash: string | null;
+  tokenExpiresAt: Date | null;
+}
+
 export interface SiteRecord {
   _id: Types.ObjectId;
   workspaceId: Types.ObjectId;
@@ -37,6 +54,8 @@ export interface SiteRecord {
    * read it through `sitePrivacyOf`.
    */
   privacy?: SitePrivacyRecord | null;
+  /** At most `LEAD_RECIPIENTS_MAX`. Sites created before ADR-018 lack the field. */
+  leadRecipients?: LeadRecipientRecord[];
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -59,6 +78,26 @@ export function sitePrivacyOf(site: Pick<SiteRecord, 'privacy'>): SitePrivacyRec
   return site.privacy ?? null;
 }
 
+export function leadRecipientsOf(site: Pick<SiteRecord, 'leadRecipients'>): LeadRecipientRecord[] {
+  return site.leadRecipients ?? [];
+}
+
+/** The addresses that receive the site's leads now. */
+export function confirmedRecipientsOf(
+  site: Pick<SiteRecord, 'leadRecipients'>,
+): LeadRecipientRecord[] {
+  return leadRecipientsOf(site).filter((recipient) => recipient.confirmedAt !== null);
+}
+
+const leadRecipientSchema = new Schema<LeadRecipientRecord>({
+  email: { type: String, required: true },
+  addedAt: { type: Date, required: true },
+  invitedAt: { type: Date, default: null },
+  confirmedAt: { type: Date, default: null },
+  tokenHash: { type: String, default: null },
+  tokenExpiresAt: { type: Date, default: null },
+});
+
 export const siteSchema = new Schema<SiteRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
@@ -69,6 +108,7 @@ export const siteSchema = new Schema<SiteRecord>(
     defaultShareImageAssetId: { type: Schema.Types.ObjectId, default: null },
     pageSeq: { type: Number, default: 0 },
     privacy: { type: sitePrivacySchema, default: null },
+    leadRecipients: { type: [leadRecipientSchema], default: [] },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },
     updatedAt: { type: Date, required: true },
@@ -77,3 +117,5 @@ export const siteSchema = new Schema<SiteRecord>(
 );
 siteSchema.index({ subdomain: 1 }, { unique: true, name: SITES_SUBDOMAIN_INDEX });
 siteSchema.index({ workspaceId: 1, createdAt: 1 });
+// The confirmation link finds its address by the hash of its secret (ADR-018).
+siteSchema.index({ 'leadRecipients.tokenHash': 1 }, { name: 'sites_recipient_token' });

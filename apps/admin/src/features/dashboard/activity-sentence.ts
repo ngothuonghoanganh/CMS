@@ -68,6 +68,14 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
         text: data.count === null ? 'xuất dữ liệu lead' : `xuất dữ liệu ${data.count} lead`,
         tone: 'primary',
       };
+    case 'lead.recipients_changed':
+      return {
+        text:
+          data.count === null
+            ? 'đổi nơi nhận lead'
+            : `đổi nơi nhận lead (còn ${data.count} địa chỉ)`,
+        tone: 'primary',
+      };
     case 'lead.person_deleted':
       return {
         text:

@@ -182,10 +182,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   | prettier · dependency-cruiser                                                     | 3.9.10 · 18.7.0                                                     |
   | MongoDB server                                                                    | `mongo:9.0.4` (replica set một node)                                |
   | S3-compatible storage (dev/CI)                                                    | `rustfs/rustfs:1.0.3`; khởi tạo bucket bằng `amazon/aws-cli:2.38.5` |
+  | nodemailer (API, MVP B)                                                           | 10.2.1 (kèm type, không cần `@types/nodemailer`)                    |
+  | SMTP cho dev/CI (MVP B)                                                           | `axllent/mailpit:v1.32.0` (SMTP :1125, web và API :8125)            |
 
   Thêm vào ở các lát sau, cũng theo bản mới nhất lúc cài: argon2, jose, @aws-sdk/client-s3, file-type, sharp, zustand, immer, @tanstack/react-query, @dnd-kit, radix-ui (chỉ trong admin), qrcode.
 
-  MVP B thêm `nodemailer` (API, ADR-018) và Mailpit trong docker compose cho dev và CI. Phiên bản ghi vào bảng trên khi cài.
+  MVP B thêm `nodemailer` (API, ADR-018) và Mailpit trong docker compose cho dev và CI; phiên bản ở bảng trên (cài ngày 2026-10-25).
 
 - **Reason và ngoại lệ:**
   - **TypeScript 6.0.3, không 7.0.2.** TS 7 là bản native port; typescript-eslint 8.72 khai báo peer `typescript <6.1.0`. Tắt lint có type thì vi phạm quality gate.
@@ -697,6 +699,39 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Truyền dữ liệu:** file tải về đi bằng `POST` qua proxy `/api`, nên vẫn qua kiểm tra Origin. Phản hồi có dữ liệu lead gửi `Cache-Control: no-store`. Tải CSV bị bỏ dở (người dùng rời trang) thì cursor MongoDB được đóng ngay, không đợi hết hạn.
   - **Số trên badge:** trang hộp thư và dashboard nạp số đếm cùng lúc với dữ liệu của chúng và ghi đè số cũ hơn trong cache, nên badge ở sidebar (layout giữ dữ liệu lần đầu) khớp với trang vừa mở.
   - **Liên kết tới một lead:** `/sites/{siteId}/leads?lead={leadId}`; email thông báo của B4 dùng liên kết này. Phần "Đã gửi tới", nút "Nơi nhận lead" và badge "Lỗi đồng bộ" thuộc B4.
+- **Amended 2026-10-25 (B4):**
+  - **Địa chỉ nhận lead** nằm trong `sites.leadRecipients[]`: `{ email, addedAt, invitedAt, confirmedAt, tokenHash, tokenExpiresAt }`.
+    - Thêm địa chỉ bằng một lệnh cập nhật có điều kiện (chưa có địa chỉ đó, chưa đủ 5), nên giới hạn đúng cả khi thêm cùng lúc.
+    - Trạng thái suy ra, không lưu: `confirmed`, `pending` (liên kết còn hạn), `expired`, `unsent` (thư xác nhận chưa gửi được, bấm "Gửi lại").
+    - Thêm địa chỉ không thất bại khi thư xác nhận không gửi được. Địa chỉ ở trạng thái `unsent` cho tới khi gửi lại.
+    - "Gửi lại" tạo liên kết mới; liên kết cũ hết tác dụng.
+    - **Giới hạn thư xác nhận:** trong 24 giờ, mỗi cặp site và địa chỉ nhận tối đa 5 thư, mỗi địa chỉ tối đa 30 thư từ mọi site, mỗi workspace gửi tối đa 50 thư. Vượt giới hạn thì trả 429 và không lưu hay gửi gì.
+      - Lý do: thư xác nhận đi tới người chưa đồng ý, kèm tên site do Owner tự đặt, nên không được để thành công cụ gửi thư hàng loạt hay lừa đảo.
+      - Agency thêm cùng một email cho nhiều site khách vẫn nằm dưới giới hạn.
+      - Bộ đếm dùng chung bảng `lead_limits`, khóa chứa sha256 của địa chỉ. Bỏ rồi thêm lại một địa chỉ không đặt lại bộ đếm.
+  - **Xác nhận:** liên kết `{ADMIN_ORIGIN}/lead-recipients/confirm#token=…`. Bí mật nằm trong fragment nên không tới server hay log nào.
+    - Trang xác nhận không cần đăng nhập. Người nhận phải bấm nút: mở liên kết (kể cả bằng trình quét link) không xác nhận gì.
+    - Mỗi liên kết dùng một lần. Sau khi xác nhận, trang xóa bí mật khỏi thanh địa chỉ.
+    - `POST /public/lead-recipients/confirm` không cần session nhưng vẫn qua kiểm tra Origin. Liên kết sai, đã dùng hay hết hạn đều trả 404.
+  - **Gửi:** lead nghi ngờ spam có `notification.status = skipped`, không gửi.
+    - Lúc gửi mà site không còn địa chỉ đã xác nhận: `failed` với mã `no_recipients`, không thử lại.
+    - Các mã lỗi khác: `smtp_unavailable`, `smtp_rejected`, `timeout`, `unknown`.
+    - Mỗi lần thử giành lead bằng điều kiện `pending` → `sending` và tăng `attempts`; kết quả chỉ ghi khi `attempts` còn khớp lần giành đó.
+    - "Gửi lại" (Owner và Editor) đưa lead `failed` về `pending` với `attempts = 0`. Admin đọc lại lead một lần sau 3 giây, không polling.
+    - **Spam không bao giờ được gửi email**, kể cả lead một thành viên chuyển vào spam sau khi nhận. Lần thử kế tiếp giành lead xong thì đánh dấu `skipped`. "Gửi lại" không áp dụng cho lead trong spam, và badge "Lỗi đồng bộ" không hiện cho chúng.
+    - **Một phần địa chỉ bị từ chối**, ví dụ hộp thư đã bị xóa: lead vẫn là `sent`. `recipients` là số địa chỉ máy chủ nhận, `rejectedRecipients` là số bị từ chối, `lastErrorCode` ghi lý do. Chi tiết lead nhắc kiểm tra "Nơi nhận lead". Gửi lại sẽ lặp thư tới những địa chỉ đã nhận, nên không gửi lại.
+    - **Database lỗi giữa chừng:**
+      - Lỗi sau khi giành lead mà trước khi gửi: ghi một lần thử thất bại (`unknown`) và hẹn lần sau. Nếu ghi cũng lỗi, thử ghi thêm một lần; sau đó lượt quét lúc khởi động xử lý.
+      - Thư đã gửi mà ghi kết quả lỗi: thử ghi lại một lần và không gửi lại.
+  - **Email:** gửi tới mọi địa chỉ đã xác nhận trong một thư.
+    - Chủ đề: `[{tên site}] Lead mới: {họ tên}`. Nội dung có số điện thoại dạng Việt Nam, email và lời nhắn nếu có, trang và phiên bản, nguồn, giờ Việt Nam, và liên kết `…/leads?lead={id}&range=all`.
+    - Phần HTML escape mọi giá trị khách nhập.
+  - **Check:** blocking `lead_destination_missing`, target `{ kind: 'lead_recipients', sectionId }`. "Sửa ngay" mở hộp thư lead với "Nơi nhận lead" đang mở (`?recipients=open`). Badge trên dòng section trong editor ghi "Chưa chọn nơi nhận lead".
+    - Mục passed "Có nơi nhận lead" chỉ có trên trang có form.
+    - Site trả thêm `confirmedLeadRecipients` và `privacyConfigured`. Checklist của màn 01 dùng hai trường này cho "Thêm chính sách quyền riêng tư" và "Chọn nơi nhận lead (email)". Bước "Kết nối tên miền riêng" vẫn ẩn.
+  - **Activity** `lead.recipients_changed` ghi số địa chỉ còn lại sau mỗi lần thêm hoặc bỏ, không ghi email.
+  - **Index ngoại lệ:** `leads_notification_sweep (notification.status, notification.updatedAt)` không bắt đầu bằng `siteId`, vì lượt quét lúc khởi động đi qua mọi site.
+  - **Thử nghiệm:** integration test thay SMTP bằng bộ ghi thư và rút ngắn thời gian chờ giữa các lần thử. Một test gửi thật qua Mailpit. E2E đọc thư qua HTTP API của Mailpit.
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 
@@ -759,7 +794,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 | B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint                                      | 02, 04, 05, 09  | Xong       |
 | B2.1       | Sửa sau QA: số điện thoại E.164 (+84 mặc định), nút lưu không bị hụt khi validate, nhãn "Thêm section", icon xác nhận | 03, 04, 09, 12  | Xong       |
 | B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người                                      | 10, 01, Sidebar | Xong       |
-| B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                                                          | 10, 05, 03      | Chưa làm   |
+| B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                                                          | 10, 05, 03      | Xong       |
 | B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                                                         | 12 (phần dưới)  | Chưa làm   |
 | B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                                                              | 11              | Chưa làm   |
 

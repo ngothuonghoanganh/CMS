@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RendererSignatureGuard } from '../../shared/renderer-channel/renderer-request.js';
 import { ActivityModule } from '../activity/activity.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { PagesModule } from '../pages/pages.module.js';
 import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
@@ -19,6 +20,7 @@ import { PublicLeadsController } from './public-leads.controller.js';
   imports: [
     ActivityModule,
     LeadsCoreModule,
+    NotificationsModule,
     PagesModule,
     PublishingCoreModule,
     SitesCoreModule,

@@ -1,4 +1,5 @@
 import { leadDetailSchema, leadListResponseSchema, problemSchema, type Site } from '@plp/contracts';
+import { Types } from 'mongoose';
 import type { Test } from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
@@ -10,6 +11,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
+import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
 
 /** ADR-003: another workspace's leads answer 404, never 403, and stay untouched. */
@@ -31,6 +33,7 @@ describe('workspace isolation of leads', () => {
     ownerA = a.client;
     siteA = await createSite(ownerA, a.workspaceId);
     await configurePrivacy(ownerA, siteA.id);
+    await addConfirmedRecipient(t, ownerA, siteA.id);
     const { pageId, published } = await createLiveFormPage(ownerA, siteA.id, uniqueSlug('tu-van'));
     pageIdA = pageId;
     await submitLead(t, siteA.subdomain, leadBody(published.release.id)).expect(201);
@@ -69,6 +72,22 @@ describe('workspace isolation of leads', () => {
     await expectNotFound(ownerB.patch(`/leads/${leadId}`, { status: 'won', note: 'chen ngang' }));
     await expectNotFound(ownerB.post(`/leads/${leadId}/person/export`, { format: 'json' }));
     await expectNotFound(ownerB.delete(`/leads/${leadId}/person`));
+  });
+
+  it('refuses to send the email of a lead of site A again for workspace B', async () => {
+    await t.connection.collection('leads').updateOne(
+      { _id: new Types.ObjectId(leadId) },
+      {
+        $set: {
+          'notification.status': 'failed',
+          'notification.attempts': 3,
+          'notification.lastErrorCode': 'smtp_unavailable',
+        },
+      },
+    );
+    await expectNotFound(ownerB.post(`/leads/${leadId}/notification/retry`));
+    const lead = leadDetailSchema.parse((await ownerA.get(`/leads/${leadId}`).expect(200)).body);
+    expect(lead.notification).toMatchObject({ status: 'failed', attempts: 3 });
   });
 
   it('does not let a filter of site B reach the pages of site A', async () => {

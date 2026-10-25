@@ -1,6 +1,10 @@
 import {
   type LeadDevice,
   leadDevices,
+  type LeadNotificationErrorCode,
+  leadNotificationErrorCodes,
+  type LeadNotificationStatus,
+  leadNotificationStatuses,
   type LeadStatus,
   leadStatuses,
   type SpamReason,
@@ -11,6 +15,21 @@ import type { LeadSearchKeys } from './domain/lead-search.js';
 
 export const LEAD_MODEL = 'Lead';
 export const LEADS_SUBMISSION_INDEX = 'leads_site_submission_unique';
+
+/** The email notification of a lead (ADR-018). */
+export interface LeadNotificationRecord {
+  status: LeadNotificationStatus;
+  /** Attempts made so far; while `sending`, the running one included. */
+  attempts: number;
+  lastErrorCode: LeadNotificationErrorCode | null;
+  sentAt: Date | null;
+  /** How many confirmed addresses the SMTP server accepted the email for. */
+  recipients: number | null;
+  /** Addresses refused one by one while the others were accepted. */
+  rejectedRecipients?: number | null;
+  /** Last change; a `sending` this old means its sender stopped (the startup sweep). */
+  updatedAt: Date;
+}
 
 /**
  * A visitor's submission of a lead form (ADR-016). Personal data: never logged, never copied into
@@ -39,6 +58,8 @@ export interface LeadRecord {
    * (ADR-018). Written on insert; leads stored before B3 have none and are not found by search.
    */
   search: LeadSearchKeys;
+  /** Leads stored before ADR-018's notifications have none. */
+  notification?: LeadNotificationRecord;
   createdAt: Date;
   /** Null when the site keeps leads until they are deleted by hand. */
   expiresAt: Date | null;
@@ -80,6 +101,15 @@ export const leadSchema = new Schema<LeadRecord>(
       email: { type: String, default: null },
       name: { type: String, required: true },
     },
+    notification: {
+      status: { type: String, enum: leadNotificationStatuses, required: true },
+      attempts: { type: Number, required: true, min: 0 },
+      lastErrorCode: { type: String, enum: [...leadNotificationErrorCodes, null], default: null },
+      sentAt: { type: Date, default: null },
+      recipients: { type: Number, default: null },
+      rejectedRecipients: { type: Number, default: null },
+      updatedAt: { type: Date, required: true },
+    },
     createdAt: { type: Date, required: true },
     expiresAt: { type: Date, default: null },
   },
@@ -111,6 +141,12 @@ leadSchema.index(
 // Search by the start of a phone number or an email, and a person's leads (ADR-017).
 leadSchema.index({ siteId: 1, 'search.phone': 1 }, { name: 'leads_search_phone' });
 leadSchema.index({ siteId: 1, 'search.email': 1 }, { name: 'leads_search_email' });
+// The startup sweep of unsent notifications looks across every site (ADR-018), the one index
+// that does not start with `siteId`.
+leadSchema.index(
+  { 'notification.status': 1, 'notification.updatedAt': 1 },
+  { name: 'leads_notification_sweep' },
+);
 // Leads without an expiry (null) are kept: the TTL monitor skips them.
 leadSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

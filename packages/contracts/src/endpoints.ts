@@ -35,6 +35,13 @@ import {
   slugAvailabilityQuerySchema,
   slugAvailabilitySchema,
 } from './page.js';
+import {
+  addLeadRecipientRequestSchema,
+  confirmLeadRecipientRequestSchema,
+  confirmLeadRecipientResponseSchema,
+  leadRecipientListResponseSchema,
+  leadRecipientSchema,
+} from './lead-recipients.js';
 import { createPreviewLinkRequestSchema, previewLinkResponseSchema } from './preview.js';
 import {
   consentVersionListQuerySchema,
@@ -284,6 +291,63 @@ export const endpoints = {
     request: null,
     query: null,
     response: personDeleteResponseSchema,
+  }),
+
+  /** Members: sends the lead's email notification again after it failed (ADR-018). */
+  retryLeadNotification: endpoint({
+    method: 'POST',
+    path: (leadId: string) => `/leads/${e(leadId)}/notification/retry`,
+    request: null,
+    query: null,
+    response: leadDetailSchema,
+  }),
+
+  // Lead recipients (ADR-018): members read them, the owner changes them
+  listLeadRecipients: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/lead-recipients`,
+    request: null,
+    query: null,
+    response: leadRecipientListResponseSchema,
+  }),
+  /**
+   * Adds an address and emails it a confirmation link. 201 even when that email could not be
+   * sent: the recipient is then `unsent`. 409 `recipient_exists` or `recipient_limit_reached`.
+   */
+  addLeadRecipient: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/lead-recipients`,
+    request: addLeadRecipientRequestSchema,
+    query: null,
+    response: leadRecipientSchema,
+  }),
+  /** A new confirmation link; the previous one stops working. */
+  resendLeadRecipient: endpoint({
+    method: 'POST',
+    path: (siteId: string, recipientId: string) =>
+      `/sites/${e(siteId)}/lead-recipients/${e(recipientId)}/resend`,
+    request: null,
+    query: null,
+    response: leadRecipientSchema,
+  }),
+  removeLeadRecipient: endpoint({
+    method: 'DELETE',
+    path: (siteId: string, recipientId: string) =>
+      `/sites/${e(siteId)}/lead-recipients/${e(recipientId)}`,
+    request: null,
+    query: null,
+    response: null,
+  }),
+  /**
+   * No session: the person who received the link confirms it. 404 when the link is unknown,
+   * already used or expired.
+   */
+  confirmLeadRecipient: endpoint({
+    method: 'POST',
+    path: () => '/public/lead-recipients/confirm',
+    request: confirmLeadRecipientRequestSchema,
+    query: null,
+    response: confirmLeadRecipientResponseSchema,
   }),
 
   // Pages and drafts

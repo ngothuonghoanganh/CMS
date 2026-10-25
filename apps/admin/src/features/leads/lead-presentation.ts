@@ -3,6 +3,9 @@ import {
   formatLeadPhone,
   type LeadCounts,
   type LeadDetail,
+  type LeadNotification,
+  type LeadNotificationErrorCode,
+  type LeadRecipientStatus,
   type LeadSource,
   leadSourceLabel,
   type LeadStatus,
@@ -80,4 +83,83 @@ export function zaloUrl(phone: string): string | null {
 export function consentMoment(at: DateInput): string {
   const seconds = String(new Date(at).getUTCSeconds()).padStart(2, '0');
   return `lúc ${formatTime(at)}:${seconds}`;
+}
+
+export const recipientStatusLabels: Record<LeadRecipientStatus, string> = {
+  confirmed: 'Đã xác nhận',
+  pending: 'Chờ xác nhận',
+  expired: 'Liên kết hết hạn',
+  unsent: 'Chưa gửi được thư',
+};
+
+export const recipientStatusTones: Record<LeadRecipientStatus, BadgeTone> = {
+  confirmed: 'success',
+  pending: 'info',
+  expired: 'warning',
+  unsent: 'danger',
+};
+
+export const notificationErrorLabels: Record<LeadNotificationErrorCode, string> = {
+  no_recipients: 'site chưa có email nhận lead nào đã xác nhận',
+  smtp_unavailable: 'không kết nối được máy chủ gửi thư',
+  smtp_rejected: 'máy chủ gửi thư từ chối thư',
+  timeout: 'máy chủ gửi thư không trả lời kịp',
+  unknown: 'lỗi không xác định',
+};
+
+/** The "Đã gửi tới" line of a lead (ADR-018); null for a lead stored before notifications. */
+export type NotificationView =
+  | { kind: 'sent'; text: string; at: string; warning: string | null }
+  | { kind: 'waiting'; text: string }
+  | { kind: 'failed'; text: string }
+  | { kind: 'skipped'; text: string };
+
+/**
+ * `spam`: the lead is in "Nghi ngờ spam" now. Spam is never emailed, so a lead there shows that
+ * instead of a failure to fix.
+ */
+export function notificationView(
+  notification: LeadNotification | null,
+  spam: boolean,
+): NotificationView | null {
+  if (notification === null) {
+    return null;
+  }
+  if (notification.status === 'sent') {
+    const refused = notification.rejectedRecipients ?? 0;
+    return {
+      kind: 'sent',
+      text: `Email thông báo · ${notification.recipients ?? 0} người nhận`,
+      at: notification.sentAt ?? '',
+      warning:
+        refused === 0
+          ? null
+          : `${refused} địa chỉ bị máy chủ thư từ chối. Kiểm tra lại trong "Nơi nhận lead".`,
+    };
+  }
+  if (spam) {
+    return { kind: 'skipped', text: 'Không gửi email: lead nghi ngờ spam' };
+  }
+  switch (notification.status) {
+    case 'pending':
+    case 'sending': {
+      // While sending, `attempts` already counts the attempt that is running.
+      const attempt =
+        notification.status === 'sending' ? notification.attempts : notification.attempts + 1;
+      return {
+        kind: 'waiting',
+        text:
+          attempt <= 1
+            ? 'Đang gửi email thông báo'
+            : `Đang thử gửi lại email thông báo (lần ${attempt})`,
+      };
+    }
+    case 'failed':
+      return {
+        kind: 'failed',
+        text: `Lỗi đồng bộ · ${notificationErrorLabels[notification.lastErrorCode ?? 'unknown']}`,
+      };
+    case 'skipped':
+      return { kind: 'skipped', text: 'Không gửi email: lead từng bị nghi ngờ spam' };
+  }
 }
