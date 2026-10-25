@@ -75,7 +75,7 @@ test.describe('B3 · lead inbox', () => {
     await expect(nav.getByRole('link', { name: 'Leads 1 mới' })).toBeVisible();
     await detail.getByRole('textbox', { name: /Ghi chú nội bộ/ }).fill('Hẹn gọi lại sau 18h');
     await detail.getByRole('button', { name: 'Lưu ghi chú' }).click();
-    await expect(page.getByText('Đã lưu ghi chú')).toBeVisible();
+    await expect(page.getByText('Đã lưu ghi chú', { exact: true })).toBeVisible();
     await page.reload();
     await expect(
       page
@@ -121,7 +121,7 @@ test.describe('B3 · lead inbox', () => {
     const confirm = page.getByRole('alertdialog', { name: 'Xóa dữ liệu của Nguyễn Thu Hà?' });
     await expect(confirm).toContainText('Xóa 1 lead');
     await confirm.getByRole('button', { name: 'Xóa dữ liệu' }).click();
-    await expect(page.getByText('Đã xóa 1 lead của người này')).toBeVisible();
+    await expect(page.getByText('Đã xóa 1 lead của người này', { exact: true })).toBeVisible();
     await expect(list.getByRole('link', { name: 'Nguyễn Thu Hà' })).toHaveCount(0);
     await expect(folders.getByRole('button', { name: 'Hộp thư · 1' })).toBeVisible();
   });
