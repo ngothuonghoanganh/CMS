@@ -65,7 +65,8 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
   const slots = useRef<Array<HTMLButtonElement | null>>([]);
   // The bar that has focus; kept when a new report removes it, so focus can move to today's bar.
   const focusedBar = useRef<HTMLButtonElement | null>(null);
-  // A finger or pen that just lifted from a tap: its leaving keeps the tapped day shown.
+  // A finger or pen that lifted from a tap and has not entered another day since: its leaving
+  // keeps the tapped day shown.
   const lifted = useRef<number | null>(null);
   const ticks = niceTicks(Math.max(0, ...daily.map((day) => day.visitors)));
   const top = ticks.at(-1) ?? 1;
@@ -216,9 +217,7 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
               onPointerLeave={(event) => {
                 // A finger or pen lifting after a tap leaves too, and the tapped day stays shown.
                 // Any other leave hides it: a mouse moving away, a touch that became a scroll.
-                const tapped = lifted.current === event.pointerId;
-                lifted.current = null;
-                if (!tapped) {
+                if (lifted.current !== event.pointerId) {
                   setActiveDay(null);
                 }
               }}
@@ -233,7 +232,11 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
                   tabIndex={index === focusIndex ? 0 : -1}
                   className={cx(styles.slot, index === active && styles.slotActive)}
                   aria-label={`${tooltipDayLabel(day.day)}: ${dayDetails(day)}`}
-                  onPointerEnter={() => {
+                  onPointerEnter={(event) => {
+                    // A pen that hovers on after its tap has moved on from the tapped day.
+                    if (lifted.current === event.pointerId) {
+                      lifted.current = null;
+                    }
                     setActiveDay(day.day);
                   }}
                   onFocus={(event) => {

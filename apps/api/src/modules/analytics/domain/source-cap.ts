@@ -52,12 +52,15 @@ export class SourceCapRegistry {
     if (known?.day === day) {
       return known.pairs;
     }
-    const entry = {
-      day,
-      pairs: stored().then(
-        (items) => new Set(items.filter((item) => !isStandardSource(item)).map(sourcePairKey)),
-      ),
-    };
+    const pairs = stored().then(
+      (items) => new Set(items.filter((item) => !isStandardSource(item)).map(sourcePairKey)),
+    );
+    // A view of yesterday can get here after today's first view: its day was taken a few queries
+    // earlier. It is checked against yesterday's pairs and leaves today's in place.
+    if (known !== undefined && known.day > day) {
+      return pairs;
+    }
+    const entry = { day, pairs };
     // One entry per site: yesterday's pairs are dropped when today's first view arrives.
     this.sites.set(siteId, entry);
     // The views waiting on a failed load get its error; the next view loads again.

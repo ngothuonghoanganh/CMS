@@ -14,19 +14,46 @@ const VALUE_MAX = 40;
 /** Search engines by the second-level name of their host, e.g. "google" in "www.google.com.vn". */
 const SEARCH_ENGINES = ['google', 'bing', 'coccoc', 'yahoo', 'duckduckgo', 'yandex'] as const;
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** The longest run of `parts` from the start that fits in `VALUE_MAX` UTF-16 units. */
+function fitted(parts: Iterable<string>): string {
+  let cut = '';
+  for (const part of parts) {
+    if (cut.length + part.length > VALUE_MAX) {
+      break;
+    }
+    cut += part;
+  }
+  return cut;
+}
+
+/**
+ * At most `VALUE_MAX` UTF-16 units, cut between characters as people see them: a flag, an emoji
+ * joined by ZWJ or a letter with its accents is kept whole or left out.
+ */
+function cutToMax(text: string): string {
+  if (text.length <= VALUE_MAX) {
+    return text;
+  }
+  const whole = fitted(Array.from(graphemes.segment(text), (item) => item.segment));
+  // One character longer than the limit (a letter under a run of combining marks): cut between
+  // its code points instead.
+  return whole === '' ? fitted(text) : whole;
+}
+
 /**
  * Lowercase, trimmed, at most 40 characters; null when empty. A run of spaces or control
- * characters (a line break in a campaign tag) becomes one space, and a cut never splits an emoji.
+ * characters (a line break in a campaign tag) becomes one space, and a cut never splits a
+ * character in two.
  */
 function clean(value: string | null): string | null {
-  const text =
+  const text = cutToMax(
     value
       ?.replace(/[\s\p{Cc}]+/gu, ' ')
       .trim()
-      .toLowerCase()
-      .slice(0, VALUE_MAX)
-      .replace(/[\uD800-\uDBFF]$/, '')
-      .trim() ?? '';
+      .toLowerCase() ?? '',
+  ).trim();
   return text === '' ? null : text;
 }
 

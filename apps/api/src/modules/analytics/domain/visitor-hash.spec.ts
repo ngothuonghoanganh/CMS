@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { toObjectId } from '../../../shared/persistence/object-id.js';
+import { addressKeySecret } from '../../../shared/renderer-channel/address-key.js';
 import { visitorHash, visitorHashSecret } from './visitor-hash.js';
 
 const SECRET = visitorHashSecret('renderer-api-secret-of-at-least-32-chars');
@@ -37,6 +38,7 @@ describe('visitorHash', () => {
       visitorHash(visitorHashSecret('another-renderer-api-secret-32-chars!!'), INPUT),
     ).not.toBe(hash);
     // Its own key: not the one of the rate-limit buckets, nor the renderer secret itself.
+    expect(SECRET.equals(addressKeySecret('renderer-api-secret-of-at-least-32-chars'))).toBe(false);
     expect(SECRET.equals(Buffer.from('renderer-api-secret-of-at-least-32-chars'))).toBe(false);
   });
 });

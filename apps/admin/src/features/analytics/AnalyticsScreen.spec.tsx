@@ -181,6 +181,24 @@ describe('AnalyticsScreen', () => {
 
     tap('pen', 3);
     expect(chart()).toHaveTextContent(details);
+    // A pen that taps Thursday, hovers on to Friday within the chart, then away: it tapped
+    // Thursday only, so nothing stays.
+    const friday = within(chart()).getByRole('button', { name: /^Thứ 6, 23\/10/ });
+    const pen = { pointerType: 'pen', pointerId: 5 };
+    fireEvent.pointerEnter(thursday, pen);
+    fireEvent.pointerUp(thursday, pen);
+    fireEvent.pointerEnter(friday, pen);
+    expect(chart()).toHaveTextContent('Thứ 6, 23/10360 khách');
+    fireEvent.pointerLeave(bars, pen);
+    expect(chart()).not.toHaveTextContent('Thứ 6, 23/10360 khách');
+
+    // A finger tapping Thursday, then scrolling from Friday with the same pointer id.
+    tap('touch', 2);
+    expect(chart()).toHaveTextContent(details);
+    fireEvent.pointerEnter(friday, { pointerType: 'touch', pointerId: 2 });
+    fireEvent.pointerCancel(friday, { pointerType: 'touch', pointerId: 2 });
+    fireEvent.pointerLeave(bars, { pointerType: 'touch', pointerId: 2 });
+    expect(chart()).not.toHaveTextContent('Thứ 6, 23/10360 khách');
 
     // A touch that turns into a scroll is cancelled: nothing stays over the chart.
     fireEvent.pointerEnter(thursday, { pointerType: 'touch', pointerId: 4 });
@@ -345,18 +363,26 @@ describe('AnalyticsScreen', () => {
     });
     expect(within(chart()).getByRole('button', { name: 'Xem dạng bảng' })).toHaveFocus();
 
-    // A bar whose day the next report still has keeps the focus and the tab stop.
-    await user.click(within(ranges).getByRole('button', { name: '7 ngày' }));
-    const thursday = within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ });
+    // A bar whose day the next report still has keeps the focus, the tab stop and its tooltip.
+    await user.click(within(ranges).getByRole('button', { name: '90 ngày' }));
+    // Not cached: the 30 days stay on screen while the 90 load.
+    expect(apiMock).toHaveBeenCalledTimes(2);
+    expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(30);
     act(() => {
-      thursday.focus();
+      within(chart())
+        .getByRole('button', { name: /^Thứ 5, 22\/10/ })
+        .focus();
     });
-    pending.resolve(report());
+    pending.resolve(
+      report({ period: { from: '2026-07-27', to: '2026-10-24' }, daily: dailyOf(90) }),
+    );
     await vi.waitFor(() => {
-      expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(7);
+      expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(90);
     });
-    expect(within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ })).toHaveFocus();
-    expect(within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ }).tabIndex).toBe(0);
+    const thursday = within(chart()).getByRole('button', { name: /^Thứ 5, 22\/10/ });
+    expect(thursday).toHaveFocus();
+    expect(thursday.tabIndex).toBe(0);
+    expect(chart()).toHaveTextContent('Thứ 5, 22/10100 khách');
   });
 
   it('hands the focus to today’s bar when the next report no longer has the focused day', async () => {
@@ -377,6 +403,29 @@ describe('AnalyticsScreen', () => {
       expect(within(chart()).getByRole('button', { name: /^Thứ 7, 24\/10/ })).toHaveFocus();
     });
     expect(within(chart()).getByRole('button', { name: /^Thứ 7, 24\/10/ }).tabIndex).toBe(0);
+  });
+
+  it('leaves the focus on the page when the bar the user left is gone from the next report', async () => {
+    const pending = pendingReports();
+    const user = userEvent.setup();
+    renderScreen(report({ period: { from: '2026-07-27', to: '2026-10-24' }, daily: dailyOf(90) }), {
+      range: '90d',
+      pageId: null,
+    });
+    await user.click(screen.getByRole('button', { name: '7 ngày' }));
+    const monday = within(chart()).getByRole('button', { name: /^Thứ 2, 03\/08/ });
+    act(() => {
+      monday.focus();
+    });
+    // Safari and Firefox on macOS: clicking elsewhere leaves the focus on the page itself.
+    act(() => {
+      monday.blur();
+    });
+    pending.resolve(report());
+    await vi.waitFor(() => {
+      expect(within(chart()).getAllByRole('button', { name: /khách ·/ })).toHaveLength(7);
+    });
+    expect(document.body).toHaveFocus();
   });
 
   it('shows "Theo trang" for a report of every page only, not while one page’s report is still shown', async () => {

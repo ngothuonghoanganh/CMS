@@ -28,11 +28,20 @@ describe('normalizeLeadSource', () => {
     ).toEqual({ source: 'face book', medium: 'c p c', campaign: null });
   });
 
-  it('never cuts an emoji in half at the 40th character', () => {
-    const tag = `${'u'.repeat(39)}🔥 sale`;
-    expect(
-      normalizeLeadSource({ ...NONE, utmSource: tag, utmCampaign: tag, siteHost: SITE_HOST }),
-    ).toEqual({ source: 'u'.repeat(39), medium: '(none)', campaign: 'u'.repeat(39) });
+  it('never cuts a character in two at the 40th unit: an emoji, a flag, a joined emoji', () => {
+    const cut = (tag: string) =>
+      normalizeLeadSource({ ...NONE, utmSource: tag, utmCampaign: tag, siteHost: SITE_HOST });
+    expect(cut(`${'u'.repeat(39)}🔥 sale`)).toEqual({
+      source: 'u'.repeat(39),
+      medium: '(none)',
+      campaign: 'u'.repeat(39),
+    });
+    expect(cut(`${'u'.repeat(38)}🇻🇳`).source).toBe('u'.repeat(38));
+    expect(cut(`${'u'.repeat(36)}👩‍💻 dev`).source).toBe('u'.repeat(36));
+    // Whole characters that fit are kept.
+    expect(cut(`${'u'.repeat(36)}🇻🇳`).source).toBe(`${'u'.repeat(36)}🇻🇳`);
+    // One character longer than the limit is cut between its code points, not dropped.
+    expect(cut(`e${'\u0301'.repeat(50)}`).source).toBe(`e${'\u0301'.repeat(39)}`);
   });
 
   it('uses campaign tags first, lowercased and cut to 40 characters', () => {

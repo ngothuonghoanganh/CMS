@@ -70,6 +70,29 @@ describe('SourceCapRegistry', () => {
     expect(pairs.slice(50)).toEqual(Array.from({ length: 10 }, () => ANALYTICS_OTHER_SOURCE));
   });
 
+  it('leaves today’s pairs in place when a late view of yesterday arrives', async () => {
+    const registry = new SourceCapRegistry();
+    const loads: string[] = [];
+    const storedOf = (day: string) => async () => {
+      loads.push(day);
+      await new Promise((done) => setTimeout(done, 5));
+      return [] as SourcePair[];
+    };
+    const today = (from: number, count: number) =>
+      Array.from({ length: count }, (_, index) =>
+        registry.pairFor('site-a', '2026-10-26', pair(from + index), storedOf('2026-10-26')),
+      );
+    const first = today(0, 40);
+    // Its day was taken just before midnight, a few queries earlier.
+    const late = registry.pairFor('site-a', '2026-10-25', pair(99), storedOf('2026-10-25'));
+    const next = today(40, 40);
+    const pairs = await Promise.all([...first, ...next]);
+
+    expect(await late).toEqual(pair(99));
+    expect(loads.filter((day) => day === '2026-10-26')).toHaveLength(1);
+    expect(pairs.filter((item) => item !== ANALYTICS_OTHER_SOURCE)).toHaveLength(50);
+  });
+
   it('loads again after a load fails, which the waiting views see', async () => {
     const registry = new SourceCapRegistry();
     const stored = vi
