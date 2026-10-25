@@ -33,6 +33,9 @@ export interface InsertReleaseInput {
   idempotencyKey: string;
 }
 
+/** Only the consent snapshot: a lead's consent version is `leadCapture.consentVersion`. */
+export type ReleaseLeadCaptureRow = Pick<ReleaseRecord, '_id' | 'leadCapture'>;
+
 /** Another request already published with the same `Idempotency-Key` for this page. */
 export class IdempotencyKeyUsedError extends Error {
   constructor(options: { cause: unknown }) {
@@ -96,6 +99,25 @@ export class ReleasesRepository {
     const releases = await this.releases
       .find({ workspaceId: scope.workspaceId, _id: { $in: unique } })
       .lean<ReleaseRecord[]>()
+      .exec();
+    return new Map(releases.map((release) => [release._id.toHexString(), release]));
+  }
+
+  /**
+   * The consent snapshot of some releases (the evidence of leads, ADR-017), keyed by release id
+   * hex, without their content.
+   */
+  async findLeadCaptures(
+    scope: WorkspaceScope,
+    ids: readonly ObjectId[],
+  ): Promise<Map<string, ReleaseLeadCaptureRow>> {
+    const unique = uniqueIds(ids);
+    if (unique.length === 0) {
+      return new Map();
+    }
+    const releases = await this.releases
+      .find({ workspaceId: scope.workspaceId, _id: { $in: unique } }, { leadCapture: 1 })
+      .lean<ReleaseLeadCaptureRow[]>()
       .exec();
     return new Map(releases.map((release) => [release._id.toHexString(), release]));
   }

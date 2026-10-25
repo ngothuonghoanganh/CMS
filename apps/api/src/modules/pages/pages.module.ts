@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AssetsModule } from '../assets/assets.module.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { LeadsCoreModule } from '../leads/leads-core.module.js';
 import { PrivacyCoreModule } from '../privacy/privacy-core.module.js';
 import { PublishingCoreModule } from '../publishing/publishing-core.module.js';
 import { SitesCoreModule } from '../sites/sites-core.module.js';
@@ -23,6 +24,7 @@ import { PagesService } from './pages.service.js';
     ActivityModule,
     AssetsModule,
     AuthModule,
+    LeadsCoreModule,
     PrivacyCoreModule,
     PublishingCoreModule,
     SitesCoreModule,

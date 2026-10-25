@@ -680,6 +680,23 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Production cần nhà cung cấp SMTP có SPF và DKIM cho domain gửi; chọn khi deploy.
   - Google Sheets, Meta Conversions API hay Zalo OA là nơi nhận mới, mỗi cái cần ADR riêng.
 - **Amended 2026-10-25 (quyết định trước B3):** hộp thư mặc định lọc "7 ngày qua" như thiết kế, và có thêm lựa chọn "Toàn bộ thời gian". Badge "N mới" ở sidebar và dòng "chưa xử lý" ở dashboard mở hộp thư với trạng thái "Mới" và "Toàn bộ thời gian", để số trên badge khớp với danh sách mở ra.
+- **Amended 2026-10-25 (B3):**
+  - **Ngày:** "7 ngày qua" là hôm nay và 6 ngày trước theo lịch Việt Nam (UTC+7), "30 ngày qua" tương tự. Khoảng tùy chọn gồm cả ngày đầu và ngày cuối, tối đa 365 ngày. API và admin dùng chung các hàm lịch trong contracts (`calendar.ts`), nên badge, thẻ dashboard, cột "LEAD 7 NGÀY" và hộp thư ra cùng một số.
+  - **Tìm kiếm:** khi nhận lead, API lưu thêm `search { phone, email, name }`: chữ số của số E.164, email chữ thường, tên chữ thường bỏ dấu. Số gõ dạng `0…` được đổi sang `84…`; số không có 0 đầu được thử cả hai dạng. Lead nhận trước B3 không có `search` (chỉ có ở DB dev) nên không tìm được bằng ô tìm.
+  - **Index:** `leads_inbox` (siteId, spam, createdAt, _id), `leads_inbox_page`, `leads_inbox_status`, `leads_search_phone`, `leads_search_email`, đều bắt đầu bằng `siteId`.
+  - **Đếm:** số trên thư mục, badge và thẻ dashboard dừng ở 999 ("999+"), nên một lệnh đếm không quét quá 1.000 lead. Cột "LEAD 7 NGÀY" đếm đúng bằng một aggregate cho mọi trang của site. Lead nghi ngờ spam, kể cả lead được chuyển vào spam bằng tay, không được tính ở đâu cả.
+  - **Một người** là lead đang xem cùng mọi lead trong site có cùng số điện thoại hoặc cùng email với nó (so trực tiếp, không bắc cầu). "Xuất dữ liệu người này" cho file JSON (kèm nội dung đồng ý của từng lead) hoặc CSV, tối đa 1.000 lead; "Xóa dữ liệu người này" xóa tất cả.
+  - **Xuất và xóa:** mỗi lần xuất ghi `lead.exported`, mỗi lần xóa ghi `lead.person_deleted`, kèm số lead và không kèm dữ liệu cá nhân. Activity của lần xóa nằm cùng transaction với lệnh xóa. CSV dùng giờ Việt Nam dạng `2026-10-24 16:42:07` và số Việt Nam dạng `0901 234 567`.
+  - **Ô tìm kiếm không bao giờ nằm trong URL:** từ khóa là dữ liệu cá nhân (số điện thoại, email, tên).
+    - Danh sách không tìm kiếm dùng `GET /sites/:siteId/leads`; schema của query từ chối tham số lạ như `q`.
+    - Có từ khóa thì gửi `POST /sites/:siteId/leads/search` với từ khóa trong body. CSV cũng nhận từ khóa trong body.
+    - URL của màn hộp thư giữ các bộ lọc và lead đang mở, nhưng không giữ từ khóa: tải lại trang thì ô tìm trống.
+    - Lý do: URL đi vào lịch sử trình duyệt, header `Referer`, access log của proxy, và dòng log "Failed to proxy" của rewrite `/api` khi API không trả lời.
+    - Log của API vẫn che `q` trong URL, query và header `Referer`, phòng khi có trang khác dùng `q`.
+    - Từ khóa tối đa 80 ký tự, không chứa ký tự điều khiển. Admin đổi các ký tự đó (ví dụ khi dán) thành khoảng trắng.
+  - **Truyền dữ liệu:** file tải về đi bằng `POST` qua proxy `/api`, nên vẫn qua kiểm tra Origin. Phản hồi có dữ liệu lead gửi `Cache-Control: no-store`. Tải CSV bị bỏ dở (người dùng rời trang) thì cursor MongoDB được đóng ngay, không đợi hết hạn.
+  - **Số trên badge:** trang hộp thư và dashboard nạp số đếm cùng lúc với dữ liệu của chúng và ghi đè số cũ hơn trong cache, nên badge ở sidebar (layout giữ dữ liệu lần đầu) khớp với trang vừa mở.
+  - **Liên kết tới một lead:** `/sites/{siteId}/leads?lead={leadId}`; email thông báo của B4 dùng liên kết này. Phần "Đã gửi tới", nút "Nơi nhận lead" và badge "Lỗi đồng bộ" thuộc B4.
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 
@@ -741,7 +758,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 | B1         | Cài đặt dữ liệu cá nhân, phiên bản đồng ý, snapshot `leadCapture`, mục sidebar                                        | 12 (phần trên)  | Xong       |
 | B2         | Section Form, gửi form qua renderer, lưu lead, chống spam, rate limit, blueprint                                      | 02, 04, 05, 09  | Xong       |
 | B2.1       | Sửa sau QA: số điện thoại E.164 (+84 mặc định), nút lưu không bị hụt khi validate, nhãn "Thêm section", icon xác nhận | 03, 04, 09, 12  | Xong       |
-| B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người                                      | 10, 01, Sidebar | Chưa làm   |
+| B3         | Hộp thư lead, trạng thái, ghi chú, spam, xuất CSV, xuất và xóa dữ liệu một người                                      | 10, 01, Sidebar | Xong       |
 | B4         | Nơi nhận lead có xác nhận, email thông báo, gửi lại, Mailpit                                                          | 10, 05, 03      | Chưa làm   |
 | B5         | Yêu cầu từ người gửi form, hạn xử lý, nhật ký                                                                         | 12 (phần dưới)  | Chưa làm   |
 | B6         | Beacon, khách duy nhất theo ngày, tổng hợp, màn Hiệu quả                                                              | 11              | Chưa làm   |

@@ -8,7 +8,9 @@ import {
   type PageDetailResponse,
   type PageListResponse,
   type pageListQuerySchema,
+  type PageRefListResponse,
   type ProblemIssue,
+  recentDaysWindow,
   reservedSlugs,
   type RestoreDraftRequest,
   type SaveDraftRequest,
@@ -25,6 +27,7 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
+import { LeadsRepository } from '../leads/leads.repository.js';
 import { imageOccurrences } from '../publishing/domain/content-refs.js';
 import { RELEASE_NOT_FOUND } from '../publishing/release-dto.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
@@ -67,12 +70,14 @@ export class PagesService {
     private readonly assets: AssetsRepository,
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
+    private readonly leads: LeadsRepository,
   ) {}
 
   /**
    * Pages of a site with derived status and check counts. Status, counts and attention need every
    * page of the site, which `MAX_PAGES_PER_SITE` bounds (ADR-014); filtering and the keyset page
-   * are applied afterwards.
+   * are applied afterwards. Each row carries its leads of the last 7 days, counted for every page
+   * in one aggregation (ADR-018).
    */
   async list(
     user: AuthenticatedUser,
@@ -93,7 +98,10 @@ export class PagesService {
           ]
         : [],
     );
-    const evaluated = await this.evaluator.evaluateMany(scope, site, pages, livePages);
+    const [evaluated, recentLeads] = await Promise.all([
+      this.evaluator.evaluateMany(scope, site, pages, livePages),
+      this.leads.countRecentByPage(scope, site._id, recentDaysWindow(new Date(), 7).from),
+    ]);
     const listed = evaluated.map(({ summary, checks }) => ({
       summary,
       blockingCount: checks.blocking.length,
@@ -104,10 +112,24 @@ export class PagesService {
       query.limit,
     );
     return {
-      items: page.items.map(({ summary }) => summary),
+      items: page.items.map(({ summary }) => ({
+        ...summary,
+        leadsLast7Days: recentLeads.get(summary.id) ?? 0,
+      })),
       nextCursor: page.nextCursor,
       counts: countPages(listed),
       attention: attentionOf(listed),
+    };
+  }
+
+  /** Id and title of every page of the site, by title: the page filter of the lead inbox. */
+  async listRefs(user: AuthenticatedUser, siteId: string): Promise<PageRefListResponse> {
+    const { scope, site } = await this.sites.access(user, siteId);
+    const pages = await this.pages.listTitlesForSite(scope, site._id);
+    return {
+      items: pages
+        .map((page) => ({ id: page._id.toHexString(), title: page.title }))
+        .sort((a, b) => a.title.localeCompare(b.title, 'vi')),
     };
   }
 

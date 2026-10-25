@@ -5,6 +5,7 @@ import {
   type PageDetailResponse,
   type PageListResponse,
   pageListQuerySchema,
+  type PageRefListResponse,
   type RestoreDraftRequest,
   restoreDraftRequestSchema,
   type SaveDraftRequest,
@@ -34,6 +35,14 @@ export class PagesController {
     @Query(new ZodPipe(pageListQuerySchema)) query: PageListQueryValues,
   ): Promise<PageListResponse> {
     return this.pages.list(user, siteId, query);
+  }
+
+  @Get('sites/:siteId/page-refs')
+  listRefs(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+  ): Promise<PageRefListResponse> {
+    return this.pages.listRefs(user, siteId);
   }
 
   @Get('sites/:siteId/page-count')

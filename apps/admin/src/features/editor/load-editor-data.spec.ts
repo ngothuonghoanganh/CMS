@@ -5,7 +5,7 @@ import { pageSummary, sampleComposition, site } from './test-fixtures';
 
 function pagesResponse(nextCursor: string | null): PageListResponse {
   return {
-    items: [pageSummary()],
+    items: [{ ...pageSummary(), leadsLast7Days: 0 }],
     nextCursor,
     counts: { all: 1, live: 0, live_with_changes: 0, draft: 1, unpublished: 0 },
     attention: { pagesWithChanges: 0, pagesWithBlockingErrors: 0, firstPage: null },

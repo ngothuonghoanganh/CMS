@@ -88,3 +88,29 @@
   font-size: var(--text-body);
   color: var(--color-success-ink);
 }
+
+.leadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.leadCount {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pending {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pending:hover {
+  color: var(--color-ink);
+}

@@ -1,3 +1,4 @@
+import { DIRECT_LEAD_SOURCE } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { toObjectId } from '../../../shared/persistence/object-id.js';
 import {
@@ -7,7 +8,7 @@ import {
   siteLimitKey,
   spamReasons,
 } from './lead-intake-rules.js';
-import { DIRECT_SOURCE, normalizeLeadSource } from './lead-source.js';
+import { normalizeLeadSource } from './lead-source.js';
 
 const NONE = { utmSource: null, utmMedium: null, utmCampaign: null, referrer: null };
 const SITE_HOST = 'smilecare.payload.site';
@@ -52,7 +53,7 @@ describe('normalizeLeadSource', () => {
   it('treats no referrer, the site itself and junk as direct', () => {
     for (const referrer of [null, `https://${SITE_HOST}/uu-dai`, 'not a url', 'javascript:x']) {
       expect(normalizeLeadSource({ ...NONE, referrer, siteHost: `${SITE_HOST}:443` })).toEqual({
-        ...DIRECT_SOURCE,
+        ...DIRECT_LEAD_SOURCE,
         campaign: null,
       });
     }

@@ -146,6 +146,13 @@ export const pageSummarySchema = z.object({
 });
 export type PageSummary = z.infer<typeof pageSummarySchema>;
 
+/** A row of the page list (screen 01): the summary and its column "LEAD 7 NGÀY". */
+export const pageListItemSchema = pageSummarySchema.extend({
+  /** Leads of the last 7 days in Vietnam, spam excluded (ADR-018). */
+  leadsLast7Days: z.number().int().nonnegative(),
+});
+export type PageListItem = z.infer<typeof pageListItemSchema>;
+
 export const draftSchema = z.object({
   slug: z.string(),
   composition: compositionSchema,
@@ -190,7 +197,7 @@ export const pageCountsSchema = z.object({
 export type PageCounts = z.infer<typeof pageCountsSchema>;
 
 export const pageListResponseSchema = z.object({
-  items: z.array(pageSummarySchema),
+  items: z.array(pageListItemSchema),
   nextCursor: z.string().nullable(),
   /** Counts over every page of the site, independent of the filter. */
   counts: pageCountsSchema,

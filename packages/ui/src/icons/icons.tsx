@@ -50,6 +50,11 @@ export const ExternalLinkIcon = createIcon(
   'external-link',
   <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />,
 );
+export const DownloadIcon = createIcon('download', <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />);
+export const PhoneIcon = createIcon(
+  'phone',
+  <path d="M6.6 4h2.6l1.3 3.6-1.8 1.4a11 11 0 0 0 6.3 6.3l1.4-1.8 3.6 1.3v2.6A1.6 1.6 0 0 1 18.4 19 15 15 0 0 1 5 5.6 1.6 1.6 0 0 1 6.6 4z" />,
+);
 export const LogoutIcon = createIcon(
   'logout',
   <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />,

@@ -8,7 +8,13 @@ function sentence(overrides: Partial<ActivityItem>): string {
   return `${result.actor} ${result.text} [${result.tone}]`;
 }
 
-const noVersions = { version: null, fromVersion: null, toVersion: null, revalidationFailed: false };
+const noVersions = {
+  version: null,
+  fromVersion: null,
+  toVersion: null,
+  count: null,
+  revalidationFailed: false,
+};
 
 describe('activitySentence', () => {
   it('describes a publish', () => {
@@ -24,7 +30,13 @@ describe('activitySentence', () => {
         type: 'page.rolled_back',
         actor: minh,
         page: { id: '64b000000000000000000102', title: 'Cấy ghép Implant' },
-        data: { version: null, fromVersion: 6, toVersion: 5, revalidationFailed: false },
+        data: {
+          version: null,
+          fromVersion: 6,
+          toVersion: 5,
+          count: null,
+          revalidationFailed: false,
+        },
       }),
     ).toBe('Minh khôi phục “Cấy ghép Implant” từ v6 về v5 [warning]');
     expect(sentence({ type: 'page.rolled_back', data: noVersions })).toBe(
@@ -59,6 +71,18 @@ describe('activitySentence', () => {
     );
   });
 
+  it('describes lead exports and deletions with counts only (ADR-018, rule 10)', () => {
+    expect(
+      sentence({ type: 'lead.exported', page: null, data: { ...noVersions, count: 48 } }),
+    ).toBe('Ngọc Anh xuất dữ liệu 48 lead [primary]');
+    expect(
+      sentence({ type: 'lead.person_deleted', page: null, data: { ...noVersions, count: 3 } }),
+    ).toBe('Ngọc Anh xóa dữ liệu của một người gửi form (3 lead) [muted]');
+    expect(sentence({ type: 'lead.exported', page: null, data: noVersions })).toBe(
+      'Ngọc Anh xuất dữ liệu lead [primary]',
+    );
+  });
+
   it('describes changes to the personal data settings and consent texts (ADR-017)', () => {
     expect(sentence({ type: 'privacy.updated', page: null, data: noVersions })).toBe(
       'Ngọc Anh cập nhật cài đặt dữ liệu cá nhân [primary]',
@@ -67,7 +91,13 @@ describe('activitySentence', () => {
       sentence({
         type: 'consent.version_created',
         page: null,
-        data: { version: 3, fromVersion: null, toVersion: null, revalidationFailed: false },
+        data: {
+          version: 3,
+          fromVersion: null,
+          toVersion: null,
+          count: null,
+          revalidationFailed: false,
+        },
       }),
     ).toBe('Ngọc Anh lưu nội dung đồng ý bản 3 [primary]');
   });
@@ -76,7 +106,13 @@ describe('activitySentence', () => {
     expect(
       sentence({
         type: 'page.draft_restored',
-        data: { version: 8, fromVersion: null, toVersion: null, revalidationFailed: false },
+        data: {
+          version: 8,
+          fromVersion: null,
+          toVersion: null,
+          count: null,
+          revalidationFailed: false,
+        },
       }),
     ).toBe('Ngọc Anh sao chép v8 vào bản nháp của “Ưu đãi niềng răng tháng 11” [primary]');
     expect(sentence({ type: 'page.draft_restored', data: noVersions })).toBe(

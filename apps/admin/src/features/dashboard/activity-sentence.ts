@@ -63,6 +63,19 @@ function describe(item: ActivityItem): Omit<ActivitySentence, 'actor'> {
             : `lưu nội dung đồng ý bản ${data.version}`,
         tone: 'primary',
       };
+    case 'lead.exported':
+      return {
+        text: data.count === null ? 'xuất dữ liệu lead' : `xuất dữ liệu ${data.count} lead`,
+        tone: 'primary',
+      };
+    case 'lead.person_deleted':
+      return {
+        text:
+          data.count === null
+            ? 'xóa dữ liệu của một người gửi form'
+            : `xóa dữ liệu của một người gửi form (${data.count} lead)`,
+        tone: 'muted',
+      };
   }
 }
 

@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { Sidebar, type SidebarProps } from './Sidebar';
 import { renderWithProviders } from './test-utils';
 
@@ -62,6 +62,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}) {
       site={site}
       sites={[site, otherSite]}
       pageCount={6}
+      leadCounts={NO_LEADS}
       {...overrides}
     />,
   );
@@ -100,8 +101,13 @@ describe('Sidebar', () => {
       'href',
       `/sites/${SITE_ID}/privacy`,
     );
-    // Leads and "Hiệu quả" come with later MVP B slices.
-    expect(screen.queryByRole('link', { name: /Leads|Hiệu quả/ })).not.toBeInTheDocument();
+    // Without new leads, "Leads" opens the inbox as it is and shows no badge.
+    expect(screen.getByRole('link', { name: 'Leads' })).toHaveAttribute(
+      'href',
+      `/sites/${SITE_ID}/leads`,
+    );
+    // "Hiệu quả" comes with a later MVP B slice.
+    expect(screen.queryByRole('link', { name: /Hiệu quả/ })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Owner');
   });
 
@@ -110,6 +116,27 @@ describe('Sidebar', () => {
     renderSidebar();
     expect(screen.getByRole('link', { name: 'Tên miền' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Trang 6 trang' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('shows the new leads of every time and opens exactly those (ADR-018)', () => {
+    renderSidebar({
+      leadCounts: { new: { count: 12, capped: false }, last7Days: { count: 48, capped: false } },
+    });
+    const leads = screen.getByRole('link', { name: 'Leads 12 mới' });
+    expect(leads).toHaveAttribute('href', `/sites/${SITE_ID}/leads?status=new&range=all`);
+  });
+
+  it('caps the badge at 999+', () => {
+    renderSidebar({
+      leadCounts: { new: { count: 999, capped: true }, last7Days: { count: 999, capped: true } },
+    });
+    expect(screen.getByRole('link', { name: 'Leads 999+ mới' })).toBeInTheDocument();
+  });
+
+  it('marks "Leads" in the inbox', () => {
+    pathname.current = `/sites/${SITE_ID}/leads`;
+    renderSidebar();
+    expect(screen.getByRole('link', { name: 'Leads' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('marks "Dữ liệu & đồng ý" on the privacy page', () => {

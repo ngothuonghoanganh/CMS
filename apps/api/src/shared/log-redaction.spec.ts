@@ -5,6 +5,7 @@ import {
   LOG_REDACT_PATHS,
   REDACTED,
   redactPreviewToken,
+  redactSearch,
   serializeRequest,
 } from './log-redaction.js';
 
@@ -63,6 +64,54 @@ describe('log redaction', () => {
     logger.info({ req: { url: `/public/preview/${TOKEN}`, params: { token: TOKEN } } }, 'done');
     expect(lines.join('')).not.toContain(TOKEN);
     expect(lines.join('')).toContain(`/public/preview/${REDACTED}`);
+  });
+
+  it('replaces what a member searched for, wherever it sits in the query string', () => {
+    expect(redactSearch('/sites/abc/leads?q=0901234567')).toBe(`/sites/abc/leads?q=${REDACTED}`);
+    expect(redactSearch('/sites/abc/leads?folder=inbox&q=Nguy%E1%BB%85n&range=7d')).toBe(
+      `/sites/abc/leads?folder=inbox&q=${REDACTED}&range=7d`,
+    );
+    expect(redactSearch('/sites/abc/leads?faq=1&range=7d')).toBe('/sites/abc/leads?faq=1&range=7d');
+  });
+
+  it('keeps a lead search out of the url and query of a log line, not of the live request', () => {
+    const query = { folder: 'inbox', q: 'thuha@example.com' };
+    const serialized = serializeRequest({
+      url: '/sites/abc/leads?folder=inbox&q=thuha%40example.com',
+      query,
+    });
+    expect(serialized).toMatchObject({
+      url: `/sites/abc/leads?folder=inbox&q=${REDACTED}`,
+      query: { folder: 'inbox', q: REDACTED },
+    });
+    expect(query.q).toBe('thuha@example.com');
+  });
+
+  it('keeps a search out of the Referer an admin page sends, without touching the live headers', () => {
+    const headers = {
+      referer: 'http://localhost:3100/sites/abc/leads?status=new&q=0901234567&lead=x',
+      cookie: 'plp_session=secret',
+    };
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        lines.push(chunk.toString('utf8'));
+        done();
+      },
+    });
+    const logger = pino(
+      { redact: [...LOG_REDACT_PATHS], serializers: { req: serializeRequest } },
+      sink,
+    );
+    logger.info({ req: { method: 'GET', url: '/leads/x', headers } }, 'request completed');
+    const output = lines.join('');
+    expect(output).toContain(`q=${REDACTED}&lead=x`);
+    expect(output).not.toContain('0901234567');
+    expect(output).not.toContain('plp_session');
+    expect(headers.referer).toContain('q=0901234567');
+    expect(serializeRequest({ url: '/x', headers: { referer: 'http://a/b' } }).headers).toEqual({
+      referer: 'http://a/b',
+    });
   });
 
   it('keeps the visitor address, user agent and channel signature of a lead out of the log', () => {

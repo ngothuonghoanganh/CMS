@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: DashboardPageProps): Promise<
 /** Screen 01: the site's pages. The client keeps the filters in sync with `?status=&q=`. */
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
   const { siteId } = await params;
-  const { site, membership } = await loadSiteContext(siteId);
+  const { site, membership, leadCounts } = await loadSiteContext(siteId);
   const filters = parseDashboardFilters(await searchParams);
   const data = await loadDashboardData(site.id, filters);
   return (
@@ -30,6 +30,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       initialFilters={filters}
       initialPages={data.pages}
       initialActivity={data.activity}
+      initialLeadCounts={leadCounts}
       loadedAt={data.loadedAt}
     />
   );

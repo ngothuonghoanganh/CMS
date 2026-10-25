@@ -1,6 +1,7 @@
 import {
   type ActivityListResponse,
   endpoints,
+  type LeadCounts,
   type PageListResponse,
   publishingActivityTypes,
 } from '@plp/contracts';
@@ -15,6 +16,7 @@ import { siteQueryKeys } from './queries';
 import {
   activityFixture,
   draftPageFixture,
+  NO_LEADS,
   pageFixture,
   pageListFixture,
   SITE_ID,
@@ -42,10 +44,12 @@ function renderDashboard({
   pages = pageListFixture([livePage, draftPage]),
   activity = { items: [activityFixture()], nextCursor: null },
   filters = { status: null, q: '' },
+  leadCounts = NO_LEADS,
 }: {
   pages?: PageListResponse;
   activity?: ActivityListResponse;
   filters?: DashboardFilters;
+  leadCounts?: LeadCounts;
 } = {}) {
   return renderWithProviders(
     <Dashboard
@@ -54,6 +58,7 @@ function renderDashboard({
       initialFilters={filters}
       initialPages={pages}
       initialActivity={activity}
+      initialLeadCounts={leadCounts}
       loadedAt={Date.now()}
     />,
   );
@@ -128,6 +133,43 @@ describe('Dashboard', () => {
     ).toHaveAttribute('href', `${DASHBOARD_PATH}/pages/64b000000000000000000101/history`);
     expect(screen.getByText('Xuất bản trang đầu tiên')).toHaveClass(/doneLabel/);
     expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('shows the leads of the last 7 days and the new ones, linking into the inbox (ADR-018)', () => {
+    renderDashboard({
+      pages: pageListFixture([pageFixture({ leadsLast7Days: 31 }), draftPage]),
+      leadCounts: { new: { count: 12, capped: false }, last7Days: { count: 48, capped: false } },
+    });
+
+    const summary = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(summary).getByText('Lead 7 ngày qua')).toBeInTheDocument();
+    expect(within(summary).getByText('48')).toBeInTheDocument();
+    expect(within(summary).getByRole('link', { name: '12 chưa xử lý' })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/leads?status=new&range=all`,
+    );
+    expect(within(summary).getByRole('link', { name: /Mở hộp thư lead/ })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/leads`,
+    );
+
+    expect(screen.getByRole('columnheader', { name: 'LEAD 7 NGÀY' })).toBeInTheDocument();
+    const [, liveRow, draftRow] = screen.getAllByRole('row');
+    if (liveRow === undefined || draftRow === undefined) {
+      throw new Error('missing rows');
+    }
+    // A live page shows its count, a page that never went live a dash.
+    expect(within(liveRow).getAllByRole('cell')[4]).toHaveTextContent('31');
+    expect(within(draftRow).getAllByRole('cell')[4]).toHaveTextContent('—');
+  });
+
+  it('caps the lead counts at 999+ and hides "chưa xử lý" without new leads', () => {
+    renderDashboard({
+      leadCounts: { new: { count: 0, capped: false }, last7Days: { count: 999, capped: true } },
+    });
+    const summary = screen.getByRole('region', { name: 'Tóm tắt site' });
+    expect(within(summary).getByText('999+')).toBeInTheDocument();
+    expect(within(summary).queryByText(/chưa xử lý/)).not.toBeInTheDocument();
   });
 
   it('asks only for publishing events, so uploads never push them out of the activity card', async () => {
@@ -268,7 +310,13 @@ describe('Dashboard', () => {
         items: [
           activityFixture({
             type: 'page.unpublished',
-            data: { version: null, fromVersion: 12, toVersion: null, revalidationFailed: true },
+            data: {
+              version: null,
+              fromVersion: 12,
+              toVersion: null,
+              count: null,
+              revalidationFailed: true,
+            },
           }),
         ],
         nextCursor: null,

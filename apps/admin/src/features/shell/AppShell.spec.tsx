@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { AppShell } from './AppShell';
 import { createTestQueryClient } from './test-utils';
 
@@ -45,6 +45,7 @@ function renderShell() {
         site={site}
         sites={[site]}
         pageCount={2}
+        leadCounts={NO_LEADS}
       >
         <h1>Tên miền</h1>
       </AppShell>

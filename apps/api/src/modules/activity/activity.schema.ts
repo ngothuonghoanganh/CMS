@@ -13,6 +13,8 @@ export interface ActivityData {
   /** Pointer moves: the live release before and after; undo moves back to `fromReleaseId`. */
   fromReleaseId: Types.ObjectId | null;
   toReleaseId: Types.ObjectId | null;
+  /** How many leads an export or a deletion covered; never what they contained (rule 10). */
+  count: number | null;
   /** Set after the commit when the renderer could not be revalidated (ADR-009). */
   revalidationFailed: boolean;
 }
@@ -23,6 +25,7 @@ export const EMPTY_ACTIVITY_DATA: ActivityData = {
   toVersion: null,
   fromReleaseId: null,
   toReleaseId: null,
+  count: null,
   revalidationFailed: false,
 };
 
@@ -58,6 +61,7 @@ export const activitySchema = new Schema<ActivityRecord>(
       toVersion: { type: Number, default: null },
       fromReleaseId: { type: Schema.Types.ObjectId, default: null },
       toReleaseId: { type: Schema.Types.ObjectId, default: null },
+      count: { type: Number, default: null },
       revalidationFailed: { type: Boolean, default: false },
     },
     reason: { type: String, default: null },

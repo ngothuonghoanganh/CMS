@@ -4,7 +4,7 @@ import { loadSiteContext } from '../../../../features/shell/site-context';
 
 /**
  * The workspace frame of a site: sidebar, workspace and site switchers, toasts and the `<main>`
- * landmark. Every page of the site (dashboard, domain, settings, SEO, history) renders inside it.
+ * landmark. Every page of the site (dashboard, leads, domain, settings, SEO, history) renders inside it.
  */
 export default async function SiteLayout({
   children,
@@ -14,7 +14,7 @@ export default async function SiteLayout({
   params: Promise<{ siteId: string }>;
 }) {
   const { siteId } = await params;
-  const { me, membership, site, sites, pageCount } = await loadSiteContext(siteId);
+  const { me, membership, site, sites, pageCount, leadCounts } = await loadSiteContext(siteId);
   return (
     <AppShell
       user={me.user}
@@ -23,6 +23,7 @@ export default async function SiteLayout({
       site={site}
       sites={sites}
       pageCount={pageCount}
+      leadCounts={leadCounts}
     >
       {children}
     </AppShell>

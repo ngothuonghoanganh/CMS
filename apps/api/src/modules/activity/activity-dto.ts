@@ -28,6 +28,8 @@ export function toActivityItem(
       version: record.data.version,
       fromVersion: record.data.fromVersion,
       toVersion: record.data.toVersion,
+      // Events stored before lead exports existed have no count.
+      count: record.data.count ?? null,
       revalidationFailed: record.data.revalidationFailed,
     },
     reason: record.reason,

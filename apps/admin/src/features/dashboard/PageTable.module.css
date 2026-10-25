@@ -146,3 +146,10 @@
   align-items: center;
   gap: 4px;
 }
+
+.table th.leads,
+.table td.leads {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
