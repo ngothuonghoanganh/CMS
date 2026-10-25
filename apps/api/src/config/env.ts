@@ -43,6 +43,16 @@ const envSchema = z.object({
   RENDERER_INTERNAL_URL: z.url(),
   REVALIDATE_SECRET: secret,
   PREVIEW_SECRET: secret,
+  /**
+   * Shared with the renderer, which signs the visitor requests it relays (lead form, ADR-016):
+   * only signed requests may carry the visitor's address and user agent.
+   */
+  RENDERER_API_SECRET: secret,
+  /** Leads one visitor address may send to one site per window (ADR-016). */
+  LEAD_LIMIT_PER_CLIENT: z.coerce.number().int().min(1).default(5),
+  LEAD_LIMIT_PER_CLIENT_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
+  /** Leads one site accepts per hour, whoever sends them; protects storage from a flood. */
+  LEAD_LIMIT_PER_SITE_PER_HOUR: z.coerce.number().int().min(1).default(300),
 
   S3_ENDPOINT: z.url(),
   S3_REGION: z.string().min(1),

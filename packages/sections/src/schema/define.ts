@@ -71,7 +71,7 @@ export interface SectionVariant {
 }
 
 export type SectionCategory =
-  'navigation' | 'hero' | 'benefits' | 'social' | 'faq' | 'cta' | 'footer';
+  'navigation' | 'hero' | 'benefits' | 'social' | 'faq' | 'form' | 'cta' | 'footer';
 
 export const sectionCategoryLabels: Record<SectionCategory, string> = {
   navigation: 'Thanh điều hướng',
@@ -79,6 +79,7 @@ export const sectionCategoryLabels: Record<SectionCategory, string> = {
   benefits: 'Lợi ích & tính năng',
   social: 'Bằng chứng xã hội',
   faq: 'Câu hỏi thường gặp',
+  form: 'Form & liên hệ',
   cta: 'Kêu gọi hành động',
   footer: 'Chân trang',
 };

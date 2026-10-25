@@ -24,6 +24,12 @@ export {
   type FooterContent,
 } from './sections/footer.js';
 export { heroContentSchema, heroSection, type HeroContent } from './sections/hero.js';
+export {
+  leadFormContentSchema,
+  leadFormFieldLabels,
+  leadFormSection,
+  type LeadFormContent,
+} from './sections/lead-form.js';
 export { navbarContentSchema, navbarSection, type NavbarContent } from './sections/navbar.js';
 export {
   TESTIMONIALS_CARDS_MIN,

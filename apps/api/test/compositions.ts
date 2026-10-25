@@ -63,6 +63,30 @@ export function heroSection(options: HeroOptions = {}): SectionInstance {
   };
 }
 
+export interface LeadFormOptions {
+  id?: string;
+  showEmail?: boolean;
+  showMessage?: boolean;
+}
+
+/** A lead form with real (non-sample) content (ADR-016). */
+export function leadFormSection(options: LeadFormOptions = {}): SectionInstance {
+  const base = createSectionInstance('lead_form', 'stacked', options.id ?? nextSectionId('form'));
+  return {
+    ...base,
+    content: {
+      heading: 'Đăng ký tư vấn niềng răng',
+      description: 'Để lại tên và số điện thoại, phòng khám gọi lại trong giờ làm việc.',
+      showEmail: options.showEmail ?? false,
+      showMessage: options.showMessage ?? false,
+      submitLabel: 'Gửi đăng ký',
+      successTitle: 'Đã nhận đăng ký của bạn',
+      successMessage: 'Phòng khám sẽ gọi lại trong giờ làm việc.',
+    },
+    samplePaths: [],
+  };
+}
+
 /** SEO that passes every SEO check. */
 export function cleanSeo(overrides: Partial<Seo> = {}): Seo {
   return {
@@ -88,4 +112,12 @@ export function publishableDraft(
     composition: composition([heroSection(heading === undefined ? {} : { heading })]),
     seo: cleanSeo(),
   };
+}
+
+/** A publishable draft with a lead form; its site needs consent settings first (ADR-016). */
+export function formDraft(
+  slug: string,
+  form: SectionInstance = leadFormSection(),
+): { slug: string; composition: Composition; seo: Seo } {
+  return { slug, composition: composition([heroSection(), form]), seo: cleanSeo() };
 }

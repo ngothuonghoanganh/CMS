@@ -116,6 +116,7 @@ export function makeStore(overrides: Partial<EditorInit> = {}): EditorStore {
     site,
     assets: [asset],
     role: 'owner',
+    leadCapture: null,
     newId: sequentialIds(),
     ...overrides,
   });

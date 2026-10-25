@@ -32,6 +32,8 @@ const pageData: PublicPageData = {
   },
   assets: {},
   pageLinks: {},
+  releaseId: 'd'.repeat(24),
+  leadCapture: null,
 };
 
 function stubFetch(status: number, body: unknown) {
@@ -47,6 +49,7 @@ beforeEach(() => {
   vi.stubEnv('BASE_DOMAIN', 'localhost:3101');
   vi.stubEnv('PUBLIC_SITE_PROTOCOL', 'http');
   vi.stubEnv('REVALIDATE_SECRET', 's'.repeat(32));
+  vi.stubEnv('RENDERER_API_SECRET', 'r'.repeat(32));
 });
 
 afterEach(() => {

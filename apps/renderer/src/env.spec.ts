@@ -6,6 +6,7 @@ const valid = {
   BASE_DOMAIN: 'localhost:3101',
   PUBLIC_SITE_PROTOCOL: 'http',
   REVALIDATE_SECRET: 'x'.repeat(32),
+  RENDERER_API_SECRET: 'y'.repeat(32),
 };
 
 describe('parseRendererEnv', () => {
@@ -41,6 +42,9 @@ describe('parseRendererEnv', () => {
     }
     expect(message).toMatch(/REVALIDATE_SECRET/);
     expect(message).not.toContain('too-short-secret');
+    expect(() => parseRendererEnv({ ...valid, RENDERER_API_SECRET: 'short' })).toThrow(
+      /RENDERER_API_SECRET/,
+    );
   });
 
   it('rejects a base domain with a scheme or path', () => {

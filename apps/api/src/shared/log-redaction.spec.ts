@@ -1,7 +1,12 @@
 import { Writable } from 'node:stream';
 import { pino } from 'pino';
 import { describe, expect, it } from 'vitest';
-import { REDACTED, redactPreviewToken, serializeRequest } from './log-redaction.js';
+import {
+  LOG_REDACT_PATHS,
+  REDACTED,
+  redactPreviewToken,
+  serializeRequest,
+} from './log-redaction.js';
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiIsImtpZCI6IjEifQ.eyJraW5kIjoiZHJhZnQifQ.c2lnbmF0dXJl';
 
@@ -58,5 +63,39 @@ describe('log redaction', () => {
     logger.info({ req: { url: `/public/preview/${TOKEN}`, params: { token: TOKEN } } }, 'done');
     expect(lines.join('')).not.toContain(TOKEN);
     expect(lines.join('')).toContain(`/public/preview/${REDACTED}`);
+  });
+
+  it('keeps the visitor address, user agent and channel signature of a lead out of the log', () => {
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        lines.push(chunk.toString('utf8'));
+        done();
+      },
+    });
+    const logger = pino(
+      { redact: [...LOG_REDACT_PATHS], serializers: { req: serializeRequest } },
+      sink,
+    );
+    logger.info(
+      {
+        req: {
+          method: 'POST',
+          url: '/public/sites/smilecare/leads',
+          headers: {
+            'x-plp-client-ip': '203.0.113.7',
+            'x-plp-client-ua': 'Mozilla/5.0 (iPhone; Nguyen Thu Ha)',
+            'x-plp-renderer-signature': 'a'.repeat(64),
+            cookie: 'plp_session=secret',
+          },
+        },
+      },
+      'request completed',
+    );
+    const output = lines.join('');
+    expect(output).toContain('/public/sites/smilecare/leads');
+    for (const secret of ['203.0.113.7', 'Nguyen Thu Ha', 'a'.repeat(64), 'plp_session']) {
+      expect(output).not.toContain(secret);
+    }
   });
 });

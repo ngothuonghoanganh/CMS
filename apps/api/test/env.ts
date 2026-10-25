@@ -1,6 +1,7 @@
 import type { EnvInput } from '../src/config/env.js';
 
 export const TEST_ADMIN_ORIGIN = 'http://localhost:3100';
+export const TEST_RENDERER_API_SECRET = 'test-renderer-api-secret-0123456789abcdef';
 
 /** Environment for integration tests; MONGODB_URI is set per test file by createTestApp. */
 export function testEnvInput(
@@ -16,6 +17,7 @@ export function testEnvInput(
     RENDERER_INTERNAL_URL: 'http://localhost:3101',
     REVALIDATE_SECRET: 'test-revalidate-secret-0123456789abcdef',
     PREVIEW_SECRET: 'test-preview-secret-0123456789abcdef',
+    RENDERER_API_SECRET: TEST_RENDERER_API_SECRET,
     S3_ENDPOINT: process.env['S3_ENDPOINT'] ?? 'http://localhost:9100',
     S3_REGION: process.env['S3_REGION'] ?? 'us-east-1',
     S3_BUCKET: process.env['S3_BUCKET'] ?? 'plp-assets',

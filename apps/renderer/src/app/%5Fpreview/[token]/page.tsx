@@ -51,7 +51,8 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
   return (
     <>
       <PreviewBanner preview={preview.preview} />
-      <SitePage data={preview.data} />
+      {/* A preview never sends a lead. */}
+      <SitePage data={preview.data} submission="off" />
     </>
   );
 }

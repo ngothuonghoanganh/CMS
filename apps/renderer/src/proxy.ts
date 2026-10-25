@@ -5,9 +5,12 @@ import { LIVE_RELEASE_HEADER } from './lib/live-release';
 import { NOT_FOUND_ROUTE, pathGate } from './lib/path-gate';
 import { getPathStatus } from './lib/public-api';
 
-/** Public page requests only; assets, previews, webhooks and the SEO files answer on their own. */
+/**
+ * Public page requests only; assets, previews, webhooks, the SEO files and the lead route
+ * (`/_lead`, ADR-016) answer on their own.
+ */
 export const config = {
-  matcher: ['/((?!_next/|_preview/|api/|(?:healthz|sitemap\\.xml|robots\\.txt)$).*)'],
+  matcher: ['/((?!_next/|_preview/|api/|(?:healthz|sitemap\\.xml|robots\\.txt|_lead)$).*)'],
 };
 
 /**

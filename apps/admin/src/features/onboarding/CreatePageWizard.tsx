@@ -21,6 +21,7 @@ import {
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  Badge,
   BoxIcon,
   BuildingIcon,
   Button,
@@ -215,6 +216,11 @@ function OutlinePanel({
                 />
               </span>
               <span className={styles.outlineLabel}>{item.label}</span>
+              {item.type === 'lead_form' ? (
+                <Badge tone="success" size="sm">
+                  Form
+                </Badge>
+              ) : null}
             </li>
           );
         })}
@@ -222,14 +228,31 @@ function OutlinePanel({
       <div className={styles.defaults}>
         <span className={styles.defaultsTitle}>Mặc định hướng chuyển đổi</span>
         <ul className={styles.defaultsList}>
-          <li>Nút kêu gọi lặp lại ở đầu và cuối trang</li>
-          <li>Bố cục một cột, ưu tiên màn hình điện thoại</li>
-          <li>Liên hệ nhanh qua điện thoại hoặc Zalo</li>
+          {(outline.some((item) => item.type === 'lead_form') ? FORM_DEFAULTS : CALL_DEFAULTS).map(
+            (line) => (
+              <li key={line}>{line}</li>
+            ),
+          )}
         </ul>
       </div>
     </aside>
   );
 }
+
+/** "Mặc định hướng chuyển đổi" of a goal whose page collects contacts with the form (board 02). */
+const FORM_DEFAULTS = [
+  'Form ngắn: Họ và tên + Số điện thoại',
+  'Nút kêu gọi lặp lại ở đầu và cuối trang',
+  'Bố cục một cột, ưu tiên màn hình điện thoại',
+  'Ô đồng ý xử lý dữ liệu không tick sẵn',
+] as const;
+
+/** The same for goals that end with a call-to-action band. */
+const CALL_DEFAULTS = [
+  'Nút kêu gọi lặp lại ở đầu và cuối trang',
+  'Bố cục một cột, ưu tiên màn hình điện thoại',
+  'Liên hệ nhanh qua điện thoại hoặc Zalo',
+] as const;
 
 export interface CreatePageWizardProps {
   site: Site;

@@ -5,7 +5,7 @@ import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Connection } from 'mongoose';
 import { AppModule } from '../src/app.module.js';
 import { type Env, type EnvInput, parseEnv } from '../src/config/env.js';
-import { configureApp } from '../src/configure-app.js';
+import { configureApp, NEST_APP_OPTIONS } from '../src/configure-app.js';
 import { testEnvInput } from './env.js';
 import { dropDatabase, isolatedMongoUri } from './mongo.js';
 
@@ -34,7 +34,10 @@ export async function createTestApp(
     builder = options.override(builder);
   }
   const moduleRef = await builder.compile();
-  const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    logger: false,
+    ...NEST_APP_OPTIONS,
+  });
   configureApp(app, env);
   await app.init();
   const connection = app.get<Connection>(getConnectionToken());

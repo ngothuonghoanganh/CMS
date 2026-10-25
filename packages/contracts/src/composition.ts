@@ -7,6 +7,7 @@ export const sectionTypes = [
   'benefits',
   'testimonials',
   'faq',
+  'lead_form',
   'cta_band',
   'footer',
 ] as const;

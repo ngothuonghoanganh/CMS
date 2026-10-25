@@ -9,6 +9,8 @@ export const checkTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('seo'), field: seoFieldSchema }),
   z.object({ kind: z.literal('slug') }),
   z.object({ kind: z.literal('page') }),
+  /** The site's personal data and consent settings a form needs (ADR-017). */
+  z.object({ kind: z.literal('privacy'), sectionId: z.string() }),
 ]);
 export type CheckTarget = z.infer<typeof checkTargetSchema>;
 
@@ -21,6 +23,7 @@ export const blockingCheckCodes = [
   'section_link_broken',
   'no_visible_section_desktop',
   'no_visible_section_mobile',
+  'consent_not_configured',
 ] as const;
 
 export const warningCheckCodes = [
@@ -43,6 +46,7 @@ export const passedCheckCodes = [
   'mobile_visible',
   'images_described',
   'no_sample_content',
+  'privacy_policy',
 ] as const;
 
 export const checkItemSchema = z.object({

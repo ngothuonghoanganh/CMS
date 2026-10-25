@@ -118,10 +118,13 @@ describe('public delivery and previews', () => {
         noindex: false,
         canonicalUrl: `${site.defaultOrigin}/${slug}`,
       });
+      // The release id is public since the lead form sends it back (ADR-009, ADR-016); a page
+      // without a form has no consent texts.
+      expect(data.releaseId).toBe(published.release.id);
+      expect(data.leadCapture).toBeNull();
       const body = JSON.stringify(data);
       expect(body).not.toContain('Bản nháp chưa xuất bản');
       expect(body).not.toContain(workspaceId);
-      expect(body).not.toContain(published.release.id);
     });
 
     it('serves the home page at the empty path and accepts surrounding slashes', async () => {

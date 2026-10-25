@@ -100,6 +100,29 @@ describe('StructurePanel', () => {
     expect(within(rows()[1] ?? document.body).queryByRole('img', { name: 'Có lỗi' })).toBeNull();
   });
 
+  it('marks a section whose finding points at the site settings it needs', () => {
+    const store = makeStore();
+    store.getState().setServerState({
+      checks: {
+        ...emptyChecks,
+        blocking: [
+          {
+            code: 'consent_not_configured',
+            severity: 'blocking',
+            fingerprint: 'y',
+            title: 'Form đăng ký chưa có nội dung đồng ý',
+            description: '',
+            target: { kind: 'privacy', sectionId: BENEFITS },
+          },
+        ],
+      },
+    });
+    renderEditor(<StructurePanel onOpenTheme={vi.fn()} />, { store });
+    expect(
+      within(rows()[2] ?? document.body).getByText('Form đăng ký chưa có nội dung đồng ý'),
+    ).toBeVisible();
+  });
+
   it('adds after the selected section, or at the end before the footer', async () => {
     const user = userEvent.setup();
     const openAddSection = vi.fn();

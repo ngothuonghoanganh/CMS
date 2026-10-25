@@ -6,11 +6,12 @@ import { briefSchema, pageGoalSchema, pageStyleSchema } from './goals.js';
 
 /**
  * Paths the renderer answers itself, so a page published there could never be served at its URL:
- * the renderer's own routes (`_preview`, `api`, `healthz`, sitemap, robots) and the paths Next
- * keeps for itself (`_next`, `index` is `/`, `404` and `500` are its error pages).
+ * the renderer's own routes (`_preview`, `_lead`, `api`, `healthz`, sitemap, robots) and the
+ * paths Next keeps for itself (`_next`, `index` is `/`, `404` and `500` are its error pages).
  */
 export const reservedSlugs: readonly string[] = [
   '_preview',
+  '_lead',
   '_next',
   'api',
   'healthz',

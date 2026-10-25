@@ -1,6 +1,12 @@
 import type { ConsentVersionRecord } from '../privacy/consent-version.schema.js';
 import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
-import { currentLeadCapture, type LeadCapture } from './domain/lead-capture.js';
+import {
+  currentLeadCapture,
+  type LeadCapture,
+  type LeadCaptureGap,
+  leadCaptureGaps,
+  type LeadCaptureSettings,
+} from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
 import type { ReleaseRecord } from './release.schema.js';
 
@@ -46,7 +52,22 @@ export function currentSiteLeadCapture(
   site: Pick<SiteRecord, 'privacy'>,
   consent: ConsentVersionRecord | null,
 ): LeadCapture | null {
-  return currentLeadCapture({
+  return currentLeadCapture(leadCaptureSettingsOf(site, consent));
+}
+
+/** What a page with a form still misses before it can be published (ADR-016). */
+export function siteLeadCaptureGaps(
+  site: Pick<SiteRecord, 'privacy'>,
+  consent: ConsentVersionRecord | null,
+): LeadCaptureGap[] {
+  return leadCaptureGaps(leadCaptureSettingsOf(site, consent));
+}
+
+function leadCaptureSettingsOf(
+  site: Pick<SiteRecord, 'privacy'>,
+  consent: ConsentVersionRecord | null,
+): LeadCaptureSettings {
+  return {
     privacy: sitePrivacyOf(site),
     consent: consent && {
       id: consent._id.toHexString(),
@@ -54,7 +75,7 @@ export function currentSiteLeadCapture(
       requiredText: consent.requiredText,
       marketingText: consent.marketingText,
     },
-  });
+  };
 }
 
 /**

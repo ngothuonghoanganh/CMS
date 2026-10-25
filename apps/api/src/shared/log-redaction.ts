@@ -1,6 +1,20 @@
 /** Placeholder written to logs instead of a secret. */
 export const REDACTED = '[redacted]';
 
+/**
+ * Request and response fields pino replaces with "[Redacted]": session secrets, and a visitor's
+ * address and user agent relayed by the renderer for the lead form (ADR-016, rule 10). Bodies are
+ * never logged.
+ */
+export const LOG_REDACT_PATHS = [
+  'req.headers.cookie',
+  'req.headers.authorization',
+  'res.headers["set-cookie"]',
+  'req.headers["x-plp-client-ip"]',
+  'req.headers["x-plp-client-ua"]',
+  'req.headers["x-plp-renderer-signature"]',
+] as const;
+
 /** `/public/preview/{token}`: the path segment is a signed preview token (ADR-010). */
 const PREVIEW_TOKEN_IN_PATH = /(\/public\/preview\/)([^/?#]+)/;
 

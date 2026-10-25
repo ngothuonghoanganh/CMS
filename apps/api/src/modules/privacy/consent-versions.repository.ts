@@ -78,6 +78,18 @@ export class ConsentVersionsRepository {
       .exec();
   }
 
+  /**
+   * The latest version for a public read (a draft preview, ADR-017): no member scope, bound to the
+   * site the preview token names.
+   */
+  findPublicCurrent(siteId: ObjectId): Promise<ConsentVersionRecord | null> {
+    return this.versions
+      .findOne({ siteId })
+      .sort({ version: -1 })
+      .lean<ConsentVersionRecord>()
+      .exec();
+  }
+
   /** Versions of the site, newest first. */
   async listForSite(
     scope: WorkspaceScope,

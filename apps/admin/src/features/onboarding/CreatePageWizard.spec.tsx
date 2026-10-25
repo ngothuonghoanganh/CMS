@@ -72,9 +72,22 @@ describe('CreatePageWizard', () => {
     );
     const outline = screen.getByRole('complementary', { name: 'Trang sẽ gồm' });
     expect(within(outline).getByText('Hero + nút đặt lịch')).toBeInTheDocument();
-    expect(within(outline).getByText('Liên hệ nhanh qua điện thoại hoặc Zalo')).toBeInTheDocument();
-    expect(screen.queryByText(/Form/)).not.toBeInTheDocument();
+    // A lead page collects contacts with the form (ADR-016), as on board 02.
+    const form = within(outline).getByText('Form đăng ký tư vấn').closest('li');
+    expect(form).toHaveTextContent('Form');
+    expect(within(outline).getByText('Form ngắn: Họ và tên + Số điện thoại')).toBeInTheDocument();
+    expect(within(outline).getByText('Ô đồng ý xử lý dữ liệu không tick sẵn')).toBeInTheDocument();
     expect(screen.queryByText('Duyệt thư viện mẫu')).not.toBeInTheDocument();
+  });
+
+  it('keeps the phone call defaults for a goal without a form', async () => {
+    const user = userEvent.setup();
+    serve();
+    renderWizard();
+    await user.click(screen.getByRole('radio', { name: 'Giới thiệu dịch vụ' }));
+    const outline = screen.getByRole('complementary', { name: 'Trang sẽ gồm' });
+    expect(within(outline).getByText('Liên hệ nhanh qua điện thoại hoặc Zalo')).toBeInTheDocument();
+    expect(within(outline).queryByText('Form ngắn: Họ và tên + Số điện thoại')).toBeNull();
   });
 
   it('moves through the steps and creates the page from the goal', async () => {

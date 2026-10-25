@@ -29,6 +29,8 @@ function pageData(seo: Partial<PublicSeo> = {}): PublicPageData {
     },
     assets: {},
     pageLinks: {},
+    releaseId: 'd'.repeat(24),
+    leadCapture: null,
   };
 }
 

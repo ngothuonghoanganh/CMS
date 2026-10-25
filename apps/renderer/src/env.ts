@@ -16,7 +16,15 @@ const rendererEnvSchema = z.object({
   PUBLIC_SITE_PROTOCOL: z.enum(['http', 'https']),
   /** Shared with the API to sign revalidation webhooks. */
   REVALIDATE_SECRET: z.string().min(32),
-  /** Trust `x-forwarded-host` only behind a proxy that sets it. */
+  /**
+   * Shared with the API: signs the visitor requests this app relays (lead form, ADR-016), so the
+   * API can trust the visitor address and user agent they carry.
+   */
+  RENDERER_API_SECRET: z.string().min(32),
+  /**
+   * Trust `x-forwarded-host`, and the last `x-forwarded-for` entry as the visitor address, only
+   * behind a proxy that sets them.
+   */
   TRUST_PROXY: z
     .enum(['true', 'false'])
     .default('false')

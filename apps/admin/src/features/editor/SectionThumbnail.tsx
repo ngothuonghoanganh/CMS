@@ -50,6 +50,14 @@ const layouts = {
     blk('90%', 10, 'white'),
     blk('90%', 10, 'white'),
   ],
+  form: [
+    blk('44%', 8, 'dark'),
+    blk('44%', 14, 'white', 4),
+    blk('44%', 30, 'light'),
+    blk('44%', 14, 'white', 4),
+    blk('44%', 0),
+    blk('44%', 14, 'accent', 4),
+  ],
   ctaBand: [blk('100%', 56, 'dark', 6)],
   footer: [blk('22%', 30), blk('22%', 30), blk('22%', 30), blk('100%', 4)],
 } satisfies Record<string, Block[]>;
@@ -70,6 +78,8 @@ function layoutOf(type: SectionType, variant: string): Block[] {
       return variant === 'quote' ? layouts.quote : layouts.cards3;
     case 'faq':
       return layouts.faq;
+    case 'lead_form':
+      return layouts.form;
     case 'cta_band':
       return layouts.ctaBand;
     case 'footer':

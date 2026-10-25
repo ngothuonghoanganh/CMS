@@ -1,4 +1,6 @@
-import type { PublicImage } from '@plp/contracts';
+import type { PublicImage, PublicLeadCapture } from '@plp/contracts';
+import type { ReactNode } from 'react';
+import type { LeadFormViewProps } from './lead-form-view.js';
 
 /**
  * What a section needs from its host. The renderer passes published data in "live" mode; the
@@ -13,4 +15,20 @@ export interface RenderContext {
   pagePaths: Readonly<Record<string, string | null>>;
   /** Edit mode: commits text typed on the canvas through the editor's `updateContent` command. */
   onTextChange?: (sectionId: string, path: string, value: string) => void;
+  /**
+   * Consent texts of the lead form (ADR-017): the release snapshot on live pages and release
+   * previews, the current settings on the canvas and in draft previews; null when there are none.
+   */
+  leadCapture: PublicLeadCapture | null;
+  /**
+   * Live pages only: the release the visitor sees and the host's interactive form, a client
+   * component that renders `LeadFormView`. Absent on the canvas and in previews, where the form
+   * never sends; the section then renders the plain view.
+   */
+  leadSubmission?: LeadSubmission;
+}
+
+export interface LeadSubmission {
+  releaseId: string;
+  render: (view: LeadFormViewProps) => ReactNode;
 }

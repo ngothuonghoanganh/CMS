@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
 import { AssetsModule } from './modules/assets/assets.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { LeadsModule } from './modules/leads/leads.module.js';
 import { PagesModule } from './modules/pages/pages.module.js';
 import { PreviewModule } from './modules/preview/preview.module.js';
 import { PrivacyModule } from './modules/privacy/privacy.module.js';
@@ -18,7 +19,7 @@ import { RevalidationModule } from './modules/revalidation/revalidation.module.j
 import { SitesModule } from './modules/sites/sites.module.js';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 import { EnvModule } from './shared/env.js';
-import { serializeRequest } from './shared/log-redaction.js';
+import { LOG_REDACT_PATHS, serializeRequest } from './shared/log-redaction.js';
 import { OriginGuard } from './shared/origin.guard.js';
 import { PersistenceModule } from './shared/persistence/persistence.module.js';
 import { ProblemFilter } from './shared/problem.filter.js';
@@ -40,11 +41,7 @@ export class AppModule {
               res.setHeader('x-request-id', id);
               return id;
             },
-            redact: [
-              'req.headers.cookie',
-              'req.headers.authorization',
-              'res.headers["set-cookie"]',
-            ],
+            redact: [...LOG_REDACT_PATHS],
             // `req.url` and the route params of /public/preview/{token} carry a preview token.
             serializers: { req: serializeRequest },
           },
@@ -62,6 +59,7 @@ export class AppModule {
         AssetsModule,
         PagesModule,
         PublishingModule,
+        LeadsModule,
         PreviewModule,
         PrivacyModule,
         PublicDeliveryModule,

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { loadAssetsByIds } from '../../../../../../../features/assets';
 import { LIST_LIMIT, loadAllPages, referencedAssetIds } from '../../../../../../../features/editor';
+import { leadCaptureViewOf } from '../../../../../../../features/privacy/privacy-presentation';
 import { EditorWithPublish } from '../../../../../../../features/publish/EditorWithPublish';
 import { ApiError } from '../../../../../../../lib/api-core';
 import { requireMe, serverApi } from '../../../../../../../lib/server-api';
@@ -44,13 +45,14 @@ export default async function EditPage({ params }: EditPageProps) {
   if (detail.page.siteId !== siteId) {
     notFound();
   }
-  const [site, pages] = await Promise.all([
+  const [site, pages, privacy] = await Promise.all([
     orNotFound(serverApi(endpoints.getSite, [siteId])),
     loadAllPages((cursor) =>
       serverApi(endpoints.listPages, [siteId], {
         query: { limit: LIST_LIMIT, ...(cursor === null ? {} : { cursor }) },
       }),
     ),
+    orNotFound(serverApi(endpoints.getPrivacySettings, [siteId])),
   ]);
   const membership = me.memberships.find((item) => item.workspace.id === site.workspaceId);
   if (!membership) {
@@ -61,5 +63,16 @@ export default async function EditPage({ params }: EditPageProps) {
     (ids) => serverApi(endpoints.listAssets, [siteId], { query: { ids } }),
   );
 
-  return <EditorWithPublish initial={{ detail, site, assets, pages, role: membership.role }} />;
+  return (
+    <EditorWithPublish
+      initial={{
+        detail,
+        site,
+        assets,
+        pages,
+        role: membership.role,
+        leadCapture: leadCaptureViewOf(privacy),
+      }}
+    />
+  );
 }

@@ -15,7 +15,7 @@ function contrast(a: string, b: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-const TEXT_ROLES = ['heading', 'text', 'muted', 'link'] as const;
+const TEXT_ROLES = ['heading', 'text', 'muted', 'link', 'danger'] as const;
 const GROUNDS = ['background', 'surface'] as const;
 
 const cases = themePresetIds.flatMap((presetId) =>

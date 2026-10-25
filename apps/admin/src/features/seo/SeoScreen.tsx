@@ -162,6 +162,8 @@ export function SeoScreen({ initial, loadedAt, focus }: SeoScreenProps) {
       site: initial.site,
       assets: initial.assets,
       role: initial.role,
+      // This screen draws no section, so it needs no consent texts.
+      leadCapture: null,
     }),
   );
   return (

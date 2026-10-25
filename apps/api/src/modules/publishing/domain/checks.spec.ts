@@ -11,6 +11,7 @@ import {
   cleanSeo,
   composition,
   heroSection,
+  leadFormSection,
   sampleSection,
 } from '../../../../test/compositions.js';
 import {
@@ -19,6 +20,7 @@ import {
   type LivePageRef,
   PASSED_CHECK_TITLES,
 } from './checks.js';
+import type { LeadCaptureGap } from './lead-capture.js';
 
 const PAGE_ID = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const OTHER_PAGE_ID = 'bbbbbbbbbbbbbbbbbbbbbbbb';
@@ -33,6 +35,7 @@ function run(
     otherLivePages?: LivePageRef[];
     assets?: string[];
     revision?: number;
+    leadCaptureGaps?: LeadCaptureGap[];
   } = {},
 ) {
   const input: ChecksInput = {
@@ -45,6 +48,7 @@ function run(
     },
     existingAssetIds: new Set(options.assets ?? [ASSET_ID]),
     otherLivePages: options.otherLivePages ?? [],
+    leadCaptureGaps: options.leadCaptureGaps ?? [],
   };
   return checksResultSchema.parse(evaluateChecks(input));
 }
@@ -69,7 +73,12 @@ describe('evaluateChecks: a clean draft', () => {
     expect(result.revision).toBe(12);
     expect(result.blocking).toEqual([]);
     expect(result.warnings).toEqual([]);
-    expect(result.passed.map((item) => item.title)).toEqual(Object.values(PASSED_CHECK_TITLES));
+    // The policy link only matters on a page with a form.
+    expect(result.passed.map((item) => item.title)).toEqual(
+      Object.values(PASSED_CHECK_TITLES).filter(
+        (title) => title !== PASSED_CHECK_TITLES.privacy_policy,
+      ),
+    );
     expect(result.passed.map((item) => item.title)).toEqual([
       'Tiêu đề SEO',
       'Mô tả SEO',
@@ -347,6 +356,50 @@ describe('evaluateChecks: warnings', () => {
     const item = only(result.warnings, 'section_hidden_everywhere');
     expect(item.target).toEqual({ kind: 'section', sectionId: hidden.id, fieldPath: null });
     expect(item.title).toBe('Section “Hero” đang ẩn trên mọi thiết bị');
+  });
+});
+
+describe('evaluateChecks: lead form', () => {
+  const form = leadFormSection({ id: 'form00000001' });
+
+  it('blocks a form while the site misses consent settings, pointing at the settings', () => {
+    const result = run([heroSection(), form], { leadCaptureGaps: ['privacy', 'consent'] });
+    const item = only(result.blocking, 'consent_not_configured');
+    expect(item).toMatchObject({
+      title: 'Form đăng ký chưa có nội dung đồng ý',
+      description:
+        'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư, rồi lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.',
+      target: { kind: 'privacy', sectionId: 'form00000001' },
+      fingerprint: 'consent_not_configured:privacy:form00000001',
+    });
+    expect(result.passed.map((passed) => passed.code)).not.toContain('privacy_policy');
+  });
+
+  it('says what is still missing', () => {
+    expect(
+      only(run([form], { leadCaptureGaps: ['privacy'] }).blocking, 'consent_not_configured')
+        .description,
+    ).toBe(
+      'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư ở mục “Dữ liệu & đồng ý”.',
+    );
+    expect(
+      only(run([form], { leadCaptureGaps: ['consent'] }).blocking, 'consent_not_configured')
+        .description,
+    ).toBe('Owner của workspace cần lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.');
+  });
+
+  it('passes the policy check once the settings are complete', () => {
+    const result = run([heroSection(), form]);
+    expect(result.blocking).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.passed.map((passed) => passed.title)).toContain(
+      'Có liên kết chính sách quyền riêng tư',
+    );
+  });
+
+  it('ignores missing settings on a page without a form', () => {
+    const result = run([heroSection()], { leadCaptureGaps: ['privacy', 'consent'] });
+    expect(result.blocking).toEqual([]);
   });
 });
 
