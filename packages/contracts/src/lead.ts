@@ -24,20 +24,37 @@ export const leadFormFieldNames = {
 } as const;
 
 export const LEAD_PHONE_MESSAGE =
-  'Số điện thoại cần 10 chữ số và bắt đầu bằng 0, ví dụ 0901 234 567.';
+  'Số điện thoại chưa đúng. Nhập số bắt đầu bằng 0 (ví dụ 0901 234 567) hoặc số có mã quốc gia (ví dụ +84 901 234 567).';
 
 /**
- * A Vietnamese phone number: 10 digits starting with 0, or +84 and 9 digits. Spaces, dots and
- * dashes are allowed while typing; the stored form is the 10 digits starting with 0.
+ * A phone number as E.164 ("+84901234567"), or null when it is not one. A number written without
+ * a country code is Vietnamese: 0 then 9 digits (mobile) or 10 digits (landline, "028 3822 1234").
+ * One with a code may be from any
+ * country; +84 (or 84) must then be followed by the 9 or 10 digits of a Vietnamese number. Spaces,
+ * dots, dashes and brackets are allowed while typing; "00" may stand for "+".
  */
+export function normalizeLeadPhone(value: string): string | null {
+  const compact = value.replace(/[\s.()-]/g, '').replace(/^00/, '+');
+  if (/^0\d{9,10}$/.test(compact)) {
+    return `+84${compact.slice(1)}`;
+  }
+  const vietnamese = /^\+?84(\d*)$/.exec(compact);
+  if (vietnamese) {
+    // "+84 0901 234 567": the 0 of the national form is often kept after the country code.
+    const national = (vietnamese[1] ?? '').replace(/^0(?=\d{9,10}$)/, '');
+    return /^\d{9,10}$/.test(national) ? `+84${national}` : null;
+  }
+  return /^\+[1-9]\d{7,14}$/.test(compact) ? compact : null;
+}
+
+/** A lead's phone number, stored as E.164 with Vietnam (+84) as the default country (ADR-016). */
 export const leadPhoneSchema = z
   .string()
   .trim()
   .min(1, 'Nhập số điện thoại')
-  .max(20, LEAD_PHONE_MESSAGE)
-  .transform((value) => value.replace(/[\s.-]/g, ''))
-  .pipe(z.string().regex(/^(0\d{9}|\+84\d{9})$/, LEAD_PHONE_MESSAGE))
-  .transform((value) => (value.startsWith('+84') ? `0${value.slice(3)}` : value));
+  .max(24, LEAD_PHONE_MESSAGE)
+  .transform(normalizeLeadPhone)
+  .pipe(z.string({ error: LEAD_PHONE_MESSAGE }));
 
 export const leadNameSchema = z
   .string()

@@ -168,6 +168,17 @@ export function insertionIndex(
   if (position === 'last') {
     return sections.length;
   }
+  return bodyInsertionIndex(sections, requestedIndex);
+}
+
+/**
+ * Where a section without a fixed place lands: `requestedIndex`, kept after a navigation bar and
+ * before a footer.
+ */
+export function bodyInsertionIndex(
+  sections: readonly Pick<SectionInstance, 'type'>[],
+  requestedIndex: number,
+): number {
   const first = sections[0];
   const last = sections[sections.length - 1];
   const min = first && getSectionDefinition(first.type).position === 'first' ? 1 : 0;

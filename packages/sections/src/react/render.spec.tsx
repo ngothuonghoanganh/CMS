@@ -18,7 +18,7 @@ import { themePresets } from '../schema/themes.js';
 import type { RenderContext } from './context.js';
 import type { LeadFormViewProps } from './lead-form-view.js';
 import frame from './frame.module.css';
-import { LeadFormView } from './lead-form-view.js';
+import { LeadFormSent, LeadFormView } from './lead-form-view.js';
 import { MAIN_CONTENT_ID, PageView } from './PageView.js';
 import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
@@ -531,6 +531,16 @@ describe('lead form', () => {
         releaseId: RELEASE_ID,
       },
     ]);
+  });
+
+  it('confirms a sent lead in the section, with a decorative tick', () => {
+    const markup = renderToStaticMarkup(
+      <LeadFormSent content={sampleLeadForm(section('lead_form'))} />,
+    );
+    expect(markup).toContain('role="status"');
+    expect(markup).toMatch(/<span[^>]*aria-hidden="true"[^>]*><svg/);
+    expect(markup).toContain('<h2 tabindex="-1"');
+    expect(markup).toContain('Đã nhận đăng ký của bạn');
   });
 
   it('cannot send from a preview', () => {

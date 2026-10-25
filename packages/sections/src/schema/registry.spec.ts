@@ -1,6 +1,7 @@
 import { type Composition, type SectionType, sectionTypes } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import {
+  bodyInsertionIndex,
   canMoveSection,
   collectLeaves,
   createSectionInstance,
@@ -177,6 +178,9 @@ describe('section registry', () => {
     expect(canMoveSection(sections, 1, 2)).toBe(true);
     expect(canMoveSection(sections, 2, 3)).toBe(false);
     expect(canMoveSection(sections, 2, 0)).toBe(false);
+    // Past the end, a body section still lands before the footer.
+    expect(bodyInsertionIndex(sections, 4)).toBe(3);
+    expect(bodyInsertionIndex(sections, 0)).toBe(1);
   });
 
   it('finds the lead form, the only section that collects personal data', () => {

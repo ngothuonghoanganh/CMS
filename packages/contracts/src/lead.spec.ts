@@ -3,6 +3,7 @@ import {
   CONSENT_REQUIRED_MESSAGE,
   LEAD_PHONE_MESSAGE,
   leadPhoneSchema,
+  normalizeLeadPhone,
   publicLeadRequestSchema,
 } from './lead.js';
 import { rendererSignaturePayload } from './public.js';
@@ -23,24 +24,39 @@ const request = {
 
 describe('leadPhoneSchema', () => {
   it.each([
-    ['0901 234 567', '0901234567'],
-    ['0901.234.567', '0901234567'],
-    ['090-123-4567', '0901234567'],
-    ['+84 901 234 567', '0901234567'],
-  ])('accepts %j as %j', (input, stored) => {
+    ['0901 234 567', '+84901234567'],
+    ['0901.234.567', '+84901234567'],
+    ['090-123-4567', '+84901234567'],
+    ['(028) 3822 1234', '+842838221234'],
+    ['+84 901 234 567', '+84901234567'],
+    ['+84 0901 234 567', '+84901234567'],
+    ['84 901 234 567', '+84901234567'],
+    ['0084 901 234 567', '+84901234567'],
+    ['+1 650 555 0100', '+16505550100'],
+    ['+65 6123 4567', '+6561234567'],
+  ])('stores %j as %j, Vietnam by default', (input, stored) => {
     expect(leadPhoneSchema.parse(input)).toBe(stored);
   });
 
-  it.each(['090123456', '1901234567', '+8490123456', '0901 234 56a', '+1 650 555 0100'])(
-    'refuses %j with the message of board 09',
-    (input) => {
-      const result = leadPhoneSchema.safeParse(input);
-      expect(result.error?.issues[0]?.message).toBe(LEAD_PHONE_MESSAGE);
-    },
-  );
+  it.each([
+    '090123456',
+    '1901234567',
+    '+8490123456',
+    '0901 234 56a',
+    '650 555 0100',
+    '+0123456789',
+  ])('refuses %j with a message that shows both forms', (input) => {
+    const result = leadPhoneSchema.safeParse(input);
+    expect(result.error?.issues[0]?.message).toBe(LEAD_PHONE_MESSAGE);
+  });
 
   it('asks for a number when empty', () => {
     expect(leadPhoneSchema.safeParse('  ').error?.issues[0]?.message).toBe('Nhập số điện thoại');
+  });
+
+  it('exposes the same rule for code that only needs the number', () => {
+    expect(normalizeLeadPhone('0901 234 567')).toBe('+84901234567');
+    expect(normalizeLeadPhone('0901')).toBeNull();
   });
 });
 
@@ -48,7 +64,7 @@ describe('publicLeadRequestSchema', () => {
   it('normalizes the fields', () => {
     expect(publicLeadRequestSchema.parse(request)).toMatchObject({
       name: 'Nguyễn Thu Hà',
-      phone: '0901234567',
+      phone: '+84901234567',
       email: 'thuha@example.com',
       message: null,
     });
