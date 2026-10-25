@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   chartDayLabel,
   conversionRate,
+  dayLabelKind,
   formatCount,
-  isLabelledDay,
   labelEvery,
   niceTicks,
   periodLabel,
@@ -44,11 +44,34 @@ describe('days of board 11', () => {
     expect(labelEvery(7)).toBe(1);
     expect(labelEvery(30)).toBe(5);
     expect(labelEvery(90)).toBe(13);
-    const labelled = Array.from({ length: 30 }, (_, index) => index).filter((index) =>
-      isLabelledDay(index, 30),
-    );
-    expect(labelled).toEqual([4, 9, 14, 19, 24, 29]);
-    expect(isLabelledDay(89, 90)).toBe(true);
+    const labels = (days: number) =>
+      Array.from({ length: days }, (_, index) => dayLabelKind(index, days)).flatMap(
+        (kind, index) => (kind === null ? [] : [`${String(index)} ${kind}`]),
+      );
+    expect(labels(30)).toEqual([
+      '4 minor',
+      '9 major',
+      '14 minor',
+      '19 major',
+      '24 minor',
+      '29 major',
+    ]);
+    expect(labels(7)).toEqual([
+      '0 major',
+      '1 major',
+      '2 major',
+      '3 major',
+      '4 major',
+      '5 major',
+      '6 major',
+    ]);
+    // A narrow chart keeps today and every other label: four dates of ninety days.
+    expect(labels(90).filter((label) => label.endsWith('major'))).toEqual([
+      '11 major',
+      '37 major',
+      '63 major',
+      '89 major',
+    ]);
   });
 });
 

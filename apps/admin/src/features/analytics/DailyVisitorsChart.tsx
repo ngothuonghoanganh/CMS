@@ -7,8 +7,9 @@ import { cx } from '../shell/cx';
 import {
   chartDayParts,
   conversionRate,
+  dayLabelKind,
   formatCount,
-  isLabelledDay,
+  labelEvery,
   niceTicks,
   tooltipDayLabel,
 } from './analytics-presentation';
@@ -49,7 +50,8 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
   const slots = useRef<Array<HTMLButtonElement | null>>([]);
   const ticks = niceTicks(Math.max(0, ...daily.map((day) => day.visitors)));
   const top = ticks.at(-1) ?? 1;
-  const showLeads = daily.length <= 7;
+  // Beyond a week only some days carry a label, and each label is wider than its day.
+  const sparse = labelEvery(daily.length) > 1;
   const activeDay = active === null ? undefined : daily[active];
   const empty = daily.every((day) => day.visitors === 0);
 
@@ -80,7 +82,12 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
           Khách duy nhất mỗi ngày
         </h2>
         <div className={styles.cardTools}>
-          {asTable ? null : <span className={styles.hint}>Di chuột lên cột để xem chi tiết</span>}
+          {asTable ? null : (
+            <span className={styles.hint}>
+              <span className={styles.hintPointer}>Di chuột lên cột để xem chi tiết</span>
+              <span className={styles.hintTouch}>Chạm vào cột để xem chi tiết</span>
+            </span>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -157,8 +164,11 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
               role="group"
               aria-label="Khách duy nhất mỗi ngày. Dùng phím mũi tên để xem từng ngày."
               onKeyDown={onKeyDown}
-              onPointerLeave={() => {
-                setActive(null);
+              onPointerLeave={(event) => {
+                // A lifted finger leaves too: the tapped day stays shown until another is tapped.
+                if (event.pointerType !== 'touch') {
+                  setActive(null);
+                }
               }}
             >
               {daily.map((day, index) => (
@@ -205,22 +215,28 @@ export function DailyVisitorsChart({ daily }: DailyVisitorsChartProps) {
               </div>
             )}
           </div>
-          <div className={styles.xAxis} aria-hidden="true">
-            {daily.map((day, index) =>
-              isLabelledDay(index, daily.length) ? (
-                <span key={day.day} className={styles.xLabel}>
+          <div className={cx(styles.xAxis, sparse && styles.xAxisSparse)} aria-hidden="true">
+            {daily.map((day, index) => {
+              const kind = dayLabelKind(index, daily.length);
+              if (kind === null) {
+                return <span key={day.day} className={styles.xLabel} />;
+              }
+              const parts = chartDayParts(day.day);
+              return (
+                <span
+                  key={day.day}
+                  className={cx(styles.xLabel, kind === 'minor' && styles.xLabelMinor)}
+                >
                   <span className={styles.xDay}>
-                    <span>{chartDayParts(day.day).weekday}</span>{' '}
-                    <span>{chartDayParts(day.day).date}</span>
+                    <span className={styles.xWeekday}>{parts.weekday}</span>{' '}
+                    <span className={styles.xDate}>{parts.date}</span>
                   </span>
-                  {showLeads ? (
+                  {sparse ? null : (
                     <span className={styles.xLeads}>{`${formatCount(day.leads)} lead`}</span>
-                  ) : null}
+                  )}
                 </span>
-              ) : (
-                <span key={day.day} className={styles.xLabel} />
-              ),
-            )}
+              );
+            })}
           </div>
         </div>
       )}

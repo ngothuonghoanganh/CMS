@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 import { Editor } from '../support/editor.js';
 import { createPageViaApi, setUpLeadCaptureViaApi, setUpSite, uniqueId } from '../support/setup.js';
 import { FILLED_CONSENT, VISITOR_UA } from '../support/visitor.js';
@@ -17,6 +17,43 @@ function kpi(page: Page, label: string) {
     .getByRole('term')
     .filter({ hasText: label })
     .locator('xpath=following-sibling::dd[1]');
+}
+
+interface Edges {
+  left: number;
+  right: number;
+}
+
+/** The labels under the chart that show (each day, each day's leads) as their left and right edges. */
+function axisLabels(chart: Locator): Promise<{ days: Edges[]; leads: Edges[] }> {
+  return chart.evaluate((element) => {
+    const edges = (node: Element): Edges => {
+      const box = node.getBoundingClientRect();
+      return { left: box.left, right: box.right };
+    };
+    const shown = (node: Element) => node.checkVisibility({ visibilityProperty: true });
+    const spans = [...element.querySelectorAll('span')];
+    return {
+      // A day's label holds its weekday and its date, either of which a narrow chart may drop.
+      days: spans
+        .filter((span) => /^\d{2}\/\d{2}$/.test(span.textContent))
+        .flatMap((date) =>
+          date.parentElement !== null && shown(date.parentElement)
+            ? [edges(date.parentElement)]
+            : [],
+        ),
+      leads: spans.filter((span) => /^\d+ lead$/.test(span.textContent) && shown(span)).map(edges),
+    };
+  });
+}
+
+/** Labels of one row: inside the plot, at least 4px apart. */
+function expectApartInside(labels: Edges[], plot: Edges, where: string) {
+  const sorted = labels.toSorted((a, b) => a.left - b.left);
+  const outside = sorted.filter((box) => box.left < plot.left - 1 || box.right > plot.right + 1);
+  expect(outside, `${where}: labels outside the plot ${JSON.stringify(plot)}`).toEqual([]);
+  const gaps = sorted.slice(1).map((box, index) => box.left - (sorted[index]?.right ?? 0));
+  expect(Math.min(...gaps), `${where}: the closest labels`).toBeGreaterThanOrEqual(4);
 }
 
 test.describe('B6 · Hiệu quả', () => {
@@ -98,5 +135,39 @@ test.describe('B6 · Hiệu quả', () => {
 
     await page.goto(`/sites/${site.id}/analytics`);
     await expect(kpi(page, 'Lượt xem')).toHaveText('2');
+  });
+
+  test('the chart’s day labels stay apart and inside the plot, from a phone to a desktop', async ({
+    page,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    const chart = page.getByRole('region', { name: 'Khách duy nhất mỗi ngày' });
+    const ranges = [
+      { name: '7 ngày', days: 7 },
+      { name: '30 ngày', days: 30 },
+      { name: '90 ngày', days: 90 },
+    ];
+    // A phone; a narrow window with the sidebar; the width of the boards.
+    for (const width of [375, 600, 900, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto(`/sites/${site.id}/analytics`);
+      for (const range of ranges) {
+        await page
+          .getByRole('group', { name: 'Khoảng thời gian' })
+          .getByRole('button', { name: range.name })
+          .click();
+        await expect(chart.getByRole('button', { name: /khách ·/ })).toHaveCount(range.days);
+        const plot = await chart
+          .getByRole('group', { name: /^Khách duy nhất mỗi ngày/ })
+          .boundingBox();
+        expect(plot).not.toBeNull();
+        const edges = { left: plot?.x ?? 0, right: (plot?.x ?? 0) + (plot?.width ?? 0) };
+        const labels = await axisLabels(chart);
+        const where = `${String(width)}px, ${range.name}`;
+        expect(labels.days.length, where).toBeGreaterThanOrEqual(3);
+        expectApartInside(labels.days, edges, where);
+        expectApartInside(labels.leads, edges, `${where}, leads`);
+      }
+    }
   });
 });

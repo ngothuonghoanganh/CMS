@@ -1,5 +1,5 @@
 import { type AnalyticsReport, endpoints } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -120,6 +120,22 @@ describe('AnalyticsScreen', () => {
         .map((cell) => cell.textContent),
     ).toEqual(['502', '402', '9', '2,2%']);
     expect(within(rows[5] ?? chart).getByRole('rowheader')).toHaveTextContent('Thứ 5, 22/10');
+  });
+
+  it('keeps a tapped day once the finger lifts, and lets a hovered one go with the pointer', () => {
+    renderScreen();
+    const chart = screen.getByRole('region', { name: 'Khách duy nhất mỗi ngày' });
+    const bars = within(chart).getByRole('group', { name: /^Khách duy nhất mỗi ngày/ });
+    const thursday = within(chart).getByRole('button', { name: /^Thứ 5, 22\/10/ });
+    const details = 'Thứ 5, 22/10402 khách · 9 lead · 2,2%';
+
+    fireEvent.pointerEnter(thursday, { pointerType: 'touch' });
+    fireEvent.pointerLeave(bars, { pointerType: 'touch' });
+    expect(chart).toHaveTextContent(details);
+
+    fireEvent.pointerEnter(thursday, { pointerType: 'mouse' });
+    fireEvent.pointerLeave(bars, { pointerType: 'mouse' });
+    expect(chart).not.toHaveTextContent(details);
   });
 
   it('lists sources, pages and devices', () => {

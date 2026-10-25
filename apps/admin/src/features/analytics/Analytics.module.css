@@ -101,8 +101,26 @@
   color: var(--color-muted);
 }
 
-/* The daily chart: the y axis, the plot, and the day labels under it. */
+.hintTouch {
+  display: none;
+}
+
+@media (hover: none) {
+  .hintPointer {
+    display: none;
+  }
+
+  .hintTouch {
+    display: inline;
+  }
+}
+
+/*
+ * The daily chart: the y axis, the plot, and the day labels under it. The labels follow the
+ * chart's own width, which the sidebar and the window both change.
+ */
 .chart {
+  container-type: inline-size;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: 200px auto;
@@ -166,12 +184,15 @@
   outline-offset: -2px;
 }
 
-/* At most 24px wide, 2px of surface between neighbours, rounded at the data end only. */
+/*
+ * At most 24px wide, rounded at the data end only, 2px of surface between neighbours. Ninety days
+ * on a phone leave under 3px a day: the gap shrinks there, so bars never thin to a hairline.
+ */
 .bar {
   position: absolute;
   bottom: 0;
   left: 50%;
-  width: min(24px, calc(100% - 2px));
+  width: min(24px, calc(100% - min(2px, 25%)));
   border-radius: 4px 4px 0 0;
   background: var(--chart-bar);
   transform: translateX(-50%);
@@ -215,12 +236,34 @@
   color: var(--color-muted);
 }
 
-/* Narrow plots stack the weekday over the date so neighbouring labels never collide. */
-@media (max-width: 640px) {
+/* Today's label ends at the plot's edge instead of spilling past it. */
+.xAxisSparse .xLabel:last-child {
+  align-items: flex-end;
+}
+
+/* A narrow chart stacks the weekday over the date so neighbouring labels never collide. */
+@container (max-width: 560px) {
   .xDay {
     display: flex;
     flex-direction: column;
     align-items: center;
+  }
+}
+
+/*
+ * Narrower still, a label keeps one line: the weekday in a week, whose dates the period above
+ * gives, and the date beyond, where every other label gives way. A day's leads stay in the
+ * tooltip and the table.
+ */
+@container (max-width: 400px) {
+  .xLeads,
+  .xAxis:not(.xAxisSparse) .xDate,
+  .xAxisSparse .xWeekday {
+    display: none;
+  }
+
+  .xLabelMinor {
+    visibility: hidden;
   }
 }
 
@@ -248,22 +291,29 @@
   font-size: var(--text-body-sm);
 }
 
-.table th {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-align: left;
-  color: var(--color-muted);
-}
-
+.table th,
 .table td {
   padding: 9px 10px;
   border-bottom: 1px solid var(--color-divider);
 }
 
-.table tbody tr:last-child td {
+.table th {
+  font-weight: 400;
+  text-align: left;
+}
+
+/* Column headers. A row's own header, its day or its source, reads as the rest of the row. */
+.table thead th {
+  padding: 8px 10px;
+  border-bottom-color: var(--color-border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--color-muted);
+}
+
+.table tbody tr:last-child > * {
   border-bottom: 0;
 }
 
@@ -278,7 +328,6 @@
 
 .mono {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
 }
 
 .tableScroll {

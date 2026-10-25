@@ -81,7 +81,16 @@ export function labelEvery(days: number): number {
   return Math.ceil(days / 7);
 }
 
-/** Whether the chart labels the day at `index`: counted back from today, so today always is. */
-export function isLabelledDay(index: number, days: number): boolean {
-  return (days - 1 - index) % labelEvery(days) === 0;
+/**
+ * How the chart labels the day at `index`, counted back from today so today always is labelled.
+ * A `minor` label gives way on a narrow chart: every other one beyond a week, where labels are
+ * dates; a week keeps all seven, as weekdays. `null` leaves the day unlabelled.
+ */
+export function dayLabelKind(index: number, days: number): 'major' | 'minor' | null {
+  const back = days - 1 - index;
+  const every = labelEvery(days);
+  if (back % every !== 0) {
+    return null;
+  }
+  return every === 1 || back % (every * 2) === 0 ? 'major' : 'minor';
 }
