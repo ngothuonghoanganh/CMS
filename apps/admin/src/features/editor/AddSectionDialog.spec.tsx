@@ -37,10 +37,21 @@ describe('AddSectionDialog', () => {
     expect(categories[0]).toHaveTextContent('Bằng chứng xã hội');
     expect(screen.getByRole('button', { name: /^Nhận xét dạng thẻ/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Trích dẫn nổi bật/ })).toBeInTheDocument();
+    expect(
+      screen.getByText('2 section phù hợp với “nhan xet”.', { selector: '[aria-live="polite"]' }),
+    ).toBeInTheDocument();
 
     await user.clear(screen.getByRole('searchbox', { name: 'Tìm section' }));
     await user.type(screen.getByRole('searchbox', { name: 'Tìm section' }), 'bảng giá');
-    expect(screen.getByText('Không tìm thấy section phù hợp với “bảng giá”.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Không tìm thấy section phù hợp với “bảng giá”.', { selector: 'p' }),
+    ).toBeVisible();
+    // The result of typing is announced (WCAG 4.1.3).
+    expect(
+      screen.getByText('Không tìm thấy section phù hợp với “bảng giá”.', {
+        selector: '[aria-live="polite"]',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('disables singletons that are already on the page', async () => {

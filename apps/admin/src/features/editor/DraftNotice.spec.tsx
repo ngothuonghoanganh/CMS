@@ -1,4 +1,4 @@
-import type { PageDetailResponse } from '@plp/contracts';
+import { type Asset, endpoints, type PageDetailResponse } from '@plp/contracts';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -7,7 +7,14 @@ import type * as ApiModule from '../../lib/api';
 import { ConflictDialog } from './ConflictDialog';
 import { DraftNotice } from './DraftNotice';
 import { currentSaveResponse } from './store';
-import { makeStore, pageDetail, RELEASE_ID, sampleComposition } from './test-fixtures';
+import {
+  asset,
+  makeStore,
+  pageDetail,
+  RELEASE_ID,
+  sampleComposition,
+  SITE_ID,
+} from './test-fixtures';
 import { renderEditor } from './test-render';
 
 vi.mock('../../lib/api', async (importOriginal) => {
@@ -35,6 +42,32 @@ function liveStore() {
       liveUrl: 'https://go.smilecare.vn/uu-dai-thang-11',
     }),
   });
+}
+
+const NEW_ASSET: Asset = { ...asset, id: '64b0000000000000000000ab', alt: 'Phòng khám mới' };
+
+/** A draft whose Hero shows NEW_ASSET, which the editor did not load yet. */
+function draftWithNewImage(revision: number, overrides: Parameters<typeof pageDetail>[1] = {}) {
+  const composition = sampleComposition();
+  const hero = composition.sections[1];
+  if (hero) {
+    hero.content = {
+      ...hero.content,
+      image: { assetId: NEW_ASSET.id, alt: NEW_ASSET.alt, decorative: false },
+    };
+  }
+  const detail = pageDetail(composition, overrides);
+  detail.draft.revision = revision;
+  return detail;
+}
+
+/** Answers the draft request with `detail` and the asset lookup with NEW_ASSET. */
+function answerWith(detail: PageDetailResponse) {
+  apiMock.mockImplementation((endpoint) =>
+    Promise.resolve(
+      endpoint === endpoints.listAssets ? { items: [NEW_ASSET], nextCursor: null } : detail,
+    ),
+  );
 }
 
 beforeEach(() => {
@@ -88,6 +121,31 @@ describe('DraftNotice', () => {
     // The action that opened the dialog is gone; focus stays on the notice, not on <body>.
     await waitFor(() => {
       expect(document.querySelector('[data-tone="warning"][tabindex="-1"]')).toHaveFocus();
+    });
+  });
+
+  it('loads the images of the restored draft, so the canvas does not report them missing', async () => {
+    const user = userEvent.setup();
+    const store = liveStore();
+    answerWith(
+      draftWithNewImage(5, {
+        status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
+        liveRelease,
+      }),
+    );
+    renderEditor(
+      <DraftNotice ensureSaved={() => Promise.resolve(currentSaveResponse(store.getState()))} />,
+      { store },
+    );
+    await user.click(screen.getByRole('button', { name: 'Hủy thay đổi, quay về bản live' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Quay về bản live v12?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Quay về bản live' }));
+    await waitFor(() => {
+      expect(store.getState().baseRevision).toBe(5);
+    });
+    expect(store.getState().assetsById[NEW_ASSET.id]).toEqual(NEW_ASSET);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.listAssets, [SITE_ID], {
+      query: { ids: NEW_ASSET.id },
     });
   });
 
@@ -147,5 +205,22 @@ describe('ConflictDialog', () => {
     });
     expect(store.getState()).toMatchObject({ saveState: 'saved', baseRevision: 8 });
     expect(store.getState().draft.composition.sections[1]?.spacing).toBe('normal');
+  });
+
+  it('loads the images the reloaded draft uses before showing it', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().markConflict();
+    answerWith(draftWithNewImage(8));
+    renderEditor(<ConflictDialog />, { store });
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Trang vừa được cập nhật ở nơi khác' });
+    await user.click(within(dialog).getByRole('button', { name: 'Tải lại bản mới nhất' }));
+    await waitFor(() => {
+      expect(store.getState().baseRevision).toBe(8);
+    });
+    expect(store.getState().assetsById[NEW_ASSET.id]).toEqual(NEW_ASSET);
+    // The asset the editor already knew is not requested again.
+    expect(apiMock).toHaveBeenCalledTimes(2);
   });
 });

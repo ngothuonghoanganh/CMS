@@ -1,12 +1,15 @@
+import { Logger } from '@nestjs/common';
 import {
   activityListResponseSchema,
+  MAX_SITES_PER_WORKSPACE,
   problemSchema,
   siteListResponseSchema,
   siteSchema,
   subdomainAvailabilitySchema,
 } from '@plp/contracts';
+import { Types } from 'mongoose';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { addEditor, createSite, uniqueSubdomain, uploadImage } from '../../../test/resources.js';
@@ -113,6 +116,67 @@ describe('sites', () => {
 
     it('requires a session', async () => {
       await request(t.app.getHttpServer()).get(`/workspaces/${workspaceId}/sites`).expect(401);
+    });
+  });
+
+  describe('site limit', () => {
+    /** Stores `count` sites in the workspace directly, bypassing the API's site limit. */
+    async function insertSites(workspace: string, count: number): Promise<void> {
+      const now = new Date();
+      await t.connection.collection('sites').insertMany(
+        Array.from({ length: count }, (_unused, index) => ({
+          workspaceId: new Types.ObjectId(workspace),
+          name: `Site ${index}`,
+          subdomain: uniqueSubdomain('day'),
+          themePresetId: 'mint',
+          logoAssetId: null,
+          defaultShareImageAssetId: null,
+          pageSeq: 0,
+          createdBy: new Types.ObjectId(),
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    }
+
+    it('creates only one of several racing sites when one slot is left', async () => {
+      const { client, workspaceId: almostFull } = await signedUpClient(t.app);
+      await insertSites(almostFull, MAX_SITES_PER_WORKSPACE - 1);
+      const responses = await Promise.all(
+        [1, 2, 3].map(() =>
+          client.post(`/workspaces/${almostFull}/sites`, {
+            name: 'Đua',
+            subdomain: uniqueSubdomain('dua'),
+          }),
+        ),
+      );
+      expect(responses.map((response) => response.status).sort()).toEqual([201, 409, 409]);
+      for (const response of responses.filter(({ status }) => status === 409)) {
+        expect(problemSchema.parse(response.body)).toMatchObject({
+          code: 'site_limit_reached',
+          title: `Mỗi workspace có tối đa ${MAX_SITES_PER_WORKSPACE} site`,
+        });
+      }
+      const listed = await client.get(`/workspaces/${almostFull}/sites`).expect(200);
+      expect(siteListResponseSchema.parse(listed.body).items).toHaveLength(MAX_SITES_PER_WORKSPACE);
+    });
+
+    it('fails loudly instead of hiding sites when a workspace holds more than the limit', async () => {
+      const { client, workspaceId: overfull } = await signedUpClient(t.app);
+      await insertSites(overfull, MAX_SITES_PER_WORKSPACE + 1);
+      const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      try {
+        const response = await client.get(`/workspaces/${overfull}/sites`).expect(500);
+        expect(problemSchema.parse(response.body).code).toBe('internal');
+        const [entry]: unknown[] = logged.mock.calls[0] ?? [];
+        expect(entry).toMatchObject({
+          err: {
+            message: `Workspace ${overfull} holds more than ${MAX_SITES_PER_WORKSPACE} sites (ADR-014)`,
+          },
+        });
+      } finally {
+        logged.mockRestore();
+      }
     });
   });
 

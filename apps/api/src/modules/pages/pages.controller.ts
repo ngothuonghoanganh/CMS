@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import {
   createPageRequestSchema,
+  type PageCountResponse,
   type PageDetailResponse,
   type PageListResponse,
   pageListQuerySchema,
@@ -33,6 +34,14 @@ export class PagesController {
     @Query(new ZodPipe(pageListQuerySchema)) query: PageListQueryValues,
   ): Promise<PageListResponse> {
     return this.pages.list(user, siteId, query);
+  }
+
+  @Get('sites/:siteId/page-count')
+  count(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+  ): Promise<PageCountResponse> {
+    return this.pages.count(user, siteId);
   }
 
   @Post('sites/:siteId/pages')

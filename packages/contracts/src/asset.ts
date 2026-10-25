@@ -79,7 +79,6 @@ export const uploadAssetFieldsSchema = z
       .transform((value) => value === 'true'),
   })
   .refine(describedOrDecorative, altRequiredMessage);
-export type UploadAssetFields = z.input<typeof uploadAssetFieldsSchema>;
 
 export const updateAssetRequestSchema = z
   .object({ alt: altTextSchema, decorative: z.boolean() })

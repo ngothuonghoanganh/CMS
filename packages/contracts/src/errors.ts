@@ -15,6 +15,7 @@ export const errorCodes = [
   'publish_blocked',
   'undo_not_available',
   'page_limit_reached',
+  'site_limit_reached',
   'rate_limited',
   'payload_too_large',
   'unsupported_media_type',

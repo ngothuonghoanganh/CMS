@@ -3,6 +3,7 @@ import {
   checksSummaryView,
   displayUrl,
   frameLayout,
+  frameStyle,
   liveStatusView,
   livePathOf,
   lowerFirst,
@@ -32,24 +33,26 @@ function item(severity: 'blocking' | 'warning') {
 
 describe('editor presentation', () => {
   it('formats relative save times with the shared admin formatter', () => {
-    const at = (iso: string) => saveStatusView('saved', iso, null, NOW).text;
-    expect(at('2026-10-24T09:59:30.000Z')).toBe('Đã lưu bản nháp · vừa xong');
-    expect(at('2026-10-24T09:55:00.000Z')).toBe('Đã lưu bản nháp · 5 phút trước');
-    expect(at('2026-10-24T07:00:00.000Z')).toBe('Đã lưu bản nháp · 3 giờ trước');
+    const at = (iso: string) => saveStatusView('saved', iso, null, NOW).time;
+    expect(at('2026-10-24T09:59:30.000Z')).toBe('vừa xong');
+    expect(at('2026-10-24T09:55:00.000Z')).toBe('5 phút trước');
+    expect(at('2026-10-24T07:00:00.000Z')).toBe('3 giờ trước');
     // NOW is 17:00 in Asia/Ho_Chi_Minh; the day before reads like the dashboard.
-    expect(at('2026-10-23T09:20:00.000Z')).toBe('Đã lưu bản nháp · hôm qua, 16:20');
-    expect(at('2026-10-20T07:00:00.000Z')).toBe('Đã lưu bản nháp · 20/10');
+    expect(at('2026-10-23T09:20:00.000Z')).toBe('hôm qua, 16:20');
+    expect(at('2026-10-20T07:00:00.000Z')).toBe('20/10');
   });
 
   it('describes every save state', () => {
     expect(saveStatusView('saved', '2026-10-24T09:59:50.000Z', null, NOW)).toEqual({
       tone: 'success',
-      text: 'Đã lưu bản nháp · vừa xong',
+      text: 'Đã lưu bản nháp',
+      time: 'vừa xong',
       canRetry: false,
     });
-    expect(saveStatusView('saved', '2026-10-24T09:59:50.000Z', null, null).text).toBe(
-      'Đã lưu bản nháp',
-    );
+    expect(saveStatusView('saved', '2026-10-24T09:59:50.000Z', null, null)).toMatchObject({
+      text: 'Đã lưu bản nháp',
+      time: null,
+    });
     expect(saveStatusView('saving', null, null, NOW).text).toBe('Đang lưu…');
     expect(saveStatusView('dirty', null, null, NOW).text).toBe('Có thay đổi chưa lưu');
     expect(saveStatusView('error', null, { kind: 'retryable', message: 'x' }, NOW)).toMatchObject({
@@ -155,5 +158,18 @@ describe('editor presentation', () => {
     expect(frameLayout('mobile', 632)).toEqual({ width: 390, zoom: 1 });
     expect(frameLayout('desktop', null)).toEqual({ width: null, zoom: 1 });
     expect(frameLayout('mobile', null)).toEqual({ width: 390, zoom: 1 });
+  });
+
+  it('gives the editor controls on the frame the inverse zoom, so they keep their real size', () => {
+    expect(frameStyle({ width: 1024, zoom: 0.5 })).toEqual({
+      width: 1024,
+      zoom: 0.5,
+      '--chrome-zoom': 2,
+    });
+    expect(frameStyle({ width: null, zoom: 1 })).toEqual({
+      width: '100%',
+      zoom: 1,
+      '--chrome-zoom': 1,
+    });
   });
 });

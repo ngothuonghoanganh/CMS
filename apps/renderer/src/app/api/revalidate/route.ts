@@ -10,6 +10,34 @@ import { verifyRevalidateSignature } from '../../../lib/revalidate-signature';
 /** At most 20 tags of 256 characters; anything far larger is not a real webhook. */
 const MAX_BODY_BYTES = 16 * 1024;
 
+/**
+ * The body as text, or null as soon as it passes `maxBytes`. It is read as a stream with a running
+ * count because a chunked request declares no Content-Length, and `request.text()` would buffer
+ * all of it before any check ran: this route is public and runs before the signature check.
+ */
+async function readBodyWithin(request: Request, maxBytes: number): Promise<string | null> {
+  if (request.body === null) {
+    return '';
+  }
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  // Same decoding as `request.text()`: UTF-8, leading BOM dropped.
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
 function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
   try {
     return { ok: true, value: JSON.parse(text) as unknown };
@@ -25,12 +53,11 @@ function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
  * the new release instead of a stale one.
  */
 export async function POST(request: Request): Promise<Response> {
+  // A declared length that is too large is rejected without reading anything.
   const declaredLength = Number(request.headers.get('content-length') ?? '0');
-  if (declaredLength > MAX_BODY_BYTES) {
-    return Response.json({ error: 'payload_too_large' }, { status: 413 });
-  }
-  const rawBody = await request.text();
-  if (Buffer.byteLength(rawBody) > MAX_BODY_BYTES) {
+  const rawBody =
+    declaredLength > MAX_BODY_BYTES ? null : await readBodyWithin(request, MAX_BODY_BYTES);
+  if (rawBody === null) {
     return Response.json({ error: 'payload_too_large' }, { status: 413 });
   }
   const verdict = verifyRevalidateSignature({

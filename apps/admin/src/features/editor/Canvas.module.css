@@ -111,9 +111,10 @@
 }
 
 /* The selected section's chip and toolbar sit over the top of the section; keep the
-   placeholder's text and button below them instead of underneath. */
+   placeholder's text and button below them instead of underneath. The toolbar keeps its real size
+   on a scaled frame, so the room it needs is scaled back too. */
 .selected .hidden {
-  padding-top: 64px;
+  padding-top: calc(64px * var(--chrome-zoom, 1));
 }
 
 .hiddenAction {
@@ -179,6 +180,15 @@
 }
 
 .chrome:hover > .insert > .insertButton,
+.selected > .insert > .insertButton,
 .insertButton:focus-visible {
   opacity: 1;
+}
+
+/* The frame scales the page down on a narrow canvas; the editor's controls keep their real size. */
+.chip,
+.toolbar,
+.altWarning,
+.insertButton {
+  zoom: var(--chrome-zoom, 1);
 }

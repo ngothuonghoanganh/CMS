@@ -4,6 +4,7 @@ import {
   SEO_DESCRIPTION_RECOMMENDED_MAX,
   SEO_TITLE_RECOMMENDED_MAX,
 } from '@plp/contracts';
+import { firstHeroHeading } from '@plp/sections/schema';
 
 /** Display rules of "SEO & chia sẻ" (board 07). Pure functions, unit-tested. */
 
@@ -18,11 +19,16 @@ export interface FieldHint {
   text: string;
 }
 
-/** The hint under "Tiêu đề trên công cụ tìm kiếm". */
-export function seoTitleHint(title: string): FieldHint {
+/**
+ * The hint under "Tiêu đề trên công cụ tìm kiếm". An empty title names the fallback the live page
+ * really uses (`seoTitleOf`): the Hero heading, or the site name when no Hero has one.
+ */
+export function seoTitleHint(title: string, composition: Composition, siteName: string): FieldHint {
   const length = title.trim().length;
   if (length === 0) {
-    return { tone: 'help', text: 'Đang để trống: sẽ dùng tiêu đề Hero.' };
+    return firstHeroHeading(composition) === null
+      ? { tone: 'help', text: `Đang để trống: sẽ dùng tên site “${siteName}”.` }
+      : { tone: 'help', text: 'Đang để trống: sẽ dùng tiêu đề Hero.' };
   }
   if (length > SEO_TITLE_RECOMMENDED_MAX) {
     return { tone: 'warning', text: 'Hơi dài: phần cuối có thể bị cắt trên kết quả tìm kiếm.' };
@@ -42,23 +48,6 @@ export function searchResultTitle(title: string): string {
 /** The description as a search result shows it: over 160 characters, 157 and "…". */
 export function searchResultDescription(description: string): string {
   return cut(description, SEO_DESCRIPTION_RECOMMENDED_MAX, SEARCH_DESCRIPTION_VISIBLE);
-}
-
-/** The heading of the page's first Hero, which stands in for an empty SEO title (ADR-005). */
-export function heroHeadingOf(composition: Composition): string {
-  const hero = composition.sections.find((section) => section.type === 'hero');
-  const heading = hero?.content.heading;
-  return typeof heading === 'string' ? heading.trim() : '';
-}
-
-/** The title the live page will use: the SEO title, else the Hero heading, else the page name. */
-export function effectiveTitle(seoTitle: string, composition: Composition, pageTitle: string) {
-  const own = seoTitle.trim();
-  if (own !== '') {
-    return own;
-  }
-  const hero = heroHeadingOf(composition);
-  return hero === '' ? pageTitle : hero;
 }
 
 /**

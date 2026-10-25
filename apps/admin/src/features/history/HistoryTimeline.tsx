@@ -87,6 +87,7 @@ function ReleaseCard({
               variant="secondary"
               size="sm"
               aria-describedby={headingId}
+              data-restore-release={release.id}
               className={styles.restore}
               onClick={() => {
                 onRestore(release);

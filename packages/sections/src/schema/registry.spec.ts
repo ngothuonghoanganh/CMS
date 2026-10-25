@@ -6,6 +6,7 @@ import {
   createSectionInstance,
   getSectionDefinition,
   insertionIndex,
+  listMinimum,
   samplePathsOf,
   validateComposition,
 } from './registry.js';
@@ -99,6 +100,69 @@ describe('section registry', () => {
     expect(collectLeaves(grid).some((leaf) => leaf.path.endsWith('.image'))).toBe(false);
     expect(collectLeaves(alternate).some((leaf) => leaf.path.endsWith('.image'))).toBe(true);
     expect(collectLeaves(alternate).some((leaf) => leaf.path.endsWith('.icon'))).toBe(false);
+  });
+
+  it('returns hidden fields too when asked, since switching variants keeps their values', () => {
+    const centered = createSectionInstance('hero', 'centered', id(1));
+    const hero = {
+      ...centered,
+      content: {
+        ...centered.content,
+        image: { assetId: 'a'.repeat(24), alt: 'Ảnh', decorative: false },
+      },
+    };
+    expect(collectLeaves(hero).some((leaf) => leaf.path === 'image')).toBe(false);
+    expect(collectLeaves(hero, { includeHidden: true })).toContainEqual(
+      expect.objectContaining({ path: 'image', value: hero.content.image }),
+    );
+  });
+
+  it('marks sample text in fields the variant hides, so a variant switch still warns', () => {
+    const quote = createSectionInstance('testimonials', 'quote', id(1));
+    expect(quote.content.heading).toBe('Khách hàng nói gì về chúng tôi');
+    expect(quote.samplePaths).toContain('heading');
+    expect(samplePathsOf(quote)).toContain('heading');
+  });
+
+  it('needs 3 items in the benefits grid and the testimonial cards, fewer in the other variants', () => {
+    expect(listMinimum('benefits', 'grid', 'items')).toBe(3);
+    expect(listMinimum('benefits', 'alternate', 'items')).toBe(2);
+    expect(listMinimum('testimonials', 'cards', 'items')).toBe(3);
+    expect(listMinimum('testimonials', 'quote', 'items')).toBe(1);
+    expect(listMinimum('faq', 'accordion', 'items')).toBe(1);
+
+    function withItems(type: 'benefits' | 'testimonials', variant: string, count: number) {
+      const section = createSectionInstance(type, variant, id(1));
+      const items = section.content.items;
+      if (!Array.isArray(items)) {
+        throw new Error('The sample has no items');
+      }
+      return { ...section, content: { ...section.content, items: items.slice(0, count) } };
+    }
+    expect(
+      validateComposition({ version: 1, sections: [withItems('benefits', 'grid', 2)] }),
+    ).toEqual([
+      {
+        path: ['sections', 0, 'content', 'items'],
+        code: 'too_small',
+        message: 'Bố cục “Lưới 3–6 lợi ích” cần ít nhất 3 lợi ích',
+      },
+    ]);
+    expect(
+      validateComposition({ version: 1, sections: [withItems('benefits', 'alternate', 2)] }),
+    ).toEqual([]);
+    expect(
+      validateComposition({ version: 1, sections: [withItems('testimonials', 'cards', 1)] }),
+    ).toEqual([
+      {
+        path: ['sections', 0, 'content', 'items'],
+        code: 'too_small',
+        message: 'Bố cục “Nhận xét dạng thẻ” cần ít nhất 3 nhận xét',
+      },
+    ]);
+    expect(
+      validateComposition({ version: 1, sections: [withItems('testimonials', 'quote', 1)] }),
+    ).toEqual([]);
   });
 
   it('places fixed sections at their position and keeps others between them', () => {

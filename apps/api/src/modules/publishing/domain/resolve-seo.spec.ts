@@ -6,7 +6,7 @@ import {
   heroSection,
   sampleSection,
 } from '../../../../test/compositions.js';
-import { firstHeroHeading, resolveSeo } from './resolve-seo.js';
+import { resolveSeo } from './resolve-seo.js';
 import type { PageSnapshot } from './snapshot.js';
 
 const ORIGIN = 'https://smilecare.payload.site';
@@ -56,11 +56,14 @@ describe('resolveSeo', () => {
   });
 
   it('skips an empty Hero heading for the next Hero', () => {
-    expect(
-      firstHeroHeading(
-        composition([heroSection({ heading: ' ' }), heroSection({ heading: 'Thứ hai' })]),
-      ),
-    ).toBe('Thứ hai');
+    const twoHeroes = snapshot({
+      seo: cleanSeo({ title: '' }),
+      composition: composition([
+        heroSection({ heading: ' ' }),
+        heroSection({ heading: 'Thứ hai' }),
+      ]),
+    });
+    expect(resolveSeo(twoHeroes, SITE, ORIGIN, {}).title).toBe('Thứ hai');
   });
 
   it('falls back to the site default share image, and to none when it is not available', () => {

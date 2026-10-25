@@ -50,6 +50,17 @@
   color: var(--color-danger);
 }
 
+/* The live region of `announceMessages`: laid out like the field, and no room when empty. */
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.messages:empty {
+  margin-top: -6px;
+}
+
 .help {
   margin: 0;
   font-size: var(--text-sm);

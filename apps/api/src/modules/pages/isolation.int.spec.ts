@@ -79,6 +79,7 @@ describe('workspace isolation of pages, publishing and previews', () => {
   it('hides the pages and drafts of workspace A from user B', async () => {
     const draft = { baseRevision: 0, ...publishableDraft(uniqueSlug('chen')) };
     await expectNotFound(userB.get(`/sites/${siteA.id}/pages`));
+    await expectNotFound(userB.get(`/sites/${siteA.id}/page-count`));
     await expectNotFound(
       userB.post(`/sites/${siteA.id}/pages`, {
         title: 'Chen',

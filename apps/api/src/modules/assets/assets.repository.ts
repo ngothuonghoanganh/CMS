@@ -77,13 +77,6 @@ export class AssetsRepository {
     return toKeysetPage(records, limit);
   }
 
-  findById(scope: WorkspaceScope, id: ObjectId): Promise<AssetRecord | null> {
-    return this.assets
-      .findOne({ _id: id, workspaceId: scope.workspaceId })
-      .lean<AssetRecord>()
-      .exec();
-  }
-
   /** Unscoped lookup by id that only returns the asset's site, for access checks. */
   async findAccessRef(id: ObjectId): Promise<AssetAccessRef | null> {
     const asset = await this.assets

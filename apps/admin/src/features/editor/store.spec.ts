@@ -3,6 +3,7 @@ import { createSectionInstance, getAtPath } from '@plp/sections/schema';
 import { describe, expect, it } from 'vitest';
 import { MAX_HISTORY, visibilityGroupOf } from './store';
 import {
+  asset,
   emptyChecks,
   makeStore,
   pageDetail,
@@ -181,6 +182,24 @@ describe('editor store: content', () => {
     expect(sectionById(store, HERO).content.heading).toBe('Niềng');
   });
 
+  it('ends the typing step when the selection changes, as a field closed by Escape never blurs', () => {
+    const store = makeStore();
+    store.getState().select(HERO, 'heading');
+    store.getState().updateContent(HERO, 'heading', 'Gốc một', { merge: true });
+    store.getState().select(null);
+    store.getState().select(HERO, 'heading');
+    store.getState().updateContent(HERO, 'heading', 'Gốc một hai', { merge: true });
+    expect(store.getState().history.past).toHaveLength(2);
+    store.getState().undo();
+    expect(sectionById(store, HERO).content.heading).toBe('Gốc một');
+
+    // Selecting what is already selected keeps the step open.
+    store.getState().updateContent(HERO, 'heading', 'Gốc một ba', { merge: true });
+    store.getState().select(HERO, 'heading');
+    store.getState().updateContent(HERO, 'heading', 'Gốc một bốn', { merge: true });
+    expect(store.getState().history.past).toHaveLength(2);
+  });
+
   it('adds list items up to the maximum with sample markers for the new item', () => {
     const store = makeStore();
     expect(store.getState().addListItem(BENEFITS, 'items')).toBe(true);
@@ -197,6 +216,8 @@ describe('editor store: content', () => {
 
   it('removes list items down to the minimum and renumbers sample markers', () => {
     const store = makeStore();
+    // The alternating layout works with 2 benefits; the grid needs 3.
+    store.getState().setVariant(BENEFITS, 'alternate');
     store.getState().updateContent(BENEFITS, 'items.0.title', 'Đã sửa');
     store.getState().select(BENEFITS, 'items.1.title');
     expect(store.getState().removeListItem(BENEFITS, 'items', 1)).toBe(true);
@@ -208,6 +229,18 @@ describe('editor store: content', () => {
     expect(store.getState().selection).toEqual({ sectionId: BENEFITS, fieldPath: null });
     expect(store.getState().removeListItem(BENEFITS, 'items', 0)).toBe(false);
     expect(store.getState().removeListItem(BENEFITS, 'items', 9)).toBe(false);
+  });
+
+  it('keeps at least 3 benefits in the grid and 3 testimonials in the cards', () => {
+    const store = makeStore();
+    expect(store.getState().removeListItem(BENEFITS, 'items', 0)).toBe(false);
+    expect(getAtPath(sectionById(store, BENEFITS).content, 'items')).toHaveLength(3);
+
+    store.getState().addSection('testimonials', 'quote', 3);
+    const quote = sectionIds(store)[3] ?? '';
+    expect(store.getState().removeListItem(quote, 'items', 2)).toBe(true);
+    expect(store.getState().removeListItem(quote, 'items', 1)).toBe(true);
+    expect(getAtPath(sectionById(store, quote).content, 'items')).toHaveLength(1);
   });
 
   it('reorders list items and moves their sample markers with them', () => {
@@ -230,6 +263,42 @@ describe('editor store: layout and visibility', () => {
     expect(store.getState().setVariant(HERO, 'centered')).toBe(true);
     expect(sectionById(store, HERO).variant).toBe('centered');
     expect(store.getState().setVariant(HERO, 'grid')).toBe(false);
+  });
+
+  it('adds sample items when the new variant needs more of them, in one undo step', () => {
+    const store = makeStore();
+    store.getState().addSection('testimonials', 'quote', 3);
+    const id = sectionIds(store)[3] ?? '';
+    store.getState().removeListItem(id, 'items', 2);
+    store.getState().removeListItem(id, 'items', 1);
+    store.getState().updateContent(id, 'items.0.quote', 'Dịch vụ rất tận tình.');
+    const steps = store.getState().history.past.length;
+
+    expect(store.getState().setVariant(id, 'cards')).toBe(true);
+    const cards = sectionById(store, id);
+    expect(cards.variant).toBe('cards');
+    expect(getAtPath(cards.content, 'items')).toHaveLength(3);
+    expect(getAtPath(cards.content, 'items.0.quote')).toBe('Dịch vụ rất tận tình.');
+    expect(getAtPath(cards.content, 'items.2.quote')).toBe(
+      'Nhận xét của khách hàng về trải nghiệm thực tế.',
+    );
+    expect(cards.samplePaths).toEqual(expect.arrayContaining(['items.1.quote', 'items.2.name']));
+    expect(cards.samplePaths).not.toContain('items.0.quote');
+    expect(store.getState().history.past).toHaveLength(steps + 1);
+
+    store.getState().undo();
+    expect(sectionById(store, id).variant).toBe('quote');
+    expect(getAtPath(sectionById(store, id).content, 'items')).toHaveLength(1);
+  });
+
+  it('keeps the sample marker of a heading the creation variant hid, so a switch still warns', () => {
+    const store = makeStore();
+    store.getState().addSection('testimonials', 'quote', 3);
+    const id = sectionIds(store)[3] ?? '';
+    store.getState().setVariant(id, 'cards');
+    const cards = sectionById(store, id);
+    expect(cards.content.heading).toBe('Khách hàng nói gì về chúng tôi');
+    expect(cards.samplePaths).toContain('heading');
   });
 
   it('sets color scheme and spacing presets, refusing unknown values', () => {
@@ -388,7 +457,7 @@ describe('editor store: server state', () => {
     const fresh = pageDetail();
     fresh.draft.revision = 9;
     store.getState().select(HERO);
-    store.getState().replaceDraftFromServer(fresh);
+    store.getState().replaceDraftFromServer(fresh, []);
     expect(store.getState()).toMatchObject({
       saveState: 'saved',
       baseRevision: 9,
@@ -397,6 +466,14 @@ describe('editor store: server state', () => {
     expect(sectionById(store, HERO).spacing).toBe('normal');
     expect(store.getState().selection.sectionId).toBe(HERO);
     expect(store.getState().draftVersion).toBe(store.getState().savedVersion);
+  });
+
+  it('adds the assets of a draft replaced from the server, keeping the ones it had', () => {
+    const store = makeStore({ assets: [] });
+    const other = { ...asset, id: '64b0000000000000000000aa' };
+    store.getState().addAssets([other]);
+    store.getState().replaceDraftFromServer(pageDetail(), [asset]);
+    expect(Object.keys(store.getState().assetsById).sort()).toEqual([asset.id, other.id].sort());
   });
 
   it('adds uploaded assets to the canvas map', () => {

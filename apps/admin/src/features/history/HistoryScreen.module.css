@@ -1,3 +1,9 @@
+/* While empty, the live region stays in the accessibility tree without taking a row (and a gap)
+   of the page column. */
+.bannerSlot:empty {
+  position: absolute;
+}
+
 .banner {
   display: flex;
   flex-wrap: wrap;

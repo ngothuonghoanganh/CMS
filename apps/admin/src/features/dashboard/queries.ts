@@ -1,3 +1,4 @@
+import { type ActivityListQuery, publishingActivityTypes } from '@plp/contracts';
 import type { DashboardFilters } from './filters';
 
 /**
@@ -15,5 +16,11 @@ export const siteQueryKeys = {
 /** Pages per request (the API maximum); further pages load with "Xem thêm trang". */
 export const PAGE_LIST_LIMIT = 50;
 
-/** Items in "Hoạt động xuất bản gần đây". */
-export const RECENT_ACTIVITY_LIMIT = 5;
+/**
+ * "Hoạt động xuất bản gần đây": the 5 newest publishing events only, so uploads and page
+ * creations never push them out, and a site that never published shows the empty state.
+ */
+export const RECENT_ACTIVITY_QUERY = {
+  limit: 5,
+  types: publishingActivityTypes.join(','),
+} as const satisfies ActivityListQuery;

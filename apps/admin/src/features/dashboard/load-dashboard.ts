@@ -1,7 +1,7 @@
 import { type ActivityListResponse, endpoints, type PageListResponse } from '@plp/contracts';
 import { serverApi } from '../../lib/server-api';
 import { type DashboardFilters, pageListQuery } from './filters';
-import { PAGE_LIST_LIMIT, RECENT_ACTIVITY_LIMIT } from './queries';
+import { PAGE_LIST_LIMIT, RECENT_ACTIVITY_QUERY } from './queries';
 
 export interface DashboardData {
   pages: PageListResponse;
@@ -19,7 +19,7 @@ export async function loadDashboardData(
     serverApi(endpoints.listPages, [siteId], {
       query: { ...pageListQuery(filters), limit: PAGE_LIST_LIMIT },
     }),
-    serverApi(endpoints.listActivity, [siteId], { query: { limit: RECENT_ACTIVITY_LIMIT } }),
+    serverApi(endpoints.listActivity, [siteId], { query: RECENT_ACTIVITY_QUERY }),
   ]);
   return { pages, activity, loadedAt: Date.now() };
 }

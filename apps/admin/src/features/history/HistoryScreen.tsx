@@ -22,7 +22,7 @@ import {
 } from '@plp/ui';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { type Ref, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { displayUrl } from '../../lib/site-url';
 import { siteQueryKeys } from '../dashboard/queries';
@@ -67,22 +67,27 @@ function clearRestoreParam() {
   }
 }
 
+/** Where keyboard focus goes once the rollback panel closes. */
+type PanelFocus = { kind: 'opener'; releaseId: string } | { kind: 'banner' };
+
 function RollbackBanner({
   entry,
   page,
   now,
   undoPending,
   onUndo,
+  ref,
 }: {
   entry: PointerEntry;
   page: PageSummary;
   now: number;
   undoPending: boolean;
   onUndo: () => void;
+  ref: Ref<HTMLDivElement>;
 }) {
   const liveUrl = page.liveUrl;
   return (
-    <div role="status" className={styles.banner}>
+    <div ref={ref} tabIndex={-1} className={styles.banner}>
       <span className={styles.bannerText}>
         <CheckCircleIcon size={20} className={styles.bannerIcon} />
         <span>
@@ -138,6 +143,9 @@ export function HistoryScreen({
   const [selectedId, setSelectedId] = useState<string | null>(restoreReleaseId);
   const [copyTarget, setCopyTarget] = useState<ReleaseSummary | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const panelFocus = useRef<PanelFocus | null>(null);
 
   const pageQuery = useQuery({
     queryKey: pageQueryKeys.summary(site.id, pageId),
@@ -183,6 +191,26 @@ export function HistoryScreen({
     clearRestoreParam();
   }
 
+  // The panel held focus when it closed: continue from the button that opened it (or the list),
+  // or from the banner that now confirms the rollback.
+  const panelOpen = selected !== null;
+  useEffect(() => {
+    const request = panelFocus.current;
+    if (request === null || panelOpen) {
+      return;
+    }
+    panelFocus.current = null;
+    if (request.kind === 'banner' && bannerRef.current !== null) {
+      bannerRef.current.focus();
+      return;
+    }
+    const opener =
+      request.kind === 'opener'
+        ? document.querySelector<HTMLElement>(`[data-restore-release="${request.releaseId}"]`)
+        : null;
+    (opener ?? headingRef.current)?.focus();
+  }, [panelOpen, rollback]);
+
   const undo = useMutation({
     mutationFn: (activityId: string) => api(endpoints.undoActivity, [activityId]),
     onSuccess: async (result) => {
@@ -218,6 +246,7 @@ export function HistoryScreen({
   async function onRolledBack(result: PointerMoveResponse) {
     setPage(result.page);
     await refreshSite();
+    panelFocus.current = { kind: 'banner' };
     closePanel();
     if (result.revalidation === 'failed') {
       toast({
@@ -240,22 +269,27 @@ export function HistoryScreen({
         }}
       />
 
-      {rollback === null ? null : (
-        <RollbackBanner
-          entry={rollback}
-          page={page}
-          now={now}
-          undoPending={undo.isPending}
-          onUndo={() => {
-            undo.mutate(rollback.activityId);
-          }}
-        />
-      )}
+      {/* The live region stays mounted, so the banner a rollback puts into it is announced; a
+          region mounted together with its text is not reliably read. */}
+      <div role="status" className={styles.bannerSlot}>
+        {rollback === null ? null : (
+          <RollbackBanner
+            entry={rollback}
+            page={page}
+            now={now}
+            ref={bannerRef}
+            undoPending={undo.isPending}
+            onUndo={() => {
+              undo.mutate(rollback.activityId);
+            }}
+          />
+        )}
+      </div>
 
       <div className={styles.columns}>
         <section aria-labelledby="releases-heading" className={styles.list}>
           <div className={styles.listHeading}>
-            <h2 id="releases-heading" className={styles.heading}>
+            <h2 id="releases-heading" ref={headingRef} tabIndex={-1} className={styles.heading}>
               Phiên bản đã xuất bản
             </h2>
             <SegmentedControl
@@ -342,7 +376,10 @@ export function HistoryScreen({
             page={page}
             release={selected}
             liveReleaseId={liveReleaseId}
-            onCancel={closePanel}
+            onCancel={() => {
+              panelFocus.current = { kind: 'opener', releaseId: selected.id };
+              closePanel();
+            }}
             onRolledBack={onRolledBack}
             onConflict={() => {
               void refreshSite();

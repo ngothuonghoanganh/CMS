@@ -61,15 +61,21 @@ export class ActivityRepository {
     return created._id;
   }
 
-  /** Events of a site, newest first. */
+  /** Events of a site, newest first, optionally only some types (e.g. publishing events). */
   async listForSite(
     scope: WorkspaceScope,
     siteId: ObjectId,
     cursor: string | undefined,
     limit: number,
+    types?: readonly ActivityType[],
   ): Promise<KeysetPage<ActivityRecord>> {
     const records = await this.activity
-      .find({ workspaceId: scope.workspaceId, siteId, ...afterCursor(cursor) })
+      .find({
+        workspaceId: scope.workspaceId,
+        siteId,
+        ...(types ? { type: { $in: [...types] } } : {}),
+        ...afterCursor(cursor),
+      })
       .sort(NEWEST_FIRST)
       .limit(limit + 1)
       .lean<ActivityRecord[]>()

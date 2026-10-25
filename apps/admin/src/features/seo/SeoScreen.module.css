@@ -143,6 +143,13 @@
   object-fit: cover;
 }
 
+.noImage {
+  border: 1.5px dashed var(--color-border-strong);
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
 .shareText {
   display: flex;
   flex-direction: column;

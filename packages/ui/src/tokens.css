@@ -16,6 +16,8 @@
   --color-hover: #f0f2f5;
   --color-border: #e2e5ea;
   --color-border-strong: #cdd2da;
+  /* Edges and states of form controls (inputs, switch track, selected segment): 3:1 (WCAG 1.4.11). */
+  --color-border-control: #828998;
   --color-divider: #eef0f3;
 
   /* Primary */

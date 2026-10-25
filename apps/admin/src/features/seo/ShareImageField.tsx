@@ -12,10 +12,6 @@ export const SHARE_IMAGE_FIELD_ID = 'seo-share-image';
 
 export interface ShareImageFieldProps {
   siteId: string;
-  siteName: string;
-  /** Background of the placeholder tile when the site has no default image (theme brand). */
-  tileColor: string;
-  tileTextColor: string;
   /** True when the page has its own share image (`seo.shareImageAssetId`). */
   custom: boolean;
   /** The page's own image, when it is loaded. */
@@ -26,31 +22,27 @@ export interface ShareImageFieldProps {
   disabled?: boolean | undefined;
 }
 
-/** The share image tile: the image itself, or the site name on the brand color. */
+/**
+ * The share image tile: the image itself, or an empty "Chưa có ảnh" tile. Without an image the
+ * live page sends no `og:image`, so the tile never pretends there is one.
+ */
 export function ShareImageTile({
   asset,
-  siteName,
-  tileColor,
-  tileTextColor,
   className,
 }: {
   asset: Asset | null;
-  siteName: string;
-  tileColor: string;
-  tileTextColor: string;
   className: string | undefined;
 }) {
+  if (asset === null) {
+    return (
+      <span aria-hidden="true" className={[className, styles.noImage].join(' ')}>
+        Chưa có ảnh
+      </span>
+    );
+  }
   return (
-    <span
-      aria-hidden="true"
-      className={className}
-      style={asset === null ? { background: tileColor, color: tileTextColor } : undefined}
-    >
-      {asset === null ? (
-        siteName
-      ) : (
-        <Image src={asset.url} alt="" fill sizes="320px" unoptimized className={styles.cover} />
-      )}
+    <span aria-hidden="true" className={className}>
+      <Image src={asset.url} alt="" fill sizes="320px" unoptimized className={styles.cover} />
     </span>
   );
 }
@@ -61,9 +53,6 @@ export function ShareImageTile({
  */
 export function ShareImageField({
   siteId,
-  siteName,
-  tileColor,
-  tileTextColor,
   custom,
   customAsset,
   defaultAsset,
@@ -107,13 +96,7 @@ export function ShareImageField({
     <fieldset id={SHARE_IMAGE_FIELD_ID} className={styles.shareFieldset}>
       <legend className={styles.label}>Ảnh khi chia sẻ</legend>
       <div className={styles.shareRow}>
-        <ShareImageTile
-          asset={defaultAsset}
-          siteName={siteName}
-          tileColor={tileColor}
-          tileTextColor={tileTextColor}
-          className={styles.shareTile}
-        />
+        <ShareImageTile asset={defaultAsset} className={styles.shareTile} />
         <div className={styles.shareText}>
           <span className={styles.shareStatus}>
             {defaultAsset === null

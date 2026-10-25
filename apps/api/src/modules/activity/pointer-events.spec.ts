@@ -1,30 +1,11 @@
 import type { ActivityType } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { newObjectId, type ObjectId } from '../../shared/persistence/object-id.js';
-import { isPointerEvent, isUndoable } from './pointer-events.js';
+import { isUndoable } from './pointer-events.js';
 
 function event(type: ActivityType, pageId: ObjectId | null = newObjectId()) {
   return { _id: newObjectId(), type, pageId };
 }
-
-describe('isPointerEvent', () => {
-  it('covers exactly the events that move the live pointer', () => {
-    const pointer: ActivityType[] = [
-      'page.published',
-      'page.rolled_back',
-      'page.rollback_undone',
-      'page.unpublished',
-    ];
-    const other: ActivityType[] = [
-      'site.created',
-      'page.created',
-      'page.draft_restored',
-      'asset.uploaded',
-    ];
-    expect(pointer.every(isPointerEvent)).toBe(true);
-    expect(other.some(isPointerEvent)).toBe(false);
-  });
-});
 
 describe('isUndoable', () => {
   it('is true for a rollback that is still the latest pointer event of its page', () => {

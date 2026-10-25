@@ -47,9 +47,12 @@
   outline-offset: 0;
 }
 
+/* The white pill alone is 1.1:1 on the group: its edge marks the selected item at 3:1. */
 .item[aria-pressed='true'] {
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px var(--color-border-control);
   color: var(--color-ink);
   font-weight: 600;
 }

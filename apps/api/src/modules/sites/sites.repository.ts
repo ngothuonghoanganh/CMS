@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { ThemePresetId } from '@plp/contracts';
+import { MAX_SITES_PER_WORKSPACE, type ThemePresetId } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { AppError } from '../../shared/errors.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
@@ -54,13 +54,29 @@ export class SitesRepository {
       .exec();
   }
 
-  /** Sites of the workspace, oldest first. */
-  listForWorkspace(scope: WorkspaceScope): Promise<SiteRecord[]> {
-    return this.sites
+  /**
+   * Sites of the workspace, oldest first. A workspace holds at most `MAX_SITES_PER_WORKSPACE`
+   * sites (ADR-014); the read fetches one more so a workspace over the limit fails loudly instead
+   * of silently losing sites from the switcher.
+   */
+  async listForWorkspace(scope: WorkspaceScope): Promise<SiteRecord[]> {
+    const sites = await this.sites
       .find({ workspaceId: scope.workspaceId })
       .sort({ createdAt: 1, _id: 1 })
+      .limit(MAX_SITES_PER_WORKSPACE + 1)
       .lean<SiteRecord[]>()
       .exec();
+    if (sites.length > MAX_SITES_PER_WORKSPACE) {
+      throw new Error(
+        `Workspace ${scope.workspaceId.toHexString()} holds more than ${MAX_SITES_PER_WORKSPACE} sites (ADR-014)`,
+      );
+    }
+    return sites;
+  }
+
+  /** Sites of the workspace, counted inside the site-creation transaction (ADR-014). */
+  countForWorkspace(scope: WorkspaceScope, tx: Tx): Promise<number> {
+    return this.sites.countDocuments({ workspaceId: scope.workspaceId }, { session: tx }).exec();
   }
 
   /** Inserts a site created by the scope's user. A duplicate subdomain is 409 `subdomain_taken`. */
@@ -73,6 +89,7 @@ export class SitesRepository {
       themePresetId: input.themePresetId,
       logoAssetId: null,
       defaultShareImageAssetId: null,
+      pageSeq: 0,
       createdBy: scope.userId,
       createdAt: now,
       updatedAt: now,
@@ -106,6 +123,23 @@ export class SitesRepository {
       )
       .lean<SiteRecord>()
       .exec();
+  }
+
+  /**
+   * Increments `pageSeq` inside a page-creation transaction. The write makes concurrent creations
+   * in the site conflict, so the page count read afterwards in the same transaction is exact.
+   */
+  async recordPageCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
+    const result = await this.sites
+      .updateOne(
+        { _id: siteId, workspaceId: scope.workspaceId },
+        { $inc: { pageSeq: 1 } },
+        { session: tx },
+      )
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
+    }
   }
 
   /** Unscoped lookup for public delivery, which resolves a site from the request host. */

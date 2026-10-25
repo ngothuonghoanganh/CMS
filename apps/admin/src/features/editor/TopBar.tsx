@@ -18,12 +18,12 @@ import {
   Spinner,
   StatusBadge,
   TabletIcon,
-  Tooltip,
   UndoIcon,
   VisuallyHidden,
   WarningTriangleIcon,
 } from '@plp/ui';
-import { type ReactNode, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
+import { useClientNow } from '../shell/use-now';
 import { useEditor, useEditorStoreApi } from './editor-context';
 import { GuardedLink } from './GuardedLink';
 import {
@@ -44,44 +44,36 @@ const deviceIcons: Record<Device, ReactNode> = {
 
 const devices: readonly Device[] = ['desktop', 'tablet', 'mobile'];
 
-const CLOCK_STEP_MS = 30_000;
-
-function subscribeToClock(onTick: () => void): () => void {
-  const timer = setInterval(onTick, CLOCK_STEP_MS);
-  return () => {
-    clearInterval(timer);
-  };
-}
-
-function clockSnapshot(): number {
-  return Math.floor(Date.now() / CLOCK_STEP_MS) * CLOCK_STEP_MS;
-}
-
-function serverClockSnapshot(): null {
-  return null;
-}
-
 /**
- * The time, refreshed every 30 s so "Đã lưu bản nháp · 2 phút trước" stays true. It is null during
- * server rendering and hydration, so the relative time never causes a hydration mismatch.
+ * "Đã lưu bản nháp · 2 phút trước". Only the state and the reason of a failure are in the live
+ * region: the relative time (refreshed every 30 s) sits beside it, so screen readers announce
+ * save transitions, not the clock.
  */
-function useNow(): Date | null {
-  const now = useSyncExternalStore(subscribeToClock, clockSnapshot, serverClockSnapshot);
-  return now === null ? null : new Date(now);
-}
-
 function SaveStatus({ onRetry }: { onRetry: () => void }) {
   const saveState = useEditor((state) => state.saveState);
   const lastSavedAt = useEditor((state) => state.lastSavedAt);
   const saveError = useEditor((state) => state.saveError);
-  const now = useNow();
-  const view = saveStatusView(saveState, lastSavedAt, saveError, now);
+  const now = useClientNow();
+  const view = saveStatusView(
+    saveState,
+    lastSavedAt,
+    saveError,
+    now === null ? null : new Date(now),
+  );
+  const issue =
+    saveState === 'error' && saveError !== null && saveError.kind !== 'retryable'
+      ? saveError.message
+      : null;
   return (
-    <span role="status" className={styles.save} data-tone={view.tone}>
+    <span className={styles.save} data-tone={view.tone}>
       {saveState === 'saving' ? <Spinner size={12} /> : null}
       {saveState === 'saved' ? <CheckIcon size={14} strokeWidth={2.2} /> : null}
       {view.tone === 'danger' ? <AlertCircleIcon size={14} strokeWidth={2} /> : null}
-      <span>{view.text}</span>
+      <span role="status" className={styles.saveText}>
+        {view.text}
+        {issue === null ? null : <span className={styles.saveIssue}> · {issue}</span>}
+      </span>
+      {view.time === null ? null : <span>· {view.time}</span>}
       {view.canRetry ? (
         <>
           <span aria-hidden="true">·</span>
@@ -89,9 +81,6 @@ function SaveStatus({ onRetry }: { onRetry: () => void }) {
             Thử lại
           </button>
         </>
-      ) : null}
-      {saveState === 'error' && saveError !== null && saveError.kind !== 'retryable' ? (
-        <span className={styles.saveIssue}>· {saveError.message}</span>
       ) : null}
     </span>
   );
@@ -103,8 +92,8 @@ export interface TopBarProps {
   onRetrySave: () => void;
   onPreview: () => void;
   previewPending: boolean;
-  /** Opens the publish dialog; null while publishing is not available yet. */
-  onOpenPublish: (() => void) | null;
+  /** Opens the publish dialog (screen 05). */
+  onOpenPublish: () => void;
 }
 
 export function TopBar({
@@ -132,10 +121,7 @@ export function TopBar({
       type="button"
       className={styles.checks}
       data-tone={summary.tone}
-      aria-disabled={onOpenPublish === null ? true : undefined}
-      onClick={() => {
-        onOpenPublish?.();
-      }}
+      onClick={onOpenPublish}
     >
       {summary.tone === 'success' ? (
         <CheckCircleIcon size={16} />
@@ -150,11 +136,7 @@ export function TopBar({
 
   const publishButton = (
     <Button
-      aria-disabled={onOpenPublish === null ? true : undefined}
-      className={onOpenPublish === null ? styles.unavailable : undefined}
-      onClick={() => {
-        onOpenPublish?.();
-      }}
+      onClick={onOpenPublish}
       trailingIcon={
         page.status.kind !== 'draft' && changeCount > 0 ? (
           <span className={styles.count}>
@@ -228,7 +210,7 @@ export function TopBar({
         />
       </div>
       <div className={styles.right}>
-        {onOpenPublish === null ? <Tooltip content="Sắp có">{checksButton}</Tooltip> : checksButton}
+        {checksButton}
         <IconButtonLink
           as={GuardedLink}
           href={`${pageBase}/history`}
@@ -253,11 +235,7 @@ export function TopBar({
         >
           Xem trước
         </Button>
-        {onOpenPublish === null ? (
-          <Tooltip content="Sắp có">{publishButton}</Tooltip>
-        ) : (
-          publishButton
-        )}
+        {publishButton}
       </div>
     </header>
   );

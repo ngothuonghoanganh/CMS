@@ -45,8 +45,8 @@ export async function getResolved(
 }
 
 /**
- * Whether a live page or a redirect answers at `path` ("" is the home page); null when nothing
- * does. Asked by the proxy on every page request, so it is a light lookup and never cached: the
+ * Whether a live page or a redirect (and where to) answers at `path` ("" is the home page); null
+ * when nothing does. Asked by the proxy on every page request, so it is a light lookup and never cached: the
  * page itself still renders from the cached `getResolved`.
  */
 export async function getPathStatus(

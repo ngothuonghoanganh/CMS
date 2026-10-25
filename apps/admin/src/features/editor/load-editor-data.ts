@@ -31,11 +31,15 @@ export async function loadAllPages(
   return pages;
 }
 
-/** Asset ids the editor needs to draw: images in the draft, share image and site logo. */
+/**
+ * Asset ids the editor needs to draw: images in the draft, share image and site logo. Images in
+ * fields the current variant hides count too: switching back to a variant that shows them must not
+ * report them as missing from the library.
+ */
 export function referencedAssetIds(composition: Composition, seo: Seo, site: Site): Set<string> {
   const ids = new Set<string>();
   for (const section of composition.sections) {
-    for (const leaf of collectLeaves(section)) {
+    for (const leaf of collectLeaves(section, { includeHidden: true })) {
       if (leaf.field.kind !== 'image') {
         continue;
       }

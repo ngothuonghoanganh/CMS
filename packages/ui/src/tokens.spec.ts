@@ -60,4 +60,17 @@ describe('admin tokens', () => {
   it('keeps the focus outline visible against surfaces (3:1)', () => {
     expect(contrast(token('color-primary'), token('color-surface'))).toBeGreaterThanOrEqual(3);
   });
+
+  // Non-text pairs that identify a control or its state (WCAG 1.4.11): input borders on cards and
+  // the canvas, the switch's off track and its white thumb, the selected segment's edge on the
+  // group, and the drag handle icon on a selected structure row.
+  it.each([
+    ['color-border-control', 'color-surface'],
+    ['color-border-control', 'color-canvas'],
+    ['color-border-control', 'color-surface-subtle'],
+    ['color-border-control', 'color-hover'],
+    ['color-muted', 'color-primary-soft'],
+  ] as const)('%s against %s keeps 3:1 for controls', (foreground, background) => {
+    expect(contrast(token(foreground), token(background))).toBeGreaterThanOrEqual(3);
+  });
 });

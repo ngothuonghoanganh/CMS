@@ -10,7 +10,8 @@ import {
   type Site,
   sitemapResponseSchema,
 } from '@plp/contracts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Logger } from '@nestjs/common';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import {
@@ -31,6 +32,8 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { createSite, uploadImage } from '../../../test/resources.js';
+import { REDACTED } from '../../shared/log-redaction.js';
+import { PagesRepository } from '../pages/pages.repository.js';
 import { PreviewTokens } from '../preview/preview-tokens.js';
 
 function heroHeading(data: PublicPageData): unknown {
@@ -214,7 +217,10 @@ describe('public delivery and previews', () => {
       });
       expect(live.body).toEqual({ kind: 'page', releaseId: second.release.id });
       const moved = await pathStatus(statusSite.subdomain, oldSlug).expect(200);
-      expect(pathStatusResponseSchema.parse(moved.body)).toEqual({ kind: 'redirect' });
+      expect(pathStatusResponseSchema.parse(moved.body)).toEqual({
+        kind: 'redirect',
+        location: `/${newSlug}`,
+      });
 
       const draft = await pathStatus(statusSite.subdomain, draftOnly.page.slug).expect(404);
       expect(problemSchema.parse(draft.body).code).toBe('not_found');
@@ -344,6 +350,26 @@ describe('public delivery and previews', () => {
         new Date(Date.now() - (PREVIEW_TTL_SECONDS + 60) * 1000),
       );
       await visitor.get(`/public/preview/${expired.token}`).expect(404);
+    });
+
+    it('keeps the token out of the error log when a preview fails', async () => {
+      const page = await createPage(client, site.id);
+      const token = await previewLink(page.page.id, { kind: 'draft' });
+      const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const lookup = vi
+        .spyOn(t.app.get(PagesRepository), 'findPublicById')
+        .mockRejectedValueOnce(new Error('connection reset'));
+      try {
+        const response = await visitor.get(`/public/preview/${token}`).expect(500);
+        expect(problemSchema.parse(response.body).code).toBe('internal');
+        expect(logged).toHaveBeenCalledTimes(1);
+        const line = JSON.stringify(logged.mock.calls);
+        expect(line).not.toContain(token);
+        expect(line).toContain(`/public/preview/${REDACTED}`);
+      } finally {
+        lookup.mockRestore();
+        logged.mockRestore();
+      }
     });
 
     it('answers 404 when the token claims do not match the stored site', async () => {

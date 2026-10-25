@@ -31,6 +31,18 @@ function subscribe(listener: () => void): () => void {
 }
 
 /**
+ * The same clock for screens without a server time (the editor's "Đã lưu · 2 phút trước"): null
+ * during server rendering and hydration, so the relative time never causes a hydration mismatch.
+ */
+export function useClientNow(): number | null {
+  return useSyncExternalStore(
+    subscribe,
+    () => current,
+    () => null,
+  );
+}
+
+/**
  * The current time (epoch ms) for relative labels ("2 giờ trước"), refreshed every 30 seconds.
  * The server render and hydration both use `serverTime` (when the server loaded the data), so
  * they produce the same text; the browser's clock takes over right after hydration.

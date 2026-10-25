@@ -6,22 +6,9 @@ import {
   DEFAULT_THEME_PRESET,
   endpoints,
   slugify,
-  type ThemePresetId,
   themePresetIdSchema,
-  themePresetIds,
 } from '@plp/contracts';
-import { themePresets } from '@plp/sections/schema';
-import {
-  Button,
-  ButtonLink,
-  Callout,
-  CheckCircleIcon,
-  Field,
-  Input,
-  RadioCardGroup,
-  type RadioCardOption,
-  Spinner,
-} from '@plp/ui';
+import { Button, ButtonLink, Callout, CheckCircleIcon, Field, Input, Spinner } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -31,7 +18,7 @@ import { defaultHostPreview } from '../../lib/site-url';
 import { siteHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
-import { ThemeSwatches } from './ThemeSwatches';
+import { ThemePicker } from '../theme';
 import {
   type SubdomainAvailabilityState,
   useSubdomainAvailability,
@@ -50,16 +37,6 @@ const fieldIds: Record<SiteField, string> = {
   themePresetId: 'site-theme',
 };
 const fieldOrder: readonly SiteField[] = ['name', 'subdomain', 'themePresetId'];
-
-const themeOptions: ReadonlyArray<RadioCardOption<ThemePresetId>> = themePresetIds.map((id) => {
-  const preset = themePresets[id];
-  return {
-    value: id,
-    label: preset.label,
-    description: preset.description,
-    preview: <ThemeSwatches preset={preset} />,
-  };
-});
 
 export interface CreateSiteFormProps {
   workspaceId: string;
@@ -217,11 +194,10 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
       </div>
 
       <div id={fieldIds.themePresetId} tabIndex={-1} className={styles.theme}>
-        <RadioCardGroup
+        <ThemePicker
           legend="Giao diện"
           showLegend
           name="themePresetId"
-          options={themeOptions}
           value={theme.success ? theme.data : null}
           minColumnWidth={170}
           onChange={(value) => {

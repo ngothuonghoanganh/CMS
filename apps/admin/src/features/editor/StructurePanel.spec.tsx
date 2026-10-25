@@ -95,6 +95,8 @@ describe('StructurePanel', () => {
     renderEditor(<StructurePanel onOpenTheme={vi.fn()} />, { store });
     const benefits = rows()[2] ?? document.body;
     expect(within(benefits).getByRole('img', { name: 'Có lỗi' })).toBeInTheDocument();
+    // The reason is on the row itself, as on board 03.
+    expect(within(benefits).getByText('Lợi ích chưa có tiêu đề')).toBeVisible();
     expect(within(rows()[1] ?? document.body).queryByRole('img', { name: 'Có lỗi' })).toBeNull();
   });
 

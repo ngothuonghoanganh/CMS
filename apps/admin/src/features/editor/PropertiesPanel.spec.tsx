@@ -176,17 +176,56 @@ describe('PropertiesPanel', () => {
     expect(store.getState().addListItem(BENEFITS, 'items')).toBe(false);
   });
 
-  it('disables removing items at the minimum with the reason', async () => {
+  it('disables removing items at the minimum of the variant, with the reason', async () => {
     const user = userEvent.setup();
     const store = makeStore();
     store.getState().select(BENEFITS);
     renderEditor(<PropertiesPanel />, { store });
-    const list = within(fieldBox('items'));
+    // "Lưới 3–6 lợi ích" keeps at least 3.
+    let list = within(fieldBox('items'));
+    expect(list.getByText('3 / 6')).toBeInTheDocument();
+    expect(list.getByRole('button', { name: 'Xóa lợi ích 3' })).toBeDisabled();
+    expect(list.getByRole('button', { name: 'Xóa lợi ích 3' })).toHaveAccessibleDescription(
+      'Cần ít nhất 3 lợi ích, nên chưa xóa được.',
+    );
+
+    // "Xen kẽ ảnh và chữ" works with 2.
+    await user.click(screen.getByRole('button', { name: /Xen kẽ ảnh và chữ/ }));
+    list = within(fieldBox('items'));
     await user.click(list.getByRole('button', { name: 'Xóa lợi ích 3' }));
     expect(list.getByText('2 / 6')).toBeInTheDocument();
     const remove = list.getByRole('button', { name: 'Xóa lợi ích 1' });
     expect(remove).toBeDisabled();
     expect(remove).toHaveAccessibleDescription('Cần ít nhất 2 lợi ích, nên chưa xóa được.');
+  });
+
+  it('keeps keyboard focus on the list after deleting the last item', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().select(BENEFITS);
+    renderEditor(<PropertiesPanel />, { store });
+    const list = within(fieldBox('items'));
+    await user.click(list.getByRole('button', { name: 'Thêm lợi ích' }));
+    list.getByRole('button', { name: 'Xóa lợi ích 4' }).focus();
+    await user.keyboard('{Enter}');
+    expect(getAtPath(sectionById(store, BENEFITS).content, 'items')).toHaveLength(3);
+    expect(list.getByRole('button', { name: /^Lợi ích thứ ba/ })).toHaveFocus();
+  });
+
+  it('follows the moved item with focus, so pressing again moves it further', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().select(FAQ);
+    renderEditor(<PropertiesPanel />, { store });
+    const list = within(fieldBox('items'));
+    const first = getAtPath(sectionById(store, FAQ).content, 'items.0.question');
+    list.getByRole('button', { name: 'Chuyển câu hỏi 1 xuống' }).focus();
+    await user.keyboard('{Enter}');
+    expect(list.getByRole('button', { name: 'Chuyển câu hỏi 2 xuống' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(getAtPath(sectionById(store, FAQ).content, 'items.2.question')).toBe(first);
+    // At the end of the list "xuống" is disabled: focus moves to "lên" of the same item.
+    expect(list.getByRole('button', { name: 'Chuyển câu hỏi 3 lên' })).toHaveFocus();
   });
 
   it('reorders list items with the arrow buttons', async () => {

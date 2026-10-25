@@ -1,8 +1,10 @@
+import { Logger } from '@nestjs/common';
 import {
   type ActivityItem,
   activityListResponseSchema,
   compositionSchema,
   MAX_PAGES_PER_SITE,
+  pageCountResponseSchema,
   pageDetailResponseSchema,
   problemSchema,
   type Site,
@@ -10,7 +12,7 @@ import {
 } from '@plp/contracts';
 import { validateComposition } from '@plp/sections/schema';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import {
@@ -38,6 +40,7 @@ describe('pages and drafts', () => {
   let t: TestApp;
   let client: TestClient;
   let workspaceId: string;
+  let userId: string;
   let site: Site;
 
   beforeAll(async () => {
@@ -48,12 +51,40 @@ describe('pages and drafts', () => {
     const owner = await signedUpClient(t.app);
     client = owner.client;
     workspaceId = owner.workspaceId;
+    userId = owner.me.user.id;
     site = await createSite(client, workspaceId, { name: 'Nha khoa Smile Care' });
   });
 
   afterAll(async () => {
     await t.close();
   });
+
+  /** Stores `count` blank draft pages in the site directly, bypassing the API's page limit. */
+  async function insertPages(siteId: string, count: number): Promise<void> {
+    const now = new Date();
+    await t.connection.collection('pages').insertMany(
+      Array.from({ length: count }, (_unused, index) => ({
+        workspaceId: new Types.ObjectId(workspaceId),
+        siteId: new Types.ObjectId(siteId),
+        title: `Trang ${index}`,
+        goal: null,
+        draft: {
+          slug: `trang-${index}`,
+          composition: { version: 1, sections: [] },
+          seo: cleanSeo(),
+          revision: 0,
+          updatedAt: now,
+          updatedBy: new Types.ObjectId(userId),
+        },
+        publishedReleaseId: null,
+        publishedSlug: null,
+        releaseSeq: 0,
+        createdBy: new Types.ObjectId(userId),
+        createdAt: now,
+        updatedAt: now,
+      })),
+    );
+  }
 
   async function activity(siteId: string): Promise<ActivityItem[]> {
     const response = await client.get(`/sites/${siteId}/activity?limit=50`).expect(200);
@@ -146,29 +177,7 @@ describe('pages and drafts', () => {
 
     it(`stops at ${MAX_PAGES_PER_SITE} pages per site`, async () => {
       const full = await createSite(client, workspaceId);
-      const now = new Date();
-      await t.connection.collection('pages').insertMany(
-        Array.from({ length: MAX_PAGES_PER_SITE }, (_unused, index) => ({
-          workspaceId: new Types.ObjectId(workspaceId),
-          siteId: new Types.ObjectId(full.id),
-          title: `Trang ${index}`,
-          goal: null,
-          draft: {
-            slug: `trang-${index}`,
-            composition: { version: 1, sections: [] },
-            seo: cleanSeo(),
-            revision: 0,
-            updatedAt: now,
-            updatedBy: new Types.ObjectId(),
-          },
-          publishedReleaseId: null,
-          publishedSlug: null,
-          releaseSeq: 0,
-          createdBy: new Types.ObjectId(),
-          createdAt: now,
-          updatedAt: now,
-        })),
-      );
+      await insertPages(full.id, MAX_PAGES_PER_SITE);
       const response = await client
         .post(`/sites/${full.id}/pages`, { title: 'Thêm', slug: 'them', start: { kind: 'blank' } })
         .expect(409);
@@ -176,6 +185,51 @@ describe('pages and drafts', () => {
         code: 'page_limit_reached',
         title: `Mỗi site có tối đa ${MAX_PAGES_PER_SITE} trang`,
       });
+    });
+  });
+
+  describe('page limit under concurrency', () => {
+    it('creates only one of several racing pages when one slot is left', async () => {
+      const almostFull = await createSite(client, workspaceId);
+      await insertPages(almostFull.id, MAX_PAGES_PER_SITE - 1);
+      const responses = await Promise.all(
+        ['dua-1', 'dua-2', 'dua-3'].map((slug) =>
+          client.post(`/sites/${almostFull.id}/pages`, {
+            title: slug,
+            slug,
+            start: { kind: 'blank' },
+          }),
+        ),
+      );
+      expect(responses.map((response) => response.status).sort()).toEqual([201, 409, 409]);
+      for (const response of responses.filter(({ status }) => status === 409)) {
+        expect(problemSchema.parse(response.body).code).toBe('page_limit_reached');
+      }
+      expect(
+        await t.connection
+          .collection('pages')
+          .countDocuments({ siteId: new Types.ObjectId(almostFull.id) }),
+      ).toBe(MAX_PAGES_PER_SITE);
+      expect((await listPages(client, almostFull.id)).counts.all).toBe(MAX_PAGES_PER_SITE);
+    });
+
+    it('fails loudly instead of hiding pages when a site holds more than the limit', async () => {
+      const overfull = await createSite(client, workspaceId);
+      await insertPages(overfull.id, MAX_PAGES_PER_SITE + 1);
+      const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      try {
+        const response = await client.get(`/sites/${overfull.id}/pages`).expect(500);
+        expect(problemSchema.parse(response.body).code).toBe('internal');
+        const [entry, message]: unknown[] = logged.mock.calls[0] ?? [];
+        expect(message).toBe('Unhandled error');
+        expect(entry).toMatchObject({
+          err: {
+            message: `Site ${overfull.id} holds more than ${MAX_PAGES_PER_SITE} pages (ADR-014)`,
+          },
+        });
+      } finally {
+        logged.mockRestore();
+      }
     });
   });
 
@@ -313,6 +367,21 @@ describe('pages and drafts', () => {
         .collection<{ publishedReleaseId: Types.ObjectId | null }>('pages')
         .findOne({ _id: new Types.ObjectId(pageId) });
       expect(stored?.publishedReleaseId?.toHexString()).toBe(published.release.id);
+    });
+  });
+
+  describe('GET /sites/:siteId/page-count', () => {
+    it('counts the pages of the site, whatever their status, without listing them', async () => {
+      const countSite = await createSite(client, workspaceId);
+      const count = async () =>
+        pageCountResponseSchema.parse(
+          (await client.get(`/sites/${countSite.id}/page-count`).expect(200)).body,
+        ).count;
+      expect(await count()).toBe(0);
+      await createPage(client, countSite.id);
+      await createLivePage(client, countSite.id, uniqueSlug('dem'));
+      expect(await count()).toBe(2);
+      expect((await listPages(client, countSite.id)).counts.all).toBe(2);
     });
   });
 

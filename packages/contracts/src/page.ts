@@ -4,10 +4,19 @@ import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 import { compositionSchema } from './composition.js';
 import { briefSchema, pageGoalSchema, pageStyleSchema } from './goals.js';
 
+/**
+ * Paths the renderer answers itself, so a page published there could never be served at its URL:
+ * the renderer's own routes (`_preview`, `api`, `healthz`, sitemap, robots) and the paths Next
+ * keeps for itself (`_next`, `index` is `/`, `404` and `500` are its error pages).
+ */
 export const reservedSlugs: readonly string[] = [
   '_preview',
   '_next',
   'api',
+  'healthz',
+  'index',
+  '404',
+  '500',
   'sitemap.xml',
   'robots.txt',
   'favicon.ico',
@@ -138,7 +147,6 @@ export const pageListQuerySchema = z.object({
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(50),
 });
-export type PageListQuery = z.input<typeof pageListQuerySchema>;
 
 /**
  * Page counts of the dashboard chips ("Tất cả · 6", "Live · 3", "Có thay đổi · 1", …). They match
@@ -205,6 +213,10 @@ export const restoreDraftRequestSchema = z.object({
   releaseId: idSchema,
 });
 export type RestoreDraftRequest = z.infer<typeof restoreDraftRequestSchema>;
+
+/** How many pages a site holds, without evaluating them (the sidebar count). */
+export const pageCountResponseSchema = z.object({ count: z.number().int().nonnegative() });
+export type PageCountResponse = z.infer<typeof pageCountResponseSchema>;
 
 export const slugAvailabilityQuerySchema = z.object({
   slug: z.string().max(100),

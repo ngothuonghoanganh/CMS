@@ -23,7 +23,9 @@ export const benefitIconLabels: Record<(typeof benefitIcons)[number], string> = 
   leaf: 'Chiếc lá',
 };
 
+/** The alternating layout explains 2 to 6 points; the grid needs 3 to 6 (ADR-007). */
 export const BENEFITS_MIN = 2;
+export const BENEFITS_GRID_MIN = 3;
 export const BENEFITS_MAX = 6;
 
 const benefitItemSchema = z.object({
@@ -57,6 +59,7 @@ export const benefitsSection = defineSection<BenefitsContent>({
       description: 'Biểu tượng, tiêu đề ngắn và một câu mô tả.',
       hasMedia: false,
       hiddenFields: ['items.image'],
+      listMin: { items: BENEFITS_GRID_MIN },
     },
     {
       id: 'alternate',

@@ -4,16 +4,11 @@ import { endpoints } from '@plp/contracts';
 import { Button, Callout } from '@plp/ui';
 import { AlertDialog } from 'radix-ui';
 import { useState } from 'react';
-import { ApiError, api } from '../../lib/api';
+import { api } from '../../lib/api';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import styles from './ConflictDialog.module.css';
 import { useEditor, useEditorStoreApi } from './editor-context';
-
-function reloadErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.problem.detail ?? error.problem.title;
-  }
-  return 'Không tải được bản mới nhất. Kiểm tra kết nối rồi thử lại.';
-}
+import { replaceWithServerDraft } from './server-draft';
 
 /**
  * Blocking dialog after a revision conflict (409): someone saved this draft elsewhere. The only
@@ -32,9 +27,10 @@ export function ConflictDialog() {
     setError(null);
     try {
       const detail = await api(endpoints.getPage, [pageId]);
-      store.getState().replaceDraftFromServer(detail);
+      await replaceWithServerDraft(store, detail);
     } catch (caught) {
-      setError(reloadErrorMessage(caught));
+      reportUnexpected('Reloading the latest draft failed', caught);
+      setError(problemMessage(caught));
     } finally {
       setPending(false);
     }

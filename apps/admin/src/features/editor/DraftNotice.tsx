@@ -4,20 +4,15 @@ import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { Callout, ConfirmDialog, useToast } from '@plp/ui';
 import { useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import styles from './DraftNotice.module.css';
 import { useEditor, useEditorStoreApi } from './editor-context';
 import { displayUrl } from './presentation';
+import { replaceWithServerDraft } from './server-draft';
 import { DraftConflictError } from './use-draft-saver';
 
 export interface DraftNoticeProps {
   ensureSaved: () => Promise<SaveDraftResponse>;
-}
-
-function restoreErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.problem.detail ?? error.problem.title;
-  }
-  return 'Không quay về được bản live. Kiểm tra kết nối rồi thử lại.';
 }
 
 /**
@@ -50,7 +45,7 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
       const detail = await api(endpoints.restoreDraft, [page.id], {
         body: { baseRevision: saved.revision, releaseId: live.id },
       });
-      store.getState().replaceDraftFromServer(detail);
+      await replaceWithServerDraft(store, detail);
       setConfirming(false);
       toast({ title: `Bản nháp đã quay về bản live v${live.version}`, tone: 'success' });
     } catch (caught) {
@@ -61,7 +56,8 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
         store.getState().markConflict();
         setConfirming(false);
       } else {
-        setError(restoreErrorMessage(caught));
+        reportUnexpected('Restoring the draft from the live release failed', caught);
+        setError(problemMessage(caught));
       }
     } finally {
       setPending(false);

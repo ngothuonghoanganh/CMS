@@ -360,6 +360,41 @@ describe('section specifics', () => {
     expect(branded).toContain('>Đặt lịch</span>');
   });
 
+  it('turns the Hero background text, buttons and focus rings white only over a chosen photo', () => {
+    const hero = withContent(section('hero', 'background'), 'secondaryCta', {
+      label: 'Xem bảng giá',
+      link: { kind: 'url', url: 'https://smile.example/bang-gia' },
+    });
+    // No photo yet: the edit placeholder keeps the scheme colors and gets no dark overlay.
+    const placeholder = render(hero, editCtx());
+    expect(placeholder).toContain('Chọn ảnh nền trong bảng thuộc tính');
+    expect(placeholder).not.toContain(cls(heroStyles.overPhoto));
+    expect(placeholder).not.toContain(cls(heroStyles.ctaOverPhoto));
+
+    const photo = render(
+      withContent(hero, 'image', { assetId: ASSET_ID, alt: 'Phòng khám', decorative: false }),
+      liveCtx(),
+    );
+    expect(photo).toContain(cls(heroStyles.overPhoto));
+    expect(count(photo, cls(heroStyles.ctaOverPhoto))).toBe(2);
+    expect(photo).toMatch(
+      new RegExp(
+        `<a class="[^"]*${cls(frame.buttonSecondary)}[^"]*${cls(heroStyles.secondaryOverPhoto)}`,
+      ),
+    );
+
+    // The split variant shows the photo beside the text: no overlay colors there.
+    const split = render(
+      withContent(section('hero', 'split'), 'image', {
+        assetId: ASSET_ID,
+        alt: 'Ảnh',
+        decorative: false,
+      }),
+      liveCtx(),
+    );
+    expect(split).not.toContain(cls(heroStyles.overPhoto));
+  });
+
   it('draws one decorative icon per benefit in a list', () => {
     const markup = render(section('benefits', 'grid'), liveCtx());
     expect(count(markup, '<li')).toBe(3);

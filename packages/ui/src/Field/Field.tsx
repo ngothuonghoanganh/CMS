@@ -41,6 +41,12 @@ export interface FieldProps {
   /** Blocking problem; marks the control `aria-invalid`. */
   error?: ReactNode;
   counter?: FieldCounter | undefined;
+  /**
+   * The error, warning and help change while the user types, e.g. when an availability check
+   * answers: they then sit in one persistent polite live region, so assistive technology announces
+   * them as status messages (WCAG 4.1.3) without a second copy of the text.
+   */
+  announceMessages?: boolean | undefined;
   /** Id for the control. Generated when omitted. */
   id?: string | undefined;
   className?: string | undefined;
@@ -71,6 +77,7 @@ export function Field({
   warning,
   error,
   counter,
+  announceMessages = false,
   id,
   className,
   children,
@@ -100,6 +107,28 @@ export function Field({
   const tone: FieldTone = hasError ? 'danger' : hasWarning ? 'warning' : 'default';
   const context: FieldContextValue = { control, tone };
   const counterState = counter === undefined ? undefined : counterTone(counter);
+
+  const messages = (
+    <>
+      {hasError ? (
+        <p id={errorId} className={cx(styles.message, styles.error)}>
+          <AlertCircleIcon size={14} strokeWidth={2} className={styles.messageIcon} />
+          <span>{error}</span>
+        </p>
+      ) : null}
+      {hasWarning ? (
+        <p id={warningId} className={cx(styles.message, styles.warning)}>
+          <WarningTriangleIcon size={14} strokeWidth={2} className={styles.messageIcon} />
+          <span>{warning}</span>
+        </p>
+      ) : null}
+      {hasHelp ? (
+        <p id={helpId} className={styles.help}>
+          {help}
+        </p>
+      ) : null}
+    </>
+  );
 
   return (
     <div className={cx(styles.field, className)}>
@@ -132,23 +161,13 @@ export function Field({
       <FieldContext.Provider value={context}>
         {typeof children === 'function' ? children(control) : children}
       </FieldContext.Provider>
-      {hasError ? (
-        <p id={errorId} className={cx(styles.message, styles.error)}>
-          <AlertCircleIcon size={14} strokeWidth={2} className={styles.messageIcon} />
-          <span>{error}</span>
-        </p>
-      ) : null}
-      {hasWarning ? (
-        <p id={warningId} className={cx(styles.message, styles.warning)}>
-          <WarningTriangleIcon size={14} strokeWidth={2} className={styles.messageIcon} />
-          <span>{warning}</span>
-        </p>
-      ) : null}
-      {hasHelp ? (
-        <p id={helpId} className={styles.help}>
-          {help}
-        </p>
-      ) : null}
+      {announceMessages ? (
+        <div aria-live="polite" className={styles.messages}>
+          {messages}
+        </div>
+      ) : (
+        messages
+      )}
     </div>
   );
 }

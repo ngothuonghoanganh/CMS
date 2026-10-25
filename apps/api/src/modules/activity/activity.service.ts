@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { ActivityItem, ActivityListResponse, CursorQuery } from '@plp/contracts';
+import type { ActivityItem, activityListQuerySchema, ActivityListResponse } from '@plp/contracts';
+import type { z } from 'zod';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
@@ -7,6 +8,8 @@ import { toActivityItem } from './activity-dto.js';
 import { ActivityRepository } from './activity.repository.js';
 import type { ActivityRecord } from './activity.schema.js';
 import { isUndoable } from './pointer-events.js';
+
+export type ActivityListQueryValues = z.output<typeof activityListQuerySchema>;
 
 @Injectable()
 export class ActivityService {
@@ -18,9 +21,15 @@ export class ActivityService {
   async listForSite(
     scope: WorkspaceScope,
     siteId: ObjectId,
-    query: CursorQuery,
+    query: ActivityListQueryValues,
   ): Promise<ActivityListResponse> {
-    const page = await this.activity.listForSite(scope, siteId, query.cursor, query.limit);
+    const page = await this.activity.listForSite(
+      scope,
+      siteId,
+      query.cursor,
+      query.limit,
+      query.types,
+    );
     return { items: await this.toItems(scope, page.items), nextCursor: page.nextCursor };
   }
 

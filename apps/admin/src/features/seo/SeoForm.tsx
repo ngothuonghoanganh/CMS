@@ -5,7 +5,6 @@ import {
   SEO_DESCRIPTION_RECOMMENDED_MAX,
   SEO_TITLE_RECOMMENDED_MAX,
 } from '@plp/contracts';
-import { themePresets } from '@plp/sections/schema';
 import { Field, Input, Switch, Textarea, WarningTriangleIcon } from '@plp/ui';
 import { useEffect, useId } from 'react';
 import { slugPath } from '../../lib/site-url';
@@ -89,9 +88,9 @@ export function SeoForm({ host, initialFocus, onRetrySave }: SeoFormProps) {
   const site = useEditor((state) => state.site);
   const seo = useEditor((state) => state.draft.seo);
   const slug = useEditor((state) => state.draft.slug);
+  const composition = useEditor((state) => state.draft.composition);
   const assetsById = useEditor((state) => state.assetsById);
   const redirectNoticeId = useId();
-  const brand = themePresets[site.themePresetId].schemes.brand;
 
   const slugField = useSlugField({
     siteId: site.id,
@@ -123,7 +122,7 @@ export function SeoForm({ host, initialFocus, onRetrySave }: SeoFormProps) {
   } else if (redirected === null) {
     slugHelp = 'Chỉ dùng chữ thường không dấu, số và dấu gạch ngang.';
   }
-  const titleHint = seoTitleHint(seo.title);
+  const titleHint = seoTitleHint(seo.title, composition, site.name);
   const customShare = seo.shareImageAssetId;
   const defaultShare = site.defaultShareImageAssetId;
 
@@ -132,7 +131,14 @@ export function SeoForm({ host, initialFocus, onRetrySave }: SeoFormProps) {
       <SaveIndicator onRetry={onRetrySave} />
 
       <div className={styles.slugGroup}>
-        <Field label="Đường dẫn trang" id={seoFieldIds.slug} help={slugHelp} error={slugError}>
+        {/* The availability check answers while typing: announce its result (WCAG 4.1.3). */}
+        <Field
+          label="Đường dẫn trang"
+          id={seoFieldIds.slug}
+          help={slugHelp}
+          error={slugError}
+          announceMessages
+        >
           <Input
             prefix={`${host}/`}
             mono
@@ -202,9 +208,6 @@ export function SeoForm({ host, initialFocus, onRetrySave }: SeoFormProps) {
 
       <ShareImageField
         siteId={site.id}
-        siteName={site.name}
-        tileColor={brand.background}
-        tileTextColor={brand.heading}
         custom={customShare !== null}
         customAsset={customShare === null ? null : (assetsById[customShare] ?? null)}
         defaultAsset={defaultShare === null ? null : (assetsById[defaultShare] ?? null)}

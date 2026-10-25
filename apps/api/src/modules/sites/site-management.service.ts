@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  createSiteRequestSchema,
-  ProblemIssue,
-  Site,
-  UpdateSiteRequest,
+import {
+  type createSiteRequestSchema,
+  MAX_SITES_PER_WORKSPACE,
+  type ProblemIssue,
+  type Site,
+  type UpdateSiteRequest,
 } from '@plp/contracts';
 import type { z } from 'zod';
-import { notFound, validationFailed } from '../../shared/errors.js';
+import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
@@ -14,6 +15,7 @@ import { AssetsRepository } from '../assets/assets.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { SiteRecord } from './site.schema.js';
 import { type SitePatch, SitesRepository } from './sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from './sites.service.js';
@@ -22,6 +24,8 @@ import { SITE_NOT_FOUND, SitesService } from './sites.service.js';
 export type CreateSiteValues = z.output<typeof createSiteRequestSchema>;
 
 export const ASSET_NOT_IN_SITE_MESSAGE = 'Ảnh không có trong thư viện của site này';
+
+export const SITE_LIMIT_MESSAGE = `Mỗi workspace có tối đa ${MAX_SITES_PER_WORKSPACE} site`;
 
 const ASSET_FIELDS = ['logoAssetId', 'defaultShareImageAssetId'] as const;
 
@@ -32,12 +36,17 @@ export class SiteManagementService {
     private readonly sites: SitesRepository,
     private readonly sitesService: SitesService,
     private readonly access: AccessService,
+    private readonly workspaces: WorkspacesRepository,
     private readonly assets: AssetsRepository,
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
   ) {}
 
-  /** Creates the site and its `site.created` activity in one transaction. */
+  /**
+   * Creates the site and its `site.created` activity in one transaction. The limit is checked
+   * inside it, after a write to the workspace that serializes concurrent creations, so the 101st
+   * site is refused even when requests race (ADR-014).
+   */
   async create(
     user: AuthenticatedUser,
     workspaceId: string,
@@ -46,6 +55,10 @@ export class SiteManagementService {
     const scope = await this.sitesService.scopeForWorkspace(user, workspaceId);
     this.access.requireOwner(scope);
     const site = await this.transactions.run(async (tx) => {
+      await this.workspaces.recordSiteCreation(scope, tx);
+      if ((await this.sites.countForWorkspace(scope, tx)) >= MAX_SITES_PER_WORKSPACE) {
+        throw new AppError(409, 'site_limit_reached', SITE_LIMIT_MESSAGE);
+      }
       const created = await this.sites.create(scope, input, tx);
       await this.activity.record(scope, { siteId: created._id, type: 'site.created' }, tx);
       return created;

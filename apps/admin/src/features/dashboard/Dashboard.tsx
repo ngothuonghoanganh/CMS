@@ -41,7 +41,7 @@ import {
   type StatusFilterValue,
 } from './filters';
 import { PageTable } from './PageTable';
-import { PAGE_LIST_LIMIT, RECENT_ACTIVITY_LIMIT, siteQueryKeys } from './queries';
+import { PAGE_LIST_LIMIT, RECENT_ACTIVITY_QUERY, siteQueryKeys } from './queries';
 import { RecentActivity } from './RecentActivity';
 import { SetupChecklist, type SetupStep } from './SetupChecklist';
 import { SiteSummary } from './SiteSummary';
@@ -118,7 +118,7 @@ export function Dashboard({
   const activityQuery = useQuery({
     queryKey: siteQueryKeys.recentActivity(site.id),
     queryFn: ({ signal }) =>
-      api(endpoints.listActivity, [site.id], { query: { limit: RECENT_ACTIVITY_LIMIT }, signal }),
+      api(endpoints.listActivity, [site.id], { query: RECENT_ACTIVITY_QUERY, signal }),
     initialData: initialActivity,
     initialDataUpdatedAt: loadedAt,
   });
@@ -151,6 +151,13 @@ export function Dashboard({
             },
     },
   ];
+
+  // The list changes while the user types or filters: an empty result is a status message.
+  const filtering = status !== null || q !== '';
+  const listStatus =
+    filtering && counts.all > 0 && !loadingPages && pages.length === 0
+      ? 'Không có trang nào khớp'
+      : '';
 
   function clearFilters() {
     setStatus(null);
@@ -187,6 +194,7 @@ export function Dashboard({
         <h2 id="pages-heading" className={styles.srOnly}>
           Danh sách trang
         </h2>
+        <VisuallyHidden aria-live="polite">{listStatus}</VisuallyHidden>
         <div className={styles.toolbar}>
           <SegmentedControl<StatusFilterValue>
             aria-label="Lọc theo trạng thái"
@@ -293,7 +301,7 @@ export function Dashboard({
       </Card>
 
       <div className={styles.bottomRow}>
-        <RecentActivity items={activityQuery.data.items} now={now} />
+        <RecentActivity siteId={site.id} items={activityQuery.data.items} now={now} />
         <SetupChecklist steps={setupSteps} />
       </div>
 

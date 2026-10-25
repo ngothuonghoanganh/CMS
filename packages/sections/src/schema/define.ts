@@ -63,6 +63,11 @@ export interface SectionVariant {
   hasMedia: boolean;
   /** Field keys this variant does not use; they are hidden in the panel and skipped by checks. */
   hiddenFields?: readonly string[];
+  /**
+   * Item minimums of list fields that are higher in this variant than the field's own `min`,
+   * by list key: a grid needs at least 3 items, while the alternating layout works with 2.
+   */
+  listMin?: Readonly<Record<string, number>>;
 }
 
 export type SectionCategory =

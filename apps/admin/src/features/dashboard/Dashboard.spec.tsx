@@ -1,4 +1,9 @@
-import { type ActivityListResponse, endpoints, type PageListResponse } from '@plp/contracts';
+import {
+  type ActivityListResponse,
+  endpoints,
+  type PageListResponse,
+  publishingActivityTypes,
+} from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +11,7 @@ import { api } from '../../lib/api';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { Dashboard } from './Dashboard';
 import type { DashboardFilters } from './filters';
+import { siteQueryKeys } from './queries';
 import {
   activityFixture,
   draftPageFixture,
@@ -114,8 +120,32 @@ describe('Dashboard', () => {
     expect(
       screen.getByText('xuất bản v12 của “Ưu đãi niềng răng tháng 11”', { exact: false }),
     ).toBeInTheDocument();
+    // Board 01 ends the activity card with a way into version history.
+    expect(
+      screen.getByRole('link', {
+        name: /^Xem lịch sử phiên bản\s*của trang “Ưu đãi niềng răng tháng 11”$/,
+      }),
+    ).toHaveAttribute('href', `${DASHBOARD_PATH}/pages/64b000000000000000000101/history`);
     expect(screen.getByText('Xuất bản trang đầu tiên')).toHaveClass(/doneLabel/);
     expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('asks only for publishing events, so uploads never push them out of the activity card', async () => {
+    apiMock.mockResolvedValue({ items: [], nextCursor: null } satisfies ActivityListResponse);
+    const { queryClient } = renderDashboard();
+
+    await queryClient.invalidateQueries({ queryKey: siteQueryKeys.recentActivity(SITE_ID) });
+
+    const call = lastCallTo(apiMock, endpoints.listActivity);
+    expect(call.args).toEqual([SITE_ID]);
+    expect(call.options).toHaveProperty('query', {
+      limit: 5,
+      types: publishingActivityTypes.join(','),
+    });
+    // A site that never published shows the empty state instead of "tạo site".
+    await vi.waitFor(() => {
+      expect(screen.getByText(/^Chưa có hoạt động nào/)).toBeInTheDocument();
+    });
   });
 
   it('filters by status with pressed chips, a server query and the URL', async () => {
@@ -167,6 +197,19 @@ describe('Dashboard', () => {
       limit: 50,
     });
     expect(new URLSearchParams(window.location.search).get('q')).toBe('niềng răng');
+  });
+
+  it('announces a search without results', async () => {
+    const user = userEvent.setup();
+    const all = pageListFixture([livePage, draftPage]);
+    apiMock.mockResolvedValue(pageListFixture([], { counts: all.counts }));
+    renderDashboard({ pages: all });
+
+    await user.type(screen.getByRole('searchbox', { name: 'Tìm trang' }), 'không có');
+    expect(
+      await screen.findByText('Không có trang nào khớp', { selector: '[aria-live="polite"]' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Không có trang nào khớp' })).toBeVisible();
   });
 
   it('starts from the filters in the URL', () => {

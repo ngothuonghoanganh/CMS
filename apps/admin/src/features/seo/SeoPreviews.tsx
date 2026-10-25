@@ -12,14 +12,12 @@ export interface SeoPreviewsProps {
   siteName: string;
   host: string;
   slug: string;
-  /** The title the live page will use (SEO title, Hero heading or page name). */
+  /** The title the live page will use (`seoTitleOf`: SEO title, Hero heading or site name). */
   title: string;
   description: string;
   noindex: boolean;
-  /** The image a shared link shows: the page's own, or the site default. */
+  /** The image a shared link shows: the page's own, or the site default; null when neither. */
   image: Asset | null;
-  tileColor: string;
-  tileTextColor: string;
 }
 
 /** "Kết quả tìm kiếm" and "Khi chia sẻ qua Facebook, Zalo" previews of board 07. */
@@ -31,8 +29,6 @@ export function SeoPreviews({
   description,
   noindex,
   image,
-  tileColor,
-  tileTextColor,
 }: SeoPreviewsProps) {
   const trimmedDescription = description.trim();
   return (
@@ -75,13 +71,8 @@ export function SeoPreviews({
           Khi chia sẻ qua Facebook, Zalo
         </h2>
         <div className={styles.share}>
-          <ShareImageTile
-            asset={image}
-            siteName={siteName}
-            tileColor={tileColor}
-            tileTextColor={tileTextColor}
-            className={styles.shareImage}
-          />
+          {/* Without an image the live page sends no og:image: the card is text only. */}
+          {image === null ? null : <ShareImageTile asset={image} className={styles.shareImage} />}
           <div className={styles.shareBody}>
             <span className={styles.shareHost}>{host}</span>
             <span className={styles.shareTitle}>{searchResultTitle(title)}</span>
@@ -90,6 +81,11 @@ export function SeoPreviews({
             )}
           </div>
         </div>
+        {image === null ? (
+          <p className={styles.previewNote}>
+            Chưa có ảnh chia sẻ, nên link sẽ không có ảnh lớn. Chọn ảnh ở mục “Ảnh khi chia sẻ”.
+          </p>
+        ) : null}
         <p className={styles.previewNote}>
           Mạng xã hội lưu bản xem trước một thời gian, thay đổi có thể chưa hiện ngay với link đã
           chia sẻ.

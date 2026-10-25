@@ -1,5 +1,5 @@
 import { endpoints, type HistoryResponse, type PageSummary } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -195,13 +195,22 @@ describe('HistoryScreen', () => {
       revalidation: 'ok',
     };
     apiMock.mockImplementationOnce(() => Promise.resolve(moved));
+    // The live region is on the page before the banner is written into it.
+    const slot = screen.getByRole('status');
+    expect(slot).toBeEmptyDOMElement();
     await user.click(within(panel).getByRole('button', { name: 'Khôi phục v11' }));
 
     const banner = await screen.findByRole('status', { name: '' });
-    expect(banner).toHaveTextContent(
-      'v11 đang live tại smilecare.payload.site/uu-dai-thang-11 · khôi phục lúc 17:20 bởi Ngọc Anh',
-    );
+    expect(banner).toBe(slot);
+    await waitFor(() => {
+      expect(banner).toHaveTextContent(
+        'v11 đang live tại smilecare.payload.site/uu-dai-thang-11 · khôi phục lúc 17:20 bởi Ngọc Anh',
+      );
+    });
     expect(screen.queryByRole('region', { name: /Khôi phục v/ })).not.toBeInTheDocument();
+    // The panel that held focus is gone: focus moves to the confirmation, which was written into
+    // a live region that was already on the page (so it is announced).
+    expect(banner.firstElementChild).toHaveFocus();
     expect(within(card('v11')).getByText('ĐANG LIVE')).toBeInTheDocument();
 
     server.page = historyPage();
@@ -233,6 +242,27 @@ describe('HistoryScreen', () => {
     expect(apiMock).toHaveBeenCalledWith(endpoints.undoActivity, ['64b0000000000000000000f1']);
     expect(screen.queryByRole('button', { name: 'Hoàn tác khôi phục' })).not.toBeInTheDocument();
     expect(screen.getByText('HOÀN TÁC')).toBeInTheDocument();
+  });
+
+  it('returns focus to "Khôi phục bản này" when the panel is cancelled', async () => {
+    const user = userEvent.setup();
+    serve({ page: historyPage(), history: initialHistory });
+    renderScreen();
+    const restore = within(card('v11')).getByRole('button', { name: 'Khôi phục bản này' });
+    await user.click(restore);
+    const panel = screen.getByRole('region', { name: 'Khôi phục v11 thành bản live?' });
+    await user.click(within(panel).getByRole('button', { name: 'Hủy' }));
+    expect(screen.queryByRole('region', { name: /Khôi phục v/ })).not.toBeInTheDocument();
+    expect(restore).toHaveFocus();
+  });
+
+  it('focuses the release of a panel opened by ?restore= when it is cancelled', async () => {
+    const user = userEvent.setup();
+    serve({ page: historyPage(), history: initialHistory });
+    renderScreen(releaseId(11));
+    const panel = screen.getByRole('region', { name: 'Khôi phục v11 thành bản live?' });
+    await user.click(within(panel).getByRole('button', { name: 'Hủy' }));
+    expect(within(card('v11')).getByRole('button', { name: 'Khôi phục bản này' })).toHaveFocus();
   });
 
   it('copies a release into the draft from the current revision and offers the editor', async () => {

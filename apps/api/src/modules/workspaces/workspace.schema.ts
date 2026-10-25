@@ -7,6 +7,12 @@ export const MEMBERSHIP_MODEL = 'Membership';
 export interface WorkspaceRecord {
   _id: Types.ObjectId;
   name: string;
+  /**
+   * Sites created in the workspace so far. Every site creation increments it in its transaction,
+   * so two concurrent creations write the same document and MongoDB retries the later one, which
+   * then counts the other's site against the limit (ADR-014).
+   */
+  siteSeq: number;
   createdBy: Types.ObjectId;
   createdAt: Date;
 }
@@ -14,6 +20,7 @@ export interface WorkspaceRecord {
 export const workspaceSchema = new Schema<WorkspaceRecord>(
   {
     name: { type: String, required: true },
+    siteSeq: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },
   },

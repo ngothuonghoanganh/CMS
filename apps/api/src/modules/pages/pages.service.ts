@@ -4,6 +4,7 @@ import {
   type createPageRequestSchema,
   EMPTY_SEO,
   MAX_PAGES_PER_SITE,
+  type PageCountResponse,
   type PageDetailResponse,
   type PageListResponse,
   type pageListQuerySchema,
@@ -29,6 +30,7 @@ import { RELEASE_NOT_FOUND } from '../publishing/release-dto.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import { ASSET_NOT_IN_SITE_MESSAGE } from '../sites/site-management.service.js';
 import type { SiteRecord } from '../sites/site.schema.js';
+import { SitesRepository } from '../sites/sites.repository.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
@@ -59,6 +61,7 @@ export class PagesService {
     private readonly pages: PagesRepository,
     private readonly pageAccess: PageAccessService,
     private readonly sites: SitesService,
+    private readonly sitesRepository: SitesRepository,
     private readonly evaluator: PageEvaluator,
     private readonly releases: ReleasesRepository,
     private readonly assets: AssetsRepository,
@@ -108,18 +111,29 @@ export class PagesService {
     };
   }
 
-  /** A blank page or a page built for a goal (screen 02), and its `page.created` activity. */
+  /** The number of pages of a site, without evaluating them (the sidebar count). */
+  async count(user: AuthenticatedUser, siteId: string): Promise<PageCountResponse> {
+    const { scope, site } = await this.sites.access(user, siteId);
+    return { count: await this.pages.countForSite(scope, site._id) };
+  }
+
+  /**
+   * A blank page or a page built for a goal (screen 02), and its `page.created` activity. The
+   * limit is checked inside the transaction, after a write to the site that serializes concurrent
+   * creations in it, so the 201st page is refused even when requests race (ADR-014).
+   */
   async create(
     user: AuthenticatedUser,
     siteId: string,
     input: CreatePageValues,
   ): Promise<PageDetailResponse> {
     const { scope, site } = await this.sites.access(user, siteId);
-    if ((await this.pages.countForSite(scope, site._id)) >= MAX_PAGES_PER_SITE) {
-      throw new AppError(409, 'page_limit_reached', PAGE_LIMIT_MESSAGE);
-    }
     const composition = this.initialComposition(site, input.start);
     const page = await this.transactions.run(async (tx) => {
+      await this.sitesRepository.recordPageCreation(scope, site._id, tx);
+      if ((await this.pages.countForSite(scope, site._id, tx)) >= MAX_PAGES_PER_SITE) {
+        throw new AppError(409, 'page_limit_reached', PAGE_LIMIT_MESSAGE);
+      }
       const created = await this.pages.create(
         scope,
         {

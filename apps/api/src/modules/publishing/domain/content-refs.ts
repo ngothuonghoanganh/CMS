@@ -7,38 +7,14 @@ import {
   type SectionInstance,
   type Seo,
 } from '@plp/contracts';
-import { getAtPath, getSectionDefinition, type LeafField } from '@plp/sections/schema';
-
-interface StoredLeaf {
-  /** Content path, e.g. "items.1.image". */
-  path: string;
-  field: LeafField;
-  value: unknown;
-}
+import { collectLeaves, type LeafOccurrence } from '@plp/sections/schema';
 
 /**
  * Every leaf field stored in a section's content, list items expanded, including the fields the
  * current variant hides: switching variants keeps their values, so they still reference assets.
  */
-function storedLeaves(section: Pick<SectionInstance, 'type' | 'content'>): StoredLeaf[] {
-  const leaves: StoredLeaf[] = [];
-  for (const field of getSectionDefinition(section.type).fields) {
-    if (field.kind !== 'list') {
-      leaves.push({ path: field.key, field, value: getAtPath(section.content, field.key) });
-      continue;
-    }
-    const items = getAtPath(section.content, field.key);
-    if (!Array.isArray(items)) {
-      continue;
-    }
-    items.forEach((_item, index) => {
-      for (const itemField of field.itemFields) {
-        const path = `${field.key}.${index}.${itemField.key}`;
-        leaves.push({ path, field: itemField, value: getAtPath(section.content, path) });
-      }
-    });
-  }
-  return leaves;
+function storedLeaves(section: SectionInstance): LeafOccurrence[] {
+  return collectLeaves(section, { includeHidden: true });
 }
 
 export interface ImageOccurrence {

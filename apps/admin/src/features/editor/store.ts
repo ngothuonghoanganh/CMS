@@ -28,6 +28,7 @@ import {
   getVariant,
   insertionIndex,
   isPathWithin,
+  listMinimum,
   setAtPath,
   validateComposition,
 } from '@plp/sections/schema';
@@ -144,7 +145,12 @@ export interface EditorState {
   setDevice: (device: Device) => void;
 
   /* Server state */
-  replaceDraftFromServer: (detail: PageDetailResponse) => void;
+  /**
+   * Replaces the draft with the server's (conflict reload, "Quay về bản live", a stale draft
+   * restored by Back/Forward). `assets` are the ones the new draft references that the store did
+   * not know yet; callers load them first so images do not look deleted.
+   */
+  replaceDraftFromServer: (detail: PageDetailResponse, assets: readonly Asset[]) => void;
   markSaving: () => void;
   applySaved: (response: SaveDraftResponse, savedVersion: number) => void;
   markSaveFailed: (failure: SaveFailure) => void;
@@ -446,7 +452,11 @@ export function createEditorStore(init: EditorInit): EditorStore {
           return false;
         }
         const items = listItemsOf(section.content, listKey);
-        if (items.length <= list.min || index < 0 || index >= items.length) {
+        if (
+          items.length <= listMinimum(section.type, section.variant, listKey) ||
+          index < 0 ||
+          index >= items.length
+        ) {
           return false;
         }
         const content = setAtPath(
@@ -503,11 +513,42 @@ export function createEditorStore(init: EditorInit): EditorStore {
 
       setVariant(sectionId, variant) {
         const section = findSection(sectionId);
-        if (!section || !getVariant(getSectionDefinition(section.type), variant)) {
+        const definition = section ? getSectionDefinition(section.type) : undefined;
+        if (!section || !definition || !getVariant(definition, variant)) {
           return false;
+        }
+        // A variant can need more list items than the current one (the benefits grid needs 3,
+        // the alternating layout 2): new sample items, marked as sample, fill the gap.
+        let content = section.content;
+        const addedSamples: string[] = [];
+        for (const field of definition.fields) {
+          if (field.kind !== 'list') {
+            continue;
+          }
+          const items = listItemsOf(content, field.key);
+          const missing = listMinimum(section.type, variant, field.key) - items.length;
+          if (missing <= 0) {
+            continue;
+          }
+          const extra = Array.from({ length: missing }, () => field.newItem());
+          extra.forEach((item, offset) => {
+            addedSamples.push(
+              ...samplePathsOfNewItem(
+                { ...section, variant },
+                field.key,
+                item,
+                items.length + offset,
+              ),
+            );
+          });
+          content = setAtPath(content, field.key, [...items, ...extra]);
         }
         return editSection(sectionId, (draft) => {
           draft.variant = variant;
+          if (content !== section.content) {
+            draft.content = content;
+            draft.samplePaths = [...draft.samplePaths, ...addedSamples];
+          }
           return true;
         });
       },
@@ -595,7 +636,13 @@ export function createEditorStore(init: EditorInit): EditorStore {
         if (sectionId !== null && !findSection(sectionId)) {
           return false;
         }
-        set({ selection: { sectionId, fieldPath: sectionId === null ? null : fieldPath } });
+        const selection = { sectionId, fieldPath: sectionId === null ? null : fieldPath };
+        const current = get().selection;
+        const changed =
+          current.sectionId !== selection.sectionId || current.fieldPath !== selection.fieldPath;
+        // A field that unmounts with the selection (Escape closes the panel) never blurs, so the
+        // typing step it opened ends here: the next typing in that field is a new undo step.
+        set(changed ? { selection, mergeKey: null } : { selection });
         return true;
       },
 
@@ -603,12 +650,16 @@ export function createEditorStore(init: EditorInit): EditorStore {
         set({ device });
       },
 
-      replaceDraftFromServer(detail) {
+      replaceDraftFromServer(detail, assets) {
         const state = get();
         const draft = snapshotOf(detail);
         const version = state.draftVersion + 1;
         set({
           draft,
+          assetsById:
+            assets.length === 0
+              ? state.assetsById
+              : { ...state.assetsById, ...indexAssets(assets) },
           baseRevision: detail.draft.revision,
           page: detail.page,
           checks: detail.checks,

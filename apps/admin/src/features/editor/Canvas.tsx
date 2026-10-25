@@ -15,7 +15,7 @@ import {
 } from 'react';
 import styles from './Canvas.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
-import { canvasLabels, frameLayout, livePathOf } from './presentation';
+import { canvasLabels, frameLayout, frameStyle, livePathOf } from './presentation';
 import { SectionChrome } from './SectionChrome';
 
 /** Links inside the preview never navigate away from the editor. */
@@ -128,7 +128,7 @@ export function Canvas() {
       <div
         ref={frameRef}
         className={styles.frame}
-        style={{ width: layout.width ?? '100%', zoom: layout.zoom }}
+        style={frameStyle(layout)}
         data-device={device}
         onClickCapture={preventNavigation}
       >

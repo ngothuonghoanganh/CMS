@@ -62,12 +62,21 @@ export interface LeafOccurrence {
   value: unknown;
 }
 
+export interface CollectLeavesOptions {
+  /**
+   * Also return the fields the current variant hides. Switching variants keeps their values, so
+   * they still hold sample text and still reference assets.
+   */
+  includeHidden?: boolean;
+}
+
 /** Every visible leaf field of a section's content, list items expanded. */
 export function collectLeaves(
   section: Pick<SectionInstance, 'type' | 'variant' | 'content'>,
+  options: CollectLeavesOptions = {},
 ): LeafOccurrence[] {
   const definition = getSectionDefinition(section.type);
-  const variant = getVariant(definition, section.variant);
+  const variant = options.includeHidden ? undefined : getVariant(definition, section.variant);
   const leaves: LeafOccurrence[] = [];
   for (const field of definition.fields) {
     if (isHidden(variant, field.key)) {
@@ -94,12 +103,16 @@ export function collectLeaves(
   return leaves;
 }
 
-/** Paths whose value is sample text: every non-empty text field and button label. */
+/**
+ * Paths whose value is sample text: every non-empty text field and button label, including the
+ * fields the variant hides. A later variant switch shows them again still holding the sample, so
+ * they stay marked; checks and the panel only look at the fields the current variant shows.
+ */
 export function samplePathsOf(
   section: Pick<SectionInstance, 'type' | 'variant' | 'content'>,
 ): string[] {
   const paths: string[] = [];
-  for (const leaf of collectLeaves(section)) {
+  for (const leaf of collectLeaves(section, { includeHidden: true })) {
     if (leaf.field.kind === 'text' && typeof leaf.value === 'string' && leaf.value.trim() !== '') {
       paths.push(leaf.path);
     }
@@ -111,6 +124,18 @@ export function samplePathsOf(
     }
   }
   return paths;
+}
+
+/**
+ * The fewest items a list field may hold in a variant: the field's own `min`, or the variant's
+ * higher minimum (the benefits grid and the testimonial cards need 3).
+ */
+export function listMinimum(type: SectionType, variantId: string, listKey: string): number {
+  const definition = getSectionDefinition(type);
+  const field = definition.fields.find((candidate) => candidate.key === listKey);
+  const fieldMin = field?.kind === 'list' ? field.min : 0;
+  const variantMin = getVariant(definition, variantId)?.listMin?.[listKey] ?? 0;
+  return Math.max(fieldMin, variantMin);
 }
 
 /**
@@ -221,6 +246,18 @@ export function validateComposition(composition: Composition): ProblemIssue[] {
         });
       }
       singletonsSeen.add(section.type);
+    }
+    const variant = getVariant(definition, section.variant);
+    for (const [listKey, minimum] of Object.entries(variant?.listMin ?? {})) {
+      const field = definition.fields.find((candidate) => candidate.key === listKey);
+      const items = getAtPath(section.content, listKey);
+      if (field?.kind === 'list' && Array.isArray(items) && items.length < minimum) {
+        issues.push({
+          path: ['sections', index, 'content', listKey],
+          code: 'too_small',
+          message: `Bố cục “${variant?.label ?? section.variant}” cần ít nhất ${minimum} ${field.itemLabel.toLowerCase()}`,
+        });
+      }
     }
     const result = definition.contentSchema.safeParse(section.content);
     if (!result.success) {

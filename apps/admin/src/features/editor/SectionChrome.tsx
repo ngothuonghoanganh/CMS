@@ -1,6 +1,6 @@
 'use client';
 
-import { imageRefSchema, type SectionInstance } from '@plp/contracts';
+import { imageRefSchema, MAX_SECTIONS, type SectionInstance } from '@plp/contracts';
 import { canMoveSection, collectLeaves, getSectionDefinition } from '@plp/sections/schema';
 import {
   ArrowDownIcon,
@@ -11,9 +11,17 @@ import {
   IconButton,
   PlusIcon,
   TrashIcon,
+  VisuallyHidden,
   WarningTriangleIcon,
 } from '@plp/ui';
-import { type KeyboardEvent, type ReactElement, useState } from 'react';
+import {
+  type KeyboardEvent,
+  type ReactElement,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import styles from './Canvas.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { focusOutlineRow } from './focus-target';
@@ -52,6 +60,8 @@ function moveToolbarFocus(event: KeyboardEvent<HTMLDivElement>) {
   buttons[(current + step + buttons.length) % buttons.length]?.focus();
 }
 
+type MoveControl = 'up' | 'down';
+
 export interface SectionChromeProps {
   section: SectionInstance;
   index: number;
@@ -71,12 +81,36 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
   const selected = useEditor((state) => state.selection.sectionId === section.id);
   const device = useEditor((state) => state.device);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const focusRequest = useRef<MoveControl | null>(null);
+  const fullNoteId = useId();
   const definition = getSectionDefinition(section.type);
   const kind = definition.label;
   const group = visibilityGroupOf(device);
   const hidden = !section.visibility[group];
   const missingAlt = imagesMissingAlt(section);
   const canInsertAfter = definition.position !== 'last';
+  const full = sections.length >= MAX_SECTIONS;
+
+  // A move that reaches the first or last free slot disables the focused button, which would drop
+  // focus to <body>: keep it on that button, else the other one, else the structure row.
+  useLayoutEffect(() => {
+    const request = focusRequest.current;
+    if (request === null) {
+      return;
+    }
+    focusRequest.current = null;
+    const find = (control: MoveControl) =>
+      toolbarRef.current?.querySelector<HTMLButtonElement>(`[data-move-control="${control}"]`);
+    const target = [find(request), find(request === 'up' ? 'down' : 'up')].find(
+      (button) => button !== undefined && button !== null && !button.disabled,
+    );
+    if (target) {
+      target.focus();
+    } else {
+      focusOutlineRow(section.id);
+    }
+  }, [sections, section.id]);
 
   function select() {
     if (store.getState().selection.sectionId !== section.id) {
@@ -84,8 +118,9 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
     }
   }
 
-  function move(toIndex: number) {
+  function move(toIndex: number, control: MoveControl) {
     if (store.getState().moveSection(section.id, toIndex)) {
+      focusRequest.current = control;
       announce(`Đã chuyển ${kind} tới vị trí ${toIndex + 1} / ${sections.length}.`);
     }
   }
@@ -102,6 +137,7 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
       </span>
       {selected ? (
         <div
+          ref={toolbarRef}
           role="toolbar"
           aria-label={`Thao tác với section ${kind}`}
           className={styles.toolbar}
@@ -110,32 +146,40 @@ export function SectionChrome({ section, index, rendered }: SectionChromeProps) 
           <IconButton
             size="sm"
             aria-label="Chuyển lên"
+            data-move-control="up"
             icon={<ArrowUpIcon size={18} />}
             disabled={!canMoveSection(sections, index, index - 1)}
             onClick={() => {
-              move(index - 1);
+              move(index - 1, 'up');
             }}
           />
           <IconButton
             size="sm"
             aria-label="Chuyển xuống"
+            data-move-control="down"
             icon={<ArrowDownIcon size={18} />}
             disabled={!canMoveSection(sections, index, index + 1)}
             onClick={() => {
-              move(index + 1);
+              move(index + 1, 'down');
             }}
           />
           <IconButton
             size="sm"
             aria-label="Nhân bản section"
             icon={<DuplicateIcon size={18} />}
-            disabled={definition.singleton}
+            disabled={definition.singleton || full}
+            aria-describedby={full && !definition.singleton ? fullNoteId : undefined}
             onClick={() => {
               if (store.getState().duplicateSection(section.id)) {
                 announce(`Đã nhân bản ${kind}.`);
               }
             }}
           />
+          {full ? (
+            <VisuallyHidden id={fullNoteId}>
+              Một trang có tối đa {MAX_SECTIONS} section.
+            </VisuallyHidden>
+          ) : null}
           <IconButton
             size="sm"
             aria-label="Ẩn section"

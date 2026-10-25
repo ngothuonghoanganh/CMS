@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPageLive, presentPageStatus } from './status-presentation';
+import { presentPageStatus } from './status-presentation';
 import { draftPageFixture, minh, pageFixture, pointerEvent } from './test-fixtures';
 
 // 24/10/2026 15:02 in Vietnam; the fixtures went live two hours earlier.
@@ -155,12 +155,5 @@ describe('presentPageStatus', () => {
   it('shows a dash for a live status without a live release', () => {
     const page = pageFixture({ liveRelease: null });
     expect(presentPageStatus(page, now)).toMatchObject({ versionLine: '—', authorLine: null });
-  });
-});
-
-describe('isPageLive', () => {
-  it('is true only while a release is live', () => {
-    expect(isPageLive(pageFixture())).toBe(true);
-    expect(isPageLive(draftPageFixture())).toBe(false);
   });
 });

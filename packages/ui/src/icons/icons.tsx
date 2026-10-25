@@ -46,28 +46,13 @@ export const SearchIcon = createIcon(
     <path d="M20 20l-4.2-4.2" />
   </>,
 );
-export const RefreshIcon = createIcon(
-  'refresh',
-  <path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4" />,
-);
 export const ExternalLinkIcon = createIcon(
   'external-link',
   <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />,
 );
-export const LinkIcon = createIcon(
-  'link',
-  <>
-    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
-    <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
-  </>,
-);
 export const LogoutIcon = createIcon(
   'logout',
   <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />,
-);
-export const SparkleIcon = createIcon(
-  'sparkle',
-  <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
 );
 export const MoreHorizontalIcon = createIcon(
   'more-horizontal',
@@ -94,8 +79,6 @@ export const MenuIcon = createIcon('menu', <path d="M4 6h16M4 12h16M4 18h16" />)
 
 /* Direction */
 export const ChevronDownIcon = createIcon('chevron-down', <path d="M6 9l6 6 6-6" />);
-export const ChevronUpIcon = createIcon('chevron-up', <path d="M6 15l6-6 6 6" />);
-export const ChevronLeftIcon = createIcon('chevron-left', <path d="M15 6l-6 6 6 6" />);
 export const ChevronRightIcon = createIcon('chevron-right', <path d="M9 6l6 6-6 6" />);
 /** Up/down chevrons: switchers and sortable columns. */
 export const ChevronUpDownIcon = createIcon(
@@ -180,13 +163,6 @@ export const LockIcon = createIcon(
   <>
     <rect x="5" y="11" width="14" height="9" rx="1.5" />
     <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-  </>,
-);
-export const ClockIcon = createIcon(
-  'clock',
-  <>
-    <circle cx="12" cy="12" r="8" />
-    <path d="M12 8v4l2.5 1.5" />
   </>,
 );
 

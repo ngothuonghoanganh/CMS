@@ -70,6 +70,19 @@ function draftSlugTaken(cause: unknown): AppError {
   });
 }
 
+/**
+ * Every per-site read is bounded by `MAX_PAGES_PER_SITE` (ADR-014). Reads fetch one more row so a
+ * site over the limit fails loudly instead of silently losing pages from counts and the sitemap.
+ */
+function withinPageLimit<T>(siteId: ObjectId, pages: T[]): T[] {
+  if (pages.length > MAX_PAGES_PER_SITE) {
+    throw new Error(
+      `Site ${siteId.toHexString()} holds more than ${MAX_PAGES_PER_SITE} pages (ADR-014)`,
+    );
+  }
+  return pages;
+}
+
 const LIVE_FILTER = { publishedSlug: { $type: 'string' } } as const;
 const LIVE_PROJECTION = { title: 1, publishedSlug: 1, publishedReleaseId: 1 } as const;
 
@@ -97,26 +110,35 @@ export class PagesRepository {
    * Every page of a site, most recently updated first. A site holds at most `MAX_PAGES_PER_SITE`
    * pages (ADR-014), so per-site computations (counts, attention) stay bounded.
    */
-  listForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<PageRecord[]> {
-    return this.pages
+  async listForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<PageRecord[]> {
+    const pages = await this.pages
       .find({ workspaceId: scope.workspaceId, siteId })
       .sort({ updatedAt: -1, _id: -1 })
-      .limit(MAX_PAGES_PER_SITE)
+      .limit(MAX_PAGES_PER_SITE + 1)
       .lean<PageRecord[]>()
       .exec();
+    return withinPageLimit(siteId, pages);
   }
 
-  countForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
-    return this.pages.countDocuments({ workspaceId: scope.workspaceId, siteId }).exec();
+  /**
+   * Pages of the site. Page creation passes its transaction so the count sees what it serializes
+   * (ADR-014).
+   */
+  countForSite(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<number> {
+    return this.pages
+      .countDocuments({ workspaceId: scope.workspaceId, siteId })
+      .session(tx ?? null)
+      .exec();
   }
 
   /** Pages of the site that are live right now. */
-  listLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<LivePageRow[]> {
-    return this.pages
+  async listLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<LivePageRow[]> {
+    const pages = await this.pages
       .find({ workspaceId: scope.workspaceId, siteId, ...LIVE_FILTER }, LIVE_PROJECTION)
-      .limit(MAX_PAGES_PER_SITE)
+      .limit(MAX_PAGES_PER_SITE + 1)
       .lean<LivePageRow[]>()
       .exec();
+    return withinPageLimit(siteId, pages);
   }
 
   /** Another page of the site that uses `slug` as its draft or live slug. */
@@ -306,12 +328,13 @@ export class PagesRepository {
   }
 
   /** Live pages of a site (sitemap). */
-  listPublicLiveForSite(siteId: ObjectId): Promise<LivePageRow[]> {
-    return this.pages
+  async listPublicLiveForSite(siteId: ObjectId): Promise<LivePageRow[]> {
+    const pages = await this.pages
       .find({ siteId, ...LIVE_FILTER }, LIVE_PROJECTION)
-      .limit(MAX_PAGES_PER_SITE)
+      .limit(MAX_PAGES_PER_SITE + 1)
       .lean<LivePageRow[]>()
       .exec();
+    return withinPageLimit(siteId, pages);
   }
 
   /** Live slugs of the pages among `ids` in the site, keyed by id hex; others are absent. */

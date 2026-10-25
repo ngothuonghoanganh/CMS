@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { activityListResponseSchema } from './activity.js';
+import { activityListQuerySchema, activityListResponseSchema } from './activity.js';
 import {
   assetListQuerySchema,
   assetListResponseSchema,
@@ -13,6 +13,7 @@ import { healthResponseSchema } from './health.js';
 import {
   createPageRequestSchema,
   pageDetailResponseSchema,
+  pageCountResponseSchema,
   pageListQuerySchema,
   pageListResponseSchema,
   restoreDraftRequestSchema,
@@ -163,6 +164,14 @@ export const endpoints = {
     query: pageListQuerySchema,
     response: pageListResponseSchema,
   }),
+  /** `counts.all` of `listPages` without evaluating every page. */
+  countPages: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/page-count`,
+    request: null,
+    query: null,
+    response: pageCountResponseSchema,
+  }),
   createPage: endpoint({
     method: 'POST',
     path: (siteId: string) => `/sites/${e(siteId)}/pages`,
@@ -246,11 +255,12 @@ export const endpoints = {
   }),
 
   // Activity
+  /** Events of the site, newest first; `types` narrows them (see `activityListQuerySchema`). */
   listActivity: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/activity`,
     request: null,
-    query: cursorQuerySchema,
+    query: activityListQuerySchema,
     response: activityListResponseSchema,
   }),
 

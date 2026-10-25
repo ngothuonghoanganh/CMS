@@ -17,7 +17,13 @@ export interface CommittedInputProps {
   mono?: boolean;
 }
 
-function BufferedInput({
+/**
+ * An input whose value only reaches the draft once it is valid (on blur or Enter): a URL is
+ * typed through invalid prefixes ("htt…"), and the draft must never hold an invalid link.
+ * Undo or a reload from the server resets the text. The input itself stays mounted, so focus
+ * stays in it after Enter commits.
+ */
+export function CommittedInput({
   label,
   value,
   validate,
@@ -30,6 +36,13 @@ function BufferedInput({
 }: CommittedInputProps) {
   const [text, setText] = useState(value);
   const [error, setError] = useState<string | null>(null);
+  // The draft value changed (a commit, undo, or a reload from the server): show it.
+  const [shownValue, setShownValue] = useState(value);
+  if (shownValue !== value) {
+    setShownValue(value);
+    setText(value);
+    setError(null);
+  }
 
   function commit() {
     if (text === value) {
@@ -67,13 +80,4 @@ function BufferedInput({
       />
     </Field>
   );
-}
-
-/**
- * An input whose value only reaches the draft once it is valid (on blur or Enter): a URL is
- * typed through invalid prefixes ("htt…"), and the draft must never hold an invalid link.
- * Undo or a reload from the server resets the text.
- */
-export function CommittedInput(props: CommittedInputProps) {
-  return <BufferedInput key={props.value} {...props} />;
 }

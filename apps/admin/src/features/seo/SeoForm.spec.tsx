@@ -100,7 +100,10 @@ describe('SeoForm slug', () => {
       query: { slug: 'uu-dai-tet', pageId: PAGE_ID },
       signal: expect.any(AbortSignal) as unknown,
     });
-    expect(await screen.findByText('Đường dẫn này dùng được.')).toBeInTheDocument();
+    const available = await screen.findByText('Đường dẫn này dùng được.');
+    expect(available).toBeVisible();
+    // The result also reaches screen readers while they keep typing (WCAG 4.1.3).
+    expect(available.closest('[aria-live="polite"]')).not.toBeNull();
   });
 
   it('keeps a taken slug out of the draft and explains why', async () => {
@@ -116,9 +119,9 @@ describe('SeoForm slug', () => {
     await user.clear(slugInput());
     await user.type(slugInput(), 'bang-gia');
 
-    expect(
-      await screen.findByText('Đường dẫn này đang được trang “Bảng giá” dùng'),
-    ).toBeInTheDocument();
+    const taken = await screen.findByText('Đường dẫn này đang được trang “Bảng giá” dùng');
+    expect(taken).toBeVisible();
+    expect(taken.closest('[aria-live="polite"]')).not.toBeNull();
     expect(slugInput()).toHaveAttribute('aria-invalid', 'true');
     expect(store.getState().draft.slug).toBe('uu-dai-thang-11');
   });
@@ -130,7 +133,7 @@ describe('SeoForm slug', () => {
     await user.clear(slugInput());
     await user.type(slugInput(), 'api');
 
-    expect(screen.getByText('Đường dẫn này được hệ thống giữ lại')).toBeInTheDocument();
+    expect(screen.getByText('Đường dẫn này được hệ thống giữ lại')).toBeVisible();
     expect(apiMock).not.toHaveBeenCalled();
   });
 });

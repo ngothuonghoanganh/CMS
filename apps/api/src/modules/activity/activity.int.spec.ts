@@ -1,4 +1,9 @@
-import { type ActivityItem, activityListResponseSchema, problemSchema } from '@plp/contracts';
+import {
+  type ActivityItem,
+  activityListResponseSchema,
+  problemSchema,
+  publishingActivityTypes,
+} from '@plp/contracts';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
@@ -142,6 +147,50 @@ describe('GET /sites/:siteId/activity', () => {
     expect(undoable.get(undoneRollback.toHexString())).toBe(false);
     expect(undoable.get(currentRollback.toHexString())).toBe(true);
     expect([...undoable.values()].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('lists only the requested types, so uploads never push publishing events out', async () => {
+    const { client, scope, siteId, siteObjectId } = await setup();
+    const pageId = new Types.ObjectId();
+    const published = await activity.record(scope, {
+      siteId: siteObjectId,
+      type: 'page.published',
+      page: { id: pageId, title: 'Trang chủ' },
+      data: { version: 1 },
+    });
+    const unpublished = await activity.record(scope, {
+      siteId: siteObjectId,
+      type: 'page.unpublished',
+      page: { id: pageId, title: 'Trang chủ' },
+    });
+    await activity.record(scope, {
+      siteId: siteObjectId,
+      type: 'page.draft_restored',
+      page: { id: pageId, title: 'Trang chủ' },
+      data: { version: 1 },
+    });
+    for (let upload = 0; upload < 3; upload += 1) {
+      await uploadImage(client, siteId);
+    }
+
+    const types = publishingActivityTypes.join(',');
+    const items = await list(client, siteId, `?limit=2&types=${types}`);
+    expect(items.map((item) => item.id)).toEqual([
+      unpublished.toHexString(),
+      published.toHexString(),
+    ]);
+    expect(await list(client, siteId, '?limit=50')).toHaveLength(7);
+  });
+
+  it('lists nothing for a new site when only publishing events are asked for', async () => {
+    const { client, siteId } = await setup();
+    expect(await list(client, siteId)).toHaveLength(1);
+    expect(await list(client, siteId, `?types=${publishingActivityTypes.join(',')}`)).toEqual([]);
+  });
+
+  it('rejects an unknown activity type', async () => {
+    const { client, siteId } = await setup();
+    await client.get(`/sites/${siteId}/activity?types=page.published,page.deleted`).expect(422);
   });
 
   it('rejects a forged cursor and an out-of-range limit', async () => {

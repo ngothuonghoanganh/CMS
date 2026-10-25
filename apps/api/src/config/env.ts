@@ -15,6 +15,13 @@ const envSchema = z.object({
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   /** Sign-up and login attempts allowed per client per minute. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
+  /**
+   * Proxies between the browser and the API whose `X-Forwarded-For` entry is trusted. The client
+   * address, which keys the auth rate limit, is read through them. Default 0: the admin's `/api`
+   * rewrite passes on whatever the browser sent, so trusting it without an edge proxy that
+   * appends the socket address would let a client pick a fresh bucket per request (ADR-004).
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   /** Secure cookies need HTTPS; only local development may turn this off. */
   COOKIE_SECURE: z
     .enum(['true', 'false'])

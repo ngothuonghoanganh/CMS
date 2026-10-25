@@ -90,8 +90,9 @@ export class PublicDeliveryService {
   }
 
   /**
-   * The same decision as `resolve` without loading the release: a live page, a redirect or 404.
-   * Cheap enough for the renderer's proxy to ask on every page request.
+   * The same decision as `resolve` without loading the release: a live page, a redirect (with its
+   * location, so the renderer's proxy answers the 308 itself) or 404. Cheap enough for the proxy
+   * to ask on every page request.
    */
   async pathStatus(subdomain: string, path: string): Promise<PathStatusResponse> {
     const site = await this.siteOrNotFound(subdomain);
@@ -100,8 +101,9 @@ export class PublicDeliveryService {
     if (live) {
       return { kind: 'page', releaseId: live.publishedReleaseId.toHexString() };
     }
-    if ((await this.redirectLocation(site, slug)) !== null) {
-      return { kind: 'redirect' };
+    const location = await this.redirectLocation(site, slug);
+    if (location !== null) {
+      return { kind: 'redirect', location };
     }
     throw notFound(PUBLIC_PAGE_NOT_FOUND);
   }

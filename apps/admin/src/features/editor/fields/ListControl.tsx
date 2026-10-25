@@ -1,6 +1,6 @@
 'use client';
 
-import { getAtPath, isPathWithin, type ListField } from '@plp/sections/schema';
+import { getAtPath, isPathWithin, listMinimum, type ListField } from '@plp/sections/schema';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -10,7 +10,7 @@ import {
   PlusIcon,
   TrashIcon,
 } from '@plp/ui';
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { isFieldHidden, listItemsOf } from '../content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor-context';
 import { lowerFirst } from '../presentation';
@@ -36,9 +36,15 @@ function describeItem(field: ListField, item: Record<string, unknown>) {
   return { title, summary };
 }
 
+type ItemControl = 'toggle' | 'up' | 'down';
+
+/** The control to focus after a move or a delete re-renders the list. */
+type FocusRequest = { index: number; control: ItemControl } | { index: null; control: 'add' };
+
 /**
  * A repeatable group ("Các lợi ích", "Câu hỏi"): items expand to their fields, move up or down,
- * and are added or removed within the list's limits, which disable the buttons beforehand.
+ * and are added or removed within the list's limits, which disable the buttons beforehand. The
+ * minimum can depend on the variant (the benefits grid needs 3 items).
  */
 export function ListControl({ section, field, path }: ControlProps<ListField>) {
   const store = useEditorStoreApi();
@@ -50,10 +56,40 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
   );
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const itemLabel = lowerFirst(field.itemLabel);
-  const atMin = items.length <= field.min;
+  const minimum = listMinimum(section.type, section.variant, path);
+  const atMin = items.length <= minimum;
   const atMax = items.length >= field.max;
   const minId = `${baseId}-min`;
   const maxId = `${baseId}-max`;
+  const listRef = useRef<HTMLFieldSetElement>(null);
+  const focusRequest = useRef<FocusRequest | null>(null);
+
+  // Rows are keyed by position, so after a move the focused button belongs to the other item, and
+  // a deleted row's button disappears: keyboard focus follows the moved item, or lands on the
+  // item before the deleted one (or "Thêm" when none is left).
+  useLayoutEffect(() => {
+    const request = focusRequest.current;
+    const root = listRef.current;
+    if (request === null || root === null) {
+      return;
+    }
+    focusRequest.current = null;
+    const find = (control: ItemControl | 'add', index: number | null) =>
+      root.querySelector<HTMLButtonElement>(
+        `[data-list-control="${index === null ? control : `${index}:${control}`}"]`,
+      );
+    if (request.index === null) {
+      find('add', null)?.focus();
+      return;
+    }
+    const other = request.control === 'up' ? 'down' : 'up';
+    const target = [
+      find(request.control, request.index),
+      request.control === 'toggle' ? null : find(other, request.index),
+      find('toggle', request.index),
+    ].find((button) => button !== null && !button.disabled);
+    target?.focus();
+  }, [section.content]);
 
   function isExpanded(index: number): boolean {
     return (
@@ -84,6 +120,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
       next.add(open === index ? toIndex : open === toIndex ? index : open);
     }
     setExpanded(next);
+    focusRequest.current = { index: toIndex, control: toIndex > index ? 'down' : 'up' };
     announce(`Đã chuyển ${itemLabel} tới vị trí ${toIndex + 1} / ${items.length}.`);
   }
 
@@ -98,6 +135,10 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
       }
     }
     setExpanded(next);
+    focusRequest.current =
+      items.length > 1
+        ? { index: Math.max(0, index - 1), control: 'toggle' }
+        : { index: null, control: 'add' };
     announce(`Đã xóa ${itemLabel} ${index + 1}.`);
   }
 
@@ -110,7 +151,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
   }
 
   return (
-    <fieldset data-field-path={path} className={styles.list}>
+    <fieldset ref={listRef} data-field-path={path} className={styles.list}>
       <legend className={styles.listLegend}>
         {field.label}
         <span className={styles.listCount}>
@@ -130,6 +171,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
                   type="button"
                   aria-expanded={open}
                   aria-controls={bodyId}
+                  data-list-control={`${index}:toggle`}
                   className={styles.itemToggle}
                   onClick={() => {
                     toggle(index);
@@ -148,6 +190,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
                 <IconButton
                   size="sm"
                   aria-label={`Chuyển ${name} lên`}
+                  data-list-control={`${index}:up`}
                   icon={<ArrowUpIcon size={16} />}
                   disabled={index === 0}
                   onClick={() => {
@@ -157,6 +200,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
                 <IconButton
                   size="sm"
                   aria-label={`Chuyển ${name} xuống`}
+                  data-list-control={`${index}:down`}
                   icon={<ArrowDownIcon size={16} />}
                   disabled={index === items.length - 1}
                   onClick={() => {
@@ -195,7 +239,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
       </ol>
       {atMin && items.length > 0 ? (
         <p id={minId} className={styles.note}>
-          Cần ít nhất {field.min} {itemLabel}, nên chưa xóa được.
+          Cần ít nhất {minimum} {itemLabel}, nên chưa xóa được.
         </p>
       ) : null}
       <div className={styles.listActions}>
@@ -203,6 +247,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
           variant="secondary"
           size="sm"
           leadingIcon={<PlusIcon size={16} />}
+          data-list-control="add"
           disabled={atMax}
           aria-describedby={atMax ? maxId : undefined}
           onClick={add}

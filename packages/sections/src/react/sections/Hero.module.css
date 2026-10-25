@@ -97,27 +97,38 @@
   border-radius: 0;
 }
 
-.backgroundImage::after {
+/* Only a chosen photo gets the overlay; the edit placeholder keeps the scheme's colors. */
+.overPhoto .backgroundImage::after {
   content: '';
   position: absolute;
   inset: 0;
   background: rgba(11, 15, 20, 0.62);
 }
 
-.backgroundImage:empty::after {
-  display: none;
-}
-
-.background:has(.backgroundImage img) .heading,
-.background:has(.backgroundImage img) .subheading,
-.background:has(.backgroundImage img) .eyebrow {
+.overPhoto .heading,
+.overPhoto .subheading,
+.overPhoto .eyebrow {
   color: #ffffff;
 }
 
 /* Over a photo the eyebrow is plain white text, like the heading. */
-.background:has(.backgroundImage img) .eyebrow {
+.overPhoto .eyebrow {
   padding-inline: 0;
   background: transparent;
+}
+
+/*
+ * The scheme's link color (a dark teal, indigo or orange in the light and soft schemes) is far
+ * below AA on the overlay, so the outlined button and every focus ring turn white there. White on
+ * the overlay is at least 5.5:1 whatever the photo.
+ */
+.overPhoto .secondaryOverPhoto {
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+.overPhoto .ctaOverPhoto:focus-visible {
+  outline-color: #ffffff;
 }
 
 @container plp-page (max-width: 767px) {

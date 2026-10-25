@@ -217,4 +217,61 @@ describe('draft saver', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(saveMock).not.toHaveBeenCalled();
   });
+
+  it('saves pending changes at once when stopped, instead of dropping them with the debounce', async () => {
+    const { store, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('compact');
+    expect(store.getState().saveState).toBe('saved');
+  });
+
+  it('tries a failing save once more when stopped, then schedules no retries', async () => {
+    const { store, stop } = setup();
+    saveMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getState().saveState).toBe('error');
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(saveMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops changes the user chose to discard, also when stopped', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    saver.discard();
+    await vi.advanceTimersByTimeAsync(5000);
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('saves again after a discard once there is a new change', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    saver.discard();
+    store.getState().setSpacing(HERO, 'spacious');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('does not save over a conflict when stopped', async () => {
+    const { store, stop } = setup();
+    saveMock.mockRejectedValue(problem(409, 'revision_conflict'));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    store.getState().setSpacing(HERO, 'spacious');
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -23,6 +23,7 @@ describe('parseEnv', () => {
     expect(env.SESSION_TTL_DAYS).toBe(30);
     expect(env.COOKIE_SECURE).toBe(true);
     expect(env.LOG_LEVEL).toBe('info');
+    expect(env.TRUST_PROXY_HOPS).toBe(0);
   });
 
   it('fails fast with the name of a missing variable', () => {

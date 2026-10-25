@@ -2,7 +2,9 @@ import { EMPTY_IMAGE, imageRefSchema, textSchema } from '@plp/contracts';
 import { z } from 'zod';
 import { defineSection } from '../define.js';
 
+/** The highlighted quote shows one testimonial; the cards need 3 to 6 (ADR-007). */
 export const TESTIMONIALS_MIN = 1;
+export const TESTIMONIALS_CARDS_MIN = 3;
 export const TESTIMONIALS_MAX = 6;
 
 const testimonialSchema = z.object({
@@ -32,8 +34,9 @@ export const testimonialsSection = defineSection<TestimonialsContent>({
     {
       id: 'cards',
       label: 'Nhận xét dạng thẻ',
-      description: '1–6 nhận xét có tên và ảnh khách hàng.',
+      description: '3–6 nhận xét có tên và ảnh khách hàng.',
       hasMedia: false,
+      listMin: { items: TESTIMONIALS_CARDS_MIN },
     },
     {
       id: 'quote',

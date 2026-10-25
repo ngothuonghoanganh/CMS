@@ -44,4 +44,34 @@ describe('editor data loading', () => {
     );
     expect([...ids].sort()).toEqual(['a'.repeat(24), 'b'.repeat(24), 'c'.repeat(24)]);
   });
+
+  it('includes images kept in fields the current variant hides', () => {
+    const composition = sampleComposition();
+    const hero = composition.sections[1];
+    const benefits = composition.sections[2];
+    if (!hero || !benefits || !Array.isArray(benefits.content.items)) {
+      throw new Error('Unexpected sample composition');
+    }
+    // "Căn giữa" hides the Hero image and the benefits grid hides item images.
+    hero.variant = 'centered';
+    hero.content = {
+      ...hero.content,
+      image: { assetId: 'a'.repeat(24), alt: 'Ảnh', decorative: false },
+    };
+    benefits.variant = 'grid';
+    benefits.content = {
+      ...benefits.content,
+      items: benefits.content.items.map((item: unknown, index) =>
+        index === 0 && item !== null && typeof item === 'object'
+          ? { ...item, image: { assetId: 'd'.repeat(24), alt: 'Ảnh', decorative: false } }
+          : item,
+      ),
+    };
+    const ids = referencedAssetIds(
+      composition,
+      { title: '', description: '', shareImageAssetId: null, noindex: false },
+      site,
+    );
+    expect([...ids].sort()).toEqual(['a'.repeat(24), 'd'.repeat(24)]);
+  });
 });

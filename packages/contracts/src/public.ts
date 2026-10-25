@@ -19,7 +19,6 @@ export const publicSiteSchema = z.object({
   logo: publicImageSchema.nullable(),
   origin: z.url(),
 });
-export type PublicSite = z.infer<typeof publicSiteSchema>;
 
 export const publicSeoSchema = z.object({
   /** Resolved: falls back to the Hero heading, then the site name. */
@@ -59,13 +58,14 @@ export type ResolveResponse = z.infer<typeof resolveResponseSchema>;
 
 /**
  * What answers at a path, without any page data. The renderer's proxy asks this before rendering
- * so a miss is served as the server-rendered not-found page with status 404 (ADR-009). A live page
- * names its live release, which the renderer adds to the page's cache key: when the pointer
- * moves, the next request cannot be served the previous release.
+ * so a miss is served as the server-rendered not-found page with status 404, and an old slug as a
+ * 308 to `location` (ADR-009). A live page names its live release, which the renderer adds to the
+ * page's cache key: when the pointer moves, the next request cannot be served the previous
+ * release.
  */
 export const pathStatusResponseSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('page'), releaseId: idSchema }),
-  z.object({ kind: z.literal('redirect') }),
+  z.object({ kind: z.literal('redirect'), location: z.string() }),
 ]);
 export type PathStatusResponse = z.infer<typeof pathStatusResponseSchema>;
 

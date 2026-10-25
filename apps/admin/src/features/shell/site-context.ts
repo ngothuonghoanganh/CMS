@@ -43,9 +43,10 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
   if (membership === undefined) {
     notFound();
   }
-  const [siteList, pageList] = await Promise.all([
+  // The count endpoint skips the page evaluation that `listPages` runs for statuses and checks.
+  const [siteList, pageCount] = await Promise.all([
     serverApi(endpoints.listSites, [site.workspaceId]),
-    serverApi(endpoints.listPages, [site.id], { query: { limit: 1 } }),
+    serverApi(endpoints.countPages, [site.id]),
   ]);
-  return { me, membership, site, sites: siteList.items, pageCount: pageList.counts.all };
+  return { me, membership, site, sites: siteList.items, pageCount: pageCount.count };
 });

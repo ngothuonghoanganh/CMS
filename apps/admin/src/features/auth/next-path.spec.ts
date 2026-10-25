@@ -38,6 +38,15 @@ describe('safeNextPath', () => {
     expect(safeNextPath('/sites/../domain')).toBe('/domain');
     expect(safeNextPath('/../../etc')).toBe('/etc');
   });
+
+  it('rejects dot segments that normalise into a protocol-relative URL', () => {
+    expect(safeNextPath('/.//evil.example')).toBe('/');
+    expect(safeNextPath('/..//evil.example/x')).toBe('/');
+    expect(safeNextPath('/%2e//evil.example')).toBe('/');
+    expect(safeNextPath('/%2E%2E//evil.example')).toBe('/');
+    expect(safeNextPath('/a/..//evil.example')).toBe('/');
+    expect(safeNextPath('/sites/.//abc')).toBe('/sites//abc');
+  });
 });
 
 describe('authPageHref', () => {

@@ -4,6 +4,7 @@ import type { Role } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
+import type { WorkspaceScope } from './workspace-scope.js';
 import {
   MEMBERSHIP_MODEL,
   type MembershipRecord,
@@ -21,7 +22,7 @@ export class WorkspacesRepository {
   async createWithOwner(name: string, ownerId: ObjectId, tx: Tx): Promise<WorkspaceRecord> {
     const now = new Date();
     const [workspace] = await this.workspaces.create(
-      [{ name, createdBy: ownerId, createdAt: now }],
+      [{ name, siteSeq: 0, createdBy: ownerId, createdAt: now }],
       { session: tx },
     );
     if (!workspace) {
@@ -34,6 +35,19 @@ export class WorkspacesRepository {
       },
     );
     return workspace.toObject();
+  }
+
+  /**
+   * Increments `siteSeq` inside a site-creation transaction. The write makes concurrent creations
+   * in the workspace conflict, so the site count read afterwards in the same transaction is exact.
+   */
+  async recordSiteCreation(scope: WorkspaceScope, tx: Tx): Promise<void> {
+    const result = await this.workspaces
+      .updateOne({ _id: scope.workspaceId }, { $inc: { siteSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Workspace ${scope.workspaceId.toHexString()} of the scope does not exist`);
+    }
   }
 
   findMembership(workspaceId: ObjectId, userId: ObjectId): Promise<MembershipRecord | null> {

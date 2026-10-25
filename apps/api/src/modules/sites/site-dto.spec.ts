@@ -15,6 +15,7 @@ function siteRecord(overrides: Partial<SiteRecord> = {}): SiteRecord {
     themePresetId: 'indigo',
     logoAssetId: null,
     defaultShareImageAssetId: null,
+    pageSeq: 0,
     createdBy: newObjectId(),
     createdAt,
     updatedAt: createdAt,

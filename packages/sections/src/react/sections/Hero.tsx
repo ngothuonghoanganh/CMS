@@ -6,6 +6,11 @@ import styles from './Hero.module.css';
 export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>) {
   const variant = section.variant;
   const mediaFirst = section.mobileOrder === 'media-first';
+  // The dark overlay and the white text and buttons belong to a real photo only: the edit
+  // placeholder (no image chosen yet) keeps the color scheme's own colors.
+  const imageId = content.image.assetId;
+  const overPhoto =
+    variant === 'background' && imageId !== null && ctx.images[imageId] !== undefined;
   const text = (
     <div className={styles.text}>
       <Text
@@ -37,7 +42,13 @@ export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>
         placeholder="Mô tả"
       />
       <div className={styles.actions}>
-        <CtaButton ctx={ctx} sectionId={section.id} path="primaryCta" cta={content.primaryCta} />
+        <CtaButton
+          ctx={ctx}
+          sectionId={section.id}
+          path="primaryCta"
+          cta={content.primaryCta}
+          className={overPhoto ? styles.ctaOverPhoto : undefined}
+        />
         {variant !== 'centered' && (
           <CtaButton
             ctx={ctx}
@@ -45,6 +56,9 @@ export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>
             path="secondaryCta"
             cta={content.secondaryCta}
             variant="secondary"
+            className={
+              overPhoto ? [styles.ctaOverPhoto, styles.secondaryOverPhoto].join(' ') : undefined
+            }
           />
         )}
       </div>
@@ -57,7 +71,11 @@ export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>
 
   if (variant === 'background') {
     return (
-      <div className={[styles.root, styles.background].join(' ')}>
+      <div
+        className={[styles.root, styles.background, overPhoto ? styles.overPhoto : undefined]
+          .filter(Boolean)
+          .join(' ')}
+      >
         <div className={styles.backgroundImage}>
           <SectionImage
             ctx={ctx}

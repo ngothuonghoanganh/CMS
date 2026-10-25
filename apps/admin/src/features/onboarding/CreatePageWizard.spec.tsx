@@ -102,7 +102,10 @@ describe('CreatePageWizard', () => {
       'Giảm 30% niềng răng trong suốt',
     );
     await user.type(screen.getByRole('textbox', { name: /Số điện thoại/ }), '0901 234 567');
-    expect(await screen.findByText('Đường dẫn này dùng được.')).toBeInTheDocument();
+    const available = await screen.findByText('Đường dẫn này dùng được.');
+    expect(available).toBeVisible();
+    // The result also reaches screen readers while they keep typing (WCAG 4.1.3).
+    expect(available.closest('[aria-live="polite"]')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
 
     expect(currentStep()).toBe('3Phong cách');

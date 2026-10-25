@@ -31,6 +31,36 @@ describe('Field', () => {
     expect(input).toHaveAccessibleDescription('Email không hợp lệ Dùng email công việc');
   });
 
+  it('announces messages that change while typing from one persistent live region', () => {
+    const field = (help: string, error?: string) => (
+      <Field label="Đường dẫn" help={help} error={error} announceMessages>
+        <Input />
+      </Field>
+    );
+    const { container, rerender } = render(field('Đang kiểm tra đường dẫn…'));
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region).toHaveTextContent('Đang kiểm tra đường dẫn…');
+
+    rerender(field('Chỉ dùng chữ thường.', 'Đường dẫn này đã được dùng'));
+
+    // The same element, so screen readers announce the change; the text exists only once.
+    expect(container.querySelector('[aria-live="polite"]')).toBe(region);
+    expect(region).toHaveTextContent('Đường dẫn này đã được dùngChỉ dùng chữ thường.');
+    expect(screen.getAllByText('Đường dẫn này đã được dùng')).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'Đường dẫn' })).toHaveAccessibleDescription(
+      'Đường dẫn này đã được dùng Chỉ dùng chữ thường.',
+    );
+  });
+
+  it('has no live region unless asked', () => {
+    const { container } = render(
+      <Field label="Email" help="Dùng email công việc">
+        <Input type="email" />
+      </Field>,
+    );
+    expect(container.querySelector('[aria-live]')).toBeNull();
+  });
+
   it('describes a non-blocking warning without marking the control invalid', () => {
     render(
       <Field label="Mô tả ảnh" warning="Cảnh báo: chưa có mô tả ảnh">

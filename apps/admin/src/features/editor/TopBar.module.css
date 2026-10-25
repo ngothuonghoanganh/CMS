@@ -60,6 +60,10 @@
   font-weight: 500;
 }
 
+.saveText {
+  display: inline;
+}
+
 .saveIssue {
   color: var(--color-danger);
 }
@@ -128,11 +132,6 @@
 }
 
 .checks[aria-disabled='true'],
-.unavailable {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
 .count {
   display: inline-flex;
   align-items: center;

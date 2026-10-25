@@ -3,10 +3,12 @@ export * from './define.js';
 export * from './links.js';
 export * from './paths.js';
 export * from './registry.js';
+export * from './seo.js';
 export * from './themes.js';
 export {
   benefitIconLabels,
   benefitIcons,
+  BENEFITS_GRID_MIN,
   BENEFITS_MAX,
   BENEFITS_MIN,
   benefitsContentSchema,
@@ -24,6 +26,7 @@ export {
 export { heroContentSchema, heroSection, type HeroContent } from './sections/hero.js';
 export { navbarContentSchema, navbarSection, type NavbarContent } from './sections/navbar.js';
 export {
+  TESTIMONIALS_CARDS_MIN,
   TESTIMONIALS_MAX,
   TESTIMONIALS_MIN,
   testimonialsContentSchema,

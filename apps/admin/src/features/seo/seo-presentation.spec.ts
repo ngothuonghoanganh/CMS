@@ -1,9 +1,7 @@
 import { createSectionInstance } from '@plp/sections/schema';
 import { describe, expect, it } from 'vitest';
 import {
-  effectiveTitle,
   finalizeSlug,
-  heroHeadingOf,
   isSlugComplete,
   normalizeSlugTyping,
   redirectedLiveSlug,
@@ -27,20 +25,36 @@ function compositionWithHero(heading: string) {
 }
 
 describe('seoTitleHint', () => {
+  const withHero = compositionWithHero('Niềng răng trong suốt');
+
   it('explains an empty, a long and a good title', () => {
-    expect(seoTitleHint('')).toEqual({
+    expect(seoTitleHint('', withHero, 'Smile Care')).toEqual({
       tone: 'help',
       text: 'Đang để trống: sẽ dùng tiêu đề Hero.',
     });
-    expect(seoTitleHint('   ')).toEqual({
+    expect(seoTitleHint('   ', withHero, 'Smile Care')).toEqual({
       tone: 'help',
       text: 'Đang để trống: sẽ dùng tiêu đề Hero.',
     });
-    expect(seoTitleHint('a'.repeat(61))).toEqual({
+    expect(seoTitleHint('a'.repeat(61), withHero, 'Smile Care')).toEqual({
       tone: 'warning',
       text: 'Hơi dài: phần cuối có thể bị cắt trên kết quả tìm kiếm.',
     });
-    expect(seoTitleHint('a'.repeat(60))).toEqual({ tone: 'help', text: 'Độ dài phù hợp.' });
+    expect(seoTitleHint('a'.repeat(60), withHero, 'Smile Care')).toEqual({
+      tone: 'help',
+      text: 'Độ dài phù hợp.',
+    });
+  });
+
+  it('names the site name as the fallback when no Hero has a heading, as the live page does', () => {
+    const blank = { version: 1 as const, sections: [] };
+    expect(seoTitleHint('', blank, 'Nha khoa Smile Care')).toEqual({
+      tone: 'help',
+      text: 'Đang để trống: sẽ dùng tên site “Nha khoa Smile Care”.',
+    });
+    expect(seoTitleHint('', compositionWithHero(' '), 'Nha khoa Smile Care').text).toBe(
+      'Đang để trống: sẽ dùng tên site “Nha khoa Smile Care”.',
+    );
   });
 });
 
@@ -62,17 +76,6 @@ describe('search result truncation', () => {
     expect(searchResultPath('smilecare.payload.site', '')).toBe('smilecare.payload.site');
     expect(siteInitial(' smile Care')).toBe('S');
     expect(siteInitial('')).toBe('?');
-  });
-});
-
-describe('effective title', () => {
-  it('falls back to the Hero heading, then the page name', () => {
-    const composition = compositionWithHero('  Niềng răng trong suốt  ');
-    expect(heroHeadingOf(composition)).toBe('Niềng răng trong suốt');
-    expect(effectiveTitle('Ưu đãi | Smile Care', composition, 'Trang')).toBe('Ưu đãi | Smile Care');
-    expect(effectiveTitle(' ', composition, 'Trang')).toBe('Niềng răng trong suốt');
-    expect(effectiveTitle('', compositionWithHero(''), 'Trang ưu đãi')).toBe('Trang ưu đãi');
-    expect(effectiveTitle('', { version: 1, sections: [] }, 'Trang ưu đãi')).toBe('Trang ưu đãi');
   });
 });
 

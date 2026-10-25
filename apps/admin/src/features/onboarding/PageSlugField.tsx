@@ -41,12 +41,14 @@ export function PageSlugField({
   const checkProblem =
     check.state === 'rejected' || check.state === 'failed' ? check.message : undefined;
   return (
+    // The check answers while the user keeps typing: its result is a status message (WCAG 4.1.3).
     <Field
       label="Đường dẫn"
       id={id}
       required
       help={helpOf(value, check)}
       error={error ?? checkProblem}
+      announceMessages
     >
       <Input
         prefix={`${host}/`}

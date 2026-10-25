@@ -28,7 +28,16 @@ export interface DraftSaver {
   ensureSaved: () => Promise<SaveDraftResponse>;
   /** "Thử lại": saves now and restarts the automatic retries. */
   retry: () => void;
-  /** Starts listening to the store; returns the function that stops it. */
+  /**
+   * "Rời trang, bỏ thay đổi": drops the pending save, and stopping will not save these changes.
+   * A later change is saved as usual again.
+   */
+  discard: () => void;
+  /**
+   * Starts listening to the store; returns the function that stops it. Stopping (the screen
+   * unmounts: a link, Back/Forward) saves pending changes right away instead of dropping them, but
+   * schedules no more retries.
+   */
   start: () => () => void;
 }
 
@@ -79,6 +88,8 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
   let running: Promise<SaveDraftResponse> | null = null;
+  let stopped = true;
+  let discarded = false;
 
   function clearTimers() {
     if (debounceTimer !== null) {
@@ -93,7 +104,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 
   function scheduleRetry() {
     const delay = retryDelays[retryAttempt];
-    if (delay === undefined) {
+    if (delay === undefined || stopped) {
       return;
     }
     retryAttempt += 1;
@@ -176,8 +187,16 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       retryAttempt = 0;
       flushInBackground();
     },
+    discard() {
+      discarded = true;
+      clearTimers();
+    },
     start() {
+      stopped = false;
       const unsubscribe = store.subscribe((state, previous) => {
+        if (state.draftVersion !== previous.draftVersion) {
+          discarded = false;
+        }
         if (
           state.draftVersion !== previous.draftVersion &&
           hasUnsavedChanges(state) &&
@@ -190,8 +209,13 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         scheduleSave();
       }
       return () => {
+        stopped = true;
         unsubscribe();
         clearTimers();
+        const state = store.getState();
+        if (!discarded && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
+          flushInBackground();
+        }
       };
     },
   };
@@ -201,7 +225,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 export function useDraftSaver(
   store: EditorStore,
   options?: DraftSaverOptions,
-): Pick<DraftSaver, 'ensureSaved' | 'retry'> {
+): Pick<DraftSaver, 'ensureSaved' | 'retry' | 'discard'> {
   const [saver] = useState(() => createDraftSaver(store, options));
   useEffect(() => saver.start(), [saver]);
   return saver;

@@ -35,7 +35,7 @@ export async function createTestApp(
   }
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
-  configureApp(app);
+  configureApp(app, env);
   await app.init();
   const connection = app.get<Connection>(getConnectionToken());
   // Collections and unique indexes must exist before tests rely on them and before transactions write.

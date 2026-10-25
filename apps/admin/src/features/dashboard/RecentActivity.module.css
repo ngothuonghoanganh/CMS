@@ -81,3 +81,19 @@
   font-weight: 500;
   color: var(--color-warning-ink);
 }
+
+.historyLink {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-primary-ink);
+  text-decoration: none;
+}
+
+.historyLink:hover {
+  color: var(--color-primary-pressed);
+  text-decoration: underline;
+}

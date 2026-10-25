@@ -18,6 +18,6 @@ const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(e
   bufferLogs: true,
 });
 app.useLogger(app.get(Logger));
-configureApp(app);
+configureApp(app, env);
 app.enableShutdownHooks();
 await app.listen(env.API_PORT);

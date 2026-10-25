@@ -31,7 +31,7 @@ import {
   Tooltip,
 } from '@plp/ui';
 import { type ReactNode, useId, useLayoutEffect, useMemo, useRef } from 'react';
-import { ThemeSwatches } from '../theme';
+import { ThemeDots } from '../theme';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { groupLabels } from './presentation';
 import { visibilityGroupOf } from './store';
@@ -91,7 +91,8 @@ interface RowProps {
   section: SectionInstance;
   index: number;
   selected: boolean;
-  hasError: boolean;
+  /** Title of the first blocking check of this section, e.g. "Nút chính chưa có đích". */
+  error: string | null;
   canUp: boolean;
   canDown: boolean;
   onMove: (section: SectionInstance, toIndex: number, control: FocusControl) => void;
@@ -102,7 +103,7 @@ function StructureRow({
   section,
   index,
   selected,
-  hasError,
+  error,
   canUp,
   canDown,
   onMove,
@@ -162,9 +163,12 @@ function StructureRow({
       >
         <span className={styles.kind}>
           <span className={styles.kindText}>{kind}</span>
-          {hasError ? <span role="img" aria-label="Có lỗi" className={styles.errorDot} /> : null}
+          {error === null ? null : (
+            <span role="img" aria-label="Có lỗi" className={styles.errorDot} />
+          )}
         </span>
         <span className={styles.summary}>{summaryOf(section)}</span>
+        {error === null ? null : <span className={styles.errorBadge}>{error}</span>}
         {section.visibility.mobile ? null : (
           <span className={styles.badge}>Ẩn trên điện thoại</span>
         )}
@@ -226,13 +230,16 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
   const focusRequest = useRef<{ sectionId: string; control: FocusControl } | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
 
-  const errorIds = useMemo(
-    () =>
-      new Set(
-        blocking.flatMap((item) => (item.target.kind === 'section' ? [item.target.sectionId] : [])),
-      ),
-    [blocking],
-  );
+  // The reason of the first blocking check per section, shown as a badge on its row (board 03).
+  const errors = useMemo(() => {
+    const bySection = new Map<string, string>();
+    for (const item of blocking) {
+      if (item.target.kind === 'section' && !bySection.has(item.target.sectionId)) {
+        bySection.set(item.target.sectionId, item.title);
+      }
+    }
+    return bySection;
+  }, [blocking]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -335,7 +342,7 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
                 section={section}
                 index={index}
                 selected={section.id === selectedId}
-                hasError={errorIds.has(section.id)}
+                error={errors.get(section.id) ?? null}
                 canUp={canMoveSection(sections, index, index - 1)}
                 canDown={canMoveSection(sections, index, index + 1)}
                 onMove={move}
@@ -366,7 +373,7 @@ export function StructurePanel({ onOpenTheme }: StructurePanelProps) {
       </div>
       <div className={styles.themeRow}>
         <button type="button" className={styles.theme} onClick={onOpenTheme}>
-          <ThemeSwatches themePresetId={theme} />
+          <ThemeDots themePresetId={theme} />
           <span className={styles.themeLabel}>Giao diện site · màu &amp; chữ</span>
           <ChevronRightIcon size={18} />
         </button>

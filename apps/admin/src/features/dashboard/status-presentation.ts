@@ -104,8 +104,3 @@ export function presentPageStatus(page: PageSummary, now: DateInput): PageStatus
     checks: checksOf(page),
   };
 }
-
-/** True while a release of the page is live, i.e. it can be unpublished or opened. */
-export function isPageLive(page: PageSummary): boolean {
-  return page.liveRelease !== null;
-}

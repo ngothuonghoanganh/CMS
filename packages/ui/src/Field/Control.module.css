@@ -1,4 +1,5 @@
-/* Shared look of text inputs, textareas and selects: 44px, border-strong, radius 10. */
+/* Shared look of text inputs, textareas and selects: 44px, border-control, radius 10. An empty
+   field is identified by its border alone, so the border keeps 3:1 against the page. */
 .control {
   position: relative;
   display: flex;
@@ -6,7 +7,7 @@
   box-sizing: border-box;
   min-width: 0;
   min-height: var(--target-min);
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-ink);

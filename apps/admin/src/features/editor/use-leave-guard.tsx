@@ -2,9 +2,11 @@
 
 import type { SaveDraftResponse } from '@plp/contracts';
 import { Button, Callout, Dialog } from '@plp/ui';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
-import { ApiError } from '../../lib/api';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { setHistoryGuard } from '../shell/history-guard';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import type { EditorStore, SaveState } from './store';
+import { DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
 export function isUnsaved(saveState: SaveState): boolean {
@@ -26,11 +28,58 @@ export function useBeforeUnloadGuard(store: EditorStore): void {
   }, [store]);
 }
 
-function saveErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.problem.detail ?? error.problem.title;
-  }
-  return 'Chưa lưu được bản nháp. Kiểm tra kết nối rồi thử lại.';
+/** Where the user wanted to go: a link in the editor, or the browser's Back/Forward. */
+type PendingLeave = { kind: 'link'; href: string } | { kind: 'history' };
+
+/** The editor's own history entry, recorded while the editor is surely on it. */
+interface HistoryEntry {
+  state: unknown;
+  url: string;
+}
+
+function currentEntry(): HistoryEntry {
+  return { state: window.history.state as unknown, url: window.location.href };
+}
+
+/**
+ * Browser Back/Forward out of the editor (see `history-guard`). While changes are unsaved the
+ * guard keeps the router from handling the event, puts the editor's entry back (with the router's
+ * own state, so the router keeps working) and asks through `onBlocked`. Leaving after all goes
+ * back once more: the editor's entry was pushed right after the one the user chose, so
+ * `history.back()` reaches it whichever direction they went.
+ */
+function useHistoryLeaveGuard(store: EditorStore, onBlocked: () => void) {
+  const allowNext = useRef(false);
+
+  useEffect(() => {
+    let entry = currentEntry();
+    const unsubscribe = store.subscribe((state, previous) => {
+      if (isUnsaved(state.saveState) && !isUnsaved(previous.saveState)) {
+        entry = currentEntry();
+      }
+    });
+    const removeGuard = setHistoryGuard(() => {
+      if (allowNext.current) {
+        allowNext.current = false;
+        return false;
+      }
+      if (!isUnsaved(store.getState().saveState)) {
+        return false;
+      }
+      window.history.pushState(entry.state, '', entry.url);
+      onBlocked();
+      return true;
+    });
+    return () => {
+      unsubscribe();
+      removeGuard();
+    };
+  }, [store, onBlocked]);
+
+  return useCallback(() => {
+    allowNext.current = true;
+    window.history.back();
+  }, []);
 }
 
 export interface LeaveGuard {
@@ -41,39 +90,66 @@ export interface LeaveGuard {
 }
 
 /**
- * In-app navigation out of the editor (back, history, SEO). With unsaved changes the user can
- * stay, save and leave, or leave without saving.
+ * Navigation out of the editor (back, history, SEO, and the browser's Back/Forward). With unsaved
+ * changes the user can stay, save and leave, or leave without saving.
  */
 export function useLeaveGuard(
   store: EditorStore,
-  ensureSaved: () => Promise<SaveDraftResponse>,
+  saver: { ensureSaved: () => Promise<SaveDraftResponse>; discard: () => void },
   push: (href: string) => void,
 ): LeaveGuard {
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const { ensureSaved, discard } = saver;
+  const [pending, setPending] = useState<PendingLeave | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const ask = useCallback((leave: PendingLeave) => {
+    setError(null);
+    setPending(leave);
+  }, []);
+  const askForHistory = useCallback(() => {
+    ask({ kind: 'history' });
+  }, [ask]);
+  const goBackInHistory = useHistoryLeaveGuard(store, askForHistory);
 
   const navigate = useCallback(
     (href: string) => {
       if (isUnsaved(store.getState().saveState)) {
-        setError(null);
-        setPendingHref(href);
+        ask({ kind: 'link', href });
         return;
       }
       push(href);
     },
-    [store, push],
+    [store, push, ask],
   );
 
-  async function saveAndLeave(href: string) {
+  function leave(target: PendingLeave, saved: boolean) {
+    setPending(null);
+    if (!saved) {
+      // Leaving unmounts the editor, which would otherwise save these changes on the way out.
+      discard();
+    }
+    if (target.kind === 'link') {
+      push(target.href);
+    } else {
+      goBackInHistory();
+    }
+  }
+
+  async function saveAndLeave(target: PendingLeave) {
     setSaving(true);
     setError(null);
     try {
       await ensureSaved();
-      setPendingHref(null);
-      push(href);
+      leave(target, true);
     } catch (caught) {
-      setError(saveErrorMessage(caught));
+      if (caught instanceof DraftConflictError) {
+        // The blocking conflict dialog takes over; nothing here can be saved any more.
+        setPending(null);
+      } else {
+        reportUnexpected('Saving the draft before leaving the editor failed', caught);
+        setError(`Chưa lưu được bản nháp. ${problemMessage(caught)}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -81,10 +157,10 @@ export function useLeaveGuard(
 
   const dialog = (
     <Dialog
-      open={pendingHref !== null}
+      open={pending !== null}
       onOpenChange={(open) => {
         if (!open && !saving) {
-          setPendingHref(null);
+          setPending(null);
         }
       }}
       title="Rời editor khi chưa lưu xong?"
@@ -95,7 +171,7 @@ export function useLeaveGuard(
             variant="secondary"
             disabled={saving}
             onClick={() => {
-              setPendingHref(null);
+              setPending(null);
             }}
           >
             Ở lại
@@ -104,9 +180,8 @@ export function useLeaveGuard(
             variant="danger"
             disabled={saving}
             onClick={() => {
-              if (pendingHref !== null) {
-                setPendingHref(null);
-                push(pendingHref);
+              if (pending !== null) {
+                leave(pending, false);
               }
             }}
           >
@@ -115,8 +190,8 @@ export function useLeaveGuard(
           <Button
             loading={saving}
             onClick={() => {
-              if (pendingHref !== null) {
-                void saveAndLeave(pendingHref);
+              if (pending !== null) {
+                void saveAndLeave(pending);
               }
             }}
           >

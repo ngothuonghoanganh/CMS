@@ -1,4 +1,5 @@
 import type { ChecksResult, PageStatusKind, PageSummary } from '@plp/contracts';
+import type { CSSProperties } from 'react';
 import { formatRelativeTime } from '../../lib/format';
 import type { Device, SaveFailure, SaveState, VisibilityGroup } from './store';
 
@@ -46,6 +47,15 @@ export function frameLayout(device: Device, available: number | null): FrameLayo
   return { width: target, zoom: 1 };
 }
 
+/**
+ * Style of the canvas frame. The page inside is scaled with `zoom`; the editor's own controls on
+ * it (section toolbar, insertion point, alt warning) read `--chrome-zoom` to undo that scaling,
+ * so their targets keep their real size (WCAG 2.5.8) on a narrow canvas.
+ */
+export function frameStyle(layout: FrameLayout): CSSProperties & { '--chrome-zoom': number } {
+  return { width: layout.width ?? '100%', zoom: layout.zoom, '--chrome-zoom': 1 / layout.zoom };
+}
+
 export const groupLabels: Record<VisibilityGroup, string> = {
   desktop: 'máy tính',
   mobile: 'điện thoại',
@@ -53,7 +63,13 @@ export const groupLabels: Record<VisibilityGroup, string> = {
 
 export interface SaveStatusView {
   tone: 'success' | 'muted' | 'danger' | 'warning';
+  /** The save state ("Đã lưu bản nháp"); it changes only when the state does. */
   text: string;
+  /**
+   * When the draft was last saved ("2 phút trước"). It changes as time passes, so it stays out of
+   * the status live region; otherwise screen readers would hear the status again every minute.
+   */
+  time: string | null;
   /** Show the "Thử lại" button. */
   canRetry: boolean;
 }
@@ -69,21 +85,29 @@ export function saveStatusView(
     case 'saved':
       return {
         tone: 'success',
-        text:
-          lastSavedAt === null || now === null
-            ? 'Đã lưu bản nháp'
-            : `Đã lưu bản nháp · ${formatRelativeTime(lastSavedAt, now)}`,
+        text: 'Đã lưu bản nháp',
+        time: lastSavedAt === null || now === null ? null : formatRelativeTime(lastSavedAt, now),
         canRetry: false,
       };
     case 'saving':
-      return { tone: 'muted', text: 'Đang lưu…', canRetry: false };
+      return { tone: 'muted', text: 'Đang lưu…', time: null, canRetry: false };
     case 'dirty':
-      return { tone: 'muted', text: 'Có thay đổi chưa lưu', canRetry: false };
+      return { tone: 'muted', text: 'Có thay đổi chưa lưu', time: null, canRetry: false };
     case 'conflict':
-      return { tone: 'danger', text: 'Trang vừa được cập nhật ở nơi khác', canRetry: false };
+      return {
+        tone: 'danger',
+        text: 'Trang vừa được cập nhật ở nơi khác',
+        time: null,
+        canRetry: false,
+      };
     case 'error':
       // A rejected draft (422) needs a fix, not another attempt.
-      return { tone: 'danger', text: 'Chưa lưu được', canRetry: saveError?.kind !== 'invalid' };
+      return {
+        tone: 'danger',
+        text: 'Chưa lưu được',
+        time: null,
+        canRetry: saveError?.kind !== 'invalid',
+      };
   }
 }
 

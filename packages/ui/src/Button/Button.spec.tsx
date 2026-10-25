@@ -32,7 +32,7 @@ describe('Button', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('is busy and disabled while loading, and ignores clicks', async () => {
+  it('is busy and aria-disabled while loading, and ignores clicks and keys', async () => {
     const onClick = vi.fn();
     render(
       <Button loading onClick={onClick}>
@@ -41,9 +41,43 @@ describe('Button', () => {
     );
     const button = screen.getByRole('button', { name: 'Xuất bản v13' });
     expect(button).toHaveAttribute('aria-busy', 'true');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(button);
+    button.focus();
+    await userEvent.keyboard('{Enter}[Space]');
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps keyboard focus when it starts loading', () => {
+    function Publish({ loading }: { loading: boolean }) {
+      return <Button loading={loading}>Xuất bản v13</Button>;
+    }
+    const { rerender } = render(<Publish loading={false} />);
+    const button = screen.getByRole('button', { name: 'Xuất bản v13' });
+    button.focus();
+    rerender(<Publish loading />);
+    expect(button).toBeEnabled();
+    expect(button).toHaveFocus();
+    rerender(<Publish loading={false} />);
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('does not submit its form again while loading', async () => {
+    const onSubmit = vi.fn((event: { preventDefault: () => void }) => {
+      event.preventDefault();
+    });
+    render(
+      <form aria-label="Đăng nhập" onSubmit={onSubmit}>
+        <input aria-label="Email" />
+        <Button type="submit" loading>
+          Đăng nhập
+        </Button>
+      </form>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Email' }), 'a{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('can be disabled without being busy', () => {

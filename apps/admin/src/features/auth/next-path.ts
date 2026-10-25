@@ -30,7 +30,14 @@ export function safeNextPath(value: string | readonly string[] | null | undefine
     return '/';
   }
   const url = new URL(value, PLACEHOLDER_ORIGIN);
-  if (url.origin !== PLACEHOLDER_ORIGIN || AUTH_PATHS.has(url.pathname)) {
+  // Removing dot segments can leave an empty first segment ("/.//evil.example" becomes
+  // "//evil.example"), which the router would resolve as another host, so the normalised
+  // result is checked again.
+  if (
+    url.origin !== PLACEHOLDER_ORIGIN ||
+    url.pathname.startsWith('//') ||
+    AUTH_PATHS.has(url.pathname)
+  ) {
     return '/';
   }
   return `${url.pathname}${url.search}${url.hash}`;

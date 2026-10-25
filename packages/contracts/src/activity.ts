@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
+import { cursorQuerySchema, idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 
 export const activityTypes = [
   'site.created',
@@ -13,6 +13,32 @@ export const activityTypes = [
 ] as const;
 export const activityTypeSchema = z.enum(activityTypes);
 export type ActivityType = z.infer<typeof activityTypeSchema>;
+
+/**
+ * Events that move a page's live pointer (publish, rollback, undo, unpublish): the publishing
+ * history a site shows, e.g. "Hoạt động xuất bản gần đây" on the dashboard.
+ */
+export const publishingActivityTypes = [
+  'page.published',
+  'page.rolled_back',
+  'page.rollback_undone',
+  'page.unpublished',
+] as const satisfies readonly ActivityType[];
+
+export const activityListQuerySchema = cursorQuerySchema.extend({
+  /**
+   * Comma-separated types to list, e.g. `publishingActivityTypes.join(',')`; every type when
+   * absent.
+   */
+  types: z
+    .string()
+    .max(300)
+    .transform((value) => value.split(','))
+    // Splitting always yields at least one item; an empty value fails as an unknown type.
+    .pipe(z.array(activityTypeSchema))
+    .optional(),
+});
+export type ActivityListQuery = z.input<typeof activityListQuerySchema>;
 
 export const activityItemSchema = z.object({
   id: idSchema,

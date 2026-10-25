@@ -16,6 +16,7 @@ export {
 export { ConflictDialog } from './ConflictDialog';
 export { focusFieldElement, focusTarget, type FocusTargetOptions } from './focus-target';
 export { LIST_LIMIT, loadAllPages, referencedAssetIds } from './load-editor-data';
+export { useLatestServerDraft } from './server-draft';
 export {
   createEditorStore,
   type Device,

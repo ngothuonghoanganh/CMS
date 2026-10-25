@@ -1,17 +1,25 @@
 import type { ActivityItem } from '@plp/contracts';
-import { Card, WarningTriangleIcon } from '@plp/ui';
+import { Card, VisuallyHidden, WarningTriangleIcon } from '@plp/ui';
+import Link from 'next/link';
 import { type DateInput, formatDateTime, formatRelativeTime } from '../../lib/format';
 import { cx } from '../shell/cx';
+import { pageHref } from '../shell/navigation';
 import { activitySentence } from './activity-sentence';
 import styles from './RecentActivity.module.css';
 
 export interface RecentActivityProps {
+  siteId: string;
   items: readonly ActivityItem[];
   now: DateInput;
 }
 
-/** "Hoạt động xuất bản gần đây": the latest activity of the site, newest first. */
-export function RecentActivity({ items, now }: RecentActivityProps) {
+/**
+ * "Hoạt động xuất bản gần đây": the latest activity of the site, newest first. As on board 01 it
+ * ends with "Xem lịch sử phiên bản →", which opens the history of the page that changed last
+ * (history is kept per page).
+ */
+export function RecentActivity({ siteId, items, now }: RecentActivityProps) {
+  const latestPage = items.find((item) => item.page !== null)?.page ?? null;
   return (
     <Card as="section" aria-labelledby="activity-heading" className={styles.card}>
       <h2 id="activity-heading" className={styles.heading}>
@@ -51,6 +59,13 @@ export function RecentActivity({ items, now }: RecentActivityProps) {
             );
           })}
         </ul>
+      )}
+      {latestPage === null ? null : (
+        <Link href={pageHref(siteId, latestPage.id, 'history')} className={styles.historyLink}>
+          Xem lịch sử phiên bản
+          <VisuallyHidden> của trang “{latestPage.title}”</VisuallyHidden>
+          <span aria-hidden="true"> →</span>
+        </Link>
       )}
     </Card>
   );

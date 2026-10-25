@@ -4,7 +4,8 @@ import { endpoints, type Site, type ThemePresetId } from '@plp/contracts';
 import { Button, Callout, Dialog, useToast } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ApiError, api } from '../../lib/api';
+import { api } from '../../lib/api';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import styles from './theme.module.css';
 import { ThemePicker } from './ThemePicker';
 
@@ -16,13 +17,6 @@ export interface ThemePickerDialogProps {
   canEdit: boolean;
   /** Called with the saved site so the caller (e.g. the editor canvas) updates at once. */
   onSiteUpdated: (site: Site) => void;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.problem.detail ?? error.problem.title;
-  }
-  return 'Không đổi được giao diện. Kiểm tra kết nối rồi thử lại.';
 }
 
 /** "Giao diện site · màu & chữ" from the editor: pick a preset and apply it to the whole site. */
@@ -42,6 +36,9 @@ export function ThemePickerDialog({
       onSiteUpdated(updated);
       toast({ title: 'Đã đổi giao diện site', tone: 'success' });
       onOpenChange(false);
+    },
+    onError: (error) => {
+      reportUnexpected('Changing the site theme failed', error);
     },
   });
 
@@ -100,7 +97,7 @@ export function ThemePickerDialog({
         />
         {mutation.isError ? (
           <Callout tone="danger" role="alert">
-            {errorMessage(mutation.error)}
+            {problemMessage(mutation.error)}
           </Callout>
         ) : null}
       </div>

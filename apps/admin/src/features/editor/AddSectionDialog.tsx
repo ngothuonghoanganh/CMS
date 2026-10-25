@@ -2,7 +2,7 @@
 
 import { MAX_SECTIONS } from '@plp/contracts';
 import { getSectionDefinition, insertionIndex } from '@plp/sections/schema';
-import { Badge, Button, Dialog, InfoCircleIcon, Input, SearchIcon } from '@plp/ui';
+import { Badge, Button, Dialog, InfoCircleIcon, Input, SearchIcon, VisuallyHidden } from '@plp/ui';
 import { useMemo, useRef, useState } from 'react';
 import styles from './AddSectionDialog.module.css';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
@@ -40,6 +40,14 @@ export function AddSectionDialog({ open, onOpenChange, requestedIndex }: AddSect
   const selected = available.find((card) => card.key === selectedKey) ?? available[0] ?? null;
 
   const full = sections.length >= MAX_SECTIONS;
+  const trimmedQuery = query.trim();
+  // Search results change while typing; screen readers hear how many sections match.
+  const searchStatus =
+    trimmedQuery === ''
+      ? ''
+      : matches.length === 0
+        ? `Không tìm thấy section phù hợp với “${trimmedQuery}”.`
+        : `${matches.length} section phù hợp với “${trimmedQuery}”.`;
   const index = selected ? insertionIndex(sections, selected.type, requestedIndex) : requestedIndex;
   const previous = sections[index - 1];
   const position = `vị trí ${index + 1} / ${sections.length + 1}`;
@@ -110,6 +118,7 @@ export function AddSectionDialog({ open, onOpenChange, requestedIndex }: AddSect
       }
     >
       <div className={styles.body}>
+        <VisuallyHidden aria-live="polite">{searchStatus}</VisuallyHidden>
         <nav aria-label="Nhóm section" className={styles.categories}>
           <ul className={styles.categoryList}>
             {categories.map((item) => {

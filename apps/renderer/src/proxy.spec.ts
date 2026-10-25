@@ -71,11 +71,26 @@ describe('proxy', () => {
     expect(forwardedHeader(response, 'x-plp-live-release')).toBe(RELEASE_ID);
   });
 
-  it('lets a redirect render without a live release, dropping a client value', async () => {
-    getPathStatusMock.mockResolvedValue({ kind: 'redirect' });
+  it('answers an old slug with a 308 itself, before the page renders', async () => {
+    // Without a User-Agent, Next would stream the page's own redirect as a 200 shell.
+    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '/moi' });
+    const response = await proxy(request('/cu'));
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('http://smilecare.localhost:3101/moi');
+    expect(response.headers.get('x-middleware-next')).toBeNull();
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull();
+    expect(getPathStatusMock).toHaveBeenCalledOnce();
+    expect(getPathStatusMock).toHaveBeenCalledWith('smilecare', 'cu');
+  });
+
+  it('lets the page decide when the API names a redirect off the site', async () => {
+    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '//evil.example/x' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await proxy(
       request('/cu', 'smilecare.localhost:3101', { 'x-plp-live-release': FORGED_ID }),
     );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
     expect(response.headers.get('x-middleware-next')).toBe('1');
     expect(forwardedHeader(response, 'x-plp-live-release')).toBeNull();
   });
@@ -89,6 +104,6 @@ describe('proxy', () => {
     );
     expect(response.headers.get('x-middleware-next')).toBe('1');
     expect(forwardedHeader(response, 'x-plp-live-release')).toBeNull();
-    expect(log).toHaveBeenCalledWith('Not-found check failed; rendering the page instead', error);
+    expect(log).toHaveBeenCalledWith('Path check failed; rendering the page instead', error);
   });
 });

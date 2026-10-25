@@ -64,6 +64,12 @@ export const siteSchema = z.object({
 });
 export type Site = z.infer<typeof siteSchema>;
 
+/**
+ * Upper bound on sites per workspace (ADR-014): the site list, which every workspace screen loads
+ * for the site switcher, stays bounded.
+ */
+export const MAX_SITES_PER_WORKSPACE = 100;
+
 export const siteListResponseSchema = z.object({ items: z.array(siteSchema) });
 export type SiteListResponse = z.infer<typeof siteListResponseSchema>;
 

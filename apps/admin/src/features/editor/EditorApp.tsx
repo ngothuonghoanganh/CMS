@@ -15,7 +15,8 @@ import { useToast } from '@plp/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
-import { ApiError, api } from '../../lib/api';
+import { api } from '../../lib/api';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { ThemePickerDialog } from '../theme';
 import { AddSectionDialog } from './AddSectionDialog';
 import { Canvas } from './Canvas';
@@ -31,6 +32,7 @@ import styles from './EditorApp.module.css';
 import { focusTarget } from './focus-target';
 import { LIST_LIMIT, loadAllPages } from './load-editor-data';
 import { PropertiesPanel } from './PropertiesPanel';
+import { useLatestServerDraft } from './server-draft';
 import { createEditorStore, type EditorStore } from './store';
 import { StructurePanel } from './StructurePanel';
 import { TopBar } from './TopBar';
@@ -66,18 +68,15 @@ export interface PublishDialogRenderProps {
 
 export interface EditorAppProps {
   initial: EditorInitialData;
-  /** The publish dialog (screen 05). Without it, publishing buttons say "Sắp có". */
-  renderPublishDialog?: ((props: PublishDialogRenderProps) => ReactNode) | undefined;
+  /** The publish dialog (screen 05), mounted by the publish feature. */
+  renderPublishDialog: (props: PublishDialogRenderProps) => ReactNode;
 }
 
 function previewErrorMessage(error: unknown): string {
   if (error instanceof DraftConflictError) {
     return 'Trang vừa được cập nhật ở nơi khác. Tải lại bản mới nhất rồi thử lại.';
   }
-  if (error instanceof ApiError) {
-    return error.problem.detail ?? error.problem.title;
-  }
-  return 'Kiểm tra kết nối rồi thử lại.';
+  return problemMessage(error);
 }
 
 interface ShellProps {
@@ -93,7 +92,8 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
   const pageId = useEditor((state) => state.page.id);
   const site = useEditor((state) => state.site);
   const role = useEditor((state) => state.role);
-  const { ensureSaved, retry } = useDraftSaver(store);
+  const saver = useDraftSaver(store);
+  const { ensureSaved, retry } = saver;
   const { announce, region } = useAnnouncer();
   const push = useCallback(
     (href: string) => {
@@ -101,8 +101,9 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
     },
     [router],
   );
-  const guard = useLeaveGuard(store, ensureSaved, push);
+  const guard = useLeaveGuard(store, saver, push);
   useBeforeUnloadGuard(store);
+  useLatestServerDraft(store);
   useEditorShortcuts(store, announce);
 
   const pagesQuery = useQuery({
@@ -167,6 +168,9 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
         duration: 15_000,
       });
     } catch (error) {
+      if (!(error instanceof DraftConflictError)) {
+        reportUnexpected('Opening the draft preview failed', error);
+      }
       toast({
         tone: 'danger',
         title: 'Chưa mở được bản xem trước',
@@ -188,13 +192,9 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
             void preview();
           }}
           previewPending={previewPending}
-          onOpenPublish={
-            renderPublishDialog
-              ? () => {
-                  setPublishOpen(true);
-                }
-              : null
-          }
+          onOpenPublish={() => {
+            setPublishOpen(true);
+          }}
         />
         <DraftNotice ensureSaved={ensureSaved} />
         <main className={styles.workspace}>
@@ -227,7 +227,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
           store.getState().setSite(updated);
         }}
       />
-      {renderPublishDialog?.({
+      {renderPublishDialog({
         open: publishOpen,
         onOpenChange: setPublishOpen,
         pageId,

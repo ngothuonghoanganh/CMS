@@ -3,7 +3,7 @@ import { themePresets } from '@plp/sections/schema';
 import styles from './theme.module.css';
 
 /** Three overlapping dots: brand background, soft background and accent (decorative). */
-export function ThemeSwatches({ themePresetId }: { themePresetId: ThemePresetId }) {
+export function ThemeDots({ themePresetId }: { themePresetId: ThemePresetId }) {
   const { schemes } = themePresets[themePresetId];
   const colors = [schemes.brand.background, schemes.soft.background, schemes.brand.accent];
   return (
@@ -15,9 +15,12 @@ export function ThemeSwatches({ themePresetId }: { themePresetId: ThemePresetId 
   );
 }
 
-/** The four color schemes of a preset as "Aa" tiles with the accent dot. */
+/**
+ * The four color schemes of a preset (Sáng, Nhạt, Thương hiệu, Tối) as "Aa" tiles in the preset's
+ * heading font, with the accent dot. Decorative: the preset's name and description label it.
+ */
 export function SchemeStrip({ themePresetId }: { themePresetId: ThemePresetId }) {
-  const { schemes } = themePresets[themePresetId];
+  const { schemes, fonts } = themePresets[themePresetId];
   return (
     <span className={styles.strip} aria-hidden="true">
       {colorSchemeIds.map((id) => {
@@ -30,6 +33,7 @@ export function SchemeStrip({ themePresetId }: { themePresetId: ThemePresetId })
               background: scheme.background,
               color: scheme.heading,
               borderColor: scheme.border,
+              fontFamily: fonts.heading,
             }}
           >
             Aa
