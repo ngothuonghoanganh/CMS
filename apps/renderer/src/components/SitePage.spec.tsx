@@ -6,6 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { liveRenderContext, SitePage } from './SitePage';
 
 const LOGO = { url: 'http://cdn.test/public/logo.png', width: 320, height: 80 };
+const RELEASE_ID = 'd'.repeat(24);
+const CAPTURE = {
+  requiredText: 'Tôi đồng ý để Smile Care liên hệ tư vấn.',
+  marketingText: null,
+  policyUrl: 'https://smilecare.vn/chinh-sach',
+};
 
 function pageData(): PublicPageData {
   let next = 0;
@@ -40,27 +46,71 @@ function pageData(): PublicPageData {
     },
     assets: {},
     pageLinks: { ['c'.repeat(24)]: '/uu-dai' },
+    releaseId: RELEASE_ID,
+    leadCapture: CAPTURE,
+  };
+}
+
+function withForm(data: PublicPageData): PublicPageData {
+  const sections = data.page.composition.sections;
+  return {
+    ...data,
+    page: {
+      ...data.page,
+      composition: {
+        version: 1,
+        sections: [
+          ...sections.slice(0, -1),
+          createSectionInstance('lead_form', undefined, 'form00000001'),
+          ...sections.slice(-1),
+        ],
+      },
+    },
   };
 }
 
 describe('liveRenderContext', () => {
   it('renders published data in live mode, without any editing hook', () => {
-    const data = pageData();
-    expect(liveRenderContext(data)).toEqual({
+    const { leadSubmission, ...rest } = liveRenderContext(pageData(), 'live');
+    expect(rest).toEqual({
       mode: 'live',
       site: { name: 'Smile Care', logo: LOGO },
       images: {},
       pagePaths: { ['c'.repeat(24)]: '/uu-dai' },
+      leadCapture: CAPTURE,
     });
+    // A live page sends its form with the release it shows.
+    expect(leadSubmission?.releaseId).toBe(RELEASE_ID);
+  });
+
+  it('never lets a preview send its form', () => {
+    expect(liveRenderContext(pageData(), 'off')).not.toHaveProperty('leadSubmission');
+    expect(liveRenderContext({ ...pageData(), releaseId: null }, 'live')).not.toHaveProperty(
+      'leadSubmission',
+    );
   });
 });
 
 describe('SitePage', () => {
   it('draws the page with header, main (skip-link target) and footer landmarks', () => {
-    const html = renderToStaticMarkup(<SitePage data={pageData()} />);
+    const html = renderToStaticMarkup(<SitePage data={pageData()} submission="live" />);
     expect(html).toContain('<header');
     expect(html).toContain(`<main id="${MAIN_CONTENT_ID}">`);
     expect(html).toContain('<footer');
     expect(html).not.toContain('contenteditable');
+  });
+
+  it('server-renders a live form that posts to /_lead without JavaScript', () => {
+    const html = renderToStaticMarkup(<SitePage data={withForm(pageData())} submission="live" />);
+    expect(html).toContain('action="/_lead"');
+    expect(html).toContain(`value="${RELEASE_ID}"`);
+    expect(html).toContain('Tôi đồng ý để Smile Care liên hệ tư vấn.');
+    expect(html).not.toContain('checked');
+  });
+
+  it('renders a preview form that cannot send', () => {
+    const html = renderToStaticMarkup(<SitePage data={withForm(pageData())} submission="off" />);
+    expect(html).not.toContain('action=');
+    expect(html).toContain('Bản xem trước: form không gửi đi.');
   });
 });

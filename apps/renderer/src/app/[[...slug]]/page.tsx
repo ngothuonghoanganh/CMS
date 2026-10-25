@@ -54,5 +54,5 @@ export default async function PublicPage({ params }: PublicPageProps) {
   if (resolution.kind === 'not_found') {
     notFound();
   }
-  return <SitePage data={resolution.data} />;
+  return <SitePage data={resolution.data} submission="live" />;
 }

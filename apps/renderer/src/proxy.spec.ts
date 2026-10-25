@@ -1,7 +1,8 @@
+import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPathStatus } from './lib/public-api';
-import { proxy } from './proxy';
+import { config, proxy } from './proxy';
 
 vi.mock('./lib/public-api', () => ({ getPathStatus: vi.fn() }));
 
@@ -29,6 +30,7 @@ beforeEach(() => {
   vi.stubEnv('BASE_DOMAIN', 'localhost:3101');
   vi.stubEnv('PUBLIC_SITE_PROTOCOL', 'http');
   vi.stubEnv('REVALIDATE_SECRET', 's'.repeat(32));
+  vi.stubEnv('RENDERER_API_SECRET', 'r'.repeat(32));
 });
 
 afterEach(() => {
@@ -106,4 +108,17 @@ describe('proxy', () => {
     expect(forwardedHeader(response, 'x-plp-live-release')).toBeNull();
     expect(log).toHaveBeenCalledWith('Path check failed; rendering the page instead', error);
   });
+});
+
+describe('proxy matcher', () => {
+  it.each(['/', '/uu-dai', '/_leadx', '/lead'])('gates the page path %s', (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true);
+  });
+
+  it.each(['/_lead', '/_preview/abc', '/_next/static/x.js', '/api/revalidate', '/sitemap.xml'])(
+    'leaves %s to its own route',
+    (url) => {
+      expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false);
+    },
+  );
 });
