@@ -52,6 +52,38 @@ describe('ConfirmRecipient', () => {
     );
   });
 
+  it('asks again for another link pasted into the same tab', async () => {
+    const user = userEvent.setup();
+    apiMock
+      .mockResolvedValueOnce({ siteName: 'Nha khoa Smile Care', email: 'sales@smilecare.vn' })
+      .mockRejectedValueOnce(apiError(404, 'not_found', 'Liên kết xác nhận không còn hiệu lực'));
+    renderWithProviders(<ConfirmRecipient />);
+    await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('sales@smilecare.vn');
+
+    // Only the fragment changes, so the page is not loaded again.
+    const other = 'b'.repeat(43);
+    act(() => {
+      window.history.replaceState(null, '', `/lead-recipients/confirm#token=${other}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
+    expect(lastCallTo(apiMock, endpoints.confirmLeadRecipient).options).toEqual({
+      body: { token: other },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Liên kết xác nhận không còn hiệu lực',
+    );
+
+    // The first link's error is not shown for a third one.
+    act(() => {
+      window.history.replaceState(null, '', `/lead-recipients/confirm#token=${'c'.repeat(43)}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('asks to open the email again when the link lost its secret', () => {
     window.history.replaceState(null, '', '/lead-recipients/confirm#token=ngan');
     renderWithProviders(<ConfirmRecipient />);

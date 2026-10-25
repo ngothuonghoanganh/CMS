@@ -37,7 +37,11 @@ export function ConfirmRecipient() {
     },
   });
 
-  if (confirm.isSuccess) {
+  // Another link pasted into this tab gets its own button: an earlier outcome is not about it. After
+  // a confirmation the fragment is cleared, so no token still means the link just confirmed.
+  const outcomeOfThisLink = token === null || token === confirm.variables;
+
+  if (confirm.isSuccess && outcomeOfThisLink) {
     return (
       <Callout tone="success" role="status" title="Đã xác nhận">
         {`${confirm.data.email} sẽ nhận email khi có lead mới từ ${confirm.data.siteName}.`}
@@ -56,7 +60,7 @@ export function ConfirmRecipient() {
   }
   return (
     <div className={styles.confirm}>
-      {confirm.isError ? (
+      {confirm.isError && outcomeOfThisLink ? (
         <Callout
           tone="danger"
           role="alert"
