@@ -1,7 +1,11 @@
 import { siteQueryKeys } from '../dashboard/queries';
 
+function pagesKey(siteId: string) {
+  return [...siteQueryKeys.pages(siteId), 'page'] as const;
+}
+
 function pageKey(siteId: string, pageId: string) {
-  return [...siteQueryKeys.pages(siteId), 'page', pageId] as const;
+  return [...pagesKey(siteId), pageId] as const;
 }
 
 /**
@@ -9,6 +13,8 @@ function pageKey(siteId: string, pageId: string) {
  * invalidating `siteQueryKeys.site(siteId)` after a pointer move refreshes them with the dashboard.
  */
 export const pageQueryKeys = {
+  /** The screens of every page of the site. */
+  pages: pagesKey,
   page: pageKey,
   summary: (siteId: string, pageId: string) => [...pageKey(siteId, pageId), 'summary'] as const,
   history: (siteId: string, pageId: string) => [...pageKey(siteId, pageId), 'history'] as const,

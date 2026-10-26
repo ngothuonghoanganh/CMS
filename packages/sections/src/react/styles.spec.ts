@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /** Declarations by selector; rules inside @container blocks add to the top-level ones. */
@@ -16,6 +16,15 @@ function declarations(file: string): Map<string, string> {
 
 const frame = declarations('./frame.module.css');
 const hero = declarations('./sections/Hero.module.css');
+const leadForm = declarations('./sections/LeadForm.module.css');
+
+/** Every rule of the canvas frame and of each section, by selector. */
+const everyRule = [
+  ...frame,
+  ...readdirSync(new URL('./sections/', import.meta.url))
+    .filter((file) => file.endsWith('.module.css'))
+    .flatMap((file) => [...declarations(`./sections/${file}`)]),
+];
 
 describe('placeholder of an empty text on the canvas', () => {
   it('draws the field name in a scheme text color at full opacity, slanted', () => {
@@ -25,13 +34,17 @@ describe('placeholder of an empty text on the canvas', () => {
     expect(placeholder).toMatch(/(?<![\w-])font-style:\s*italic;/);
   });
 
-  it('never fades a placeholder, wherever it is drawn', () => {
-    const placeholders = [...frame, ...hero].filter(([selector]) =>
-      selector.endsWith(':empty::before'),
+  it('never fades a placeholder or its empty text, wherever it is drawn', () => {
+    // An empty element passes its opacity on to its placeholder, so its rules count too.
+    const empty = everyRule.filter(
+      ([selector]) => selector.includes(':empty') && !selector.includes(':not(:empty)'),
     );
-    expect(placeholders.length).toBeGreaterThanOrEqual(5);
-    for (const [selector, body] of placeholders) {
+    expect(empty.length).toBeGreaterThanOrEqual(5);
+    for (const [selector, body] of empty) {
       expect(body, selector).not.toMatch(/opacity|filter|color-mix|rgba|transparent/);
+      for (const [, color = ''] of body.matchAll(/(?<![\w-])color:\s*([^;]+);/g)) {
+        expect(color, selector).toMatch(/^(inherit|var\(--plp-(heading|text|muted|link)\))$/);
+      }
     }
   });
 
@@ -44,5 +57,13 @@ describe('placeholder of an empty text on the canvas', () => {
         /(?<![\w-])color:\s*inherit;/,
       );
     }
+  });
+});
+
+describe('send button of the lead form', () => {
+  it('shows that a lead is on its way, since it stays enabled while sending', () => {
+    const busy = leadForm.get(".submit[aria-busy='true']") ?? '';
+    expect(busy).toMatch(/(?<![\w-])cursor:\s*progress;/);
+    expect(busy).toMatch(/(?<![\w-])opacity:\s*0\.\d+;/);
   });
 });

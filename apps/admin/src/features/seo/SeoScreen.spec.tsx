@@ -9,7 +9,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
-import { renderWithProviders } from '../shell/test-utils';
+import { installHistoryGuard } from '../shell/history-guard';
+import { apiError, renderWithProviders } from '../shell/test-utils';
 import { SeoScreen } from './SeoScreen';
 
 const { router } = vi.hoisted(() => ({
@@ -50,6 +51,9 @@ function renderScreen(composition?: Composition) {
   );
   return detail;
 }
+
+// As the root providers do while loading: ahead of any router listener.
+installHistoryGuard();
 
 // jsdom has no pointer capture; Radix menus call it while handling pointer events.
 beforeAll(() => {
@@ -154,6 +158,106 @@ describe('SeoScreen', () => {
     });
   });
 
+  describe('with a change still to save', () => {
+    /** A link of the page outside this screen, like the sidebar's "Trang". */
+    function outsideLink(): HTMLAnchorElement {
+      const link = document.createElement('a');
+      link.href = `/sites/${SITE_ID}`;
+      link.textContent = 'Trang';
+      document.body.append(link);
+      return link;
+    }
+
+    it('saves before following any link of the page, then follows it', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      let answerSave: () => void = () => undefined;
+      answerApi(
+        () =>
+          new Promise((resolve) => {
+            answerSave = () => {
+              resolve({
+                revision: 4,
+                updatedAt: '2026-10-24T08:05:00.000Z',
+                page: detail.page,
+                checks: detail.checks,
+              });
+            };
+          }),
+      );
+      const link = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+
+      await waitFor(() => {
+        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      });
+      expect(router.push).not.toHaveBeenCalled();
+      answerSave();
+      await waitFor(() => {
+        expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
+      });
+      link.remove();
+    });
+
+    it('stays, keeping the change, when that save fails', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      const link = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+      expect(router.push).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
+      link.remove();
+    });
+
+    it('saves before the browser goes Back, then goes back', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      let answerSave: () => void = () => undefined;
+      answerApi(
+        () =>
+          new Promise((resolve) => {
+            answerSave = () => {
+              resolve({
+                revision: 4,
+                updatedAt: '2026-10-24T08:05:00.000Z',
+                page: detail.page,
+                checks: detail.checks,
+              });
+            };
+          }),
+      );
+      const pushState = vi.spyOn(window.history, 'pushState');
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+      const routerListener = vi.fn();
+      window.addEventListener('popstate', routerListener);
+      try {
+        await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+        window.dispatchEvent(new PopStateEvent('popstate', { state: { previous: true } }));
+
+        // The router never saw this Back; the screen's entry is back in place while it saves.
+        expect(routerListener).not.toHaveBeenCalled();
+        expect(pushState).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+          expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        });
+        expect(back).not.toHaveBeenCalled();
+        answerSave();
+        await waitFor(() => {
+          expect(back).toHaveBeenCalledTimes(1);
+        });
+      } finally {
+        window.removeEventListener('popstate', routerListener);
+        pushState.mockRestore();
+        back.mockRestore();
+      }
+    });
+  });
+
   it('leaves at once when everything is saved', async () => {
     const user = userEvent.setup();
     renderScreen();
@@ -163,60 +267,105 @@ describe('SeoScreen', () => {
     expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).toEqual([endpoints.getPage]);
   });
 
-  it('keeps the focus in the header when the page is unpublished from it', async () => {
-    const user = userEvent.setup();
-    const detail = pageDetail(undefined, {
-      status: { kind: 'live', changeCount: 0, changes: [] },
-      liveRelease: {
-        id: '64b000000000000000000201',
-        version: 12,
-        slug: 'uu-dai-thang-11',
-        publishedAt: '2026-10-24T06:02:00.000Z',
-      },
-      latestVersion: 12,
-      liveUrl: 'https://smilecare.payload.site/uu-dai-thang-11',
-    });
-    const unpublished: PageSummary = {
-      ...detail.page,
-      status: { kind: 'unpublished', changeCount: 0, changes: [] },
-      liveRelease: null,
-      liveUrl: null,
-    };
-    answerApi(
-      (endpoint) =>
-        endpoint === endpoints.movePointer
-          ? Promise.resolve({
-              activityId: '64b000000000000000000401',
-              page: unpublished,
-              revalidation: 'ok',
-            })
-          : Promise.reject(new Error('unexpected call')),
-      detail,
-    );
-    renderWithProviders(
-      <SeoScreen
-        initial={{ detail, site, assets: [], role: 'owner' }}
-        loadedAt={Date.now()}
-        focus={null}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Gỡ xuất bản' }));
-    const dialog = screen.getByRole('alertdialog');
-    await user.type(within(dialog).getByRole('textbox', { name: /Lý do/ }), 'Hết chương trình');
-    const confirm = within(dialog).getAllByRole('button', { name: 'Gỡ xuất bản' }).at(-1);
-    if (confirm === undefined) {
-      throw new Error('confirm button missing');
+  describe('unpublishing from the header', () => {
+    function liveDetail() {
+      const detail = pageDetail(undefined, {
+        status: { kind: 'live', changeCount: 0, changes: [] },
+        liveRelease: {
+          id: '64b000000000000000000201',
+          version: 12,
+          slug: 'uu-dai-thang-11',
+          publishedAt: '2026-10-24T06:02:00.000Z',
+        },
+        latestVersion: 12,
+        liveUrl: 'https://smilecare.payload.site/uu-dai-thang-11',
+      });
+      const unpublished: PageSummary = {
+        ...detail.page,
+        status: { kind: 'unpublished', changeCount: 0, changes: [] },
+        liveRelease: null,
+        liveUrl: null,
+      };
+      return { detail, unpublished };
     }
-    await user.click(confirm);
 
-    await waitFor(() => {
-      expect(screen.queryByRole('alertdialog')).toBeNull();
+    async function unpublish(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Gỡ xuất bản' }));
+      const dialog = screen.getByRole('alertdialog');
+      await user.type(within(dialog).getByRole('textbox', { name: /Lý do/ }), 'Hết chương trình');
+      const confirm = within(dialog).getAllByRole('button', { name: 'Gỡ xuất bản' }).at(-1);
+      if (confirm === undefined) {
+        throw new Error('confirm button missing');
+      }
+      await user.click(confirm);
+      await waitFor(() => {
+        expect(screen.queryByRole('alertdialog')).toBeNull();
+      });
+    }
+
+    it('keeps the focus in the header when the page is unpublished from it', async () => {
+      const user = userEvent.setup();
+      const { detail, unpublished } = liveDetail();
+      answerApi(
+        (endpoint) =>
+          endpoint === endpoints.movePointer
+            ? Promise.resolve({
+                activityId: '64b000000000000000000401',
+                page: unpublished,
+                revalidation: 'ok',
+              })
+            : Promise.reject(new Error('unexpected call')),
+        detail,
+      );
+      renderWithProviders(
+        <SeoScreen
+          initial={{ detail, site, assets: [], role: 'owner' }}
+          loadedAt={Date.now()}
+          focus={null}
+        />,
+      );
+
+      await unpublish(user);
+      // The header's links ask before leaving here: "Mở editor" must still take the focus.
+      expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+      });
     });
-    // The header's links ask before leaving here: "Mở editor" must still take the focus.
-    expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
-    await waitFor(() => {
+
+    it('reads the page again when a teammate unpublished it first', async () => {
+      const user = userEvent.setup();
+      const { detail, unpublished } = liveDetail();
+      let reads = 0;
+      apiMock.mockImplementation((endpoint) => {
+        if (endpoint === endpoints.getPage) {
+          reads += 1;
+          // The mount read sees the live page; the read after the conflict, the teammate's change.
+          return Promise.resolve(reads === 1 ? detail : { ...detail, page: unpublished });
+        }
+        if (endpoint === endpoints.movePointer) {
+          return Promise.reject(apiError(409, 'pointer_conflict', 'Trang live vừa được thay đổi'));
+        }
+        return Promise.reject(new Error('unexpected call'));
+      });
+      renderWithProviders(
+        <SeoScreen
+          initial={{ detail, site, assets: [], role: 'owner' }}
+          loadedAt={Date.now()}
+          focus={null}
+        />,
+      );
+      await waitFor(() => {
+        expect(reads).toBe(1);
+      });
+
+      await unpublish(user);
+      // The header no longer offers to unpublish a page that is not live, and keeps the focus.
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+      });
+      expect(reads).toBe(2);
       expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
     });
   });

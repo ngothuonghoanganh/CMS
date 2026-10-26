@@ -95,3 +95,14 @@ export function useLatestServerDraft(store: EditorStore): void {
     };
   }, [store]);
 }
+
+/**
+ * Reads the page again and takes its summary (status, live release, site reminders), unless the
+ * draft changed on the server meanwhile: the next save's 409 then tells.
+ */
+export async function refreshPageSummary(store: EditorStore): Promise<void> {
+  const detail = await api(endpoints.getPage, [store.getState().page.id]);
+  if (detail.draft.revision === store.getState().baseRevision) {
+    store.getState().setServerState({ page: detail.page });
+  }
+}

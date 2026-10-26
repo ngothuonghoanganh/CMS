@@ -19,7 +19,6 @@ import { configurePrivacy, saveConsentVersion, savePrivacy } from '../../../test
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
 import { addMonthsUtc } from './domain/lead-intake-rules.js';
-import { LeadLimitsRepository } from './lead-limits.repository.js';
 import { LeadsRepository } from './leads.repository.js';
 
 const CLIENT_LIMIT = 3;
@@ -367,28 +366,32 @@ describe('lead intake', () => {
   it('gives a lead sent while the retention period changes the period saved, not the one read', async () => {
     const { site, releaseId } = await formSite();
     await savePrivacy(client, site.id, { retentionMonths: null });
-    const limits = t.app.get(LeadLimitsRepository);
-    const hit = limits.hit.bind(limits);
+    const leads = t.app.get(LeadsRepository);
+    const insert = leads.insertPublic.bind(leads);
     let reached: () => void = () => undefined;
-    const atLimits = new Promise<void>((resolve) => {
+    const atInsert = new Promise<void>((resolve) => {
       reached = resolve;
     });
     let resume: () => void = () => undefined;
     const paused = new Promise<void>((resolve) => {
       resume = resolve;
     });
-    const spy = vi.spyOn(limits, 'hit').mockImplementationOnce(async (key, now, windowEnd) => {
-      reached();
-      await paused;
-      return hit(key, now, windowEnd);
-    });
+    // Paused right at the insert: anything the intake read before it, the site included, is
+    // older than the owner's save.
+    const spy = vi
+      .spyOn(leads, 'insertPublic')
+      .mockImplementationOnce(async (siteRecord, values) => {
+        reached();
+        await paused;
+        return insert(siteRecord, values);
+      });
     try {
-      // The intake has read the site (no expiry) and waits before storing the lead, while the
-      // owner saves 6 months and every stored lead is recomputed.
+      // The intake has read the site (no expiry) and waits to store the lead, while the owner
+      // saves 6 months and every stored lead is recomputed.
       const sending = submitLead(t, site.subdomain, leadBody(releaseId)).then(
         (response) => response,
       );
-      await atLimits;
+      await atInsert;
       await savePrivacy(client, site.id, { retentionMonths: 6 });
       resume();
       expect((await sending).status).toBe(201);

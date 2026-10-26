@@ -48,7 +48,10 @@ export interface ConfirmDialogProps {
   reason?: ConfirmReasonOptions | undefined;
   /** The action is running: confirm shows a spinner and the dialog cannot be dismissed. */
   pending?: boolean | undefined;
-  /** Confirming is not possible yet, e.g. while what it acts on is still loading. */
+  /**
+   * Confirming is not possible yet, e.g. while what it acts on is still loading. The button stays
+   * focusable (`aria-disabled`): it may have the focus when this turns on again.
+   */
   confirmDisabled?: boolean | undefined;
   /** Actionable error from the last attempt, shown above the buttons. */
   error?: ReactNode;
@@ -130,10 +133,15 @@ function ConfirmBody({ props, reasonRef }: ConfirmBodyProps) {
           <Button
             variant={tone === 'danger' ? 'danger' : 'primary'}
             loading={pending}
-            disabled={missingReason || confirmDisabled}
+            disabled={missingReason}
+            // A natively disabled button would drop the focus it has to the page, e.g. when a
+            // confirmed action answers that what it acts on changed and is read again.
+            aria-disabled={confirmDisabled || undefined}
             aria-describedby={missingReason ? hintId : undefined}
             onClick={() => {
-              onConfirm(reason ? trimmed : '');
+              if (!confirmDisabled) {
+                onConfirm(reason ? trimmed : '');
+              }
             }}
           >
             {confirmLabel}

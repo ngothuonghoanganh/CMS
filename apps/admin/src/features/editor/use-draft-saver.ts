@@ -4,8 +4,7 @@ import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
-import { siteQueryKeys } from '../dashboard/queries';
-import { pageQueryKeys } from '../history/queries';
+import { markPageScreensStale } from './stale-screens';
 import {
   currentSaveResponse,
   type EditorStore,
@@ -261,18 +260,12 @@ export function useDraftSaver(
   const [saver] = useState(() =>
     createDraftSaver(store, {
       ...options,
-      // A saved draft changes the page's status in the page lists and on its history screen. They
-      // are not on screen now, so they are only marked stale and read again once shown: a render
-      // the browser's Back button restores is older than the cache and would not replace it.
+      // One on screen already is read at once: a save sent as its screen unmounted can land
+      // after the next screen showed.
       onSaved: () => {
         options?.onSaved?.();
         const { site, page } = store.getState();
-        for (const queryKey of [
-          siteQueryKeys.pageLists(site.id),
-          pageQueryKeys.page(site.id, page.id),
-        ]) {
-          void queryClient.invalidateQueries({ queryKey, refetchType: 'none' });
-        }
+        markPageScreensStale(queryClient, site.id, page.id);
       },
     }),
   );

@@ -1,5 +1,5 @@
 import type { ErrorCode, SaveDraftRequest, SaveDraftResponse } from '@plp/contracts';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -314,6 +314,33 @@ describe('runningSavesSettled', () => {
     editor.stop();
   });
 
+  it('still waits for a later save once an earlier one of the page has ended', async () => {
+    const editor = setup();
+    const seo = setup();
+    const editorSave = deferred<SaveDraftResponse>();
+    const seoSave = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(editorSave.promise).mockReturnValueOnce(seoSave.promise);
+    editor.store.getState().setSpacing(HERO, 'compact');
+    const editorSaved = editor.saver.ensureSaved();
+    seo.store.getState().updateSeo({ title: 'Niềng răng trong suốt' });
+    const seoSaved = seo.saver.ensureSaved();
+    editorSave.resolve(response(4));
+    await expect(editorSaved).resolves.toMatchObject({ revision: 4 });
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A read starting now must still wait for the save that is running.
+    const settled = vi.fn();
+    void runningSavesSettled(PAGE_ID).then(settled);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).not.toHaveBeenCalled();
+    seoSave.resolve(response(5));
+    await expect(seoSaved).resolves.toMatchObject({ revision: 5 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toHaveBeenCalledTimes(1);
+    editor.stop();
+    seo.stop();
+  });
+
   it('also waits for a save that started after one that ends first', async () => {
     const editor = setup();
     const seo = setup();
@@ -371,5 +398,29 @@ describe('useDraftSaver', () => {
     // Nothing read now: only the two saves went out.
     expect(saveMock).toHaveBeenCalledTimes(2);
     unmount();
+  });
+
+  it('reads a list already on screen again when the save sent on leaving lands', async () => {
+    const store = makeStore();
+    const queryClient = createTestQueryClient();
+    const list = siteQueryKeys.pageList(SITE_ID, { status: null, q: '' });
+    const readList = vi.fn(() => Promise.resolve({ read: readList.mock.calls.length }));
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const leaving = renderHook(() => useDraftSaver(store), { wrapper });
+    const save = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(save.promise);
+    store.getState().setSpacing(HERO, 'compact');
+
+    // The screen goes, sending its change; the next one shows the list before the save lands.
+    leaving.unmount();
+    const shown = renderHook(() => useQuery({ queryKey: list, queryFn: readList }), { wrapper });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(readList).toHaveBeenCalledTimes(1);
+
+    save.resolve(response(4));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(readList).toHaveBeenCalledTimes(2);
+    shown.unmount();
   });
 });

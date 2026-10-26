@@ -160,6 +160,12 @@
   opacity: 0.7;
 }
 
+/* Sending: the button keeps the focus (it is not disabled), so it shows the wait instead. */
+.submit[aria-busy='true'] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 .sent {
   display: flex;
   flex-direction: column;

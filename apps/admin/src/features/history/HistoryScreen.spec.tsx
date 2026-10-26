@@ -425,9 +425,78 @@ describe('HistoryScreen', () => {
 
     await user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
-    expect(
-      await within(dialog).findByText(/2 thay đổi chưa xuất bản sẽ mất\./),
-    ).toBeInTheDocument();
+    // Announced as it arrives: the description was read out while the draft was being checked.
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(
+      /2 thay đổi chưa xuất bản sẽ mất\./,
+    );
+    // The header around the dialog says the same as what the dialog just read.
+    expect(screen.getByText('2 thay đổi chưa xuất bản')).toBeInTheDocument();
+  });
+
+  it('starts from the check again when the dialog opens again', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: historyPage(), history: initialHistory };
+    serve(server);
+    renderScreen();
+    const copy = () =>
+      user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    await copy();
+    let dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(/4 thay đổi/);
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+
+    // Reopened while the new read is on its way: nothing from the earlier read is shown.
+    apiMock.mockImplementationOnce(() => new Promise(() => undefined));
+    await copy();
+    dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Đang kiểm tra bản nháp hiện tại…',
+    );
+  });
+
+  it('keeps the focus on "Sao chép vào bản nháp" while a conflict is read again', async () => {
+    const user = userEvent.setup();
+    const server: ServerState = { page: historyPage(), history: initialHistory };
+    serve(server);
+    renderScreen();
+    await user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(/4 thay đổi/);
+
+    let answerRead: () => void = () => undefined;
+    apiMock
+      .mockImplementationOnce(() =>
+        Promise.reject(apiError(409, 'revision_conflict', 'Bản nháp đã thay đổi')),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answerRead = () => {
+              resolve({ page: historyPage(), draft: { revision: 10 }, checks: {} });
+            };
+          }),
+      );
+    const confirm = within(dialog).getByRole('button', { name: 'Sao chép vào bản nháp' });
+    act(() => {
+      confirm.focus();
+    });
+    await user.keyboard('{Enter}');
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Bản nháp vừa được lưu ở nơi khác.',
+    );
+    // Not usable while the draft is read again, yet focusable: a disabled button loses the focus.
+    expect(confirm).toHaveAttribute('aria-disabled', 'true');
+    expect(confirm).not.toBeDisabled();
+    expect(confirm).toHaveFocus();
+    await act(async () => {
+      answerRead();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(confirm).not.toHaveAttribute('aria-disabled');
+    });
+    expect(confirm).toHaveFocus();
   });
 
   it('never overwrites a draft saved elsewhere after the dialog read it', async () => {

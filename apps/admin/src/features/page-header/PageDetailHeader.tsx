@@ -42,6 +42,11 @@ export interface PageDetailHeaderProps {
   link?: LinkComponent | undefined;
   /** After "Gỡ xuất bản" succeeded; the site's page and activity queries are refreshed already. */
   onUnpublished?: ((result: PointerMoveResponse) => void) | undefined;
+  /**
+   * After "Gỡ xuất bản" answered that the live page changed meanwhile. The site's queries are
+   * refreshed already; a screen that keeps its page elsewhere reads it again here.
+   */
+  onUnpublishConflict?: (() => void) | undefined;
 }
 
 /** The tabs of one page: "Nội dung" (the editor), "SEO & chia sẻ", "Lịch sử phiên bản". */
@@ -68,6 +73,7 @@ export function PageDetailHeader({
   now,
   link = Link,
   onUnpublished,
+  onUnpublishConflict,
 }: PageDetailHeaderProps) {
   const LinkAs = link;
   const presentation = presentPageStatus(page, now);
@@ -192,6 +198,7 @@ export function PageDetailHeader({
           open={unpublishOpen}
           onOpenChange={setUnpublishOpen}
           onUnpublished={onUnpublished}
+          onConflict={onUnpublishConflict}
           fallbackFocusRef={editorLink}
         />
       )}

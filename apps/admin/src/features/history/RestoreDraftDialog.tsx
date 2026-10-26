@@ -7,7 +7,7 @@ import {
   type ReleaseSummary,
 } from '@plp/contracts';
 import { ConfirmDialog, useToast } from '@plp/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { ApiError, api } from '../../lib/api';
 import { pageHref } from '../shell/navigation';
@@ -50,10 +50,12 @@ export function RestoreDraftDialog({
 }: RestoreDraftDialogProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const editHref = pageHref(page.siteId, page.id, 'edit');
+  const baseKey = pageQueryKeys.draftBase(page.siteId, page.id);
 
   const base = useQuery({
-    queryKey: pageQueryKeys.draftBase(page.siteId, page.id),
+    queryKey: baseKey,
     queryFn: async ({ signal }) => {
       const detail = await api(endpoints.getPage, [page.id], { signal });
       onPageRead(detail.page);
@@ -105,7 +107,7 @@ export function RestoreDraftDialog({
         ? DRAFT_CHANGED
         : problemMessage(restore.error)
       : base.error !== null
-        ? `Chưa đọc được bản nháp hiện tại: ${problemMessage(base.error)} Đóng rồi mở lại để thử lại.`
+        ? `Chưa tải được bản nháp hiện tại. ${problemMessage(base.error)} Đóng hộp thoại rồi mở lại.`
         : undefined;
 
   return (
@@ -114,14 +116,20 @@ export function RestoreDraftDialog({
       onOpenChange={(next) => {
         if (!next) {
           restore.reset();
+          // The next opening starts from "Đang kiểm tra…", never from this read.
+          queryClient.removeQueries({ queryKey: baseKey, exact: true });
         }
         onOpenChange(next);
       }}
       title={`Sao chép v${release.version} vào bản nháp?`}
       description={
-        current === undefined
-          ? 'Đang kiểm tra bản nháp hiện tại…'
-          : `Bản nháp hiện tại sẽ được thay bằng nội dung của v${release.version}.${loses}`
+        // Read once as the dialog opens, while the draft is still being checked: what will be lost
+        // is announced when it arrives.
+        <span role="status">
+          {current === undefined
+            ? 'Đang kiểm tra bản nháp hiện tại…'
+            : `Bản nháp hiện tại sẽ được thay bằng nội dung của v${release.version}.${loses}`}
+        </span>
       }
       confirmLabel="Sao chép vào bản nháp"
       tone={loses === '' ? 'default' : 'danger'}

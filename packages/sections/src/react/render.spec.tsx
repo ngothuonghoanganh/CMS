@@ -547,6 +547,8 @@ describe('lead form', () => {
     expect(sending).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*aria-disabled="true")[^>]*>/);
     expect(sending).toContain('aria-busy="true"');
     expect(sending).not.toContain('disabled=""');
+    // The label says the send is under way, instead of inviting another press.
+    expect(sending).toMatch(/aria-busy="true"[^>]*>Đang gửi…<\/button>/);
   });
 
   it('confirms a sent lead in the section, with a decorative tick', () => {

@@ -42,8 +42,8 @@ describe('lead notifications', () => {
     t = await createTestApp('plp_test_notifications', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
       env: { LEAD_LIMIT_PER_CLIENT: 1000, LEAD_LIMIT_PER_SITE_PER_HOUR: 1000 },
-      // Retries a few milliseconds apart instead of 1 and 5 minutes.
-      notificationRetryDelaysMs: [20, 40],
+      // Retries 20 ms and 1 s apart instead of 1 and 5 minutes: far enough apart to tell them apart.
+      notificationRetryDelaysMs: [20, 1000],
     });
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
@@ -276,6 +276,30 @@ describe('lead notifications', () => {
     }
   });
 
+  it('emails a lead that was stored although its request then failed', async () => {
+    const form = await formSite();
+    const privacy = vi
+      .spyOn(t.app.get(SitesRepository), 'findPublicPrivacy')
+      .mockRejectedValueOnce(new Error('database unreachable'));
+    try {
+      const body = leadBody(form.releaseId, { name: 'Lưu rồi mới lỗi' });
+      await submitLead(t, form.site.subdomain, body).expect(500);
+      // The page script sends it again: the lead is there, so this is answered as a replay.
+      await submitLead(t, form.site.subdomain, body).expect(200);
+      const list = leadListResponseSchema.parse(
+        (await owner.get(`/sites/${form.site.id}/leads`).expect(200)).body,
+      );
+      const stored = list.items.filter((item) => item.name === 'Lưu rồi mới lỗi');
+      expect(stored).toHaveLength(1);
+      expect((await settled(stored[0]?.id ?? '', 'sent')).notification).toMatchObject({
+        attempts: 1,
+      });
+      expect(leadEmails('Lưu rồi mới lỗi')).toHaveLength(1);
+    } finally {
+      privacy.mockRestore();
+    }
+  });
+
   it('tries the claim once more only, then leaves the lead to the startup sweep', async () => {
     const form = await formSite();
     const claimedAt: number[] = [];
@@ -295,9 +319,11 @@ describe('lead notifications', () => {
         },
         { timeout: 5000, interval: 20 },
       );
-      // The second claim waits like a retry (20 ms here): one at once would meet the same outage.
+      // The second claim waits like a first retry (20 ms here, 1 minute in production): one at
+      // once would meet the same outage, and the longest wait would only delay the email.
       const [first = 0, second = 0] = claimedAt;
       expect(second - first).toBeGreaterThanOrEqual(15);
+      expect(second - first).toBeLessThan(500);
       // Well past the wait before a third claim, which never comes.
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(claim).toHaveBeenCalledTimes(2);

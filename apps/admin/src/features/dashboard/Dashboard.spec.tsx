@@ -117,6 +117,20 @@ describe('Dashboard', () => {
     expect(added).toHaveFocus();
   });
 
+  it('keeps the focus on "Xem thêm trang" while it stays, with more pages to come', async () => {
+    const user = userEvent.setup();
+    renderDashboard({ pages: pageListFixture([livePage], { nextCursor: 'cursor-2' }) });
+    apiMock.mockResolvedValueOnce(pageListFixture([draftPage], { nextCursor: 'cursor-3' }));
+
+    const more = screen.getByRole('button', { name: 'Xem thêm trang' });
+    await user.click(more);
+    expect(
+      await screen.findByRole('link', { name: 'Webinar chăm sóc răng trẻ em' }),
+    ).toBeInTheDocument();
+    expect(more).toBeInTheDocument();
+    expect(more).toHaveFocus();
+  });
+
   it('opens the live home page from "Xem site live", and offers nothing while no page is live', () => {
     const { unmount } = renderDashboard({
       pages: pageListFixture([livePage, draftPage], {

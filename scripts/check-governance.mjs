@@ -66,18 +66,56 @@ function sourceOf(packageDir, distFile) {
   return existsSync(join(root, `${typescript}x`)) ? `${typescript}x` : typescript;
 }
 
+/** A YAML scalar without its quotes and its trailing comment. */
+function scalar(text) {
+  return text
+    .replace(/\s+#.*$/, '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2');
+}
+
+/**
+ * The `packages:` globs of pnpm-workspace.yaml, as a block or a flow sequence, with comments and
+ * blank lines anywhere. An empty result is reported rather than read as "no packages": every
+ * manifest check below would pass without looking at anything.
+ */
+function workspaceGlobs() {
+  const lines = readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8').split(/\r?\n/);
+  const start = lines.findIndex((line) => /^packages:/.test(line));
+  if (start === -1) {
+    return [];
+  }
+  const inline = scalar(lines[start].slice('packages:'.length));
+  if (inline.startsWith('[')) {
+    return inline
+      .replace(/^\[|\]$/g, '')
+      .split(',')
+      .map(scalar)
+      .filter(Boolean);
+  }
+  const globs = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*(#.*)?$/.test(line)) {
+      continue;
+    }
+    // The next top-level key ends the list.
+    if (!/^\s/.test(line) && !line.startsWith('-')) {
+      break;
+    }
+    const item = /^\s*-\s+(.*)$/.exec(line);
+    if (item) {
+      globs.push(scalar(item[1]));
+    }
+  }
+  return globs.filter(Boolean);
+}
+
 /** Every package.json of the workspace, from the globs in pnpm-workspace.yaml. */
 function workspaceManifests() {
-  const workspace = readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8');
-  const globs = (workspace.match(/^packages:\n((?:[ \t]+- .+\n?)+)/m)?.[1] ?? '')
-    .split('\n')
-    .map((line) =>
-      line
-        .replace(/^\s*-\s*/, '')
-        .replace(/['"]/g, '')
-        .trim(),
-    )
-    .filter(Boolean);
+  const globs = workspaceGlobs();
+  if (globs.length === 0) {
+    problems.push('pnpm-workspace.yaml: no workspace packages found under `packages:`');
+  }
   const dirs = globs.flatMap((glob) =>
     glob.endsWith('/*')
       ? readdirSync(join(root, glob.slice(0, -2)), { withFileTypes: true })
@@ -85,6 +123,19 @@ function workspaceManifests() {
           .map((entry) => `${glob.slice(0, -2)}/${entry.name}`)
       : [glob],
   );
+  // Every app and package must be in the workspace, or its manifest goes unchecked.
+  for (const parent of ['apps', 'packages']) {
+    for (const entry of readdirSync(join(root, parent), { withFileTypes: true })) {
+      const dir = `${parent}/${entry.name}`;
+      if (
+        entry.isDirectory() &&
+        existsSync(join(root, dir, 'package.json')) &&
+        !dirs.includes(dir)
+      ) {
+        problems.push(`pnpm-workspace.yaml: ${dir} is not a workspace package`);
+      }
+    }
+  }
   return ['package.json', ...dirs.map((dir) => `${dir}/package.json`)];
 }
 

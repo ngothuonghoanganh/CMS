@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  type ActivityType,
   type PathStatusResponse,
   type PublicImage,
   type PublicLeadCapture,
@@ -14,7 +15,6 @@ import {
 import { pageCapturesLeads } from '@plp/sections/schema';
 import { notFound } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
-import type { ActivityType } from '@plp/contracts';
 import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import { AssetsService } from '../assets/assets.service.js';
@@ -51,13 +51,13 @@ export function slugFromPath(path: string): string {
   return path.replace(/^\/+|\/+$/g, '');
 }
 
-/** What visitors see of a lead capture: the texts and the policy link, nothing internal. */
 /** Pointer moves that make an existing, older release live again. */
 const RELEASE_RESTORED: ReadonlySet<ActivityType> = new Set([
   'page.rolled_back',
   'page.rollback_undone',
 ]);
 
+/** What visitors see of a lead capture: the texts and the policy link, nothing internal. */
 function publicLeadCapture(capture: LeadCapture | null): PublicLeadCapture | null {
   return (
     capture && {

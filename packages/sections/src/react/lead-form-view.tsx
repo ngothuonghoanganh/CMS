@@ -7,6 +7,9 @@ import styles from './sections/LeadForm.module.css';
 /** Fields that can show an error under them. */
 export type LeadFormErrorField = 'name' | 'phone' | 'email' | 'message' | 'consent';
 
+/** The send button's label while a lead is on its way. */
+const SENDING_LABEL = 'Đang gửi…';
+
 /** What the lead form shows; serializable, so the renderer can hand it to a client component. */
 export interface LeadFormViewProps {
   sectionId: string;
@@ -216,7 +219,7 @@ export function LeadFormView({
         )}
         {/* Only a preview cannot send. While sending the button stays focusable (the client drops
             a second submit): disabling it would drop focus to the page, and a refused send would
-            leave the visitor nowhere near the form. */}
+            leave the visitor nowhere near the form. Its label says that the send is under way. */}
         <button
           type="submit"
           className={[frame.button, frame.buttonPrimary, styles.submit].join(' ')}
@@ -224,7 +227,7 @@ export function LeadFormView({
           aria-disabled={submitting || undefined}
           aria-busy={submitting || undefined}
         >
-          {content.submitLabel}
+          {submitting ? SENDING_LABEL : content.submitLabel}
         </button>
         {releaseId === null ? (
           <p className={styles.note}>Bản xem trước: form không gửi đi.</p>

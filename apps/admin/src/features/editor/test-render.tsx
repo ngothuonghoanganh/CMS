@@ -15,17 +15,20 @@ export interface RenderEditorOptions {
   store: EditorStore;
   sitePages?: PageSummary[];
   services?: Partial<EditorServices>;
+  /** For tests that look at what the editor does to cached server data. */
+  queryClient?: QueryClient;
 }
 
 function Providers({
   store,
   sitePages,
   services,
+  queryClient,
   children,
 }: RenderEditorOptions & { children: ReactNode }) {
   const { announce, region } = useAnnouncer();
   const [client] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    () => queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   );
   const value = useMemo<EditorServices>(
     () => ({

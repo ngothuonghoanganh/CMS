@@ -226,5 +226,28 @@ describe('PageDetailHeader', () => {
       read(unpublished);
       expect(tab).toHaveFocus();
     });
+
+    it('does not take a focus the page already had when "Tùy chọn khác" never had it', () => {
+      const read = renderReading();
+      expect(document.activeElement).toBe(document.body);
+      read(unpublished);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('forgets "Tùy chọn khác" had the focus once it moved on, even back to the page', () => {
+      const read = renderReading();
+      const tab = screen.getByRole('link', { name: 'SEO & chia sẻ' });
+      act(() => {
+        screen.getByRole('button', { name: 'Tùy chọn khác' }).focus();
+      });
+      act(() => {
+        tab.focus();
+      });
+      act(() => {
+        tab.blur();
+      });
+      read(unpublished);
+      expect(document.activeElement).toBe(document.body);
+    });
   });
 });

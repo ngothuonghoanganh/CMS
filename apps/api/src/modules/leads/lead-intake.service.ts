@@ -141,6 +141,12 @@ export class LeadIntakeService {
       }
       throw error;
     }
+    if (!spam) {
+      // The visitor gets the answer now; the email goes out in the background. Queued before
+      // anything else can fail: a resend of this submission is answered as a replay and queues
+      // nothing, so the stored lead would wait for the next restart.
+      this.notifier.enqueue(stored._id);
+    }
     // The owner may have changed the retention period since the site was read above. Settings
     // commit before they recompute every lead, so either that recompute covers this lead or this
     // read sees the new period (ADR-017).
@@ -150,10 +156,6 @@ export class LeadIntakeService {
         stored._id,
         latest === null ? null : addMonthsUtc(now, latest),
       );
-    }
-    if (!spam) {
-      // The visitor gets the answer now; the email goes out in the background.
-      this.notifier.enqueue(stored._id);
     }
     return { replayed: false };
   }

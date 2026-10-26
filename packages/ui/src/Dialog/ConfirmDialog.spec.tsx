@@ -239,8 +239,12 @@ describe('ConfirmDialog', () => {
       />,
     );
     const confirm = screen.getByRole('button', { name: 'Sao chép vào bản nháp' });
-    expect(confirm).toBeDisabled();
+    // Focusable, so it keeps the focus it may have; it does nothing until ready.
+    expect(confirm).not.toBeDisabled();
+    expect(confirm).toHaveAttribute('aria-disabled', 'true');
     await user.click(confirm);
+    confirm.focus();
+    await user.keyboard('{Enter}');
     expect(onConfirm).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Hủy' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);

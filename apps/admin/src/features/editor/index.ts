@@ -16,7 +16,7 @@ export {
 export { ConflictDialog } from './ConflictDialog';
 export { focusFieldElement, focusTarget, type FocusTargetOptions } from './focus-target';
 export { LIST_LIMIT, loadAllPages, referencedAssetIds } from './load-editor-data';
-export { useLatestServerDraft } from './server-draft';
+export { refreshPageSummary, useLatestServerDraft } from './server-draft';
 export {
   createEditorStore,
   type Device,
@@ -35,5 +35,11 @@ export {
   type DraftSaver,
   useDraftSaver,
 } from './use-draft-saver';
-export { isUnsaved, useBeforeUnloadGuard, useLeaveGuard, type LeaveGuard } from './use-leave-guard';
+export {
+  isUnsaved,
+  type LeaveGuard,
+  useBeforeUnloadGuard,
+  useHistoryLeaveGuard,
+  useLeaveGuard,
+} from './use-leave-guard';
 export { displayUrl, liveStatusView, SAME_AS_LIVE, saveStatusView } from './presentation';

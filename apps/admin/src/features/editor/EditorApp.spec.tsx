@@ -7,8 +7,10 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { api } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
+import { siteQueryKeys } from '../dashboard/queries';
+import { pageQueryKeys } from '../history/queries';
 import { EditorApp, type EditorInitialData, type PublishDialogRenderProps } from './EditorApp';
-import { asset, pageDetail, site } from './test-fixtures';
+import { asset, pageDetail, site, SITE_ID } from './test-fixtures';
 
 const push = vi.hoisted(() => vi.fn());
 
@@ -219,12 +221,24 @@ describe('EditorApp', () => {
         endpoint === endpoints.updateSite ? { ...site, themePresetId: 'sunset' } : undefined,
       );
     });
+    // Every row of the page lists and every page's history reminds of the old look.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const list = siteQueryKeys.pageList(SITE_ID, { status: null, q: '' });
+    const otherPage = pageQueryKeys.summary(SITE_ID, '64b0000000000000000000ff');
+    queryClient.setQueryData(list, { cached: true });
+    queryClient.setQueryData(otherPage, { cached: true });
     render(
       <EditorApp
         initial={{ ...initial(), detail: before }}
         renderPublishDialog={noPublishDialog}
       />,
-      { wrapper },
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>{children}</ToastProvider>
+          </QueryClientProvider>
+        ),
+      },
     );
     await waitFor(() => {
       expect(reads).toBe(1);
@@ -239,5 +253,7 @@ describe('EditorApp', () => {
     expect(screen.getByText(/Bạn đang sửa/)).toHaveTextContent(
       'Giao diện site đã đổi sau khi xuất bản v12: trang live vẫn dùng giao diện cũ cho tới khi bạn xuất bản lại.',
     );
+    expect(queryClient.getQueryState(list)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(otherPage)?.isInvalidated).toBe(true);
   });
 });

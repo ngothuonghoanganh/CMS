@@ -207,10 +207,12 @@ describe('LeadRecipientsDialog', () => {
 
     expect(await screen.findByText('Đã đủ 5 địa chỉ. Bỏ một địa chỉ để thêm.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Thêm email nhận lead' })).toHaveFocus();
-    // Enter again adds nothing.
+    // Enter again, or "Thêm", adds nothing and asks for nothing: the field cannot be typed in.
     await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Thêm' }));
     expect(
       apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.addLeadRecipient),
     ).toHaveLength(1);
+    expect(screen.queryByText('Nhập email nhận lead')).toBeNull();
   });
 });

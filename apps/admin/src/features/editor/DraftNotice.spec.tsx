@@ -1,9 +1,12 @@
 import { type Asset, endpoints, type PageDetailResponse } from '@plp/contracts';
+import { QueryClient } from '@tanstack/react-query';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { ApiError, api } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
+import { siteQueryKeys } from '../dashboard/queries';
+import { pageQueryKeys } from '../history/queries';
 import { ConflictDialog } from './ConflictDialog';
 import { DraftNotice } from './DraftNotice';
 import { currentSaveResponse } from './store';
@@ -124,7 +127,12 @@ describe('DraftNotice', () => {
     });
     restored.draft.revision = 5;
     apiMock.mockResolvedValue(restored);
-    renderEditor(<DraftNotice ensureSaved={ensureSaved} />, { store });
+    const queryClient = new QueryClient();
+    const list = siteQueryKeys.pageList(SITE_ID, { status: null, q: '' });
+    const summary = pageQueryKeys.summary(SITE_ID, store.getState().page.id);
+    queryClient.setQueryData(list, { cached: true });
+    queryClient.setQueryData(summary, { cached: true });
+    renderEditor(<DraftNotice ensureSaved={ensureSaved} />, { store, queryClient });
 
     await user.click(screen.getByRole('button', { name: 'Hủy thay đổi, quay về bản live' }));
     const dialog = screen.getByRole('alertdialog', { name: 'Quay về bản live v12?' });
@@ -138,6 +146,9 @@ describe('DraftNotice', () => {
     });
     expect(store.getState().draft.composition.sections).toHaveLength(5);
     expect(store.getState().history.past).toHaveLength(0);
+    // The page lists and the page's history said "4 thay đổi chưa xuất bản": read them again.
+    expect(queryClient.getQueryState(list)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(summary)?.isInvalidated).toBe(true);
     expect(screen.queryByRole('button', { name: 'Hủy thay đổi, quay về bản live' })).toBeNull();
     // The action that opened the dialog is gone; focus stays on the notice, not on <body>.
     await waitFor(() => {
