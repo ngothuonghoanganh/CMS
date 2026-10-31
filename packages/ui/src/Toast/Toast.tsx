@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -21,6 +22,7 @@ import {
 } from '../icons';
 import { cx } from '../internal/cx';
 import { hasContent } from '../internal/hasContent';
+import { type ToastPlacement, toastPlacement } from './placement';
 import styles from './Toast.module.css';
 
 export type ToastTone = 'neutral' | 'success' | 'warning' | 'danger';
@@ -83,10 +85,59 @@ export interface ToastProviderProps {
   children: ReactNode;
 }
 
-/** Holds the toasts and renders their region ("Thông báo") at the bottom right. */
+/**
+ * Holds the toasts and renders their region ("Thông báo") at the bottom right, or at the top
+ * right while the control in focus is under the bottom corner: a toast never hides it (WCAG
+ * 2.4.11).
+ */
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<readonly ToastRecord[]>([]);
+  const [placement, setPlacement] = useState<ToastPlacement>('bottom');
   const lastId = useRef(0);
+  const viewportRef = useRef<HTMLOListElement>(null);
+  const showing = toasts.length > 0;
+
+  useEffect(() => {
+    if (!showing) {
+      // The next toast starts from the usual corner.
+      const reset = requestAnimationFrame(() => {
+        setPlacement('bottom');
+      });
+      return () => {
+        cancelAnimationFrame(reset);
+      };
+    }
+    let frame = 0;
+    function place() {
+      // After the browser has scrolled the newly focused control into view.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const stack = viewportRef.current;
+        const focused = document.activeElement;
+        if (
+          stack === null ||
+          !(focused instanceof HTMLElement) ||
+          focused === document.body ||
+          stack.contains(focused)
+        ) {
+          return;
+        }
+        setPlacement(
+          toastPlacement(
+            focused.getBoundingClientRect(),
+            stack.getBoundingClientRect(),
+            window.innerHeight,
+          ),
+        );
+      });
+    }
+    place();
+    document.addEventListener('focusin', place);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('focusin', place);
+    };
+  }, [showing]);
 
   const dismiss = useCallback((id: number) => {
     setToasts((current) => current.filter((item) => item.id !== id));
@@ -145,7 +196,12 @@ export function ToastProvider({ children }: ToastProviderProps) {
             </RadixToast.Root>
           );
         })}
-        <RadixToast.Viewport label="Thông báo" className={styles.viewport} />
+        <RadixToast.Viewport
+          ref={viewportRef}
+          label="Thông báo"
+          className={styles.viewport}
+          data-placement={placement}
+        />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );

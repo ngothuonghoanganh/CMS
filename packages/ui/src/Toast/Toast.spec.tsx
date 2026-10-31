@@ -18,6 +18,42 @@ function Trigger({ options, label = 'Hiện thông báo' }: { options: ToastOpti
 }
 
 describe('Toast', () => {
+  it('moves to the top corner while the focused control is under the bottom one', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <Trigger options={{ title: 'Đã lưu ghi chú' }} />
+        <button type="button">Chuyển vào spam</button>
+      </ToastProvider>,
+    );
+    // jsdom lays nothing out: the stack sits at the bottom right of a 768 px tall window, and
+    // "Chuyển vào spam" under it.
+    const boxes: Record<string, { top: number; left: number; width: number; height: number }> = {
+      OL: { top: 692, left: 600, width: 380, height: 60 },
+      'Chuyển vào spam': { top: 700, left: 700, width: 140, height: 36 },
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const { top, left, width, height } = boxes[this.tagName] ??
+        boxes[this.textContent] ?? { top: 0, left: 0, width: 100, height: 36 };
+      return DOMRect.fromRect({ x: left, y: top, width, height });
+    });
+    await user.click(screen.getByRole('button', { name: 'Hiện thông báo' }));
+    const stack = screen.getByRole('region', { name: 'Thông báo' }).querySelector('ol');
+    expect(stack).toHaveAttribute('data-placement', 'bottom');
+
+    screen.getByRole('button', { name: 'Chuyển vào spam' }).focus();
+    await waitFor(() => {
+      expect(stack).toHaveAttribute('data-placement', 'top');
+    });
+    screen.getByRole('button', { name: 'Hiện thông báo' }).focus();
+    await waitFor(() => {
+      expect(stack).toHaveAttribute('data-placement', 'bottom');
+    });
+    vi.restoreAllMocks();
+  });
+
   it('shows the toast inside the "Thông báo" region', async () => {
     const user = userEvent.setup();
     render(

@@ -15,6 +15,12 @@
   outline: none;
 }
 
+/* The control in focus is under the bottom corner (see `toastPlacement`). */
+.viewport[data-placement='top'] {
+  top: 16px;
+  bottom: auto;
+}
+
 .toast {
   display: flex;
   align-items: flex-start;
