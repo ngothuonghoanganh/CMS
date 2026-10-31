@@ -1,8 +1,5 @@
 import type { z } from 'zod';
 
-/** A public API call should answer well within this; a hung API must not hang page requests. */
-const REQUEST_TIMEOUT_MS = 10_000;
-
 export interface PublicRequest<S extends z.ZodType> {
   baseUrl: string;
   /** Path from the endpoint catalog, e.g. `endpoints.publicResolve.path(subdomain)`. */
@@ -11,6 +8,11 @@ export interface PublicRequest<S extends z.ZodType> {
   schema: S;
   /** Endpoint name for error messages. The URL is left out on purpose: it may carry a token. */
   label: string;
+  /**
+   * How long the API may take before the call fails. Every caller states its share of the time a
+   * visitor waits, so a hung API cannot hold a request open for long (see `public-api.ts`).
+   */
+  timeoutMs: number;
   cache?: RequestCache;
 }
 
@@ -28,7 +30,7 @@ export async function fetchPublicJson<S extends z.ZodType>(
     response = await fetch(url, {
       method: 'GET',
       headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(request.timeoutMs),
       ...(request.cache === undefined ? {} : { cache: request.cache }),
     });
   } catch (error) {

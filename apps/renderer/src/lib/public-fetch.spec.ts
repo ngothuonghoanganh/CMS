@@ -12,13 +12,14 @@ function stubFetch(response: Response | Error) {
   return fetchMock;
 }
 
-function call(extra: { cache?: RequestCache } = {}) {
+function call(extra: { cache?: RequestCache; timeoutMs?: number } = {}) {
   return fetchPublicJson({
     baseUrl: 'http://api.test',
     path: '/public/sites/smilecare/resolve',
     query: { path: 'uu-dai' },
     schema,
     label: 'publicResolve',
+    timeoutMs: 1000,
     ...extra,
   });
 }
@@ -63,6 +64,27 @@ describe('fetchPublicJson', () => {
     });
   });
 
+  it('gives up after the timeout the caller states', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal;
+            signal?.addEventListener('abort', () => {
+              reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'));
+            });
+          }),
+      ),
+    );
+    const started = Date.now();
+    await expect(call({ timeoutMs: 30 })).rejects.toMatchObject({
+      message: 'Public API request publicResolve failed',
+      cause: { name: 'TimeoutError' },
+    });
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it('throws when the body is not JSON or does not match the contract', async () => {
     stubFetch(new Response('<html>', { status: 200 }));
     await expect(call()).rejects.toThrow('returned invalid JSON');
@@ -78,6 +100,7 @@ describe('fetchPublicJson', () => {
         path: '/public/preview/secret-token',
         schema,
         label: 'publicPreview',
+        timeoutMs: 1000,
       }),
     ).rejects.toThrow(/^(?!.*secret-token).*$/);
   });

@@ -3,36 +3,78 @@ import { rendererEnv } from './env';
 import { subdomainFromHeaders } from './lib/host';
 import { LIVE_RELEASE_HEADER } from './lib/live-release';
 import { NOT_FOUND_ROUTE, pathGate } from './lib/path-gate';
-import { getPathStatus } from './lib/public-api';
+import { previewForHost, previewTokenOf } from './lib/preview-gate';
+import { CHECK_TIMEOUT_MS, getPathStatus, getPreview } from './lib/public-api';
+import { unavailablePage } from './lib/responses';
 
 /**
- * Public page requests only; assets, previews, webhooks, the SEO files and the lead route
- * (`/_lead`, ADR-016) answer on their own.
+ * Public pages and previews; assets, webhooks, the SEO files and the visitor routes (`/_lead`,
+ * ADR-016; `/_e`, ADR-019) answer on their own.
  */
 export const config = {
-  matcher: ['/((?!_next/|_preview/|api/|(?:healthz|sitemap\\.xml|robots\\.txt|_lead|_e)$).*)'],
+  matcher: ['/((?!_next/|api/|(?:healthz|sitemap\\.xml|robots\\.txt|_lead|_e)$).*)'],
 };
 
+/** Stands in for a missing User-Agent; see `proxy`. */
+export const UNKNOWN_USER_AGENT = 'unknown';
+
 /**
- * Serves a miss as the server-rendered not-found page with status 404 and an old slug as a 308
- * (see `pathGate`), and hands the page the id of the live release, which keys its cached lookup
- * (ADR-009).
+ * The prerendered not-found page with status 404. It goes out with the request headers below, as a
+ * page does: without a User-Agent Next would send its static copy with `s-maxage` of a year, and a
+ * shared cache would keep answering 404 after a page is published at that path.
  */
-export async function proxy(request: NextRequest): Promise<NextResponse> {
+function notFound(request: NextRequest, headers: Headers): NextResponse {
+  return NextResponse.rewrite(new URL(NOT_FOUND_ROUTE, request.url), {
+    status: 404,
+    request: { headers },
+  });
+}
+
+/**
+ * Decides what answers before anything renders, so no status depends on how Next renders a page:
+ * - a miss (page or preview) is the server-rendered not-found page with status 404;
+ * - an old slug is a 308 (see `pathGate`);
+ * - when the API cannot answer, a 503 with `Retry-After` (ADR-009). Rendering anyway would only
+ *   wait on the same API again, and a page cannot answer 503 itself: Next sends 500.
+ *
+ * A live page also gets the id of its live release, which keys its cached lookup (ADR-009).
+ */
+export async function proxy(request: NextRequest): Promise<Response> {
   // Only this proxy may say which release is live: a value sent by the client would let anyone
   // fill the cache with entries under made-up keys.
   const forwarded = new Headers(request.headers);
   forwarded.delete(LIVE_RELEASE_HEADER);
+  // Next renders in blocking mode (real status codes, head tags in <head>) only for requests that
+  // send a User-Agent (`htmlLimitedBots`); any other client would get a streamed 200 shell even
+  // when the page then fails.
+  if ((forwarded.get('user-agent') ?? '').trim() === '') {
+    forwarded.set('user-agent', UNKNOWN_USER_AGENT);
+  }
+  const subdomain = subdomainFromHeaders(request.headers, rendererEnv());
+  const token = previewTokenOf(request.nextUrl.pathname);
+
+  if (token !== null) {
+    try {
+      const preview = await previewForHost({ subdomain, token }, (value) =>
+        getPreview(value, CHECK_TIMEOUT_MS),
+      );
+      if (preview === null) {
+        return notFound(request, forwarded);
+      }
+    } catch (error) {
+      console.error('Preview check failed; answering 503', error);
+      return unavailablePage({ noindex: true });
+    }
+    return NextResponse.next({ request: { headers: forwarded } });
+  }
+
   try {
     const decision = await pathGate(
-      {
-        subdomain: subdomainFromHeaders(request.headers, rendererEnv()),
-        pathname: request.nextUrl.pathname,
-      },
+      { subdomain, pathname: request.nextUrl.pathname },
       getPathStatus,
     );
     if (decision.kind === 'not_found') {
-      return NextResponse.rewrite(new URL(NOT_FOUND_ROUTE, request.url), { status: 404 });
+      return notFound(request, forwarded);
     }
     if (decision.kind === 'redirect') {
       // Next sends a same-host Location as a relative path, as the page's own redirect does. The
@@ -43,10 +85,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     }
     forwarded.set(LIVE_RELEASE_HEADER, decision.liveReleaseId);
   } catch (error) {
-    // The page makes the same decision from its cached lookup and still answers 404 or 308; only
-    // the no-JavaScript body of that 404, the 308 for clients without a User-Agent and the release
-    // part of the cache key depend on this check.
-    console.error('Path check failed; rendering the page instead', error);
+    console.error('Path check failed; answering 503', error);
+    return unavailablePage({ noindex: false });
   }
   return NextResponse.next({ request: { headers: forwarded } });
 }

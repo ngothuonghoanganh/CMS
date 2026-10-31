@@ -67,3 +67,49 @@ describe('send button of the lead form', () => {
     expect(busy).toMatch(/(?<![\w-])opacity:\s*0\.\d+;/);
   });
 });
+
+/** Every stylesheet the sections draw with: the frame and one per section. */
+const STYLESHEETS = [
+  './frame.module.css',
+  ...readdirSync(new URL('./sections/', import.meta.url))
+    .filter((file) => file.endsWith('.module.css'))
+    .map((file) => `./sections/${file}`),
+];
+
+/** The condition of each `@container` or `@media` block of a stylesheet, with the rules in it. */
+function conditionalBlocks(file: string): { condition: string; rules: string }[] {
+  const css = readFileSync(new URL(file, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  return [...css.matchAll(/@(?:container|media)\s+([^{]+)\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)].map(
+    ([, condition = '', rules = '']) => ({ condition: condition.trim(), rules }),
+  );
+}
+
+describe('device breakpoints', () => {
+  // `max-width: 767px` and `min-width: 768px` leave a gap: at a fractional width such as 767.5 px
+  // (browser zoom, classic scrollbars) neither applies. Range syntax splits at one point.
+  it('use range syntax, so every width falls on exactly one side', () => {
+    const conditions = STYLESHEETS.flatMap((file) =>
+      conditionalBlocks(file).map(({ condition }) => ({ file, condition })),
+    );
+    const widths = conditions.filter(({ condition }) => condition.includes('width'));
+    expect(widths.length).toBeGreaterThanOrEqual(10);
+    for (const { file, condition } of widths) {
+      expect(condition, file).not.toMatch(/(min|max)-width/);
+      expect(condition, file).toMatch(/^plp-page \(width (<|>=) \d+px\)$/);
+    }
+  });
+
+  it('hide a section on one side of 768 px each, never on both or neither', () => {
+    const blocks = conditionalBlocks('./frame.module.css');
+    const holding = (selector: string) =>
+      blocks.filter(({ rules }) =>
+        new RegExp(`\\${selector}\\s*\\{[^}]*display:\\s*none`).test(rules),
+      );
+    expect(holding('.hideDesktop').map(({ condition }) => condition)).toEqual([
+      'plp-page (width >= 768px)',
+    ]);
+    expect(holding('.hideMobile').map(({ condition }) => condition)).toEqual([
+      'plp-page (width < 768px)',
+    ]);
+  });
+});

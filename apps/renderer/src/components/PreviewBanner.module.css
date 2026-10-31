@@ -50,7 +50,7 @@
   margin: 4px 0 0;
 }
 
-@media (min-width: 768px) {
+@media (width >= 768px) {
   .inner {
     padding-inline: 40px;
   }

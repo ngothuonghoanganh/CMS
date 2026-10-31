@@ -128,13 +128,13 @@
   object-fit: cover;
 }
 
-@container plp-page (max-width: 767px) {
+@container plp-page (width < 768px) {
   .mediaFirst .media {
     order: -1;
   }
 }
 
-@container plp-page (min-width: 768px) {
+@container plp-page (width >= 768px) {
   .root {
     gap: 32px;
   }
@@ -191,7 +191,7 @@
   }
 }
 
-@container plp-page (min-width: 1024px) {
+@container plp-page (width >= 1024px) {
   .grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

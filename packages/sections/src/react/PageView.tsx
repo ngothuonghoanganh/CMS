@@ -24,10 +24,14 @@ export interface PageViewProps {
  */
 export function PageView({ composition, themePresetId, ctx, wrapSection }: PageViewProps) {
   const theme = themePresets[themePresetId];
+  // The page body opens with the first section after the navigation bar.
+  const leading = composition.sections.find(
+    (section, index) => index > 0 || section.type !== 'navbar',
+  );
   const rendered = composition.sections.map((section, index) => {
     const element = (
       <SectionFrame key={section.id} section={section} theme={theme}>
-        {renderSectionContent(section, ctx)}
+        {renderSectionContent(section, ctx, section === leading)}
       </SectionFrame>
     );
     return {

@@ -49,8 +49,8 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
 export default async function PublicPage({ params, searchParams }: PublicPageProps) {
   const resolution = await resolveRequest(params);
   if (resolution.kind === 'redirect') {
-    // The proxy answers redirects before rendering (see `pathGate`); this is the fallback when its
-    // check failed. The query goes along, as with the proxy.
+    // The proxy answers redirects before rendering (see `pathGate`); this is the fallback when the
+    // slug moved between its check and this lookup. The query goes along, as with the proxy.
     permanentRedirect(`${resolution.location}${queryOf(await searchParams)}`);
   }
   if (resolution.kind === 'not_found') {

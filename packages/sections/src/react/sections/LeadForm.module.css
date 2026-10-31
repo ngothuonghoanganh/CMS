@@ -190,7 +190,7 @@
   color: var(--plp-accent-text);
 }
 
-@container plp-page (min-width: 768px) {
+@container plp-page (width >= 768px) {
   .heading {
     font-size: 28px;
   }
