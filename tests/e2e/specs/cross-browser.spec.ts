@@ -135,13 +135,13 @@ test.describe('Cross-browser · a visitor on a live page', () => {
         analyticsReportSchema,
       );
     const before = (await report()).totals.views;
-    // Chromium's headless user agent is a bot's and is never counted (ADR-019); WebKit and
-    // Firefox send their usual one.
+    // Each project sends its engine's usual desktop user agent (playwright.config.ts devices),
+    // never a headless one, which would not be counted (ADR-019).
     await page.goto(pageUrl);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect
       .poll(async () => (await report()).totals.views, { timeout: 10_000 })
-      .toBe(test.info().project.name === 'chromium' ? before : before + 1);
+      .toBe(before + 1);
   });
 
   test('without JavaScript the form posts and lands on the result page', async ({ browser }) => {
