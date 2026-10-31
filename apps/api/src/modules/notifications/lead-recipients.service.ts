@@ -82,7 +82,7 @@ export class LeadRecipientsService {
     const { scope, site } = await this.sitesService.access(user, siteId);
     this.access.requireOwner(scope);
     const now = new Date();
-    await this.countInvite(scope, site._id, email, now);
+    const invite = await this.countInvite(scope, site._id, email, now);
     const { token, tokenHash } = newConfirmationToken();
     const recipient: LeadRecipientRecord = {
       _id: newObjectId(),
@@ -93,28 +93,33 @@ export class LeadRecipientsService {
       tokenHash,
       tokenExpiresAt: confirmationExpiry(now),
     };
-    await this.transactions.run(async (tx) => {
-      const outcome = await this.sites.addLeadRecipient(scope, site._id, recipient, tx);
-      switch (outcome.kind) {
-        case 'exists':
-          throw new AppError(409, 'recipient_exists', 'Địa chỉ này đã có trong nơi nhận lead');
-        case 'limit_reached':
-          throw new AppError(
-            409,
-            'recipient_limit_reached',
-            `Mỗi site có tối đa ${LEAD_RECIPIENTS_MAX} địa chỉ nhận lead`,
-          );
-        case 'site_missing':
-          throw notFound(SITE_NOT_FOUND);
-        case 'added':
-          await this.activity.record(
-            scope,
-            { siteId: site._id, type: 'lead.recipients_changed', data: { count: outcome.count } },
-            tx,
-          );
-      }
-    });
+    await this.uncountedOnError(invite, () =>
+      this.transactions.run(async (tx) => {
+        const outcome = await this.sites.addLeadRecipient(scope, site._id, recipient, tx);
+        switch (outcome.kind) {
+          case 'exists':
+            throw new AppError(409, 'recipient_exists', 'Địa chỉ này đã có trong nơi nhận lead');
+          case 'limit_reached':
+            throw new AppError(
+              409,
+              'recipient_limit_reached',
+              `Mỗi site có tối đa ${LEAD_RECIPIENTS_MAX} địa chỉ nhận lead`,
+            );
+          case 'site_missing':
+            throw notFound(SITE_NOT_FOUND);
+          case 'added':
+            await this.activity.record(
+              scope,
+              { siteId: site._id, type: 'lead.recipients_changed', data: { count: outcome.count } },
+              tx,
+            );
+        }
+      }),
+    );
     const invitedAt = await this.sendConfirmation(scope, site, recipient, token, user.name);
+    if (invitedAt === null) {
+      await this.uncount(invite);
+    }
     return toLeadRecipientDto({ ...recipient, invitedAt }, new Date());
   }
 
@@ -135,16 +140,23 @@ export class LeadRecipientsService {
       throw new AppError(409, 'conflict', 'Địa chỉ này đã xác nhận nhận lead');
     }
     const now = new Date();
-    await this.countInvite(scope, site._id, recipient.email, now);
+    const counted = await this.countInvite(scope, site._id, recipient.email, now);
     const { token, tokenHash } = newConfirmationToken();
     const invite = { tokenHash, tokenExpiresAt: confirmationExpiry(now) };
-    if (!(await this.sites.renewRecipientInvite(scope, site._id, id, invite))) {
+    const renewed = await this.uncountedOnError(counted, () =>
+      this.sites.renewRecipientInvite(scope, site._id, id, invite),
+    );
+    if (!renewed) {
       // Removed or confirmed since the site was read.
+      await this.uncount(counted);
       throw notFound(RECIPIENT_NOT_FOUND);
     }
-    const renewed = { ...recipient, ...invite, invitedAt: null };
-    const invitedAt = await this.sendConfirmation(scope, site, renewed, token, user.name);
-    return toLeadRecipientDto({ ...renewed, invitedAt }, new Date());
+    const sent = { ...recipient, ...invite, invitedAt: null };
+    const invitedAt = await this.sendConfirmation(scope, site, sent, token, user.name);
+    if (invitedAt === null) {
+      await this.uncount(counted);
+    }
+    return toLeadRecipientDto({ ...sent, invitedAt }, new Date());
   }
 
   async remove(user: AuthenticatedUser, siteId: string, recipientId: string): Promise<void> {
@@ -177,14 +189,18 @@ export class LeadRecipientsService {
 
   /**
    * Counts one confirmation email against the daily limits (`INVITE_LIMITS_PER_DAY`) before
-   * anything is stored or sent; over a limit answers 429 (ADR-018).
+   * anything is stored or sent, so requests at the same time cannot pass a limit together; over a
+   * limit answers 429 (ADR-018). Returns the keys counted: the caller takes the email back with
+   * `uncount` when it does not go out after all. The limits count emails sent, so a request refused
+   * here counts nowhere either: clicking "Gửi lại" past the cap of one address must not use up the
+   * workspace's other emails.
    */
   private async countInvite(
     scope: WorkspaceScope,
     siteId: ObjectId,
     email: string,
     now: Date,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const keys = inviteLimitKeys(email, { workspaceId: scope.workspaceId, siteId });
     const windowEnd = new Date(now.getTime() + DAY_MS);
     const counted = await Promise.all(
@@ -193,10 +209,35 @@ export class LeadRecipientsService {
         count: (await this.limits.hit(keys[limit], now, windowEnd)).count,
       })),
     );
+    const hit = Object.values(keys);
     if (counted.some(({ limit, count }) => count > INVITE_LIMITS_PER_DAY[limit])) {
+      await this.uncount(hit);
       throw new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
         detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
       });
+    }
+    return hit;
+  }
+
+  /** Runs `task`; when it fails, the email counted for it is taken back before the error goes on. */
+  private async uncountedOnError<T>(keys: readonly string[], task: () => Promise<T>): Promise<T> {
+    try {
+      return await task();
+    } catch (error) {
+      await this.uncount(keys);
+      throw error;
+    }
+  }
+
+  /**
+   * Takes back an email `countInvite` counted that did not go out. When the database fails here
+   * the email stays counted, the safe side of a limit; the request goes on with its own outcome.
+   */
+  private async uncount(keys: readonly string[]): Promise<void> {
+    try {
+      await this.limits.release(keys, new Date());
+    } catch (error) {
+      this.logger.error({ err: error }, 'Confirmation email not taken back from the daily limits');
     }
   }
 
