@@ -40,7 +40,7 @@ import { createEditorStore, type EditorStore } from './store';
 import { StructurePanel } from './StructurePanel';
 import { TopBar } from './TopBar';
 import { useAnnouncer } from './use-announcer';
-import { ChangesDiscardedError, DraftConflictError, useDraftSaver } from './use-draft-saver';
+import { DraftConflictError, useDraftSaver } from './use-draft-saver';
 import { useEditorShortcuts } from './use-editor-shortcuts';
 import { useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
@@ -195,10 +195,6 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
         duration: 15_000,
       });
     } catch (error) {
-      if (error instanceof ChangesDiscardedError) {
-        // The changes were given up for a leave: nothing saved them, so there is nothing to show.
-        return;
-      }
       if (!(error instanceof DraftConflictError)) {
         reportUnexpected('Opening the draft preview failed', error);
       }

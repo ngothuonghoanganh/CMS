@@ -19,7 +19,6 @@ import {
   SITE_ID,
 } from './test-fixtures';
 import { renderEditor } from './test-render';
-import { ChangesDiscardedError } from './use-draft-saver';
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
@@ -155,25 +154,6 @@ describe('DraftNotice', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-tone="warning"][tabindex="-1"]')).toHaveFocus();
     });
-  });
-
-  it('restores nothing, without a word, when the changes were given up for a leave', async () => {
-    const user = userEvent.setup();
-    const logged = vi.spyOn(console, 'error');
-    const store = liveStore();
-    renderEditor(<DraftNotice ensureSaved={() => Promise.reject(new ChangesDiscardedError())} />, {
-      store,
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Hủy thay đổi, quay về bản live' }));
-    const dialog = screen.getByRole('alertdialog', { name: 'Quay về bản live v12?' });
-    await user.click(within(dialog).getByRole('button', { name: 'Quay về bản live' }));
-    await waitFor(() => {
-      expect(screen.queryByRole('alertdialog')).toBeNull();
-    });
-    expect(apiMock).not.toHaveBeenCalled();
-    expect(store.getState().saveState).toBe('saved');
-    expect(logged).not.toHaveBeenCalled();
   });
 
   it('loads the images of the restored draft, so the canvas does not report them missing', async () => {

@@ -30,7 +30,6 @@ export {
 } from './store';
 export {
   AUTOSAVE_DELAY_MS,
-  ChangesDiscardedError,
   createDraftSaver,
   DraftConflictError,
   type DraftSaver,

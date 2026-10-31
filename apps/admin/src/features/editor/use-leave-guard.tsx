@@ -5,8 +5,8 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { setHistoryGuard } from '../shell/history-guard';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import type { Leave, LeaveOutcome } from '../shell/screen-leave';
-import { type EditorStore, isDiscarded, type SaveState } from './store';
-import { ChangesDiscardedError, type DraftSaver, DraftConflictError } from './use-draft-saver';
+import type { EditorStore, SaveState } from './store';
+import { type DraftSaver, DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
 export function isUnsaved(saveState: SaveState): boolean {
@@ -20,18 +20,18 @@ export function isUnsaved(saveState: SaveState): boolean {
 export type PendingInput = () => boolean;
 
 /**
- * Whether leaving now drops changes the user has not given up. Changes given up for a leave
- * ("Rời trang, bỏ thay đổi") are nothing to save: any leave then goes without asking or saving.
+ * Whether leaving now drops changes, so it must ask or save first. Not while a leave without saving
+ * ("Rời trang, bỏ thay đổi") is under way: the user already chose to go without them.
  */
 export function leavingLoses(store: EditorStore, pendingInput?: PendingInput): boolean {
   const state = store.getState();
-  return !isDiscarded(state) && (isUnsaved(state.saveState) || pendingInput?.() === true);
+  return !state.leavingWithoutSaving && (isUnsaved(state.saveState) || pendingInput?.() === true);
 }
 
 /**
- * Asks the browser to confirm closing or reloading the tab while changes are unsaved. Not while the
- * user gives them up for a leave: they chose to leave, and a prompt would let them stay after a
- * full page load already began (the sidebar's workspace switch remembers the new workspace first).
+ * Asks the browser to confirm closing or reloading the tab while changes are unsaved. Not during a
+ * leave without saving: a prompt would let the user stay after a full page load already began
+ * (the sidebar's workspace switch remembers the new workspace first).
  */
 export function useBeforeUnloadGuard(store: EditorStore, pendingInput?: PendingInput): void {
   useEffect(() => {
@@ -193,11 +193,7 @@ export function useLeaveGuard(
       await ensureSaved();
       leave(target, true);
     } catch (caught) {
-      if (caught instanceof ChangesDiscardedError) {
-        // Given up for another leave meanwhile: nothing is left to save, so this one goes too.
-        setPending(null);
-        go(target);
-      } else if (caught instanceof DraftConflictError) {
+      if (caught instanceof DraftConflictError) {
         // The blocking conflict dialog takes over.
         setPending(null);
       } else {

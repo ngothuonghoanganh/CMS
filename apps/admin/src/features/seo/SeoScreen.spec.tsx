@@ -400,44 +400,27 @@ describe('SeoScreen', () => {
       link.remove();
     });
 
-    it('still follows a link waiting for its save when the change is given up meanwhile', async () => {
+    it('leaves once, where the toast action goes, while another link waits for its save', async () => {
       const user = userEvent.setup();
       const detail = renderScreen();
       answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
       const link = outsideLink();
-      const description = screen.getByRole('textbox', { name: 'Mô tả ngắn' });
-      await user.type(description, 'Tư vấn');
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       await user.click(link);
       expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
 
-      // Another link waits for a save that takes a while, and the user types on meanwhile.
-      let answerSave: () => void = () => undefined;
-      answerApi(
-        () =>
-          new Promise((resolve) => {
-            answerSave = () => {
-              resolve({
-                revision: 4,
-                updatedAt: '2026-10-24T08:05:00.000Z',
-                page: detail.page,
-                checks: detail.checks,
-              });
-            };
-          }),
-      );
+      // Another link waits for a save that takes a while; meanwhile the user takes the way out
+      // the first failure offers.
+      const answerSave = heldSave(detail);
       await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
-      await user.type(description, ' miễn phí');
-      // The first failure still offers to leave without the change: the user takes it.
       await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
 
-      // The save ends; what was typed after it was given up, so the waiting link goes too.
+      // The save ends, and keeps the change in the draft; the link that waited for it goes nowhere.
       answerSave();
-      await waitFor(() => {
-        expect(router.push).toHaveBeenLastCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
-      });
+      expect(await screen.findByText('Đã lưu bản nháp')).toBeInTheDocument();
       expect(savesSent()).toBe(2);
-      expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      expect(router.push).toHaveBeenCalledTimes(1);
       link.remove();
     });
 
@@ -636,7 +619,7 @@ describe('SeoScreen', () => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
     });
 
-    it('follows any later link at once when the slug was given up, without checking it again', async () => {
+    it('follows any later link at once after leaving without the slug, without checking it', async () => {
       const user = userEvent.setup();
       const detail = renderScreen();
       const taken = vi.fn(() =>
@@ -654,7 +637,7 @@ describe('SeoScreen', () => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
       const checks = taken.mock.calls.length;
 
-      // The editor has not shown yet: another link still goes, and the slug given up stays so.
+      // The editor has not shown yet: another link goes at once too, and the slug stays unsaved.
       await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
       expect(router.push).toHaveBeenLastCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
       expect(taken).toHaveBeenCalledTimes(checks);
@@ -707,35 +690,24 @@ describe('SeoScreen', () => {
   });
 
   describe('leaving through the sidebar menus', () => {
-    it('switches workspace with no prompt from the browser once a change that failed is given up', async () => {
-      const user = userEvent.setup();
+    const agency: Membership = {
+      workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+      role: 'owner',
+    };
+    const clinic: Membership = {
+      workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
+      role: 'editor',
+    };
+
+    /** The real sidebar next to the screen, whose saves fail: the server is down. */
+    function renderWithSidebar(memberships: Membership[] = [agency]) {
       const detail = pageDetail();
       answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')), detail);
-      // The page load begins as the browser does: the page may still ask the user to stay, and a
-      // user who stays would be left in this workspace with the cookie naming the other one.
-      const atLoad: Array<{ prompted: boolean; cookie: string }> = [];
-      loadPageMock.mockImplementation(() => {
-        const event = new Event('beforeunload', { cancelable: true });
-        window.dispatchEvent(event);
-        atLoad.push({ prompted: event.defaultPrevented, cookie: document.cookie });
-      });
-      onTestFinished(() => {
-        loadPageMock.mockReset();
-        document.cookie = `${WORKSPACE_PREFERENCE_COOKIE}=; Path=/; Max-Age=0`;
-      });
-      const agency: Membership = {
-        workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
-        role: 'owner',
-      };
-      const clinic: Membership = {
-        workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
-        role: 'editor',
-      };
       renderWithProviders(
         <>
           <Sidebar
             user={{ id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngocanh@mayxanh.vn' }}
-            memberships={[agency, clinic]}
+            memberships={memberships}
             membership={agency}
             site={site}
             sites={[site]}
@@ -749,6 +721,34 @@ describe('SeoScreen', () => {
           />
         </>,
       );
+      return detail;
+    }
+
+    /**
+     * Page loads begin as the browser does: the page may still ask the user to stay. Records where
+     * each load goes, whether the page asked, and the cookies then.
+     */
+    function recordPageLoads() {
+      const loads: Array<{ href: string; prompted: boolean; cookie: string }> = [];
+      loadPageMock.mockImplementation((href) => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        loads.push({ href, prompted: event.defaultPrevented, cookie: document.cookie });
+      });
+      onTestFinished(() => {
+        loadPageMock.mockReset();
+      });
+      return loads;
+    }
+
+    it('switches workspace with no prompt from the browser when leaving without the change', async () => {
+      const user = userEvent.setup();
+      // A user who stayed would be left in this workspace with the cookie naming the other one.
+      const loads = recordPageLoads();
+      onTestFinished(() => {
+        document.cookie = `${WORKSPACE_PREFERENCE_COOKIE}=; Path=/; Max-Age=0`;
+      });
+      renderWithSidebar([agency, clinic]);
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
 
       await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
@@ -759,12 +759,38 @@ describe('SeoScreen', () => {
       expect(document.cookie).not.toContain(`${WORKSPACE_PREFERENCE_COOKIE}=`);
       await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
 
-      expect(loadPageMock).toHaveBeenCalledWith('/');
-      expect(atLoad).toHaveLength(1);
-      expect(atLoad[0]?.prompted).toBe(false);
-      expect(atLoad[0]?.cookie).toContain(
-        `${WORKSPACE_PREFERENCE_COOKIE}=64b0000000000000000000a2`,
+      expect(loads).toMatchObject([{ href: '/', prompted: false }]);
+      expect(loads[0]?.cookie).toContain(`${WORKSPACE_PREFERENCE_COOKIE}=64b0000000000000000000a2`);
+    });
+
+    it('signs out with no prompt from the browser when leaving without the change', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      const loads = recordPageLoads();
+      const detail = renderWithSidebar();
+      // The session ends, but the router cannot open the login page: a page load opens it.
+      answerApi(
+        (endpoint) =>
+          endpoint === endpoints.logout
+            ? Promise.resolve()
+            : Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')),
+        detail,
       );
+      router.replace.mockImplementation(() => {
+        throw new Error('The router is not mounted');
+      });
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+
+      await waitFor(() => {
+        expect(loads).toMatchObject([{ href: '/login', prompted: false }]);
+      });
     });
 
     it('saves first, and offers to sign out without the change when the save fails', async () => {
@@ -805,15 +831,15 @@ describe('SeoScreen', () => {
       });
       const saves = savesSent();
 
-      // Signing out takes a while; the user follows a link meanwhile. The change was given up, so
-      // there is nothing to save first.
+      // Signing out takes a while; the user follows a link meanwhile. They chose to leave without
+      // the change, so nothing is saved first.
       await user.click(screen.getByRole('link', { name: 'Mở editor' }));
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
       expect(savesSent()).toBe(saves);
       expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
 
-      // Signing out failed before the editor showed: the user is still here, with the change, and
-      // the tab asks again.
+      // Signing out failed before the editor showed: the user is still here, with the change. The
+      // tab asks again, and a link saves first again.
       stay();
       await waitFor(() => {
         const event = new Event('beforeunload', { cancelable: true });
@@ -821,35 +847,15 @@ describe('SeoScreen', () => {
         expect(event.defaultPrevented).toBe(true);
       });
       expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
+      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+      expect(router.push).toHaveBeenCalledTimes(1);
     });
 
-    it('takes the change back when signing out without it fails: the tab asks before closing', async () => {
+    it('asks before the tab closes again when signing out without the change fails', async () => {
       const user = userEvent.setup();
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      const detail = pageDetail();
-      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')), detail);
-      const agency: Membership = {
-        workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
-        role: 'owner',
-      };
-      renderWithProviders(
-        <>
-          <Sidebar
-            user={{ id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngocanh@mayxanh.vn' }}
-            memberships={[agency]}
-            membership={agency}
-            site={site}
-            sites={[site]}
-            pageCount={1}
-            leadCounts={NO_LEADS}
-          />
-          <SeoScreen
-            initial={{ detail, site, assets: [], role: 'editor' }}
-            loadedAt={Date.now()}
-            focus={null}
-          />
-        </>,
-      );
+      renderWithSidebar();
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
 
       await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));

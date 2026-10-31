@@ -9,10 +9,8 @@ import { siteQueryKeys } from '../dashboard/queries';
 import { pageQueryKeys } from '../history/queries';
 import type { LeaveOutcome } from '../shell/screen-leave';
 import { createTestQueryClient } from '../shell/test-utils';
-import { isDiscarded } from './store';
 import { emptyChecks, makeStore, PAGE_ID, pageSummary, SITE_ID } from './test-fixtures';
 import {
-  ChangesDiscardedError,
   createDraftSaver,
   DraftConflictError,
   runningSavesSettled,
@@ -256,29 +254,31 @@ describe('draft saver', () => {
     expect(saveMock).toHaveBeenCalledTimes(2);
   });
 
-  it('drops changes the user chose to discard, also when stopped', async () => {
+  it('saves nothing on stopping during a leave without saving', async () => {
     const { store, saver, stop } = setup();
     saveMock.mockResolvedValue(response(4));
     store.getState().setSpacing(HERO, 'compact');
+    // The leave unmounts the screen before the autosave delay is over.
     await expect(saver.discardFor(() => 'leaving')).resolves.toBe('leaving');
-    await vi.advanceTimersByTimeAsync(5000);
     stop();
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
     expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('saves again after a discard once there is a new change', async () => {
+  it('keeps saving as usual while a leave without saving is under way', async () => {
     const { store, saver, stop } = setup();
-    saveMock.mockResolvedValue(response(4));
+    saveMock.mockResolvedValueOnce(response(4)).mockResolvedValueOnce(response(5));
     store.getState().setSpacing(HERO, 'compact');
-    await saver.discardFor(() => 'leaving');
-    store.getState().setSpacing(HERO, 'spacious');
+    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
     await vi.advanceTimersByTimeAsync(1500);
     expect(saveMock).toHaveBeenCalledTimes(1);
+
+    store.getState().setSpacing(HERO, 'spacious');
+    await expect(saver.ensureSaved()).resolves.toMatchObject({ revision: 5 });
     stop();
   });
 
-  it('takes the changes back when the user stays after all, and saves them again', async () => {
+  it('saves on stopping again once the user stays after all', async () => {
     const { store, saver, stop } = setup();
     saveMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     store.getState().setSpacing(HERO, 'compact');
@@ -287,156 +287,23 @@ describe('draft saver', () => {
 
     // Signing out failed: the user is still here with the change.
     await expect(saver.discardFor(() => Promise.resolve('stayed'))).resolves.toBe('stayed');
-    expect(isDiscarded(store.getState())).toBe(false);
     saveMock.mockResolvedValue(response(4));
-    await vi.advanceTimersByTimeAsync(1500);
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
     expect(saveMock).toHaveBeenCalledTimes(2);
-    expect(saveMock.mock.calls[1]?.[2].body.composition.sections[1]?.spacing).toBe('compact');
     expect(store.getState().saveState).toBe('saved');
-    stop();
   });
 
-  it('saves nothing for a save asked for while the changes are given up for a leave under way', async () => {
-    const { store, saver, stop } = setup();
-    saveMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    store.getState().setSpacing(HERO, 'compact');
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(store.getState().saveState).toBe('error');
-
-    // Signing out without the change takes a while; a link or "Thử lại" asks for a save meanwhile.
-    const signOut = deferred<LeaveOutcome>();
-    const left = saver.discardFor(() => signOut.promise);
-    await expect(saver.ensureSaved()).rejects.toBeInstanceOf(ChangesDiscardedError);
-    const logged = vi.spyOn(console, 'error');
-    saver.retry();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    expect(store.getState().saveState).toBe('error');
-    expect(logged).not.toHaveBeenCalled();
-
-    // Signing out failed: the change counts again, and a save asked for now saves it.
-    saveMock.mockResolvedValue(response(4));
-    signOut.resolve('stayed');
-    await expect(left).resolves.toBe('stayed');
-    await expect(saver.ensureSaved()).resolves.toMatchObject({ revision: 4 });
-    expect(saveMock).toHaveBeenCalledTimes(2);
-    stop();
-  });
-
-  it('leaves the changes given up to a later leave when an earlier one stays', async () => {
-    const { store, saver, stop } = setup();
-    saveMock.mockResolvedValue(response(4));
-    store.getState().setSpacing(HERO, 'compact');
-    const first = deferred<LeaveOutcome>();
-    const second = deferred<LeaveOutcome>();
-    const firstLeft = saver.discardFor(() => first.promise);
-    const secondLeft = saver.discardFor(() => second.promise);
-
-    first.resolve('stayed');
-    await expect(firstLeft).resolves.toBe('stayed');
-    // The second leave still goes without them: nothing saves them.
-    expect(isDiscarded(store.getState())).toBe(true);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(saveMock).not.toHaveBeenCalled();
-
-    second.resolve('stayed');
-    await expect(secondLeft).resolves.toBe('stayed');
-    expect(isDiscarded(store.getState())).toBe(false);
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    stop();
-  });
-
-  it('keeps the changes given up for an earlier leave under way when a later one stays', async () => {
-    const { store, saver, stop } = setup();
-    saveMock.mockResolvedValue(response(4));
-    store.getState().setSpacing(HERO, 'compact');
-    const first = deferred<LeaveOutcome>();
-    const second = deferred<LeaveOutcome>();
-    const firstLeft = saver.discardFor(() => first.promise);
-    const secondLeft = saver.discardFor(() => second.promise);
-
-    second.resolve('stayed');
-    await expect(secondLeft).resolves.toBe('stayed');
-    // The first leave still goes without them: nothing saves them, not even on stopping.
-    expect(isDiscarded(store.getState())).toBe(true);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(saveMock).not.toHaveBeenCalled();
-
-    first.resolve('stayed');
-    await expect(firstLeft).resolves.toBe('stayed');
-    expect(isDiscarded(store.getState())).toBe(false);
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    stop();
-  });
-
-  it('takes nothing back for a leave that stays once the changes it gave up were changed', async () => {
-    const { store, saver, stop } = setup();
-    saveMock.mockResolvedValue(response(4));
-    store.getState().setSpacing(HERO, 'compact');
-    const first = deferred<LeaveOutcome>();
-    const firstLeft = saver.discardFor(() => first.promise);
-    // A newer change, given up for another leave still under way.
-    store.getState().setSpacing(HERO, 'spacious');
-    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
-
-    first.resolve('stayed');
-    await expect(firstLeft).resolves.toBe('stayed');
-    expect(isDiscarded(store.getState())).toBe(true);
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(saveMock).not.toHaveBeenCalled();
-    stop();
-  });
-
-  it('takes the changes back when the leave fails, and passes the failure on', async () => {
+  it('saves on stopping again when the leave fails, and passes the failure on', async () => {
     const { store, saver, stop } = setup();
     store.getState().setSpacing(HERO, 'compact');
     const failure = new Error('leave failed');
 
     await expect(saver.discardFor(() => Promise.reject(failure))).rejects.toBe(failure);
-    expect(isDiscarded(store.getState())).toBe(false);
     saveMock.mockResolvedValue(response(4));
     stop();
     await vi.advanceTimersByTimeAsync(0);
     expect(saveMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('starts no save of discarded changes after the request in flight, not even when stopped', async () => {
-    const { store, saver, stop } = setup();
-    const first = deferred<SaveDraftResponse>();
-    saveMock.mockReturnValueOnce(first.promise).mockResolvedValue(response(5));
-    store.getState().setSpacing(HERO, 'compact');
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(store.getState().saveState).toBe('saving');
-    // A change made while the request is out, then given up with the rest.
-    store.getState().setSpacing(HERO, 'spacious');
-    void saver.discardFor(() => 'leaving');
-
-    first.resolve(response(4));
-    await vi.advanceTimersByTimeAsync(5000);
-    stop();
-    await vi.advanceTimersByTimeAsync(0);
-    // The request already sent cannot be recalled; nothing follows it.
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('compact');
-  });
-
-  it('schedules no retry when a request sent before the discard fails', async () => {
-    const { store, saver, stop } = setup();
-    const first = deferred<SaveDraftResponse>();
-    saveMock.mockReturnValueOnce(first.promise).mockResolvedValue(response(5));
-    store.getState().setSpacing(HERO, 'compact');
-    await vi.advanceTimersByTimeAsync(1500);
-    void saver.discardFor(() => 'leaving');
-
-    first.reject(new TypeError('Failed to fetch'));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(store.getState().saveState).toBe('error');
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(saveMock).toHaveBeenCalledTimes(1);
-    stop();
   });
 
   it('does not save over a conflict when stopped', async () => {

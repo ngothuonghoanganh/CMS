@@ -14,9 +14,9 @@
 export type LeaveOutcome = 'leaving' | 'stayed';
 
 /**
- * Takes the user away from the screen and reports whether it did, so a screen that gave its
- * changes up for this leave takes them back when the user stays. Never rejects: a failure is
- * shown and reported where it happens.
+ * Takes the user away from the screen and reports whether it did, so a screen that let the user
+ * leave without saving asks and saves again when they stay. Never rejects: a failure is shown and
+ * reported where it happens.
  */
 export type Leave = () => LeaveOutcome | Promise<LeaveOutcome>;
 
@@ -48,7 +48,7 @@ export function leaveScreen(
   options: LeaveOptions = { discardLabel: LEAVE_WITHOUT_SAVING },
 ): void {
   if (current === null) {
-    // Nothing was given up for this leave, so its outcome changes nothing here.
+    // No screen let this leave go without saving, so its outcome changes nothing here.
     void leave();
     return;
   }

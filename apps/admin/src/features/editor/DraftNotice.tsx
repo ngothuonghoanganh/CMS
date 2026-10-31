@@ -11,7 +11,7 @@ import { useEditor, useEditorStoreApi } from './editor-context';
 import { displayUrl, siteChangesNotice } from './presentation';
 import { replaceWithServerDraft } from './server-draft';
 import { markPageScreensStale } from './stale-screens';
-import { ChangesDiscardedError, DraftConflictError } from './use-draft-saver';
+import { DraftConflictError } from './use-draft-saver';
 
 export interface DraftNoticeProps {
   ensureSaved: () => Promise<SaveDraftResponse>;
@@ -55,10 +55,7 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
       setConfirming(false);
       toast({ title: `Bản nháp đã quay về bản live v${live.version}`, tone: 'success' });
     } catch (caught) {
-      if (caught instanceof ChangesDiscardedError) {
-        // The changes were given up for a leave: nothing saved them, and nothing replaces them.
-        setConfirming(false);
-      } else if (
+      if (
         caught instanceof DraftConflictError ||
         (caught instanceof ApiError && caught.code === 'revision_conflict')
       ) {

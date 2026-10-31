@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { hostOf } from '../../lib/site-url';
 import {
-  ChangesDiscardedError,
   ConflictDialog,
   createEditorStore,
   DraftConflictError,
@@ -149,43 +148,8 @@ function SeoScreenBody({
   const host = hostOf(site.defaultOrigin);
   const shareImageId = seo.shareImageAssetId ?? site.defaultShareImageAssetId;
 
-  // Changes given up for a leave are nothing to save: any other leave then goes at once.
+  // During a leave without saving, any other leave goes at once too.
   const hasPending = useCallback(() => leavingLoses(store, slugPending), [store, slugPending]);
-
-  const leaveFailed = useCallback(
-    (error: unknown, { leave, discardLabel }: PendingLeave) => {
-      // A conflict opens the blocking reload dialog. Changes given up meanwhile for another leave
-      // (signing out without them) are nothing to save: this leave goes too. Anything else keeps
-      // the user here, with a way out when the save cannot succeed (signed out elsewhere, role
-      // lowered, a taken slug).
-      if (error instanceof DraftConflictError) {
-        return;
-      }
-      if (error instanceof ChangesDiscardedError) {
-        void leave();
-        return;
-      }
-      const slugRefused = error instanceof SlugNotCommittedError;
-      toast({
-        tone: 'danger',
-        title: slugRefused ? 'Chưa lưu được đường dẫn trang' : 'Chưa lưu được thiết lập SEO',
-        description: slugRefused
-          ? error.message
-          : `${problemMessage(error)} Thay đổi vẫn ở đây, hãy thử lại.`,
-        action: {
-          label: discardLabel,
-          onClick: () => {
-            // Given up for this leave only: when the user stays (signing out failed), the changes
-            // are unsaved again and the browser asks before the tab closes.
-            discardFor(leave).catch((caught: unknown) => {
-              reportUnexpected('Leaving the SEO settings without saving failed', caught);
-            });
-          },
-        },
-      });
-    },
-    [toast, discardFor],
-  );
 
   // Leaving saves first, whichever way: a save sent as the screen unmounts would land after the
   // next screen read the page (it would show the state before it), and could fail unseen (ADR-008).
@@ -199,6 +163,36 @@ function SeoScreenBody({
     },
     [],
   );
+
+  const leaveFailed = useCallback(
+    (error: unknown, { leave, discardLabel }: PendingLeave) => {
+      // A conflict opens the blocking reload dialog. Anything else keeps the user here, with a way
+      // out when the save cannot succeed (signed out elsewhere, role lowered, a taken slug).
+      if (error instanceof DraftConflictError) {
+        return;
+      }
+      const slugRefused = error instanceof SlugNotCommittedError;
+      toast({
+        tone: 'danger',
+        title: slugRefused ? 'Chưa lưu được đường dẫn trang' : 'Chưa lưu được thiết lập SEO',
+        description: slugRefused
+          ? error.message
+          : `${problemMessage(error)} Thay đổi vẫn ở đây, hãy thử lại.`,
+        action: {
+          label: discardLabel,
+          onClick: () => {
+            // The user leaves once, to here: any leave still waiting for its save is dropped.
+            pendingLeave.current = null;
+            discardFor(leave).catch((caught: unknown) => {
+              reportUnexpected('Leaving the SEO settings without saving failed', caught);
+            });
+          },
+        },
+      });
+    },
+    [toast, discardFor],
+  );
+
   const leaveAfterSave = useCallback(
     (leave: Leave, discardLabel: string = LEAVE_WITHOUT_SAVING) => {
       pendingLeave.current = { leave, discardLabel };

@@ -8,10 +8,8 @@ import type { Leave, LeaveOutcome } from '../shell/screen-leave';
 import { markPageScreensStale } from './stale-screens';
 import {
   currentSaveResponse,
-  type EditorState,
   type EditorStore,
   hasUnsavedChanges,
-  isDiscarded,
   type SaveFailure,
 } from './store';
 
@@ -28,39 +26,23 @@ export class DraftConflictError extends Error {
   }
 }
 
-/**
- * The changes not saved yet were given up for a leave ("Rời trang, bỏ thay đổi"): nothing saved
- * them, and whoever asked for the save must not act as if it had. Another leave goes without them,
- * as the user chose; anything else that needed them saved (publish, preview, "Quay về bản live")
- * does nothing. They count again when the leave does not happen.
- */
-export class ChangesDiscardedError extends Error {
-  constructor() {
-    super('Thay đổi chưa lưu đã được bỏ cho lần rời trang đang diễn ra');
-    this.name = 'ChangesDiscardedError';
-  }
-}
-
 export interface DraftSaver {
-  /**
-   * Saves pending changes now (e.g. before publishing) and resolves with the server result.
-   * Rejects with `ChangesDiscardedError` while they are given up for a leave.
-   */
+  /** Saves pending changes now (e.g. before publishing) and resolves with the server result. */
   ensureSaved: () => Promise<SaveDraftResponse>;
-  /** "Thử lại": saves now and restarts the automatic retries. Nothing while changes are given up. */
+  /** "Thử lại": saves now and restarts the automatic retries. */
   retry: () => void;
   /**
-   * "Rời trang, bỏ thay đổi": gives the changes not saved yet up for `leave`, then leaves. No save
-   * of them starts any more, not even a retry or the one on stopping; a request already sent cannot
-   * be recalled. When the user stays after all, this leave takes them back: once no other leave
-   * they were given up for is under way, they count as unsaved again and autosave resumes. A later
-   * change is saved as usual. Resolves with the leave's outcome.
+   * "Rời trang, bỏ thay đổi": runs `leave` without waiting for a save, asking, or saving on the way
+   * out (`leavingWithoutSaving`). Autosave goes on meanwhile: a save that lands before the screen
+   * is gone keeps those changes in the draft, which the live page does not show. When the user
+   * stays (`'stayed'`, or `leave` throws), leaving asks and saves again. Resolves with the leave's
+   * outcome.
    */
   discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
    * Starts listening to the store; returns the function that stops it. Stopping (the screen
    * unmounts: a link, Back/Forward) saves pending changes right away instead of dropping them, but
-   * schedules no more retries.
+   * schedules no more retries. Not during a leave without saving (`discardFor`).
    */
   start: () => () => void;
 }
@@ -97,17 +79,9 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
   return { kind: 'other', message: 'Lưu bản nháp không thành công' };
 }
 
-/** Changes to save: some not saved yet, and not given up for a leave. */
-function needsSave(state: EditorState): boolean {
-  return hasUnsavedChanges(state) && !isDiscarded(state);
-}
-
 function isKnownSaveFailure(error: unknown): boolean {
   return (
-    error instanceof ApiError ||
-    error instanceof DraftConflictError ||
-    error instanceof ChangesDiscardedError ||
-    error instanceof TypeError
+    error instanceof ApiError || error instanceof DraftConflictError || error instanceof TypeError
   );
 }
 
@@ -186,8 +160,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         throw new DraftConflictError();
       }
       store.getState().markSaveFailed(failure);
-      // Changes given up while this request was out are not tried again.
-      if (failure.kind === 'retryable' && !isDiscarded(store.getState())) {
+      if (failure.kind === 'retryable') {
         scheduleRetry();
       }
       throw error;
@@ -205,11 +178,6 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       }
       if (!hasUnsavedChanges(state)) {
         return currentSaveResponse(state);
-      }
-      if (isDiscarded(state)) {
-        // The store's last saved state is not these changes: answering with it would let the
-        // caller leave as if they were saved, while the leave they were given up for may stay.
-        throw new ChangesDiscardedError();
       }
       await saveOnce();
     }
@@ -246,18 +214,6 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }, debounceMs);
   }
 
-  /**
-   * A leave the changes of `version` were given up for did not happen: they are saved again, unless
-   * another leave they were given up for is still under way.
-   */
-  function keepUnsaved(version: number) {
-    store.getState().withdrawDiscard(version);
-    const state = store.getState();
-    if (!stopped && needsSave(state) && state.saveState !== 'conflict') {
-      scheduleSave();
-    }
-  }
-
   return {
     ensureSaved: flush,
     retry() {
@@ -265,17 +221,19 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       flushInBackground();
     },
     async discardFor(leave) {
-      const version = store.getState().discardUnsaved();
-      clearTimers();
+      const { setLeavingWithoutSaving } = store.getState();
+      // Leaves under way at once share the flag: one that stays clears it for the others, and the
+      // browser may then ask once before a page load one of them starts.
+      setLeavingWithoutSaving(true);
       let outcome: LeaveOutcome;
       try {
         outcome = await leave();
       } catch (error) {
-        keepUnsaved(version);
+        setLeavingWithoutSaving(false);
         throw error;
       }
       if (outcome === 'stayed') {
-        keepUnsaved(version);
+        setLeavingWithoutSaving(false);
       }
       return outcome;
     },
@@ -298,7 +256,11 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         unsubscribe();
         clearTimers();
         const state = store.getState();
-        if (needsSave(state) && state.saveState !== 'conflict') {
+        if (
+          !state.leavingWithoutSaving &&
+          hasUnsavedChanges(state) &&
+          state.saveState !== 'conflict'
+        ) {
           flushInBackground();
         }
       };
