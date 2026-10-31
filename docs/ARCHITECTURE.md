@@ -414,6 +414,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - content của mỗi section là kết quả parse của schema section đó, nên key lạ trong content, nút, link hay mục danh sách bị bỏ;
     - `samplePaths` chỉ giữ đường dẫn tới field chữ và nhãn nút có trong section (kể cả field variant ẩn), mỗi đường dẫn một lần.
   - Autosave, trang tạo theo mục tiêu và publish lưu kết quả này. Publish parse lại bản nháp, nên bản nháp lưu trước thay đổi này cũng không đưa key lạ vào release hay JSON public.
+  - **`validateComposition`** chỉ trả danh sách lỗi, không dựng composition đã parse hay `samplePaths`, vì store của editor gọi nó sau mỗi command, kể cả mỗi lần gõ phím. Hai hàm dùng chung một bộ quy tắc (`checkSections`), và test kiểm chúng báo cùng lỗi trên mọi mẫu section, mọi trang tạo theo mục tiêu và các ca lỗi.
   - **Key lạ bị bỏ chứ không bị từ chối,** như mọi body khác của API (mặc định của Zod), nên bản nháp cũ vẫn autosave được. Field bị variant ẩn vẫn được kiểm như mọi field (URL, độ dài, ảnh thuộc site) và vẫn được giữ.
   - Release cũ không bị viết lại; chỉ database dev local có thể còn release mang key lạ.
 - **Amended 2026-10-31 (vòng test thứ ba, renderer):**

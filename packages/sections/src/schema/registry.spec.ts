@@ -1,5 +1,13 @@
-import { type Composition, type SectionType, sectionTypes } from '@plp/contracts';
+import {
+  type Composition,
+  pageGoalIds,
+  pageStyleIds,
+  type SectionInstance,
+  type SectionType,
+  sectionTypes,
+} from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
+import { buildCompositionFromGoal } from './blueprints.js';
 import {
   bodyInsertionIndex,
   canMoveSection,
@@ -356,5 +364,140 @@ describe('parseComposition', () => {
         expect.objectContaining({ path: ['sections', 1, 'type'], code: 'invalid_position' }),
       ],
     });
+  });
+});
+
+describe('validateComposition', () => {
+  function withItems(type: 'benefits' | 'testimonials', variant: string, count: number) {
+    const section = createSectionInstance(type, variant, id(1));
+    const items = section.content.items;
+    if (!Array.isArray(items)) {
+      throw new Error('The sample has no items');
+    }
+    return { ...section, content: { ...section.content, items: items.slice(0, count) } };
+  }
+
+  function blueprint(goal: (typeof pageGoalIds)[number], style: (typeof pageStyleIds)[number]) {
+    let next = 0;
+    return buildCompositionFromGoal({
+      goal,
+      style,
+      brief: { offer: 'Niềng răng trong suốt', audience: 'người đi làm', phone: '0901 234 567' },
+      siteName: 'Smile Care',
+      newId: () => id((next += 1)),
+    });
+  }
+
+  const hero = createSectionInstance('hero', 'split', id(1));
+  const faq = createSectionInstance('faq', undefined, id(1));
+  const grid = createSectionInstance('benefits', 'grid', id(1));
+  const { items: _items, ...gridWithoutItems } = grid.content;
+  const fixtures: [string, Composition][] = [
+    ...sectionTypes.flatMap((type) =>
+      getSectionDefinition(type).variants.map((variant): [string, Composition] => [
+        `sample ${type} · ${variant.id}`,
+        { version: 1, sections: [createSectionInstance(type, variant.id, id(1))] },
+      ]),
+    ),
+    [
+      'full page',
+      page(['navbar', 'hero', 'benefits', 'testimonials', 'faq', 'cta_band', 'footer']),
+    ],
+    ...pageGoalIds.flatMap((goal) =>
+      pageStyleIds.map((style): [string, Composition] => [
+        `blueprint ${goal} · ${style}`,
+        blueprint(goal, style),
+      ]),
+    ),
+    [
+      'unknown keys and repeated sample paths',
+      {
+        version: 1,
+        sections: [
+          {
+            ...hero,
+            content: { ...hero.content, onload: 'x' },
+            samplePaths: ['heading', 'heading', 'nope'],
+          },
+        ],
+      },
+    ],
+    ['misplaced fixed sections', page(['hero', 'navbar', 'footer', 'faq'])],
+    ['second singleton', page(['navbar', 'hero', 'lead_form', 'lead_form'])],
+    [
+      'unknown variant and second footer',
+      {
+        version: 1,
+        sections: [
+          { ...hero, variant: 'nope' },
+          createSectionInstance('footer', undefined, id(2)),
+          createSectionInstance('footer', undefined, id(3)),
+        ],
+      },
+    ],
+    [
+      'content too long',
+      {
+        version: 1,
+        sections: [{ ...hero, content: { ...hero.content, heading: 'x'.repeat(81) } }],
+      },
+    ],
+    ['empty list', { version: 1, sections: [{ ...faq, content: { ...faq.content, items: [] } }] }],
+    ['benefits grid of 2', { version: 1, sections: [withItems('benefits', 'grid', 2)] }],
+    ['testimonial cards of 1', { version: 1, sections: [withItems('testimonials', 'cards', 1)] }],
+    ['missing list', { version: 1, sections: [{ ...grid, content: gridWithoutItems }] }],
+    [
+      'issues in several sections',
+      {
+        version: 1,
+        sections: [
+          { ...hero, content: { ...hero.content, heading: 'x'.repeat(81) } },
+          createSectionInstance('navbar', undefined, id(2)),
+          { ...withItems('testimonials', 'cards', 1), variant: 'nope' },
+        ],
+      },
+    ],
+  ];
+
+  it.each(fixtures)('reports the issues of parseComposition: %s', (_name, composition) => {
+    expect(validateComposition(composition)).toEqual(parseComposition(composition).issues);
+  });
+
+  it('covers valid and invalid compositions alike', () => {
+    const invalid = fixtures.filter(([, composition]) => validateComposition(composition).length);
+    expect(invalid.length).toBeGreaterThanOrEqual(9);
+    expect(invalid.length).toBeLessThan(fixtures.length);
+  });
+
+  it('builds no parsed section, so it never reads what only the result needs', () => {
+    // The editor runs it on every keystroke: sample paths and the frame are for the result only.
+    const read: string[] = [];
+    const watched = (section: SectionInstance): SectionInstance =>
+      Object.defineProperties(
+        { ...section },
+        {
+          samplePaths: {
+            get: () => {
+              read.push('samplePaths');
+              return section.samplePaths;
+            },
+          },
+          visibility: {
+            get: () => {
+              read.push('visibility');
+              return section.visibility;
+            },
+          },
+        },
+      );
+    const composition: Composition = {
+      version: 1,
+      sections: [watched(hero), watched(createSectionInstance('faq', undefined, id(2)))],
+    };
+
+    expect(validateComposition(composition)).toEqual([]);
+    expect(read).toEqual([]);
+    expect(parseComposition(composition).success).toBe(true);
+    expect(read).toContain('samplePaths');
   });
 });

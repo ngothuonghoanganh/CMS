@@ -255,15 +255,17 @@ export type CompositionParseResult =
   | { success: false; issues: ProblemIssue[] };
 
 /**
- * Validates every section against its own definition and returns the composition as validated:
- * each content as its section schema parsed it, so keys no schema knows (in the content, a button,
- * a link) are dropped, and sample paths that name no text field are dropped too. Store and publish
- * this result, never the input. Issues have paths relative to the composition, e.g.
- * ["sections", 2, "content", "heading"]. The frame (`compositionSchema`) must already be valid.
+ * The one rule set of `parseComposition` and `validateComposition`: checks every section against
+ * its own definition and returns the issues, with paths relative to the composition, e.g.
+ * ["sections", 2, "content", "heading"]. Each section without issues of its content goes to
+ * `onParsed` with that content as its section schema parsed it; `validateComposition` passes none,
+ * so the editor's check on every command builds nothing more than the issues.
  */
-export function parseComposition(composition: Composition): CompositionParseResult {
+function checkSections(
+  composition: Composition,
+  onParsed?: (section: SectionInstance, content: SectionInstance['content']) => void,
+): ProblemIssue[] {
   const issues: ProblemIssue[] = [];
-  const sections: SectionInstance[] = [];
   const singletonsSeen = new Set<SectionType>();
   const lastIndex = composition.sections.length - 1;
   composition.sections.forEach((section, index) => {
@@ -326,7 +328,22 @@ export function parseComposition(composition: Composition): CompositionParseResu
       }
       return;
     }
-    const known = samplePathCandidates({ ...section, content: result.data });
+    onParsed?.(section, result.data);
+  });
+  return issues;
+}
+
+/**
+ * Validates every section against its own definition and returns the composition as validated:
+ * each content as its section schema parsed it, so keys no schema knows (in the content, a button,
+ * a link) are dropped, and sample paths that name no text field are dropped too. Store and publish
+ * this result, never the input. Issues are those of `validateComposition`. The frame
+ * (`compositionSchema`) must already be valid.
+ */
+export function parseComposition(composition: Composition): CompositionParseResult {
+  const sections: SectionInstance[] = [];
+  const issues = checkSections(composition, (section, content) => {
+    const known = samplePathCandidates({ ...section, content });
     sections.push({
       id: section.id,
       type: section.type,
@@ -335,7 +352,7 @@ export function parseComposition(composition: Composition): CompositionParseResu
       spacing: section.spacing,
       visibility: { desktop: section.visibility.desktop, mobile: section.visibility.mobile },
       mobileOrder: section.mobileOrder,
-      content: result.data,
+      content,
       samplePaths: [...new Set(section.samplePaths)].filter((path) => known.has(path)),
     });
   });
@@ -344,7 +361,10 @@ export function parseComposition(composition: Composition): CompositionParseResu
     : { success: true, composition: { version: composition.version, sections }, issues: [] };
 }
 
-/** The issues of `parseComposition`; an empty list means valid. */
+/**
+ * The issues of `parseComposition`, without building the parsed composition or its sample paths:
+ * the editor runs it on every command, each keystroke included. An empty list means valid.
+ */
 export function validateComposition(composition: Composition): ProblemIssue[] {
-  return parseComposition(composition).issues;
+  return checkSections(composition);
 }
