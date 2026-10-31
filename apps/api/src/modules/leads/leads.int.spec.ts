@@ -6,7 +6,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { formDraft, leadFormSection } from '../../../test/compositions.js';
-import { createLiveFormPage, leadBody, PHONE_UA, submitLead } from '../../../test/leads.js';
+import {
+  createLiveFormPage,
+  leadBody,
+  PHONE_UA,
+  storedLead,
+  submitLead,
+} from '../../../test/leads.js';
 import {
   createLivePage,
   publish,
@@ -271,6 +277,24 @@ describe('lead intake', () => {
     await submitLead(t, site.subdomain, first, { ip }).expect(200);
     expect(await counted()).toEqual(before);
     expect(await storedLeads(site)).toHaveLength(CLIENT_LIMIT);
+  });
+
+  it('answers a resend of a lead stored under its plain submission id as a replay', async () => {
+    // Leads stored before the submission key hold the form's plain id (ADR-016). The answer to the
+    // first send was lost across the deploy, and the visitor sends the same form again.
+    const { site, pageId, releaseId } = await formSite();
+    const body = leadBody(releaseId);
+    await t.connection.collection('leads').insertOne({
+      ...storedLead({ workspaceId, siteId: site.id, pageId, releaseId, name: body.name }),
+      submissionId: body.submissionId,
+    });
+
+    const response = await submitLead(t, site.subdomain, body).expect(200);
+    expect(publicLeadResponseSchema.parse(response.body)).toEqual({ status: 'received' });
+    expect(await storedLeads(site)).toHaveLength(1);
+    // Another visitor's submission is still a new lead.
+    await submitLead(t, site.subdomain, leadBody(releaseId)).expect(201);
+    expect(await storedLeads(site)).toHaveLength(2);
   });
 
   it('keeps suspected spam, flagged, with the same answer', async () => {

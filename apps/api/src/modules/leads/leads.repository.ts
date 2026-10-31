@@ -178,13 +178,20 @@ export class LeadsRepository {
   }
 
   /**
-   * Whether the site already received this submission (`submissionKey`). MongoDB uses a
-   * partial index only for a query that implies its filter, which a plain equality does not: the
-   * type check keeps this one probe of the unique index rather than a read of every lead of the site.
+   * Whether the site already received this submission, stored under any of `submissionIds` (its
+   * `submissionKey`, or the plain id of a lead stored before the key existed): one probe of the
+   * unique index per id, however many leads the site has. MongoDB uses a partial index only for a
+   * query that implies its filter, which a plain `$in` does not, hence the type check. The hint
+   * holds the plan: with two ids the planner's trial can prefer `siteId, createdAt` when the
+   * site's newest lead matches, and a plan cached from that reads every lead of the site.
    */
-  async existsPublicSubmission(siteId: ObjectId, submissionId: string): Promise<boolean> {
+  async existsPublicSubmission(
+    siteId: ObjectId,
+    submissionIds: readonly string[],
+  ): Promise<boolean> {
     const found = await this.leads
-      .exists({ siteId, submissionId: { $eq: submissionId, $type: 'string' } })
+      .exists({ siteId, submissionId: { $in: [...submissionIds], $type: 'string' } })
+      .hint(LEADS_SUBMISSION_INDEX)
       .exec();
     return found !== null;
   }

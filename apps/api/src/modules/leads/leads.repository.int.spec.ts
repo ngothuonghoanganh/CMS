@@ -177,6 +177,7 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     };
     const submissionId = randomUUID();
     const elsewhere = randomUUID();
+    const sortsFirst = '00000000-0000-4000-8000-000000000000';
     await insertLeads(t, [
       // Leads sent without the page script have no submission id.
       ...Array.from({ length: 30 }, (_, index) => ({
@@ -193,17 +194,20 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     const leads = t.app.get(LeadsRepository);
 
     const sent = await recordCalls(t.connection, 'leads', async () => {
-      expect(await leads.existsPublicSubmission(siteId, submissionId)).toBe(true);
-      expect(await leads.existsPublicSubmission(siteId, randomUUID())).toBe(false);
-      expect(await leads.existsPublicSubmission(siteId, elsewhere)).toBe(false);
+      expect(await leads.existsPublicSubmission(siteId, [submissionId])).toBe(true);
+      // Intake looks up the submission key and the plain id of a lead stored before the key. An id
+      // that sorts first makes the index take two steps, while the site's newest lead matches.
+      expect(await leads.existsPublicSubmission(siteId, [sortsFirst, submissionId])).toBe(true);
+      expect(await leads.existsPublicSubmission(siteId, [randomUUID(), randomUUID()])).toBe(false);
+      expect(await leads.existsPublicSubmission(siteId, [elsewhere])).toBe(false);
     });
 
-    // Each lookup explained exactly as it was sent.
-    expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne']);
+    // Each lookup explained exactly as it was sent: at most one probe of the index per id.
+    expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne', 'findOne']);
     for (const call of sent) {
       const explained = await explainFindOne(t.connection, call);
       expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([LEADS_SUBMISSION_INDEX]);
-      expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
+      expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(2);
       expect(explained.executionStats.totalDocsExamined).toBeLessThanOrEqual(1);
     }
   });
