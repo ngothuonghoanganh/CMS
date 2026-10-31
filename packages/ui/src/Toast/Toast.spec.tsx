@@ -86,12 +86,26 @@ function stackOf(): HTMLElement {
   return stack;
 }
 
-/** Placement is decided a frame after what moved; waiting longer must not change it either. */
-async function settledPlacement(): Promise<string | null> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+/**
+ * The stack decides its corner a frame after what moved. Running each frame at once makes the
+ * corner final as soon as the change returns, with no real time to wait.
+ */
+function framesAtOnce(): void {
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callback(performance.now());
+    return 0;
   });
+  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+}
+
+function placement(): string | null {
   return stackOf().getAttribute('data-placement');
+}
+
+function focus(name: string): void {
+  act(() => {
+    screen.getByRole('button', { name }).focus();
+  });
 }
 
 describe('Toast', () => {
@@ -101,8 +115,9 @@ describe('Toast', () => {
     FakeResizeObserver.observing.clear();
   });
 
-  it('moves to the top corner when a second toast makes the stack reach the focused control', async () => {
+  it('moves to the top corner when a second toast makes the stack reach the focused control', () => {
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    framesAtOnce();
     const { Capture, api } = captureApi();
     render(
       <ToastProvider>
@@ -112,11 +127,11 @@ describe('Toast', () => {
     );
     // One toast covers 692–752 px, two cover 624–752 px: only the second reaches the control.
     mockLayout({ 'Ghi chú': { top: 640, left: 700, width: 140, height: 36 } });
-    screen.getByRole('button', { name: 'Ghi chú' }).focus();
+    focus('Ghi chú');
     act(() => {
       api().toast({ title: 'Đã lưu ghi chú' });
     });
-    expect(await settledPlacement()).toBe('bottom');
+    expect(placement()).toBe('bottom');
 
     act(() => {
       api().toast({ title: 'Đã chuyển trạng thái' });
@@ -126,10 +141,10 @@ describe('Toast', () => {
     act(() => {
       FakeResizeObserver.report();
     });
-    expect(await settledPlacement()).toBe('top');
+    expect(placement()).toBe('top');
   });
 
-  it('moves to the top corner when scrolling brings the focused control under the stack', async () => {
+  it('moves to the top corner when scrolling brings the focused control under the stack', () => {
     const { Capture, api } = captureApi();
     render(
       <ToastProvider>
@@ -139,25 +154,26 @@ describe('Toast', () => {
         </div>
       </ToastProvider>,
     );
+    framesAtOnce();
     const control = { top: 400, left: 700, width: 140, height: 36 };
     mockLayout({ 'Chuyển vào spam': control });
-    screen.getByRole('button', { name: 'Chuyển vào spam' }).focus();
+    focus('Chuyển vào spam');
     act(() => {
       api().toast({ title: 'Đã lưu ghi chú' });
     });
-    expect(await settledPlacement()).toBe('bottom');
+    expect(placement()).toBe('bottom');
 
     // A scrolling list, not the page, carries the control down under the stack.
     control.top = 700;
     fireEvent.scroll(screen.getByTestId('list'));
-    expect(await settledPlacement()).toBe('top');
+    expect(placement()).toBe('top');
 
     control.top = 300;
     fireEvent.scroll(window);
-    expect(await settledPlacement()).toBe('bottom');
+    expect(placement()).toBe('bottom');
   });
 
-  it('moves to the top corner when the window shrinks under the focused control', async () => {
+  it('moves to the top corner when the window shrinks under the focused control', () => {
     const { Capture, api } = captureApi();
     render(
       <ToastProvider>
@@ -165,19 +181,20 @@ describe('Toast', () => {
         <button type="button">Lưu</button>
       </ToastProvider>,
     );
+    framesAtOnce();
     mockLayout({ Lưu: { top: 600, left: 700, width: 100, height: 36 } });
-    screen.getByRole('button', { name: 'Lưu' }).focus();
+    focus('Lưu');
     act(() => {
       api().toast({ title: 'Đã lưu' });
     });
-    expect(await settledPlacement()).toBe('bottom');
+    expect(placement()).toBe('bottom');
 
     // An on-screen keyboard takes 108 px: the stack now covers 584–644 px at the bottom.
     const height = window.innerHeight;
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 660 });
     try {
       fireEvent(window, new Event('resize'));
-      expect(await settledPlacement()).toBe('top');
+      expect(placement()).toBe('top');
     } finally {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
     }
