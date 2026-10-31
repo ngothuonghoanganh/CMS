@@ -7,7 +7,7 @@ import type { Leave } from '../shell/screen-leave';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
 import { createDraftSaver, DraftConflictError, type DraftSaver } from './use-draft-saver';
-import { isFragmentNavigation, useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
+import { isSameDocument, useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
 
@@ -50,10 +50,22 @@ function setup(ensureSaved?: () => Promise<SaveDraftResponse>) {
   return { store, discard, push };
 }
 
-/** What the browser does on Back: move to the previous entry, then fire popstate. */
-function pressBack() {
+/** Where the tests start, and where each one comes back to. */
+const START_URL = window.location.href;
+
+/** What the browser does on Back: move to the previous entry (`to`), then fire popstate. */
+function pressBack(to = '/sites/s/pages') {
   act(() => {
+    window.history.replaceState({ previous: true }, '', to);
     window.dispatchEvent(new PopStateEvent('popstate', { state: { previous: true } }));
+  });
+}
+
+/** What a click on the skip link does: a new entry of the same page at `#main-content`, then popstate. */
+function followSkipLink() {
+  act(() => {
+    window.history.pushState(window.history.state, '', '#main-content');
+    window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state as unknown }));
   });
 }
 
@@ -83,6 +95,7 @@ function closeTab(): boolean {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.history.replaceState(null, '', START_URL);
 });
 
 describe('useBeforeUnloadGuard', () => {
@@ -151,21 +164,21 @@ describe('useBeforeUnloadGuard', () => {
   });
 });
 
-describe('isFragmentNavigation', () => {
+describe('isSameDocument', () => {
   const page = 'https://admin.example/sites/s/pages/p/seo?focus=title';
 
-  it('is a move within the page when only the fragment changes', () => {
-    expect(isFragmentNavigation(page, `${page}#main-content`)).toBe(true);
-    expect(isFragmentNavigation(`${page}#main-content`, page)).toBe(true);
+  it('is the same document whatever the fragment', () => {
+    expect(isSameDocument(page, `${page}#main-content`)).toBe(true);
+    expect(isSameDocument(`${page}#main-content`, page)).toBe(true);
+    expect(isSameDocument(page, page)).toBe(true);
   });
 
-  it('is not when the path, the query or the origin changes, or nothing does', () => {
-    expect(isFragmentNavigation(page, 'https://admin.example/sites/s/pages/p/seo#x')).toBe(false);
-    expect(isFragmentNavigation(page, 'https://admin.example/sites/s/pages/p/history')).toBe(false);
-    expect(
-      isFragmentNavigation(page, 'https://other.example/sites/s/pages/p/seo?focus=title#x'),
-    ).toBe(false);
-    expect(isFragmentNavigation(page, page)).toBe(false);
+  it('is not when the path, the query or the origin changes', () => {
+    expect(isSameDocument(page, 'https://admin.example/sites/s/pages/p/seo#x')).toBe(false);
+    expect(isSameDocument(page, 'https://admin.example/sites/s/pages/p/history')).toBe(false);
+    expect(isSameDocument(page, 'https://other.example/sites/s/pages/p/seo?focus=title#x')).toBe(
+      false,
+    );
   });
 });
 
@@ -186,16 +199,33 @@ describe('useLeaveGuard with the browser Back button', () => {
     const router = vi.fn();
     window.addEventListener('popstate', router);
     const { store } = setup();
-    const editorUrl = window.location.href;
     store.getState().setSpacing(HERO, 'compact');
     try {
-      // What a click on "#main-content" does: a new entry of the same page, then popstate.
-      window.history.pushState(window.history.state, '', '#main-content');
-      pressBack();
+      followSkipLink();
       expect(router).toHaveBeenCalledTimes(1);
       expect(screen.queryByRole('dialog')).toBeNull();
     } finally {
-      window.history.replaceState(window.history.state, '', editorUrl);
+      window.removeEventListener('popstate', router);
+    }
+  });
+
+  it('lets Back from the skip link through to the same URL, with unsaved changes', () => {
+    const pushState = vi.spyOn(window.history, 'pushState');
+    const router = vi.fn();
+    window.addEventListener('popstate', router);
+    const { store } = setup();
+    const editorUrl = window.location.href;
+    // The changes became unsaved on this very URL: Back from the skip link lands on it again.
+    store.getState().setSpacing(HERO, 'compact');
+    try {
+      followSkipLink();
+      pressBack(editorUrl);
+      expect(router).toHaveBeenCalledTimes(2);
+      expect(window.location.href).toBe(editorUrl);
+      // Only the skip link added an entry; the guard put none back.
+      expect(pushState).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
       window.removeEventListener('popstate', router);
     }
   });

@@ -498,9 +498,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Chúng vẫn ở trong thứ tự Tab: Shift+Tab từ chữ đưa focus lên thanh công cụ và nó hiện lại.
 - **Amended 2026-11-01 (vòng test thứ ba):** link trong cùng trang không phải là rời màn.
   - Chromium, Firefox và WebKit đều bắn `popstate` khi bấm link `#…` trong trang (skip link "Bỏ qua điều hướng" tới `#main-content`), và khi Back giữa hai mục chỉ khác fragment.
-  - Guard của Back/Forward bỏ qua mọi `popstate` mà đường dẫn và query giữ nguyên, chỉ fragment đổi (`isFragmentNavigation`).
+  - Guard của Back/Forward chỉ coi `popstate` là rời màn khi đường dẫn hoặc query khác với entry của màn (URL ghi lại khi màn bắt đầu có thay đổi chưa lưu). Cùng đường dẫn và query thì, dù fragment là gì, người dùng vẫn ở tài liệu này và guard để sự kiện đi qua (`isSameDocument`).
+    - Bản đầu của sửa đổi này đòi fragment phải khác với URL của entry. Skip link rồi Back về đúng URL đó (hai URL giống hệt) vì vậy vẫn bị coi là rời màn.
   - Trước đây, ở màn SEO hay editor còn thay đổi chưa lưu, skip link bị coi là Back: guard đẩy lại entry của màn, lưu rồi `history.back()`. Kết quả là thừa một entry lịch sử, và nếu lưu lỗi thì có cả toast "Rời trang, bỏ thay đổi".
-  - E2E kiểm skip link trên màn SEO còn thay đổi chưa lưu: lịch sử tăng đúng một entry, focus vào nội dung chính và thay đổi vẫn được lưu.
+  - E2E kiểm trên màn SEO còn thay đổi chưa lưu (lưu đang lỗi):
+    - skip link thêm đúng một entry và đưa focus vào nội dung chính;
+    - Back về URL của màn không có fragment: lịch sử không tăng, entry của skip link vẫn ở phía trước (Forward về lại `#main-content`), không hộp thoại, không toast;
+    - sau "Thử lại", thay đổi được lưu.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 

@@ -61,18 +61,16 @@ function currentEntry(): HistoryEntry {
 }
 
 /**
- * Whether going from `from` to `to` only moved within the page: same path and query, another
- * fragment. Browsers fire `popstate` for that too (a skip link to `#main-content`, Back to the
- * entry before it), and it leaves nothing, so it must not be taken for leaving the screen.
+ * Whether `url` is still the document of the screen's entry: same path and query, whatever the
+ * fragment. Browsers fire `popstate` for a move within the document too (a skip link to
+ * `#main-content`, then Back to the URL without it), and it leaves nothing, so it must not be
+ * taken for leaving the screen.
  */
-export function isFragmentNavigation(from: string, to: string): boolean {
-  const before = new URL(from);
-  const after = new URL(to);
+export function isSameDocument(entryUrl: string, url: string): boolean {
+  const entry = new URL(entryUrl);
+  const now = new URL(url);
   return (
-    before.origin === after.origin &&
-    before.pathname === after.pathname &&
-    before.search === after.search &&
-    before.hash !== after.hash
+    entry.origin === now.origin && entry.pathname === now.pathname && entry.search === now.search
   );
 }
 
@@ -81,7 +79,8 @@ export function isFragmentNavigation(from: string, to: string): boolean {
  * are unsaved the guard keeps the router from handling the event, puts the screen's entry back
  * (with the router's own state, so the router keeps working) and hands `onBlocked` the way to
  * leave after all: going back once more. The screen's entry was pushed right after the one the
- * user chose, so `history.back()` reaches it whichever direction they went.
+ * user chose, so `history.back()` reaches it whichever direction they went. A popstate that stays
+ * on the screen's document (only the fragment differs from its entry) is not a leave.
  */
 export function useHistoryLeaveGuard(
   store: EditorStore,
@@ -110,7 +109,7 @@ export function useHistoryLeaveGuard(
       if (!leavingLoses(store, pendingInput)) {
         return false;
       }
-      if (isFragmentNavigation(entry.url, window.location.href)) {
+      if (isSameDocument(entry.url, window.location.href)) {
         return false;
       }
       window.history.pushState(entry.state, '', entry.url);

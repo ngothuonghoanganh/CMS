@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Route, test } from '@playwright/test';
 import { endpoints, previewLinkResponseSchema } from '@plp/contracts';
 import { seedBoard } from '../support/board.js';
 import { call, createPageViaApi, setUpSite } from '../support/setup.js';
@@ -126,7 +126,7 @@ test.describe('Third round · admin and renderer', () => {
     }
   });
 
-  test('the skip link works on SEO with a change still to save, and nothing is lost', async ({
+  test('on SEO with a change not saved, the skip link and Back are no leave; nothing is lost', async ({
     page,
   }) => {
     const { site } = await setUpSite(page.request);
@@ -137,8 +137,13 @@ test.describe('Third round · admin and renderer', () => {
     });
     const seoUrl = `/sites/${site.id}/pages/${created.page.id}/seo`;
     await page.goto(seoUrl);
+    // Saves fail until the end: the change stays unsaved, and a leave would end in a toast.
+    const failSaves = (route: Route) =>
+      route.request().method() === 'PUT' ? route.abort() : route.fallback();
+    await page.route('**/pages/*/draft', failSaves);
     const seo = page.getByRole('region', { name: 'Thiết lập SEO' });
     await seo.getByRole('textbox', { name: 'Mô tả ngắn' }).fill('Tư vấn miễn phí');
+    await expect(seo.getByRole('status')).toContainText('Chưa lưu được');
 
     // Browsers fire popstate for an in-page link too; it must not count as leaving (ADR-008).
     // Taken for leaving, the guard would push the screen's entry back: one entry too many.
@@ -148,9 +153,20 @@ test.describe('Third round · admin and renderer', () => {
     await expect(page).toHaveURL(new RegExp(`${seoUrl}#main-content$`));
     expect(await page.evaluate(() => window.history.length)).toBe(entries + 1);
     await expect(page.locator('main#main-content')).toBeFocused();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(seo.getByRole('status')).toHaveText('Đã lưu bản nháp');
 
+    // Back to the URL the change was made on: still this page, so not a leave either.
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`${seoUrl}$`));
+    expect(await page.evaluate(() => window.history.length)).toBe(entries + 1);
+    // The skip link's entry is still ahead: the guard pushed nothing over it.
+    await page.goForward();
+    await expect(page).toHaveURL(new RegExp(`${seoUrl}#main-content$`));
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText('Chưa lưu được thiết lập SEO')).toHaveCount(0);
+
+    await page.unroute('**/pages/*/draft', failSaves);
+    await seo.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(seo.getByRole('status')).toHaveText('Đã lưu bản nháp');
     await page.goto(seoUrl);
     await expect(seo.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
   });

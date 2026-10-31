@@ -68,6 +68,15 @@ function renderScreen(composition?: Composition) {
 // As the root providers do while loading: ahead of any router listener.
 installHistoryGuard();
 
+/** Where the tests start, and where each one comes back to. */
+const START_URL = window.location.href;
+
+/** What the browser does on Back: move to the previous entry (the site), then fire popstate. */
+function pressBack(state?: unknown) {
+  window.history.replaceState(state ?? null, '', `/sites/${SITE_ID}`);
+  window.dispatchEvent(new PopStateEvent('popstate', { state }));
+}
+
 // jsdom has no pointer capture; Radix menus call it while handling pointer events.
 beforeAll(() => {
   for (const method of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCapture']) {
@@ -84,6 +93,7 @@ beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
   router.replace.mockReset();
+  window.history.replaceState(null, '', START_URL);
 });
 
 describe('SeoScreen', () => {
@@ -324,8 +334,8 @@ describe('SeoScreen', () => {
       const link = outsideLink();
       try {
         await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        pressBack();
+        pressBack();
         await user.click(link);
         await waitFor(() => {
           expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
@@ -426,12 +436,40 @@ describe('SeoScreen', () => {
       const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
       try {
         await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        pressBack();
 
         expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
         expect(back).not.toHaveBeenCalled();
         expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
       } finally {
+        back.mockRestore();
+      }
+    });
+
+    it('stays put for the skip link and for Back from it to the same URL', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+      const routerListener = vi.fn();
+      window.addEventListener('popstate', routerListener);
+      try {
+        await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+        // The skip link: a new entry of this page at #main-content, then popstate.
+        window.history.pushState(window.history.state, '', '#main-content');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        // Back: the URL the changes were made on, without the fragment.
+        window.history.replaceState(window.history.state, '', START_URL);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Neither left the page: no save to leave, no going back, no toast.
+        expect(routerListener).toHaveBeenCalledTimes(2);
+        expect(apiMock).not.toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(back).not.toHaveBeenCalled();
+        expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      } finally {
+        window.removeEventListener('popstate', routerListener);
         back.mockRestore();
       }
     });
@@ -459,7 +497,7 @@ describe('SeoScreen', () => {
       window.addEventListener('popstate', routerListener);
       try {
         await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
-        window.dispatchEvent(new PopStateEvent('popstate', { state: { previous: true } }));
+        pressBack({ previous: true });
 
         // The router never saw this Back; the screen's entry is back in place while it saves.
         expect(routerListener).not.toHaveBeenCalled();
@@ -573,7 +611,7 @@ describe('SeoScreen', () => {
       const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
       try {
         await typeSlug(user, 'uu-dai-tet');
-        window.dispatchEvent(new PopStateEvent('popstate', { state: { previous: true } }));
+        pressBack({ previous: true });
 
         await waitFor(() => {
           expect(back).toHaveBeenCalledTimes(1);
