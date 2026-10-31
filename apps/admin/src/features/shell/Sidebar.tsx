@@ -246,7 +246,7 @@ export function Sidebar({
             <button type="button" className={styles.accountButton}>
               <Avatar name={user.name} />
               <span className={styles.stack}>
-                <span className={styles.userName}>{user.name}</span>
+                <span className={styles.userName}>{user.name}</span>{' '}
                 <span className={styles.userRole}>{roleLabels[membership.role]}</span>
               </span>
               <span className={styles.chevron}>

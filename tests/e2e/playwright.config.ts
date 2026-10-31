@@ -84,5 +84,18 @@ export default defineConfig({
       reuseExistingServer,
       timeout: 120_000,
     },
+    {
+      // The same renderer build pointed at an API address nothing listens on, so a spec can see
+      // what visitors get while the API is down (ADR-009) without stopping the real one.
+      command: `pnpm --filter @plp/renderer exec next start --port ${new URL(urls.rendererWithoutApi).port}`,
+      cwd: repoRoot,
+      env: {
+        API_PUBLIC_URL: 'http://localhost:4199',
+        BASE_DOMAIN: new URL(urls.rendererWithoutApi).host,
+      },
+      url: `${urls.rendererWithoutApi}/healthz`,
+      reuseExistingServer,
+      timeout: 120_000,
+    },
   ],
 });

@@ -115,7 +115,8 @@ describe('Sidebar', () => {
       'href',
       `/sites/${SITE_ID}/analytics`,
     );
-    expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Owner');
+    // Words of their own, not "Ngọc AnhOwner".
+    expect(screen.getByRole('button', { name: 'Ngọc Anh Owner' })).toBeInTheDocument();
   });
 
   it('marks "Tên miền" on the domain page', () => {
