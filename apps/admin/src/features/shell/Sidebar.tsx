@@ -28,9 +28,9 @@ import {
   ShieldCheckIcon,
   VisuallyHidden,
 } from '@plp/ui';
-import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { loadPage } from '../../lib/page-load';
 import { hostOf } from '../../lib/site-url';
 import { newLeadsBadge } from '../leads/lead-presentation';
 import { useLeadCounts } from '../leads/queries';
@@ -87,17 +87,28 @@ export function Sidebar({
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const queryClient = useQueryClient();
   const logout = useLogout();
   const workspace = membership.workspace;
   const newLeads = newLeadsBadge(useLeadCounts(site.id, leadCounts).data);
 
   // Code navigation leaves through the screen on display, which saves what it holds first.
-  function go(href: string, before?: () => void) {
+  function go(href: string) {
     onNavigate?.();
     leaveScreen(() => {
-      before?.();
       router.push(href);
+    });
+  }
+
+  function switchWorkspace(workspaceId: string) {
+    onNavigate?.();
+    leaveScreen(() => {
+      // A UI preference only; the API checks membership on every request. Written once the user
+      // really leaves: a failed save keeps them in this workspace.
+      document.cookie = workspacePreferenceCookie(workspaceId);
+      // A full page load rather than a client navigation: the screen on display unmounts with
+      // this workspace's queries instead of fetching them again on its way out, and nothing of
+      // this workspace's sites (leads, "N mới") stays in memory to show up on coming back.
+      loadPage('/');
     });
   }
 
@@ -129,17 +140,9 @@ export function Sidebar({
         <DropdownMenuRadioGroup
           value={workspace.id}
           onValueChange={(workspaceId) => {
-            if (workspaceId === workspace.id) {
-              return;
+            if (workspaceId !== workspace.id) {
+              switchWorkspace(workspaceId);
             }
-            go('/', () => {
-              // A UI preference only; the API checks membership on every request. Written once
-              // the user really leaves: a failed save keeps them in this workspace.
-              document.cookie = workspacePreferenceCookie(workspaceId);
-              // Nothing of the other workspace's sites stays in memory (leads, "N mới"): coming
-              // back later shows what the server sends then, not counts kept from now.
-              queryClient.clear();
-            });
           }}
         >
           {memberships.map((item) => (

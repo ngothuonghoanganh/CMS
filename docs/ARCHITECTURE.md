@@ -484,7 +484,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất" rời màn qua màn đang hiện (`screen-leave`). Màn lưu xong mới cho đi, và vẫn chỉ giữ một lần rời trang đang chờ.
     - Lưu lỗi thì ở lại, kèm nút bỏ thay đổi ("Đăng xuất, bỏ thay đổi" khi đăng xuất).
     - Cookie chọn workspace chỉ được ghi khi người dùng thật sự rời đi. Đăng xuất nhận 401 (phiên đã hết) vẫn mở trang đăng nhập.
-  - **Đổi workspace xóa cache TanStack Query:** không dữ liệu nào của các site thuộc workspace cũ (lead, "N mới") còn trong bộ nhớ hay hiện lại từ cache khi quay lại.
+  - **Đổi workspace tải lại cả trang** (`window.location.assign('/')`, sau khi màn đang hiện lưu xong và cookie chọn workspace đã ghi): không dữ liệu nào của các site thuộc workspace cũ (lead, "N mới") còn trong bộ nhớ hay hiện lại từ cache khi quay lại.
+    - Trước đây sidebar gọi `queryClient.clear()` rồi `router.push('/')` trong khi màn cũ còn mount: các query đang mount dựng lại và tải lại dữ liệu của workspace cũ, nên màn nháy lên trước khi rời đi.
+    - Đổi site vẫn là điều hướng phía client và giữ cache của workspace.
   - **Đọc lại tóm tắt trang** (sau khi đổi giao diện site, sau xung đột lúc gỡ xuất bản):
     - lấy cả tóm tắt và checks từ cùng một lần đọc;
     - chờ các lần lưu đang chạy của trang;

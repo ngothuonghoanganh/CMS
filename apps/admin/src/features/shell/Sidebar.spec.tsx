@@ -3,6 +3,7 @@ import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
+import { loadPage } from '../../lib/page-load';
 import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { leadQueryKeys } from '../leads/queries';
 import { setScreenLeave } from './screen-leave';
@@ -24,7 +25,10 @@ vi.mock(import('../../lib/api'), async (importOriginal) => ({
   api: vi.fn(),
 }));
 
+vi.mock(import('../../lib/page-load'), () => ({ loadPage: vi.fn() }));
+
 const apiMock = vi.mocked(api);
+const loadPageMock = vi.mocked(loadPage);
 
 // jsdom has no pointer capture; Radix menus call it while handling pointer events.
 beforeAll(() => {
@@ -74,6 +78,7 @@ beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
   router.replace.mockReset();
+  loadPageMock.mockReset();
   pathname.current = `/sites/${SITE_ID}`;
   document.cookie = 'plp_ws=; Max-Age=0; Path=/';
 });
@@ -187,7 +192,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('menuitem', { name: 'Tạo site mới' })).not.toBeInTheDocument();
   });
 
-  it('remembers the chosen workspace and opens it', async () => {
+  it('remembers the chosen workspace and opens it with a full page load', async () => {
     const user = userEvent.setup();
     renderSidebar();
 
@@ -195,25 +200,42 @@ describe('Sidebar', () => {
     await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
 
     expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
-    expect(router.push).toHaveBeenCalledWith('/');
+    // Nothing of this workspace's sites (leads, "N mới") stays in memory after a page load.
+    expect(loadPageMock).toHaveBeenCalledWith('/');
+    expect(router.push).not.toHaveBeenCalled();
   });
 
-  it('keeps nothing of the sites of the workspace it leaves', async () => {
+  it('leaves the screen on display alone until the page unloads', async () => {
     const user = userEvent.setup();
     const { queryClient } = renderSidebar();
-    // "N mới" and the inbox of a site of this workspace, cached while working in it.
-    queryClient.setQueryData(leadQueryKeys.counts(otherSite.id), {
+    // "N mới" and the inbox of a site of this workspace, which the screen on display shows.
+    queryClient.setQueryData(leadQueryKeys.counts(site.id), {
       ...NO_LEADS,
       new: { count: 4, capped: false },
     });
-    queryClient.setQueryData(leadQueryKeys.lists(otherSite.id), { items: [] });
+    queryClient.setQueryData(leadQueryKeys.lists(site.id), { items: [] });
 
     await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
     await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
 
-    expect(queryClient.getQueryData(leadQueryKeys.counts(otherSite.id))).toBeUndefined();
-    expect(queryClient.getQueryData(leadQueryKeys.lists(otherSite.id))).toBeUndefined();
-    expect(router.push).toHaveBeenCalledWith('/');
+    // Clearing the cache here would make the mounted queries refetch this workspace's data.
+    expect(loadPageMock).toHaveBeenCalledWith('/');
+    expect(queryClient.getQueryData(leadQueryKeys.counts(site.id))).toMatchObject({
+      new: { count: 4 },
+    });
+    expect(queryClient.getQueryData(leadQueryKeys.lists(site.id))).toEqual({ items: [] });
+    expect(screen.getByRole('link', { name: 'Leads 4 mới' })).toBeInTheDocument();
+  });
+
+  it('stays when the current workspace is chosen again', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Mây Xanh Agency' }));
+
+    expect(loadPageMock).not.toHaveBeenCalled();
+    expect(document.cookie).not.toContain('plp_ws=');
   });
 
   it('keeps the cached data of the workspace when only the site changes', async () => {
@@ -321,10 +343,10 @@ describe('Sidebar', () => {
 
       // The save may fail and the user stay: this workspace is still the one they work in.
       expect(document.cookie).not.toContain('plp_ws=');
-      expect(router.push).not.toHaveBeenCalled();
+      expect(loadPageMock).not.toHaveBeenCalled();
       asked[0]?.leave();
       expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
-      expect(router.push).toHaveBeenCalledWith('/');
+      expect(loadPageMock).toHaveBeenCalledWith('/');
     });
 
     it('ends the session only after the screen saved, offering to sign out without the change', async () => {
