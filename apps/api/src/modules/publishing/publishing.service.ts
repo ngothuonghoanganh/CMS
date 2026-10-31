@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   ChangeItem,
   ChecksResult,
+  Composition,
   CursorQuery,
   HistoryEntry,
   HistoryResponse,
@@ -12,7 +13,7 @@ import type {
   PublishResponse,
   UserRef,
 } from '@plp/contracts';
-import { pageCapturesLeads } from '@plp/sections/schema';
+import { pageCapturesLeads, parseComposition } from '@plp/sections/schema';
 import { AppError, notFound } from '../../shared/errors.js';
 import type { KeysetPage } from '../../shared/persistence/keyset.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -85,6 +86,21 @@ function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId): UserRef {
     throw new Error(`Unknown user ${id.toHexString()}`);
   }
   return user;
+}
+
+/**
+ * The draft's sections as the registry parses them: what a release freezes. Saving stores parsed
+ * drafts and the checks refuse an invalid one, so this only drops keys that a draft saved before
+ * parsing still holds; an invalid draft here is a bug, never published.
+ */
+function releasedComposition(page: PageRecord): Composition {
+  const parsed = parseComposition(page.draft.composition);
+  if (!parsed.success) {
+    throw new Error(
+      `Page ${page._id.toHexString()} passed the checks with an invalid composition: ${JSON.stringify(parsed.issues)}`,
+    );
+  }
+  return parsed.composition;
 }
 
 type HistoryRow =
@@ -228,8 +244,9 @@ export class PublishingService {
     },
   ): Promise<CommittedRelease> {
     const from = await this.liveReleaseOf(scope, page);
-    const pageChanges = diffSnapshots(from ?? emptyPageSnapshot(page.draft.slug), page.draft);
-    const capturesLeads = pageCapturesLeads(page.draft.composition);
+    const snapshot = { ...page.draft, composition: releasedComposition(page) };
+    const pageChanges = diffSnapshots(from ?? emptyPageSnapshot(snapshot.slug), snapshot);
+    const capturesLeads = pageCapturesLeads(snapshot.composition);
     return this.pointer.transaction(scope, site._id, async (tx) => {
       if (!(await this.pages.claimReleaseVersion(scope, page, page.draft.revision, tx))) {
         throw await this.publishConflict(scope, page._id, page.draft.revision);
@@ -277,9 +294,9 @@ export class PublishingService {
           siteId: site._id,
           pageId: page._id,
           version: page.releaseSeq + 1,
-          slug: page.draft.slug,
-          composition: page.draft.composition,
-          seo: page.draft.seo,
+          slug: snapshot.slug,
+          composition: snapshot.composition,
+          seo: snapshot.seo,
           sitePresentation,
           leadCapture,
           sourceRevision: page.draft.revision,

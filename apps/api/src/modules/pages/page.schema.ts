@@ -8,7 +8,7 @@ export const PAGES_PUBLISHED_SLUG_INDEX = 'pages_published_slug_unique';
 /** The editable state of a page. Saving it never changes what is live (business rule 1). */
 export interface PageDraftRecord {
   slug: string;
-  /** Validated by the contract schema and `validateComposition` before it reaches the repository. */
+  /** As the contract schema and `parseComposition` returned it; never the raw request body. */
   composition: Composition;
   seo: Seo;
   /** Incremented by every save; optimistic concurrency guard for autosave and publish. */
