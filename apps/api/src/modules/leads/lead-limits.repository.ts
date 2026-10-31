@@ -28,6 +28,19 @@ export class LeadLimitsRepository {
     }
   }
 
+  /**
+   * Takes back one request `hit` counted under each key whose window is still open: for limits
+   * that count what was done, not what was asked, such as confirmation emails (ADR-018).
+   */
+  async release(keys: readonly string[], now: Date): Promise<void> {
+    await this.limits
+      .updateMany(
+        { key: { $in: keys }, count: { $gt: 0 }, expiresAt: { $gt: now } },
+        { $inc: { count: -1 } },
+      )
+      .exec();
+  }
+
   private async increment(key: string, now: Date, windowEnd: Date): Promise<LimitWindow> {
     const active = { $gt: ['$expiresAt', now] };
     const record = await this.limits

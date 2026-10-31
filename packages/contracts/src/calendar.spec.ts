@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addVnDays,
   businessDeadline,
@@ -77,6 +77,19 @@ describe('businessDeadline', () => {
   it('starts on the Monday after a request received at the weekend', () => {
     expect(businessDeadline(vn('2026-10-24T09:00:00'), 1)).toEqual(vn('2026-10-26T23:59:59.999'));
     expect(businessDeadline(vn('2026-10-25T21:00:00'), 2)).toEqual(vn('2026-10-27T23:59:59.999'));
+  });
+
+  describe('on a machine in another time zone', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('still reads the weekday of a day in Vietnam', () => {
+      // At 00:00 UTC it is still the day before in Los Angeles: a weekday read in the machine's
+      // zone would take Saturday 24/10 for a Friday and count it.
+      vi.stubEnv('TZ', 'America/Los_Angeles');
+      expect(businessDeadline(vn('2026-10-23T10:15:00'), 1)).toEqual(vn('2026-10-26T23:59:59.999'));
+    });
   });
 
   it('runs across months and the new year', () => {

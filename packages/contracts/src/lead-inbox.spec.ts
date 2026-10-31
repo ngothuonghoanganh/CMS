@@ -64,7 +64,24 @@ describe('leadListQuerySchema', () => {
     ).toBe(true);
   });
 
+  it('takes each range of board 10, and a custom range of a single day', () => {
+    expect(leadListQuerySchema.parse({ range: '30d' }).range).toBe('30d');
+    expect(leadListQuerySchema.parse({ range: 'all' }).range).toBe('all');
+    expect(
+      leadListQuerySchema.parse({ range: 'custom', from: '2026-10-25', to: '2026-10-25' }),
+    ).toMatchObject({ range: 'custom', from: '2026-10-25', to: '2026-10-25' });
+  });
+
+  it('pages 1 to 50 leads at a time, after a cursor of up to 200 characters', () => {
+    expect(leadListQuerySchema.parse({ limit: '1' }).limit).toBe(1);
+    expect(leadListQuerySchema.safeParse({ limit: '0' }).success).toBe(false);
+    expect(leadListQuerySchema.safeParse({ limit: '20.5' }).success).toBe(false);
+    expect(leadListQuerySchema.parse({ cursor: 'c'.repeat(200) }).cursor).toHaveLength(200);
+    expect(leadListQuerySchema.safeParse({ cursor: 'c'.repeat(201) }).success).toBe(false);
+  });
+
   it('refuses unknown values and long searches', () => {
+    expect(leadListQuerySchema.safeParse({ pageId: 'trang-chu' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ folder: 'trash' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ status: 'lost' }).success).toBe(false);
     expect(leadListQuerySchema.safeParse({ range: '90d' }).success).toBe(false);
@@ -99,7 +116,7 @@ describe('leadSearchRequestSchema', () => {
       'Nhập từ khóa tìm kiếm',
     );
     expect(leadSearchRequestSchema.safeParse({ q: 'x'.repeat(81) }).success).toBe(false);
-    for (const q of ['thuha@example.com\u0000', 'a\u2028b', 'line\nbreak']) {
+    for (const q of ['thuha@example.com\u0000', 'a\u2028b', 'a\u2029b', 'line\nbreak']) {
       expect(leadSearchRequestSchema.safeParse({ q }).error?.issues[0]?.message).toBe(
         'Từ khóa tìm kiếm có ký tự không hợp lệ',
       );
@@ -110,13 +127,27 @@ describe('leadSearchRequestSchema', () => {
   it('cleans a pasted search the way the schema accepts it', () => {
     expect(cleanLeadSearch(' 0901\n234\u0000567 ')).toBe('0901 234 567');
     expect(cleanLeadSearch('x'.repeat(100))).toHaveLength(80);
+    // Spaces in front are trimmed before the cut, so they never take the place of characters.
+    expect(cleanLeadSearch(`   ${'x'.repeat(80)}`)).toBe('x'.repeat(80));
     expect(leadSearchRequestSchema.safeParse({ q: cleanLeadSearch('a\u2028b') }).success).toBe(
       true,
     );
   });
+
+  it('applies the rule of a custom range to a search too', () => {
+    expect(
+      leadSearchRequestSchema.safeParse({ q: '0901', range: 'custom', from: '2026-10-01' }).error
+        ?.issues[0],
+    ).toMatchObject({ path: ['to'], message: 'Chọn ngày bắt đầu và ngày kết thúc' });
+  });
 });
 
 describe('updateLeadRequestSchema', () => {
+  it('refuses a status or a spam flag of another kind', () => {
+    expect(updateLeadRequestSchema.safeParse({ spam: 'true' }).success).toBe(false);
+    expect(updateLeadRequestSchema.safeParse({ status: 'lost' }).success).toBe(false);
+  });
+
   it('changes any of status, note and spam', () => {
     expect(updateLeadRequestSchema.parse({ status: 'won' })).toEqual({ status: 'won' });
     expect(updateLeadRequestSchema.parse({ note: '  gọi lại sau 18h ' })).toEqual({
