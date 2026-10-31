@@ -661,6 +661,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Tab qua mọi màn admin và trang live ở 1440 và 375 px, cả khi có toast: control đang focus không bao giờ bị che hoàn toàn (2.4.11).
     - Kích thước target 24 px (2.5.8) là rule `target-size` của axe trong các lần quét trên.
   - **Sửa từ các lần quét:** menu (DropdownMenu của `@plp/ui`) không còn modal, vì Radix gắn `aria-hidden` lên phần còn lại của trang trong khi link và nút ở đó vẫn focus được (Tab vẫn bị giữ trong menu, click ra ngoài vẫn đóng menu). Nút đổi workspace, đổi site và chọn bảng màu lấy tên từ chữ hiện trên nút (2.5.3). Bảng của "Hiệu quả" cuộn ngang được bằng bàn phím (2.1.1).
+  - **Toast không che control đang focus (2.4.11):** chồng toast ở góc dưới phải, và chuyển lên góc trên phải khi control đang focus nằm dưới góc dưới (ví dụ "Chuyển vào spam" của lead đang mở ở 1440 × 900), rồi về chỗ cũ khi focus rời đi. Hàm thuần `toastPlacement` trong `@plp/ui` quyết định góc.
   - **Đa trình duyệt:** hai project WebKit và Firefox chỉ chạy `cross-browser.spec.ts`: trang live, FAQ `<details>`, ẩn/hiện theo thiết bị quanh 768 px, form tải lười (lỗi tại chỗ, focus vào ô lỗi, gửi), lượt xem được đếm, form không JavaScript, gõ và dán (chữ có định dạng, nhiều đoạn) trên canvas của editor. Phần còn lại của E2E chỉ chạy Chromium để giữ thời gian chạy.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
