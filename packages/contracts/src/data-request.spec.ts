@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createDataRequestRequestSchema,
   DATA_REQUEST_CONTACT_MESSAGE,
+  DATA_REQUEST_LOG_MAX,
+  DATA_REQUEST_MATCHES_MAX,
   dataRequestContactSchema,
   dataRequestDeadlines,
   receivedAtProblem,
@@ -66,6 +68,46 @@ describe('createDataRequestRequestSchema', () => {
     ]);
   });
 
+  it('takes each of the four kinds of request', () => {
+    for (const type of ['access', 'rectify', 'delete', 'withdraw_marketing']) {
+      expect(
+        createDataRequestRequestSchema.parse({
+          name: '',
+          phone: '0987106223',
+          email: '',
+          type,
+          receivedAt: RECEIVED,
+        }).type,
+      ).toBe(type);
+    }
+  });
+
+  it('takes a name of up to 100 characters and a phone number typed in up to 24', () => {
+    const contact = { name: 'A'.repeat(100), phone: '(+84) (0)901 - 234 - 567', email: '' };
+    expect(dataRequestContactSchema.parse(contact)).toEqual({
+      name: 'A'.repeat(100),
+      phone: '+84901234567',
+      email: null,
+    });
+    expect(
+      dataRequestContactSchema.safeParse({ ...contact, name: 'A'.repeat(101) }).error?.issues,
+    ).toEqual([expect.objectContaining({ path: ['name'], message: 'Họ và tên tối đa 100 ký tự' })]);
+    // The same number with one more space: 25 characters.
+    expect(
+      dataRequestContactSchema.safeParse({ ...contact, phone: '(+84) (0) 901 - 234 - 567' }).error
+        ?.issues,
+    ).toEqual([expect.objectContaining({ path: ['phone'], message: LEAD_PHONE_MESSAGE })]);
+  });
+
+  it('needs a phone number or an email in the contact form too', () => {
+    expect(
+      dataRequestContactSchema.safeParse({ name: 'Lê Mai Anh', phone: '', email: '' }).error
+        ?.issues,
+    ).toEqual([
+      expect.objectContaining({ path: ['phone'], message: DATA_REQUEST_CONTACT_MESSAGE }),
+    ]);
+  });
+
   it('refuses an unknown type and a receipt time that is not an instant', () => {
     const result = createDataRequestRequestSchema.safeParse({
       name: '',
@@ -111,10 +153,21 @@ describe('the deadlines of a request', () => {
     expect(receivedAtProblem(vn('2026-09-25T11:59:00'), now)).toBe(
       'Chỉ ghi nhận được yêu cầu nhận trong 30 ngày qua',
     );
-    // A clock a few minutes ahead is tolerated.
+    // A clock up to 5 minutes ahead is tolerated, not a millisecond more.
     expect(receivedAtProblem(vn('2026-10-25T12:04:00'), now)).toBeNull();
+    expect(receivedAtProblem(vn('2026-10-25T12:05:00'), now)).toBeNull();
+    expect(receivedAtProblem(vn('2026-10-25T12:05:00.001'), now)).toBe(
+      'Thời điểm nhận yêu cầu không được ở tương lai',
+    );
     expect(receivedAtProblem(vn('2026-10-25T12:06:00'), now)).toBe(
       'Thời điểm nhận yêu cầu không được ở tương lai',
     );
+  });
+});
+
+describe('the limits of a request', () => {
+  it('keeps 50 log entries (ADR-017) and lists 20 of the person’s leads', () => {
+    expect(DATA_REQUEST_LOG_MAX).toBe(50);
+    expect(DATA_REQUEST_MATCHES_MAX).toBe(20);
   });
 });
