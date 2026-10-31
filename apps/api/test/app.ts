@@ -35,6 +35,12 @@ export interface TestAppOptions {
    * nestjs-pino builds one logger per process, so the first app of a test file decides both.
    */
   logDestination?: DestinationStream;
+  /**
+   * Another test app's database (`first.env.MONGODB_URI`): several API processes on one database,
+   * as a deployment may run them. Closing this app leaves the database to the first one, so close
+   * it before the first.
+   */
+  mongoUri?: string;
 }
 
 /** Boots the whole API against a database of its own, with every index built. */
@@ -42,7 +48,7 @@ export async function createTestApp(
   prefix: string,
   options: TestAppOptions = {},
 ): Promise<TestApp> {
-  const mongoUri = isolatedMongoUri(prefix);
+  const mongoUri = options.mongoUri ?? isolatedMongoUri(prefix);
   const env = parseEnv(testEnvInput({ ...options.env, MONGODB_URI: mongoUri }));
   const emails = new RecordingEmailSender();
   let builder = Test.createTestingModule({
@@ -76,7 +82,9 @@ export async function createTestApp(
     emails,
     async close() {
       await app.close();
-      await dropDatabase(mongoUri);
+      if (options.mongoUri === undefined) {
+        await dropDatabase(mongoUri);
+      }
     },
   };
 }
