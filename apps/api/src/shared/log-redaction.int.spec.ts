@@ -27,6 +27,7 @@ import { addConfirmedRecipient } from '../../test/recipients.js';
 import { createSite } from '../../test/resources.js';
 import { LeadLimitsRepository } from '../modules/leads/lead-limits.repository.js';
 import { inviteLimitKeys } from '../modules/notifications/domain/notification-rules.js';
+import { LeadRecipientsService } from '../modules/notifications/lead-recipients.service.js';
 import { HASH_PLACEHOLDER, REDACTED } from './log-redaction.js';
 
 /** What pino writes in place of a `redact` path (its default censor). */
@@ -250,5 +251,41 @@ describe('request log', () => {
     });
     expect(logged).toContain(`recipient-invite:address:${HASH_PLACEHOLDER}`);
     expectNotLogged(hash);
+  });
+
+  it('logs and answers a 500 whose error refers back to itself through toJSON', async () => {
+    // A value that writes itself as a fresh object holding the value again.
+    const record = {
+      id: 'vong-lap',
+      toJSON(): unknown {
+        return { id: record.id, record };
+      },
+    };
+    // ProblemFilter logs the error as thrown; pino's standard serializer copies its fields.
+    const list = vi
+      .spyOn(t.app.get(LeadRecipientsService), 'list')
+      .mockRejectedValueOnce(Object.assign(new Error('Listing failed'), { record }));
+    t.app.useLogger(t.app.get(PinoNestLogger));
+    try {
+      const response = await owner
+        .get(`/sites/${site.id}/lead-recipients`)
+        .set('x-request-id', 'log-cycle')
+        .expect(500);
+      expect(response.headers['content-type']).toContain('application/problem+json');
+    } finally {
+      list.mockRestore();
+    }
+
+    const logged = await vi.waitFor(() => {
+      const line = output
+        .join('')
+        .split('\n')
+        .find((text) => text.includes('"Unhandled error"') && text.includes('log-cycle'));
+      if (line === undefined) {
+        throw new Error('The 500 logged no error');
+      }
+      return line;
+    });
+    expect(logged).toContain('vong-lap');
   });
 });

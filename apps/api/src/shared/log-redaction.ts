@@ -28,20 +28,68 @@ export function redactPreviewToken(url: string): string {
   return url.replace(PREVIEW_TOKEN_IN_PATH, `$1${REDACTED}`);
 }
 
-/** A copy of `value` with every occurrence of `secret` in its strings replaced. */
-function redactSecret(value: unknown, secret: string): unknown {
-  if (typeof value === 'string') {
-    return value.split(secret).join(REDACTED);
+/** Fields of an error that are not enumerable but say what went wrong. */
+const ERROR_FIELDS = ['name', 'message', 'stack', 'errmsg', 'cause', 'errors'] as const;
+
+function hasToJson(value: object): value is { toJSON: () => unknown } {
+  return 'toJSON' in value && typeof value.toJSON === 'function';
+}
+
+/**
+ * A copy of `value` with `map` applied to each of its strings, at any depth, in what the log
+ * writes for it: an object's `toJSON()` (an ObjectId's hex string, a Date's ISO string) and an
+ * error's own fields, which are not enumerable. A value met again is the copy already made, so a
+ * cycle, also one through what a `toJSON()` returns, ends the walk instead of the stack. The value
+ * itself is not changed.
+ */
+function mapStrings(value: unknown, map: (text: string) => string): unknown {
+  const copies = new WeakMap<object, unknown>();
+  function walk(item: unknown): unknown {
+    if (typeof item === 'string') {
+      return map(item);
+    }
+    if (typeof item !== 'object' || item === null) {
+      return item;
+    }
+    if (copies.has(item)) {
+      return copies.get(item);
+    }
+    const written: unknown = item instanceof Error || !hasToJson(item) ? item : item.toJSON();
+    if (typeof written !== 'object' || written === null) {
+      const copy = walk(written);
+      copies.set(item, copy);
+      return copy;
+    }
+    if (copies.has(written)) {
+      const copy = copies.get(written);
+      copies.set(item, copy);
+      return copy;
+    }
+    if (Array.isArray(written)) {
+      const copy: unknown[] = [];
+      copies.set(item, copy);
+      copies.set(written, copy);
+      for (const entry of written) {
+        copy.push(walk(entry));
+      }
+      return copy;
+    }
+    const copy: Record<string, unknown> = {};
+    copies.set(item, copy);
+    copies.set(written, copy);
+    if (written instanceof Error) {
+      for (const field of ERROR_FIELDS) {
+        if (field in written) {
+          copy[field] = walk(Reflect.get(written, field));
+        }
+      }
+    }
+    for (const [key, entry] of Object.entries(written)) {
+      copy[key] = walk(entry);
+    }
+    return copy;
   }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSecret(item, secret));
-  }
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, redactSecret(item, secret)]),
-    );
-  }
-  return value;
+  return walk(value);
 }
 
 /** `q=` of a query string: a search, which in the lead inbox is a phone number, email or name. */
@@ -102,7 +150,7 @@ export function serializeRequest<R extends LoggableRequest>(req: R): R {
     return req;
   }
   req.url = redactPreviewToken(req.url);
-  req.params = redactSecret(req.params, token);
+  req.params = mapStrings(req.params, (text) => text.split(token).join(REDACTED));
   return req;
 }
 
@@ -116,55 +164,6 @@ export const HASH_PLACEHOLDER = '[hash]';
  */
 const HEX_RUN = /[0-9a-f]{64,}/gi;
 
-/** Fields of an error that are not enumerable but say what went wrong. */
-const ERROR_FIELDS = ['name', 'message', 'stack', 'errmsg', 'cause', 'errors'] as const;
-
-function hasToJson(value: object): value is { toJSON: () => unknown } {
-  return 'toJSON' in value && typeof value.toJSON === 'function';
-}
-
-/** A copy of `value` with every run of 64 hex digits in its strings replaced, cycles kept. */
-function redactHashesIn(value: unknown, copies: WeakMap<object, unknown>): unknown {
-  if (typeof value === 'string') {
-    return value.replace(HEX_RUN, HASH_PLACEHOLDER);
-  }
-  if (typeof value !== 'object' || value === null) {
-    return value;
-  }
-  const known = copies.get(value);
-  if (known !== undefined) {
-    return known;
-  }
-  if (Array.isArray(value)) {
-    const copy: unknown[] = [];
-    copies.set(value, copy);
-    for (const item of value) {
-      copy.push(redactHashesIn(item, copies));
-    }
-    return copy;
-  }
-  // What the log would write for it: an ObjectId's hex string, a Date's ISO string.
-  if (!(value instanceof Error) && hasToJson(value)) {
-    const json = value.toJSON();
-    if (json !== value) {
-      return redactHashesIn(json, copies);
-    }
-  }
-  const copy: Record<string, unknown> = {};
-  copies.set(value, copy);
-  if (value instanceof Error) {
-    for (const field of ERROR_FIELDS) {
-      if (field in value) {
-        copy[field] = redactHashesIn(Reflect.get(value, field), copies);
-      }
-    }
-  }
-  for (const [key, item] of Object.entries(value)) {
-    copy[key] = redactHashesIn(item, copies);
-  }
-  return copy;
-}
-
 /**
  * pino's error serializer (`err`, after the standard one, which folds the causes' messages and
  * stacks into the error's own): every run of 64 hex digits in the logged error becomes `[hash]`,
@@ -174,5 +173,5 @@ function redactHashesIn(value: unknown, copies: WeakMap<object, unknown>): unkno
  * a 500 (`ProblemFilter`). Returns a copy; the error itself is not changed.
  */
 export function serializeError(error: unknown): unknown {
-  return redactHashesIn(error, new WeakMap());
+  return mapStrings(error, (text) => text.replace(HEX_RUN, HASH_PLACEHOLDER));
 }

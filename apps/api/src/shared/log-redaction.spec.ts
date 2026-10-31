@@ -53,6 +53,15 @@ describe('log redaction', () => {
     expect(splat[2]).toBe(TOKEN);
   });
 
+  it('redacts the token in params that refer to themselves', () => {
+    const params: Record<string, unknown> = { token: TOKEN };
+    params['self'] = params;
+    const serialized = serializeRequest({ url: `/public/preview/${TOKEN}`, params });
+    expect(serialized.params).toMatchObject({ token: REDACTED, self: { token: REDACTED } });
+    expect((serialized.params as { self: unknown }).self).toBe(serialized.params);
+    expect(params['token']).toBe(TOKEN);
+  });
+
   it('leaves the params of other requests alone', () => {
     const params = { siteId: 'abc' };
     expect(serializeRequest({ url: '/sites/abc', params }).params).toBe(params);
@@ -296,6 +305,32 @@ describe('serializeError', () => {
       context: { self: { key: `recipient-invite:address:${HASH_PLACEHOLDER}` } },
     });
     expect(written({ message: (serialized as { message: unknown }).message })).not.toContain(HASH);
+  });
+
+  it('stops at a toJSON that refers back to its object, and the log line is written', () => {
+    // A record that writes itself as a fresh object holding the record again.
+    const record = {
+      key: KEY,
+      toJSON(): unknown {
+        return { key: record.key, record };
+      },
+    };
+    const failed = Object.assign(new Error('Counting failed'), { record });
+
+    const serialized = serializeError(failed) as { record: { key: unknown; record: unknown } };
+    expect(serialized.record.key).toBe(`recipient-invite:address:${HASH_PLACEHOLDER}`);
+    expect(serialized.record.record).toBe(serialized.record);
+
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        lines.push(chunk.toString('utf8'));
+        done();
+      },
+    });
+    pino({ serializers: { err: serializeError } }, sink).error({ err: failed }, 'Unhandled error');
+    expect(lines.join('')).toContain('Unhandled error');
+    expect(lines.join('')).not.toContain(HASH);
   });
 
   it('keeps the hash out of an error a pino log line carries', () => {
