@@ -756,6 +756,18 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Địa chỉ khách:**
     - Phần tử cuối của `X-Forwarded-For` được chuẩn hóa: IPv4 trong IPv6 (`::ffff:a.b.c.d`) thành IPv4, IPv6 viết gọn chữ thường, bỏ cổng và ngoặc vuông. Một khách chỉ có một bucket.
     - Đã kiểm end-to-end qua proxy nối `X-Forwarded-For`: hai địa chỉ có giới hạn riêng, header giả không chọn được bucket.
+- **Amended 2026-10-31 (vòng test thứ ba, API):** địa chỉ của khách sau proxy tin cậy.
+  - **Một địa chỉ, một cách viết** (`canonicalAddress`) trước khi tạo khóa rate limit hay hash khách:
+    - Địa chỉ IPv4 đi qua socket IPv6 (`::ffff:203.0.113.7`) là chính địa chỉ IPv4 đó.
+    - Địa chỉ IPv6 viết đủ 8 nhóm, chữ thường, bỏ số 0 đầu mỗi nhóm; bỏ zone (`%eth0`).
+    - Trước đây hai cách viết của cùng một địa chỉ là hai bucket và hai khách.
+  - **Giới hạn theo địa chỉ tính theo mạng /64 với IPv6** (`addressNetwork`): 5 lead mỗi 10 phút và 60 lượt xem mỗi 10 phút (ADR-019), cho mỗi địa chỉ IPv4 hoặc mỗi mạng IPv6 /64.
+    - Lý do: một thuê bao (điện thoại, router gia đình) giữ cả một /64 và tự chọn địa chỉ trong đó, nên giới hạn theo từng địa chỉ IPv6 không giới hạn được ai.
+    - Đánh đổi: các máy chung một /64 chung một bucket, như các máy chung một IPv4 sau NAT.
+    - Khách duy nhất (ADR-019) vẫn tính theo địa chỉ đầy đủ: hai điện thoại trong một /64 là hai khách.
+  - **Integration test** chạy với `TRUST_PROXY_HOPS=1`, địa chỉ do renderer ký và giới hạn mặc định.
+    - Kiểm: 5 lead và 60 lượt xem cho mỗi địa chỉ; hai địa chỉ cùng trình duyệt là hai khách; IPv6 và IPv4-mapped.
+    - Route relay không đọc `X-Forwarded-For`, kể cả khi header có phần tử giả ở đầu.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -832,6 +844,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-26 (test toàn dự án):** thời gian lưu luôn theo cài đặt cuối cùng, kể cả khi có thay đổi đúng lúc.
   - Lead tới trong lúc Owner đổi thời gian lưu: sau khi lưu lead, phần nhận lead đọc lại thời gian lưu hiện tại và sửa `expiresAt` nếu khác. Cài đặt được commit trước khi tính lại mọi lead, nên hoặc lần tính lại đó đã gồm lead này, hoặc lần đọc lại thấy giá trị mới.
   - Hai lần lưu cùng lúc: sau khi tính lại, lần lưu đọc lại giá trị đã lưu và tính lại lần nữa nếu khác. Lead theo giá trị được lưu sau cùng.
+- **Amended 2026-10-31 (vòng test thứ ba):** nhật ký 50 mục bỏ mục cũ nhất trước, kể cả mục "Ghi nhận".
+  - Thời điểm ghi nhận, phản hồi và hoàn tất vẫn nằm trên yêu cầu (`createdAt`, `respondedAt`, `completedAt`).
+  - Integration test đi qua API: ghi nhận cộng 49 lần xuất là 50 mục, và lần xuất thứ 50 đẩy mục ghi nhận ra. Phản hồi và hoàn tất (update pipeline) giữ 50 mục, cũ nhất trước.
 
 ### ADR-018 — Hộp thư lead và email thông báo
 
@@ -918,6 +933,28 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Không tính lần thử; lead vẫn `pending`.
   - Thử giành lại một lần sau lần chờ đầu (1 phút). Lỗi nữa thì lượt quét lúc khởi động xử lý.
   - Trước đây lead kẹt ở `pending` tới lần khởi động sau, và không có nút "Gửi lại".
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Giới hạn thư xác nhận đếm thư đã gửi đi,** không đếm yêu cầu.
+    - Request bị từ chối (429; 409 vì địa chỉ đã có hoặc site đã đủ 5 địa chỉ; 404) và thư không gửi được (địa chỉ `unsent`) được trả lại ở cả ba bộ đếm.
+    - Trước đây 5 lần bấm "Gửi lại" lúc SMTP lỗi khóa địa chỉ đó cả ngày, và bấm quá giới hạn của một địa chỉ tiêu hết 50 thư của workspace.
+    - Vẫn đếm trước khi gửi (nguyên tử), nên các request đồng thời không vượt giới hạn. Trả lại là giảm 1 trong cửa sổ còn hiệu lực, không xuống dưới 0. Trả lại lỗi thì thư vẫn bị đếm (phía an toàn) và có log lỗi.
+  - **Lỗi SMTP thật,** thử bằng một SMTP stub trên `node:net` qua `SmtpEmailSender` và nodemailer:
+    - kết nối bị từ chối → `smtp_unavailable`;
+    - máy chủ không chào hoặc không trả lời DATA → `timeout`;
+    - 550 cho một trong hai địa chỉ → `sent` với `recipients` 1, `rejectedRecipients` 1 và mã `smtp_rejected`, không thử lại;
+    - 550 cho mọi địa chỉ → `smtp_rejected`.
+    - Timeout của nodemailer đặt được bằng query của `SMTP_URL` (`?socketTimeout=…`).
+  - **Lịch thử lại:** test chỉ giả lập `setTimeout` (database, HTTP và `Date` vẫn thật) giữ đúng lịch production: thử ngay, sau 1 phút, sau 5 phút, rồi `failed`.
+  - **Nhiều instance API:**
+    - Giành lead và lượt quét lúc khởi động đúng như đã ghi. Hai instance cùng thử 40 lead thì mỗi lead đi một thư, một lần thử. Hai lượt quét chạy cùng lúc nhận backlog một lần. Lead đang `sending` dưới 10 phút được để lại.
+    - Lịch 0/1/5 phút chỉ đúng trong một instance.
+      - Lượt quét của một instance khởi động lại nhận cả lead `pending` mà instance khác đang chờ thử lại, và thử ngay. Lần thử đã hẹn của instance kia sau đó thấy lead đã xử lý và không gửi gì.
+      - Thư không bao giờ trùng, nhưng ba lần thử có thể dồn sát nhau khi deploy cuốn chiếu.
+    - "Lần khởi động sau" ở Consequences nghĩa là lần khởi động sau của bất kỳ instance nào.
+  - **Phân trang hộp thư** (170 lead ở 7 thời điểm): qua nhiều trang 50 và 20 mục, không lead nào lặp hay bị bỏ. Điều này đúng cả khi lọc trang + trạng thái, trong thư mục spam, khi tìm theo số điện thoại và theo tên. Số trên thư mục, các trang và file CSV giữ cùng các lead theo cùng thứ tự.
+  - **Lọc trang + trạng thái** dùng `leads_inbox_page` hoặc `leads_inbox_status`, không quét collection và không sort trong bộ nhớ.
+    - Đo bằng `explain` trên 54.000 lead có trạng thái lệch.
+    - Lệnh đếm tệ nhất quét 3.200 key.
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 
@@ -998,6 +1035,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Script đếm view chỉ import `@plp/contracts/page-view`, một module không có zod.
     - Script của form được tải lười (`React.lazy`, fallback là form tĩnh vẽ ở server, vẫn gửi được khi tắt JavaScript).
     - Kết quả đo trên build production: trang không có form không còn tải chunk 38 KB gzip của schema và form. Chỉ còn phần nền của framework và khoảng 1 KB của script đếm view.
+- **Amended 2026-10-31 (vòng test thứ ba):** sửa câu "Khi chạy nhiều instance, một site có thể lưu nhiều hơn 50 cặp một chút".
+  - Mỗi instance đọc các cặp đã lưu một lần, ở lượt xem có chiến dịch đầu tiên trong ngày, rồi đếm riêng. Với N instance, một site lưu được gần N × 50 cặp mỗi ngày; test với hai instance ra 99 cặp.
+  - Số khách duy nhất và số lượt xem cộng đúng qua các instance.
 
 ---
 
