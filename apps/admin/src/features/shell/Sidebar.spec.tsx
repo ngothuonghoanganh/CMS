@@ -389,6 +389,37 @@ describe('Sidebar', () => {
       expect(router.replace).not.toHaveBeenCalled();
     });
 
+    it('reports a leave, not a failed sign-out, when opening the login page fails', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      apiMock.mockResolvedValueOnce(undefined);
+      const broken = new Error('The router is not mounted');
+      router.replace.mockImplementationOnce(() => {
+        throw broken;
+      });
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      // The session is gone: the screen must not take its changes back as if the user stayed.
+      expect(outcome).toBe('leaving');
+      expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+      expect(logged).toHaveBeenCalledWith(
+        'Opening the login page after signing out failed',
+        broken,
+      );
+      expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+    });
+
     it('reports a leave when the session had already ended', async () => {
       const user = userEvent.setup();
       apiMock.mockRejectedValueOnce(apiError(401, 'unauthenticated', 'Phiên đăng nhập đã hết hạn'));

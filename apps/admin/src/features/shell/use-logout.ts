@@ -10,7 +10,7 @@ import type { LeaveOutcome } from './screen-leave';
 
 export interface Logout {
   isPending: boolean;
-  /** Signs out; resolves with `'stayed'` when that failed (the user was told). */
+  /** Signs out; resolves with `'stayed'` when the session could not be ended (the user was told). */
   signOut: () => Promise<LeaveOutcome>;
 }
 
@@ -31,23 +31,28 @@ export function useLogout(): Logout {
         throw error;
       }
     },
-    onSuccess: () => {
+  });
+
+  async function signOut(): Promise<LeaveOutcome> {
+    try {
+      await mutation.mutateAsync();
+    } catch (error) {
+      // The session still exists: the user stays, and is told.
+      reportUnexpected('Sign-out failed', error);
+      toast({ tone: 'danger', title: 'Chưa đăng xuất được', description: problemMessage(error) });
+      return 'stayed';
+    }
+    // The session is gone, so the user is leaving whatever happens here; a failure is reported
+    // rather than taken for a failed sign-out.
+    try {
       queryClient.clear();
       router.replace('/login');
       router.refresh();
-    },
-    onError: (error) => {
-      reportUnexpected('Sign-out failed', error);
-      toast({ tone: 'danger', title: 'Chưa đăng xuất được', description: problemMessage(error) });
-    },
-  });
-  return {
-    isPending: mutation.isPending,
-    signOut: () =>
-      mutation.mutateAsync().then(
-        (): LeaveOutcome => 'leaving',
-        // `onError` already showed and reported the failure; the caller learns the user stays.
-        (): LeaveOutcome => 'stayed',
-      ),
-  };
+    } catch (error) {
+      reportUnexpected('Opening the login page after signing out failed', error);
+    }
+    return 'leaving';
+  }
+
+  return { isPending: mutation.isPending, signOut };
 }

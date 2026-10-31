@@ -510,6 +510,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Link khác, sidebar hay "Lưu rồi rời trang" lúc đó bị bỏ qua: không toast, không lỗi, không điều hướng; "Thử lại" không làm gì. Lần rời trang đang chạy quyết định: người dùng đi, hoặc thay đổi trở lại khi nó không xảy ra.
     - Trước đây link đó rời màn như thể đã lưu, mà không lưu gì; nếu đăng xuất sau đó thất bại (`'stayed'`), thay đổi mất.
   - **Mỗi lần bỏ thay đổi có token** (`discardUnsaved` trả token, `withdrawDiscard(token)`): chỉ lần rời trang bỏ thay đổi sau cùng mới lấy lại được chúng khi nó không xảy ra. Trước đây `'stayed'` của một lần rời trang huỷ cả việc bỏ thay đổi của một lần khác vẫn đang chạy.
+  - **Kết quả của "Đăng xuất"** (`useLogout`): chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".
+    - Mở trang đăng nhập chạy sau khi request thành công, ngoài nhánh lỗi của mutation. Lỗi lúc đó được báo (`reportUnexpected`) và vẫn tính là `'leaving'`: session đã hết.
+    - Trước đây mọi lỗi, kể cả lỗi ném ra sau khi `router.replace('/login')` đã bắt đầu điều hướng, đều thành `'stayed'`: màn lấy lại thay đổi đã bỏ và toast báo chưa đăng xuất được, dù session đã hết.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
