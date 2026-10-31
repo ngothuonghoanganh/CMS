@@ -204,6 +204,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-26 (test toàn dự án):**
   - `docker compose` chỉ mở cổng trên `127.0.0.1`. MongoDB chạy không xác thực, còn Mailpit giữ thư thông báo lead và link xác nhận, nên không dịch vụ nào được nghe thấy từ mạng. `localhost` vẫn dùng được như cũ.
   - `multer` được ép lên 2.5.0 (`overrides` của pnpm), để vá lỗi DoS GHSA-q7qp-rjg7-q26m. `@nestjs/platform-express` 12.2.0 vẫn khai báo 2.4.0. Bỏ override khi Nest khai báo bản đã vá.
+- **Amended 2026-10-31 (vòng test thứ ba):** `minimatch` được ép lên 11.0.3 (`overrides` của pnpm) để vá GHSA-g3hv-75wg-m249 (DoS khi tiền xử lý glob, mức trung bình).
+  - Chỉ bản 11 có bản vá; eslint, typescript-eslint và `@nestjs/cli` vẫn khai báo 10.x.
+  - Đây là công cụ dev, pattern lấy từ chính repo. Chúng chỉ gọi `minimatch()` và `new Minimatch().match()`, hai API bản 11 giữ nguyên, và ESLint vẫn lint đúng các file như trước.
+  - Bản 11 kéo theo `@isaacs/nonrecursive-glob-match` 1.0.3 (cùng tác giả). Bỏ override khi các gói này khai báo bản 11.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -249,6 +253,17 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - Người khác biết email có thể khóa đăng nhập của tài khoản đó tối đa một cửa sổ. Đây là đánh đổi có chủ đích để chặn dò mật khẩu.
 - **Amended 2026-10-25 (MVP B):** quyền với lead, cài đặt dữ liệu cá nhân và yêu cầu về dữ liệu nằm ở ADR-017. Editor xem và xử lý lead; chỉ Owner sửa cài đặt, xuất và xóa dữ liệu.
 - **Amended 2026-10-26 (test toàn dự án):** session hết hiệu lực đúng lúc `expiresAt`. Guard so với thời điểm của từng request, không đợi TTL monitor của MongoDB (chạy khoảng mỗi phút) xóa bản ghi. Integration test giữ điều này.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Khóa đếm đăng nhập** là HMAC-SHA256 của email đã chuẩn hóa với `LOGIN_ATTEMPT_SECRET` (bắt buộc, ít nhất 32 ký tự), thay cho sha256. Băm một danh sách email là đảo ngược được sha256, nên trước đây một bản sao database cho biết email nào đã thử đăng nhập. Đổi secret thì mọi bộ đếm bắt đầu lại.
+  - **Lỗi phía hệ thống không tốn lượt:**
+    - Lần thử vẫn được đếm trước khi kiểm mật khẩu.
+    - Khi tra tài khoản, kiểm mật khẩu, xóa bộ đếm hoặc tạo session ném lỗi, API trả lại lần thử đó: giảm 1 trong đúng cửa sổ đã đếm, không xuống dưới 0, không chạm cửa sổ đã hết hay cửa sổ sau.
+    - Trả lại cũng lỗi thì log cả hai lỗi.
+    - Chỉ mật khẩu sai mới tiêu lượt của tài khoản.
+  - **Nhiều instance API:**
+    - Rate limit theo địa chỉ của `/auth/*` (`@nestjs/throttler`) đếm trong bộ nhớ của từng tiến trình, nên N instance cho một địa chỉ tối đa N × `AUTH_RATE_LIMIT_PER_MINUTE` lần mỗi phút.
+    - Giới hạn theo tài khoản nằm trong MongoDB, đúng với mọi số instance, và là lớp chặn dò mật khẩu thật.
+    - Integration test chạy hai instance trên một database giữ cả hai điều này.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -391,6 +406,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Trong nút và trên ảnh của Hero, chữ gợi ý giữ màu của chữ thật ở đó, vì `muted` không đạt AA trên nền đó.
   - Chữ gợi ý in nghiêng, để ô trống không bị nhầm với nội dung đã nhập.
   - `styles.spec.ts` kiểm các quy tắc CSS này.
+- **Amended 2026-10-31 (vòng test thứ ba):** server lưu composition đã kiểm tra, không lưu input thô.
+  - **`parseComposition`** trả composition đã parse:
+    - content của mỗi section là kết quả parse của schema section đó, nên key lạ trong content, nút, link hay mục danh sách bị bỏ;
+    - `samplePaths` chỉ giữ đường dẫn tới field chữ và nhãn nút có trong section (kể cả field variant ẩn), mỗi đường dẫn một lần.
+  - Autosave, trang tạo theo mục tiêu và publish lưu kết quả này. Publish parse lại bản nháp, nên bản nháp lưu trước thay đổi này cũng không đưa key lạ vào release hay JSON public.
+  - **Key lạ bị bỏ chứ không bị từ chối,** như mọi body khác của API (mặc định của Zod), nên bản nháp cũ vẫn autosave được. Field bị variant ẩn vẫn được kiểm như mọi field (URL, độ dài, ảnh thuộc site) và vẫn được giữ.
+  - Release cũ không bị viết lại; chỉ database dev local có thể còn release mang key lạ.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -538,6 +560,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Mỗi tiến trình API mã hóa lại một ảnh một lúc;** tối đa 8 ảnh chờ, ảnh tiếp theo nhận 429.
     - AVIF 25 megapixel vẫn tốn khoảng 0,5 GB lúc giải mã, nên production cần ít nhất 1 GB RAM cho API.
     - Một ảnh JPEG 12 MP mất dưới 1 giây; AVIF có thể mất vài giây.
+- **Amended 2026-10-31 (vòng test thứ ba):** integration test kiểm bucket đang chạy bằng client ẩn danh.
+  - Đọc được object dưới `public/`, không đọc được object ngoài `public/`.
+  - Không liệt kê được: ListObjects v1/v2, prefix, versions, uploads, HEAD bucket.
+  - Không đọc được policy, ACL, CORS, location.
+  - Không PUT hay DELETE được, kể cả dưới `public/`.
+  - Storage production phải giữ đúng chính sách này.
 
 ### ADR-013 — Boundary, lỗi, logging, quality gate
 
