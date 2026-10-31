@@ -90,6 +90,120 @@ describe('Dialog', () => {
     expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
   });
 
+  it('returns focus to the element that opened it, not to its trigger', async () => {
+    const user = userEvent.setup();
+    function TwoOpeners() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            Thêm section ở đây
+          </Button>
+          <Dialog
+            open={open}
+            onOpenChange={setOpen}
+            title="Thêm section"
+            trigger={<button type="button">Thêm section</button>}
+          >
+            <p>Danh sách section</p>
+          </Dialog>
+        </>
+      );
+    }
+    render(<TwoOpeners />);
+    const opener = screen.getByRole('button', { name: 'Thêm section ở đây' });
+    await user.click(opener);
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+  });
+
+  it('returns focus to the opener after focusing a requested element inside', async () => {
+    const user = userEvent.setup();
+    function WithSearchOpened() {
+      const [open, setOpen] = useState(false);
+      const searchRef = useRef<HTMLInputElement>(null);
+      return (
+        <>
+          <Button
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            Thêm section
+          </Button>
+          <Dialog
+            open={open}
+            onOpenChange={setOpen}
+            title="Thêm section"
+            initialFocusRef={searchRef}
+            headerActions={<input ref={searchRef} aria-label="Tìm section" />}
+          >
+            <button type="button">Hero</button>
+          </Dialog>
+        </>
+      );
+    }
+    render(<WithSearchOpened />);
+    const opener = screen.getByRole('button', { name: 'Thêm section' });
+    await user.click(opener);
+    expect(screen.getByRole('textbox', { name: 'Tìm section' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+
+    expect(opener).toHaveFocus();
+  });
+
+  it('focuses the fallback when what was chosen in it removed the opener', async () => {
+    const user = userEvent.setup();
+    function ReplacingChoice() {
+      const [open, setOpen] = useState(false);
+      const [chosen, setChosen] = useState(false);
+      const fallback = useRef<HTMLParagraphElement>(null);
+      return (
+        <>
+          <p ref={fallback} tabIndex={-1}>
+            Ảnh đã chọn
+          </p>
+          {chosen ? null : (
+            <Button
+              onClick={() => {
+                setOpen(true);
+              }}
+            >
+              Chọn ảnh
+            </Button>
+          )}
+          <Dialog
+            open={open}
+            onOpenChange={setOpen}
+            title="Thư viện ảnh"
+            fallbackFocusRef={fallback}
+          >
+            <Button
+              onClick={() => {
+                setChosen(true);
+                setOpen(false);
+              }}
+            >
+              Phòng khám
+            </Button>
+          </Dialog>
+        </>
+      );
+    }
+    render(<ReplacingChoice />);
+    await user.click(screen.getByRole('button', { name: 'Chọn ảnh' }));
+    await user.click(screen.getByRole('button', { name: 'Phòng khám' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Ảnh đã chọn')).toHaveFocus();
+  });
+
   it('traps focus inside while open', async () => {
     const user = userEvent.setup();
     render(<PublishFlow />);

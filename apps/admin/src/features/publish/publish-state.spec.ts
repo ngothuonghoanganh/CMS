@@ -8,6 +8,7 @@ import {
   isFirstPublish,
   liveSince,
   nextVersion,
+  ownerOnlyFixNote,
   type PreparedPublish,
   publishDisabledReason,
   publishChanges,
@@ -246,5 +247,25 @@ describe('publishReducer', () => {
     expect(failed.submitting).toBe(false);
     expect(failed.error).toBe('Máy chủ đang gặp sự cố');
     expect(publishReducer(failed, { type: 'submit_started' }).error).toBeNull();
+  });
+});
+
+describe('ownerOnlyFixNote', () => {
+  const privacy = { kind: 'privacy', sectionId: 'form00000001' } as const;
+  const recipients = { kind: 'lead_recipients', sectionId: 'form00000001' } as const;
+
+  it('asks an Editor to turn to the Owner for the site settings a form needs', () => {
+    expect(ownerOnlyFixNote(privacy, 'editor')).toMatch(/^Chỉ Owner của workspace cài đặt được/);
+    expect(ownerOnlyFixNote(recipients, 'editor')).toMatch(/^Chỉ Owner của workspace chọn được/);
+  });
+
+  it('lets the Owner fix them, and an Editor fix the page itself', () => {
+    expect(ownerOnlyFixNote(privacy, 'owner')).toBeNull();
+    expect(ownerOnlyFixNote(recipients, 'owner')).toBeNull();
+    expect(
+      ownerOnlyFixNote({ kind: 'section', sectionId: 'hero00000001', fieldPath: null }, 'editor'),
+    ).toBeNull();
+    expect(ownerOnlyFixNote({ kind: 'seo', field: 'title' }, 'editor')).toBeNull();
+    expect(ownerOnlyFixNote({ kind: 'slug' }, 'editor')).toBeNull();
   });
 });

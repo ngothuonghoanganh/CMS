@@ -1,5 +1,6 @@
 import {
   type Asset,
+  type ChecksResult,
   endpoints,
   type PageDetailResponse,
   type SaveDraftRequest,
@@ -9,7 +10,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { ApiError, api } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
-import { useLatestServerDraft } from './server-draft';
+import { refreshPageSummary, useLatestServerDraft } from './server-draft';
 import { asset, makeStore, pageDetail, sampleComposition } from './test-fixtures';
 import { createDraftSaver } from './use-draft-saver';
 
@@ -219,5 +220,109 @@ describe('useLatestServerDraft', () => {
     editor.getState().setSpacing(HERO, 'compact');
     await expect(createDraftSaver(editor).ensureSaved()).resolves.toMatchObject({ revision: 5 });
     expect(editor.getState().saveState).toBe('saved');
+  });
+});
+
+describe('refreshPageSummary', () => {
+  /** The server's checks after the site changed: a lead form now lacks a destination. */
+  const blocked: ChecksResult = {
+    revision: 3,
+    blocking: [
+      {
+        code: 'lead_destination_missing',
+        severity: 'blocking',
+        fingerprint: 'lead_destination_missing:form00000001',
+        title: 'Chưa chọn nơi nhận lead',
+        description: 'Thêm và xác nhận một địa chỉ email nhận lead.',
+        target: { kind: 'lead_recipients', sectionId: 'form00000001' },
+      },
+    ],
+    warnings: [],
+    passed: [],
+  };
+
+  /** The page read again after the site theme changed, at a draft revision. */
+  function refreshed(revision: number): PageDetailResponse {
+    const detail = pageDetail(undefined, {
+      siteChanges: [{ kind: 'site', label: 'Giao diện site: giao diện', sectionId: null }],
+      checks: { blocking: 1, warnings: 0 },
+    });
+    detail.draft.revision = revision;
+    detail.checks = { ...blocked, revision };
+    return detail;
+  }
+
+  function savedAt(store: ReturnType<typeof makeStore>, revision: number): SaveDraftResponse {
+    return {
+      revision,
+      updatedAt: '2026-10-24T09:00:00.000Z',
+      page: store.getState().page,
+      checks: { ...store.getState().checks, revision },
+    };
+  }
+
+  it('takes the summary and the checks from the same read', async () => {
+    const store = makeStore();
+    answer(refreshed(3));
+
+    await refreshPageSummary(store);
+
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    expect(store.getState().page.siteChanges).toHaveLength(1);
+    expect(store.getState().page.checks).toEqual({ blocking: 1, warnings: 0 });
+    expect(store.getState().checks).toEqual(blocked);
+    expect(store.getState().saveState).toBe('saved');
+  });
+
+  it('reads after the save of the page still running, whose answer would be older', async () => {
+    const store = makeStore();
+    let saveReachesServer: () => void = () => undefined;
+    const held = new Promise<void>((done) => {
+      saveReachesServer = done;
+    });
+    const order: string[] = [];
+    apiMock.mockImplementation(async (endpoint) => {
+      if (endpoint === endpoints.getPage) {
+        order.push('read');
+        return refreshed(4);
+      }
+      await held;
+      order.push('save');
+      return savedAt(store, 4);
+    });
+    store.getState().setSpacing(HERO, 'compact');
+    const saving = createDraftSaver(store).ensureSaved();
+
+    const refreshing = refreshPageSummary(store);
+    saveReachesServer();
+    await Promise.all([saving, refreshing]);
+
+    expect(order).toEqual(['save', 'read']);
+    expect(store.getState()).toMatchObject({ saveState: 'saved', baseRevision: 4 });
+    expect(store.getState().checks).toEqual({ ...blocked, revision: 4 });
+  });
+
+  it('drops a read older than the store instead of reporting a conflict', async () => {
+    const store = makeStore();
+    // A save of this tab landed after the server answered the read.
+    store.getState().setSpacing(HERO, 'compact');
+    store.getState().applySaved(savedAt(store, 4), store.getState().draftVersion);
+    answer(refreshed(3));
+
+    await refreshPageSummary(store);
+
+    expect(store.getState()).toMatchObject({ saveState: 'saved', baseRevision: 4 });
+    expect(store.getState().page.siteChanges).toEqual([]);
+    expect(store.getState().checks.blocking).toEqual([]);
+  });
+
+  it('opens the reload dialog when a teammate changed the draft and nothing waits to be saved', async () => {
+    const store = makeStore();
+    answer(refreshed(5));
+
+    await refreshPageSummary(store);
+
+    expect(store.getState().saveState).toBe('conflict');
+    expect(store.getState().checks.blocking).toEqual([]);
   });
 });

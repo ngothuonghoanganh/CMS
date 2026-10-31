@@ -33,6 +33,8 @@
   /* Contains the visually hidden table header text, which is absolutely positioned. */
   position: relative;
   overflow-x: auto;
+  /* The page table adapts to the width it gets, which the sidebar takes part of (PageTable). */
+  container: page-list / inline-size;
   transition: opacity var(--duration-fast) ease;
 }
 

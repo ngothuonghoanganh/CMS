@@ -38,6 +38,7 @@ export {
 export {
   isUnsaved,
   type LeaveGuard,
+  type PendingInput,
   useBeforeUnloadGuard,
   useHistoryLeaveGuard,
   useLeaveGuard,

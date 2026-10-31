@@ -11,7 +11,7 @@ import { slugPath } from '../../lib/site-url';
 import { saveStatusView, useEditor, useEditorStoreApi } from '../editor';
 import { finalizeSlug, redirectedLiveSlug, seoTitleHint, SLUG_MAX } from './seo-presentation';
 import { SHARE_IMAGE_FIELD_ID, ShareImageField } from './ShareImageField';
-import { useSlugField } from './use-slug-field';
+import { type SlugField, useSlugField } from './use-slug-field';
 import styles from './SeoScreen.module.css';
 
 /** Same bounds as `seoSchema`. */
@@ -85,31 +85,18 @@ function SaveIndicator({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export interface SeoFormProps {
-  /** "smilecare.payload.site", shown before the slug. */
-  host: string;
-  /** Field to focus when the page opens (`?focus=` from a publish check). */
-  initialFocus: SeoFocus | null;
-  onRetrySave: () => void;
-}
-
 /**
- * The SEO settings of the draft (board 07). Every change goes through the editor store's
- * commands, so autosave, undo steps and conflicts behave exactly as in the editor.
+ * The page slug field wired to the draft of the editor store in context. The screen owns it, so
+ * leaving can commit the slug it still holds (ADR-008).
  */
-export function SeoForm({ host, initialFocus, onRetrySave }: SeoFormProps) {
+export function useDraftSlugField(): SlugField {
   const store = useEditorStoreApi();
-  const page = useEditor((state) => state.page);
-  const site = useEditor((state) => state.site);
-  const seo = useEditor((state) => state.draft.seo);
+  const pageId = useEditor((state) => state.page.id);
+  const siteId = useEditor((state) => state.site.id);
   const slug = useEditor((state) => state.draft.slug);
-  const composition = useEditor((state) => state.draft.composition);
-  const assetsById = useEditor((state) => state.assetsById);
-  const redirectNoticeId = useId();
-
-  const slugField = useSlugField({
-    siteId: site.id,
-    pageId: page.id,
+  return useSlugField({
+    siteId,
+    pageId,
     committed: slug,
     onCommit: (value) => {
       store.getState().setSlug(value, { merge: true });
@@ -118,6 +105,30 @@ export function SeoForm({ host, initialFocus, onRetrySave }: SeoFormProps) {
       store.getState().closeHistoryStep();
     },
   });
+}
+
+export interface SeoFormProps {
+  /** "smilecare.payload.site", shown before the slug. */
+  host: string;
+  /** Field to focus when the page opens (`?focus=` from a publish check). */
+  initialFocus: SeoFocus | null;
+  onRetrySave: () => void;
+  /** From `useDraftSlugField`. */
+  slugField: SlugField;
+}
+
+/**
+ * The SEO settings of the draft (board 07). Every change goes through the editor store's
+ * commands, so autosave, undo steps and conflicts behave exactly as in the editor.
+ */
+export function SeoForm({ host, initialFocus, onRetrySave, slugField }: SeoFormProps) {
+  const store = useEditorStoreApi();
+  const page = useEditor((state) => state.page);
+  const site = useEditor((state) => state.site);
+  const seo = useEditor((state) => state.draft.seo);
+  const composition = useEditor((state) => state.draft.composition);
+  const assetsById = useEditor((state) => state.assetsById);
+  const redirectNoticeId = useId();
 
   useEffect(() => {
     if (initialFocus !== null) {

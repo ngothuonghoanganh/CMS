@@ -181,6 +181,14 @@
   line-height: 1.5;
 }
 
+/* Replaces "Sửa ngay" for an Editor: the fix is the Owner's (in the row's color, like its text). */
+.ownerOnly {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .checkActions {
   display: flex;
   flex-wrap: wrap;

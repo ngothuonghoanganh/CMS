@@ -184,6 +184,30 @@ describe('CreatePageWizard', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('creates the page with a slug whose check has not answered yet; the server decides', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.createPage
+        ? Promise.resolve({ page: { id: NEW_PAGE_ID } })
+        : new Promise(() => undefined),
+    );
+    renderWizard();
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    const slug = screen.getByRole('textbox', { name: /Đường dẫn/ });
+    await user.clear(slug);
+    await user.type(slug, 'tu-van-');
+    expect(screen.getByText('Đang kiểm tra đường dẫn…')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    await user.click(screen.getByRole('button', { name: 'Tạo trang' }));
+
+    await waitFor(() => {
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${NEW_PAGE_ID}/edit`);
+    });
+    const { options } = lastCallTo(apiMock, endpoints.createPage);
+    expect(options).toMatchObject({ body: { slug: 'tu-van' } });
+  });
+
   it('explains the page limit in the footer', async () => {
     const user = userEvent.setup();
     serve(() => Promise.reject(apiError(409, 'page_limit_reached', 'Site đã có tối đa 200 trang')));
@@ -227,5 +251,32 @@ describe('CreatePageWizard', () => {
     expect(apiMock).toHaveBeenCalledWith(endpoints.createPage, [SITE_ID], {
       body: { title: 'Bảng giá', slug: 'bang-gia', start: { kind: 'blank' } },
     });
+  });
+
+  it('sends a blank page slug still being typed and checked, and shows why the server refused it', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.createPage
+        ? Promise.reject(
+            apiError(409, 'slug_taken', 'Đường dẫn này đã được một trang khác trong site dùng'),
+          )
+        : new Promise(() => undefined),
+    );
+    renderWizard();
+    await user.click(screen.getByRole('button', { name: 'Bắt đầu trống' }));
+    const dialog = screen.getByRole('dialog', { name: 'Bắt đầu trống' });
+    await user.type(within(dialog).getByRole('textbox', { name: /Tên trang/ }), 'Bảng giá');
+    const slug = within(dialog).getByRole('textbox', { name: /Đường dẫn/ });
+    await user.clear(slug);
+    // Enter submits from the field: no blur finishes the slug, and its check has not answered.
+    await user.type(slug, 'bang-gia-moi-{Enter}');
+
+    expect(
+      await within(dialog).findByText('Đường dẫn này đã được một trang khác trong site dùng'),
+    ).toBeInTheDocument();
+    const { options } = lastCallTo(apiMock, endpoints.createPage);
+    expect(options).toMatchObject({ body: { slug: 'bang-gia-moi' } });
+    expect(router.push).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Bắt đầu trống' })).toBeInTheDocument();
   });
 });
