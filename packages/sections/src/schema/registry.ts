@@ -233,22 +233,49 @@ export function createSectionInstance(
 }
 
 /**
- * Validates every section against its own definition. Returns issues with paths relative to the
- * composition, e.g. ["sections", 2, "content", "heading"]. An empty list means valid.
+ * Paths a section may mark as sample text: its text fields and button labels, including the fields
+ * the variant hides and every list item that exists (the candidates of `samplePathsOf`).
  */
-export function validateComposition(composition: Composition): ProblemIssue[] {
+function samplePathCandidates(
+  section: Pick<SectionInstance, 'type' | 'variant' | 'content'>,
+): Set<string> {
+  const paths = new Set<string>();
+  for (const leaf of collectLeaves(section, { includeHidden: true })) {
+    if (leaf.field.kind === 'text') {
+      paths.add(leaf.path);
+    } else if (leaf.field.kind === 'cta') {
+      paths.add(`${leaf.path}.label`);
+    }
+  }
+  return paths;
+}
+
+export type CompositionParseResult =
+  | { success: true; composition: Composition; issues: [] }
+  | { success: false; issues: ProblemIssue[] };
+
+/**
+ * Validates every section against its own definition and returns the composition as validated:
+ * each content as its section schema parsed it, so keys no schema knows (in the content, a button,
+ * a link) are dropped, and sample paths that name no text field are dropped too. Store and publish
+ * this result, never the input. Issues have paths relative to the composition, e.g.
+ * ["sections", 2, "content", "heading"]. The frame (`compositionSchema`) must already be valid.
+ */
+export function parseComposition(composition: Composition): CompositionParseResult {
   const issues: ProblemIssue[] = [];
+  const sections: SectionInstance[] = [];
   const singletonsSeen = new Set<SectionType>();
+  const lastIndex = composition.sections.length - 1;
   composition.sections.forEach((section, index) => {
     const definition = getSectionDefinition(section.type);
-    if (!getVariant(definition, section.variant)) {
+    const variant = getVariant(definition, section.variant);
+    if (!variant) {
       issues.push({
         path: ['sections', index, 'variant'],
         code: 'invalid_variant',
         message: `Kiểu bố cục "${section.variant}" không có trong section ${definition.label}`,
       });
     }
-    const lastIndex = composition.sections.length - 1;
     if (
       (definition.position === 'first' && index !== 0) ||
       (definition.position === 'last' && index !== lastIndex)
@@ -272,7 +299,6 @@ export function validateComposition(composition: Composition): ProblemIssue[] {
       }
       singletonsSeen.add(section.type);
     }
-    const variant = getVariant(definition, section.variant);
     for (const [listKey, minimum] of Object.entries(variant?.listMin ?? {})) {
       const field = definition.fields.find((candidate) => candidate.key === listKey);
       const items = getAtPath(section.content, listKey);
@@ -298,7 +324,27 @@ export function validateComposition(composition: Composition): ProblemIssue[] {
           message: issue.message,
         });
       }
+      return;
     }
+    const known = samplePathCandidates({ ...section, content: result.data });
+    sections.push({
+      id: section.id,
+      type: section.type,
+      variant: section.variant,
+      colorScheme: section.colorScheme,
+      spacing: section.spacing,
+      visibility: { desktop: section.visibility.desktop, mobile: section.visibility.mobile },
+      mobileOrder: section.mobileOrder,
+      content: result.data,
+      samplePaths: [...new Set(section.samplePaths)].filter((path) => known.has(path)),
+    });
   });
-  return issues;
+  return issues.length > 0
+    ? { success: false, issues }
+    : { success: true, composition: { version: composition.version, sections }, issues: [] };
+}
+
+/** The issues of `parseComposition`; an empty list means valid. */
+export function validateComposition(composition: Composition): ProblemIssue[] {
+  return parseComposition(composition).issues;
 }
