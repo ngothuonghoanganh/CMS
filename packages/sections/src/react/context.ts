@@ -30,5 +30,7 @@ export interface RenderContext {
 
 export interface LeadSubmission {
   releaseId: string;
+  /** New for every page the host serves; the form sends it when JavaScript is off (ADR-016). */
+  submissionId: string;
   render: (view: LeadFormViewProps) => ReactNode;
 }

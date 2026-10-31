@@ -1,4 +1,5 @@
-import { LEAD_ROUTE } from '@plp/contracts';
+import { LEAD_ROUTE, submissionIdSchema } from '@plp/contracts';
+import { LEAD_SUBMISSION_FIELD } from '@plp/sections/react';
 import { rendererEnv } from '../../env';
 import { clientAddress } from '../../lib/client-address';
 import { requestHost, subdomainFromHeaders } from '../../lib/host';
@@ -69,6 +70,16 @@ function backOf(request: Request, host: string | null): BackLink {
   return url.host === host
     ? { path: safeBackPath(url.pathname), campaign: campaignQuery(url.searchParams) }
     : HOME;
+}
+
+/**
+ * The submission id a form sent without script, or null when it has none: a page served before the
+ * form carried one. Anything else in the field is dropped rather than refused, so a visitor never
+ * loses a lead to a value they could not see.
+ */
+function formSubmissionId(value: string | null): string | null {
+  const parsed = submissionIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function scriptAnswer(outcome: RelayOutcome): Response {
@@ -163,9 +174,10 @@ export async function POST(request: Request): Promise<Response> {
 
   const form = new URLSearchParams(raw);
   const back = backOf(request, host);
-  // Without script there is no submission id or fill time; campaign tags come from the Referer.
+  // Without script the submission id is the one the server drew into the form; there is no fill
+  // time, and campaign tags come from the Referer.
   const candidate = leadRequestCandidate((name) => form.get(name), {
-    submissionId: null,
+    submissionId: formSubmissionId(form.get(LEAD_SUBMISSION_FIELD)),
     elapsedMs: null,
     source: leadSourceFrom(request.headers.get('referer'), null),
   });

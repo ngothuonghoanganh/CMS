@@ -1,5 +1,6 @@
 export type { LeadSubmission, RenderContext } from './context.js';
 export {
+  LEAD_SUBMISSION_FIELD,
   leadFieldId,
   type LeadFormErrorField,
   type LeadFormInteraction,

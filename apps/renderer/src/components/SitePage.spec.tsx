@@ -1,4 +1,4 @@
-import type { PublicPageData } from '@plp/contracts';
+import { type PublicPageData, submissionIdSchema } from '@plp/contracts';
 import { MAIN_CONTENT_ID } from '@plp/sections/react';
 import { createSectionInstance } from '@plp/sections/schema';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -83,6 +83,16 @@ describe('liveRenderContext', () => {
     expect(leadSubmission?.releaseId).toBe(RELEASE_ID);
   });
 
+  // Without JavaScript the form can only send what the server drew into it; the API takes a
+  // second send of the same id as a replay (ADR-016).
+  it('draws a new valid submission id for every page served', () => {
+    const first = liveRenderContext(pageData(), 'live').leadSubmission?.submissionId;
+    const second = liveRenderContext(pageData(), 'live').leadSubmission?.submissionId;
+    expect(submissionIdSchema.safeParse(first).success).toBe(true);
+    expect(submissionIdSchema.safeParse(second).success).toBe(true);
+    expect(first).not.toBe(second);
+  });
+
   it('never lets a preview send its form', () => {
     expect(liveRenderContext(pageData(), 'off')).not.toHaveProperty('leadSubmission');
     expect(liveRenderContext({ ...pageData(), releaseId: null }, 'live')).not.toHaveProperty(
@@ -104,6 +114,8 @@ describe('SitePage', () => {
     const html = renderToStaticMarkup(<SitePage data={withForm(pageData())} submission="live" />);
     expect(html).toContain('action="/_lead"');
     expect(html).toContain(`value="${RELEASE_ID}"`);
+    const submissionId = /name="submissionId" value="([^"]+)"/.exec(html)?.[1];
+    expect(submissionIdSchema.safeParse(submissionId).success).toBe(true);
     expect(html).toContain('Tôi đồng ý để Smile Care liên hệ tư vấn.');
     expect(html).not.toContain('checked');
   });
@@ -111,6 +123,7 @@ describe('SitePage', () => {
   it('renders a preview form that cannot send', () => {
     const html = renderToStaticMarkup(<SitePage data={withForm(pageData())} submission="off" />);
     expect(html).not.toContain('action=');
+    expect(html).not.toContain('name="submissionId"');
     expect(html).toContain('Bản xem trước: form không gửi đi.');
   });
 });

@@ -18,7 +18,7 @@ import { themePresets } from '../schema/themes.js';
 import type { RenderContext } from './context.js';
 import type { LeadFormViewProps } from './lead-form-view.js';
 import frame from './frame.module.css';
-import { LeadFormSent, LeadFormView } from './lead-form-view.js';
+import { LEAD_SUBMISSION_FIELD, LeadFormSent, LeadFormView } from './lead-form-view.js';
 import { MAIN_CONTENT_ID, PageView } from './PageView.js';
 import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
@@ -544,6 +544,7 @@ describe('lead form', () => {
     policyUrl: 'https://smilecare.vn/chinh-sach',
   };
   const RELEASE_ID = 'c3'.repeat(12);
+  const SUBMISSION_ID = '5e0b7c1d-2f3a-4b5c-8d9e-0f1a2b3c4d5e';
 
   it('posts a plain form to /_lead with the release the visitor sees', () => {
     const form = section('lead_form');
@@ -551,7 +552,11 @@ describe('lead form', () => {
       form,
       liveCtx({
         leadCapture: CAPTURE,
-        leadSubmission: { releaseId: RELEASE_ID, render: () => 'interactive form' },
+        leadSubmission: {
+          releaseId: RELEASE_ID,
+          submissionId: SUBMISSION_ID,
+          render: () => 'interactive form',
+        },
       }),
     );
     // A host with an interactive form renders it instead of the plain view.
@@ -563,12 +568,17 @@ describe('lead form', () => {
         content={sampleLeadForm(form)}
         capture={CAPTURE}
         releaseId={RELEASE_ID}
+        submissionId={SUBMISSION_ID}
       />,
     );
     expect(plain).toContain('<form');
     expect(plain).toContain('method="post"');
     expect(plain).toContain('action="/_lead"');
     expect(plain).toContain(`name="releaseId" value="${RELEASE_ID}"`);
+    // Sent again after a timeout, the same form is a replay, not a second lead (ADR-016).
+    expect(plain).toContain(
+      `<input type="hidden" name="${LEAD_SUBMISSION_FIELD}" value="${SUBMISSION_ID}"/>`,
+    );
     // The honeypot: out of the tab order, whatever the attribute order.
     expect(plain).toMatch(/<input(?=[^>]*name="website")(?=[^>]*tabindex="-1")[^>]*>/);
     expect(plain).toContain('href="https://smilecare.vn/chinh-sach"');
@@ -589,6 +599,7 @@ describe('lead form', () => {
         leadCapture: CAPTURE,
         leadSubmission: {
           releaseId: RELEASE_ID,
+          submissionId: SUBMISSION_ID,
           render: (view) => {
             seen.push(view);
             return null;
@@ -602,8 +613,16 @@ describe('lead form', () => {
         content: sampleLeadForm(form),
         capture: CAPTURE,
         releaseId: RELEASE_ID,
+        submissionId: SUBMISSION_ID,
       },
     ]);
+  });
+
+  it('draws no submission id where the form cannot send', () => {
+    const form = section('lead_form');
+    const preview = render(form, liveCtx({ leadCapture: CAPTURE }));
+    expect(preview).not.toContain(`name="${LEAD_SUBMISSION_FIELD}"`);
+    expect(preview).not.toContain('name="releaseId"');
   });
 
   it('keeps the send button focusable while sending, so a refusal finds the visitor on it', () => {
@@ -614,6 +633,7 @@ describe('lead form', () => {
         content={sampleLeadForm(form)}
         capture={CAPTURE}
         releaseId={RELEASE_ID}
+        submissionId={SUBMISSION_ID}
         submitting
       />,
     );

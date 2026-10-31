@@ -17,6 +17,7 @@ export function LeadFormSection({ section, content, ctx }: SectionProps<LeadForm
       content,
       capture: ctx.leadCapture,
       releaseId: ctx.leadSubmission?.releaseId ?? null,
+      submissionId: ctx.leadSubmission?.submissionId ?? null,
     };
     return ctx.leadSubmission ? ctx.leadSubmission.render(view) : <LeadFormView {...view} />;
   }

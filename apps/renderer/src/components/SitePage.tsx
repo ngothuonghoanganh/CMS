@@ -5,7 +5,11 @@ import { LeadFormSlot } from './LeadFormSlot';
 /** Whether the page's lead form sends: on live pages only, never in previews (ADR-016). */
 export type LeadSubmissionMode = 'live' | 'off';
 
-/** Published (or previewed) page data as the shared section components expect it. */
+/**
+ * Published (or previewed) page data as the shared section components expect it. A live page's
+ * form gets a new submission id with every page served: the page is never stored in a shared
+ * cache (`Cache-Control: private, no-store`), so no two visitors send the same one.
+ */
 export function liveRenderContext(
   data: PublicPageData,
   submission: LeadSubmissionMode,
@@ -20,6 +24,7 @@ export function liveRenderContext(
       ? {
           leadSubmission: {
             releaseId: data.releaseId,
+            submissionId: crypto.randomUUID(),
             // The static form is drawn here, on the server; only its script loads on the page.
             render: (view) => <LeadFormSlot {...view} fallback={<LeadFormView {...view} />} />,
           },

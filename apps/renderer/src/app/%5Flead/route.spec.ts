@@ -56,8 +56,12 @@ function formPost(fields: Record<string, string>, headers: Record<string, string
   });
 }
 
+/** What the server drew into the hidden field of the form (see `SitePage`). */
+const SERVER_SUBMISSION_ID = '0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f';
+
 const FORM_FIELDS = {
   releaseId: RELEASE_ID,
+  submissionId: SERVER_SUBMISSION_ID,
   website: '',
   name: 'Nguyễn Thu Hà',
   phone: '0901 234 567',
@@ -209,14 +213,47 @@ describe('POST /_lead without JavaScript', () => {
     const response = await POST(formPost(FORM_FIELDS));
     expect(response.status).toBe(303);
     expect(response.headers.get('location')).toBe('/_lead?status=received&back=%2Fuu-dai');
-    // Campaign tags come from the page address in the Referer; there is no submission id.
+    // Campaign tags come from the page address in the Referer; the submission id is the one the
+    // server drew into the form.
     expect(JSON.parse(relayedCall().body)).toMatchObject({
-      submissionId: null,
+      submissionId: SERVER_SUBMISSION_ID,
       elapsedMs: null,
       consent: true,
       email: '',
       source: { utmSource: 'facebook', utmMedium: 'cpc', utmCampaign: null, referrer: null },
     });
+  });
+
+  // A relay that timed out may still have stored the lead: sending the same form again, or
+  // reloading the result page, must be answered as a replay by the API, not stored twice.
+  it('sends the same submission id when the same form is sent again', async () => {
+    fetchMock.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'));
+    const timedOut = await POST(formPost(FORM_FIELDS));
+    expect(timedOut.status).toBe(503);
+    expect(timedOut.headers.get('retry-after')).toBe('60');
+    expect(await timedOut.text()).toContain('Chưa gửi được đăng ký');
+    fetchMock.mockResolvedValueOnce(apiAnswer(200, { status: 'received' }));
+    expect((await POST(formPost(FORM_FIELDS))).status).toBe(303);
+    const sent = fetchMock.mock.calls.map(([, init]) =>
+      typeof init?.body === 'string'
+        ? (JSON.parse(init.body) as { submissionId: unknown }).submissionId
+        : 'no JSON body',
+    );
+    expect(sent).toEqual([SERVER_SUBMISSION_ID, SERVER_SUBMISSION_ID]);
+  });
+
+  it.each([
+    ['missing (a page served before the form carried one)', undefined],
+    ['malformed', 'not an id!'],
+    ['too short', 'abc'],
+  ])('relays the lead without a submission id when the field is %s', async (_case, value) => {
+    fetchMock.mockResolvedValueOnce(apiAnswer(201, { status: 'received' }));
+    const { submissionId: _drawn, ...fields } = FORM_FIELDS;
+    const response = await POST(
+      formPost(value === undefined ? fields : { ...fields, submissionId: value }),
+    );
+    expect(response.status).toBe(303);
+    expect(JSON.parse(relayedCall().body)).toMatchObject({ submissionId: null });
   });
 
   it('answers a page that lists the problems when the consent box is not ticked', async () => {

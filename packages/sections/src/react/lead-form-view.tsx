@@ -7,6 +7,14 @@ import styles from './sections/LeadForm.module.css';
 /** Fields that can show an error under them. */
 export type LeadFormErrorField = 'name' | 'phone' | 'email' | 'message' | 'consent';
 
+/**
+ * Name of the hidden control that carries the form's submission id when JavaScript is off: the
+ * renderer draws a new id with every page it serves, so sending the same form again, after a
+ * timeout or by reloading the result page, is answered as a replay and never stored twice
+ * (ADR-016).
+ */
+export const LEAD_SUBMISSION_FIELD = 'submissionId';
+
 /** The send button's label while a lead is on its way. */
 const SENDING_LABEL = 'Đang gửi…';
 
@@ -17,6 +25,8 @@ export interface LeadFormViewProps {
   capture: PublicLeadCapture | null;
   /** The release the form sends back (ADR-016); null when the form cannot send (previews). */
   releaseId: string | null;
+  /** Drawn by the server for this page view; null when the form cannot send (previews). */
+  submissionId: string | null;
 }
 
 /** State of an interactive form, set by the renderer's client component. */
@@ -66,6 +76,7 @@ export function LeadFormView({
   content,
   capture,
   releaseId,
+  submissionId,
   errors = {},
   formError = null,
   submitting = false,
@@ -94,6 +105,9 @@ export function LeadFormView({
       >
         {releaseId === null ? null : (
           <input type="hidden" name={names.releaseId} value={releaseId} />
+        )}
+        {submissionId === null ? null : (
+          <input type="hidden" name={LEAD_SUBMISSION_FIELD} value={submissionId} />
         )}
         <div className={styles.trap} aria-hidden="true">
           <label>
