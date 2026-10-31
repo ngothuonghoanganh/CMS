@@ -995,7 +995,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Request bị từ chối (429; 409 vì địa chỉ đã có hoặc site đã đủ 5 địa chỉ; 404) và thư không gửi được (địa chỉ `unsent`) được trả lại ở cả ba bộ đếm.
     - Trước đây 5 lần bấm "Gửi lại" lúc SMTP lỗi khóa địa chỉ đó cả ngày, và bấm quá giới hạn của một địa chỉ tiêu hết 50 thư của workspace.
     - Vẫn đếm trước khi gửi (nguyên tử), nên các request đồng thời không vượt giới hạn. Trả lại là giảm 1 trong đúng cửa sổ đã đếm (khớp `expiresAt` của cửa sổ đó), không xuống dưới 0, không chạm cửa sổ đã hết hay cửa sổ sau, như lần thử đăng nhập của ADR-004.
-    - Trả lại lỗi thì thư vẫn bị đếm (phía an toàn) và request thất bại (500) với lỗi đó, không chỉ ghi log. Request đã có lỗi riêng (429, 409, 404) thì ném `AggregateError` mang cả hai lỗi; thư không gửi được (`unsent`) thì ném lỗi trả lại làm `cause`.
+    - Trả lại lỗi thì thư vẫn bị đếm (phía an toàn: cửa sổ hết trong một ngày) và lỗi được ghi log mức error kèm các khóa bộ đếm (khóa chứa sha256 của địa chỉ, không chứa địa chỉ) và nguyên nhân. Request giữ kết quả của chính nó: vẫn là 429, 409 hay 404 như cũ, hoặc địa chỉ `unsent` được thêm thành công. Lý do: dọn bộ đếm không được đổi điều người dùng được báo. Trả 500 sẽ mất thông báo họ làm theo được, và báo lỗi cho một lần thêm hay gửi lại đã lưu thật.
+    - Ba bộ đếm tăng song song. Một bộ đếm lỗi thì các bộ đếm đã tăng được trả lại, rồi request thất bại (500) với lỗi đó làm `cause`.
   - **Lỗi SMTP thật,** thử bằng một SMTP stub trên `node:net` qua `SmtpEmailSender` và nodemailer:
     - kết nối bị từ chối → `smtp_unavailable`;
     - máy chủ không chào hoặc không trả lời DATA → `timeout`;

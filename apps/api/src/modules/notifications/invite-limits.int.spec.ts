@@ -6,6 +6,7 @@ import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createSite } from '../../../test/resources.js';
 import { LeadLimitsRepository } from '../leads/lead-limits.repository.js';
+import { inviteLimitKeys } from './domain/notification-rules.js';
 
 /**
  * The daily caps on confirmation emails (ADR-018), counted for real: 5 per site and address, 30
@@ -184,51 +185,133 @@ describe('confirmation email caps', () => {
   });
 
   describe('when an email cannot be taken back', () => {
-    async function failingRelease(body: (logged: () => unknown[]) => Promise<void>) {
+    const takeBackFailed =
+      'Confirmation email still counted: taking it back from the daily limits failed';
+
+    /** The three counters of `email` on `site`, as `countInvite` names them. */
+    function keysOf(owner: { workspaceId: string }, site: Site, email: string): string[] {
+      return Object.values(
+        inviteLimitKeys(email, {
+          workspaceId: new Types.ObjectId(owner.workspaceId),
+          siteId: new Types.ObjectId(site.id),
+        }),
+      );
+    }
+
+    async function counts(keys: readonly string[]): Promise<(number | null)[]> {
+      const records = await t.connection
+        .collection<{ key: string; count: number }>('lead_limits')
+        .find({ key: { $in: [...keys] } })
+        .toArray();
+      return keys.map((key) => records.find((record) => record.key === key)?.count ?? null);
+    }
+
+    /** Runs `body` while taking back fails once; returns what was logged as an error meanwhile. */
+    async function whileReleaseFails(body: () => Promise<void>): Promise<unknown[][]> {
       const release = vi
         .spyOn(t.app.get(LeadLimitsRepository), 'release')
         .mockRejectedValueOnce(new Error('not primary'));
       const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       try {
-        await body(() => logged.mock.calls[0] ?? []);
+        await body();
+        expect(release).toHaveBeenCalledTimes(1);
+        return logged.mock.calls;
       } finally {
         logged.mockRestore();
         release.mockRestore();
       }
     }
 
-    it('fails a request whose email was not sent instead of answering unsent', async () => {
+    /** One error logged: the failed take-back, with the counters it left. */
+    function expectTakeBackLogged(logged: unknown[][], keys: readonly string[]): void {
+      expect(logged).toHaveLength(1);
+      const [entry, message] = logged[0] ?? [];
+      expect(entry).toMatchObject({ err: { message: 'not primary' }, keys });
+      expect(message).toBe(takeBackFailed);
+    }
+
+    it('still answers 429 past a cap, and leaves the email counted', async () => {
       const owner = await signedUpClient(t.app);
-      const site = await createSite(owner.client, owner.workspaceId);
-      t.emails.failNext('smtp_unavailable');
-      await failingRelease(async (logged) => {
-        const response = await add(owner.client, site, 'khong-tra@smilecare.vn').expect(500);
-        expect(problemSchema.parse(response.body).code).toBe('internal');
-        const [entry] = logged();
-        expect(entry).toMatchObject({
-          err: {
-            message: 'Confirmation email not sent, and taking it back from the daily limits failed',
-            cause: { message: 'not primary' },
-          },
-        });
+      const email = 'van-dem@smilecare.vn';
+      const { site, recipient } = await inviteOnNewSite(owner, email, 5);
+      const keys = keysOf(owner, site, email);
+      expect(await counts(keys)).toEqual([5, 5, 5]);
+
+      const logged = await whileReleaseFails(async () => {
+        await expectCapped(resend(owner.client, site, recipient).expect(429));
       });
+      expectTakeBackLogged(logged, keys);
+      expect(await counts(keys)).toEqual([6, 6, 6]);
+      expect(t.emails.to(email)).toHaveLength(5);
     });
 
-    it('keeps both errors of a refused request', async () => {
+    it('still answers 409 for an address already there', async () => {
       const owner = await signedUpClient(t.app);
       const site = await createSite(owner.client, owner.workspaceId);
-      await added(owner.client, site, 'hai-lan@smilecare.vn');
-      await failingRelease(async (logged) => {
-        await add(owner.client, site, 'hai-lan@smilecare.vn').expect(500);
-        const [entry] = logged();
-        expect(entry).toMatchObject({
-          err: {
-            message:
-              'Confirmation email request failed, and taking its email back from the daily limits failed too',
-            errors: [{ status: 409, code: 'recipient_exists' }, { message: 'not primary' }],
-          },
-        });
+      const email = 'hai-lan@smilecare.vn';
+      await added(owner.client, site, email);
+      const keys = keysOf(owner, site, email);
+
+      const logged = await whileReleaseFails(async () => {
+        const response = await add(owner.client, site, email).expect(409);
+        expect(problemSchema.parse(response.body).code).toBe('recipient_exists');
       });
+      expectTakeBackLogged(logged, keys);
+      expect(await counts(keys)).toEqual([2, 2, 2]);
     });
+
+    it('still adds an address whose email was not sent, as unsent', async () => {
+      const owner = await signedUpClient(t.app);
+      const site = await createSite(owner.client, owner.workspaceId);
+      const email = 'khong-tra@smilecare.vn';
+      t.emails.failNext('smtp_unavailable');
+
+      const logged = await whileReleaseFails(async () => {
+        expect((await added(owner.client, site, email)).status).toBe('unsent');
+      });
+      expectTakeBackLogged(logged, keysOf(owner, site, email));
+      expect(await counts(keysOf(owner, site, email))).toEqual([1, 1, 1]);
+    });
+  });
+
+  it('takes the email back from the other counters when one counter fails', async () => {
+    const owner = await signedUpClient(t.app);
+    const site = await createSite(owner.client, owner.workspaceId);
+    const email = 'mot-phan@smilecare.vn';
+    const keys = inviteLimitKeys(email, {
+      workspaceId: new Types.ObjectId(owner.workspaceId),
+      siteId: new Types.ObjectId(site.id),
+    });
+    const limits = t.app.get(LeadLimitsRepository);
+    const hit = limits.hit.bind(limits);
+    const failing = vi
+      .spyOn(limits, 'hit')
+      .mockImplementation((key, now, windowEnd) =>
+        key === keys.workspace
+          ? Promise.reject(new Error('not primary'))
+          : hit(key, now, windowEnd),
+      );
+    const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      const response = await add(owner.client, site, email).expect(500);
+      expect(problemSchema.parse(response.body).code).toBe('internal');
+      expect(logged.mock.calls[0]?.[0]).toMatchObject({
+        err: {
+          message: 'Confirmation email could not be counted against the daily limits',
+          cause: { message: 'not primary' },
+        },
+      });
+    } finally {
+      logged.mockRestore();
+      failing.mockRestore();
+    }
+    const records = await t.connection
+      .collection<{ key: string; count: number }>('lead_limits')
+      .find({ key: { $in: [keys.siteAddress, keys.address] } })
+      .toArray();
+    expect(records.map(({ count }) => count)).toEqual([0, 0]);
+    expect(t.emails.to(email)).toEqual([]);
+    // Nothing was stored: the same address can be added now.
+    await added(owner.client, site, email);
   });
 });

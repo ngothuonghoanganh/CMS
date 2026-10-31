@@ -118,7 +118,7 @@ export class LeadRecipientsService {
     );
     const invitedAt = await this.sendConfirmation(scope, site, recipient, token, user.name);
     if (invitedAt === null) {
-      await this.uncountUnsent(invite);
+      await this.uncount(invite);
     }
     return toLeadRecipientDto({ ...recipient, invitedAt }, new Date());
   }
@@ -148,12 +148,13 @@ export class LeadRecipientsService {
     );
     if (!renewed) {
       // Removed or confirmed since the site was read.
-      return this.uncountAndThrow(counted, notFound(RECIPIENT_NOT_FOUND));
+      await this.uncount(counted);
+      throw notFound(RECIPIENT_NOT_FOUND);
     }
     const sent = { ...recipient, ...invite, invitedAt: null };
     const invitedAt = await this.sendConfirmation(scope, site, sent, token, user.name);
     if (invitedAt === null) {
-      await this.uncountUnsent(counted);
+      await this.uncount(counted);
     }
     return toLeadRecipientDto({ ...sent, invitedAt }, new Date());
   }
@@ -190,9 +191,10 @@ export class LeadRecipientsService {
    * Counts one confirmation email against the daily limits (`INVITE_LIMITS_PER_DAY`) before
    * anything is stored or sent, so requests at the same time cannot pass a limit together; over a
    * limit answers 429 (ADR-018). Returns what was counted: the caller takes the email back with
-   * `uncountAndThrow` or `uncountUnsent` when it does not go out after all. The limits count emails
-   * sent, so a request refused here counts nowhere either: clicking "Gửi lại" past the cap of one
-   * address must not use up the workspace's other emails.
+   * `uncount` when it does not go out after all. The limits count emails sent, so a request
+   * refused here counts nowhere either: clicking "Gửi lại" past the cap of one address must not
+   * use up the workspace's other emails. When one counter fails, the others take the email back
+   * before the error goes on.
    */
   private async countInvite(
     scope: WorkspaceScope,
@@ -202,20 +204,30 @@ export class LeadRecipientsService {
   ): Promise<CountedHit[]> {
     const keys = inviteLimitKeys(email, { workspaceId: scope.workspaceId, siteId });
     const windowEnd = new Date(now.getTime() + DAY_MS);
-    const counted = await Promise.all(
+    const settled = await Promise.allSettled(
       (Object.keys(INVITE_LIMITS_PER_DAY) as InviteLimit[]).map(async (limit) => {
         const window = await this.limits.hit(keys[limit], now, windowEnd);
         return { limit, key: keys[limit], ...window };
       }),
     );
+    const counted = settled.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    );
     const hits = counted.map(({ key, expiresAt }) => ({ key, expiresAt }));
+    const failures = settled.flatMap((result): unknown[] =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0) {
+      await this.uncount(hits);
+      throw new Error('Confirmation email could not be counted against the daily limits', {
+        cause: failures.length === 1 ? failures[0] : new AggregateError(failures),
+      });
+    }
     if (counted.some(({ limit, count }) => count > INVITE_LIMITS_PER_DAY[limit])) {
-      return this.uncountAndThrow(
-        hits,
-        new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
-          detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
-        }),
-      );
+      await this.uncount(hits);
+      throw new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
+        detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
+      });
     }
     return hits;
   }
@@ -228,38 +240,26 @@ export class LeadRecipientsService {
     try {
       return await task();
     } catch (error) {
-      return this.uncountAndThrow(hits, error);
+      await this.uncount(hits);
+      throw error;
     }
   }
 
   /**
-   * Rethrows `error`, the request's own outcome, once the email `countInvite` counted for it is
-   * taken back. When taking back fails too, both errors go on together, so neither is lost.
+   * Takes back the email `countInvite` counted when it does not go out after all: the request was
+   * refused, or the email could not be sent. The request keeps its own outcome either way, since
+   * cleaning up the counters must not change what the owner is told: a 429 or 409 they can act
+   * on, or an address added and `unsent`. When taking back fails, the email stays counted, which
+   * is the safe side (the window ends within a day), and the failure is logged with the counters
+   * it left: each key holds a sha256 of the address, never the address.
    */
-  private async uncountAndThrow(hits: readonly CountedHit[], error: unknown): Promise<never> {
-    try {
-      await this.limits.release(hits, new Date());
-    } catch (releaseError) {
-      throw new AggregateError(
-        [error, releaseError],
-        'Confirmation email request failed, and taking its email back from the daily limits failed too',
-        { cause: releaseError },
-      );
-    }
-    throw error;
-  }
-
-  /**
-   * Takes back the email of a confirmation that could not be sent; the address stays `unsent`.
-   * When that fails the request fails with it rather than answer as if the count were right.
-   */
-  private async uncountUnsent(hits: readonly CountedHit[]): Promise<void> {
+  private async uncount(hits: readonly CountedHit[]): Promise<void> {
     try {
       await this.limits.release(hits, new Date());
     } catch (error) {
-      throw new Error(
-        'Confirmation email not sent, and taking it back from the daily limits failed',
-        { cause: error },
+      this.logger.error(
+        { err: error, keys: hits.map(({ key }) => key) },
+        'Confirmation email still counted: taking it back from the daily limits failed',
       );
     }
   }
