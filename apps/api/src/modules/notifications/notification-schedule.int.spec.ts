@@ -49,11 +49,21 @@ describe('lead email retry schedule', () => {
     return leadDetailSchema.parse(response.body).notification;
   }
 
-  /** Waits (for real) until the background attempt has written its outcome. */
-  async function settles(leadId: string, expected: Partial<LeadNotification>): Promise<void> {
+  /**
+   * Waits (for real) until the attempt numbered `expected.attempts` has written its outcome: the
+   * attempt starts when the clock moves, then claims and records over a few database calls.
+   */
+  async function settles(
+    leadId: string,
+    expected: Partial<LeadNotification> & { attempts: number },
+  ): Promise<void> {
     for (let tries = 0; tries < 200; tries += 1) {
       const notification = await notificationOf(leadId);
-      if (notification !== null && notification.status !== 'sending') {
+      if (
+        notification !== null &&
+        notification.status !== 'sending' &&
+        notification.attempts === expected.attempts
+      ) {
         expect(notification).toMatchObject(expected);
         return;
       }
