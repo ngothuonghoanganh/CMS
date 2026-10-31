@@ -6,7 +6,7 @@ import { api } from '../../lib/api';
 import { loadPage } from '../../lib/page-load';
 import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { leadQueryKeys } from '../leads/queries';
-import { setScreenLeave } from './screen-leave';
+import { type Leave, setScreenLeave } from './screen-leave';
 import { Sidebar, type SidebarProps } from './Sidebar';
 import { apiError, renderWithProviders } from './test-utils';
 
@@ -298,7 +298,7 @@ describe('Sidebar', () => {
   describe('over a screen holding changes not saved yet', () => {
     /** The screen on display: it lets the user leave only when the test says it saved. */
     function holdingScreen() {
-      const asked: Array<{ leave: () => void; discardLabel: string }> = [];
+      const asked: Array<{ leave: Leave; discardLabel: string }> = [];
       const remove = setScreenLeave((leave, { discardLabel }) => {
         asked.push({ leave, discardLabel });
       });
@@ -316,7 +316,7 @@ describe('Sidebar', () => {
 
       expect(router.push).not.toHaveBeenCalled();
       expect(asked).toHaveLength(1);
-      asked[0]?.leave();
+      expect(asked[0]?.leave()).toBe('leaving');
       expect(router.push).toHaveBeenCalledWith('/sites/64b000000000000000000002');
     });
 
@@ -329,7 +329,7 @@ describe('Sidebar', () => {
       await user.click(screen.getByRole('menuitem', { name: 'Tạo site mới' }));
 
       expect(router.push).not.toHaveBeenCalled();
-      asked[0]?.leave();
+      expect(asked[0]?.leave()).toBe('leaving');
       expect(router.push).toHaveBeenCalledWith(`/sites/new?workspace=${WORKSPACE_ID}`);
     });
 
@@ -344,7 +344,7 @@ describe('Sidebar', () => {
       // The save may fail and the user stay: this workspace is still the one they work in.
       expect(document.cookie).not.toContain('plp_ws=');
       expect(loadPageMock).not.toHaveBeenCalled();
-      asked[0]?.leave();
+      expect(asked[0]?.leave()).toBe('leaving');
       expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
       expect(loadPageMock).toHaveBeenCalledWith('/');
     });
@@ -360,13 +360,50 @@ describe('Sidebar', () => {
 
       expect(apiMock).not.toHaveBeenCalled();
       expect(asked[0]?.discardLabel).toBe('Đăng xuất, bỏ thay đổi');
-      act(() => {
-        asked[0]?.leave();
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
       });
-      await vi.waitFor(() => {
-        expect(router.replace).toHaveBeenCalledWith('/login');
-      });
+      expect(outcome).toBe('leaving');
+      expect(router.replace).toHaveBeenCalledWith('/login');
       expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+    });
+
+    it('reports that the user stays when signing out fails', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      apiMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      // The screen takes back the changes it gave up for this leave.
+      expect(outcome).toBe('stayed');
+      expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it('reports a leave when the session had already ended', async () => {
+      const user = userEvent.setup();
+      apiMock.mockRejectedValueOnce(apiError(401, 'unauthenticated', 'Phiên đăng nhập đã hết hạn'));
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      expect(outcome).toBe('leaving');
+      expect(router.replace).toHaveBeenCalledWith('/login');
     });
   });
 });

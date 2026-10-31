@@ -96,6 +96,7 @@ export function Sidebar({
     onNavigate?.();
     leaveScreen(() => {
       router.push(href);
+      return 'leaving';
     });
   }
 
@@ -111,6 +112,7 @@ export function Sidebar({
       // this workspace's queries instead of fetching them again on its way out, and nothing of
       // this workspace's sites (leads, "N mới") stays in memory to show up on coming back.
       loadPage('/');
+      return 'leaving';
     });
   }
 
@@ -266,12 +268,7 @@ export function Sidebar({
             disabled={logout.isPending}
             onSelect={() => {
               // Saved first: once the session is gone, a save sent as the screen unmounts fails.
-              leaveScreen(
-                () => {
-                  logout.mutate();
-                },
-                { discardLabel: 'Đăng xuất, bỏ thay đổi' },
-              );
+              leaveScreen(logout.signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
             }}
           >
             Đăng xuất

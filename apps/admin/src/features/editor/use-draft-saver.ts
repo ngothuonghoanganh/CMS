@@ -4,9 +4,11 @@ import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import type { Leave, LeaveOutcome } from '../shell/screen-leave';
 import { markPageScreensStale } from './stale-screens';
 import {
   currentSaveResponse,
+  type EditorState,
   type EditorStore,
   hasUnsavedChanges,
   isDiscarded,
@@ -32,10 +34,12 @@ export interface DraftSaver {
   /** "Thử lại": saves now and restarts the automatic retries. */
   retry: () => void;
   /**
-   * "Rời trang, bỏ thay đổi": drops the pending save, and stopping will not save these changes.
-   * A later change is saved as usual again.
+   * "Rời trang, bỏ thay đổi": gives the changes not saved yet up for `leave` only, then leaves. No
+   * save of them starts any more, not even a retry or the one on stopping; a request already sent
+   * cannot be recalled. When the user stays after all, they count as unsaved again and autosave
+   * resumes. A later change is saved as usual. Resolves with the leave's outcome.
    */
-  discard: () => void;
+  discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
    * Starts listening to the store; returns the function that stops it. Stopping (the screen
    * unmounts: a link, Back/Forward) saves pending changes right away instead of dropping them, but
@@ -74,6 +78,11 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
     return { kind: 'retryable', message: 'Không kết nối được máy chủ' };
   }
   return { kind: 'other', message: 'Lưu bản nháp không thành công' };
+}
+
+/** Changes to save: some not saved yet, and not given up for a leave. */
+function needsSave(state: EditorState): boolean {
+  return hasUnsavedChanges(state) && !isDiscarded(state);
 }
 
 function isKnownSaveFailure(error: unknown): boolean {
@@ -157,7 +166,8 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         throw new DraftConflictError();
       }
       store.getState().markSaveFailed(failure);
-      if (failure.kind === 'retryable') {
+      // Changes given up while this request was out are not tried again.
+      if (failure.kind === 'retryable' && !isDiscarded(store.getState())) {
         scheduleRetry();
       }
       throw error;
@@ -173,7 +183,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       if (state.saveState === 'conflict') {
         throw new DraftConflictError();
       }
-      if (!hasUnsavedChanges(state)) {
+      if (!needsSave(state)) {
         return currentSaveResponse(state);
       }
       await saveOnce();
@@ -211,15 +221,35 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }, debounceMs);
   }
 
+  /** The leave changes were given up for did not happen: they are unsaved again, and saved. */
+  function keepUnsaved() {
+    store.getState().withdrawDiscard();
+    const state = store.getState();
+    if (!stopped && needsSave(state) && state.saveState !== 'conflict') {
+      scheduleSave();
+    }
+  }
+
   return {
     ensureSaved: flush,
     retry() {
       retryAttempt = 0;
       flushInBackground();
     },
-    discard() {
+    async discardFor(leave) {
       store.getState().discardUnsaved();
       clearTimers();
+      let outcome: LeaveOutcome;
+      try {
+        outcome = await leave();
+      } catch (error) {
+        keepUnsaved();
+        throw error;
+      }
+      if (outcome === 'stayed') {
+        keepUnsaved();
+      }
+      return outcome;
     },
     start() {
       stopped = false;
@@ -240,7 +270,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         unsubscribe();
         clearTimers();
         const state = store.getState();
-        if (!isDiscarded(state) && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
+        if (needsSave(state) && state.saveState !== 'conflict') {
           flushInBackground();
         }
       };
@@ -252,7 +282,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 export function useDraftSaver(
   store: EditorStore,
   options?: DraftSaverOptions,
-): Pick<DraftSaver, 'ensureSaved' | 'retry' | 'discard'> {
+): Pick<DraftSaver, 'ensureSaved' | 'retry' | 'discardFor'> {
   const queryClient = useQueryClient();
   const [saver] = useState(() =>
     createDraftSaver(store, {

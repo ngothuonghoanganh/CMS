@@ -13,7 +13,7 @@ import { loadPage } from '../../lib/page-load';
 import { NO_LEADS, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
 import { installHistoryGuard } from '../shell/history-guard';
-import { leaveScreen } from '../shell/screen-leave';
+import { type LeaveOutcome, leaveScreen } from '../shell/screen-leave';
 import { Sidebar } from '../shell/Sidebar';
 import { apiError, renderWithProviders } from '../shell/test-utils';
 import { WORKSPACE_PREFERENCE_COOKIE } from '../shell/workspace-preference';
@@ -83,6 +83,7 @@ beforeAll(() => {
 beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
+  router.replace.mockReset();
 });
 
 describe('SeoScreen', () => {
@@ -661,7 +662,7 @@ describe('SeoScreen', () => {
       const user = userEvent.setup();
       renderScreen();
       answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
-      const signOut = vi.fn();
+      const signOut = vi.fn((): LeaveOutcome => 'leaving');
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
 
       leaveScreen(signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
@@ -671,6 +672,49 @@ describe('SeoScreen', () => {
       expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
       await user.click(screen.getByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
       expect(signOut).toHaveBeenCalledTimes(1);
+    });
+
+    it('takes the change back when signing out without it fails: the tab asks before closing', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const detail = pageDetail();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')), detail);
+      const agency: Membership = {
+        workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+        role: 'owner',
+      };
+      renderWithProviders(
+        <>
+          <Sidebar
+            user={{ id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngocanh@mayxanh.vn' }}
+            memberships={[agency]}
+            membership={agency}
+            site={site}
+            sites={[site]}
+            pageCount={1}
+            leadCounts={NO_LEADS}
+          />
+          <SeoScreen
+            initial={{ detail, site, assets: [], role: 'editor' }}
+            loadedAt={Date.now()}
+            focus={null}
+          />
+        </>,
+      );
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+
+      // The server is down: signing out fails too, and the user stays with the change.
+      expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
+      expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+      expect(router.replace).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
     });
 
     it('leaves once the save is done', async () => {

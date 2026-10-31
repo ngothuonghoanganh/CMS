@@ -23,7 +23,7 @@ import {
 import { PageDetailHeader } from '../page-header/PageDetailHeader';
 import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { LEAVE_WITHOUT_SAVING, setScreenLeave } from '../shell/screen-leave';
+import { type Leave, LEAVE_WITHOUT_SAVING, setScreenLeave } from '../shell/screen-leave';
 import { useNow } from '../shell/use-now';
 import { type SeoFocus, SeoForm, useDraftSlugField } from './SeoForm';
 import { SeoPreviews } from './SeoPreviews';
@@ -116,7 +116,7 @@ function useSaveFirstLinks(hasPending: () => boolean, navigate: (href: string) =
 }
 
 interface PendingLeave {
-  leave: () => void;
+  leave: Leave;
   discardLabel: string;
 }
 
@@ -128,7 +128,7 @@ function SeoScreenBody({
   const router = useRouter();
   const { toast } = useToast();
   const now = useNow(loadedAt);
-  const { ensureSaved, retry, discard } = useDraftSaver(store);
+  const { ensureSaved, retry, discardFor } = useDraftSaver(store);
   // A typed slug reaches the draft only once the server confirmed it is free: until then leaving
   // must wait for that check too. The leave paths read the field between renders.
   const slugField = useDraftSlugField();
@@ -170,13 +170,16 @@ function SeoScreenBody({
         action: {
           label: discardLabel,
           onClick: () => {
-            discard();
-            leave();
+            // Given up for this leave only: when the user stays (signing out failed), the changes
+            // are unsaved again and the browser asks before the tab closes.
+            discardFor(leave).catch((caught: unknown) => {
+              reportUnexpected('Leaving the SEO settings without saving failed', caught);
+            });
           },
         },
       });
     },
-    [toast, discard],
+    [toast, discardFor],
   );
 
   // Leaving saves first, whichever way: a save sent as the screen unmounts would land after the
@@ -192,7 +195,7 @@ function SeoScreenBody({
     [],
   );
   const leaveAfterSave = useCallback(
-    (leave: () => void, discardLabel: string = LEAVE_WITHOUT_SAVING) => {
+    (leave: Leave, discardLabel: string = LEAVE_WITHOUT_SAVING) => {
       pendingLeave.current = { leave, discardLabel };
       // Concurrent calls share the running check and save; the first to settle takes the leave.
       function takePending(): PendingLeave | null {
@@ -206,7 +209,7 @@ function SeoScreenBody({
         : ensureSaved();
       saved.then(
         () => {
-          takePending()?.leave();
+          void takePending()?.leave();
         },
         (error: unknown) => {
           const next = takePending();
@@ -219,9 +222,9 @@ function SeoScreenBody({
     [slugPending, ensureSaved, leaveFailed],
   );
   const leaveSafely = useCallback(
-    (leave: () => void, discardLabel?: string) => {
+    (leave: Leave, discardLabel?: string) => {
       if (!hasPending() && pendingLeave.current === null) {
-        leave();
+        void leave();
         return;
       }
       leaveAfterSave(leave, discardLabel);
@@ -232,6 +235,7 @@ function SeoScreenBody({
     (href: string) => {
       leaveSafely(() => {
         router.push(href);
+        return 'leaving';
       });
     },
     [router, leaveSafely],

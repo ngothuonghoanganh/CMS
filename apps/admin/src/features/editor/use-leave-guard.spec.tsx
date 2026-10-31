@@ -3,9 +3,10 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installHistoryGuard } from '../shell/history-guard';
+import type { Leave } from '../shell/screen-leave';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
-import { createDraftSaver, DraftConflictError } from './use-draft-saver';
+import { createDraftSaver, DraftConflictError, type DraftSaver } from './use-draft-saver';
 import { useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
@@ -16,15 +17,15 @@ installHistoryGuard();
 function Guarded({
   store,
   ensureSaved,
-  discard,
+  discardFor,
   push,
 }: {
   store: EditorStore;
   ensureSaved: () => Promise<SaveDraftResponse>;
-  discard: () => void;
+  discardFor: DraftSaver['discardFor'];
   push: (href: string) => void;
 }) {
-  const guard = useLeaveGuard(store, { ensureSaved, discard }, push);
+  const guard = useLeaveGuard(store, { ensureSaved, discardFor }, push);
   return (
     <>
       <button
@@ -42,10 +43,10 @@ function Guarded({
 
 function setup(ensureSaved?: () => Promise<SaveDraftResponse>) {
   const store = makeStore();
-  const discard = vi.fn();
+  const discard = vi.fn((leave: Leave) => Promise.resolve(leave()));
   const push = vi.fn();
   const saved = ensureSaved ?? (() => Promise.resolve(currentSaveResponse(store.getState())));
-  render(<Guarded store={store} ensureSaved={saved} discard={discard} push={push} />);
+  render(<Guarded store={store} ensureSaved={saved} discardFor={discard} push={push} />);
   return { store, discard, push };
 }
 
@@ -112,10 +113,30 @@ describe('useBeforeUnloadGuard', () => {
     // A slug still being checked is given up with the rest.
     render(<BeforeUnloadGuarded store={store} pendingInput={() => true} />);
     failSave(store);
-    createDraftSaver(store).discard();
+    void createDraftSaver(store).discardFor(() => 'leaving');
     expect(closeTab()).toBe(false);
 
     store.getState().setSpacing(HERO, 'spacious');
+    expect(closeTab()).toBe(true);
+  });
+
+  it('asks again once the leave the changes were given up for did not happen', async () => {
+    const store = makeStore();
+    render(<BeforeUnloadGuarded store={store} pendingInput={() => true} />);
+    failSave(store);
+    let stay: () => void = () => undefined;
+    const left = createDraftSaver(store).discardFor(
+      () =>
+        new Promise((resolve) => {
+          stay = () => {
+            resolve('stayed');
+          };
+        }),
+    );
+    expect(closeTab()).toBe(false);
+
+    stay();
+    await left;
     expect(closeTab()).toBe(true);
   });
 

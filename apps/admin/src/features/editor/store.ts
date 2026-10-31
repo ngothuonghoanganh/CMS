@@ -114,7 +114,7 @@ export interface EditorState {
   /** Local counter of draft changes. Everything is saved when it equals `savedVersion`. */
   draftVersion: number;
   savedVersion: number;
-  /** The `draftVersion` whose unsaved changes the user gave up (see `isDiscarded`). */
+  /** The `draftVersion` whose unsaved changes the user gave up for a leave (see `isDiscarded`). */
   discardedVersion: number | null;
   /** Field whose typing currently merges into the last undo step. */
   mergeKey: string | null;
@@ -162,10 +162,13 @@ export interface EditorState {
   markSaveFailed: (failure: SaveFailure) => void;
   markConflict: () => void;
   /**
-   * "Rời trang, bỏ thay đổi": the user gives up the changes not saved yet, and leaves. Until the
-   * next change, nothing saves them on the way out and nothing asks before leaving.
+   * "Rời trang, bỏ thay đổi": the user gives up the changes not saved yet, for the leave that
+   * follows. Until the next change, or until `withdrawDiscard`, nothing saves them and nothing asks
+   * before leaving.
    */
   discardUnsaved: () => void;
+  /** The leave the changes were given up for did not happen: they count as unsaved again. */
+  withdrawDiscard: () => void;
   /** After publish, rollback or unpublish: the page summary and checks changed on the server. */
   setServerState: (update: { page?: PageSummary; checks?: ChecksResult }) => void;
   setSite: (site: Site) => void;
@@ -725,6 +728,10 @@ export function createEditorStore(init: EditorInit): EditorStore {
 
       discardUnsaved() {
         set({ discardedVersion: get().draftVersion });
+      },
+
+      withdrawDiscard() {
+        set({ discardedVersion: null });
       },
 
       setServerState(update) {

@@ -8,6 +8,7 @@ import type * as ApiModule from '../../lib/api';
 import { siteQueryKeys } from '../dashboard/queries';
 import { pageQueryKeys } from '../history/queries';
 import { createTestQueryClient } from '../shell/test-utils';
+import { isDiscarded } from './store';
 import { emptyChecks, makeStore, PAGE_ID, pageSummary, SITE_ID } from './test-fixtures';
 import {
   createDraftSaver,
@@ -257,7 +258,7 @@ describe('draft saver', () => {
     const { store, saver, stop } = setup();
     saveMock.mockResolvedValue(response(4));
     store.getState().setSpacing(HERO, 'compact');
-    saver.discard();
+    await expect(saver.discardFor(() => 'leaving')).resolves.toBe('leaving');
     await vi.advanceTimersByTimeAsync(5000);
     stop();
     await vi.advanceTimersByTimeAsync(0);
@@ -268,9 +269,77 @@ describe('draft saver', () => {
     const { store, saver, stop } = setup();
     saveMock.mockResolvedValue(response(4));
     store.getState().setSpacing(HERO, 'compact');
-    saver.discard();
+    await saver.discardFor(() => 'leaving');
     store.getState().setSpacing(HERO, 'spacious');
     await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('takes the changes back when the user stays after all, and saves them again', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getState().saveState).toBe('error');
+
+    // Signing out failed: the user is still here with the change.
+    await expect(saver.discardFor(() => Promise.resolve('stayed'))).resolves.toBe('stayed');
+    expect(isDiscarded(store.getState())).toBe(false);
+    saveMock.mockResolvedValue(response(4));
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    expect(saveMock.mock.calls[1]?.[2].body.composition.sections[1]?.spacing).toBe('compact');
+    expect(store.getState().saveState).toBe('saved');
+    stop();
+  });
+
+  it('takes the changes back when the leave fails, and passes the failure on', async () => {
+    const { store, saver, stop } = setup();
+    store.getState().setSpacing(HERO, 'compact');
+    const failure = new Error('leave failed');
+
+    await expect(saver.discardFor(() => Promise.reject(failure))).rejects.toBe(failure);
+    expect(isDiscarded(store.getState())).toBe(false);
+    saveMock.mockResolvedValue(response(4));
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts no save of discarded changes after the request in flight, not even when stopped', async () => {
+    const { store, saver, stop } = setup();
+    const first = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(first.promise).mockResolvedValue(response(5));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getState().saveState).toBe('saving');
+    // A change made while the request is out, then given up with the rest.
+    store.getState().setSpacing(HERO, 'spacious');
+    void saver.discardFor(() => 'leaving');
+
+    first.resolve(response(4));
+    await vi.advanceTimersByTimeAsync(5000);
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    // The request already sent cannot be recalled; nothing follows it.
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('compact');
+  });
+
+  it('schedules no retry when a request sent before the discard fails', async () => {
+    const { store, saver, stop } = setup();
+    const first = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(first.promise).mockResolvedValue(response(5));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    void saver.discardFor(() => 'leaving');
+
+    first.reject(new TypeError('Failed to fetch'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().saveState).toBe('error');
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(saveMock).toHaveBeenCalledTimes(1);
     stop();
   });

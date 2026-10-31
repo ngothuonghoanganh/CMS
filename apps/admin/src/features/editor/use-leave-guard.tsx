@@ -1,12 +1,12 @@
 'use client';
 
-import type { SaveDraftResponse } from '@plp/contracts';
 import { Button, Callout, Dialog } from '@plp/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { setHistoryGuard } from '../shell/history-guard';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import type { Leave, LeaveOutcome } from '../shell/screen-leave';
 import { type EditorStore, isDiscarded, type SaveState } from './store';
-import { DraftConflictError } from './use-draft-saver';
+import { type DraftSaver, DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
 export function isUnsaved(saveState: SaveState): boolean {
@@ -19,16 +19,19 @@ export function isUnsaved(saveState: SaveState): boolean {
  */
 export type PendingInput = () => boolean;
 
-/** Whether leaving now drops changes the user has not given up ("Rời trang, bỏ thay đổi"). */
+/**
+ * Whether leaving now drops changes the user has not given up ("Rời trang, bỏ thay đổi", for a
+ * leave still under way).
+ */
 function leavingLoses(store: EditorStore, pendingInput: PendingInput | undefined): boolean {
   const state = store.getState();
   return !isDiscarded(state) && (isUnsaved(state.saveState) || pendingInput?.() === true);
 }
 
 /**
- * Asks the browser to confirm closing or reloading the tab while changes are unsaved. Not once the
- * user gave them up: they chose to leave, and a prompt would let them stay after a full page load
- * already began (the sidebar's workspace switch remembers the new workspace first).
+ * Asks the browser to confirm closing or reloading the tab while changes are unsaved. Not while the
+ * user gives them up for a leave: they chose to leave, and a prompt would let them stay after a
+ * full page load already began (the sidebar's workspace switch remembers the new workspace first).
  */
 export function useBeforeUnloadGuard(store: EditorStore, pendingInput?: PendingInput): void {
   useEffect(() => {
@@ -66,13 +69,14 @@ function currentEntry(): HistoryEntry {
  */
 export function useHistoryLeaveGuard(
   store: EditorStore,
-  onBlocked: (leave: () => void) => void,
+  onBlocked: (leave: Leave) => void,
   pendingInput?: PendingInput,
-): () => void {
+): () => LeaveOutcome {
   const allowNext = useRef(false);
-  const leave = useCallback(() => {
+  const leave = useCallback((): LeaveOutcome => {
     allowNext.current = true;
     window.history.back();
+    return 'leaving';
   }, []);
 
   useEffect(() => {
@@ -116,10 +120,10 @@ export interface LeaveGuard {
  */
 export function useLeaveGuard(
   store: EditorStore,
-  saver: { ensureSaved: () => Promise<SaveDraftResponse>; discard: () => void },
+  saver: Pick<DraftSaver, 'ensureSaved' | 'discardFor'>,
   push: (href: string) => void,
 ): LeaveGuard {
-  const { ensureSaved, discard } = saver;
+  const { ensureSaved, discardFor } = saver;
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,17 +148,24 @@ export function useLeaveGuard(
     [store, push, ask],
   );
 
+  function go(target: PendingLeave): LeaveOutcome {
+    if (target.kind === 'history') {
+      return goBackInHistory();
+    }
+    push(target.href);
+    return 'leaving';
+  }
+
   function leave(target: PendingLeave, saved: boolean) {
     setPending(null);
-    if (!saved) {
-      // Leaving unmounts the editor, which would otherwise save these changes on the way out.
-      discard();
+    if (saved) {
+      go(target);
+      return;
     }
-    if (target.kind === 'link') {
-      push(target.href);
-    } else {
-      goBackInHistory();
-    }
+    // Leaving unmounts the editor, which would otherwise save these changes on the way out.
+    discardFor(() => go(target)).catch((error: unknown) => {
+      reportUnexpected('Leaving the editor without saving failed', error);
+    });
   }
 
   async function saveAndLeave(target: PendingLeave) {
