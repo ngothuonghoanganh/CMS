@@ -3,6 +3,7 @@ import { Card, VisuallyHidden } from '@plp/ui';
 import { useId } from 'react';
 import { conversionRate, formatCount } from './analytics-presentation';
 import styles from './Analytics.module.css';
+import { ScrollRegion } from './ScrollRegion';
 
 /** "Theo nguồn truy cập": visitors, leads and their rate per source/medium pair. */
 export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }) {
@@ -15,13 +16,7 @@ export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }
       {sources.length === 0 ? (
         <p className={styles.note}>Chưa có khách nào trong khoảng này.</p>
       ) : (
-        // Scrolls sideways on a narrow screen with nothing focusable inside: see DailyVisitorsChart.
-        <div
-          className={styles.tableScroll}
-          role="region"
-          aria-label="Bảng nguồn truy cập"
-          tabIndex={0}
-        >
+        <ScrollRegion label="Bảng nguồn truy cập">
           <table className={styles.table}>
             <thead>
               <tr>
@@ -50,7 +45,7 @@ export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       )}
     </Card>
   );

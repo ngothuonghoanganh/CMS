@@ -14,6 +14,7 @@ import {
   tooltipDayLabel,
 } from './analytics-presentation';
 import styles from './Analytics.module.css';
+import { ScrollRegion } from './ScrollRegion';
 
 export interface DailyVisitorsChartProps {
   daily: AnalyticsReport['daily'];
@@ -149,14 +150,7 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
       </div>
 
       {asTable ? (
-        // The table scrolls sideways on a phone and holds nothing focusable, so the region itself
-        // takes focus for arrow keys (WCAG 2.1.1).
-        <div
-          className={styles.tableScroll}
-          role="region"
-          aria-label="Khách duy nhất mỗi ngày, dạng bảng"
-          tabIndex={0}
-        >
+        <ScrollRegion label="Khách duy nhất mỗi ngày, dạng bảng">
           <table className={styles.table}>
             <caption>
               <VisuallyHidden>Khách duy nhất mỗi ngày</VisuallyHidden>
@@ -190,7 +184,7 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       ) : (
         <div className={styles.chart}>
           <div className={styles.yAxis} aria-hidden="true">
