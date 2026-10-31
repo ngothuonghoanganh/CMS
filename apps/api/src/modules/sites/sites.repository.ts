@@ -14,6 +14,7 @@ import {
   type SitePrivacyRecord,
   type SiteRecord,
   SITES_SUBDOMAIN_INDEX,
+  sitePrivacyOf,
 } from './site.schema.js';
 import { SUBDOMAIN_TAKEN_MESSAGE } from './subdomain-availability.js';
 
@@ -325,6 +326,18 @@ export class SitesRepository {
     if (result.matchedCount === 0) {
       throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
     }
+  }
+
+  /**
+   * The privacy settings of a site as they are now, for the public lead intake: it reads them
+   * again after storing a lead, in case the owner changed the retention period meanwhile.
+   */
+  async findPublicPrivacy(siteId: ObjectId): Promise<SitePrivacyRecord | null> {
+    const site = await this.sites
+      .findById(siteId, { privacy: 1 })
+      .lean<Pick<SiteRecord, 'privacy'>>()
+      .exec();
+    return site === null ? null : sitePrivacyOf(site);
   }
 
   /** Unscoped lookup for public delivery, which resolves a site from the request host. */

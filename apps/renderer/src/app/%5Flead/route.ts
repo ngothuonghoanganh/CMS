@@ -4,7 +4,7 @@ import { clientAddress } from '../../lib/client-address';
 import { requestHost, subdomainFromHeaders } from '../../lib/host';
 import { relayLead, type RelayOutcome } from '../../lib/lead-relay';
 import { checkLeadRequest, leadRequestCandidate, leadSourceFrom } from '../../lib/lead-request';
-import { leadResultHtml, safeBackPath } from '../../lib/lead-result-page';
+import { campaignQuery, leadResultHtml, safeBackPath } from '../../lib/lead-result-page';
 import { readBodyWithin } from '../../lib/request-body';
 import { isCrossSite } from '../../lib/same-site';
 
@@ -46,14 +46,24 @@ function parseJson(text: string): { ok: true; value: unknown } | { ok: false } {
   }
 }
 
-/** The page the form was on, from the Referer when it is this site; "/" otherwise. */
-function backPathOf(request: Request, host: string | null): string {
+interface BackLink {
+  path: string;
+  /** The page's campaign tags as a query, or "". */
+  campaign: string;
+}
+
+const HOME: BackLink = { path: '/', campaign: '' };
+
+/** The page the form was on, from the Referer when it is this site ("/" otherwise). */
+function backOf(request: Request, host: string | null): BackLink {
   const referer = request.headers.get('referer');
   if (referer === null || host === null || !URL.canParse(referer)) {
-    return '/';
+    return HOME;
   }
   const url = new URL(referer);
-  return url.host === host ? safeBackPath(url.pathname) : '/';
+  return url.host === host
+    ? { path: safeBackPath(url.pathname), campaign: campaignQuery(url.searchParams) }
+    : HOME;
 }
 
 function scriptAnswer(outcome: RelayOutcome): Response {
@@ -71,14 +81,14 @@ function scriptAnswer(outcome: RelayOutcome): Response {
   }
 }
 
-function formAnswer(outcome: RelayOutcome, back: string): Response {
+function formAnswer(outcome: RelayOutcome, back: BackLink): Response {
   switch (outcome.kind) {
     case 'received':
       // Post/redirect/get: refreshing the result page does not send the lead again.
       return new Response(null, {
         status: 303,
         headers: {
-          location: `${LEAD_ROUTE}?status=received&back=${encodeURIComponent(back)}`,
+          location: `${LEAD_ROUTE}?status=received&back=${encodeURIComponent(back.path)}`,
           ...NO_STORE,
         },
       });
@@ -86,17 +96,18 @@ function formAnswer(outcome: RelayOutcome, back: string): Response {
       return html(
         leadResultHtml(
           'invalid',
-          back,
+          back.path,
           outcome.issues.map((issue) => issue.message),
+          back.campaign,
         ),
         422,
       );
     case 'rate_limited':
-      return html(leadResultHtml('rate_limited', back), 429);
+      return html(leadResultHtml('rate_limited', back.path, [], back.campaign), 429);
     case 'not_found':
-      return html(leadResultHtml('not_found', back), 404);
+      return html(leadResultHtml('not_found', back.path, [], back.campaign), 404);
     case 'failed':
-      return html(leadResultHtml('failed', back), 502);
+      return html(leadResultHtml('failed', back.path, [], back.campaign), 502);
   }
 }
 
@@ -146,7 +157,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const form = new URLSearchParams(raw);
-  const back = backPathOf(request, host);
+  const back = backOf(request, host);
   // Without script there is no submission id or fill time; campaign tags come from the Referer.
   const candidate = leadRequestCandidate((name) => form.get(name), {
     submissionId: null,
@@ -158,8 +169,9 @@ export async function POST(request: Request): Promise<Response> {
     return html(
       leadResultHtml(
         'invalid',
-        back,
+        back.path,
         check.issues.map((issue) => issue.message),
+        back.campaign,
       ),
       422,
     );

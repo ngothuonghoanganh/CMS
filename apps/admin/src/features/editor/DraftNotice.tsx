@@ -2,6 +2,7 @@
 
 import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { Callout, ConfirmDialog, useToast } from '@plp/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -9,6 +10,7 @@ import styles from './DraftNotice.module.css';
 import { useEditor, useEditorStoreApi } from './editor-context';
 import { displayUrl, siteChangesNotice } from './presentation';
 import { replaceWithServerDraft } from './server-draft';
+import { markPageScreensStale } from './stale-screens';
 import { DraftConflictError } from './use-draft-saver';
 
 export interface DraftNoticeProps {
@@ -23,6 +25,7 @@ export interface DraftNoticeProps {
  */
 export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
   const store = useEditorStoreApi();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const page = useEditor((state) => state.page);
   const [confirming, setConfirming] = useState(false);
@@ -48,6 +51,7 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
         body: { baseRevision: saved.revision, releaseId: live.id },
       });
       await replaceWithServerDraft(store, detail);
+      markPageScreensStale(queryClient, page.siteId, page.id);
       setConfirming(false);
       toast({ title: `Bản nháp đã quay về bản live v${live.version}`, tone: 'success' });
     } catch (caught) {

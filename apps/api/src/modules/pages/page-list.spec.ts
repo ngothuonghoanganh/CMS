@@ -6,6 +6,7 @@ import {
   countPages,
   filterPages,
   type ListedPage,
+  liveSiteUrlOf,
   paginatePages,
 } from './page-list.js';
 
@@ -111,5 +112,38 @@ describe('page list helpers', () => {
     const first = paginatePages([b, a], undefined, 1);
     expect(first.items).toEqual([b]);
     expect(paginatePages([b, a], first.nextCursor ?? undefined, 1).items).toEqual([a]);
+  });
+});
+
+describe('liveSiteUrlOf', () => {
+  function live(slug: string, publishedAt: string): ListedPage {
+    const page = listed('live');
+    return {
+      ...page,
+      summary: {
+        ...page.summary,
+        liveRelease: { id: page.summary.id, version: 1, slug, publishedAt },
+        liveUrl: `https://smilecare.payload.site/${slug}`,
+      },
+    };
+  }
+
+  it('leads to the home page when it is live, else to the page published last', () => {
+    const older = live('uu-dai', '2026-10-20T08:00:00.000Z');
+    const newer = live('implant', '2026-10-24T08:00:00.000Z');
+    expect(liveSiteUrlOf([older, newer])).toBe('https://smilecare.payload.site/implant');
+    expect(liveSiteUrlOf([older, live('', '2026-10-01T08:00:00.000Z'), newer])).toBe(
+      'https://smilecare.payload.site/',
+    );
+  });
+
+  it('is null while no page is live', () => {
+    const draft = listed('draft');
+    expect(
+      liveSiteUrlOf([
+        { ...draft, summary: { ...draft.summary, liveRelease: null, liveUrl: null } },
+      ]),
+    ).toBeNull();
+    expect(liveSiteUrlOf([])).toBeNull();
   });
 });

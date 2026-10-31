@@ -98,23 +98,24 @@
   cursor: progress;
 }
 
-.button:disabled:not(.loading) {
+/* `aria-disabled` looks the same: unavailable, yet it keeps the focus it may have. */
+.button:is(:disabled, [aria-disabled='true']):not(.loading) {
   cursor: not-allowed;
 }
 
-.primary:disabled:not(.loading),
-.danger:disabled:not(.loading) {
+.primary:is(:disabled, [aria-disabled='true']):not(.loading),
+.danger:is(:disabled, [aria-disabled='true']):not(.loading) {
   background: var(--color-border);
   color: var(--color-muted);
 }
 
-.secondary:disabled:not(.loading) {
+.secondary:is(:disabled, [aria-disabled='true']):not(.loading) {
   background: var(--color-surface-subtle);
   border-color: var(--color-border);
   color: var(--color-muted);
 }
 
-.ghost:disabled:not(.loading) {
+.ghost:is(:disabled, [aria-disabled='true']):not(.loading) {
   background: transparent;
   color: var(--color-disabled);
 }

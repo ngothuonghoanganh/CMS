@@ -13,7 +13,7 @@ import {
   type Site,
 } from '@plp/contracts';
 import { useToast } from '@plp/ui';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
@@ -34,7 +34,8 @@ import styles from './EditorApp.module.css';
 import { focusTarget } from './focus-target';
 import { LIST_LIMIT, loadAllPages } from './load-editor-data';
 import { PropertiesPanel } from './PropertiesPanel';
-import { useLatestServerDraft } from './server-draft';
+import { refreshPageSummary, useLatestServerDraft } from './server-draft';
+import { markSiteScreensStale } from './stale-screens';
 import { createEditorStore, type EditorStore } from './store';
 import { StructurePanel } from './StructurePanel';
 import { TopBar } from './TopBar';
@@ -91,6 +92,7 @@ interface ShellProps {
 
 function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const siteId = useEditor((state) => state.site.id);
   const pageId = useEditor((state) => state.page.id);
@@ -159,10 +161,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
    */
   async function refreshSummary() {
     try {
-      const detail = await api(endpoints.getPage, [pageId]);
-      if (detail.draft.revision === store.getState().baseRevision) {
-        store.getState().setServerState({ page: detail.page });
-      }
+      await refreshPageSummary(store);
     } catch (error) {
       console.error('Refreshing the page summary after a site change failed', error);
     }
@@ -251,6 +250,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
         canEdit={role === 'owner'}
         onSiteUpdated={(updated) => {
           store.getState().setSite(updated);
+          markSiteScreensStale(queryClient, updated.id);
           void refreshSummary();
         }}
       />

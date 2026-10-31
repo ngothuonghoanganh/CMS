@@ -8,6 +8,7 @@ import type { DashboardFilters } from './filters';
 export const siteQueryKeys = {
   site: (siteId: string) => ['sites', siteId] as const,
   pages: (siteId: string) => ['sites', siteId, 'pages'] as const,
+  pageLists: (siteId: string) => ['sites', siteId, 'pages', 'list'] as const,
   pageList: (siteId: string, filters: DashboardFilters) =>
     ['sites', siteId, 'pages', 'list', filters.status ?? 'all', filters.q] as const,
   recentActivity: (siteId: string) => ['sites', siteId, 'activity', 'recent'] as const,

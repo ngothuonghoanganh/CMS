@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPlausiblePreviewToken, sameSiteLocation, slugFromSegments } from './routing';
+import { isPlausiblePreviewToken, queryOf, sameSiteLocation, slugFromSegments } from './routing';
 
 describe('slugFromSegments', () => {
   it('maps "/" to the home page slug', () => {
@@ -37,6 +37,18 @@ describe('sameSiteLocation', () => {
     expect(() => sameSiteLocation('//evil.example')).toThrow();
     expect(() => sameSiteLocation('/\\evil.example')).toThrow();
     expect(() => sameSiteLocation('uu-dai')).toThrow();
+  });
+});
+
+describe('queryOf', () => {
+  it('writes the query back, repeated names included, and nothing when there is none', () => {
+    expect(queryOf({})).toBe('');
+    expect(queryOf({ utm_source: 'facebook', utm_medium: 'cpc', gclid: undefined })).toBe(
+      '?utm_source=facebook&utm_medium=cpc',
+    );
+    expect(queryOf({ tag: ['a', 'b'], q: 'chăm sóc & niềng' })).toBe(
+      '?tag=a&tag=b&q=ch%C4%83m+s%C3%B3c+%26+ni%E1%BB%81ng',
+    );
   });
 });
 

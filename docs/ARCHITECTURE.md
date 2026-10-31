@@ -201,6 +201,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Styling dùng CSS Modules + CSS custom properties. Không Tailwind, không Ant Design, không GrapesJS hay builder tự do nào.
   - Radix chỉ dùng trong admin cho a11y của dialog, menu, popover, tabs, switch.
   - Production có thể dùng bất kỳ storage tương thích S3 nào.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - `docker compose` chỉ mở cổng trên `127.0.0.1`. MongoDB chạy không xác thực, còn Mailpit giữ thư thông báo lead và link xác nhận, nên không dịch vụ nào được nghe thấy từ mạng. `localhost` vẫn dùng được như cũ.
+  - `multer` được ép lên 2.5.0 (`overrides` của pnpm), để vá lỗi DoS GHSA-q7qp-rjg7-q26m. `@nestjs/platform-express` 12.2.0 vẫn khai báo 2.4.0. Bỏ override khi Nest khai báo bản đã vá.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -245,6 +248,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - Giới hạn này đúng với mọi cách deploy và giữ được qua nhiều instance API.
       - Người khác biết email có thể khóa đăng nhập của tài khoản đó tối đa một cửa sổ. Đây là đánh đổi có chủ đích để chặn dò mật khẩu.
 - **Amended 2026-10-25 (MVP B):** quyền với lead, cài đặt dữ liệu cá nhân và yêu cầu về dữ liệu nằm ở ADR-017. Editor xem và xử lý lead; chỉ Owner sửa cài đặt, xuất và xóa dữ liệu.
+- **Amended 2026-10-26 (test toàn dự án):** session hết hiệu lực đúng lúc `expiresAt`. Guard so với thời điểm của từng request, không đợi TTL monitor của MongoDB (chạy khoảng mỗi phút) xóa bản ghi. Integration test giữ điều này.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -296,6 +300,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - `publishedSlug` là projection của pointer, chỉ ghi trong `movePointer`. Ngoài ra không lưu bản sao trạng thái nào.
   - Không có điểm lưu bản nháp.
+- **Amended 2026-10-26 (test toàn dự án):** "Sao chép vào bản nháp" (lịch sử) đọc bản nháp ngay khi hộp thoại mở.
+  - Hộp thoại báo đúng số thay đổi sẽ mất, và gửi chính revision đó làm `baseRevision`.
+  - Bản nháp được lưu ở nơi khác sau lúc đó sẽ làm server trả 409 `revision_conflict`. Hộp thoại đọc lại và cho xác nhận lần nữa, không bao giờ ghi đè mà người dùng không biết.
+  - Số thay đổi sẽ mất nằm trong một vùng `role="status"`, nên trình đọc màn hình đọc nó khi có kết quả. Mỗi lần mở hộp thoại bắt đầu lại từ "Đang kiểm tra bản nháp hiện tại…".
 
 ### ADR-006 — Kiểm tra, publish, rollback, gỡ trang
 
@@ -379,6 +387,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Tên type là `lead_form`, theo quy ước snake_case của `sectionTypes`.
   - Section có cờ `capturesLeads`; `RenderContext` có thêm `leadCapture` (bắt buộc) và `leadSubmission` (chỉ trang live).
   - Mỗi color scheme có thêm màu `danger` cho lỗi của form; `themes.spec` kiểm AA trên nền và surface.
+- **Amended 2026-10-26 (test toàn dự án):** chữ gợi ý của ô trống trên canvas (tên field) dùng màu `muted`, không làm mờ, nên đạt AA như mọi màu chữ khác (`themes.spec`).
+  - Trong nút và trên ảnh của Hero, chữ gợi ý giữ màu của chữ thật ở đó, vì `muted` không đạt AA trên nền đó.
+  - Chữ gợi ý in nghiêng, để ô trống không bị nhầm với nội dung đã nhập.
+  - `styles.spec.ts` kiểm các quy tắc CSS này.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -400,6 +412,37 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Back/Forward của trình duyệt** là điều hướng phía client: không có `beforeunload`. Một listener `popstate` được gắn khi module providers gốc nạp, trước khi App Router gắn listener của nó, nên chạy trước. Khi còn thay đổi chưa lưu, editor chặn sự kiện, đặt lại history entry của editor (giữ state của router) và mở hộp thoại rời trang sẵn có.
   - Editor unmount thì lưu ngay thay đổi đang chờ, trừ khi người dùng chọn "Rời trang, bỏ thay đổi".
   - Back/Forward dựng lại màn từ payload router đã cache, có thể cũ hơn server. Editor và màn SEO đọc lại trang một lần khi mount và thay draft khi người dùng chưa sửa gì; đã sửa thì để 409 của lần lưu sau báo xung đột.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Lần đọc lại khi mount chờ các lần lưu đang chạy:** editor và màn SEO đọc lại trang sau khi mọi lần lưu của cùng trang đang chạy trong tab kết thúc, dù thành công hay lỗi.
+    - Màn vừa rời (ví dụ Back từ "SEO & chia sẻ") lưu thay đổi đang chờ lúc unmount.
+    - Trước đây lần đọc có thể đi trước lần lưu đó và giữ revision cũ, nên lần lưu sau báo xung đột giả.
+  - **Canvas hiện đúng chữ của bản nháp sau mỗi lần commit,** kể cả khi giá trị trong store không đổi:
+    - chữ gõ quá giới hạn của field bị cắt;
+    - khoảng trắng được chuẩn hóa;
+    - field bị xóa hết hiện lại chữ gợi ý (Chromium để lại một `<br>`).
+    - Trừ khi field vẫn giữ focus (cửa sổ mất focus): chữ đang gõ ở lại tới lần blur thật.
+  - **Dữ liệu server trong cache (TanStack Query):**
+    - TanStack bỏ qua `initialData` khi key đã có dữ liệu. Vì vậy màn được server render lại (link ở sidebar, mũi tên quay lại của editor) ghi dữ liệu của lần render đó vào cache khi cache cũ hơn (`adoptServerRender`).
+    - Quy tắc này áp dụng cho:
+      - danh sách trang và hoạt động gần đây (màn 01);
+      - trang và lịch sử phiên bản;
+      - danh sách lead và lead đang mở;
+      - danh sách yêu cầu dữ liệu;
+      - số đếm lead và báo cáo "Hiệu quả" (đã có từ trước).
+    - Danh sách được thay bắt đầu lại từ trang đầu.
+    - Quy tắc so `dataUpdatedAt` của cache (đồng hồ trình duyệt) với `loadedAt` của server, nên đồng hồ trình duyệt lệch nhiều thì có thể chọn sai.
+    - Mỗi lần lưu bản nháp thành công, và "Quay về bản live", đánh dấu danh sách trang và các màn của trang đó là cũ. Đổi giao diện site trong editor đánh dấu danh sách trang và màn của mọi trang.
+      - Màn đang hiện được đọc lại ngay; màn khác được đọc lại khi hiện ra, kể cả khi nút Back của trình duyệt dựng lại một bản render cũ hơn cache.
+      - Editor và màn SEO không hiện các màn đó, nên lưu ở đó không đọc thêm gì.
+  - **Màn SEO lưu xong rồi mới cho rời đi,** như các link ở header của nó:
+    - Mọi link trên trang (kể cả sidebar, nằm ngoài màn) và nút Back/Forward của trình duyệt đều chờ lần lưu.
+    - Lưu lỗi thì ở lại, thay đổi vẫn còn, kèm thông báo có nút "Rời trang, bỏ thay đổi", vì có lần lưu không bao giờ thành công (đã đăng xuất ở tab khác, bị hạ quyền). Xung đột revision thì mở hộp thoại tải lại, không báo lỗi.
+    - Mỗi màn chỉ giữ một lần rời trang đang chờ: bấm thêm link, Back hay Forward trong lúc lưu chỉ đổi đích, nên người dùng rời đi đúng một lần, tới nơi được chọn sau cùng. Màn bị unmount trước khi lưu xong thì không theo lần rời trang cũ nữa.
+    - Màn chỉ chặn hành vi mặc định của link, không chặn sự kiện lan tiếp: handler của chính link vẫn chạy (drawer điều hướng trên điện thoại tự đóng), còn `Link` của Next thấy `defaultPrevented` nên không tự điều hướng.
+    - Click có phím bổ trợ, link mở tab mới, link tải xuống, link sang origin khác và link `#` trong cùng trang đi như bình thường, không chờ lưu.
+    - Lý do: lần lưu gửi lúc unmount tới sau khi màn kế tiếp đã đọc trang, nên màn đó hiện trạng thái cũ; và nếu lần lưu đó lỗi thì thay đổi mất mà không ai biết.
+    - Sidebar có bốn chỗ điều hướng bằng code, không qua link: đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất". Ba chỗ đầu vẫn lưu thay đổi đang chờ lúc unmount như trước. Với "Đăng xuất", session đã bị xóa trước khi màn unmount, nên lần lưu đó trả 401 và thay đổi đang chờ bị mất.
+    - Khi đọc lại trang (sau xung đột lúc gỡ xuất bản, hoặc sau khi đổi giao diện site trong editor) mà thấy bản nháp đã đổi trên server và màn không còn gì để lưu, store chuyển sang trạng thái xung đột để hộp thoại tải lại mở ngay, thay vì chờ một lần lưu có thể không bao giờ tới.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
@@ -461,6 +504,16 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Slug bị cấm là mọi đường dẫn mà renderer hoặc Next tự trả lời: `_preview`, `_next`, `api`, `healthz`, `index` (Next coi là `/`), `404`, `500`, `sitemap.xml`, `robots.txt`, `favicon.ico`. Một trang publish ở các slug này sẽ không bao giờ hiện ở URL của nó.
   - Unit test của renderer đối chiếu danh sách này với các route cấp một của app, nên route mới không thể che một slug publish được.
 - **Amended 2026-10-25 (MVP B):** thêm `_lead` và `_e` vào danh sách slug bị cấm (ADR-016, ADR-019).
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Redirect 308 của slug cũ giữ query của khách** (utm, `gclid`, `fbclid`), ở proxy và ở trang dự phòng. Quảng cáo và link đã chia sẻ trước khi đổi slug vẫn giữ nguồn chiến dịch.
+  - **`lastmod` trong sitemap** là lúc nội dung đó bắt đầu live:
+    - Với publish: lúc tạo release.
+    - Với rollback hoặc undo đưa trang về một release cũ hơn: lúc con trỏ được chuyển.
+    - Đọc sự kiện con trỏ mới nhất của mọi trang live trong một aggregation, nên `lastmod` không bao giờ lùi lại.
+  - **"Xem site live"** mở trang chủ khi trang có slug rỗng đang live, nếu không thì mở trang được publish gần nhất. Nút ẩn khi site chưa có trang nào live. API trả địa chỉ này trong `liveSiteUrl` của danh sách trang.
+  - **Tra trang live theo slug** (renderer phân giải trang, mỗi lượt xem được chuyển tiếp) truy vấn kèm `$type: 'string'`.
+    - MongoDB chỉ dùng index partial khi truy vấn kéo theo điều kiện của index đó. Nhờ vậy `pages_published_slug_unique` phục vụ tra cứu bằng một lần dò.
+    - Trước đây tra cứu đọc mọi trang của site.
 
 ### ADR-012 — Asset
 
@@ -472,6 +525,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Không có API xóa asset trong MVP A.
 - **Reason:** Validate tập trung một chỗ.
 - **Consequences:** Băng thông upload đi qua API; SVG bị loại để tránh script.
+- **Amended 2026-10-26 (test toàn dự án):** ảnh tải lên được mã hóa lại trước khi lưu.
+  - Bỏ hết metadata: EXIF, XMP, IPTC, tức vị trí GPS, máy chụp, tác giả, thời gian chụp. Ai cũng tải được ảnh public, nên ảnh không được tiết lộ chụp ở đâu, khi nào, bởi ai.
+  - Ảnh được xoay theo hướng EXIF, giữ ICC profile và mọi khung của ảnh động.
+  - JPEG chất lượng 90 (mozjpeg), WebP 90, AVIF 70. PNG không mất dữ liệu; màu của GIF có thể lệch rất nhẹ khi bảng màu được tính lại.
+  - Ảnh có cạnh dài hơn 2560 px được thu nhỏ, giữ tỉ lệ (như ngưỡng "big image" của WordPress). Đủ cho ảnh tràn màn hình lớn, và trang nhẹ hơn vì renderer phục vụ đúng file đã lưu.
+  - `bytes`, `width`, `height` là của ảnh đã lưu.
+  - JPEG thiếu phần cuối, mà trình duyệt vẫn hiển thị được, vẫn được nhận.
+  - **Giới hạn pixel:** tối đa 25 megapixel, tính cả mọi khung của ảnh động.
+    - Số pixel đọc từ header. Ảnh vượt giới hạn trả 413 trước khi được giải mã.
+    - Lý do: giải mã tốn bộ nhớ theo số pixel, không theo dung lượng file. Một file AVIF 1 KB có thể mô tả 64 triệu pixel và làm API dùng hơn 1,5 GB.
+  - **Mỗi tiến trình API mã hóa lại một ảnh một lúc;** tối đa 8 ảnh chờ, ảnh tiếp theo nhận 429.
+    - AVIF 25 megapixel vẫn tốn khoảng 0,5 GB lúc giải mã, nên production cần ít nhất 1 GB RAM cho API.
+    - Một ảnh JPEG 12 MP mất dưới 1 giây; AVIF có thể mất vài giây.
 
 ### ADR-013 — Boundary, lỗi, logging, quality gate
 
@@ -487,6 +553,21 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (MVP B):**
   - Thêm module `privacy`, `leads`, `notifications`, `analytics`.
   - Log redaction phủ cả body của `POST /public/sites/:subdomain/leads` và route `/_lead` của renderer; test kiểm tra không có trường nào của lead xuất hiện trong log.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Log của request:** test dùng chính cấu hình logger của app và ghi log vào bộ nhớ.
+    - Test kiểm các giá trị sau đều bị che: cookie và `set-cookie`, `authorization`, `x-plp-client-ip`, `x-plp-client-ua`, chữ ký renderer, token preview trong đường dẫn, và `q` trong URL, query và `Referer`.
+    - Không giá trị nào của lead xuất hiện trong log.
+  - **TTL index:** một integration test liệt kê đúng tập collection có TTL index trên `expiresAt`: `sessions`, `login_attempts`, `leads`, `lead_limits`, `analytics_salts`, `analytics_seen`, `analytics_daily`.
+    - Thêm collection tự xóa thì phải sửa test này cùng lúc.
+    - TTL index lỡ thêm vào collection không được xóa (release, activity…) cũng bị phát hiện.
+  - **Governance:** dependency-cruiser phân giải các package của workspace về source qua `tsconfig.governance.json`. Nhờ vậy import qua tên `@plp/*` không còn biến mất khỏi đồ thị.
+    - `scripts/check-governance.mjs` kiểm:
+      - cấu hình trỏ đúng file đó;
+      - mọi export vào `dist/` có path tới đúng file nguồn;
+      - không có file `.tsx` trong `packages/sections/src/schema`.
+    - Quy tắc "API không có React" và "schema không có React" xét cả chuỗi import, cả import chỉ lấy type và cả file `.tsx`.
+    - `@plp/contracts` không import package nào khác của workspace; chỉ admin và renderer import `@plp/sections/react`.
+  - **Lint:** luật React hooks áp dụng cả cho code React dùng chung (`packages/sections/src/react`, `packages/ui`).
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -603,6 +684,16 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Số có mã quốc gia (`+`, `00` hoặc `84`) được nhận cho mọi nước. Sau +84 phải là 9–10 chữ số; số 0 thường bị giữ lại ("+84 0901…") thì được bỏ.
     - Thay cho quy tắc "10 chữ số bắt đầu bằng 0" của bản B2.
   - **Nút của thanh điều hướng** trên trang tạo theo mục tiêu vẫn gọi số điện thoại trong brief. Người dùng đổi đích của nút trong editor ("Khi bấm, đưa tới"), giống mọi nút khác.
+- **Amended 2026-10-26 (test toàn dự án):**
+  - **Form không JavaScript:** trang báo lỗi giữ `utm_source`, `utm_medium` và `utm_campaign` của trang trên link "Quay lại form", nên lead gửi lại vẫn đúng nguồn. Ngoài ba tham số này, link không giữ gì khác của địa chỉ.
+  - **Form có JavaScript:** nút gửi không bị `disabled` trong lúc gửi, chỉ có `aria-disabled` và `aria-busy`, ghi "Đang gửi…" và mờ đi. Gửi bị từ chối (429, 404, mất mạng) thì focus vẫn ở nút, cạnh thông báo lỗi.
+  - **Thời gian điền** (spam "gửi quá nhanh") tính từ lúc trang bắt đầu tải: `performance.now()` của script lúc gửi. Trước đây tính từ lúc script của form mount.
+    - Form do server vẽ điền được trong lúc script còn tải, nhiều giây trên mạng chậm. Đo từ lúc mount vì vậy làm người thật bị coi là spam. Cách đo mới không bao giờ đo một người nhanh hơn thực tế.
+    - Đánh đổi: bot điều khiển trình duyệt, đợi trang tải xong rồi điền ngay, có thể qua bước này. Honeypot vẫn bắt bot điền mọi ô; rate limit giới hạn số lead (5 mỗi địa chỉ trong 10 phút, 300 mỗi site mỗi giờ).
+    - Giá trị gửi tối đa là 24 giờ; tab để mở lâu hơn vẫn gửi được.
+  - **Bước 4 chạy trước bước 3:** gửi lại cùng `submissionId` của một lead đã nhận trả 200, kể cả khi khách đã vượt giới hạn, và không tính vào giới hạn.
+    - Lệnh kiểm truy vấn kèm `$type: 'string'`, để index unique-partial phục vụ. Nhờ vậy lệnh kiểm chỉ là một lần dò index, dù site có bao nhiêu lead.
+  - **User agent dài:** renderer cắt user agent ở 512 ký tự, rồi ký đúng giá trị header gửi đi. Headers bỏ khoảng trắng ở hai đầu, nên phần cắt kết thúc bằng khoảng trắng tới API mất các khoảng trắng đó. Trước đây chữ ký không khớp và lead bị từ chối.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -676,6 +767,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Quyền:** chỉ Owner xem và xử lý yêu cầu. Editor không thấy phần này; màn 12 ghi rõ.
   - **Danh sách:** yêu cầu ghi nhận gần nhất ở trên, 20 mục mỗi trang. Index `data_requests_site (siteId, createdAt, _id)`.
   - **Chưa có thời gian lưu cho yêu cầu:** yêu cầu là bằng chứng đã xử lý nên không tự xóa. Yêu cầu xóa chỉ giữ thông tin đã che. Thời gian giữ yêu cầu cần người phụ trách pháp lý xác nhận trước khi ra mắt.
+- **Amended 2026-10-26 (test toàn dự án):** thời gian lưu luôn theo cài đặt cuối cùng, kể cả khi có thay đổi đúng lúc.
+  - Lead tới trong lúc Owner đổi thời gian lưu: sau khi lưu lead, phần nhận lead đọc lại thời gian lưu hiện tại và sửa `expiresAt` nếu khác. Cài đặt được commit trước khi tính lại mọi lead, nên hoặc lần tính lại đó đã gồm lead này, hoặc lần đọc lại thấy giá trị mới.
+  - Hai lần lưu cùng lúc: sau khi tính lại, lần lưu đọc lại giá trị đã lưu và tính lại lần nữa nếu khác. Lead theo giá trị được lưu sau cùng.
 
 ### ADR-018 — Hộp thư lead và email thông báo
 
@@ -758,6 +852,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Activity** `lead.recipients_changed` ghi số địa chỉ còn lại sau mỗi lần thêm hoặc bỏ, không ghi email.
   - **Index ngoại lệ:** `leads_notification_sweep (notification.status, notification.updatedAt)` không bắt đầu bằng `siteId`, vì lượt quét lúc khởi động đi qua mọi site.
   - **Thử nghiệm:** integration test thay SMTP bằng bộ ghi thư và rút ngắn thời gian chờ giữa các lần thử. Một test gửi thật qua Mailpit. E2E đọc thư qua HTTP API của Mailpit.
+- **Amended 2026-10-26 (test toàn dự án):** **giành lead lỗi**, tức database không trả lời lúc chuyển `pending` → `sending`.
+  - Không tính lần thử; lead vẫn `pending`.
+  - Thử giành lại một lần sau lần chờ đầu (1 phút). Lỗi nữa thì lượt quét lúc khởi động xử lý.
+  - Trước đây lead kẹt ở `pending` tới lần khởi động sau, và không có nút "Gửi lại".
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 

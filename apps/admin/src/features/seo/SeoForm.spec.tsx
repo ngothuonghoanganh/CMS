@@ -1,10 +1,10 @@
 import { endpoints, type PageSummary } from '@plp/contracts';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { EditorStoreProvider, type EditorStore } from '../editor';
-import { makeStore, PAGE_ID, pageDetail, SITE_ID } from '../editor/test-fixtures';
+import { asset, makeStore, PAGE_ID, pageDetail, SITE_ID } from '../editor/test-fixtures';
 import { renderWithProviders } from '../shell/test-utils';
 import { type SeoFocus, SeoForm } from './SeoForm';
 
@@ -177,6 +177,40 @@ describe('SeoForm fields', () => {
     expect(screen.getByText('Site chưa có ảnh chia sẻ mặc định')).toBeInTheDocument();
     expect(screen.getByText('Khuyên dùng 1200 × 630 px')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chọn ảnh riêng cho trang' })).toBeInTheDocument();
+  });
+
+  it('keeps the focus through choosing a page image and going back to the default', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValue({ items: [asset], nextCursor: null });
+    renderForm();
+    await user.click(screen.getByRole('button', { name: 'Chọn ảnh riêng cho trang' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ảnh khi chia sẻ' });
+    await user.click(
+      await within(dialog).findByRole('button', { name: /Bác sĩ tư vấn cho khách hàng/ }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Chọn ảnh' }));
+    // The button that opened the picker made way for "Thay ảnh", which takes the focus.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Thay ảnh' })).toHaveFocus();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Gỡ ảnh' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Chọn ảnh riêng cho trang' })).toHaveFocus();
+    });
+  });
+
+  it('moves the focus to the save status when "Thử lại" is pressed, as the button goes away', async () => {
+    const user = userEvent.setup();
+    const store = renderForm();
+    act(() => {
+      store.getState().markSaveFailed({ kind: 'retryable', message: 'Mất kết nối' });
+    });
+    await user.click(screen.getByRole('button', { name: 'Thử lại' }));
+    const status = screen
+      .getAllByRole('status')
+      .find((element) => element.textContent.includes('Thử lại'));
+    expect(status).toHaveFocus();
   });
 
   it('focuses the field a publish check points at', () => {

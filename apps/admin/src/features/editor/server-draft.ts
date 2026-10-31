@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { loadAssetsByIds } from '../assets/load-assets-by-ids';
 import { referencedAssetIds } from './load-editor-data';
 import type { EditorState, EditorStore } from './store';
+import { runningSavesSettled } from './use-draft-saver';
 
 /** The assets a draft from the server references that the store does not know yet. */
 export async function loadMissingAssets(
@@ -48,6 +49,8 @@ function isAbort(error: unknown): boolean {
  * - the same draft still refreshes the page summary and checks (a rollback or publish elsewhere).
  * Once the user edits, the store is left alone: if it was outdated, the next save gets a 409 and
  * the conflict dialog offers the reload, so an answer racing an autosave never discards an edit.
+ * The read waits for saves of the page still running in this tab: the screen left just now saves
+ * its pending changes on the way out, and the answer must include them.
  */
 export function useLatestServerDraft(store: EditorStore): void {
   useEffect(() => {
@@ -55,6 +58,7 @@ export function useLatestServerDraft(store: EditorStore): void {
     const loaded = store.getState();
 
     async function check() {
+      await runningSavesSettled(loaded.page.id);
       const detail = await api(endpoints.getPage, [loaded.page.id], {
         signal: controller.signal,
       });
@@ -90,4 +94,21 @@ export function useLatestServerDraft(store: EditorStore): void {
       controller.abort();
     };
   }, [store]);
+}
+
+/**
+ * Reads the page again and takes its summary (status, live release, site reminders). When the
+ * draft changed on the server meanwhile (a teammate saved, then published), the summary belongs
+ * to that newer draft: with nothing left to save here the store is marked conflicting, so the
+ * reload dialog opens now instead of at a save that may never come; otherwise the running or
+ * pending save gets the 409 itself.
+ */
+export async function refreshPageSummary(store: EditorStore): Promise<void> {
+  const detail = await api(endpoints.getPage, [store.getState().page.id]);
+  const state = store.getState();
+  if (detail.draft.revision === state.baseRevision) {
+    state.setServerState({ page: detail.page });
+  } else if (state.saveState === 'saved') {
+    state.markConflict();
+  }
 }

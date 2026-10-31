@@ -34,6 +34,11 @@ export interface DialogProps {
   flush?: boolean | undefined;
   /** Element to focus when the dialog opens. Defaults to the first focusable element. */
   initialFocusRef?: RefObject<HTMLElement | null> | undefined;
+  /**
+   * Element to focus when the dialog closes and the element that opened it no longer exists, e.g.
+   * what was chosen in it replaced the opener. Focus otherwise returns to the opener.
+   */
+  fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
   /** Accessible name of the close button. Defaults to "Đóng". */
   closeLabel?: string | undefined;
   className?: string | undefined;
@@ -54,10 +59,11 @@ export function Dialog({
   size = 'md',
   flush = false,
   initialFocusRef,
+  fallbackFocusRef,
   closeLabel = 'Đóng',
   className,
 }: DialogProps) {
-  const focus = useReturnFocus();
+  const focus = useReturnFocus(fallbackFocusRef);
   const hasDescription = hasContent(description);
   const hasFooter = hasContent(footer) || hasContent(footerStart);
   return (

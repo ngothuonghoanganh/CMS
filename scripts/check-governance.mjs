@@ -1,5 +1,6 @@
 // Repository rules that dependency-cruiser cannot see. Run with `pnpm governance`.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
@@ -11,20 +12,136 @@ for (const file of ['AGENTS.md', 'CLAUDE.md', 'README.md', 'docs/ARCHITECTURE.md
   }
 }
 
-const bannedDependencies = [/^grapesjs/, /^antd$/, /^@ant-design\//];
-const workspacePackages = [
-  'package.json',
-  'apps/admin/package.json',
-  'apps/api/package.json',
-  'apps/renderer/package.json',
-  'packages/config/package.json',
-  'packages/contracts/package.json',
-  'packages/ui/package.json',
-  'packages/sections/package.json',
-  'tests/e2e/package.json',
-];
+// JSX compiles to an import of react/jsx-runtime that no source line shows, so dependency-cruiser
+// cannot see it: the framework-free schema entry (ADR-007) has no .tsx file at all.
+const schemaDir = 'packages/sections/src/schema';
+for (const file of readdirSync(join(root, schemaDir), { recursive: true })) {
+  if (file.endsWith('.tsx')) {
+    problems.push(`${schemaDir}/${file}: JSX belongs in packages/sections/src/react (ADR-007)`);
+  }
+}
 
-for (const manifestPath of workspacePackages) {
+// dependency-cruiser resolves the workspace packages through these paths: an export into dist/
+// without one, or with one to another file, would vanish from the graph, and no boundary rule
+// would see its imports. Without the option that points at the file, all of them would.
+const GOVERNANCE_TSCONFIG = 'tsconfig.governance.json';
+const cruiseOptions = createRequire(import.meta.url)('../.dependency-cruiser.cjs').options;
+if (cruiseOptions?.tsConfig?.fileName !== GOVERNANCE_TSCONFIG) {
+  problems.push(`.dependency-cruiser.cjs: options.tsConfig must name ${GOVERNANCE_TSCONFIG}`);
+}
+const governancePaths = JSON.parse(readFileSync(join(root, GOVERNANCE_TSCONFIG), 'utf8'))
+  .compilerOptions.paths;
+
+/** `exports` as a map of subpaths: a string or a set of conditions is the package's "." export. */
+function exportMap(exports) {
+  if (exports === undefined || exports === null) {
+    return {};
+  }
+  if (typeof exports === 'string' || !Object.keys(exports).some((key) => key.startsWith('.'))) {
+    return { '.': exports };
+  }
+  return exports;
+}
+
+/** The file an export loads at run time, through nested conditions. */
+function runtimeFile(target) {
+  if (typeof target === 'string') {
+    return target;
+  }
+  for (const condition of ['import', 'default', 'require', 'node']) {
+    if (target !== null && typeof target === 'object' && condition in target) {
+      return runtimeFile(target[condition]);
+    }
+  }
+  return undefined;
+}
+
+/** The source a dist/ file is built from, as a path from the repository root. */
+function sourceOf(packageDir, distFile) {
+  const stem = `./${packageDir}/src/${distFile.slice('./dist/'.length)}`;
+  if (!stem.endsWith('.js')) {
+    return stem;
+  }
+  const typescript = stem.replace(/\.js$/, '.ts');
+  return existsSync(join(root, `${typescript}x`)) ? `${typescript}x` : typescript;
+}
+
+/** A YAML scalar without its quotes and its trailing comment. */
+function scalar(text) {
+  return text
+    .replace(/\s+#.*$/, '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2');
+}
+
+/**
+ * The `packages:` globs of pnpm-workspace.yaml, as a block or a flow sequence, with comments and
+ * blank lines anywhere. An empty result is reported rather than read as "no packages": every
+ * manifest check below would pass without looking at anything.
+ */
+function workspaceGlobs() {
+  const lines = readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8').split(/\r?\n/);
+  const start = lines.findIndex((line) => /^packages:/.test(line));
+  if (start === -1) {
+    return [];
+  }
+  const inline = scalar(lines[start].slice('packages:'.length));
+  if (inline.startsWith('[')) {
+    return inline
+      .replace(/^\[|\]$/g, '')
+      .split(',')
+      .map(scalar)
+      .filter(Boolean);
+  }
+  const globs = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*(#.*)?$/.test(line)) {
+      continue;
+    }
+    // The next top-level key ends the list.
+    if (!/^\s/.test(line) && !line.startsWith('-')) {
+      break;
+    }
+    const item = /^\s*-\s+(.*)$/.exec(line);
+    if (item) {
+      globs.push(scalar(item[1]));
+    }
+  }
+  return globs.filter(Boolean);
+}
+
+/** Every package.json of the workspace, from the globs in pnpm-workspace.yaml. */
+function workspaceManifests() {
+  const globs = workspaceGlobs();
+  if (globs.length === 0) {
+    problems.push('pnpm-workspace.yaml: no workspace packages found under `packages:`');
+  }
+  const dirs = globs.flatMap((glob) =>
+    glob.endsWith('/*')
+      ? readdirSync(join(root, glob.slice(0, -2)), { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => `${glob.slice(0, -2)}/${entry.name}`)
+      : [glob],
+  );
+  // Every app and package must be in the workspace, or its manifest goes unchecked.
+  for (const parent of ['apps', 'packages']) {
+    for (const entry of readdirSync(join(root, parent), { withFileTypes: true })) {
+      const dir = `${parent}/${entry.name}`;
+      if (
+        entry.isDirectory() &&
+        existsSync(join(root, dir, 'package.json')) &&
+        !dirs.includes(dir)
+      ) {
+        problems.push(`pnpm-workspace.yaml: ${dir} is not a workspace package`);
+      }
+    }
+  }
+  return ['package.json', ...dirs.map((dir) => `${dir}/package.json`)];
+}
+
+const bannedDependencies = [/^grapesjs/, /^antd$/, /^@ant-design\//];
+
+for (const manifestPath of workspaceManifests()) {
   const fullPath = join(root, manifestPath);
   if (!existsSync(fullPath)) {
     continue;
@@ -37,6 +154,19 @@ for (const manifestPath of workspacePackages) {
     }
     if (name === '@plp/ui' && !manifestPath.startsWith('apps/admin/')) {
       problems.push(`${manifestPath}: @plp/ui is admin-only and may not be a dependency here`);
+    }
+  }
+  const packageDir = manifestPath.replace(/\/?package\.json$/, '');
+  for (const [subpath, target] of Object.entries(exportMap(manifest.exports))) {
+    const file = runtimeFile(target);
+    if (file === undefined || !file.startsWith('./dist/')) {
+      continue;
+    }
+    const specifier = subpath === '.' ? manifest.name : `${manifest.name}${subpath.slice(1)}`;
+    const expected = sourceOf(packageDir, file);
+    const [source] = governancePaths[specifier] ?? [];
+    if (source !== expected || !existsSync(join(root, expected))) {
+      problems.push(`${GOVERNANCE_TSCONFIG}: "${specifier}" needs the path ${expected}`);
     }
   }
 }

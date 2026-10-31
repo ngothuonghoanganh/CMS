@@ -6,6 +6,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { problemMessage } from '../shell/problem-message';
+import { useFocusNewItems } from '../shell/use-focus-new-items';
 import styles from './PrivacyScreen.module.css';
 
 const VERSIONS_PER_PAGE = 20;
@@ -33,6 +34,11 @@ export function ConsentHistoryDialog({ siteId, open, onOpenChange }: ConsentHist
     enabled: open,
   });
   const items = versions.data?.pages.flatMap((page) => page.items) ?? [];
+  const { listRef: newItemsRef, expectMore } = useFocusNewItems<HTMLOListElement>(
+    items.length,
+    'li',
+    'h3',
+  );
 
   return (
     <Dialog
@@ -51,10 +57,11 @@ export function ConsentHistoryDialog({ siteId, open, onOpenChange }: ConsentHist
           {problemMessage(versions.error)}
         </Callout>
       ) : null}
-      <ol className={styles.history}>
+      <ol ref={newItemsRef} className={styles.history}>
         {items.map((version) => (
           <li key={version.id} className={styles.historyItem}>
-            <h3 className={styles.historyTitle}>
+            {/* Focusable from script only: "Xem thêm" hands the focus to the first older version. */}
+            <h3 tabIndex={-1} className={styles.historyTitle}>
               {`Bản ${version.version} · ${formatDateTime(version.createdAt)} · ${version.createdBy.name}`}
             </h3>
             <p className={styles.historyText}>{version.requiredText}</p>
@@ -70,7 +77,10 @@ export function ConsentHistoryDialog({ siteId, open, onOpenChange }: ConsentHist
         <Button
           variant="secondary"
           loading={versions.isFetchingNextPage}
-          onClick={() => void versions.fetchNextPage()}
+          onClick={() => {
+            expectMore();
+            void versions.fetchNextPage();
+          }}
         >
           Xem thêm
         </Button>

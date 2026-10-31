@@ -6,7 +6,7 @@ import { SitePage } from '../../components/SitePage';
 import { pageMetadata } from '../../lib/metadata';
 import { getResolved } from '../../lib/public-api';
 import { currentLiveRelease, currentSubdomain } from '../../lib/request-host';
-import { sameSiteLocation, slugFromSegments } from '../../lib/routing';
+import { queryOf, sameSiteLocation, slugFromSegments } from '../../lib/routing';
 
 /**
  * The response must wait for the release lookup: only then can it answer with a real 404 or 308
@@ -16,6 +16,7 @@ export const instant = false;
 
 interface PublicPageProps {
   params: Promise<{ slug?: string[] }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 type Resolution =
@@ -45,12 +46,12 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
   return resolution.kind === 'page' ? pageMetadata(resolution.data) : {};
 }
 
-export default async function PublicPage({ params }: PublicPageProps) {
+export default async function PublicPage({ params, searchParams }: PublicPageProps) {
   const resolution = await resolveRequest(params);
   if (resolution.kind === 'redirect') {
     // The proxy answers redirects before rendering (see `pathGate`); this is the fallback when its
-    // check failed.
-    permanentRedirect(resolution.location);
+    // check failed. The query goes along, as with the proxy.
+    permanentRedirect(`${resolution.location}${queryOf(await searchParams)}`);
   }
   if (resolution.kind === 'not_found') {
     notFound();
