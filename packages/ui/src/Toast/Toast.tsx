@@ -88,8 +88,9 @@ export interface ToastProviderProps {
 /**
  * Holds the toasts and renders their region ("Thông báo") at the bottom right, or at the top
  * right while the control in focus is under the bottom corner: a toast never hides it (WCAG
- * 2.4.11). The corner is chosen again whenever focus moves, the stack changes size (a second
- * toast), or the page scrolls or resizes, since each can bring the stack over the control.
+ * 2.4.11). The corner is chosen again whenever focus moves or leaves, the stack changes size (a
+ * second toast), or the page scrolls or resizes, since each can bring the stack over the control.
+ * With no control in focus there is nothing to keep in sight: the usual corner.
  */
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<readonly ToastRecord[]>([]);
@@ -115,12 +116,14 @@ export function ToastProvider({ children }: ToastProviderProps) {
       frame = requestAnimationFrame(() => {
         const stack = viewportRef.current;
         const focused = document.activeElement;
-        if (
-          stack === null ||
-          !(focused instanceof HTMLElement) ||
-          focused === document.body ||
-          stack.contains(focused)
-        ) {
+        // Focus inside the stack stays where it is: moving the stack would move it from under the
+        // pointer or the user's eyes.
+        if (stack === null || (focused !== null && stack.contains(focused))) {
+          return;
+        }
+        // Focus fell to the page (the control was removed, or a click on no control blurred it).
+        if (!(focused instanceof HTMLElement) || focused === document.body) {
+          setPlacement('bottom');
           return;
         }
         setPlacement(
@@ -134,6 +137,9 @@ export function ToastProvider({ children }: ToastProviderProps) {
     }
     place();
     document.addEventListener('focusin', place);
+    // Focus leaving for no control fires no focusin. Chromium fires focusout when the focused
+    // control is removed too; Firefox and Safari fire nothing, and the next move places the stack.
+    document.addEventListener('focusout', place);
     // Capture: scrolling any container, not only the page, moves the control.
     window.addEventListener('scroll', place, { capture: true, passive: true });
     window.addEventListener('resize', place);
@@ -145,6 +151,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener('focusin', place);
+      document.removeEventListener('focusout', place);
       window.removeEventListener('scroll', place, { capture: true });
       window.removeEventListener('resize', place);
       resized?.disconnect();

@@ -200,6 +200,45 @@ describe('Toast', () => {
     }
   });
 
+  it('goes back to the bottom corner once no control has focus', () => {
+    function Row({ removed }: { removed: boolean }) {
+      return removed ? null : <button type="button">Chuyển vào spam</button>;
+    }
+    const { Capture, api } = captureApi();
+    const view = (removed: boolean) => (
+      <ToastProvider>
+        <Capture />
+        <button type="button">Ghi chú</button>
+        <Row removed={removed} />
+      </ToastProvider>
+    );
+    const { rerender } = render(view(false));
+    framesAtOnce();
+    mockLayout({
+      'Chuyển vào spam': { top: 700, left: 700, width: 140, height: 36 },
+      'Ghi chú': { top: 710, left: 560, width: 100, height: 36 },
+    });
+    focus('Chuyển vào spam');
+    act(() => {
+      api().toast({ title: 'Đã chuyển vào spam' });
+    });
+    expect(placement()).toBe('top');
+
+    // The focused control is removed with its row: focus falls to the page.
+    rerender(view(true));
+    expect(document.activeElement).toBe(document.body);
+    fireEvent.scroll(window);
+    expect(placement()).toBe('bottom');
+
+    // A control under the stack takes focus, then loses it to a click on no control.
+    focus('Ghi chú');
+    expect(placement()).toBe('top');
+    act(() => {
+      screen.getByRole('button', { name: 'Ghi chú' }).blur();
+    });
+    expect(placement()).toBe('bottom');
+  });
+
   it('moves to the top corner while the focused control is under the bottom one', async () => {
     const user = userEvent.setup();
     render(
