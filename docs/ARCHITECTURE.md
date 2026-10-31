@@ -488,7 +488,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Đổi workspace tải lại cả trang** (`window.location.assign('/')`, sau khi màn đang hiện lưu xong và cookie chọn workspace đã ghi): không dữ liệu nào của các site thuộc workspace cũ (lead, "N mới") còn trong bộ nhớ hay hiện lại từ cache khi quay lại.
     - Trước đây sidebar gọi `queryClient.clear()` rồi `router.push('/')` trong khi màn cũ còn mount: các query đang mount dựng lại và tải lại dữ liệu của workspace cũ, nên màn nháy lên trước khi rời đi.
     - Đổi site vẫn là điều hướng phía client và giữ cache của workspace.
-    - **Sau khi người dùng bỏ thay đổi, trình duyệt không hỏi nữa.** "Rời trang, bỏ thay đổi" ghi vào store phiên bản bản nháp bị bỏ (`discardUnsaved`). Tới thay đổi kế tiếp, `beforeunload` (và guard của Back/Forward) không chặn, kể cả đường dẫn đang chờ kiểm tra, và lúc unmount cũng không lưu. Vì màn chỉ cho đi khi đã lưu xong hoặc người dùng đã bỏ thay đổi, không hộp thoại "Rời khỏi trang?" nào hiện sau khi cookie chọn workspace đã ghi. Trước đây hộp thoại đó vẫn hiện; người dùng bấm ở lại thì vẫn ở workspace cũ trong khi cookie đã chọn workspace mới.
+    - **Không hộp thoại "Rời khỏi trang?" nào hiện sau khi cookie chọn workspace đã ghi:** màn chỉ cho sidebar đi khi đã lưu xong hoặc khi người dùng chọn rời trang không lưu, và lúc đó `beforeunload` không hỏi (amendment 2026-11-01, rời trang không lưu). Trước đây hộp thoại đó vẫn hiện; người dùng bấm ở lại thì vẫn ở workspace cũ trong khi cookie đã chọn workspace mới.
   - **Đọc lại tóm tắt trang** (sau khi đổi giao diện site, sau xung đột lúc gỡ xuất bản):
     - lấy cả tóm tắt và checks từ cùng một lần đọc;
     - chờ các lần lưu đang chạy của trang;
@@ -499,25 +499,24 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-01 (vòng test thứ ba):** link trong cùng trang không phải là rời màn.
   - Chromium, Firefox và WebKit đều bắn `popstate` khi bấm link `#…` trong trang (skip link "Bỏ qua điều hướng" tới `#main-content`), và khi Back giữa hai mục chỉ khác fragment.
   - Guard của Back/Forward chỉ coi `popstate` là rời màn khi đường dẫn hoặc query khác với entry của màn (URL ghi lại khi màn bắt đầu có thay đổi chưa lưu). Cùng đường dẫn và query thì, dù fragment là gì, người dùng vẫn ở tài liệu này và guard để sự kiện đi qua (`isSameDocument`).
-    - Bản đầu của sửa đổi này đòi fragment phải khác với URL của entry. Skip link rồi Back về đúng URL đó (hai URL giống hệt) vì vậy vẫn bị coi là rời màn.
   - Trước đây, ở màn SEO hay editor còn thay đổi chưa lưu, skip link bị coi là Back: guard đẩy lại entry của màn, lưu rồi `history.back()`. Kết quả là thừa một entry lịch sử, và nếu lưu lỗi thì có cả toast "Rời trang, bỏ thay đổi".
   - E2E kiểm trên màn SEO còn thay đổi chưa lưu (lưu đang lỗi):
     - skip link thêm đúng một entry và đưa focus vào nội dung chính;
     - Back về URL của màn không có fragment: lịch sử không tăng, entry của skip link vẫn ở phía trước (Forward về lại `#main-content`), không hộp thoại, không toast;
     - sau "Thử lại", thay đổi được lưu.
-- **Amended 2026-11-01 (vòng test thứ ba, bỏ thay đổi khi rời trang):**
-  - **Thay đổi người dùng đã bỏ cho một lần rời trang thì không còn gì để lưu,** từ lúc chọn "Rời trang, bỏ thay đổi" (hay "Đăng xuất, bỏ thay đổi") tới thay đổi kế tiếp, hoặc tới khi lần rời trang đó không xảy ra. Trong lúc đó `ensureSaved` từ chối bằng `ChangesDiscardedError`, không trả trạng thái đã lưu cũ của store như một lần lưu thành công.
-    - Lần rời trang mới (link, sidebar, Back/Forward) đi ngay, không hỏi và không lưu: màn SEO và editor dùng chung điều kiện `leavingLoses`, như `beforeunload`. Đường dẫn đang chờ kiểm tra cũng thuộc phần đã bỏ, nên không bị kiểm tra lại. Lần rời trang đang chờ lưu, hay "Lưu rồi rời trang" của editor, mà gặp `ChangesDiscardedError` cũng đi tiếp.
-    - Xuất bản, xem trước và "Quay về bản live" gặp `ChangesDiscardedError` thì đóng lại hoặc không làm gì, không báo lỗi: không bản nháp đã lưu nào chứa các thay đổi đó. "Thử lại" không làm gì.
-    - Bản đầu của sửa đổi này bỏ qua mọi lần rời trang mới trong lúc đó. Lần rời trang đã báo `'leaving'` mà màn chưa unmount thì mọi link trông như hỏng.
-    - Trước đó nữa, link đó rời màn như thể đã lưu mà không lưu gì; nếu đăng xuất sau đó thất bại (`'stayed'`), thay đổi mất.
-  - **Store đếm các lần rời trang đã bỏ thay đổi của cùng một phiên bản bản nháp** (`discarded: { version, leaves }`; `discardUnsaved` trả phiên bản đó, `withdrawDiscard(version)`). Thay đổi tính là đã bỏ khi còn ít nhất một lần chưa rút lại. Lần rời trang không xảy ra (`'stayed'` hay lỗi) chỉ rút phần của nó, và không rút gì khi bản nháp đã đổi sau đó.
-    - Bản đầu giữ một token duy nhất: lần bỏ thứ hai thay token của lần thứ nhất. Lần thứ hai ở lại thì rút việc bỏ thay đổi trong khi lần thứ nhất vẫn đang chạy, và autosave lưu chính thay đổi người dùng đã bỏ.
-    - Trước đó nữa, `'stayed'` của một lần rời trang huỷ cả việc bỏ thay đổi của một lần khác vẫn đang chạy.
-  - **Kết quả của "Đăng xuất"** (`useLogout`): chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".
-    - Mở trang đăng nhập chạy sau khi request thành công, ngoài nhánh lỗi của mutation. Lỗi lúc đó được báo (`reportUnexpected`) và vẫn tính là `'leaving'`: session đã hết.
-    - Ba bước sau đó (xóa cache, `router.replace('/login')`, `router.refresh()`) chạy riêng: bước nào lỗi thì được báo, các bước sau vẫn chạy. Bản đầu gói cả ba trong một `try`, nên `queryClient.clear()` lỗi thì không mở trang đăng nhập.
-    - Trước đây mọi lỗi, kể cả lỗi ném ra sau khi `router.replace('/login')` đã bắt đầu điều hướng, đều thành `'stayed'`: màn lấy lại thay đổi đã bỏ và toast báo chưa đăng xuất được, dù session đã hết.
+- **Amended 2026-11-01 (vòng test thứ ba, rời trang không lưu):**
+  - **"Rời trang, bỏ thay đổi"** (hộp thoại của editor, nút trên toast của màn SEO, kể cả "Đăng xuất, bỏ thay đổi") nghĩa là: lần rời trang này không chờ lưu, không hỏi và không lưu trên đường đi. Không hơn.
+  - **Một cờ tạm thời của store, `leavingWithoutSaving`.** `discardFor(leave)` của saver bật cờ khi lần rời trang bắt đầu, và tắt khi lần đó báo `'stayed'` hoặc ném lỗi. Lần rời trang báo `'leaving'` thì cờ giữ tới khi màn unmount.
+    - Khi cờ bật, `leavingLoses` trả false: `beforeunload` không hỏi, guard của Back/Forward để sự kiện đi qua, màn SEO và editor cho mọi lần rời trang khác đi ngay, kể cả khi đường dẫn còn đang chờ kiểm tra.
+    - Saver không lưu lúc dừng (màn unmount) khi cờ bật.
+    - Các lần rời trang chồng nhau dùng chung cờ. Một lần báo `'stayed'` tắt cờ trong khi lần khác còn chạy, nên nếu lần kia tải lại cả trang thì trình duyệt có thể hỏi một lần; đó là phía an toàn.
+  - **Autosave vẫn chạy như thường.** Lần lưu nào xong trước khi màn rời đi thì bản nháp giữ các thay đổi đó. Chấp nhận được: đó là bản nháp, trang live không đổi (quy tắc 1), và không mất dữ liệu.
+  - `ensureSaved`, "Thử lại", xuất bản, xem trước và "Quay về bản live" không xét cờ: chúng luôn lưu.
+  - Màn SEO vẫn giữ một lần rời trang đang chờ lưu. Nút bỏ thay đổi trên toast xóa lần đang chờ đó rồi mới rời đi, nên người dùng rời đi một lần, tới đích của nút vừa bấm.
+  - **Kết quả của "Đăng xuất"** (`useLogout`):
+    - Chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được". Trước đây mọi lỗi, kể cả lỗi ném ra khi đã bắt đầu mở trang đăng nhập, đều thành `'stayed'` dù session đã hết.
+    - Sau khi request thành công: xóa cache, `router.replace('/login')`, rồi `router.refresh()`. Bước nào lỗi thì được báo (`reportUnexpected`) và không cản việc mở trang đăng nhập.
+    - `router.replace('/login')` ném lỗi thì báo lỗi rồi tải lại cả trang tới `/login` (`loadPage`); kết quả vẫn là `'leaving'`. Tải trang cũng lỗi thì báo lỗi và trả `'stayed'`: cờ tắt, màn lưu và hỏi lại như thường.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
