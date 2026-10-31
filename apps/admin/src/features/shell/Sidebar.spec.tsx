@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { leadQueryKeys } from '../leads/queries';
 import { setScreenLeave } from './screen-leave';
 import { Sidebar, type SidebarProps } from './Sidebar';
 import { apiError, renderWithProviders } from './test-utils';
@@ -191,6 +192,40 @@ describe('Sidebar', () => {
 
     expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
     expect(router.push).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps nothing of the sites of the workspace it leaves', async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderSidebar();
+    // "N mới" and the inbox of a site of this workspace, cached while working in it.
+    queryClient.setQueryData(leadQueryKeys.counts(otherSite.id), {
+      ...NO_LEADS,
+      new: { count: 4, capped: false },
+    });
+    queryClient.setQueryData(leadQueryKeys.lists(otherSite.id), { items: [] });
+
+    await user.click(screen.getByRole('button', { name: /Đổi workspace/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
+
+    expect(queryClient.getQueryData(leadQueryKeys.counts(otherSite.id))).toBeUndefined();
+    expect(queryClient.getQueryData(leadQueryKeys.lists(otherSite.id))).toBeUndefined();
+    expect(router.push).toHaveBeenCalledWith('/');
+  });
+
+  it('keeps the cached data of the workspace when only the site changes', async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderSidebar();
+    queryClient.setQueryData(leadQueryKeys.counts(otherSite.id), {
+      ...NO_LEADS,
+      new: { count: 4, capped: false },
+    });
+
+    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
+
+    expect(queryClient.getQueryData(leadQueryKeys.counts(otherSite.id))).toMatchObject({
+      new: { count: 4 },
+    });
   });
 
   it('signs out and opens the login page', async () => {

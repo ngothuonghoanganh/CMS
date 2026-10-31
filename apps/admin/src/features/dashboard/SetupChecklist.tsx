@@ -6,8 +6,11 @@ import styles from './SetupChecklist.module.css';
 export interface SetupStep {
   label: string;
   done: boolean;
-  /** The next step to take while not done: a link or a button styled as a link. */
-  action: { href: string } | { onClick: () => void };
+  /**
+   * The next step to take while not done: a link or a button styled as a link. Null when only
+   * the workspace Owner can take it: an Editor would find the setting read-only (ADR-004).
+   */
+  action: { href: string } | { onClick: () => void } | null;
 }
 
 function StepLabel({ step }: { step: SetupStep }): ReactNode {
@@ -17,6 +20,13 @@ function StepLabel({ step }: { step: SetupStep }): ReactNode {
         <span className={styles.doneLabel}>{step.label}</span>
         <VisuallyHidden> (đã xong)</VisuallyHidden>
       </>
+    );
+  }
+  if (step.action === null) {
+    return (
+      <span>
+        {step.label} <span className={styles.ownerNote}>· Owner của workspace làm bước này</span>
+      </span>
     );
   }
   if ('href' in step.action) {

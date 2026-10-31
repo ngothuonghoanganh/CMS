@@ -28,6 +28,7 @@ import {
   ShieldCheckIcon,
   VisuallyHidden,
 } from '@plp/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { hostOf } from '../../lib/site-url';
@@ -86,6 +87,7 @@ export function Sidebar({
 }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const logout = useLogout();
   const workspace = membership.workspace;
   const newLeads = newLeadsBadge(useLeadCounts(site.id, leadCounts).data);
@@ -135,6 +137,9 @@ export function Sidebar({
               // A UI preference only; the API checks membership on every request. Written once
               // the user really leaves: a failed save keeps them in this workspace.
               document.cookie = workspacePreferenceCookie(workspaceId);
+              // Nothing of the other workspace's sites stays in memory (leads, "N mới"): coming
+              // back later shows what the server sends then, not counts kept from now.
+              queryClient.clear();
             });
           }}
         >

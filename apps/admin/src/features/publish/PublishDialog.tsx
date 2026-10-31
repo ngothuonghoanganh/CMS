@@ -5,6 +5,7 @@ import {
   checksResultSchema,
   endpoints,
   IDEMPOTENCY_KEY_HEADER,
+  type Role,
   type Site,
 } from '@plp/contracts';
 import {
@@ -44,6 +45,7 @@ import {
   isFirstPublish,
   liveSince,
   nextVersion,
+  ownerOnlyFixNote,
   type PreparedPublish,
   publishChanges,
   publishDisabledReason,
@@ -93,14 +95,16 @@ function targetAddress(origin: string, slug: string): string {
 
 interface CheckRowProps {
   item: CheckItem;
+  role: Role;
   ignored?: boolean;
   onFix: () => void;
   onToggle?: () => void;
 }
 
-function CheckRow({ item, ignored = false, onFix, onToggle }: CheckRowProps) {
+function CheckRow({ item, role, ignored = false, onFix, onToggle }: CheckRowProps) {
   const titleId = useId();
   const blocking = item.severity === 'blocking';
+  const ownerOnly = ownerOnlyFixNote(item.target, role);
   return (
     <li
       className={cx(
@@ -122,16 +126,19 @@ function CheckRow({ item, ignored = false, onFix, onToggle }: CheckRowProps) {
           {ignored ? <VisuallyHidden> (đã bỏ qua)</VisuallyHidden> : null}
         </p>
         <p className={styles.checkDescription}>{item.description}</p>
+        {ownerOnly === null ? null : <p className={styles.ownerOnly}>{ownerOnly}</p>}
       </div>
       <div className={styles.checkActions}>
-        <Button
-          variant={blocking ? 'secondary' : 'ghost'}
-          size="sm"
-          aria-describedby={titleId}
-          onClick={onFix}
-        >
-          {blocking ? 'Sửa ngay' : 'Sửa'}
-        </Button>
+        {ownerOnly === null ? (
+          <Button
+            variant={blocking ? 'secondary' : 'ghost'}
+            size="sm"
+            aria-describedby={titleId}
+            onClick={onFix}
+          >
+            {blocking ? 'Sửa ngay' : 'Sửa'}
+          </Button>
+        ) : null}
         {onToggle ? (
           <Button
             variant="secondary"
@@ -158,6 +165,7 @@ function PublishSession({
   ensureSaved,
   onFixTarget,
   onPageUpdated,
+  role,
   site,
 }: Omit<PublishDialogProps, 'open'>) {
   const queryClient = useQueryClient();
@@ -539,6 +547,7 @@ function PublishSession({
               {checks.blocking.map((item) => (
                 <CheckRow
                   key={item.fingerprint}
+                  role={role}
                   item={item}
                   onFix={() => {
                     onFixTarget(item.target);
@@ -548,6 +557,7 @@ function PublishSession({
               {checks.warnings.map((item) => (
                 <CheckRow
                   key={item.fingerprint}
+                  role={role}
                   item={item}
                   ignored={state.acknowledged.includes(item.fingerprint)}
                   onFix={() => {

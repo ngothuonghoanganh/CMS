@@ -116,12 +116,18 @@ describe('EditorApp', () => {
       props = next;
       return next.open ? <p>Hộp thoại xuất bản</p> : null;
     };
-    render(<EditorApp initial={initial()} renderPublishDialog={renderPublishDialog} />, {
-      wrapper,
-    });
+    render(
+      <EditorApp
+        initial={{ ...initial(), role: 'editor' }}
+        renderPublishDialog={renderPublishDialog}
+      />,
+      { wrapper },
+    );
     await user.click(screen.getByRole('button', { name: 'Xuất bản' }));
     expect(screen.getByText('Hộp thoại xuất bản')).toBeInTheDocument();
     expect(props?.pageId).toBe('64b000000000000000000002');
+    // The dialog tells an Editor which fixes are the Owner's.
+    expect(props?.role).toBe('editor');
     await expect(props?.ensureSaved()).resolves.toMatchObject({ revision: 3 });
 
     props?.onFixTarget({ kind: 'section', sectionId: 'faq000000001', fieldPath: 'heading' });

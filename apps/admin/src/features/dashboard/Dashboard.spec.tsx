@@ -3,6 +3,7 @@ import {
   endpoints,
   type LeadCounts,
   type PageListResponse,
+  type Role,
   publishingActivityTypes,
   type Site,
 } from '@plp/contracts';
@@ -50,6 +51,7 @@ function renderDashboard(
     leadCounts = NO_LEADS,
     site = siteFixture(),
     loadedAt = Date.now(),
+    role = 'owner',
   }: {
     pages?: PageListResponse;
     activity?: ActivityListResponse;
@@ -57,6 +59,7 @@ function renderDashboard(
     leadCounts?: LeadCounts;
     site?: Site;
     loadedAt?: number;
+    role?: Role;
   } = {},
   queryClient?: QueryClient,
 ) {
@@ -69,6 +72,7 @@ function renderDashboard(
       initialActivity={activity}
       initialLeadCounts={leadCounts}
       loadedAt={loadedAt}
+      role={role}
     />,
     queryClient,
   );
@@ -361,6 +365,22 @@ describe('Dashboard', () => {
       `${DASHBOARD_PATH}/leads?recipients=open`,
     );
     expect(screen.getByText('1/4')).toBeInTheDocument();
+  });
+
+  it("tells an Editor which setup steps are the Owner's instead of linking to read-only settings", () => {
+    renderDashboard({ role: 'editor', pages: pageListFixture([draftPage]) });
+    for (const label of [
+      'Thêm logo & chọn giao diện',
+      'Thêm chính sách quyền riêng tư',
+      'Chọn nơi nhận lead (email)',
+    ]) {
+      expect(screen.queryByRole('link', { name: label })).toBeNull();
+      expect(screen.getByText(label, { exact: false })).toHaveTextContent(
+        `${label} · Owner của workspace làm bước này`,
+      );
+    }
+    // Publishing a page is the Editor's to do.
+    expect(screen.getByRole('button', { name: 'Xuất bản trang đầu tiên' })).toBeInTheDocument();
   });
 
   it('ticks the setup steps the site has done', () => {

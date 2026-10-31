@@ -5,6 +5,7 @@ import {
   endpoints,
   type LeadCounts,
   type PageListResponse,
+  type Role,
   type Site,
 } from '@plp/contracts';
 import { themePresets } from '@plp/sections/schema';
@@ -72,6 +73,8 @@ export interface DashboardProps {
   initialLeadCounts: LeadCounts;
   /** When the server loaded the data (epoch ms); hydration uses it for identical relative times. */
   loadedAt: number;
+  /** The user's role: the site setup steps are the Owner's (ADR-004). */
+  role: Role;
 }
 
 function sameFilters(a: DashboardFilters, b: DashboardFilters): boolean {
@@ -87,6 +90,7 @@ export function Dashboard({
   initialActivity,
   initialLeadCounts,
   loadedAt,
+  role,
 }: DashboardProps) {
   const queryClient = useQueryClient();
   const now = useNow(loadedAt);
@@ -167,11 +171,12 @@ export function Dashboard({
   const anyReleased = counts.live + counts.unpublished > 0;
   const thumbnailColor = themePresets[site.themePresetId].schemes.brand.background;
 
+  const owner = role === 'owner';
   const setupSteps: SetupStep[] = [
     {
       label: 'Thêm logo & chọn giao diện',
       done: site.logoAssetId !== null,
-      action: { href: `${siteHref(site.id)}/settings` },
+      action: owner ? { href: `${siteHref(site.id)}/settings` } : null,
     },
     {
       label: 'Xuất bản trang đầu tiên',
@@ -189,12 +194,12 @@ export function Dashboard({
     {
       label: 'Thêm chính sách quyền riêng tư',
       done: site.privacyConfigured,
-      action: { href: privacyHref(site.id) },
+      action: owner ? { href: privacyHref(site.id) } : null,
     },
     {
       label: 'Chọn nơi nhận lead (email)',
       done: site.confirmedLeadRecipients > 0,
-      action: { href: leadRecipientsHref(site.id) },
+      action: owner ? { href: leadRecipientsHref(site.id) } : null,
     },
   ];
 

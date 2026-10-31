@@ -69,6 +69,8 @@ export interface PublishDialogRenderProps {
   onFixTarget: (target: CheckTarget) => void;
   /** After publishing: the new page summary (status, live release) and, if fetched, checks. */
   onPageUpdated: (page: PageSummary, checks?: ChecksResult) => void;
+  /** The user's role: an Editor is told which fixes only the Owner can make. */
+  role: Role;
 }
 
 export interface EditorAppProps {
@@ -266,6 +268,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
         onPageUpdated: (page, checks) => {
           store.getState().setServerState(checks ? { page, checks } : { page });
         },
+        role,
       })}
       <ConflictDialog />
       {guard.dialog}
