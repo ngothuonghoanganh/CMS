@@ -15,6 +15,10 @@ const apiEnv = {
   // Every spec signs up its own users from one client. The limit itself is covered by the API
   // integration tests; here it would only make the suite depend on how fast it runs.
   AUTH_RATE_LIMIT_PER_MINUTE: '1000',
+  // The renderer of an E2E run trusts no proxy, so every visitor of a site shares one lead bucket
+  // (ADR-016). The board's inbox (support/board.ts) needs more than its 5 leads per 10 minutes;
+  // the limit itself is covered by the API integration tests.
+  LEAD_LIMIT_PER_CLIENT: '100',
 };
 
 // Servers are never reused: one started outside this config may point at another database. A
