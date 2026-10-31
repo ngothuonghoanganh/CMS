@@ -16,16 +16,8 @@ export const SCAN_VIEWPORTS = [
  */
 export async function expectAccessible(page: Page, screen: string): Promise<void> {
   // A dialog fading in is still half transparent: axe would measure the contrast of colors blended
-  // with the page behind it. Endless animations (spinners) are left alone, and an animation
-  // cancelled on the way (its element removed) counts as done.
-  await page.evaluate(() =>
-    Promise.allSettled(
-      document
-        .getAnimations()
-        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
-        .map((animation) => animation.finished),
-    ),
-  );
+  // with the page behind it.
+  await animationsSettled(page);
   const { violations } = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
   const found = violations.map(
     (violation) =>
@@ -35,6 +27,22 @@ export async function expectAccessible(page: Page, screen: string): Promise<void
         .join('\n')}`,
   );
   expect.soft(found, `${screen} has no WCAG 2.2 AA violations`).toEqual([]);
+}
+
+/**
+ * Waits for the page's transitions and animations to end, so what is checked is what stays on
+ * screen. Endless animations (spinners) are left alone, and an animation cancelled on the way (its
+ * element removed) counts as ended.
+ */
+export async function animationsSettled(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.allSettled(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished),
+    ),
+  );
 }
 
 /** The page never scrolls sideways (WCAG 1.4.10 at a 320 px viewport). */
