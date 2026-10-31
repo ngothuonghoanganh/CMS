@@ -78,6 +78,7 @@ beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
   router.replace.mockReset();
+  router.refresh.mockReset();
   loadPageMock.mockReset();
   pathname.current = `/sites/${SITE_ID}`;
   document.cookie = 'plp_ws=; Max-Age=0; Path=/';
@@ -417,6 +418,34 @@ describe('Sidebar', () => {
         'Opening the login page after signing out failed',
         broken,
       );
+      expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+    });
+
+    it('still opens the login page when dropping the cached data fails', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      apiMock.mockResolvedValueOnce(undefined);
+      const asked = holdingScreen();
+      const { queryClient } = renderSidebar();
+      const broken = new Error('A cache listener threw');
+      vi.spyOn(queryClient, 'clear').mockImplementation(() => {
+        throw broken;
+      });
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      expect(outcome).toBe('leaving');
+      expect(router.replace).toHaveBeenCalledWith('/login');
+      expect(router.refresh).toHaveBeenCalledTimes(1);
+      expect(logged).toHaveBeenCalledWith('Dropping cached data after signing out failed', broken);
       expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
     });
 

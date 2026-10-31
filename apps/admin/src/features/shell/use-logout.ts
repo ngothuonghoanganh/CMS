@@ -14,6 +14,15 @@ export interface Logout {
   signOut: () => Promise<LeaveOutcome>;
 }
 
+/** A step after the session ended; a failure is reported, and the user still leaves. */
+function afterSignOut(step: string, run: () => void): void {
+  try {
+    run();
+  } catch (error) {
+    reportUnexpected(`${step} after signing out failed`, error);
+  }
+}
+
 /** "Đăng xuất": ends the session on the server, drops cached data and opens the login page. */
 export function useLogout(): Logout {
   const router = useRouter();
@@ -42,15 +51,18 @@ export function useLogout(): Logout {
       toast({ tone: 'danger', title: 'Chưa đăng xuất được', description: problemMessage(error) });
       return 'stayed';
     }
-    // The session is gone, so the user is leaving whatever happens here; a failure is reported
-    // rather than taken for a failed sign-out.
-    try {
+    // The session is gone, so the user is leaving whatever happens here. Each step runs on its own:
+    // a failure is reported rather than taken for a failed sign-out, and never keeps the next step
+    // (the login page above all) from running.
+    afterSignOut('Dropping cached data', () => {
       queryClient.clear();
+    });
+    afterSignOut('Opening the login page', () => {
       router.replace('/login');
+    });
+    afterSignOut('Refreshing the router', () => {
       router.refresh();
-    } catch (error) {
-      reportUnexpected('Opening the login page after signing out failed', error);
-    }
+    });
     return 'leaving';
   }
 

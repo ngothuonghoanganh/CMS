@@ -516,6 +516,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Trước đó nữa, `'stayed'` của một lần rời trang huỷ cả việc bỏ thay đổi của một lần khác vẫn đang chạy.
   - **Kết quả của "Đăng xuất"** (`useLogout`): chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".
     - Mở trang đăng nhập chạy sau khi request thành công, ngoài nhánh lỗi của mutation. Lỗi lúc đó được báo (`reportUnexpected`) và vẫn tính là `'leaving'`: session đã hết.
+    - Ba bước sau đó (xóa cache, `router.replace('/login')`, `router.refresh()`) chạy riêng: bước nào lỗi thì được báo, các bước sau vẫn chạy. Bản đầu gói cả ba trong một `try`, nên `queryClient.clear()` lỗi thì không mở trang đăng nhập.
     - Trước đây mọi lỗi, kể cả lỗi ném ra sau khi `router.replace('/login')` đã bắt đầu điều hướng, đều thành `'stayed'`: màn lấy lại thay đổi đã bỏ và toast báo chưa đăng xuất được, dù session đã hết.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
