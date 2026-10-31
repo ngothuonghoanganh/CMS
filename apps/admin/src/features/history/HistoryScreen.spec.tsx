@@ -454,6 +454,30 @@ describe('HistoryScreen', () => {
     );
   });
 
+  it('starts from the check again when the dialog opens again after a copy', async () => {
+    const user = userEvent.setup();
+    serve({ page: historyPage(), history: initialHistory });
+    renderScreen();
+    const copy = () =>
+      user.click(within(card('v11')).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    await copy();
+    let dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(await within(dialog).findByRole('status')).toHaveTextContent(/4 thay đổi/);
+    apiMock.mockImplementationOnce(() =>
+      Promise.resolve({ page: historyPage(), draft: { revision: 10 } }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Sao chép vào bản nháp' }));
+    expect(await screen.findByText('Đã sao chép v11 vào bản nháp')).toBeInTheDocument();
+
+    // Reopened while the new read is on its way: nothing from the read before the copy is shown.
+    apiMock.mockImplementationOnce(() => new Promise(() => undefined));
+    await copy();
+    dialog = screen.getByRole('alertdialog', { name: 'Sao chép v11 vào bản nháp?' });
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Đang kiểm tra bản nháp hiện tại…',
+    );
+  });
+
   it('keeps the focus on "Sao chép vào bản nháp" while a conflict is read again', async () => {
     const user = userEvent.setup();
     const server: ServerState = { page: historyPage(), history: initialHistory };

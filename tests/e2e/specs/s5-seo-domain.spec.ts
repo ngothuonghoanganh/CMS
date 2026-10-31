@@ -122,6 +122,33 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
     );
   });
 
+  test('leaving SEO through the phone menu right after typing saves first and closes the menu', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    const { site } = await setUpSite(page.request);
+    const created = await createPageViaApi(page.request, site.id, {
+      title: 'Giới thiệu',
+      slug: 'gioi-thieu',
+      start: { kind: 'blank' },
+    });
+    const seoUrl = `/sites/${site.id}/pages/${created.page.id}/seo`;
+    await page.goto(seoUrl);
+    const seo = page.getByRole('region', { name: 'Thiết lập SEO' });
+    await seo.getByRole('textbox', { name: 'Mô tả ngắn' }).fill(SEO_DESCRIPTION);
+
+    // Gone before the autosave delay ends, through the real router: the screen saves, then goes,
+    // and the menu closes on the way (ADR-008).
+    await page.getByRole('button', { name: 'Mở menu điều hướng' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Menu điều hướng' });
+    await drawer.getByRole('link', { name: /^Trang/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/sites/${site.id}(\\?.*)?$`));
+    await expect(drawer).toBeHidden();
+
+    await page.goto(seoUrl);
+    await expect(seo.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue(SEO_DESCRIPTION);
+  });
+
   test('a new site theme reaches a live page only when the page is published again', async ({
     page,
     request,

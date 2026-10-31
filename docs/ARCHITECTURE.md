@@ -390,7 +390,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-26 (test toàn dự án):** chữ gợi ý của ô trống trên canvas (tên field) dùng màu `muted`, không làm mờ, nên đạt AA như mọi màu chữ khác (`themes.spec`).
   - Trong nút và trên ảnh của Hero, chữ gợi ý giữ màu của chữ thật ở đó, vì `muted` không đạt AA trên nền đó.
   - Chữ gợi ý in nghiêng, để ô trống không bị nhầm với nội dung đã nhập.
-  - `placeholder.spec.ts` kiểm các quy tắc CSS này.
+  - `styles.spec.ts` kiểm các quy tắc CSS này.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -435,9 +435,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - Màn đang hiện được đọc lại ngay; màn khác được đọc lại khi hiện ra, kể cả khi nút Back của trình duyệt dựng lại một bản render cũ hơn cache.
       - Editor và màn SEO không hiện các màn đó, nên lưu ở đó không đọc thêm gì.
   - **Màn SEO lưu xong rồi mới cho rời đi,** như các link ở header của nó:
-    - Mọi link trên trang (kể cả sidebar, nằm ngoài màn) và nút Back/Forward của trình duyệt đều chờ lần lưu. Lưu lỗi thì ở lại, thay đổi vẫn còn, kèm thông báo.
+    - Mọi link trên trang (kể cả sidebar, nằm ngoài màn) và nút Back/Forward của trình duyệt đều chờ lần lưu.
+    - Lưu lỗi thì ở lại, thay đổi vẫn còn, kèm thông báo có nút "Rời trang, bỏ thay đổi", vì có lần lưu không bao giờ thành công (đã đăng xuất ở tab khác, bị hạ quyền). Xung đột revision thì mở hộp thoại tải lại, không báo lỗi.
+    - Mỗi màn chỉ giữ một lần rời trang đang chờ: bấm thêm link, Back hay Forward trong lúc lưu chỉ đổi đích, nên người dùng rời đi đúng một lần, tới nơi được chọn sau cùng. Màn bị unmount trước khi lưu xong thì không theo lần rời trang cũ nữa.
+    - Màn chỉ chặn hành vi mặc định của link, không chặn sự kiện lan tiếp: handler của chính link vẫn chạy (drawer điều hướng trên điện thoại tự đóng), còn `Link` của Next thấy `defaultPrevented` nên không tự điều hướng.
+    - Click có phím bổ trợ, link mở tab mới, link tải xuống, link sang origin khác và link `#` trong cùng trang đi như bình thường, không chờ lưu.
     - Lý do: lần lưu gửi lúc unmount tới sau khi màn kế tiếp đã đọc trang, nên màn đó hiện trạng thái cũ; và nếu lần lưu đó lỗi thì thay đổi mất mà không ai biết.
-    - Đổi workspace hoặc site ở sidebar điều hướng bằng code, không qua link: thay đổi đang chờ vẫn được lưu lúc unmount như trước.
+    - Sidebar có bốn chỗ điều hướng bằng code, không qua link: đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất". Ba chỗ đầu vẫn lưu thay đổi đang chờ lúc unmount như trước. Với "Đăng xuất", session đã bị xóa trước khi màn unmount, nên lần lưu đó trả 401 và thay đổi đang chờ bị mất.
+    - Khi đọc lại trang (sau xung đột lúc gỡ xuất bản, hoặc sau khi đổi giao diện site trong editor) mà thấy bản nháp đã đổi trên server và màn không còn gì để lưu, store chuyển sang trạng thái xung đột để hộp thoại tải lại mở ngay, thay vì chờ một lần lưu có thể không bao giờ tới.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 

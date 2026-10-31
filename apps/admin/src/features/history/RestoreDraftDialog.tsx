@@ -72,6 +72,9 @@ export function RestoreDraftDialog({
         body: { baseRevision: detail.draft.revision, releaseId: release.id },
       }),
     onSuccess: (detail) => {
+      // Dropped before the site's queries are refreshed: the read is not fetched again for
+      // nothing, and the next opening starts from "Đang kiểm tra…" (ADR-005).
+      queryClient.removeQueries({ queryKey: baseKey, exact: true });
       onRestored(detail);
       onOpenChange(false);
       toast({

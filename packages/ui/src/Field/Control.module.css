@@ -82,15 +82,15 @@
 }
 
 /*
- * What the user types comes first: on a narrow field the prefix (a site's address before a page
- * path) gives way and ends in an ellipsis. Its full text is still announced with the field.
+ * What the user types comes first: the input after a prefix (a site's address before a page path)
+ * always keeps at least 120 px, and the prefix shows in full whenever the rest fits, otherwise it
+ * gives way and ends in an ellipsis. Its full text is still announced with the field.
  */
 .prefix {
   display: flex;
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 55%;
   padding: 0 10px;
   border-right: 1px solid var(--color-border);
   border-radius: var(--radius-md) 0 0 var(--radius-md);
@@ -104,6 +104,10 @@
 .prefixText {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.prefix + .native {
+  min-width: 120px;
 }
 
 .leadingIcon {

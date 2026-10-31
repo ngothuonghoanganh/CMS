@@ -151,6 +151,17 @@ describe('publishedImage', () => {
     }
   });
 
+  it('keeps the colour profile, so wide-gamut photos keep their colours (ADR-012)', async () => {
+    const photo = await blank(40, 24).jpeg().withIccProfile('p3').toBuffer();
+    const before = await sharp(photo).metadata();
+    expect(before.hasProfile).toBe(true);
+
+    const published = await publishedImage(photo, 'image/jpeg');
+    const after = await sharp(published.body).metadata();
+    expect(after.hasProfile).toBe(true);
+    expect(after.icc?.equals(before.icc ?? Buffer.alloc(0))).toBe(true);
+  });
+
   it('scales a large image down to fit, keeping its shape', async () => {
     const photo = await blank(4000, 3000).jpeg().toBuffer();
     const published = await publishedImage(photo, 'image/jpeg');

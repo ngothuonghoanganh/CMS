@@ -97,12 +97,18 @@ export function useLatestServerDraft(store: EditorStore): void {
 }
 
 /**
- * Reads the page again and takes its summary (status, live release, site reminders), unless the
- * draft changed on the server meanwhile: the next save's 409 then tells.
+ * Reads the page again and takes its summary (status, live release, site reminders). When the
+ * draft changed on the server meanwhile (a teammate saved, then published), the summary belongs
+ * to that newer draft: with nothing left to save here the store is marked conflicting, so the
+ * reload dialog opens now instead of at a save that may never come; otherwise the running or
+ * pending save gets the 409 itself.
  */
 export async function refreshPageSummary(store: EditorStore): Promise<void> {
   const detail = await api(endpoints.getPage, [store.getState().page.id]);
-  if (detail.draft.revision === store.getState().baseRevision) {
-    store.getState().setServerState({ page: detail.page });
+  const state = store.getState();
+  if (detail.draft.revision === state.baseRevision) {
+    state.setServerState({ page: detail.page });
+  } else if (state.saveState === 'saved') {
+    state.markConflict();
   }
 }
