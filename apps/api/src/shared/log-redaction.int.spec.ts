@@ -7,6 +7,8 @@ import {
   RENDERER_SIGNATURE_HEADER,
   type Site,
 } from '@plp/contracts';
+import { mongo, Types } from 'mongoose';
+import { Logger as PinoNestLogger } from 'nestjs-pino';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -23,7 +25,9 @@ import {
 import { configurePrivacy } from '../../test/privacy.js';
 import { addConfirmedRecipient } from '../../test/recipients.js';
 import { createSite } from '../../test/resources.js';
-import { REDACTED } from './log-redaction.js';
+import { LeadLimitsRepository } from '../modules/leads/lead-limits.repository.js';
+import { inviteLimitKeys } from '../modules/notifications/domain/notification-rules.js';
+import { HASH_PLACEHOLDER, REDACTED } from './log-redaction.js';
 
 /** What pino writes in place of a `redact` path (its default censor). */
 const CENSORED = '[Redacted]';
@@ -60,6 +64,7 @@ describe('request log', () => {
   let t: TestApp;
   let owner: TestClient;
   let sessionToken: string;
+  let workspaceId: string;
   let site: Site;
   let pageId: string;
   let releaseId: string;
@@ -81,11 +86,12 @@ describe('request log', () => {
       .set('x-request-id', 'log-signup')
       .expect(201);
     const token = /plp_session=([^;]+)/.exec(String(signup.headers['set-cookie']))?.[1];
-    const workspaceId = meResponseSchema.parse(signup.body).memberships[0]?.workspace.id;
-    if (token === undefined || workspaceId === undefined) {
+    const firstWorkspaceId = meResponseSchema.parse(signup.body).memberships[0]?.workspace.id;
+    if (token === undefined || firstWorkspaceId === undefined) {
       throw new Error('Signup set no session cookie or created no workspace');
     }
     sessionToken = token;
+    workspaceId = firstWorkspaceId;
     site = await createSite(owner, workspaceId);
     await configurePrivacy(owner, site.id);
     await addConfirmedRecipient(t, owner, site.id);
@@ -198,5 +204,51 @@ describe('request log', () => {
     expect(inUrl.req.query).toEqual({ q: REDACTED });
     expect((await requestLine('log-search')).res.statusCode).toBe(200);
     expectNotLogged(SEARCH);
+  });
+
+  // Last: from here on Nest's loggers write through pino, as `main.ts` sets it up.
+  it('keeps the hash of an address out of an error it logs (ADR-018)', async () => {
+    const email = 'loi-dem@smilecare.vn';
+    const key = inviteLimitKeys(email, {
+      workspaceId: new Types.ObjectId(workspaceId),
+      siteId: new Types.ObjectId(site.id),
+    }).address;
+    const hash = /[0-9a-f]{64}$/.exec(key)?.[0];
+    if (hash === undefined) {
+      throw new Error(`The address counter ${key} holds no hash`);
+    }
+    // The database refuses a counter, naming its key: the 500 logs the error with it as the cause.
+    const errmsg = `E11000 duplicate key error collection: lead_limits index: key_1 dup key: { key: "${key}" }`;
+    const hit = vi.spyOn(t.app.get(LeadLimitsRepository), 'hit').mockRejectedValueOnce(
+      new mongo.MongoServerError({
+        message: errmsg,
+        errmsg,
+        code: 11000,
+        keyPattern: { key: 1 },
+        keyValue: { key },
+      }),
+    );
+    t.app.useLogger(t.app.get(PinoNestLogger));
+    try {
+      await owner
+        .post(`/sites/${site.id}/lead-recipients`, { email })
+        .set('x-request-id', 'log-hash')
+        .expect(500);
+    } finally {
+      hit.mockRestore();
+    }
+
+    const logged = await vi.waitFor(() => {
+      const line = output
+        .join('')
+        .split('\n')
+        .find((text) => text.includes('"Unhandled error"') && text.includes('log-hash'));
+      if (line === undefined) {
+        throw new Error('The 500 logged no error');
+      }
+      return line;
+    });
+    expect(logged).toContain(`recipient-invite:address:${HASH_PLACEHOLDER}`);
+    expectNotLogged(hash);
   });
 });

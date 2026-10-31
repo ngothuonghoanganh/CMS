@@ -24,7 +24,7 @@ import { RevalidationModule } from './modules/revalidation/revalidation.module.j
 import { SitesModule } from './modules/sites/sites.module.js';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 import { EnvModule } from './shared/env.js';
-import { LOG_REDACT_PATHS, serializeRequest } from './shared/log-redaction.js';
+import { LOG_REDACT_PATHS, serializeError, serializeRequest } from './shared/log-redaction.js';
 import { OriginGuard } from './shared/origin.guard.js';
 import { PersistenceModule } from './shared/persistence/persistence.module.js';
 import { ProblemFilter } from './shared/problem.filter.js';
@@ -40,8 +40,9 @@ function requestLogOptions(env: Env): PinoHttpOptions {
       return id;
     },
     redact: [...LOG_REDACT_PATHS],
-    // `req.url` and the route params of /public/preview/{token} carry a preview token.
-    serializers: { req: serializeRequest },
+    // `req.url` and the route params of /public/preview/{token} carry a preview token; a logged
+    // error can carry the hash of an address.
+    serializers: { req: serializeRequest, err: serializeError },
   };
 }
 

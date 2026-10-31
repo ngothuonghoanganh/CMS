@@ -1002,6 +1002,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Vẫn đếm trước khi gửi (nguyên tử), nên các request đồng thời không vượt giới hạn. Trả lại là giảm 1 trong đúng cửa sổ đã đếm (khớp `expiresAt` của cửa sổ đó), không xuống dưới 0, không chạm cửa sổ đã hết hay cửa sổ sau, như lần thử đăng nhập của ADR-004.
     - Trả lại lỗi thì thư vẫn bị đếm (phía an toàn: cửa sổ hết trong một ngày) và lỗi được ghi log mức error kèm tên các bộ đếm và id của site, workspace (không kèm hash của địa chỉ, vì log không chứa dữ liệu cá nhân, kể cả dạng bí danh) và nguyên nhân. Request giữ kết quả của chính nó: vẫn là 429, 409 hay 404 như cũ, hoặc địa chỉ `unsent` được thêm thành công. Lý do: dọn bộ đếm không được đổi điều người dùng được báo. Trả 500 sẽ mất thông báo họ làm theo được, và báo lỗi cho một lần thêm hay gửi lại đã lưu thật.
     - Ba bộ đếm tăng song song. Một bộ đếm lỗi thì các bộ đếm đã tăng được trả lại, rồi request thất bại (500) với lỗi đó làm `cause`.
+    - Lỗi đó (ví dụ lỗi trùng khóa của MongoDB) có thể nêu khóa bộ đếm, tức hash của địa chỉ, và `ProblemFilter` ghi cả lỗi. Lưới an toàn ở log redaction của API: serializer `err` của pino thay mọi chuỗi từ 64 chữ số hex trở lên bằng `[hash]` trong lỗi được ghi (message, stack, `errmsg`, `keyValue`, `cause` và `errors` lồng nhau, có chặn vòng lặp). Không log nào cần giá trị sha256.
   - **Lỗi SMTP thật,** thử bằng một SMTP stub trên `node:net` qua `SmtpEmailSender` và nodemailer:
     - kết nối bị từ chối → `smtp_unavailable`;
     - máy chủ không chào hoặc không trả lời DATA → `timeout`;

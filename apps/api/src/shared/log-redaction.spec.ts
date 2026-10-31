@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { pino } from 'pino';
 import { describe, expect, it } from 'vitest';
 import {
+  HASH_PLACEHOLDER,
   LOG_REDACT_PATHS,
   REDACTED,
   redactPreviewToken,
   redactSearch,
+  serializeError,
   serializeRequest,
 } from './log-redaction.js';
 
@@ -149,5 +152,164 @@ describe('log redaction', () => {
     for (const secret of ['203.0.113.7', 'Nguyen Thu Ha', 'a'.repeat(64), 'plp_session']) {
       expect(output).not.toContain(secret);
     }
+  });
+});
+
+/** The kind of value a limit key holds: the sha256 of an email address. */
+const HASH = createHash('sha256').update('thuha@example.com').digest('hex');
+const KEY = `recipient-invite:address:${HASH}`;
+
+/**
+ * Shaped like the MongoDB driver's server error (the integration test logs the real one): the
+ * server's reply copied onto the error, and `errmsg` a getter of the message.
+ */
+class DriverError extends Error {
+  override name = 'MongoServerError';
+  readonly errorResponse: Record<string, unknown>;
+  readonly code: unknown;
+  readonly keyPattern: unknown;
+  readonly keyValue: unknown;
+  constructor(response: Record<string, unknown> & { errmsg: string }) {
+    super(response.errmsg);
+    this.errorResponse = response;
+    this.code = response['code'];
+    this.keyPattern = response['keyPattern'];
+    this.keyValue = response['keyValue'];
+  }
+  get errmsg(): string {
+    return this.message;
+  }
+}
+
+/** A duplicate key error on a limit key, as the MongoDB driver raises it. */
+function duplicateKey(): DriverError {
+  return new DriverError({
+    errmsg: `E11000 duplicate key error collection: plp.lead_limits index: key_1 dup key: { key: "${KEY}" }`,
+    code: 11000,
+    keyPattern: { key: 1 },
+    keyValue: { key: KEY },
+  });
+}
+
+/** Written as its hex string, like an ObjectId. */
+class HexId {
+  constructor(private readonly hex: string) {}
+  toJSON(): string {
+    return this.hex;
+  }
+}
+
+/** Everything a serialized error would write to the log. */
+function written(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+describe('serializeError', () => {
+  it('replaces the hash in the message, stack, errmsg and keyValue of a driver error', () => {
+    const error = duplicateKey();
+    const serialized = serializeError(error);
+
+    expect(written(serialized)).not.toContain(HASH);
+    expect(serialized).toMatchObject({
+      name: 'MongoServerError',
+      message: expect.stringContaining(
+        `dup key: { key: "recipient-invite:address:${HASH_PLACEHOLDER}" }`,
+      ) as unknown,
+      stack: expect.stringContaining(`recipient-invite:address:${HASH_PLACEHOLDER}`) as unknown,
+      errmsg: expect.stringContaining(HASH_PLACEHOLDER) as unknown,
+      keyValue: { key: `recipient-invite:address:${HASH_PLACEHOLDER}` },
+      keyPattern: { key: 1 },
+      code: 11000,
+      errorResponse: { keyValue: { key: `recipient-invite:address:${HASH_PLACEHOLDER}` } },
+    });
+    // A copy: the error itself still says what it said.
+    expect(error.keyValue).toEqual({ key: KEY });
+    expect(error.message).toContain(HASH);
+  });
+
+  it('follows nested causes and the errors of an AggregateError', () => {
+    const failed = new Error('Confirmation email could not be counted against the daily limits', {
+      cause: new AggregateError(
+        [duplicateKey(), new Error('wrapped', { cause: duplicateKey() })],
+        'two counters failed',
+      ),
+    });
+    const serialized = serializeError(failed);
+
+    expect(written(serialized)).not.toContain(HASH);
+    expect(serialized).toMatchObject({
+      message: 'Confirmation email could not be counted against the daily limits',
+      cause: {
+        message: 'two counters failed',
+        errors: [
+          { keyValue: { key: `recipient-invite:address:${HASH_PLACEHOLDER}` } },
+          {
+            message: 'wrapped',
+            cause: { errmsg: expect.stringContaining(HASH_PLACEHOLDER) as unknown },
+          },
+        ],
+      },
+    });
+  });
+
+  it('redacts the shape pino hands it after its standard error serializer', () => {
+    // A cause's message and stack are folded into the error's own; an AggregateError's errors
+    // come as `aggregateErrors`.
+    for (const failed of [
+      new Error('Confirmation email could not be counted', { cause: duplicateKey() }),
+      new AggregateError([duplicateKey()], 'two counters failed'),
+    ]) {
+      const standard: unknown = pino.stdSerializers.err(failed);
+      expect(written(standard)).toContain(HASH);
+
+      const serialized = serializeError(standard);
+      expect(written(serialized)).not.toContain(HASH);
+      expect(written(serialized)).toContain(`recipient-invite:address:${HASH_PLACEHOLDER}`);
+    }
+  });
+
+  it('keeps ids, dates and short hex readable', () => {
+    const hex = '64b0000000000000000000a2';
+    const at = new Date('2026-10-31T08:00:00.000Z');
+    const error = Object.assign(new Error(`site ${hex} failed`), {
+      siteId: new HexId(hex),
+      at,
+      requestId: '3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e',
+    });
+    expect(serializeError(error)).toMatchObject({
+      message: `site ${hex} failed`,
+      siteId: hex,
+      at: '2026-10-31T08:00:00.000Z',
+      requestId: '3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e',
+    });
+  });
+
+  it('stops at cycles', () => {
+    const looping = new Error(`looping on ${KEY}`);
+    const context: Record<string, unknown> = { key: KEY };
+    context['self'] = context;
+    Object.assign(looping, { context, cause: looping });
+
+    const serialized = serializeError(looping);
+    expect(serialized).toMatchObject({
+      cause: serialized,
+      context: { self: { key: `recipient-invite:address:${HASH_PLACEHOLDER}` } },
+    });
+    expect(written({ message: (serialized as { message: unknown }).message })).not.toContain(HASH);
+  });
+
+  it('keeps the hash out of an error a pino log line carries', () => {
+    const lines: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        lines.push(chunk.toString('utf8'));
+        done();
+      },
+    });
+    const logger = pino({ serializers: { err: serializeError } }, sink);
+    logger.error({ err: new Error('Unhandled', { cause: duplicateKey() }) }, 'Unhandled error');
+    const output = lines.join('');
+    expect(output).toContain(HASH_PLACEHOLDER);
+    expect(output).not.toContain(HASH);
   });
 });

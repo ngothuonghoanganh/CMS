@@ -105,3 +105,74 @@ export function serializeRequest<R extends LoggableRequest>(req: R): R {
   req.params = redactSecret(req.params, token);
   return req;
 }
+
+/** What a logged error shows in place of a sha256 (or any longer run of hex digits). */
+export const HASH_PLACEHOLDER = '[hash]';
+
+/**
+ * 64 hex digits or more. Some keys hold an unsalted sha256 of an email address (the confirmation
+ * email limits, ADR-018), a pseudonym of personal data; no log needs a sha256 value. Ids (24 hex
+ * digits) and request ids (UUIDs) are shorter and stay readable.
+ */
+const HEX_RUN = /[0-9a-f]{64,}/gi;
+
+/** Fields of an error that are not enumerable but say what went wrong. */
+const ERROR_FIELDS = ['name', 'message', 'stack', 'errmsg', 'cause', 'errors'] as const;
+
+function hasToJson(value: object): value is { toJSON: () => unknown } {
+  return 'toJSON' in value && typeof value.toJSON === 'function';
+}
+
+/** A copy of `value` with every run of 64 hex digits in its strings replaced, cycles kept. */
+function redactHashesIn(value: unknown, copies: WeakMap<object, unknown>): unknown {
+  if (typeof value === 'string') {
+    return value.replace(HEX_RUN, HASH_PLACEHOLDER);
+  }
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+  const known = copies.get(value);
+  if (known !== undefined) {
+    return known;
+  }
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    copies.set(value, copy);
+    for (const item of value) {
+      copy.push(redactHashesIn(item, copies));
+    }
+    return copy;
+  }
+  // What the log would write for it: an ObjectId's hex string, a Date's ISO string.
+  if (!(value instanceof Error) && hasToJson(value)) {
+    const json = value.toJSON();
+    if (json !== value) {
+      return redactHashesIn(json, copies);
+    }
+  }
+  const copy: Record<string, unknown> = {};
+  copies.set(value, copy);
+  if (value instanceof Error) {
+    for (const field of ERROR_FIELDS) {
+      if (field in value) {
+        copy[field] = redactHashesIn(Reflect.get(value, field), copies);
+      }
+    }
+  }
+  for (const [key, item] of Object.entries(value)) {
+    copy[key] = redactHashesIn(item, copies);
+  }
+  return copy;
+}
+
+/**
+ * pino's error serializer (`err`, after the standard one, which folds the causes' messages and
+ * stacks into the error's own): every run of 64 hex digits in the logged error becomes `[hash]`,
+ * in its message and stack, the driver's `errmsg` and `keyValue`, and its nested `cause` and
+ * `errors` (AggregateError), at any depth. A net under logs that pass an error on whole, e.g. a
+ * duplicate key error on a limit key that holds the hash of an address, rethrown as the cause of
+ * a 500 (`ProblemFilter`). Returns a copy; the error itself is not changed.
+ */
+export function serializeError(error: unknown): unknown {
+  return redactHashesIn(error, new WeakMap());
+}
