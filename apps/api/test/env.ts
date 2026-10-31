@@ -2,6 +2,7 @@ import type { EnvInput } from '../src/config/env.js';
 
 export const TEST_ADMIN_ORIGIN = 'http://localhost:3100';
 export const TEST_RENDERER_API_SECRET = 'test-renderer-api-secret-0123456789abcdef';
+export const TEST_LOGIN_ATTEMPT_SECRET = 'test-login-attempt-secret-0123456789abcdef';
 
 /** Environment for integration tests; MONGODB_URI is set per test file by createTestApp. */
 export function testEnvInput(
@@ -17,6 +18,7 @@ export function testEnvInput(
     RENDERER_INTERNAL_URL: 'http://localhost:3101',
     REVALIDATE_SECRET: 'test-revalidate-secret-0123456789abcdef',
     PREVIEW_SECRET: 'test-preview-secret-0123456789abcdef',
+    LOGIN_ATTEMPT_SECRET: TEST_LOGIN_ATTEMPT_SECRET,
     RENDERER_API_SECRET: TEST_RENDERER_API_SECRET,
     // Integration tests record emails instead of sending them (test/app.ts); the Mailpit test
     // sends real ones here.

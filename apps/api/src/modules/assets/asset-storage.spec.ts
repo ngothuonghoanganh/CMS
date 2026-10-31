@@ -12,6 +12,7 @@ function storage(publicBaseUrl: string): S3AssetStorage {
       RENDERER_INTERNAL_URL: 'http://localhost:3101',
       REVALIDATE_SECRET: 'r'.repeat(32),
       PREVIEW_SECRET: 'p'.repeat(32),
+      LOGIN_ATTEMPT_SECRET: 'l'.repeat(32),
       RENDERER_API_SECRET: 'r'.repeat(32),
       SMTP_URL: 'smtp://localhost:1125',
       LEAD_EMAIL_FROM: 'Payload Landing Page <no-reply@payload.site>',

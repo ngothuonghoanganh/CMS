@@ -8,6 +8,7 @@ const valid = {
   RENDERER_INTERNAL_URL: 'http://localhost:3101',
   REVALIDATE_SECRET: 'r'.repeat(32),
   PREVIEW_SECRET: 'p'.repeat(32),
+  LOGIN_ATTEMPT_SECRET: 'l'.repeat(32),
   RENDERER_API_SECRET: 'r'.repeat(32),
   SMTP_URL: 'smtp://localhost:1125',
   LEAD_EMAIL_FROM: 'Payload Landing Page <no-reply@payload.site>',
@@ -56,6 +57,14 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...valid, RENDERER_API_SECRET: 'short' })).toThrow(
       /RENDERER_API_SECRET/,
     );
+    expect(() => parseEnv({ ...valid, LOGIN_ATTEMPT_SECRET: 'short' })).toThrow(
+      /LOGIN_ATTEMPT_SECRET/,
+    );
+  });
+
+  it('needs a secret for the login attempt keys, which has no default (ADR-004)', () => {
+    const { LOGIN_ATTEMPT_SECRET: _missing, ...rest } = valid;
+    expect(() => parseEnv(rest)).toThrow(/LOGIN_ATTEMPT_SECRET/);
   });
 
   it('requires the {subdomain} placeholder in the public origin template', () => {

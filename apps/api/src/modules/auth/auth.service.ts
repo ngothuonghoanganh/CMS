@@ -7,7 +7,11 @@ import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
-import { LoginAttemptsRepository, loginAccountKey } from './login-attempts.repository.js';
+import {
+  type AttemptWindow,
+  LoginAttemptsRepository,
+  loginAccountKey,
+} from './login-attempts.repository.js';
 import { hashPassword, timingSafeDummyHash, verifyPassword } from './password.js';
 import { hashSessionToken, newSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
@@ -57,10 +61,12 @@ export class AuthService {
 
   /**
    * Each account allows `LOGIN_FAILURE_LIMIT` failed attempts per window. The attempt is counted
-   * before the password is checked; a success clears the count (ADR-004).
+   * before the password is checked; a success clears the count (ADR-004). A login that fails on
+   * our side (database, password hashing, session) gives its attempt back: only a wrong password
+   * may use up the account's attempts.
    */
   async login(input: LoginRequest): Promise<IssuedSession> {
-    const accountKey = loginAccountKey(input.email);
+    const accountKey = loginAccountKey(this.env.LOGIN_ATTEMPT_SECRET, input.email);
     const now = new Date();
     const windowEnd = new Date(now.getTime() + this.env.LOGIN_FAILURE_WINDOW_MINUTES * 60_000);
     const attempts = await this.loginAttempts.begin(accountKey, now, windowEnd);
@@ -73,15 +79,50 @@ export class AuthService {
         detail: `Tài khoản này tạm dừng đăng nhập vì nhập sai quá nhiều lần. Thử lại sau ${String(minutes)} phút.`,
       });
     }
+    let session: IssuedSession | null;
+    try {
+      session = await this.signInWithPassword(input, accountKey);
+    } catch (error) {
+      return this.giveBackAttempt(accountKey, attempts, error);
+    }
+    if (!session) {
+      throw new AppError(401, 'invalid_credentials', 'Email hoặc mật khẩu không đúng');
+    }
+    return session;
+  }
+
+  /** A session when the password is right, null when it is wrong or the email has no account. */
+  private async signInWithPassword(
+    input: LoginRequest,
+    accountKey: string,
+  ): Promise<IssuedSession | null> {
     const user = await this.users.findByEmail(input.email);
     const valid = user
       ? await verifyPassword(user.passwordHash, input.password)
       : await verifyPassword(await timingSafeDummyHash(), input.password).then(() => false);
     if (!user || !valid) {
-      throw new AppError(401, 'invalid_credentials', 'Email hoặc mật khẩu không đúng');
+      return null;
     }
     await this.loginAttempts.clear(accountKey);
     return this.issueSession({ id: user._id, name: user.name, email: user.email });
+  }
+
+  /** Rethrows `error` once the attempt it counted is given back. */
+  private async giveBackAttempt(
+    accountKey: string,
+    attempts: AttemptWindow,
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await this.loginAttempts.giveBack(accountKey, attempts, new Date());
+    } catch (giveBackError) {
+      throw new AggregateError(
+        [error, giveBackError],
+        'Login failed, and giving its attempt back failed too',
+        { cause: giveBackError },
+      );
+    }
+    throw error;
   }
 
   async logout(token: string | undefined): Promise<void> {

@@ -47,7 +47,10 @@ sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 /** Unfinished login attempts of one account in the current window (ADR-004). */
 export interface LoginAttemptRecord {
   _id: Types.ObjectId;
-  /** sha256 of the normalised email: the email itself, which may not be an account, is not stored. */
+  /**
+   * HMAC of the normalised email (`loginAccountKey`): the email itself, which may not be an
+   * account, is not stored, and the database alone cannot tell which email a key belongs to.
+   */
   accountKey: string;
   count: number;
   /** End of the window; the TTL index removes the record afterwards. */
