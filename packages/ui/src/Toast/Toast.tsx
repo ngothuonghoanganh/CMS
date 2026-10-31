@@ -88,7 +88,8 @@ export interface ToastProviderProps {
 /**
  * Holds the toasts and renders their region ("Thông báo") at the bottom right, or at the top
  * right while the control in focus is under the bottom corner: a toast never hides it (WCAG
- * 2.4.11).
+ * 2.4.11). The corner is chosen again whenever focus moves, the stack changes size (a second
+ * toast), or the page scrolls or resizes, since each can bring the stack over the control.
  */
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<readonly ToastRecord[]>([]);
@@ -133,9 +134,20 @@ export function ToastProvider({ children }: ToastProviderProps) {
     }
     place();
     document.addEventListener('focusin', place);
+    // Capture: scrolling any container, not only the page, moves the control.
+    window.addEventListener('scroll', place, { capture: true, passive: true });
+    window.addEventListener('resize', place);
+    const stack = viewportRef.current;
+    const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    if (stack !== null) {
+      resized?.observe(stack);
+    }
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener('focusin', place);
+      window.removeEventListener('scroll', place, { capture: true });
+      window.removeEventListener('resize', place);
+      resized?.disconnect();
     };
   }, [showing]);
 
