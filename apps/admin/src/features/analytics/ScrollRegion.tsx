@@ -14,11 +14,15 @@ export interface ScrollRegionProps {
  * A table that scrolls sideways on a narrow screen. Nothing inside takes focus, so while the table
  * is wider than its box the box is a named region in the tab order, and arrow keys scroll it (WCAG
  * 2.1.1). Where it fits (a desktop width) it is neither: a tab stop there would scroll nothing.
- * Measured again whenever the box or the table changes width (window, rows, fonts).
+ * Once it holds focus it stays focusable until focus leaves, even if the table comes to fit (the
+ * window widens): focus would otherwise fall to the page (WCAG 2.4.3).
+ * Measured again whenever the box or the table changes width (window, rows, fonts), also a table
+ * that replaces the first one or comes late.
  */
 export function ScrollRegion({ label, children }: ScrollRegionProps) {
   const box = useRef<HTMLDivElement>(null);
   const [overflows, setOverflows] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   useLayoutEffect(() => {
     const element = box.current;
@@ -29,16 +33,30 @@ export function ScrollRegion({ label, children }: ScrollRegionProps) {
       setOverflows(element.scrollWidth > element.clientWidth);
     };
     measure();
-    if (typeof ResizeObserver === 'undefined') {
-      return undefined;
-    }
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    if (element.firstElementChild !== null) {
-      observer.observe(element.firstElementChild);
-    }
+    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    resizes?.observe(element);
+    let table: Element | null = null;
+    const observeTable = () => {
+      if (element.firstElementChild === table) {
+        return;
+      }
+      if (table !== null) {
+        resizes?.unobserve(table);
+      }
+      table = element.firstElementChild;
+      if (table !== null) {
+        resizes?.observe(table);
+      }
+    };
+    observeTable();
+    const replaced = new MutationObserver(() => {
+      observeTable();
+      measure();
+    });
+    replaced.observe(element, { childList: true });
     return () => {
-      observer.disconnect();
+      replaced.disconnect();
+      resizes?.disconnect();
     };
   }, []);
 
@@ -46,7 +64,13 @@ export function ScrollRegion({ label, children }: ScrollRegionProps) {
     <div
       ref={box}
       className={styles.tableScroll}
-      {...(overflows ? { role: 'region', 'aria-label': label, tabIndex: 0 } : {})}
+      onFocus={() => {
+        setFocused(true);
+      }}
+      onBlur={() => {
+        setFocused(false);
+      }}
+      {...(overflows || focused ? { role: 'region', 'aria-label': label, tabIndex: 0 } : {})}
     >
       {children}
     </div>
