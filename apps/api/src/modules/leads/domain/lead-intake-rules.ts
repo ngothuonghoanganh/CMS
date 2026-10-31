@@ -1,6 +1,7 @@
 import { LEAD_SPAM_MIN_FILL_MS, type LeadDevice, type SpamReason } from '@plp/contracts';
 import type { ObjectId } from '../../../shared/persistence/object-id.js';
 import { addressKey } from '../../../shared/renderer-channel/address-key.js';
+import { addressNetwork } from './visitor-address.js';
 
 /** Phones and tablets count as "Điện thoại" on the analytics board; the rest as "Máy tính". */
 export function deviceFromUserAgent(userAgent: string): LeadDevice {
@@ -42,11 +43,12 @@ export function addMonthsUtc(date: Date, months: number): Date {
 
 /**
  * Rate-limit buckets (ADR-016). Addresses are keyed hashes (`addressKey`), so none can be read
- * back from the database. Without a trusted address every visitor of the site shares one bucket,
- * the safe default when no proxy is in front.
+ * back from the database; an IPv6 visitor counts by their /64 network (`addressNetwork`). Without a
+ * trusted address every visitor of the site shares one bucket, the safe default when no proxy is
+ * in front.
  */
 export function clientLimitKey(secret: Buffer, siteId: ObjectId, ip: string | null): string {
-  const visitor = ip === null ? 'unknown' : addressKey(secret, siteId, ip);
+  const visitor = ip === null ? 'unknown' : addressKey(secret, siteId, addressNetwork(ip));
   return `lead:ip:${siteId.toHexString()}:${visitor}`;
 }
 
