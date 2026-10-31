@@ -160,6 +160,15 @@ describe('AnalyticsScreen', () => {
         .map((cell) => cell.textContent),
     ).toEqual(['502', '402', '9', '2,2%']);
     expect(within(rows[5] ?? chart).getByRole('rowheader')).toHaveTextContent('Thứ 5, 22/10');
+    // On a phone the table scrolls sideways; with nothing focusable inside, the keyboard reaches
+    // it through its region (WCAG 2.1.1).
+    expect(
+      within(chart).getByRole('region', { name: 'Khách duy nhất mỗi ngày, dạng bảng' }),
+    ).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('region', { name: 'Bảng nguồn truy cập' })).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
   });
 
   it('keeps a day tapped by a finger or a pen, and lets a hover or a scroll go', () => {

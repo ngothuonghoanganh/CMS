@@ -149,7 +149,14 @@ export function DailyVisitorsChart({ daily, asTable, onAsTableChange }: DailyVis
       </div>
 
       {asTable ? (
-        <div className={styles.tableScroll}>
+        // The table scrolls sideways on a phone and holds nothing focusable, so the region itself
+        // takes focus for arrow keys (WCAG 2.1.1).
+        <div
+          className={styles.tableScroll}
+          role="region"
+          aria-label="Khách duy nhất mỗi ngày, dạng bảng"
+          tabIndex={0}
+        >
           <table className={styles.table}>
             <caption>
               <VisuallyHidden>Khách duy nhất mỗi ngày</VisuallyHidden>

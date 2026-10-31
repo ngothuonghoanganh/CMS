@@ -84,12 +84,15 @@ describe('Sidebar', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
     expect(nav).toHaveTextContent('Payload');
+    // The switchers are named by the words they show first (WCAG 2.5.3), then what they do.
     expect(
-      screen.getByRole('button', { name: 'Đổi workspace — hiện tại: Mây Xanh Agency' }),
+      screen.getByRole('button', { name: 'Workspace Mây Xanh Agency, đổi workspace' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Đổi site — hiện tại: Nha khoa Smile Care' }),
-    ).toHaveTextContent('smilecare.payload.site');
+      screen.getByRole('button', {
+        name: 'Nha khoa Smile Care smilecare.payload.site, đổi site',
+      }),
+    ).toBeInTheDocument();
 
     const pages = screen.getByRole('link', { name: 'Trang 6 trang' });
     expect(pages).toHaveAttribute('href', `/sites/${SITE_ID}`);
@@ -156,7 +159,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     expect(screen.getByRole('menuitemradio', { name: /Nha khoa Smile Care/ })).toBeChecked();
     expect(screen.getByRole('menuitem', { name: 'Tạo site mới' })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
@@ -168,7 +171,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Tạo site mới' }));
 
     expect(router.push).toHaveBeenCalledWith(`/sites/new?workspace=${WORKSPACE_ID}`);
@@ -179,7 +182,7 @@ describe('Sidebar', () => {
     renderSidebar({ membership: { ...agency, role: 'editor' } });
 
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Editor');
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     expect(screen.queryByRole('menuitem', { name: 'Tạo site mới' })).not.toBeInTheDocument();
   });
 
@@ -187,7 +190,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole('button', { name: /Đổi workspace/ }));
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
     await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
 
     expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
@@ -204,7 +207,7 @@ describe('Sidebar', () => {
     });
     queryClient.setQueryData(leadQueryKeys.lists(otherSite.id), { items: [] });
 
-    await user.click(screen.getByRole('button', { name: /Đổi workspace/ }));
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
     await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
 
     expect(queryClient.getQueryData(leadQueryKeys.counts(otherSite.id))).toBeUndefined();
@@ -220,7 +223,7 @@ describe('Sidebar', () => {
       new: { count: 4, capped: false },
     });
 
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
 
     expect(queryClient.getQueryData(leadQueryKeys.counts(otherSite.id))).toMatchObject({
@@ -285,7 +288,7 @@ describe('Sidebar', () => {
       const asked = holdingScreen();
       renderSidebar();
 
-      await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+      await user.click(screen.getByRole('button', { name: /đổi site$/ }));
       await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
 
       expect(router.push).not.toHaveBeenCalled();
@@ -299,7 +302,7 @@ describe('Sidebar', () => {
       const asked = holdingScreen();
       renderSidebar();
 
-      await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+      await user.click(screen.getByRole('button', { name: /đổi site$/ }));
       await user.click(screen.getByRole('menuitem', { name: 'Tạo site mới' }));
 
       expect(router.push).not.toHaveBeenCalled();
@@ -312,7 +315,7 @@ describe('Sidebar', () => {
       const asked = holdingScreen();
       renderSidebar();
 
-      await user.click(screen.getByRole('button', { name: /Đổi workspace/ }));
+      await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
       await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
 
       // The save may fail and the user stay: this workspace is still the one they work in.

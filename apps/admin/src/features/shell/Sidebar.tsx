@@ -110,16 +110,15 @@ export function Sidebar({
       <DropdownMenu
         align="start"
         trigger={
-          <button
-            type="button"
-            className={styles.workspaceButton}
-            aria-label={`Đổi workspace — hiện tại: ${workspace.name}`}
-          >
+          // Named by what it shows, then what it does: a label of its own would leave out the
+          // visible words, and people who speak to their computer say what they see (WCAG 2.5.3).
+          <button type="button" className={styles.workspaceButton}>
             <Avatar name={workspace.name} shape="square" />
             <span className={styles.stack}>
-              <span className={styles.caption}>Workspace</span>
+              <span className={styles.caption}>Workspace</span>{' '}
               <span className={styles.workspaceName}>{workspace.name}</span>
             </span>
+            <VisuallyHidden>, đổi workspace</VisuallyHidden>
             <span className={styles.chevron}>
               <ChevronUpDownIcon size={16} />
             </span>
@@ -158,16 +157,13 @@ export function Sidebar({
         <DropdownMenu
           align="start"
           trigger={
-            <button
-              type="button"
-              className={styles.siteButton}
-              aria-label={`Đổi site — hiện tại: ${site.name}`}
-            >
+            <button type="button" className={styles.siteButton}>
               <SiteTile site={site} />
               <span className={styles.stack}>
-                <span className={styles.siteName}>{site.name}</span>
+                <span className={styles.siteName}>{site.name}</span>{' '}
                 <span className={styles.siteHost}>{hostOf(site.defaultOrigin)}</span>
               </span>
+              <VisuallyHidden>, đổi site</VisuallyHidden>
               <span className={styles.chevron}>
                 <ChevronUpDownIcon size={16} />
               </span>

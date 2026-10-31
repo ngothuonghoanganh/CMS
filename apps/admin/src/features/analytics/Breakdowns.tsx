@@ -15,7 +15,13 @@ export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }
       {sources.length === 0 ? (
         <p className={styles.note}>Chưa có khách nào trong khoảng này.</p>
       ) : (
-        <div className={styles.tableScroll}>
+        // Scrolls sideways on a narrow screen with nothing focusable inside: see DailyVisitorsChart.
+        <div
+          className={styles.tableScroll}
+          role="region"
+          aria-label="Bảng nguồn truy cập"
+          tabIndex={0}
+        >
           <table className={styles.table}>
             <thead>
               <tr>
