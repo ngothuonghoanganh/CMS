@@ -7,10 +7,11 @@ import {
   type Role,
   type SaveDraftResponse,
 } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../../lib/api';
+import { ChangesDiscardedError } from '../editor';
 import { pageSummary, site, SITE_ID, PAGE_ID } from '../editor/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { PublishDialog } from './PublishDialog';
@@ -114,12 +115,19 @@ interface Setup {
   page?: PageSummary;
   result?: ChecksResult;
   role?: Role;
+  /** The editor's save before the checks; by default it saves `page`. */
+  ensureSaved?: () => Promise<SaveDraftResponse>;
 }
 
-function renderDialog({ page = livePage(), result = checks(), role = 'owner' }: Setup = {}) {
+function renderDialog({
+  page = livePage(),
+  result = checks(),
+  role = 'owner',
+  ensureSaved = () => Promise.resolve(saved(page)),
+}: Setup = {}) {
   const props = {
     onOpenChange: vi.fn(),
-    ensureSaved: vi.fn(() => Promise.resolve(saved(page))),
+    ensureSaved: vi.fn(ensureSaved),
     onFixTarget: vi.fn(),
     onPageUpdated: vi.fn(),
     role,
@@ -476,6 +484,20 @@ describe('PublishDialog', () => {
     expect(await screen.findByText('Kết quả kiểm tra đã thay đổi')).toBeInTheDocument();
     expect(screen.getByText('Cảnh báo · Câu hỏi thường gặp còn nội dung mẫu')).toBeInTheDocument();
     expect(publishButton()).toBeDisabled();
+  });
+
+  it('closes without a word when the changes were given up for a leave', async () => {
+    const logged = vi.spyOn(console, 'error');
+    const props = renderDialog({
+      ensureSaved: () => Promise.reject(new ChangesDiscardedError()),
+    });
+
+    await waitFor(() => {
+      expect(props.onOpenChange).toHaveBeenCalledWith(false);
+    });
+    expect(apiMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(logged).not.toHaveBeenCalled();
   });
 
   it('shows an unexpected failure and keeps the dialog open', async () => {

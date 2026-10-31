@@ -34,7 +34,11 @@ import { formatRelativeTime } from '../../lib/format';
 import { displayUrl, internalVisitUrl } from '../../lib/site-url';
 import { siteQueryKeys } from '../dashboard/queries';
 import { CopyAddressButton } from '../domain/CopyAddressButton';
-import { DraftConflictError, type PublishDialogRenderProps } from '../editor';
+import {
+  ChangesDiscardedError,
+  DraftConflictError,
+  type PublishDialogRenderProps,
+} from '../editor';
 import { cx } from '../shell/cx';
 import { pageHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -218,8 +222,9 @@ function PublishSession({
       if (current !== run.current) {
         return;
       }
-      if (error instanceof DraftConflictError) {
-        // The editor shows its own blocking "reload" dialog for this.
+      if (error instanceof DraftConflictError || error instanceof ChangesDiscardedError) {
+        // A conflict: the editor shows its own blocking "reload" dialog. Changes given up for a
+        // leave: nothing saved them, so there is nothing to publish.
         onOpenChange(false);
         return;
       }

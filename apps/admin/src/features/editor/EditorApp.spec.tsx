@@ -180,6 +180,30 @@ describe('EditorApp', () => {
     );
   });
 
+  it('once the changes were given up for a leave, leaves at once and previews nothing', async () => {
+    const user = userEvent.setup();
+    const logged = vi.spyOn(console, 'error');
+    render(<EditorApp initial={initial()} renderPublishDialog={noPublishDialog} />, { wrapper });
+    await user.click(screen.getByRole('button', { name: 'Ẩn hoặc hiện Hero' }));
+    await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+    await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+    expect(push).toHaveBeenCalledTimes(1);
+
+    // The next screen has not shown yet: the editor still answers, without the changes.
+    await user.click(screen.getByRole('button', { name: 'Xem trước' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Xem trước' })).toBeEnabled();
+    });
+    expect(screen.queryByText('Chưa mở được bản xem trước')).toBeNull();
+    expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).not.toContain(
+      endpoints.createPreviewLink,
+    );
+    await user.click(screen.getByRole('link', { name: 'Quay lại danh sách trang' }));
+    expect(screen.queryByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeNull();
+    expect(push).toHaveBeenLastCalledWith('/sites/64b000000000000000000001');
+    expect(logged).not.toHaveBeenCalled();
+  });
+
   it('opens the draft preview, or shows the link when the popup is blocked', async () => {
     const user = userEvent.setup();
     const preview: PreviewLinkResponse = {

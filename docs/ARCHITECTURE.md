@@ -506,10 +506,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Back về URL của màn không có fragment: lịch sử không tăng, entry của skip link vẫn ở phía trước (Forward về lại `#main-content`), không hộp thoại, không toast;
     - sau "Thử lại", thay đổi được lưu.
 - **Amended 2026-11-01 (vòng test thứ ba, bỏ thay đổi khi rời trang):**
-  - **Trong lúc một lần rời trang không kèm thay đổi còn đang chạy** (ví dụ "Đăng xuất, bỏ thay đổi" chờ server), `ensureSaved` từ chối bằng `ChangesDiscardedError`, không trả trạng thái đã lưu cũ của store như một lần lưu thành công.
-    - Link khác, sidebar hay "Lưu rồi rời trang" lúc đó bị bỏ qua: không toast, không lỗi, không điều hướng; "Thử lại" không làm gì. Lần rời trang đang chạy quyết định: người dùng đi, hoặc thay đổi trở lại khi nó không xảy ra.
-    - Trước đây link đó rời màn như thể đã lưu, mà không lưu gì; nếu đăng xuất sau đó thất bại (`'stayed'`), thay đổi mất.
-  - **Mỗi lần bỏ thay đổi có token** (`discardUnsaved` trả token, `withdrawDiscard(token)`): chỉ lần rời trang bỏ thay đổi sau cùng mới lấy lại được chúng khi nó không xảy ra. Trước đây `'stayed'` của một lần rời trang huỷ cả việc bỏ thay đổi của một lần khác vẫn đang chạy.
+  - **Thay đổi người dùng đã bỏ cho một lần rời trang thì không còn gì để lưu,** từ lúc chọn "Rời trang, bỏ thay đổi" (hay "Đăng xuất, bỏ thay đổi") tới thay đổi kế tiếp, hoặc tới khi lần rời trang đó không xảy ra. Trong lúc đó `ensureSaved` từ chối bằng `ChangesDiscardedError`, không trả trạng thái đã lưu cũ của store như một lần lưu thành công.
+    - Lần rời trang mới (link, sidebar, Back/Forward) đi ngay, không hỏi và không lưu: màn SEO và editor dùng chung điều kiện `leavingLoses`, như `beforeunload`. Đường dẫn đang chờ kiểm tra cũng thuộc phần đã bỏ, nên không bị kiểm tra lại. Lần rời trang đang chờ lưu, hay "Lưu rồi rời trang" của editor, mà gặp `ChangesDiscardedError` cũng đi tiếp.
+    - Xuất bản, xem trước và "Quay về bản live" gặp `ChangesDiscardedError` thì đóng lại hoặc không làm gì, không báo lỗi: không bản nháp đã lưu nào chứa các thay đổi đó. "Thử lại" không làm gì.
+    - Bản đầu của sửa đổi này bỏ qua mọi lần rời trang mới trong lúc đó. Lần rời trang đã báo `'leaving'` mà màn chưa unmount thì mọi link trông như hỏng.
+    - Trước đó nữa, link đó rời màn như thể đã lưu mà không lưu gì; nếu đăng xuất sau đó thất bại (`'stayed'`), thay đổi mất.
+  - **Store đếm các lần rời trang đã bỏ thay đổi của cùng một phiên bản bản nháp** (`discarded: { version, leaves }`; `discardUnsaved` trả phiên bản đó, `withdrawDiscard(version)`). Thay đổi tính là đã bỏ khi còn ít nhất một lần chưa rút lại. Lần rời trang không xảy ra (`'stayed'` hay lỗi) chỉ rút phần của nó, và không rút gì khi bản nháp đã đổi sau đó.
+    - Bản đầu giữ một token duy nhất: lần bỏ thứ hai thay token của lần thứ nhất. Lần thứ hai ở lại thì rút việc bỏ thay đổi trong khi lần thứ nhất vẫn đang chạy, và autosave lưu chính thay đổi người dùng đã bỏ.
+    - Trước đó nữa, `'stayed'` của một lần rời trang huỷ cả việc bỏ thay đổi của một lần khác vẫn đang chạy.
   - **Kết quả của "Đăng xuất"** (`useLogout`): chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".
     - Mở trang đăng nhập chạy sau khi request thành công, ngoài nhánh lỗi của mutation. Lỗi lúc đó được báo (`reportUnexpected`) và vẫn tính là `'leaving'`: session đã hết.
     - Trước đây mọi lỗi, kể cả lỗi ném ra sau khi `router.replace('/login')` đã bắt đầu điều hướng, đều thành `'stayed'`: màn lấy lại thay đổi đã bỏ và toast báo chưa đăng xuất được, dù session đã hết.

@@ -37,8 +37,8 @@ export {
   useDraftSaver,
 } from './use-draft-saver';
 export {
-  isUnsaved,
   type LeaveGuard,
+  leavingLoses,
   type PendingInput,
   useBeforeUnloadGuard,
   useHistoryLeaveGuard,

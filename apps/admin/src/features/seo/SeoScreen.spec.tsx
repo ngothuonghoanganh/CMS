@@ -52,6 +52,11 @@ function answerApi(
   );
 }
 
+/** How many saves of the draft were sent. */
+function savesSent(): number {
+  return apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.saveDraft).length;
+}
+
 function renderScreen(composition?: Composition) {
   const detail = pageDetail(composition);
   answerApi(undefined, detail);
@@ -395,6 +400,47 @@ describe('SeoScreen', () => {
       link.remove();
     });
 
+    it('still follows a link waiting for its save when the change is given up meanwhile', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      const link = outsideLink();
+      const description = screen.getByRole('textbox', { name: 'Mô tả ngắn' });
+      await user.type(description, 'Tư vấn');
+      await user.click(link);
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+
+      // Another link waits for a save that takes a while, and the user types on meanwhile.
+      let answerSave: () => void = () => undefined;
+      answerApi(
+        () =>
+          new Promise((resolve) => {
+            answerSave = () => {
+              resolve({
+                revision: 4,
+                updatedAt: '2026-10-24T08:05:00.000Z',
+                page: detail.page,
+                checks: detail.checks,
+              });
+            };
+          }),
+      );
+      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+      await user.type(description, ' miễn phí');
+      // The first failure still offers to leave without the change: the user takes it.
+      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
+
+      // The save ends; what was typed after it was given up, so the waiting link goes too.
+      answerSave();
+      await waitFor(() => {
+        expect(router.push).toHaveBeenLastCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
+      });
+      expect(savesSent()).toBe(2);
+      expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      link.remove();
+    });
+
     it('opens the reload dialog, not an error, when the draft changed elsewhere', async () => {
       const user = userEvent.setup();
       renderScreen();
@@ -590,6 +636,31 @@ describe('SeoScreen', () => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
     });
 
+    it('follows any later link at once when the slug was given up, without checking it again', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      const taken = vi.fn(() =>
+        Promise.resolve({
+          slug: 'bang-gia',
+          available: false,
+          reason: 'taken',
+          message: 'Đường dẫn này đang được trang “Bảng giá” dùng',
+        }),
+      );
+      answerSlug(detail, taken);
+      await typeSlug(user, 'bang-gia');
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+      await user.click(await screen.findByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+      const checks = taken.mock.calls.length;
+
+      // The editor has not shown yet: another link still goes, and the slug given up stays so.
+      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+      expect(router.push).toHaveBeenLastCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
+      expect(taken).toHaveBeenCalledTimes(checks);
+      expect(savedSlugs()).toEqual([]);
+    });
+
     it('stays when the check cannot reach the server', async () => {
       const user = userEvent.setup();
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -712,7 +783,7 @@ describe('SeoScreen', () => {
       expect(signOut).toHaveBeenCalledTimes(1);
     });
 
-    it('follows no link while signing out without the change, and keeps it when that fails', async () => {
+    it('follows a link at once while signing out without the change, and keeps it when that fails', async () => {
       const user = userEvent.setup();
       renderScreen();
       answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
@@ -732,14 +803,17 @@ describe('SeoScreen', () => {
       await waitFor(() => {
         expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
       });
+      const saves = savesSent();
 
-      // Signing out takes a while; the user follows a link meanwhile, and nothing was saved.
+      // Signing out takes a while; the user follows a link meanwhile. The change was given up, so
+      // there is nothing to save first.
       await user.click(screen.getByRole('link', { name: 'Mở editor' }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(router.push).not.toHaveBeenCalled();
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+      expect(savesSent()).toBe(saves);
       expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
 
-      // Signing out failed: the user is still here, with the change, and the tab asks again.
+      // Signing out failed before the editor showed: the user is still here, with the change, and
+      // the tab asks again.
       stay();
       await waitFor(() => {
         const event = new Event('beforeunload', { cancelable: true });
@@ -747,7 +821,6 @@ describe('SeoScreen', () => {
         expect(event.defaultPrevented).toBe(true);
       });
       expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
-      expect(router.push).not.toHaveBeenCalled();
     });
 
     it('takes the change back when signing out without it fails: the tab asks before closing', async () => {

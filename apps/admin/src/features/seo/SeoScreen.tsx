@@ -13,7 +13,7 @@ import {
   DraftConflictError,
   type EditorStore,
   EditorStoreProvider,
-  isUnsaved,
+  leavingLoses,
   refreshPageSummary,
   useBeforeUnloadGuard,
   useDraftSaver,
@@ -149,18 +149,20 @@ function SeoScreenBody({
   const host = hostOf(site.defaultOrigin);
   const shareImageId = seo.shareImageAssetId ?? site.defaultShareImageAssetId;
 
-  const hasPending = useCallback(
-    () => isUnsaved(store.getState().saveState) || slugPending(),
-    [store, slugPending],
-  );
+  // Changes given up for a leave are nothing to save: any other leave then goes at once.
+  const hasPending = useCallback(() => leavingLoses(store, slugPending), [store, slugPending]);
 
   const leaveFailed = useCallback(
     (error: unknown, { leave, discardLabel }: PendingLeave) => {
-      // A conflict opens the blocking reload dialog. Changes given up for a leave under way (signing
-      // out without them) leave with it: this leave is dropped, and asks nothing. Anything else keeps
+      // A conflict opens the blocking reload dialog. Changes given up meanwhile for another leave
+      // (signing out without them) are nothing to save: this leave goes too. Anything else keeps
       // the user here, with a way out when the save cannot succeed (signed out elsewhere, role
       // lowered, a taken slug).
-      if (error instanceof DraftConflictError || error instanceof ChangesDiscardedError) {
+      if (error instanceof DraftConflictError) {
+        return;
+      }
+      if (error instanceof ChangesDiscardedError) {
+        void leave();
         return;
       }
       const slugRefused = error instanceof SlugNotCommittedError;

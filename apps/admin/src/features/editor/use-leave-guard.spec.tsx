@@ -324,7 +324,7 @@ describe('useLeaveGuard with links', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('closes without a word when a leave without the changes is already under way', async () => {
+  it('leaves without a word when the changes were given up for another leave meanwhile', async () => {
     const user = userEvent.setup();
     const logged = vi.spyOn(console, 'error');
     const ensureSaved = vi.fn(() => Promise.reject(new ChangesDiscardedError()));
@@ -333,11 +333,23 @@ describe('useLeaveGuard with links', () => {
     await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
     await user.click(screen.getByRole('button', { name: 'Lưu rồi rời trang' }));
     await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(push).toHaveBeenCalledWith('/sites/s/pages/p/history');
     });
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(push).not.toHaveBeenCalled();
     expect(logged).not.toHaveBeenCalled();
+  });
+
+  it('follows a link at once when the changes were given up for a leave', async () => {
+    const user = userEvent.setup();
+    const { store, push } = setup();
+    failSave(store);
+    // A leave said it was under way, but the editor is still here.
+    void createDraftSaver(store).discardFor(() => 'leaving');
+
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(push).toHaveBeenCalledWith('/sites/s/pages/p/history');
   });
 
   it('explains a failed save and stays', async () => {

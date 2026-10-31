@@ -20,10 +20,10 @@ export function isUnsaved(saveState: SaveState): boolean {
 export type PendingInput = () => boolean;
 
 /**
- * Whether leaving now drops changes the user has not given up ("Rời trang, bỏ thay đổi", for a
- * leave still under way).
+ * Whether leaving now drops changes the user has not given up. Changes given up for a leave
+ * ("Rời trang, bỏ thay đổi") are nothing to save: any leave then goes without asking or saving.
  */
-function leavingLoses(store: EditorStore, pendingInput: PendingInput | undefined): boolean {
+export function leavingLoses(store: EditorStore, pendingInput?: PendingInput): boolean {
   const state = store.getState();
   return !isDiscarded(state) && (isUnsaved(state.saveState) || pendingInput?.() === true);
 }
@@ -157,7 +157,7 @@ export function useLeaveGuard(
 
   const navigate = useCallback(
     (href: string) => {
-      if (isUnsaved(store.getState().saveState)) {
+      if (leavingLoses(store)) {
         ask({ kind: 'link', href });
         return;
       }
@@ -193,9 +193,12 @@ export function useLeaveGuard(
       await ensureSaved();
       leave(target, true);
     } catch (caught) {
-      if (caught instanceof DraftConflictError || caught instanceof ChangesDiscardedError) {
-        // The blocking conflict dialog takes over, or a leave without the changes is already under
-        // way; nothing here can be saved any more.
+      if (caught instanceof ChangesDiscardedError) {
+        // Given up for another leave meanwhile: nothing is left to save, so this one goes too.
+        setPending(null);
+        go(target);
+      } else if (caught instanceof DraftConflictError) {
+        // The blocking conflict dialog takes over.
         setPending(null);
       } else {
         reportUnexpected('Saving the draft before leaving the editor failed', caught);
