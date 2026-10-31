@@ -239,6 +239,21 @@ describe('auth rate limit behind a trusted edge proxy', () => {
     await login('203.0.113.77').expect(401);
     await login('203.0.113.77').expect(429);
   });
+
+  it('counts a forwarded address that is not an IP address under the proxy', async () => {
+    // Express takes X-Forwarded-For as written; garbage there must neither fail the request nor
+    // open a fresh bucket per string.
+    const login = (address: string) =>
+      new TestClient(t.app)
+        .post('/auth/login', { email: 'garbage-xff@example.com', password: 'whatever-123' })
+        .set('X-Forwarded-For', address);
+
+    await login('foo').expect(401);
+    await login('not an address').expect(401);
+    await login('203.0.113.007').expect(429);
+    // A client with a real address keeps its own bucket.
+    await login('203.0.113.88').expect(401);
+  });
 });
 
 describe('per-account login limit', () => {
