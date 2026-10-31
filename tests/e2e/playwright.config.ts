@@ -42,11 +42,23 @@ export default defineConfig({
     navigationTimeout: 30_000,
     trace: 'retain-on-failure',
   },
-  // The design boards are drawn at 1440 px wide.
+  // The design boards are drawn at 1440 px wide. The whole suite runs in Chromium; the visitor's
+  // paths and inline editing (cross-browser.spec.ts) also run in WebKit and Firefox, which keeps
+  // the run short while every engine sees the public pages.
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'webkit',
+      testMatch: 'cross-browser.spec.ts',
+      use: { ...devices['Desktop Safari'], viewport: { width: 1440, height: 1000 } },
+    },
+    {
+      name: 'firefox',
+      testMatch: 'cross-browser.spec.ts',
+      use: { ...devices['Desktop Firefox'], viewport: { width: 1440, height: 1000 } },
     },
   ],
   webServer: [
