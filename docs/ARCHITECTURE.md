@@ -505,6 +505,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - skip link thêm đúng một entry và đưa focus vào nội dung chính;
     - Back về URL của màn không có fragment: lịch sử không tăng, entry của skip link vẫn ở phía trước (Forward về lại `#main-content`), không hộp thoại, không toast;
     - sau "Thử lại", thay đổi được lưu.
+- **Amended 2026-11-01 (vòng test thứ ba, bỏ thay đổi khi rời trang):**
+  - **Trong lúc một lần rời trang không kèm thay đổi còn đang chạy** (ví dụ "Đăng xuất, bỏ thay đổi" chờ server), `ensureSaved` từ chối bằng `ChangesDiscardedError`, không trả trạng thái đã lưu cũ của store như một lần lưu thành công.
+    - Link khác, sidebar hay "Lưu rồi rời trang" lúc đó bị bỏ qua: không toast, không lỗi, không điều hướng; "Thử lại" không làm gì. Lần rời trang đang chạy quyết định: người dùng đi, hoặc thay đổi trở lại khi nó không xảy ra.
+    - Trước đây link đó rời màn như thể đã lưu, mà không lưu gì; nếu đăng xuất sau đó thất bại (`'stayed'`), thay đổi mất.
+  - **Mỗi lần bỏ thay đổi có token** (`discardUnsaved` trả token, `withdrawDiscard(token)`): chỉ lần rời trang bỏ thay đổi sau cùng mới lấy lại được chúng khi nó không xảy ra. Trước đây `'stayed'` của một lần rời trang huỷ cả việc bỏ thay đổi của một lần khác vẫn đang chạy.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 

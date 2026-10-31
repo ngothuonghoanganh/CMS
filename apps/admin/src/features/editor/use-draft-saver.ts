@@ -28,16 +28,32 @@ export class DraftConflictError extends Error {
   }
 }
 
+/**
+ * The changes not saved yet were given up for a leave still under way ("Rời trang, bỏ thay đổi"):
+ * nothing saved them, and whoever asked for the save must not act as if it had. That leave already
+ * takes the user away, or gives the changes back when it does not happen.
+ */
+export class ChangesDiscardedError extends Error {
+  constructor() {
+    super('Thay đổi chưa lưu đã được bỏ cho lần rời trang đang diễn ra');
+    this.name = 'ChangesDiscardedError';
+  }
+}
+
 export interface DraftSaver {
-  /** Saves pending changes now (e.g. before publishing) and resolves with the server result. */
+  /**
+   * Saves pending changes now (e.g. before publishing) and resolves with the server result.
+   * Rejects with `ChangesDiscardedError` while they are given up for a leave under way.
+   */
   ensureSaved: () => Promise<SaveDraftResponse>;
-  /** "Thử lại": saves now and restarts the automatic retries. */
+  /** "Thử lại": saves now and restarts the automatic retries. Nothing while changes are given up. */
   retry: () => void;
   /**
    * "Rời trang, bỏ thay đổi": gives the changes not saved yet up for `leave` only, then leaves. No
    * save of them starts any more, not even a retry or the one on stopping; a request already sent
    * cannot be recalled. When the user stays after all, they count as unsaved again and autosave
-   * resumes. A later change is saved as usual. Resolves with the leave's outcome.
+   * resumes, unless another leave gave them up meanwhile: it is still under way. A later change is
+   * saved as usual. Resolves with the leave's outcome.
    */
   discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
@@ -87,7 +103,10 @@ function needsSave(state: EditorState): boolean {
 
 function isKnownSaveFailure(error: unknown): boolean {
   return (
-    error instanceof ApiError || error instanceof DraftConflictError || error instanceof TypeError
+    error instanceof ApiError ||
+    error instanceof DraftConflictError ||
+    error instanceof ChangesDiscardedError ||
+    error instanceof TypeError
   );
 }
 
@@ -183,8 +202,13 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       if (state.saveState === 'conflict') {
         throw new DraftConflictError();
       }
-      if (!needsSave(state)) {
+      if (!hasUnsavedChanges(state)) {
         return currentSaveResponse(state);
+      }
+      if (isDiscarded(state)) {
+        // The store's last saved state is not these changes: answering with it would let the
+        // caller leave as if they were saved, while the leave they were given up for may stay.
+        throw new ChangesDiscardedError();
       }
       await saveOnce();
     }
@@ -221,9 +245,12 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }, debounceMs);
   }
 
-  /** The leave changes were given up for did not happen: they are unsaved again, and saved. */
-  function keepUnsaved() {
-    store.getState().withdrawDiscard();
+  /**
+   * The leave changes were given up for (`token`) did not happen: they are unsaved again, and
+   * saved, unless another leave gave them up since.
+   */
+  function keepUnsaved(token: symbol) {
+    store.getState().withdrawDiscard(token);
     const state = store.getState();
     if (!stopped && needsSave(state) && state.saveState !== 'conflict') {
       scheduleSave();
@@ -237,17 +264,17 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       flushInBackground();
     },
     async discardFor(leave) {
-      store.getState().discardUnsaved();
+      const token = store.getState().discardUnsaved();
       clearTimers();
       let outcome: LeaveOutcome;
       try {
         outcome = await leave();
       } catch (error) {
-        keepUnsaved();
+        keepUnsaved(token);
         throw error;
       }
       if (outcome === 'stayed') {
-        keepUnsaved();
+        keepUnsaved(token);
       }
       return outcome;
     },

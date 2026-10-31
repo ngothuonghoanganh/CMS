@@ -6,7 +6,12 @@ import { installHistoryGuard } from '../shell/history-guard';
 import type { Leave } from '../shell/screen-leave';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
-import { createDraftSaver, DraftConflictError, type DraftSaver } from './use-draft-saver';
+import {
+  ChangesDiscardedError,
+  createDraftSaver,
+  DraftConflictError,
+  type DraftSaver,
+} from './use-draft-saver';
 import { isSameDocument, useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
@@ -317,6 +322,22 @@ describe('useLeaveGuard with links', () => {
     });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('closes without a word when a leave without the changes is already under way', async () => {
+    const user = userEvent.setup();
+    const logged = vi.spyOn(console, 'error');
+    const ensureSaved = vi.fn(() => Promise.reject(new ChangesDiscardedError()));
+    const { store, push } = setup(ensureSaved);
+    store.getState().setSpacing(HERO, 'compact');
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    await user.click(screen.getByRole('button', { name: 'Lưu rồi rời trang' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+    expect(logged).not.toHaveBeenCalled();
   });
 
   it('explains a failed save and stays', async () => {

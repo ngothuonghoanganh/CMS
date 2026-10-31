@@ -95,6 +95,14 @@ export interface UpdateOptions {
   merge?: boolean;
 }
 
+/** Changes not saved yet that the user gave up for a leave ("Rời trang, bỏ thay đổi"). */
+export interface Discard {
+  /** The `draftVersion` they reached: a later change is saved as usual. */
+  version: number;
+  /** Which leave gave them up: only that one takes them back when it does not happen. */
+  token: symbol;
+}
+
 export interface EditorState {
   draft: DraftSnapshot;
   /** Server revision the draft is based on; sent with every save. */
@@ -114,8 +122,8 @@ export interface EditorState {
   /** Local counter of draft changes. Everything is saved when it equals `savedVersion`. */
   draftVersion: number;
   savedVersion: number;
-  /** The `draftVersion` whose unsaved changes the user gave up for a leave (see `isDiscarded`). */
-  discardedVersion: number | null;
+  /** Unsaved changes the user gave up for a leave (see `isDiscarded`). */
+  discarded: Discard | null;
   /** Field whose typing currently merges into the last undo step. */
   mergeKey: string | null;
 
@@ -164,11 +172,15 @@ export interface EditorState {
   /**
    * "Rời trang, bỏ thay đổi": the user gives up the changes not saved yet, for the leave that
    * follows. Until the next change, or until `withdrawDiscard`, nothing saves them and nothing asks
-   * before leaving.
+   * before leaving. Returns the token that leave withdraws them with.
    */
-  discardUnsaved: () => void;
-  /** The leave the changes were given up for did not happen: they count as unsaved again. */
-  withdrawDiscard: () => void;
+  discardUnsaved: () => symbol;
+  /**
+   * The leave the changes were given up for did not happen: they count as unsaved again. Only the
+   * latest leave that gave them up (its `token`) can take them back; an earlier one that stayed
+   * leaves them to it.
+   */
+  withdrawDiscard: (token: symbol) => void;
   /** After publish, rollback or unpublish: the page summary and checks changed on the server. */
   setServerState: (update: { page?: PageSummary; checks?: ChecksResult }) => void;
   setSite: (site: Site) => void;
@@ -186,8 +198,8 @@ export function hasUnsavedChanges(state: Pick<EditorState, 'draftVersion' | 'sav
 }
 
 /** The user gave up the changes the draft holds now ("Rời trang, bỏ thay đổi"). */
-export function isDiscarded(state: Pick<EditorState, 'draftVersion' | 'discardedVersion'>) {
-  return state.discardedVersion === state.draftVersion;
+export function isDiscarded(state: Pick<EditorState, 'draftVersion' | 'discarded'>) {
+  return state.discarded?.version === state.draftVersion;
 }
 
 /** A save response built from the store when there is nothing new to save. */
@@ -348,7 +360,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
       leadCapture: init.leadCapture,
       draftVersion: 0,
       savedVersion: 0,
-      discardedVersion: null,
+      discarded: null,
       mergeKey: null,
 
       addSection(type, variant, requestedIndex) {
@@ -727,11 +739,15 @@ export function createEditorStore(init: EditorInit): EditorStore {
       },
 
       discardUnsaved() {
-        set({ discardedVersion: get().draftVersion });
+        const token = Symbol('discard');
+        set({ discarded: { version: get().draftVersion, token } });
+        return token;
       },
 
-      withdrawDiscard() {
-        set({ discardedVersion: null });
+      withdrawDiscard(token) {
+        if (get().discarded?.token === token) {
+          set({ discarded: null });
+        }
       },
 
       setServerState(update) {

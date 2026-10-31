@@ -7,10 +7,12 @@ import { ApiError, api } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
 import { siteQueryKeys } from '../dashboard/queries';
 import { pageQueryKeys } from '../history/queries';
+import type { LeaveOutcome } from '../shell/screen-leave';
 import { createTestQueryClient } from '../shell/test-utils';
 import { isDiscarded } from './store';
 import { emptyChecks, makeStore, PAGE_ID, pageSummary, SITE_ID } from './test-fixtures';
 import {
+  ChangesDiscardedError,
   createDraftSaver,
   DraftConflictError,
   runningSavesSettled,
@@ -291,6 +293,57 @@ describe('draft saver', () => {
     expect(saveMock).toHaveBeenCalledTimes(2);
     expect(saveMock.mock.calls[1]?.[2].body.composition.sections[1]?.spacing).toBe('compact');
     expect(store.getState().saveState).toBe('saved');
+    stop();
+  });
+
+  it('saves nothing for a save asked for while the changes are given up for a leave under way', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getState().saveState).toBe('error');
+
+    // Signing out without the change takes a while; a link or "Thử lại" asks for a save meanwhile.
+    const signOut = deferred<LeaveOutcome>();
+    const left = saver.discardFor(() => signOut.promise);
+    await expect(saver.ensureSaved()).rejects.toBeInstanceOf(ChangesDiscardedError);
+    const logged = vi.spyOn(console, 'error');
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(store.getState().saveState).toBe('error');
+    expect(logged).not.toHaveBeenCalled();
+
+    // Signing out failed: the change counts again, and a save asked for now saves it.
+    saveMock.mockResolvedValue(response(4));
+    signOut.resolve('stayed');
+    await expect(left).resolves.toBe('stayed');
+    await expect(saver.ensureSaved()).resolves.toMatchObject({ revision: 4 });
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('leaves the changes given up to a later leave when an earlier one stays', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    const first = deferred<LeaveOutcome>();
+    const second = deferred<LeaveOutcome>();
+    const firstLeft = saver.discardFor(() => first.promise);
+    const secondLeft = saver.discardFor(() => second.promise);
+
+    first.resolve('stayed');
+    await expect(firstLeft).resolves.toBe('stayed');
+    // The second leave still goes without them: nothing saves them.
+    expect(isDiscarded(store.getState())).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(saveMock).not.toHaveBeenCalled();
+
+    second.resolve('stayed');
+    await expect(secondLeft).resolves.toBe('stayed');
+    expect(isDiscarded(store.getState())).toBe(false);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
     stop();
   });
 

@@ -6,7 +6,7 @@ import { setHistoryGuard } from '../shell/history-guard';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import type { Leave, LeaveOutcome } from '../shell/screen-leave';
 import { type EditorStore, isDiscarded, type SaveState } from './store';
-import { type DraftSaver, DraftConflictError } from './use-draft-saver';
+import { ChangesDiscardedError, type DraftSaver, DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
 export function isUnsaved(saveState: SaveState): boolean {
@@ -193,8 +193,9 @@ export function useLeaveGuard(
       await ensureSaved();
       leave(target, true);
     } catch (caught) {
-      if (caught instanceof DraftConflictError) {
-        // The blocking conflict dialog takes over; nothing here can be saved any more.
+      if (caught instanceof DraftConflictError || caught instanceof ChangesDiscardedError) {
+        // The blocking conflict dialog takes over, or a leave without the changes is already under
+        // way; nothing here can be saved any more.
         setPending(null);
       } else {
         reportUnexpected('Saving the draft before leaving the editor failed', caught);

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { hostOf } from '../../lib/site-url';
 import {
+  ChangesDiscardedError,
   ConflictDialog,
   createEditorStore,
   DraftConflictError,
@@ -155,9 +156,11 @@ function SeoScreenBody({
 
   const leaveFailed = useCallback(
     (error: unknown, { leave, discardLabel }: PendingLeave) => {
-      // A conflict opens the blocking reload dialog; anything else keeps the user here, with a way
-      // out when the save cannot succeed (signed out elsewhere, role lowered, a taken slug).
-      if (error instanceof DraftConflictError) {
+      // A conflict opens the blocking reload dialog. Changes given up for a leave under way (signing
+      // out without them) leave with it: this leave is dropped, and asks nothing. Anything else keeps
+      // the user here, with a way out when the save cannot succeed (signed out elsewhere, role
+      // lowered, a taken slug).
+      if (error instanceof DraftConflictError || error instanceof ChangesDiscardedError) {
         return;
       }
       const slugRefused = error instanceof SlugNotCommittedError;

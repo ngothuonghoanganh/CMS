@@ -712,6 +712,44 @@ describe('SeoScreen', () => {
       expect(signOut).toHaveBeenCalledTimes(1);
     });
 
+    it('follows no link while signing out without the change, and keeps it when that fails', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      let stay: () => void = () => undefined;
+      const signOut = vi.fn(
+        () =>
+          new Promise<LeaveOutcome>((resolve) => {
+            stay = () => {
+              resolve('stayed');
+            };
+          }),
+      );
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      leaveScreen(signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
+      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      expect(signOut).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      });
+
+      // Signing out takes a while; the user follows a link meanwhile, and nothing was saved.
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(router.push).not.toHaveBeenCalled();
+      expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+
+      // Signing out failed: the user is still here, with the change, and the tab asks again.
+      stay();
+      await waitFor(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+      });
+      expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
+      expect(router.push).not.toHaveBeenCalled();
+    });
+
     it('takes the change back when signing out without it fails: the tab asks before closing', async () => {
       const user = userEvent.setup();
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
