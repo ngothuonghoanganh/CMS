@@ -22,6 +22,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * How long one attempt may take to write its outcome, in real time (`Date` is not faked). A
+ * budget of time rather than of tries: on a loaded machine each try is slower, and a count of
+ * tries ran out before the attempt did.
+ */
+const SETTLE_BUDGET_MS = 20_000;
+
+/**
  * The production waits between attempts (ADR-018): at once, after 1 minute, after 5 minutes. The
  * app keeps its real `NOTIFICATION_RETRY_DELAYS`; only `setTimeout` is faked, so the database,
  * the HTTP requests and `Date` stay real while the test moves the clock of the waits.
@@ -57,8 +64,10 @@ describe('lead email retry schedule', () => {
     leadId: string,
     expected: Partial<LeadNotification> & { attempts: number },
   ): Promise<void> {
-    for (let tries = 0; tries < 200; tries += 1) {
-      const notification = await notificationOf(leadId);
+    const deadline = Date.now() + SETTLE_BUDGET_MS;
+    let notification: LeadNotification | null = null;
+    while (Date.now() < deadline) {
+      notification = await notificationOf(leadId);
       if (
         notification !== null &&
         notification.status !== 'sending' &&
@@ -67,9 +76,11 @@ describe('lead email retry schedule', () => {
         expect(notification).toMatchObject(expected);
         return;
       }
-      await sleep(10);
+      await sleep(20);
     }
-    throw new Error('The attempt never finished');
+    throw new Error(
+      `Attempt ${String(expected.attempts)} did not finish within ${String(SETTLE_BUDGET_MS)} ms; last seen ${JSON.stringify(notification)}`,
+    );
   }
 
   /** Lets real time pass and checks that no attempt ran meanwhile. */
@@ -78,43 +89,56 @@ describe('lead email retry schedule', () => {
     expect(await notificationOf(leadId)).toMatchObject({ status: 'pending', attempts });
   }
 
-  it('tries at once, then 1 minute and 5 minutes later, then gives up', async () => {
-    const site = await createSite(owner, workspaceId);
-    await configurePrivacy(owner, site.id);
-    await addConfirmedRecipient(t, owner, site.id);
-    const { published } = await createLiveFormPage(owner, site.id, uniqueSlug('form'));
-    t.emails.failNext('smtp_unavailable', 'smtp_unavailable', 'smtp_unavailable');
+  // Three attempts may each use their whole budget on a loaded machine.
+  it(
+    'tries at once, then 1 minute and 5 minutes later, then gives up',
+    { timeout: 90_000 },
+    async () => {
+      const site = await createSite(owner, workspaceId);
+      await configurePrivacy(owner, site.id);
+      await addConfirmedRecipient(t, owner, site.id);
+      const { published } = await createLiveFormPage(owner, site.id, uniqueSlug('form'));
+      t.emails.failNext('smtp_unavailable', 'smtp_unavailable', 'smtp_unavailable');
 
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      await submitLead(t, site.subdomain, leadBody(published.release.id)).expect(201);
-      const list = leadListResponseSchema.parse(
-        (await owner.get(`/sites/${site.id}/leads`).expect(200)).body,
-      );
-      const leadId = list.items[0]?.id ?? '';
-      // Queued, not yet tried: even "at once" waits for the clock to move.
-      expect(await notificationOf(leadId)).toMatchObject({ status: 'pending', attempts: 0 });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        await submitLead(t, site.subdomain, leadBody(published.release.id)).expect(201);
+        const list = leadListResponseSchema.parse(
+          (await owner.get(`/sites/${site.id}/leads`).expect(200)).body,
+        );
+        const leadId = list.items[0]?.id ?? '';
+        // Queued, not yet tried: even "at once" waits for the clock to move.
+        expect(await notificationOf(leadId)).toMatchObject({ status: 'pending', attempts: 0 });
 
-      await vi.advanceTimersByTimeAsync(0);
-      await settles(leadId, { status: 'pending', attempts: 1, lastErrorCode: 'smtp_unavailable' });
+        await vi.advanceTimersByTimeAsync(0);
+        await settles(leadId, {
+          status: 'pending',
+          attempts: 1,
+          lastErrorCode: 'smtp_unavailable',
+        });
 
-      await vi.advanceTimersByTimeAsync(59_999);
-      await staysAt(leadId, 1);
-      await vi.advanceTimersByTimeAsync(1);
-      await settles(leadId, { status: 'pending', attempts: 2, lastErrorCode: 'smtp_unavailable' });
+        await vi.advanceTimersByTimeAsync(59_999);
+        await staysAt(leadId, 1);
+        await vi.advanceTimersByTimeAsync(1);
+        await settles(leadId, {
+          status: 'pending',
+          attempts: 2,
+          lastErrorCode: 'smtp_unavailable',
+        });
 
-      await vi.advanceTimersByTimeAsync(299_999);
-      await staysAt(leadId, 2);
-      await vi.advanceTimersByTimeAsync(1);
-      await settles(leadId, { status: 'failed', attempts: 3, lastErrorCode: 'smtp_unavailable' });
+        await vi.advanceTimersByTimeAsync(299_999);
+        await staysAt(leadId, 2);
+        await vi.advanceTimersByTimeAsync(1);
+        await settles(leadId, { status: 'failed', attempts: 3, lastErrorCode: 'smtp_unavailable' });
 
-      // Nothing more is scheduled for this lead: an hour later it is still the same.
-      await vi.advanceTimersByTimeAsync(3_600_000);
-      await sleep(150);
-      expect(await notificationOf(leadId)).toMatchObject({ status: 'failed', attempts: 3 });
-      expect(t.emails.sent.filter((email) => email.subject.includes('Lead mới'))).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+        // Nothing more is scheduled for this lead: an hour later it is still the same.
+        await vi.advanceTimersByTimeAsync(3_600_000);
+        await sleep(150);
+        expect(await notificationOf(leadId)).toMatchObject({ status: 'failed', attempts: 3 });
+        expect(t.emails.sent.filter((email) => email.subject.includes('Lead mới'))).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });
