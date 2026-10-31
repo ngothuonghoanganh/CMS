@@ -59,6 +59,11 @@ export interface SectionImageProps {
   className?: string | undefined;
   /** Text shown on the canvas when no image is chosen. */
   placeholder?: string;
+  /**
+   * The first image of the page's first section, probably its largest paint: on a live page it
+   * loads at once with high priority. Every other image, and every image on the canvas, is lazy.
+   */
+  priority?: boolean;
 }
 
 export function SectionImage({
@@ -66,6 +71,7 @@ export function SectionImage({
   image,
   className,
   placeholder = 'Chưa chọn ảnh',
+  priority = false,
 }: SectionImageProps) {
   const asset = image.assetId ? ctx.images[image.assetId] : undefined;
   if (!asset) {
@@ -82,8 +88,10 @@ export function SectionImage({
       width={asset.width}
       height={asset.height}
       alt={image.decorative ? '' : image.alt}
-      loading="lazy"
       decoding="async"
+      {...(priority && ctx.mode === 'live'
+        ? { loading: 'eager', fetchPriority: 'high' }
+        : { loading: 'lazy' })}
     />
   );
 }

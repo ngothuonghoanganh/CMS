@@ -349,6 +349,79 @@ describe('images', () => {
   });
 });
 
+describe('image loading', () => {
+  const PHOTO = { assetId: ASSET_ID, alt: 'Ảnh', decorative: false };
+
+  /** Every <img> of a page, in document order, with how it loads. */
+  function imagesOf(composition: Composition, ctx: RenderContext) {
+    const markup = renderToStaticMarkup(
+      <PageView composition={composition} themePresetId="mint" ctx={ctx} />,
+    );
+    return [...markup.matchAll(/<img [^>]*>/g)].map(([tag]) => ({
+      loading: /loading="([^"]+)"/.exec(tag)?.[1] ?? null,
+      // HTML attribute names are case-insensitive; React writes this one as `fetchPriority`.
+      fetchpriority: /fetchpriority="([^"]+)"/i.exec(tag)?.[1] ?? null,
+    }));
+  }
+
+  function withImages(...targets: SectionInstance[]): Composition {
+    return { version: 1, sections: targets };
+  }
+
+  const EAGER = { loading: 'eager', fetchpriority: 'high' };
+  const LAZY = { loading: 'lazy', fetchpriority: null };
+
+  // The Hero photo is the largest paint of most pages: lazy loading waits for layout first.
+  it.each(['split', 'background'])(
+    'loads the photo of a %s Hero after the navigation bar at once, with high priority',
+    (variant) => {
+      const images = imagesOf(
+        withImages(
+          section('navbar'),
+          withContent(section('hero', variant), 'image', PHOTO),
+          withContent(section('benefits', 'alternate'), 'items.0.image', PHOTO),
+          section('footer'),
+        ),
+        liveCtx(),
+      );
+      expect(images).toEqual([EAGER, LAZY]);
+    },
+  );
+
+  it('prioritises only the first image of the first section, whatever its type', () => {
+    let benefits = section('benefits', 'alternate');
+    for (const index of [0, 1, 2]) {
+      benefits = withContent(benefits, `items.${index}.image`, PHOTO);
+    }
+    const images = imagesOf(
+      withImages(benefits, withContent(section('hero', 'split'), 'image', PHOTO)),
+      liveCtx(),
+    );
+    expect(images).toEqual([EAGER, LAZY, LAZY, LAZY]);
+  });
+
+  it('keeps every image lazy when the first section draws none', () => {
+    const images = imagesOf(
+      withImages(
+        section('navbar'),
+        section('hero', 'centered'),
+        withContent(section('benefits', 'alternate'), 'items.0.image', PHOTO),
+      ),
+      liveCtx(),
+    );
+    expect(images).toEqual([LAZY]);
+  });
+
+  // The canvas draws the draft for editing: nothing there changes how it loads.
+  it('leaves the images of the admin canvas lazy', () => {
+    const images = imagesOf(
+      withImages(section('navbar'), withContent(section('hero', 'split'), 'image', PHOTO)),
+      editCtx(),
+    );
+    expect(images).toEqual([LAZY]);
+  });
+});
+
 describe('section specifics', () => {
   it('shows the site logo or the brand text in the navigation bar', () => {
     const navbar = section('navbar');

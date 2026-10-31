@@ -5,7 +5,12 @@ import styles from './Testimonials.module.css';
 
 type Testimonial = TestimonialsContent['items'][number];
 
-export function TestimonialsSection({ section, content, ctx }: SectionProps<TestimonialsContent>) {
+export function TestimonialsSection({
+  section,
+  content,
+  ctx,
+  leading,
+}: SectionProps<TestimonialsContent>) {
   const quoteText = (item: Testimonial, index: number, className: string | undefined) => (
     <blockquote className={styles.blockquote}>
       <Text
@@ -87,6 +92,7 @@ export function TestimonialsSection({ section, content, ctx }: SectionProps<Test
                   image={item.avatar}
                   className={styles.avatar}
                   placeholder="Ảnh"
+                  priority={leading && index === 0}
                 />
                 <span className={styles.person}>
                   {name(item, index)}

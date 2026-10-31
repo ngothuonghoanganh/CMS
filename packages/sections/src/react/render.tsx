@@ -26,6 +26,7 @@ function renderWith<C>(
   Component: ComponentType<SectionProps<C>>,
   section: SectionInstance,
   ctx: RenderContext,
+  leading: boolean,
 ): ReactNode {
   const parsed = schema.safeParse(section.content);
   if (!parsed.success) {
@@ -36,27 +37,34 @@ function renderWith<C>(
       </p>
     ) : null;
   }
-  return <Component section={section} content={parsed.data} ctx={ctx} />;
+  return <Component section={section} content={parsed.data} ctx={ctx} leading={leading} />;
 }
 
-/** Renders the component of one section; exhaustive over every section type. */
-export function renderSectionContent(section: SectionInstance, ctx: RenderContext): ReactNode {
+/**
+ * Renders the component of one section; exhaustive over every section type. `leading`: the section
+ * opens the page body (see `SectionProps`).
+ */
+export function renderSectionContent(
+  section: SectionInstance,
+  ctx: RenderContext,
+  leading = false,
+): ReactNode {
   switch (section.type) {
     case 'navbar':
-      return renderWith(navbarContentSchema, NavbarSection, section, ctx);
+      return renderWith(navbarContentSchema, NavbarSection, section, ctx, leading);
     case 'hero':
-      return renderWith(heroContentSchema, HeroSection, section, ctx);
+      return renderWith(heroContentSchema, HeroSection, section, ctx, leading);
     case 'benefits':
-      return renderWith(benefitsContentSchema, BenefitsSection, section, ctx);
+      return renderWith(benefitsContentSchema, BenefitsSection, section, ctx, leading);
     case 'testimonials':
-      return renderWith(testimonialsContentSchema, TestimonialsSection, section, ctx);
+      return renderWith(testimonialsContentSchema, TestimonialsSection, section, ctx, leading);
     case 'faq':
-      return renderWith(faqContentSchema, FaqSection, section, ctx);
+      return renderWith(faqContentSchema, FaqSection, section, ctx, leading);
     case 'lead_form':
-      return renderWith(leadFormContentSchema, LeadFormSection, section, ctx);
+      return renderWith(leadFormContentSchema, LeadFormSection, section, ctx, leading);
     case 'cta_band':
-      return renderWith(ctaBandContentSchema, CtaBandSection, section, ctx);
+      return renderWith(ctaBandContentSchema, CtaBandSection, section, ctx, leading);
     case 'footer':
-      return renderWith(footerContentSchema, FooterSection, section, ctx);
+      return renderWith(footerContentSchema, FooterSection, section, ctx, leading);
   }
 }

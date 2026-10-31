@@ -3,7 +3,7 @@ import { CtaButton, SectionImage, Text } from '../primitives.js';
 import type { SectionProps } from '../types.js';
 import styles from './Hero.module.css';
 
-export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>) {
+export function HeroSection({ section, content, ctx, leading }: SectionProps<HeroContent>) {
   const variant = section.variant;
   const mediaFirst = section.mobileOrder === 'media-first';
   // The dark overlay and the white text and buttons belong to a real photo only: the edit
@@ -81,6 +81,7 @@ export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>
             ctx={ctx}
             image={content.image}
             placeholder="Chọn ảnh nền trong bảng thuộc tính"
+            priority={leading}
           />
         </div>
         {text}
@@ -96,7 +97,7 @@ export function HeroSection({ section, content, ctx }: SectionProps<HeroContent>
     >
       {text}
       <div className={styles.media}>
-        <SectionImage ctx={ctx} image={content.image} />
+        <SectionImage ctx={ctx} image={content.image} priority={leading} />
       </div>
     </div>
   );
