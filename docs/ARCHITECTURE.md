@@ -413,6 +413,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Autosave, trang tạo theo mục tiêu và publish lưu kết quả này. Publish parse lại bản nháp, nên bản nháp lưu trước thay đổi này cũng không đưa key lạ vào release hay JSON public.
   - **Key lạ bị bỏ chứ không bị từ chối,** như mọi body khác của API (mặc định của Zod), nên bản nháp cũ vẫn autosave được. Field bị variant ẩn vẫn được kiểm như mọi field (URL, độ dài, ảnh thuộc site) và vẫn được giữ.
   - Release cũ không bị viết lại; chỉ database dev local có thể còn release mang key lạ.
+- **Amended 2026-10-31 (vòng test thứ ba, renderer):**
+  - **Breakpoint:** mọi container/media query theo độ rộng dùng cú pháp khoảng (`width < 768px` / `width >= 768px`).
+    - Cặp `max-width: 767px` / `min-width: 768px` để hở một khoảng: ở độ rộng lẻ (zoom, thanh cuộn) như 767,5 px, section ẩn trên một loại thiết bị lại hiện trên cả hai.
+    - Unit test cấm `min-width`/`max-width` trong CSS của sections và renderer.
+  - **Ảnh đầu trang:** ảnh đầu tiên của section đầu tiên trong thân trang (sau thanh điều hướng) tải ngay với `fetchpriority="high"`; mọi ảnh khác giữ `loading="lazy"`. Canvas của admin không đổi.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -500,6 +505,20 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (MVP B):**
   - DTO public có thêm `releaseId` để form gửi kèm release khách đang xem (ADR-016). Id không mở quyền truy cập nào (ADR-003).
   - Renderer có thêm hai route không cache: `POST /_lead` (gửi form, ADR-016) và `POST /_e` (beacon, ADR-019). Cả hai gọi API qua kênh ký HMAC của ADR-016.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **API lỗi hoặc treo:**
+    - Đo trên renderer thật, mọi request trang (đã cache hay chưa, có hay không User-Agent) đều treo không kết thúc.
+    - Nguyên nhân: bước kiểm tra của proxy lỗi nên page render với khóa `''`, khóa này không có trong cache. Lookup lỗi, và Next 16 gửi status 500 nhưng không đóng body khi metadata và page cùng chờ một lời gọi `'use cache'` ném lỗi.
+    - Vì vậy câu "API lỗi không làm hỏng trang đang có trong cache" của amendment 2026-10-25 không đúng.
+  - **Proxy trả 503** kèm `Retry-After: 60`, `Cache-Control: no-store` và trang HTML tiếng Việt dựng sẵn ("Trang tạm thời chưa mở được") khi không hỏi được `path-status`; trang không render.
+  - **Hàm `'use cache'` không bao giờ ném lỗi:** lỗi được log rồi trả về dưới dạng giá trị với `cacheLife` bằng 0, hàm gọi bên ngoài ném lỗi. Page kết thúc bằng 500 ngay; request kế tiếp hỏi lại API.
+  - **Hệ quả:**
+    - Khi API không trả lời `path-status`, trang không được phục vụ từ cache.
+    - Khi `path-status` trả lời mà `resolve` lỗi, entry còn trong `revalidate` (5 phút) vẫn được phục vụ. Quá hạn đó Next tạo lại ngay trong request nên khách nhận 500, vì page không tự trả 503 được.
+  - **Thời gian chờ:** kiểm tra của proxy 3 giây; lookup của page, sitemap và robots 5 giây. Khách chờ API tối đa 8 giây (trước đây 10 + 10).
+  - **sitemap.xml và robots.txt:** API lỗi thì trả 503 kèm `Retry-After` (trước đây 500, body rỗng).
+  - **User-Agent:** proxy đặt `User-Agent: unknown` cho request không có header này, nên Next luôn render chế độ blocking: status lỗi là thật, không còn shell 200.
+  - **404 của proxy** render với cùng header như trang. Trước đây request không có User-Agent nhận bản tĩnh `Cache-Control: s-maxage=31536000`, nên cache dùng chung sẽ giữ 404 cả năm sau khi trang được publish.
 
 ### ADR-010 — Preview link có chữ ký
 
@@ -511,6 +530,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Giao diện:** banner "Bản xem trước".
 - **Reason:** Quy tắc 6; chia sẻ cho khách hàng mà không cần đăng nhập.
 - **Consequences:** Link không thu hồi riêng lẻ được trước hạn; xoay khóa thì mọi link mất hiệu lực.
+- **Amended 2026-10-31 (vòng test thứ ba):** proxy kiểm tra token trước khi render (`previewForHost`: token hợp lệ và thuộc site của host).
+  - Token hết hạn, sai `kid`, sai chữ ký hay của site khác: rewrite sang trang not-found dựng sẵn, status 404, `X-Robots-Tag: noindex, nofollow`. Câu tiếng Việt có sẵn trong HTML nên đọc được khi tắt JavaScript.
+  - Trước đây thông báo chỉ hiện sau hydrate, và request không có User-Agent nhận 200.
+  - API không trả lời: 503 `noindex`.
+  - Hệ quả: một preview hợp lệ tốn hai lần gọi `GET /public/preview/:token` (proxy rồi page).
 
 ### ADR-011 — SEO, slug, redirect, sitemap, robots, tên miền mặc định
 
@@ -722,6 +746,16 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Bước 4 chạy trước bước 3:** gửi lại cùng `submissionId` của một lead đã nhận trả 200, kể cả khi khách đã vượt giới hạn, và không tính vào giới hạn.
     - Lệnh kiểm truy vấn kèm `$type: 'string'`, để index unique-partial phục vụ. Nhờ vậy lệnh kiểm chỉ là một lần dò index, dù site có bao nhiêu lead.
   - **User agent dài:** renderer cắt user agent ở 512 ký tự, rồi ký đúng giá trị header gửi đi. Headers bỏ khoảng trắng ở hai đầu, nên phần cắt kết thúc bằng khoảng trắng tới API mất các khoảng trắng đó. Trước đây chữ ký không khớp và lead bị từ chối.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Form không JavaScript có `submissionId`:**
+    - Renderer sinh id mới cho mỗi lần phục vụ trang, đặt trong ô ẩn `submissionId`. `/_lead` chuyển tiếp id nếu hợp lệ theo `submissionIdSchema`, không thì gửi `null`.
+    - Gửi lại sau khi relay hết giờ, hoặc tải lại trang kết quả, được API trả như lần đầu, không tạo lead hay email thứ hai.
+    - Trang live không bao giờ được cache dùng chung (`private, no-store`) nên hai khách không chung id. Script của trang vẫn dùng id riêng cho mỗi form.
+    - Giới hạn: link "Quay lại trang" trên trang lỗi mở trang mới với id mới.
+  - **Relay lỗi** (API không tới được, hết giờ, 5xx): `/_lead` trả 503 kèm `Retry-After: 60` thay cho 502.
+  - **Địa chỉ khách:**
+    - Phần tử cuối của `X-Forwarded-For` được chuẩn hóa: IPv4 trong IPv6 (`::ffff:a.b.c.d`) thành IPv4, IPv6 viết gọn chữ thường, bỏ cổng và ngoặc vuông. Một khách chỉ có một bucket.
+    - Đã kiểm end-to-end qua proxy nối `X-Forwarded-For`: hai địa chỉ có giới hạn riêng, header giả không chọn được bucket.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
