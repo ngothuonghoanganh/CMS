@@ -6,7 +6,7 @@ import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createSite } from '../../../test/resources.js';
 import { LeadLimitsRepository } from '../leads/lead-limits.repository.js';
-import { inviteLimitKeys } from './domain/notification-rules.js';
+import { inviteLimitKeys, loggableLimitKey } from './domain/notification-rules.js';
 
 /**
  * The daily caps on confirmation emails (ADR-018), counted for real: 5 per site and address, 30
@@ -226,7 +226,17 @@ describe('confirmation email caps', () => {
     function expectTakeBackLogged(logged: unknown[][], keys: readonly string[]): void {
       expect(logged).toHaveLength(1);
       const [entry, message] = logged[0] ?? [];
-      expect(entry).toMatchObject({ err: { message: 'not primary' }, keys });
+      expect(entry).toMatchObject({
+        err: { message: 'not primary' },
+        limits: keys.map((key) => loggableLimitKey(key)),
+      });
+      // The counters are named without the hash of the address: logs carry no personal data.
+      for (const key of keys) {
+        const hash = /[0-9a-f]{64}$/.exec(key)?.[0];
+        if (hash !== undefined) {
+          expect(JSON.stringify(entry)).not.toContain(hash);
+        }
+      }
       expect(message).toBe(takeBackFailed);
     }
 

@@ -102,6 +102,15 @@ export const INVITE_LIMITS_PER_DAY = { siteAddress: 5, address: 30, workspace: 5
 
 export type InviteLimit = keyof typeof INVITE_LIMITS_PER_DAY;
 
+/**
+ * A limit key as it may be logged: without the hash of the address. The hash is a pseudonym of
+ * personal data, and logs never carry personal data (AGENTS.md); the limit and the site or
+ * workspace are enough to find the counter.
+ */
+export function loggableLimitKey(key: string): string {
+  return key.replace(/:[0-9a-f]{64}$/, '');
+}
+
 /** Rate-limit keys of a confirmation email; the address is hashed so none is stored. */
 export function inviteLimitKeys(
   email: string,

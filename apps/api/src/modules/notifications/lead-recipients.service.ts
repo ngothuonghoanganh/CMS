@@ -30,6 +30,7 @@ import {
   INVITE_LIMITS_PER_DAY,
   type InviteLimit,
   inviteLimitKeys,
+  loggableLimitKey,
 } from './domain/notification-rules.js';
 import { EmailSender, EmailSendError } from './email-sender.js';
 import { recipientConfirmationEmail } from './email-templates.js';
@@ -251,14 +252,14 @@ export class LeadRecipientsService {
    * cleaning up the counters must not change what the owner is told: a 429 or 409 they can act
    * on, or an address added and `unsent`. When taking back fails, the email stays counted, which
    * is the safe side (the window ends within a day), and the failure is logged with the counters
-   * it left: each key holds a sha256 of the address, never the address.
+   * it left, named without the hash of the address (`loggableLimitKey`).
    */
   private async uncount(hits: readonly CountedHit[]): Promise<void> {
     try {
       await this.limits.release(hits, new Date());
     } catch (error) {
       this.logger.error(
-        { err: error, keys: hits.map(({ key }) => key) },
+        { err: error, limits: hits.map(({ key }) => loggableLimitKey(key)) },
         'Confirmation email still counted: taking it back from the daily limits failed',
       );
     }
