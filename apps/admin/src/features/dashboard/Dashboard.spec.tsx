@@ -181,7 +181,13 @@ describe('Dashboard', () => {
       within(liveRow).getByRole('button', { name: `Tùy chọn khác cho ${livePage.title}` }),
     ).toBeInTheDocument();
     expect(within(draftRow).getByText('Chưa từng xuất bản')).toBeInTheDocument();
-    expect(within(draftRow).getByText('tạo bởi Minh')).toBeInTheDocument();
+    const [, statusCell, versionCell] = within(draftRow).getAllByRole('cell');
+    if (statusCell === undefined || versionCell === undefined) {
+      throw new Error('missing cells');
+    }
+    expect(within(versionCell).getByText('tạo bởi Minh')).toBeInTheDocument();
+    // A narrow list shows the version under the status instead of in its own column.
+    expect(within(statusCell).getByText('tạo bởi Minh')).toBeInTheDocument();
     expect(within(draftRow).getByText('3 cảnh báo')).toBeInTheDocument();
     expect(within(draftRow).getByRole('link', { name: 'Sửa' })).toHaveAttribute(
       'href',

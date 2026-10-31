@@ -129,7 +129,9 @@ export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: P
         <tr>
           <th scope="col">TRANG</th>
           <th scope="col">TRẠNG THÁI</th>
-          <th scope="col">PHIÊN BẢN LIVE</th>
+          <th scope="col" className={styles.versionColumn}>
+            PHIÊN BẢN LIVE
+          </th>
           <th scope="col">KIỂM TRA</th>
           <th scope="col" className={styles.leads}>
             LEAD 7 NGÀY
@@ -166,9 +168,19 @@ export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: P
                 <div className={styles.statusCell}>
                   <StatusBadge status={view.badge} />
                   <span className={styles.sub}>{view.subtext}</span>
+                  {/* Shown instead of the version column when the list is narrow. */}
+                  <span className={cx(styles.stack, styles.versionInline)}>
+                    <span className={styles.version}>
+                      <VisuallyHidden>Phiên bản live: </VisuallyHidden>
+                      {view.versionLine}
+                    </span>
+                    {view.authorLine === null ? null : (
+                      <span className={styles.sub}>{view.authorLine}</span>
+                    )}
+                  </span>
                 </div>
               </td>
-              <td>
+              <td className={styles.versionColumn}>
                 <div className={styles.stack}>
                   <span className={styles.version}>{view.versionLine}</span>
                   {view.authorLine === null ? null : (

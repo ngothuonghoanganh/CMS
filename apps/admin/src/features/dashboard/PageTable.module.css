@@ -82,7 +82,12 @@
   min-width: 0;
 }
 
+/* A 24px target (WCAG 2.5.8) that still wraps a long title. */
 .title {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 24px;
   font-weight: 600;
   color: var(--color-ink);
   text-decoration: none;
@@ -152,4 +157,38 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* The live version under the status, in a narrow list only. */
+.versionInline {
+  display: none;
+}
+
+/*
+ * A narrow list (a tablet, or a small window beside the sidebar): without the thumbnail, with the
+ * live version under the status and tighter cells, every column and "Sửa" fit without scrolling
+ * sideways. Phones still scroll the table.
+ */
+@container page-list (max-width: 779px) {
+  .table {
+    min-width: 520px;
+  }
+
+  .table th,
+  .table td {
+    padding-inline: 10px;
+  }
+
+  .table th.leads {
+    white-space: normal;
+  }
+
+  .thumbnail,
+  .versionColumn {
+    display: none;
+  }
+
+  .versionInline {
+    display: flex;
+  }
 }

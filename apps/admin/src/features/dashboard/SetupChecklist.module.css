@@ -84,8 +84,12 @@
   color: var(--color-muted);
 }
 
+/* Text-sized, yet 24px targets (WCAG 2.5.8). */
 .link,
 .linkButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   font-weight: 500;
   color: var(--color-primary-ink);
   text-decoration: none;
