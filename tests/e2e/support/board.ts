@@ -377,8 +377,10 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
   await confirmRecipientViaApi(request, site.id);
 
   const logo = await uploadImageViaApi(request, site.id, 'Logo Nha khoa Smile Care');
+  const share = await uploadImageViaApi(request, site.id, 'Nha khoa Smile Care');
   await call(request, 'PATCH', endpoints.updateSite.path(site.id), siteSchema, {
     logoAssetId: logo.id,
+    defaultShareImageAssetId: share.id,
   });
   const doctor = await uploadImageViaApi(request, site.id, 'Bác sĩ tư vấn cho khách hàng');
 
@@ -430,16 +432,39 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
 
   await publishViaApi(request, pageId('home'), 'Trang chủ mới');
 
-  // "Ưu đãi niềng răng tháng 11": live, then a draft with 4 changes, a blocking error (the second
-  // Hero button leads nowhere) and a photo without description.
+  // "Ưu đãi niềng răng tháng 11": three versions, then a draft with 4 changes, a blocking error
+  // (the second Hero button leads nowhere) and a photo without description.
   await publishViaApi(request, pageId('promo'), 'Ưu đãi tháng 11');
+  await saveDraftViaApi(request, pageId('promo'), (draft) => ({
+    composition: withSection(draft.composition, 'faq', (faq) => ({
+      ...faq,
+      content: { ...faq.content, heading: 'Câu hỏi thường gặp về niềng răng' },
+    })),
+  }));
+  await publishViaApi(request, pageId('promo'), 'Thêm câu hỏi thường gặp');
+  await saveDraftViaApi(request, pageId('promo'), (draft) => {
+    const faqId = draft.composition.sections.find((section) => section.type === 'faq')?.id ?? '';
+    return {
+      composition: withSection(draft.composition, 'hero', (hero) => ({
+        ...hero,
+        variant: 'split',
+        content: {
+          ...hero.content,
+          eyebrow: 'Ưu đãi tháng 11',
+          subheading:
+            'Bác sĩ đánh giá khớp cắn và lên kế hoạch niềng phù hợp với bạn. Buổi tư vấn đầu tiên không mất phí.',
+          secondaryCta: { label: 'Xem bảng giá', link: { kind: 'section', sectionId: faqId } },
+          image: { assetId: doctor.id, alt: 'Bác sĩ tư vấn cho khách hàng', decorative: false },
+        },
+      })),
+    };
+  });
+  await publishViaApi(request, pageId('promo'), 'Cập nhật giá ưu đãi tháng 11');
   await saveDraftViaApi(request, pageId('promo'), (draft) => {
     let composition = withSection(draft.composition, 'hero', (hero) => ({
       ...hero,
-      variant: 'split',
       content: {
         ...hero.content,
-        eyebrow: 'Ưu đãi tháng 11',
         secondaryCta: { label: 'Xem bảng giá', link: { kind: 'url', url: '' } },
         image: { assetId: doctor.id, alt: '', decorative: false },
       },
@@ -448,7 +473,15 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
       ...section,
       visibility: { desktop: true, mobile: false },
     }));
-    return { composition };
+    return {
+      composition,
+      seo: {
+        ...draft.seo,
+        title: 'Niềng răng trong suốt – Tư vấn miễn phí | Smile Care',
+        description:
+          'Đặt lịch tư vấn niềng răng trong suốt miễn phí cùng bác sĩ Smile Care. Ưu đãi áp dụng trong tháng 11.',
+      },
+    };
   });
 
   // Every lead comes from a live page's form, in the board's order (newest last).
