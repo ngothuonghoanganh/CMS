@@ -1,6 +1,7 @@
 import type { PublicPageData } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { PageViewBeacon } from '../../components/PageViewBeacon';
 import { SitePage } from '../../components/SitePage';
 import { pageMetadata } from '../../lib/metadata';
@@ -56,6 +57,10 @@ export default async function PublicPage({ params, searchParams }: PublicPagePro
   if (resolution.kind === 'not_found') {
     notFound();
   }
+  // The form's submission id is drawn for this request (SitePage). Without this, Next renders the
+  // page once more as a prerender, meets `crypto.randomUUID()` there and logs an error for every
+  // live page served.
+  await connection();
   // Only live pages count views: never previews or the not-found page (ADR-019).
   return (
     <>
