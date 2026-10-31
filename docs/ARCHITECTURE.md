@@ -808,7 +808,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - **Khóa chống trùng là id cộng nội dung khách nhập** (`submissionKey`): sha256 của `submissionId`, họ tên, số điện thoại, email, lời nhắn và lựa chọn nhận tin, sau khi contract chuẩn hóa.
       - Cùng id, cùng nội dung là gửi lại, trả như lần đầu. Cùng id, nội dung khác là lead mới: khách không có JavaScript gửi form, bấm Back (bfcache giữ form và id), sửa số điện thoại rồi gửi lại. Trước đây lead thứ hai bị coi là gửi lại và mất. Gửi lại lead thứ hai đó vẫn là gửi lại.
       - Thời gian điền không thuộc khóa, nên script gửi lại với `elapsedMs` lớn hơn vẫn là cùng lead, như trước.
-      - Khóa lưu vào trường `submissionId` của lead, nên index unique-partial `(siteId, submissionId)` không đổi. Lead lưu trước thay đổi này giữ id thô, nên lượt kiểm tra gửi lại tìm cả khóa lẫn id thô (`$in`, trong site, trên cùng index đó, có `hint` để planner không đổi sang index `siteId, createdAt`). Một lần gửi lại vắt qua lúc deploy vẫn là gửi lại, không thành lead hay email thứ hai. Với các lead cũ đó, cùng id mà nội dung khác vẫn bị coi là gửi lại, như trước thay đổi.
+      - Khóa lưu vào trường `submissionId` của lead, nên index unique-partial `(siteId, submissionId)` không đổi. Lượt kiểm tra gửi lại là một phép so bằng đúng khóa đó (kèm `$type: 'string'`, không `$in`, không `hint`): một lần dò index, và vẫn trả lời được khi index chưa dựng xong trên database mới.
+      - Lead lưu trước thay đổi này giữ id thô. Chúng chỉ có trong database dev local; MVP A/B không có dữ liệu production (ADR-001, §6). Một lần gửi lại vắt qua thay đổi này không được nối: nó thành lead mới.
       - Id ngẫu nhiên không được lưu, nên khóa không cho suy ra nội dung.
   - **Relay lỗi** (API không tới được, hết giờ, 5xx): `/_lead` trả 503 kèm `Retry-After: 60` thay cho 502.
   - **Địa chỉ khách:**

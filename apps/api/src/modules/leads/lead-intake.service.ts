@@ -85,14 +85,10 @@ export class LeadIntakeService {
       throw notFound(FORM_NOT_FOUND);
     }
     const content = leadFormContentSchema.parse(form.content);
-    let submission: string | null = null;
-    if (input.submissionId !== null) {
-      submission = submissionKey(input.submissionId, input);
-      // A lead stored before the key existed holds the plain id: a resend that spans that deploy
-      // is still a replay, with no second lead or email (ADR-016).
-      if (await this.leads.existsPublicSubmission(site._id, [submission, input.submissionId])) {
-        return { replayed: true };
-      }
+    const submission =
+      input.submissionId === null ? null : submissionKey(input.submissionId, input);
+    if (submission !== null && (await this.leads.existsPublicSubmission(site._id, submission))) {
+      return { replayed: true };
     }
     const now = new Date();
     await this.countRequest(site._id, client.ip, now);

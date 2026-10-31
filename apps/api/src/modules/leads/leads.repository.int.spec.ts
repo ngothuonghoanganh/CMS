@@ -8,7 +8,7 @@ import { insertLeads, storedLead } from '../../../test/leads.js';
 import { scopeOf } from '../../../test/resources.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { LeadCriteria } from './domain/lead-filters.js';
-import { LEADS_SUBMISSION_INDEX } from './lead.schema.js';
+import { LEAD_MODEL, LEADS_SUBMISSION_INDEX } from './lead.schema.js';
 import { LeadsRepository } from './leads.repository.js';
 
 const EVERY_INBOX_LEAD: LeadCriteria = {
@@ -177,7 +177,6 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     };
     const submissionId = randomUUID();
     const elsewhere = randomUUID();
-    const sortsFirst = '00000000-0000-4000-8000-000000000000';
     await insertLeads(t, [
       // Leads sent without the page script have no submission id.
       ...Array.from({ length: 30 }, (_, index) => ({
@@ -194,21 +193,49 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     const leads = t.app.get(LeadsRepository);
 
     const sent = await recordCalls(t.connection, 'leads', async () => {
-      expect(await leads.existsPublicSubmission(siteId, [submissionId])).toBe(true);
-      // Intake looks up the submission key and the plain id of a lead stored before the key. An id
-      // that sorts first makes the index take two steps, while the site's newest lead matches.
-      expect(await leads.existsPublicSubmission(siteId, [sortsFirst, submissionId])).toBe(true);
-      expect(await leads.existsPublicSubmission(siteId, [randomUUID(), randomUUID()])).toBe(false);
-      expect(await leads.existsPublicSubmission(siteId, [elsewhere])).toBe(false);
+      expect(await leads.existsPublicSubmission(siteId, submissionId)).toBe(true);
+      expect(await leads.existsPublicSubmission(siteId, randomUUID())).toBe(false);
+      expect(await leads.existsPublicSubmission(siteId, elsewhere)).toBe(false);
     });
 
-    // Each lookup explained exactly as it was sent: at most one probe of the index per id.
-    expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne', 'findOne']);
+    // Each lookup explained exactly as it was sent: one exact key, one probe of the index, no hint.
+    expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne']);
     for (const call of sent) {
+      const [filter, options] = call.params;
+      expect(filter).toEqual({
+        siteId,
+        submissionId: { $eq: expect.any(String) as unknown, $type: 'string' },
+      });
+      expect(options).not.toHaveProperty('hint');
       const explained = await explainFindOne(t.connection, call);
       expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([LEADS_SUBMISSION_INDEX]);
-      expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(2);
+      expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
       expect(explained.executionStats.totalDocsExamined).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('still answers while the index is not built yet (a new database)', async () => {
+    const siteId = new Types.ObjectId();
+    const submissionId = randomUUID();
+    const leads = t.connection.collection('leads');
+    await leads.dropIndex(LEADS_SUBMISSION_INDEX);
+    try {
+      await insertLeads(t, [
+        {
+          ...storedLead({
+            workspaceId: new Types.ObjectId().toHexString(),
+            siteId: siteId.toHexString(),
+            pageId: new Types.ObjectId().toHexString(),
+            releaseId: new Types.ObjectId().toHexString(),
+          }),
+          submissionId,
+        },
+      ]);
+      const repository = t.app.get(LeadsRepository);
+      expect(await repository.existsPublicSubmission(siteId, submissionId)).toBe(true);
+      expect(await repository.existsPublicSubmission(siteId, randomUUID())).toBe(false);
+    } finally {
+      await t.connection.model(LEAD_MODEL).syncIndexes();
     }
   });
 });
