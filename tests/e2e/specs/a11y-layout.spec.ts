@@ -98,7 +98,7 @@ async function controlsHiddenWhenFocused(page: Page, presses: number): Promise<s
       const top = Math.max(box.top, 0);
       const bottom = Math.min(box.bottom, window.innerHeight);
       const describe = () =>
-        `${element.tagName.toLowerCase()} "${(element.getAttribute('aria-label') ?? element.textContent ?? '').trim().slice(0, 60)}"`;
+        `${element.tagName.toLowerCase()} "${(element.getAttribute('aria-label') ?? element.textContent).trim().slice(0, 60)}"`;
       if (right <= left || bottom <= top) {
         return `${describe()} (outside the viewport)`;
       }
