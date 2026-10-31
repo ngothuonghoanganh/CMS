@@ -9,6 +9,7 @@ import {
   currentSaveResponse,
   type EditorStore,
   hasUnsavedChanges,
+  isDiscarded,
   type SaveFailure,
 } from './store';
 
@@ -115,7 +116,6 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
   let retryAttempt = 0;
   let running: Promise<SaveDraftResponse> | null = null;
   let stopped = true;
-  let discarded = false;
 
   function clearTimers() {
     if (debounceTimer !== null) {
@@ -218,15 +218,12 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       flushInBackground();
     },
     discard() {
-      discarded = true;
+      store.getState().discardUnsaved();
       clearTimers();
     },
     start() {
       stopped = false;
       const unsubscribe = store.subscribe((state, previous) => {
-        if (state.draftVersion !== previous.draftVersion) {
-          discarded = false;
-        }
         if (
           state.draftVersion !== previous.draftVersion &&
           hasUnsavedChanges(state) &&
@@ -243,7 +240,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         unsubscribe();
         clearTimers();
         const state = store.getState();
-        if (!discarded && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
+        if (!isDiscarded(state) && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
           flushInBackground();
         }
       };

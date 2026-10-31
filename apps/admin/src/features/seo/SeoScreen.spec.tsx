@@ -1,29 +1,41 @@
 import {
   type Composition,
   endpoints,
+  type Membership,
   type PageDetailResponse,
   type PageSummary,
 } from '@plp/contracts';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, type Mock, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
+import { loadPage } from '../../lib/page-load';
+import { NO_LEADS, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
 import { installHistoryGuard } from '../shell/history-guard';
 import { leaveScreen } from '../shell/screen-leave';
+import { Sidebar } from '../shell/Sidebar';
 import { apiError, renderWithProviders } from '../shell/test-utils';
+import { WORKSPACE_PREFERENCE_COOKIE } from '../shell/workspace-preference';
 import { SeoScreen } from './SeoScreen';
 
 const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => router,
+  usePathname: () => `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+}));
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
   api: vi.fn(),
 }));
+
+vi.mock(import('../../lib/page-load'), () => ({ loadPage: vi.fn() }));
+
+const loadPageMock = vi.mocked(loadPage);
 
 const apiMock = vi.mocked(api) as unknown as Mock<(endpoint: unknown) => Promise<unknown>>;
 
@@ -585,6 +597,66 @@ describe('SeoScreen', () => {
   });
 
   describe('leaving through the sidebar menus', () => {
+    it('switches workspace with no prompt from the browser once a change that failed is given up', async () => {
+      const user = userEvent.setup();
+      const detail = pageDetail();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')), detail);
+      // The page load begins as the browser does: the page may still ask the user to stay, and a
+      // user who stays would be left in this workspace with the cookie naming the other one.
+      const atLoad: Array<{ prompted: boolean; cookie: string }> = [];
+      loadPageMock.mockImplementation(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        atLoad.push({ prompted: event.defaultPrevented, cookie: document.cookie });
+      });
+      onTestFinished(() => {
+        loadPageMock.mockReset();
+        document.cookie = `${WORKSPACE_PREFERENCE_COOKIE}=; Path=/; Max-Age=0`;
+      });
+      const agency: Membership = {
+        workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+        role: 'owner',
+      };
+      const clinic: Membership = {
+        workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
+        role: 'editor',
+      };
+      renderWithProviders(
+        <>
+          <Sidebar
+            user={{ id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngocanh@mayxanh.vn' }}
+            memberships={[agency, clinic]}
+            membership={agency}
+            site={site}
+            sites={[site]}
+            pageCount={1}
+            leadCounts={NO_LEADS}
+          />
+          <SeoScreen
+            initial={{ detail, site, assets: [], role: 'editor' }}
+            loadedAt={Date.now()}
+            focus={null}
+          />
+        </>,
+      );
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+      await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
+
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+      expect(loadPageMock).not.toHaveBeenCalled();
+      expect(document.cookie).not.toContain(`${WORKSPACE_PREFERENCE_COOKIE}=`);
+      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+
+      expect(loadPageMock).toHaveBeenCalledWith('/');
+      expect(atLoad).toHaveLength(1);
+      expect(atLoad[0]?.prompted).toBe(false);
+      expect(atLoad[0]?.cookie).toContain(
+        `${WORKSPACE_PREFERENCE_COOKIE}=64b0000000000000000000a2`,
+      );
+    });
+
     it('saves first, and offers to sign out without the change when the save fails', async () => {
       const user = userEvent.setup();
       renderScreen();

@@ -114,6 +114,8 @@ export interface EditorState {
   /** Local counter of draft changes. Everything is saved when it equals `savedVersion`. */
   draftVersion: number;
   savedVersion: number;
+  /** The `draftVersion` whose unsaved changes the user gave up (see `isDiscarded`). */
+  discardedVersion: number | null;
   /** Field whose typing currently merges into the last undo step. */
   mergeKey: string | null;
 
@@ -159,6 +161,11 @@ export interface EditorState {
   applySaved: (response: SaveDraftResponse, savedVersion: number) => void;
   markSaveFailed: (failure: SaveFailure) => void;
   markConflict: () => void;
+  /**
+   * "Rời trang, bỏ thay đổi": the user gives up the changes not saved yet, and leaves. Until the
+   * next change, nothing saves them on the way out and nothing asks before leaving.
+   */
+  discardUnsaved: () => void;
   /** After publish, rollback or unpublish: the page summary and checks changed on the server. */
   setServerState: (update: { page?: PageSummary; checks?: ChecksResult }) => void;
   setSite: (site: Site) => void;
@@ -173,6 +180,11 @@ export function randomSectionId(): string {
 
 export function hasUnsavedChanges(state: Pick<EditorState, 'draftVersion' | 'savedVersion'>) {
   return state.draftVersion !== state.savedVersion;
+}
+
+/** The user gave up the changes the draft holds now ("Rời trang, bỏ thay đổi"). */
+export function isDiscarded(state: Pick<EditorState, 'draftVersion' | 'discardedVersion'>) {
+  return state.discardedVersion === state.draftVersion;
 }
 
 /** A save response built from the store when there is nothing new to save. */
@@ -333,6 +345,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
       leadCapture: init.leadCapture,
       draftVersion: 0,
       savedVersion: 0,
+      discardedVersion: null,
       mergeKey: null,
 
       addSection(type, variant, requestedIndex) {
@@ -708,6 +721,10 @@ export function createEditorStore(init: EditorInit): EditorStore {
 
       markConflict() {
         set({ saveState: 'conflict', saveError: null });
+      },
+
+      discardUnsaved() {
+        set({ discardedVersion: get().draftVersion });
       },
 
       setServerState(update) {

@@ -5,7 +5,7 @@ import { Button, Callout, Dialog } from '@plp/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { setHistoryGuard } from '../shell/history-guard';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import type { EditorStore, SaveState } from './store';
+import { type EditorStore, isDiscarded, type SaveState } from './store';
 import { DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
@@ -19,11 +19,17 @@ export function isUnsaved(saveState: SaveState): boolean {
  */
 export type PendingInput = () => boolean;
 
+/** Whether leaving now drops changes the user has not given up ("Rời trang, bỏ thay đổi"). */
 function leavingLoses(store: EditorStore, pendingInput: PendingInput | undefined): boolean {
-  return isUnsaved(store.getState().saveState) || pendingInput?.() === true;
+  const state = store.getState();
+  return !isDiscarded(state) && (isUnsaved(state.saveState) || pendingInput?.() === true);
 }
 
-/** Asks the browser to confirm closing or reloading the tab while changes are unsaved. */
+/**
+ * Asks the browser to confirm closing or reloading the tab while changes are unsaved. Not once the
+ * user gave them up: they chose to leave, and a prompt would let them stay after a full page load
+ * already began (the sidebar's workspace switch remembers the new workspace first).
+ */
 export function useBeforeUnloadGuard(store: EditorStore, pendingInput?: PendingInput): void {
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {

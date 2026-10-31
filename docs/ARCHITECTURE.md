@@ -488,6 +488,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Đổi workspace tải lại cả trang** (`window.location.assign('/')`, sau khi màn đang hiện lưu xong và cookie chọn workspace đã ghi): không dữ liệu nào của các site thuộc workspace cũ (lead, "N mới") còn trong bộ nhớ hay hiện lại từ cache khi quay lại.
     - Trước đây sidebar gọi `queryClient.clear()` rồi `router.push('/')` trong khi màn cũ còn mount: các query đang mount dựng lại và tải lại dữ liệu của workspace cũ, nên màn nháy lên trước khi rời đi.
     - Đổi site vẫn là điều hướng phía client và giữ cache của workspace.
+    - **Sau khi người dùng bỏ thay đổi, trình duyệt không hỏi nữa.** "Rời trang, bỏ thay đổi" ghi vào store phiên bản bản nháp bị bỏ (`discardUnsaved`). Tới thay đổi kế tiếp, `beforeunload` (và guard của Back/Forward) không chặn, kể cả đường dẫn đang chờ kiểm tra, và lúc unmount cũng không lưu. Vì màn chỉ cho đi khi đã lưu xong hoặc người dùng đã bỏ thay đổi, không hộp thoại "Rời khỏi trang?" nào hiện sau khi cookie chọn workspace đã ghi. Trước đây hộp thoại đó vẫn hiện; người dùng bấm ở lại thì vẫn ở workspace cũ trong khi cookie đã chọn workspace mới.
   - **Đọc lại tóm tắt trang** (sau khi đổi giao diện site, sau xung đột lúc gỡ xuất bản):
     - lấy cả tóm tắt và checks từ cùng một lần đọc;
     - chờ các lần lưu đang chạy của trang;

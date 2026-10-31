@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installHistoryGuard } from '../shell/history-guard';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
-import { DraftConflictError } from './use-draft-saver';
+import { createDraftSaver, DraftConflictError } from './use-draft-saver';
 import { useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
@@ -62,8 +62,14 @@ function failSave(store: EditorStore) {
   store.getState().markSaveFailed({ kind: 'retryable', message: 'Không kết nối được máy chủ' });
 }
 
-function BeforeUnloadGuarded({ store }: { store: EditorStore }) {
-  useBeforeUnloadGuard(store);
+function BeforeUnloadGuarded({
+  store,
+  pendingInput,
+}: {
+  store: EditorStore;
+  pendingInput?: () => boolean;
+}) {
+  useBeforeUnloadGuard(store, pendingInput);
   return null;
 }
 
@@ -98,6 +104,18 @@ describe('useBeforeUnloadGuard', () => {
     const store = makeStore();
     render(<BeforeUnloadGuarded store={store} />);
     reach(store);
+    expect(closeTab()).toBe(true);
+  });
+
+  it('lets the tab close once the user gave the changes up, and asks again after the next one', () => {
+    const store = makeStore();
+    // A slug still being checked is given up with the rest.
+    render(<BeforeUnloadGuarded store={store} pendingInput={() => true} />);
+    failSave(store);
+    createDraftSaver(store).discard();
+    expect(closeTab()).toBe(false);
+
+    store.getState().setSpacing(HERO, 'spacious');
     expect(closeTab()).toBe(true);
   });
 

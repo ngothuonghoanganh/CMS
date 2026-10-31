@@ -103,7 +103,9 @@ export function Sidebar({
     onNavigate?.();
     leaveScreen(() => {
       // A UI preference only; the API checks membership on every request. Written once the user
-      // really leaves: a failed save keeps them in this workspace.
+      // really leaves: a failed save keeps them in this workspace. The screen calls this only once
+      // it saved or the user gave its changes up, and then the browser no longer asks to stay
+      // (`useBeforeUnloadGuard`), so the page load below goes ahead.
       document.cookie = workspacePreferenceCookie(workspaceId);
       // A full page load rather than a client navigation: the screen on display unmounts with
       // this workspace's queries instead of fetching them again on its way out, and nothing of
