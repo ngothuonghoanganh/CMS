@@ -1,7 +1,7 @@
 import { LEAD_SPAM_MIN_FILL_MS, type LeadDevice, type SpamReason } from '@plp/contracts';
 import type { ObjectId } from '../../../shared/persistence/object-id.js';
 import { addressKey } from '../../../shared/renderer-channel/address-key.js';
-import { addressNetwork } from './visitor-address.js';
+import { addressNetwork } from '../../../shared/visitor-address.js';
 
 /** Phones and tablets count as "Điện thoại" on the analytics board; the rest as "Máy tính". */
 export function deviceFromUserAgent(userAgent: string): LeadDevice {

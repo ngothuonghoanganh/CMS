@@ -264,6 +264,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Rate limit theo địa chỉ của `/auth/*` (`@nestjs/throttler`) đếm trong bộ nhớ của từng tiến trình, nên N instance cho một địa chỉ tối đa N × `AUTH_RATE_LIMIT_PER_MINUTE` lần mỗi phút.
     - Giới hạn theo tài khoản nằm trong MongoDB, đúng với mọi số instance, và là lớp chặn dò mật khẩu thật.
     - Integration test chạy hai instance trên một database giữ cả hai điều này.
+- **Amended 2026-10-31 (vòng test thứ ba, rate limit `/auth/*`):** throttle theo địa chỉ đếm theo cùng khóa với giới hạn khách của ADR-016 (`addressNetwork`, trong `shared/`): một địa chỉ IPv4, hoặc một mạng IPv6 /64, và mỗi địa chỉ chỉ có một cách viết. Trước đây một client IPv6 đổi địa chỉ trong /64 của mình là có bucket mới.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -470,6 +471,21 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Lý do: lần lưu gửi lúc unmount tới sau khi màn kế tiếp đã đọc trang, nên màn đó hiện trạng thái cũ; và nếu lần lưu đó lỗi thì thay đổi mất mà không ai biết.
     - Sidebar có bốn chỗ điều hướng bằng code, không qua link: đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất". Ba chỗ đầu vẫn lưu thay đổi đang chờ lúc unmount như trước. Với "Đăng xuất", session đã bị xóa trước khi màn unmount, nên lần lưu đó trả 401 và thay đổi đang chờ bị mất.
     - Khi đọc lại trang (sau xung đột lúc gỡ xuất bản, hoặc sau khi đổi giao diện site trong editor) mà thấy bản nháp đã đổi trên server và màn không còn gì để lưu, store chuyển sang trạng thái xung đột để hộp thoại tải lại mở ngay, thay vì chờ một lần lưu có thể không bao giờ tới.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Đường dẫn đang được kiểm tra cũng là thay đổi chưa lưu.**
+    - Đường dẫn gõ ở màn SEO chỉ vào bản nháp sau 400 ms nghỉ gõ và khi server xác nhận còn trống; trước đó store vẫn ở trạng thái đã lưu.
+    - Khi rời màn (link, Back/Forward, đóng tab), đường dẫn mà ô đang giữ nhưng chưa vào bản nháp được coi là chưa lưu. Màn kiểm tra ngay (không chờ hết 400 ms), chờ kết quả và lần lưu, rồi mới rời đi.
+    - Đường dẫn bị từ chối hoặc không kiểm tra được thì ở lại, báo "Chưa lưu được đường dẫn trang", kèm nút "Rời trang, bỏ thay đổi".
+    - Wizard tạo trang và hộp thoại "Bắt đầu trống" gửi đường dẫn cùng yêu cầu tạo trang và server kiểm tra lại, nên không cần chờ.
+  - **Điều hướng bằng code ở sidebar cũng lưu trước** (thay câu về bốn chỗ điều hướng bằng code ở trên):
+    - Đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất" rời màn qua màn đang hiện (`screen-leave`). Màn lưu xong mới cho đi, và vẫn chỉ giữ một lần rời trang đang chờ.
+    - Lưu lỗi thì ở lại, kèm nút bỏ thay đổi ("Đăng xuất, bỏ thay đổi" khi đăng xuất).
+    - Cookie chọn workspace chỉ được ghi khi người dùng thật sự rời đi. Đăng xuất nhận 401 (phiên đã hết) vẫn mở trang đăng nhập.
+  - **Đổi workspace xóa cache TanStack Query:** không dữ liệu nào của các site thuộc workspace cũ (lead, "N mới") còn trong bộ nhớ hay hiện lại từ cache khi quay lại.
+  - **Đọc lại tóm tắt trang** (sau khi đổi giao diện site, sau xung đột lúc gỡ xuất bản):
+    - lấy cả tóm tắt và checks từ cùng một lần đọc;
+    - chờ các lần lưu đang chạy của trang;
+    - bỏ qua câu trả lời cũ hơn store thay vì báo xung đột.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
@@ -620,6 +636,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Quy tắc "API không có React" và "schema không có React" xét cả chuỗi import, cả import chỉ lấy type và cả file `.tsx`.
     - `@plp/contracts` không import package nào khác của workspace; chỉ admin và renderer import `@plp/sections/react`.
   - **Lint:** luật React hooks áp dụng cả cho code React dùng chung (`packages/sections/src/react`, `packages/ui`).
+- **Amended 2026-10-31 (vòng test thứ ba):** header của admin (`next.config.ts`, `http-headers.ts`).
+  - Mọi phản hồi có `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin` và `X-Content-Type-Options: nosniff`; không gửi `X-Powered-By`.
+  - `Strict-Transport-Security: max-age=31536000` chỉ khi `COOKIE_SECURE=true` (đọc lúc build như rewrite, mặc định true như API).
+  - Trang gửi `Cache-Control: no-store` (trừ `/_next/static`), nên Back sau khi đăng xuất phải hỏi lại server.
+  - Next không gắn header của admin vào phản hồi của rewrite `/api` (proxy ra ngoài). Vì vậy API tự gửi `X-Content-Type-Options: nosniff` trên mọi phản hồi, kể cả file CSV, và `no-store` cho dữ liệu cá nhân.
+  - Chưa có CSP đầy đủ (`script-src` với nonce): cần nonce sinh trong middleware, để sau.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -847,6 +869,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-31 (vòng test thứ ba):** nhật ký 50 mục bỏ mục cũ nhất trước, kể cả mục "Ghi nhận".
   - Thời điểm ghi nhận, phản hồi và hoàn tất vẫn nằm trên yêu cầu (`createdAt`, `respondedAt`, `completedAt`).
   - Integration test đi qua API: ghi nhận cộng 49 lần xuất là 50 mục, và lần xuất thứ 50 đẩy mục ghi nhận ra. Phản hồi và hoàn tất (update pipeline) giữ 50 mục, cũ nhất trước.
+- **Amended 2026-10-31 (vòng test thứ ba, admin):**
+  - Với Editor, hộp thoại xuất bản không có "Sửa ngay" cho `consent_not_configured` và `lead_destination_missing`. Thay vào đó, hộp thoại ghi rõ chỉ Owner của workspace làm được và đề nghị nhờ Owner.
+  - Checklist "Thiết lập site" của màn 01 ghi "Owner của workspace làm bước này" cho các bước của Owner, thay vì link tới màn chỉ đọc.
 
 ### ADR-018 — Hộp thư lead và email thông báo
 

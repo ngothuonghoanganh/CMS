@@ -1,6 +1,6 @@
 import { createHmac, hkdfSync } from 'node:crypto';
 import type { ObjectId } from '../../../shared/persistence/object-id.js';
-import { canonicalAddress } from '../../leads/domain/visitor-address.js';
+import { canonicalAddress } from '../../../shared/visitor-address.js';
 
 /** The key of visitor hashes, derived from the renderer channel's secret: never in the database. */
 export function visitorHashSecret(rendererApiSecret: string): Buffer {

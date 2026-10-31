@@ -221,6 +221,24 @@ describe('auth rate limit behind a trusted edge proxy', () => {
     await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(429);
     await fromClient('198.51.100.40', '/auth/signup', signupInput()).expect(201);
   });
+
+  it('counts an IPv6 client per /64, however its address is written', async () => {
+    const login = (address: string) =>
+      new TestClient(t.app)
+        .post('/auth/login', { email: 'ipv6@example.com', password: 'whatever-123' })
+        .set('X-Forwarded-For', address);
+
+    // Two addresses of one /64 (a phone rotating its address) share one bucket.
+    await login('2001:db8:aa:1::1').expect(401);
+    await login('2001:DB8:AA:1:0:0:0:2').expect(401);
+    await login('2001:db8:aa:1:ffff::9').expect(429);
+    // Another /64 has its own bucket.
+    await login('2001:db8:aa:2::1').expect(401);
+    // An IPv4 address seen through an IPv6 socket is that IPv4 address.
+    await login('::ffff:203.0.113.77').expect(401);
+    await login('203.0.113.77').expect(401);
+    await login('203.0.113.77').expect(429);
+  });
 });
 
 describe('per-account login limit', () => {

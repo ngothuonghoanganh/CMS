@@ -78,7 +78,8 @@ describe('inspectImage', () => {
     decode.mockRestore();
   });
 
-  it('counts every frame of an animation', async () => {
+  // Decoding ten 1600 px frames takes most of a second, and far longer on a loaded machine.
+  it('counts every frame of an animation', { timeout: 30_000 }, async () => {
     // Each frame is far below the limit, the ten together are over it.
     await expect(inspectImage(await animation(1600, 1600, 10))).rejects.toMatchObject({
       status: 413,

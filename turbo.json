@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["API_INTERNAL_URL", "PUBLIC_SITE_ORIGIN_TEMPLATE"],
+      "env": ["API_INTERNAL_URL", "PUBLIC_SITE_ORIGIN_TEMPLATE", "COOKIE_SECURE"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {

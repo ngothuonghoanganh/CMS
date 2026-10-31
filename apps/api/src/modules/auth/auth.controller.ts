@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { AuthThrottlerGuard } from './auth-throttler.guard.js';
 import {
   type LoginRequest,
   loginRequestSchema,
@@ -25,7 +25,7 @@ export class AuthController {
   ) {}
 
   @Public()
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(AuthThrottlerGuard)
   @Post('signup')
   async signup(
     @Body(new ZodPipe(signupRequestSchema)) body: SignupRequest,
@@ -35,7 +35,7 @@ export class AuthController {
   }
 
   @Public()
-  @UseGuards(ThrottlerGuard)
+  @UseGuards(AuthThrottlerGuard)
   @Post('login')
   @HttpCode(200)
   async login(

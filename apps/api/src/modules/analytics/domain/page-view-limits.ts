@@ -1,6 +1,6 @@
 import type { ObjectId } from '../../../shared/persistence/object-id.js';
 import { addressKey } from '../../../shared/renderer-channel/address-key.js';
-import { addressNetwork } from '../../leads/domain/visitor-address.js';
+import { addressNetwork } from '../../../shared/visitor-address.js';
 
 /**
  * Rate-limit key of a visitor's views on a site: as for leads, a keyed hash of the address, or of

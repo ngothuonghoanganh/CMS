@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
+import type { NextFunction, Request, Response } from 'express';
 import type { Env } from './config/env.js';
 
 /**
@@ -18,4 +19,10 @@ export function configureApp(
   app.use(cookieParser());
   app.useBodyParser('json', { limit: '1mb' });
   app.disable('x-powered-by');
+  // The admin's headers do not reach responses of its /api rewrite, so the API marks its own
+  // (CSV exports among them) as not to be sniffed (ADR-013).
+  app.use((_request: Request, response: Response, next: NextFunction) => {
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
 }

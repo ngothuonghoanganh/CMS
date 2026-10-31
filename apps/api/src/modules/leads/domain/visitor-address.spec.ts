@@ -4,7 +4,7 @@ import { addressKey, addressKeySecret } from '../../../shared/renderer-channel/a
 import { pageViewClientKey } from '../../analytics/domain/page-view-limits.js';
 import { visitorHash, visitorHashSecret } from '../../analytics/domain/visitor-hash.js';
 import { clientLimitKey } from './lead-intake-rules.js';
-import { addressNetwork, canonicalAddress } from './visitor-address.js';
+import { addressNetwork, canonicalAddress } from '../../../shared/visitor-address.js';
 
 const RENDERER_SECRET = 'renderer-api-secret-of-at-least-32-chars';
 const SITE = toObjectId('64b0000000000000000000a1');
