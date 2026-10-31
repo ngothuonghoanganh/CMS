@@ -700,6 +700,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Lý do: nhiều index unique là chốt chặn của bất biến (email người dùng, session, lượt đăng nhập, membership, subdomain, slug bản nháp và slug đã xuất bản, phiên bản và khóa idempotency của release, redirect, phiên bản đồng ý, lead theo `submissionId`, bộ đếm giới hạn, salt và bộ đếm của analytics); TTL index xóa dữ liệu hết hạn; một số truy vấn có `hint`. Dựng ở nền thì trên database mới, request đầu tiên tới trước index: bản trùng lọt vào (lần dựng index sau đó thất bại, và Mongoose bỏ qua lỗi), truy vấn có `hint` bị từ chối.
   - Không dựng được một index (ví dụ dữ liệu đã có bản trùng) thì API không khởi động; lỗi nêu tên model.
   - Integration test: sau khi khởi động không model nào thiếu index (`diffIndexes`); một index unique gặp dữ liệu trùng làm khởi động thất bại; index của lead bị xóa được dựng lại ở lần khởi động sau, trước lượt kiểm tra đầu tiên.
+  - **Quy tắc vận hành** (hệ quả của việc dựng index lúc khởi động, xem §6):
+    - Đổi option của một index đã có (`expireAfterSeconds` của TTL, `partialFilterExpression`, unique) là một bước migration chạy trước khi deploy: xóa rồi tạo lại index, hoặc `collMod` với TTL. Thiếu bước này thì phiên bản mới không khởi động được, MongoDB báo `IndexOptionsConflict`.
+    - Index mới trên collection lớn được dựng trước khi deploy, để lúc khởi động index đã có sẵn.
+    - Không xóa hay đổi tên index khi API đang chạy. Lượt kiểm tra gửi lại của lead công khai dùng `hint` (ADR-016), nên thất bại trong lúc thiếu index của nó; chỉ lần khởi động sau mới tạo lại index.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -1197,6 +1201,10 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
+- API dựng index lúc khởi động và không khởi động khi một index không dựng được (ADR-013). Vì vậy:
+  - đổi option của index đã có (`expireAfterSeconds` của TTL, `partialFilterExpression`, unique) là bước migration chạy trước khi deploy (xóa rồi tạo lại, hoặc `collMod` với TTL); thiếu bước này thì bản mới dừng ở `IndexOptionsConflict`;
+  - index mới trên collection lớn được dựng trước khi deploy;
+  - không xóa hay đổi tên index khi API đang chạy.
 
 **Chủ sản phẩm cần quyết**
 
