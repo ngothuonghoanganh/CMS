@@ -254,6 +254,26 @@ describe('auth rate limit behind a trusted edge proxy', () => {
     // A client with a real address keeps its own bucket.
     await login('203.0.113.88').expect(401);
   });
+
+  it('counts a forwarded address written with a port under the address itself', async () => {
+    // Some load balancers write `ip:port` or `[v6]:port` into X-Forwarded-For.
+    const login = (address: string, email: string) =>
+      new TestClient(t.app)
+        .post('/auth/login', { email, password: 'whatever-123' })
+        .set('X-Forwarded-For', address);
+
+    await login('203.0.113.7:51234', 'port-v4@example.com').expect(401);
+    await login('203.0.113.7', 'port-v4@example.com').expect(401);
+    await login('203.0.113.7:40000', 'port-v4@example.com').expect(429);
+    // Another client's ip:port has its own bucket, not the proxy's.
+    await login('198.51.100.9:51234', 'port-other@example.com').expect(401);
+    await login('198.51.100.9:51235', 'port-other@example.com').expect(401);
+    await login('198.51.100.9:51236', 'port-other@example.com').expect(429);
+    // An IPv6 address in brackets, with or without a port, counts in its /64.
+    await login('[2001:db8:bb:1::1]:443', 'port-v6@example.com').expect(401);
+    await login('[2001:db8:bb:1::2]', 'port-v6@example.com').expect(401);
+    await login('2001:db8:bb:1::3', 'port-v6@example.com').expect(429);
+  });
 });
 
 describe('per-account login limit', () => {

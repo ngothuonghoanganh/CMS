@@ -2,7 +2,7 @@ import { isIP } from 'node:net';
 import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { addressNetwork } from '../../shared/visitor-address.js';
+import { addressNetwork, withoutPort } from '../../shared/visitor-address.js';
 
 /**
  * The per-address limit of `/auth/*` (ADR-004), counted like the visitor limits of ADR-016: per
@@ -18,12 +18,13 @@ export class AuthThrottlerGuard extends ThrottlerGuard {
 
 /**
  * The address a request counts under. Behind a trusted edge (`TRUST_PROXY_HOPS`), Express takes
- * `req.ip` from `X-Forwarded-For` without checking it, so a client can send any text there. Such a
- * request counts under the socket address (the proxy) instead: every sender of garbage then shares
- * one bucket and cannot open a fresh one per string.
+ * `req.ip` from `X-Forwarded-For` without checking it. Some load balancers write the client's port
+ * there too (`ip:port`, `[v6]:port`), which is dropped. A client can also send any text there:
+ * what is still not an IP address counts under the socket address (the proxy) instead, so every
+ * sender of garbage shares one bucket and cannot open a fresh one per string.
  */
 function trackedAddress(request: Request): string {
-  const forwarded = request.ip;
+  const forwarded = request.ip === undefined ? undefined : withoutPort(request.ip);
   if (forwarded !== undefined && isIP(forwarded) !== 0) {
     return forwarded;
   }

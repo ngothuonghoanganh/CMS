@@ -1,5 +1,11 @@
 import { isIPv4, isIPv6 } from 'node:net';
 
+/** `203.0.113.7:51234`: an IPv4 address with the port of the client's connection. */
+const IPV4_WITH_PORT = /^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$/;
+
+/** `[2001:db8::1]:51234` or `[2001:db8::1]`: an IPv6 address in brackets, with or without a port. */
+const IPV6_IN_BRACKETS = /^\[([^\]]+)\](?::\d{1,5})?$/;
+
 /** `::ffff:a.b.c.d`: an IPv4 visitor seen through an IPv6 socket. */
 const IPV4_MAPPED_PREFIX = [0, 0, 0, 0, 0, 0xffff] as const;
 
@@ -21,6 +27,15 @@ function ipv6Groups(ip: string): number[] {
   const right = rest === undefined ? [] : parseGroups(rest);
   const zeros = rest === undefined ? 0 : 8 - left.length - right.length;
   return [...left, ...Array.from({ length: zeros }, () => 0), ...right];
+}
+
+/**
+ * A forwarded address without the port some load balancers write into `X-Forwarded-For`: the
+ * port is dropped from `ip:port`, and the brackets and port from `[v6]:port`. Anything else comes
+ * back as it is, for the caller to check with `isIP`.
+ */
+export function withoutPort(forwarded: string): string {
+  return (IPV4_WITH_PORT.exec(forwarded) ?? IPV6_IN_BRACKETS.exec(forwarded))?.[1] ?? forwarded;
 }
 
 /**

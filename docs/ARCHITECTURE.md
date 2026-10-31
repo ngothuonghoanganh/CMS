@@ -267,6 +267,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Integration test chạy hai instance trên một database giữ cả hai điều này.
 - **Amended 2026-10-31 (vòng test thứ ba, rate limit `/auth/*`):** throttle theo địa chỉ đếm theo cùng khóa với giới hạn khách của ADR-016 (`addressNetwork`, trong `shared/`): một địa chỉ IPv4, hoặc một mạng IPv6 /64, và mỗi địa chỉ chỉ có một cách viết. Trước đây một client IPv6 đổi địa chỉ trong /64 của mình là có bucket mới.
   - Sau proxy tin cậy (`TRUST_PROXY_HOPS` ≥ 1), Express lấy `req.ip` từ `X-Forwarded-For` mà không kiểm tra. Địa chỉ không phải IP được đếm vào bucket của địa chỉ socket (proxy): mọi người gửi chuỗi rác chung một bucket, không đổi chuỗi để thoát được. Chỉ khi cả hai địa chỉ đều không phải IP thì mới ném lỗi. Trước đây `X-Forwarded-For: foo` làm `/auth/login` trả 500.
+  - Một số load balancer ghi cả cổng vào `X-Forwarded-For` (`ip:port`, `[v6]:port`). Trước khi kiểm tra địa chỉ, API bỏ cổng của IPv4, bỏ ngoặc vuông và cổng của IPv6 (`withoutPort`, trong `shared/`), nên `203.0.113.7:51234` và `203.0.113.7` là một bucket. Chỉ giá trị vẫn không phải IP sau bước đó mới đếm vào bucket của proxy. Trước đây mọi client sau một load balancer như vậy chung bucket của proxy.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
