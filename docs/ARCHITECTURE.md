@@ -654,7 +654,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Mọi phản hồi có `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin` và `X-Content-Type-Options: nosniff`; không gửi `X-Powered-By`.
   - `Strict-Transport-Security: max-age=31536000` chỉ khi `COOKIE_SECURE=true` (đọc lúc build như rewrite, mặc định true như API).
   - Trang gửi `Cache-Control: no-store` (trừ `/_next/static`), nên Back sau khi đăng xuất phải hỏi lại server.
-  - Next không gắn header của admin vào phản hồi của rewrite `/api` (proxy ra ngoài). Vì vậy API tự gửi `X-Content-Type-Options: nosniff` trên mọi phản hồi, kể cả file CSV, và `no-store` cho dữ liệu cá nhân.
+  - Next không gắn header của admin vào phản hồi của rewrite `/api` (proxy ra ngoài). Vì vậy API tự gửi `X-Content-Type-Options: nosniff` trên mọi phản hồi, kể cả file CSV và lỗi 400/413 của body parser (middleware này đứng đầu, trước body parser), và `no-store` cho dữ liệu cá nhân.
   - Chưa có CSP đầy đủ (`script-src` với nonce): cần nonce sinh trong middleware, để sau.
 - **Amended 2026-10-31 (vòng test thứ ba, a11y và đa trình duyệt):**
   - **Quét WCAG 2.2 AA trong E2E:** `@axe-core/playwright` với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`, ở 1440 và 375 px. Vi phạm làm E2E đỏ; không loại trừ rule nào.
