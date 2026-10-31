@@ -347,6 +347,48 @@ describe('draft saver', () => {
     stop();
   });
 
+  it('keeps the changes given up for an earlier leave under way when a later one stays', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    const first = deferred<LeaveOutcome>();
+    const second = deferred<LeaveOutcome>();
+    const firstLeft = saver.discardFor(() => first.promise);
+    const secondLeft = saver.discardFor(() => second.promise);
+
+    second.resolve('stayed');
+    await expect(secondLeft).resolves.toBe('stayed');
+    // The first leave still goes without them: nothing saves them, not even on stopping.
+    expect(isDiscarded(store.getState())).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(saveMock).not.toHaveBeenCalled();
+
+    first.resolve('stayed');
+    await expect(firstLeft).resolves.toBe('stayed');
+    expect(isDiscarded(store.getState())).toBe(false);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('takes nothing back for a leave that stays once the changes it gave up were changed', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    const first = deferred<LeaveOutcome>();
+    const firstLeft = saver.discardFor(() => first.promise);
+    // A newer change, given up for another leave still under way.
+    store.getState().setSpacing(HERO, 'spacious');
+    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
+
+    first.resolve('stayed');
+    await expect(firstLeft).resolves.toBe('stayed');
+    expect(isDiscarded(store.getState())).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(saveMock).not.toHaveBeenCalled();
+    stop();
+  });
+
   it('takes the changes back when the leave fails, and passes the failure on', async () => {
     const { store, saver, stop } = setup();
     store.getState().setSpacing(HERO, 'compact');

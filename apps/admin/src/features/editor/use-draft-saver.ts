@@ -29,9 +29,10 @@ export class DraftConflictError extends Error {
 }
 
 /**
- * The changes not saved yet were given up for a leave still under way ("Rời trang, bỏ thay đổi"):
- * nothing saved them, and whoever asked for the save must not act as if it had. That leave already
- * takes the user away, or gives the changes back when it does not happen.
+ * The changes not saved yet were given up for a leave ("Rời trang, bỏ thay đổi"): nothing saved
+ * them, and whoever asked for the save must not act as if it had. Another leave goes without them,
+ * as the user chose; anything else that needed them saved (publish, preview, "Quay về bản live")
+ * does nothing. They count again when the leave does not happen.
  */
 export class ChangesDiscardedError extends Error {
   constructor() {
@@ -43,17 +44,17 @@ export class ChangesDiscardedError extends Error {
 export interface DraftSaver {
   /**
    * Saves pending changes now (e.g. before publishing) and resolves with the server result.
-   * Rejects with `ChangesDiscardedError` while they are given up for a leave under way.
+   * Rejects with `ChangesDiscardedError` while they are given up for a leave.
    */
   ensureSaved: () => Promise<SaveDraftResponse>;
   /** "Thử lại": saves now and restarts the automatic retries. Nothing while changes are given up. */
   retry: () => void;
   /**
-   * "Rời trang, bỏ thay đổi": gives the changes not saved yet up for `leave` only, then leaves. No
-   * save of them starts any more, not even a retry or the one on stopping; a request already sent
-   * cannot be recalled. When the user stays after all, they count as unsaved again and autosave
-   * resumes, unless another leave gave them up meanwhile: it is still under way. A later change is
-   * saved as usual. Resolves with the leave's outcome.
+   * "Rời trang, bỏ thay đổi": gives the changes not saved yet up for `leave`, then leaves. No save
+   * of them starts any more, not even a retry or the one on stopping; a request already sent cannot
+   * be recalled. When the user stays after all, this leave takes them back: once no other leave
+   * they were given up for is under way, they count as unsaved again and autosave resumes. A later
+   * change is saved as usual. Resolves with the leave's outcome.
    */
   discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
@@ -246,11 +247,11 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
   }
 
   /**
-   * The leave changes were given up for (`token`) did not happen: they are unsaved again, and
-   * saved, unless another leave gave them up since.
+   * A leave the changes of `version` were given up for did not happen: they are saved again, unless
+   * another leave they were given up for is still under way.
    */
-  function keepUnsaved(token: symbol) {
-    store.getState().withdrawDiscard(token);
+  function keepUnsaved(version: number) {
+    store.getState().withdrawDiscard(version);
     const state = store.getState();
     if (!stopped && needsSave(state) && state.saveState !== 'conflict') {
       scheduleSave();
@@ -264,17 +265,17 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       flushInBackground();
     },
     async discardFor(leave) {
-      const token = store.getState().discardUnsaved();
+      const version = store.getState().discardUnsaved();
       clearTimers();
       let outcome: LeaveOutcome;
       try {
         outcome = await leave();
       } catch (error) {
-        keepUnsaved(token);
+        keepUnsaved(version);
         throw error;
       }
       if (outcome === 'stayed') {
-        keepUnsaved(token);
+        keepUnsaved(version);
       }
       return outcome;
     },

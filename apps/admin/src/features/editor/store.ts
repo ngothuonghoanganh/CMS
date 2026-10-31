@@ -95,12 +95,12 @@ export interface UpdateOptions {
   merge?: boolean;
 }
 
-/** Changes not saved yet that the user gave up for a leave ("Rời trang, bỏ thay đổi"). */
+/** Changes not saved yet that the user gave up for leaves ("Rời trang, bỏ thay đổi"). */
 export interface Discard {
   /** The `draftVersion` they reached: a later change is saved as usual. */
   version: number;
-  /** Which leave gave them up: only that one takes them back when it does not happen. */
-  token: symbol;
+  /** Leaves they were given up for that did not stay: they count as given up while any is left. */
+  leaves: number;
 }
 
 export interface EditorState {
@@ -171,16 +171,17 @@ export interface EditorState {
   markConflict: () => void;
   /**
    * "Rời trang, bỏ thay đổi": the user gives up the changes not saved yet, for the leave that
-   * follows. Until the next change, or until `withdrawDiscard`, nothing saves them and nothing asks
-   * before leaving. Returns the token that leave withdraws them with.
+   * follows. Until the next change, or until every leave they were given up for withdrew, nothing
+   * saves them and nothing asks before leaving. Returns the `draftVersion` given up, which that
+   * leave withdraws with.
    */
-  discardUnsaved: () => symbol;
+  discardUnsaved: () => number;
   /**
-   * The leave the changes were given up for did not happen: they count as unsaved again. Only the
-   * latest leave that gave them up (its `token`) can take them back; an earlier one that stayed
-   * leaves them to it.
+   * A leave the changes of `version` were given up for did not happen. They count as unsaved again
+   * once no other leave they were given up for is still under way. Nothing when the draft changed
+   * since: that discard already ended.
    */
-  withdrawDiscard: (token: symbol) => void;
+  withdrawDiscard: (version: number) => void;
   /** After publish, rollback or unpublish: the page summary and checks changed on the server. */
   setServerState: (update: { page?: PageSummary; checks?: ChecksResult }) => void;
   setSite: (site: Site) => void;
@@ -739,15 +740,18 @@ export function createEditorStore(init: EditorInit): EditorStore {
       },
 
       discardUnsaved() {
-        const token = Symbol('discard');
-        set({ discarded: { version: get().draftVersion, token } });
-        return token;
+        const { draftVersion: version, discarded } = get();
+        const leaves = discarded?.version === version ? discarded.leaves + 1 : 1;
+        set({ discarded: { version, leaves } });
+        return version;
       },
 
-      withdrawDiscard(token) {
-        if (get().discarded?.token === token) {
-          set({ discarded: null });
+      withdrawDiscard(version) {
+        const { discarded } = get();
+        if (discarded?.version !== version) {
+          return;
         }
+        set({ discarded: discarded.leaves > 1 ? { version, leaves: discarded.leaves - 1 } : null });
       },
 
       setServerState(update) {
