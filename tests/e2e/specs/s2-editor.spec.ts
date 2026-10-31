@@ -84,10 +84,11 @@ test.describe('S2 · editor', () => {
     // Dragging with the keyboard: pick up with Space, move with ↑, drop with Space. dnd-kit announces
     // each step to screen readers; the next key waits for that announcement.
     const announcement = (text: string) => page.getByRole('status').filter({ hasText: text });
-    await editor.rows
-      .nth(3)
-      .getByRole('button', { name: /^Kéo để sắp xếp/ })
-      .focus();
+    const handle = editor.rows.nth(3).getByRole('button', { name: /^Kéo để sắp xếp/ });
+    // Alt+↓ gives the moved row's button its focus back a frame later, only if the focus is still
+    // lost: Space must reach the handle, not "Chuyển … lên trên".
+    await handle.focus();
+    await expect(handle).toBeFocused();
     await page.keyboard.press('Space');
     // Picked up: dnd-kit replaces "Đã nhấc section…" with the position it is over, its own.
     await expect(announcement('Đã chuyển tới vị trí 4 / 8.')).toBeAttached();

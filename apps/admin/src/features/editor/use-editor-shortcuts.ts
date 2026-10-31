@@ -47,12 +47,21 @@ export function shortcutFor(
   return null;
 }
 
+/**
+ * Moving a section reorders the rows, and a focused row that moves loses the focus. Gives it back
+ * once React has moved it, but only if the focus is still lost: whatever the user focused meanwhile
+ * keeps it (the drag handle a keyboard drag starts from).
+ */
 function refocus(element: Element | null) {
   if (!(element instanceof HTMLElement)) {
     return;
   }
   requestAnimationFrame(() => {
-    if (element.isConnected && document.activeElement !== element) {
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && active.isConnected) {
+      return;
+    }
+    if (element.isConnected) {
       element.focus();
     }
   });
