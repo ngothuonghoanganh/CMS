@@ -57,13 +57,18 @@ describe('lead email retry schedule', () => {
   }
 
   /**
-   * Waits (for real) until the attempt numbered `expected.attempts` has written its outcome: the
-   * attempt starts when the clock moves, then claims and records over a few database calls.
+   * Waits (for real) until the attempt numbered `expected.attempts` has written its outcome and,
+   * when another attempt follows, the notifier has set the wait for it. The attempt starts when
+   * the clock moves, then claims and records over a few database calls. The outcome is visible to
+   * this test's reads a moment before the notifier's own write returns and sets the next wait:
+   * moving the clock in that moment moved it past a wait that did not exist yet, and the next
+   * attempt never came. The notifier's waits are the only timers this test fakes.
    */
   async function settles(
     leadId: string,
     expected: Partial<LeadNotification> & { attempts: number },
   ): Promise<void> {
+    const waits = expected.status === 'pending' ? 1 : 0;
     const deadline = Date.now() + SETTLE_BUDGET_MS;
     let notification: LeadNotification | null = null;
     while (Date.now() < deadline) {
@@ -71,7 +76,8 @@ describe('lead email retry schedule', () => {
       if (
         notification !== null &&
         notification.status !== 'sending' &&
-        notification.attempts === expected.attempts
+        notification.attempts === expected.attempts &&
+        vi.getTimerCount() === waits
       ) {
         expect(notification).toMatchObject(expected);
         return;
@@ -79,7 +85,7 @@ describe('lead email retry schedule', () => {
       await sleep(20);
     }
     throw new Error(
-      `Attempt ${String(expected.attempts)} did not finish within ${String(SETTLE_BUDGET_MS)} ms; last seen ${JSON.stringify(notification)}`,
+      `Attempt ${String(expected.attempts)} did not finish within ${String(SETTLE_BUDGET_MS)} ms; last seen ${JSON.stringify(notification)} with ${String(vi.getTimerCount())} waits set, expected ${String(waits)}`,
     );
   }
 
