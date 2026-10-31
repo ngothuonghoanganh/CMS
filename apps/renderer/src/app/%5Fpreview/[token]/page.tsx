@@ -14,7 +14,8 @@ import { currentSubdomain } from '../../../lib/request-host';
 // Response headers (no-store, noindex, no-referrer) come from next.config.ts. The proxy has
 // already answered an invalid, expired or foreign token with the server-rendered 404, and an API
 // it could not reach with a 503 (see `proxy.ts`); it only checked the token, so this page makes
-// the one full load of the preview.
+// the one full load of the preview. When that load fails the answer is a 500, still noindex: a
+// page cannot answer 503 (ADR-010).
 
 /** Wait for the preview before answering, so a failure is a real error status. */
 export const instant = false;

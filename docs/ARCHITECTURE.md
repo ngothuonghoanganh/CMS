@@ -563,10 +563,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-31 (vòng test thứ ba):** proxy kiểm tra token trước khi render (`previewStatusForHost`: token hợp lệ và thuộc site của host).
   - Token hết hạn, sai `kid`, sai chữ ký hay của site khác: rewrite sang trang not-found dựng sẵn, status 404, `X-Robots-Tag: noindex, nofollow`. Câu tiếng Việt có sẵn trong HTML nên đọc được khi tắt JavaScript.
   - Trước đây thông báo chỉ hiện sau hydrate, và request không có User-Agent nhận 200.
-  - API không trả lời: 503 `noindex`.
+  - Lượt kiểm tra trạng thái của proxy lỗi (API không trả lời, hết giờ, 5xx): 503 `noindex` kèm `Retry-After: 60`, do proxy dựng.
   - **Proxy chỉ hỏi trạng thái của token:** `GET /public/preview/:token/status` (contract `publicPreviewStatusResponseSchema`, thêm mới, không đổi contract cũ) kiểm token, site của token và việc trang hay release còn thuộc site đó (chỉ đọc `siteId`), rồi trả `{ kind, subdomain }`. Không nạp bản nháp, release hay asset. Cùng 404, `no-store` và `noindex` như endpoint đầy đủ.
-    - Page nạp preview đầy đủ đúng một lần (`GET /public/preview/:token`).
-    - Trước đây mỗi lần xem preview gọi endpoint đầy đủ hai lần (proxy rồi page): gấp đôi việc của API, và lần gọi thứ hai lỗi thì trả 500.
+    - Page nạp preview đầy đủ đúng một lần (`GET /public/preview/:token`) khi lần nạp đó thành công.
+    - Trước đây mỗi lần xem preview gọi endpoint đầy đủ hai lần (proxy rồi page): gấp đôi việc của API.
+  - **Lần nạp đầy đủ của page lỗi sau khi kiểm tra trạng thái đã qua thì trả 500, không phải 503:** page của Next không đặt được status 503. Phản hồi 500 đó vẫn có `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store` và `Referrer-Policy: no-referrer` (header của `next.config.ts` theo đường dẫn `/_preview/…`), cùng `<meta name="robots" content="noindex">` do Next tự thêm vào trang lỗi. Đã kiểm bằng bản build của renderer với một API giả trả lời lượt kiểm tra trạng thái và trả 500 cho lần nạp đầy đủ. Khi lỗi như vậy, Next gọi lần nạp đầy đủ hai lần.
 
 ### ADR-011 — SEO, slug, redirect, sitemap, robots, tên miền mặc định
 
