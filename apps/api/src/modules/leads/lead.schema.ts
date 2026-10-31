@@ -43,7 +43,11 @@ export interface LeadRecord {
   /** The release the visitor saw: its snapshot holds the consent text they agreed to. */
   releaseId: Types.ObjectId;
   releaseVersion: number;
-  /** From the page script; a retry with the same id is the same lead. Null without script. */
+  /**
+   * `submissionKey` of the form's submission id and the visitor's entries: sending the same entries
+   * again is the same lead. Null when the form sent no id. Leads stored before the key existed
+   * hold the plain id.
+   */
   submissionId: string | null;
   fields: { name: string; phone: string; email: string | null; message: string | null };
   /** The required consent is implied: a lead only exists once it was given. */

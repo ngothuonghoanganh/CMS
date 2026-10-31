@@ -143,6 +143,41 @@ describe('lead notifications', () => {
     ).toBe(true);
   });
 
+  it('stores a form sent again with other entries under the same submission id as a new lead', async () => {
+    // Without script the submission id is drawn once per page served. A visitor who sends the
+    // form, goes Back, corrects the phone and sends it again sends a second lead under that id.
+    const form = await formSite();
+    const leadsNamed = async (name: string) =>
+      leadListResponseSchema
+        .parse((await owner.get(`/sites/${form.site.id}/leads`).expect(200)).body)
+        .items.filter((item) => item.name === name);
+    const name = 'Sửa số rồi gửi lại';
+    const first = leadBody(form.releaseId, { name, phone: '0901 234 567', elapsedMs: null });
+    await submitLead(t, form.site.subdomain, first).expect(201);
+    // The same entries again (a reloaded result page, a lost answer) are the same lead.
+    await submitLead(t, form.site.subdomain, first).expect(200);
+    const [stored] = await leadsNamed(name);
+    await settled(stored?.id ?? '', 'sent');
+    expect(await leadsNamed(name)).toHaveLength(1);
+    expect(leadEmails(name)).toHaveLength(1);
+
+    const corrected = { ...first, phone: '0938 512 840' };
+    await submitLead(t, form.site.subdomain, corrected).expect(201);
+    await submitLead(t, form.site.subdomain, corrected).expect(200);
+    const both = await leadsNamed(name);
+    expect(both).toHaveLength(2);
+    for (const lead of both) {
+      await settled(lead.id, 'sent');
+    }
+    expect(leadEmails(name)).toHaveLength(2);
+
+    // The page script's retry carries a longer fill time: still the same lead.
+    const scripted = leadBody(form.releaseId, { name: 'Gửi lại bằng script', elapsedMs: 9000 });
+    await submitLead(t, form.site.subdomain, scripted).expect(201);
+    await submitLead(t, form.site.subdomain, { ...scripted, elapsedMs: 24_000 }).expect(200);
+    expect(await leadsNamed('Gửi lại bằng script')).toHaveLength(1);
+  });
+
   it('never emails a lead suspected of spam', async () => {
     const form = await formSite();
     const leadId = await send(form, { name: 'Bot quảng cáo', honeypot: 'https://spam.example' });

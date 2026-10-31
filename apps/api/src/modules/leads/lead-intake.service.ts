@@ -23,6 +23,7 @@ import {
   deviceFromUserAgent,
   siteLimitKey,
   spamReasons,
+  submissionKey,
 } from './domain/lead-intake-rules.js';
 import { normalizeLeadSource } from './domain/lead-source.js';
 import { LeadNotifier } from '../notifications/lead-notifier.service.js';
@@ -84,10 +85,9 @@ export class LeadIntakeService {
       throw notFound(FORM_NOT_FOUND);
     }
     const content = leadFormContentSchema.parse(form.content);
-    if (
-      input.submissionId !== null &&
-      (await this.leads.existsPublicSubmission(site._id, input.submissionId))
-    ) {
+    const submission =
+      input.submissionId === null ? null : submissionKey(input.submissionId, input);
+    if (submission !== null && (await this.leads.existsPublicSubmission(site._id, submission))) {
       return { replayed: true };
     }
     const now = new Date();
@@ -102,7 +102,7 @@ export class LeadIntakeService {
         pageId: release.pageId,
         releaseId: release._id,
         releaseVersion: release.version,
-        submissionId: input.submissionId,
+        submissionId: submission,
         fields: {
           name: input.name,
           phone: input.phone,

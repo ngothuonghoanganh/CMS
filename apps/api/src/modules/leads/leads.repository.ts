@@ -178,7 +178,7 @@ export class LeadsRepository {
   }
 
   /**
-   * Whether the site already received this submission (a retry of the same form). MongoDB uses a
+   * Whether the site already received this submission (`submissionKey`). MongoDB uses a
    * partial index only for a query that implies its filter, which a plain equality does not: the
    * type check keeps this one probe of the unique index rather than a read of every lead of the site.
    */

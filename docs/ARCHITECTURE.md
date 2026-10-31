@@ -797,6 +797,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Gửi lại sau khi relay hết giờ, hoặc tải lại trang kết quả, được API trả như lần đầu, không tạo lead hay email thứ hai.
     - Trang live không bao giờ được cache dùng chung (`private, no-store`) nên hai khách không chung id. Script của trang vẫn dùng id riêng cho mỗi form.
     - Giới hạn: link "Quay lại trang" trên trang lỗi mở trang mới với id mới.
+    - **Khóa chống trùng là id cộng nội dung khách nhập** (`submissionKey`): sha256 của `submissionId`, họ tên, số điện thoại, email, lời nhắn và lựa chọn nhận tin, sau khi contract chuẩn hóa.
+      - Cùng id, cùng nội dung là gửi lại, trả như lần đầu. Cùng id, nội dung khác là lead mới: khách không có JavaScript gửi form, bấm Back (bfcache giữ form và id), sửa số điện thoại rồi gửi lại. Trước đây lead thứ hai bị coi là gửi lại và mất. Gửi lại lead thứ hai đó vẫn là gửi lại.
+      - Thời gian điền không thuộc khóa, nên script gửi lại với `elapsedMs` lớn hơn vẫn là cùng lead, như trước.
+      - Khóa lưu vào trường `submissionId` của lead, nên index unique-partial `(siteId, submissionId)` không đổi. Lead lưu trước thay đổi này giữ id thô: một lần gửi lại vắt qua lúc deploy có thể thành lead thứ hai.
+      - Id ngẫu nhiên không được lưu, nên khóa không cho suy ra nội dung.
   - **Relay lỗi** (API không tới được, hết giờ, 5xx): `/_lead` trả 503 kèm `Retry-After: 60` thay cho 502.
   - **Địa chỉ khách:**
     - Phần tử cuối của `X-Forwarded-For` được chuẩn hóa: IPv4 trong IPv6 (`::ffff:a.b.c.d`) thành IPv4, IPv6 viết gọn chữ thường, bỏ cổng và ngoặc vuông. Một khách chỉ có một bucket.
