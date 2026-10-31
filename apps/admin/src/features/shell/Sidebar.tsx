@@ -35,6 +35,7 @@ import { newLeadsBadge } from '../leads/lead-presentation';
 import { useLeadCounts } from '../leads/queries';
 import { Brand } from './Brand';
 import { navCurrent, newLeadsHref, siteHref, siteNavItems, type SiteNavKey } from './navigation';
+import { leaveScreen } from './screen-leave';
 import { siteInitial, siteTileStyle } from './site-tile';
 import { useLogout } from './use-logout';
 import { workspacePreferenceCookie } from './workspace-preference';
@@ -89,9 +90,13 @@ export function Sidebar({
   const workspace = membership.workspace;
   const newLeads = newLeadsBadge(useLeadCounts(site.id, leadCounts).data);
 
-  function go(href: string) {
+  // Code navigation leaves through the screen on display, which saves what it holds first.
+  function go(href: string, before?: () => void) {
     onNavigate?.();
-    router.push(href);
+    leaveScreen(() => {
+      before?.();
+      router.push(href);
+    });
   }
 
   return (
@@ -126,9 +131,11 @@ export function Sidebar({
             if (workspaceId === workspace.id) {
               return;
             }
-            // A UI preference only; the API checks membership on every request.
-            document.cookie = workspacePreferenceCookie(workspaceId);
-            go('/');
+            go('/', () => {
+              // A UI preference only; the API checks membership on every request. Written once
+              // the user really leaves: a failed save keeps them in this workspace.
+              document.cookie = workspacePreferenceCookie(workspaceId);
+            });
           }}
         >
           {memberships.map((item) => (
@@ -252,7 +259,13 @@ export function Sidebar({
             icon={<LogoutIcon size={18} />}
             disabled={logout.isPending}
             onSelect={() => {
-              logout.mutate();
+              // Saved first: once the session is gone, a save sent as the screen unmounts fails.
+              leaveScreen(
+                () => {
+                  logout.mutate();
+                },
+                { discardLabel: 'Đăng xuất, bỏ thay đổi' },
+              );
             }}
           >
             Đăng xuất

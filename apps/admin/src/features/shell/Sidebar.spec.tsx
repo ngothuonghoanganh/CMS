@@ -1,11 +1,12 @@
 import { endpoints, type Membership } from '@plp/contracts';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { setScreenLeave } from './screen-leave';
 import { Sidebar, type SidebarProps } from './Sidebar';
-import { renderWithProviders } from './test-utils';
+import { apiError, renderWithProviders } from './test-utils';
 
 const { router, pathname } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
@@ -217,5 +218,94 @@ describe('Sidebar', () => {
 
     expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('opens the login page when the session had already ended', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValueOnce(apiError(401, 'unauthenticated', 'Phiên đăng nhập đã hết hạn'));
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+
+    await vi.waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/login');
+    });
+    expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+  });
+
+  describe('over a screen holding changes not saved yet', () => {
+    /** The screen on display: it lets the user leave only when the test says it saved. */
+    function holdingScreen() {
+      const asked: Array<{ leave: () => void; discardLabel: string }> = [];
+      const remove = setScreenLeave((leave, { discardLabel }) => {
+        asked.push({ leave, discardLabel });
+      });
+      onTestFinished(remove);
+      return asked;
+    }
+
+    it('switches site once the screen saved', async () => {
+      const user = userEvent.setup();
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+      await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
+
+      expect(router.push).not.toHaveBeenCalled();
+      expect(asked).toHaveLength(1);
+      asked[0]?.leave();
+      expect(router.push).toHaveBeenCalledWith('/sites/64b000000000000000000002');
+    });
+
+    it('opens site creation once the screen saved', async () => {
+      const user = userEvent.setup();
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Tạo site mới' }));
+
+      expect(router.push).not.toHaveBeenCalled();
+      asked[0]?.leave();
+      expect(router.push).toHaveBeenCalledWith(`/sites/new?workspace=${WORKSPACE_ID}`);
+    });
+
+    it('remembers another workspace only when the user really leaves', async () => {
+      const user = userEvent.setup();
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Đổi workspace/ }));
+      await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
+
+      // The save may fail and the user stay: this workspace is still the one they work in.
+      expect(document.cookie).not.toContain('plp_ws=');
+      expect(router.push).not.toHaveBeenCalled();
+      asked[0]?.leave();
+      expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
+      expect(router.push).toHaveBeenCalledWith('/');
+    });
+
+    it('ends the session only after the screen saved, offering to sign out without the change', async () => {
+      const user = userEvent.setup();
+      apiMock.mockResolvedValueOnce(undefined);
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+
+      expect(apiMock).not.toHaveBeenCalled();
+      expect(asked[0]?.discardLabel).toBe('Đăng xuất, bỏ thay đổi');
+      act(() => {
+        asked[0]?.leave();
+      });
+      await vi.waitFor(() => {
+        expect(router.replace).toHaveBeenCalledWith('/login');
+      });
+      expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+    });
   });
 });

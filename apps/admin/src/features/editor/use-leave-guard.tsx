@@ -13,11 +13,21 @@ export function isUnsaved(saveState: SaveState): boolean {
   return saveState === 'dirty' || saveState === 'saving' || saveState === 'error';
 }
 
+/**
+ * A change a field holds before it reaches the store (a slug being checked); leaving would drop
+ * it as surely as an unsaved draft. Pass a stable function.
+ */
+export type PendingInput = () => boolean;
+
+function leavingLoses(store: EditorStore, pendingInput: PendingInput | undefined): boolean {
+  return isUnsaved(store.getState().saveState) || pendingInput?.() === true;
+}
+
 /** Asks the browser to confirm closing or reloading the tab while changes are unsaved. */
-export function useBeforeUnloadGuard(store: EditorStore): void {
+export function useBeforeUnloadGuard(store: EditorStore, pendingInput?: PendingInput): void {
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
-      if (isUnsaved(store.getState().saveState)) {
+      if (leavingLoses(store, pendingInput)) {
         event.preventDefault();
       }
     }
@@ -25,7 +35,7 @@ export function useBeforeUnloadGuard(store: EditorStore): void {
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [store]);
+  }, [store, pendingInput]);
 }
 
 /** Where the user wanted to go: a link in the editor, or the browser's Back/Forward. */
@@ -51,6 +61,7 @@ function currentEntry(): HistoryEntry {
 export function useHistoryLeaveGuard(
   store: EditorStore,
   onBlocked: (leave: () => void) => void,
+  pendingInput?: PendingInput,
 ): () => void {
   const allowNext = useRef(false);
   const leave = useCallback(() => {
@@ -70,7 +81,7 @@ export function useHistoryLeaveGuard(
         allowNext.current = false;
         return false;
       }
-      if (!isUnsaved(store.getState().saveState)) {
+      if (!leavingLoses(store, pendingInput)) {
         return false;
       }
       window.history.pushState(entry.state, '', entry.url);
@@ -81,7 +92,7 @@ export function useHistoryLeaveGuard(
       unsubscribe();
       removeGuard();
     };
-  }, [store, onBlocked, leave]);
+  }, [store, onBlocked, leave, pendingInput]);
 
   return leave;
 }

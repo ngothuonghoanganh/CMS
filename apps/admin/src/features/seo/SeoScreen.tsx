@@ -23,9 +23,11 @@ import {
 import { PageDetailHeader } from '../page-header/PageDetailHeader';
 import { PageContainer } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { LEAVE_WITHOUT_SAVING, setScreenLeave } from '../shell/screen-leave';
 import { useNow } from '../shell/use-now';
-import { type SeoFocus, SeoForm } from './SeoForm';
+import { type SeoFocus, SeoForm, useDraftSlugField } from './SeoForm';
 import { SeoPreviews } from './SeoPreviews';
+import { SlugNotCommittedError } from './use-slug-field';
 import styles from './SeoScreen.module.css';
 
 export interface SeoInitialData {
@@ -79,12 +81,12 @@ function SaveFirstLink({ href, className, children, ref, ...aria }: LinkComponen
  * its default is prevented, so those handlers still run (the phone drawer closes) while Next's
  * Link and `SaveFirstLink` see `defaultPrevented` and do not navigate themselves.
  */
-function useSaveFirstLinks(store: EditorStore, navigate: (href: string) => void): void {
+function useSaveFirstLinks(hasPending: () => boolean, navigate: (href: string) => void): void {
   useEffect(() => {
     function onClick(event: MouseEvent) {
       const modified =
         event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-      if (modified || !isUnsaved(store.getState().saveState)) {
+      if (modified || !hasPending()) {
         return;
       }
       const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
@@ -110,7 +112,12 @@ function useSaveFirstLinks(store: EditorStore, navigate: (href: string) => void)
     return () => {
       document.removeEventListener('click', onClick, true);
     };
-  }, [store, navigate]);
+  }, [hasPending, navigate]);
+}
+
+interface PendingLeave {
+  leave: () => void;
+  discardLabel: string;
 }
 
 function SeoScreenBody({
@@ -122,8 +129,16 @@ function SeoScreenBody({
   const { toast } = useToast();
   const now = useNow(loadedAt);
   const { ensureSaved, retry, discard } = useDraftSaver(store);
+  // A typed slug reaches the draft only once the server confirmed it is free: until then leaving
+  // must wait for that check too. The leave paths read the field between renders.
+  const slugField = useDraftSlugField();
+  const latestSlugField = useRef(slugField);
+  useEffect(() => {
+    latestSlugField.current = slugField;
+  });
+  const slugPending = useCallback(() => latestSlugField.current.isPending(), []);
   useLatestServerDraft(store);
-  useBeforeUnloadGuard(store);
+  useBeforeUnloadGuard(store, slugPending);
   const page = useEditor((state) => state.page);
   const site = useEditor((state) => state.site);
   const seo = useEditor((state) => state.draft.seo);
@@ -133,19 +148,27 @@ function SeoScreenBody({
   const host = hostOf(site.defaultOrigin);
   const shareImageId = seo.shareImageAssetId ?? site.defaultShareImageAssetId;
 
+  const hasPending = useCallback(
+    () => isUnsaved(store.getState().saveState) || slugPending(),
+    [store, slugPending],
+  );
+
   const leaveFailed = useCallback(
-    (error: unknown, leave: () => void) => {
+    (error: unknown, { leave, discardLabel }: PendingLeave) => {
       // A conflict opens the blocking reload dialog; anything else keeps the user here, with a way
-      // out when the save cannot succeed (signed out elsewhere, role lowered).
+      // out when the save cannot succeed (signed out elsewhere, role lowered, a taken slug).
       if (error instanceof DraftConflictError) {
         return;
       }
+      const slugRefused = error instanceof SlugNotCommittedError;
       toast({
         tone: 'danger',
-        title: 'Chưa lưu được thiết lập SEO',
-        description: `${problemMessage(error)} Thay đổi vẫn ở đây, hãy thử lại.`,
+        title: slugRefused ? 'Chưa lưu được đường dẫn trang' : 'Chưa lưu được thiết lập SEO',
+        description: slugRefused
+          ? error.message
+          : `${problemMessage(error)} Thay đổi vẫn ở đây, hãy thử lại.`,
         action: {
-          label: 'Rời trang, bỏ thay đổi',
+          label: discardLabel,
           onClick: () => {
             discard();
             leave();
@@ -158,28 +181,32 @@ function SeoScreenBody({
 
   // Leaving saves first, whichever way: a save sent as the screen unmounts would land after the
   // next screen read the page (it would show the state before it), and could fail unseen (ADR-008).
-  // One leave waits at a time: another link, Back or Forward during the save only changes where
-  // the user goes when it ends, so the user leaves once.
-  const pendingLeave = useRef<(() => void) | null>(null);
+  // One leave waits at a time: another link, Back, Forward or sidebar menu during the save only
+  // changes where the user goes when it ends, so the user leaves once.
+  const pendingLeave = useRef<PendingLeave | null>(null);
   useEffect(
     () => () => {
-      // Something else took the user away (a menu navigating in code): never follow a stale leave.
+      // Something else took the user away: never follow a stale leave.
       pendingLeave.current = null;
     },
     [],
   );
   const leaveAfterSave = useCallback(
-    (leave: () => void) => {
-      pendingLeave.current = leave;
-      // Concurrent calls share the running save; the first to settle takes the leave.
-      function takePending(): (() => void) | null {
+    (leave: () => void, discardLabel: string = LEAVE_WITHOUT_SAVING) => {
+      pendingLeave.current = { leave, discardLabel };
+      // Concurrent calls share the running check and save; the first to settle takes the leave.
+      function takePending(): PendingLeave | null {
         const next = pendingLeave.current;
         pendingLeave.current = null;
         return next;
       }
-      ensureSaved().then(
+      // A slug still held by its field first: committing it changes the draft the save then sends.
+      const saved = slugPending()
+        ? latestSlugField.current.commit().then(() => ensureSaved())
+        : ensureSaved();
+      saved.then(
         () => {
-          takePending()?.();
+          takePending()?.leave();
         },
         (error: unknown) => {
           const next = takePending();
@@ -189,23 +216,36 @@ function SeoScreenBody({
         },
       );
     },
-    [ensureSaved, leaveFailed],
+    [slugPending, ensureSaved, leaveFailed],
+  );
+  const leaveSafely = useCallback(
+    (leave: () => void, discardLabel?: string) => {
+      if (!hasPending() && pendingLeave.current === null) {
+        leave();
+        return;
+      }
+      leaveAfterSave(leave, discardLabel);
+    },
+    [hasPending, leaveAfterSave],
   );
   const navigate = useCallback(
     (href: string) => {
-      const go = () => {
+      leaveSafely(() => {
         router.push(href);
-      };
-      if (!isUnsaved(store.getState().saveState) && pendingLeave.current === null) {
-        go();
-        return;
-      }
-      leaveAfterSave(go);
+      });
     },
-    [store, router, leaveAfterSave],
+    [router, leaveSafely],
   );
-  useHistoryLeaveGuard(store, leaveAfterSave);
-  useSaveFirstLinks(store, navigate);
+  useHistoryLeaveGuard(store, leaveAfterSave, slugPending);
+  useSaveFirstLinks(hasPending, navigate);
+  // The sidebar's menus and "Đăng xuất" navigate in code, outside this screen.
+  useEffect(
+    () =>
+      setScreenLeave((leave, { discardLabel }) => {
+        leaveSafely(leave, discardLabel);
+      }),
+    [leaveSafely],
+  );
 
   return (
     <NavigateContext.Provider value={navigate}>
@@ -230,7 +270,7 @@ function SeoScreenBody({
           Thiết lập SEO thuộc bản nháp: chỉ có hiệu lực trên trang live sau khi bạn xuất bản.
         </Callout>
         <div className={styles.columns}>
-          <SeoForm host={host} initialFocus={focus} onRetrySave={retry} />
+          <SeoForm host={host} initialFocus={focus} onRetrySave={retry} slugField={slugField} />
           <SeoPreviews
             siteName={site.name}
             host={host}
