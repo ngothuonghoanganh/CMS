@@ -99,7 +99,7 @@ export interface UpdateOptions {
 export interface Discard {
   /** The `draftVersion` they reached: a later change is saved as usual. */
   version: number;
-  /** Leaves they were given up for that did not stay: they count as given up while any is left. */
+  /** How many leaves gave them up and have not stayed: they count as given up while any is left. */
   leaves: number;
 }
 
