@@ -163,7 +163,7 @@ describe('POST /_lead from the page script', () => {
       429,
     ],
     [404, null, 404],
-    [500, null, 502],
+    [500, null, 503],
   ])('maps an API answer %i to %i', async (apiStatus, body, routeStatus) => {
     fetchMock.mockResolvedValueOnce(
       apiAnswer(
@@ -178,10 +178,16 @@ describe('POST /_lead from the page script', () => {
     expect(((await response.json()) as { ok: boolean }).ok).toBe(false);
   });
 
-  it('reports an unreachable API without logging the lead', async () => {
+  it('reports an unreachable API as a 503 to retry later, without logging the lead', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
     const response = await POST(scriptPost(lead({ name: 'Trần Quốc Bảo' })));
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      ok: false,
+      message: 'Chưa gửi được đăng ký. Kiểm tra kết nối rồi thử lại.',
+    });
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('Trần Quốc Bảo');
   });
 

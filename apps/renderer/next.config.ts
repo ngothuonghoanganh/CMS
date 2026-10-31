@@ -21,10 +21,11 @@ const config: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   // Every visitor that sends a User-Agent gets blocking metadata, as crawlers do (Next ignores the
-  // pattern without one). Public pages depend on the host, so a prerendered shell holds nothing;
-  // without it the response waits for the release lookup, which keeps real 404/308 statuses (a
-  // streamed shell would commit 200 first) and puts the canonical, robots and Open Graph tags in
-  // <head>. The proxy answers misses and redirects itself, so those statuses hold for any client.
+  // pattern without one, so the proxy gives such requests a placeholder). Public pages depend on
+  // the host, so a prerendered shell holds nothing; without it the response waits for the release
+  // lookup, which keeps real error statuses (a streamed shell would commit 200 first) and puts the
+  // canonical, robots and Open Graph tags in <head>. The proxy answers misses, redirects and an
+  // unreachable API itself (404, 308, 503).
   htmlLimitedBots: /.*/,
   headers() {
     return Promise.resolve(responseHeaderRules());

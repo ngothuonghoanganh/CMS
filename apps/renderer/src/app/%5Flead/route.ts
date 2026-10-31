@@ -6,6 +6,7 @@ import { relayLead, type RelayOutcome } from '../../lib/lead-relay';
 import { checkLeadRequest, leadRequestCandidate, leadSourceFrom } from '../../lib/lead-request';
 import { campaignQuery, leadResultHtml, safeBackPath } from '../../lib/lead-result-page';
 import { readBodyWithin } from '../../lib/request-body';
+import { RETRY_AFTER_SECONDS } from '../../lib/responses';
 import { isCrossSite } from '../../lib/same-site';
 
 // `/_lead` (ADR-016): the folder is "%5Flead" because "_lead" would be a private folder. Response
@@ -16,20 +17,24 @@ const MAX_BODY_BYTES = 32 * 1024;
 
 const NO_STORE = { 'cache-control': 'no-store' };
 
+/** The API could not take the lead: the visitor may send it again (same submission id) later. */
+const UNAVAILABLE = 503;
+const RETRY_LATER = { 'retry-after': String(RETRY_AFTER_SECONDS) };
+
 /** What the page script shows for each outcome it does not word itself. */
 const SCRIPT_MESSAGES = {
   not_found: 'Form này không còn nhận đăng ký. Tải lại trang rồi gửi lại.',
   failed: 'Chưa gửi được đăng ký. Kiểm tra kết nối rồi thử lại.',
 } as const;
 
-function json(body: unknown, status: number): Response {
-  return Response.json(body, { status, headers: NO_STORE });
+function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
+  return Response.json(body, { status, headers: { ...NO_STORE, ...headers } });
 }
 
-function html(body: string, status: number): Response {
+function html(body: string, status: number, headers: Record<string, string> = {}): Response {
   return new Response(body, {
     status,
-    headers: { 'content-type': 'text/html; charset=utf-8', ...NO_STORE },
+    headers: { 'content-type': 'text/html; charset=utf-8', ...NO_STORE, ...headers },
   });
 }
 
@@ -77,7 +82,7 @@ function scriptAnswer(outcome: RelayOutcome): Response {
     case 'not_found':
       return json({ ok: false, message: SCRIPT_MESSAGES.not_found }, 404);
     case 'failed':
-      return json({ ok: false, message: SCRIPT_MESSAGES.failed }, 502);
+      return json({ ok: false, message: SCRIPT_MESSAGES.failed }, UNAVAILABLE, RETRY_LATER);
   }
 }
 
@@ -107,7 +112,7 @@ function formAnswer(outcome: RelayOutcome, back: BackLink): Response {
     case 'not_found':
       return html(leadResultHtml('not_found', back.path, [], back.campaign), 404);
     case 'failed':
-      return html(leadResultHtml('failed', back.path, [], back.campaign), 502);
+      return html(leadResultHtml('failed', back.path, [], back.campaign), UNAVAILABLE, RETRY_LATER);
   }
 }
 
