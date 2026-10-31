@@ -5,12 +5,16 @@ import { useToast } from '@plp/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { ApiError, api } from '../../lib/api';
+import { loadPage } from '../../lib/page-load';
 import { problemMessage, reportUnexpected } from './problem-message';
 import type { LeaveOutcome } from './screen-leave';
 
 export interface Logout {
   isPending: boolean;
-  /** Signs out; resolves with `'stayed'` when the session could not be ended (the user was told). */
+  /**
+   * Signs out; resolves with `'stayed'` when the session could not be ended (the user was told), or
+   * when not even a page load could open the login page.
+   */
   signOut: () => Promise<LeaveOutcome>;
 }
 
@@ -51,15 +55,24 @@ export function useLogout(): Logout {
       toast({ tone: 'danger', title: 'Chưa đăng xuất được', description: problemMessage(error) });
       return 'stayed';
     }
-    // The session is gone, so the user is leaving whatever happens here. Each step runs on its own:
-    // a failure is reported rather than taken for a failed sign-out, and never keeps the next step
-    // (the login page above all) from running.
+    // The session is gone. Each step runs on its own: a failure is reported rather than taken for a
+    // failed sign-out, and never keeps the login page from opening.
     afterSignOut('Dropping cached data', () => {
       queryClient.clear();
     });
-    afterSignOut('Opening the login page', () => {
+    try {
       router.replace('/login');
-    });
+    } catch (error) {
+      reportUnexpected('Opening the login page after signing out failed', error);
+      try {
+        loadPage('/login');
+      } catch (loadError) {
+        // The user is still here: a screen that was leaving without saving saves and asks again.
+        reportUnexpected('Loading the login page after signing out failed', loadError);
+        return 'stayed';
+      }
+      return 'leaving';
+    }
     afterSignOut('Refreshing the router', () => {
       router.refresh();
     });

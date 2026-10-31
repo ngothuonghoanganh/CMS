@@ -384,13 +384,13 @@ describe('Sidebar', () => {
         outcome = await asked[0]?.leave();
       });
 
-      // The screen takes back the changes it gave up for this leave.
+      // The screen that let this leave go without saving saves and asks again.
       expect(outcome).toBe('stayed');
       expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
       expect(router.replace).not.toHaveBeenCalled();
     });
 
-    it('reports a leave, not a failed sign-out, when opening the login page fails', async () => {
+    it('opens the login page with a page load when the router cannot, and reports a leave', async () => {
       const user = userEvent.setup();
       const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       onTestFinished(() => {
@@ -411,14 +411,47 @@ describe('Sidebar', () => {
         outcome = await asked[0]?.leave();
       });
 
-      // The session is gone: the screen must not take its changes back as if the user stayed.
+      // The session is gone: the screen must not save or ask as if the user stayed.
       expect(outcome).toBe('leaving');
       expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+      expect(loadPageMock).toHaveBeenCalledWith('/login');
       expect(logged).toHaveBeenCalledWith(
         'Opening the login page after signing out failed',
         broken,
       );
       expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+    });
+
+    it('reports that the user stays when not even a page load opens the login page', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      apiMock.mockResolvedValueOnce(undefined);
+      router.replace.mockImplementationOnce(() => {
+        throw new Error('The router is not mounted');
+      });
+      const blocked = new Error('Navigation was blocked');
+      loadPageMock.mockImplementationOnce(() => {
+        throw blocked;
+      });
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      // Still on the screen: it saves and asks again before the tab closes.
+      expect(outcome).toBe('stayed');
+      expect(logged).toHaveBeenCalledWith(
+        'Loading the login page after signing out failed',
+        blocked,
+      );
     });
 
     it('still opens the login page when dropping the cached data fails', async () => {
