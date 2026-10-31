@@ -122,7 +122,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
           return;
         }
         // Focus fell to the page (the control was removed, or a click on no control blurred it).
-        if (!(focused instanceof HTMLElement) || focused === document.body) {
+        if (focused === null || focused === document.body || focused === document.documentElement) {
           setPlacement('bottom');
           return;
         }
