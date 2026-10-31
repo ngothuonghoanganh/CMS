@@ -157,6 +157,15 @@ export class ReleasesRepository {
     return this.releases.findById(id).lean<ReleaseRecord>().exec();
   }
 
+  /** The site of a release, without its content: a signed preview's check (ADR-010). */
+  async findPublicSiteId(id: ObjectId): Promise<ObjectId | null> {
+    const release = await this.releases
+      .findById(id, { siteId: 1 })
+      .lean<Pick<ReleaseRecord, '_id' | 'siteId'>>()
+      .exec();
+    return release?.siteId ?? null;
+  }
+
   /** Unscoped variant of `findByIds` for public delivery, limited to one site (the sitemap). */
   async findPublicForSite(
     siteId: ObjectId,

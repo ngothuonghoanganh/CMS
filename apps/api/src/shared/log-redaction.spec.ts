@@ -14,6 +14,9 @@ const TOKEN = 'eyJhbGciOiJIUzI1NiIsImtpZCI6IjEifQ.eyJraW5kIjoiZHJhZnQifQ.c2lnbmF
 describe('log redaction', () => {
   it('replaces the preview token in the URL path, with or without a query', () => {
     expect(redactPreviewToken(`/public/preview/${TOKEN}`)).toBe(`/public/preview/${REDACTED}`);
+    expect(redactPreviewToken(`/public/preview/${TOKEN}/status`)).toBe(
+      `/public/preview/${REDACTED}/status`,
+    );
     expect(redactPreviewToken(`/public/preview/${TOKEN}?x=1`)).toBe(
       `/public/preview/${REDACTED}?x=1`,
     );

@@ -558,11 +558,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Giao diện:** banner "Bản xem trước".
 - **Reason:** Quy tắc 6; chia sẻ cho khách hàng mà không cần đăng nhập.
 - **Consequences:** Link không thu hồi riêng lẻ được trước hạn; xoay khóa thì mọi link mất hiệu lực.
-- **Amended 2026-10-31 (vòng test thứ ba):** proxy kiểm tra token trước khi render (`previewForHost`: token hợp lệ và thuộc site của host).
+- **Amended 2026-10-31 (vòng test thứ ba):** proxy kiểm tra token trước khi render (`previewStatusForHost`: token hợp lệ và thuộc site của host).
   - Token hết hạn, sai `kid`, sai chữ ký hay của site khác: rewrite sang trang not-found dựng sẵn, status 404, `X-Robots-Tag: noindex, nofollow`. Câu tiếng Việt có sẵn trong HTML nên đọc được khi tắt JavaScript.
   - Trước đây thông báo chỉ hiện sau hydrate, và request không có User-Agent nhận 200.
   - API không trả lời: 503 `noindex`.
-  - Hệ quả: một preview hợp lệ tốn hai lần gọi `GET /public/preview/:token` (proxy rồi page).
+  - **Proxy chỉ hỏi trạng thái của token:** `GET /public/preview/:token/status` (contract `publicPreviewStatusResponseSchema`, thêm mới, không đổi contract cũ) kiểm token, site của token và việc trang hay release còn thuộc site đó (chỉ đọc `siteId`), rồi trả `{ kind, subdomain }`. Không nạp bản nháp, release hay asset. Cùng 404, `no-store` và `noindex` như endpoint đầy đủ.
+    - Page nạp preview đầy đủ đúng một lần (`GET /public/preview/:token`).
+    - Trước đây mỗi lần xem preview gọi endpoint đầy đủ hai lần (proxy rồi page): gấp đôi việc của API, và lần gọi thứ hai lỗi thì trả 500.
 
 ### ADR-011 — SEO, slug, redirect, sitemap, robots, tên miền mặc định
 

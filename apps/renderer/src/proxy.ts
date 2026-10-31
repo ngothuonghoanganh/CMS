@@ -3,8 +3,8 @@ import { rendererEnv } from './env';
 import { subdomainFromHeaders } from './lib/host';
 import { LIVE_RELEASE_HEADER } from './lib/live-release';
 import { NOT_FOUND_ROUTE, pathGate } from './lib/path-gate';
-import { previewForHost, previewTokenOf } from './lib/preview-gate';
-import { CHECK_TIMEOUT_MS, getPathStatus, getPreview } from './lib/public-api';
+import { previewStatusForHost, previewTokenOf } from './lib/preview-gate';
+import { getPathStatus, getPreviewStatus } from './lib/public-api';
 import { unavailablePage } from './lib/responses';
 
 /**
@@ -55,9 +55,8 @@ export async function proxy(request: NextRequest): Promise<Response> {
 
   if (token !== null) {
     try {
-      const preview = await previewForHost({ subdomain, token }, (value) =>
-        getPreview(value, CHECK_TIMEOUT_MS),
-      );
+      // Only the token and its site: the page makes the one full load of the preview.
+      const preview = await previewStatusForHost({ subdomain, token }, getPreviewStatus);
       if (preview === null) {
         return notFound(request, forwarded);
       }

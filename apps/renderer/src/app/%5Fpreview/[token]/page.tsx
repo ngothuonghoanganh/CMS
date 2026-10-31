@@ -7,13 +7,14 @@ import { PreviewBanner } from '../../../components/PreviewBanner';
 import { SitePage } from '../../../components/SitePage';
 import { previewMetadata } from '../../../lib/metadata';
 import { previewForHost } from '../../../lib/preview-gate';
-import { getPreview, LOOKUP_TIMEOUT_MS } from '../../../lib/public-api';
+import { getPreview } from '../../../lib/public-api';
 import { currentSubdomain } from '../../../lib/request-host';
 
 // `/_preview/{token}`: the folder is "%5Fpreview" because "_preview" would be a private folder.
 // Response headers (no-store, noindex, no-referrer) come from next.config.ts. The proxy has
 // already answered an invalid, expired or foreign token with the server-rendered 404, and an API
-// it could not reach with a 503 (see `proxy.ts`).
+// it could not reach with a 503 (see `proxy.ts`); it only checked the token, so this page makes
+// the one full load of the preview.
 
 /** Wait for the preview before answering, so a failure is a real error status. */
 export const instant = false;
@@ -29,9 +30,7 @@ interface PreviewPageProps {
 const loadPreview = cache(async (token: string): Promise<PublicPreviewResponse | null> => {
   // A preview is always the latest draft for this request; nothing of it can be prerendered.
   await connection();
-  return previewForHost({ subdomain: await currentSubdomain(), token }, (value) =>
-    getPreview(value, LOOKUP_TIMEOUT_MS),
-  );
+  return previewForHost({ subdomain: await currentSubdomain(), token }, getPreview);
 });
 
 export async function generateMetadata({ params }: PreviewPageProps): Promise<Metadata> {

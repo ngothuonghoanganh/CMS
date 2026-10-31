@@ -2,6 +2,7 @@ import {
   endpoints,
   type PathStatusResponse,
   type PublicPreviewResponse,
+  type PublicPreviewStatusResponse,
   type ResolveResponse,
   type SitemapResponse,
   siteCacheTag,
@@ -136,20 +137,33 @@ async function cachedSitemap(subdomain: string): Promise<CachedLookup<SitemapRes
 
 /**
  * The page behind a signed preview token; null when the token is invalid or expired. Never
- * cached: a draft preview always shows the latest draft (ADR-010). The proxy checks the token with
- * `CHECK_TIMEOUT_MS`, the page loads it with `LOOKUP_TIMEOUT_MS`.
+ * cached: a draft preview always shows the latest draft (ADR-010). Loaded once, by the page.
  */
-export async function getPreview(
-  token: string,
-  timeoutMs: number,
-): Promise<PublicPreviewResponse | null> {
+export async function getPreview(token: string): Promise<PublicPreviewResponse | null> {
   const endpoint = endpoints.publicPreview;
   return fetchPublicJson({
     baseUrl: rendererEnv().API_PUBLIC_URL,
     path: endpoint.path(token),
     schema: endpoint.response,
     label: 'publicPreview',
-    timeoutMs,
+    timeoutMs: LOOKUP_TIMEOUT_MS,
+    cache: 'no-store',
+  });
+}
+
+/**
+ * What a signed preview token opens (its kind and its site), without any of the page; null when
+ * the token is invalid, expired or opens nothing. The proxy's light check before the page renders:
+ * the page then makes the one full load (`getPreview`).
+ */
+export async function getPreviewStatus(token: string): Promise<PublicPreviewStatusResponse | null> {
+  const endpoint = endpoints.publicPreviewStatus;
+  return fetchPublicJson({
+    baseUrl: rendererEnv().API_PUBLIC_URL,
+    path: endpoint.path(token),
+    schema: endpoint.response,
+    label: 'publicPreviewStatus',
+    timeoutMs: CHECK_TIMEOUT_MS,
     cache: 'no-store',
   });
 }

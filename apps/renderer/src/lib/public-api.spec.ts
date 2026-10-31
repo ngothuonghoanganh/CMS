@@ -5,6 +5,7 @@ import {
   CHECK_TIMEOUT_MS,
   getPathStatus,
   getPreview,
+  getPreviewStatus,
   getResolved,
   getSitemap,
   LOOKUP_TIMEOUT_MS,
@@ -169,17 +170,41 @@ describe('getPreview', () => {
       data: pageData,
       preview: { kind: 'draft', version: null, expiresAt: '2026-10-31T08:00:00.000Z' },
     });
-    await expect(getPreview('a.b.c', LOOKUP_TIMEOUT_MS)).resolves.toMatchObject({
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    await expect(getPreview('a.b.c')).resolves.toMatchObject({
       preview: { kind: 'draft' },
     });
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/public/preview/a.b.c');
     expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe('no-store');
+    expect(timeout).toHaveBeenCalledWith(LOOKUP_TIMEOUT_MS);
     expect(cacheTag).not.toHaveBeenCalled();
     expect(cacheLife).not.toHaveBeenCalled();
   });
 
   it('returns null for an invalid or expired token', async () => {
     stubFetch(404, { code: 'not_found' });
-    await expect(getPreview('expired.token.x', CHECK_TIMEOUT_MS)).resolves.toBeNull();
+    await expect(getPreview('expired.token.x')).resolves.toBeNull();
+  });
+});
+
+describe('getPreviewStatus', () => {
+  it('asks the light status endpoint within the check timeout, never cached', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = stubFetch(200, { kind: 'draft', subdomain: 'smilecare' });
+    await expect(getPreviewStatus('a.b.c')).resolves.toEqual({
+      kind: 'draft',
+      subdomain: 'smilecare',
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/public/preview/a.b.c/status');
+    expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe('no-store');
+    expect(timeout).toHaveBeenCalledWith(CHECK_TIMEOUT_MS);
+    expect(cacheTag).not.toHaveBeenCalled();
+  });
+
+  it('returns null for an invalid, expired or foreign token, and throws when the API fails', async () => {
+    stubFetch(404, { code: 'not_found' });
+    await expect(getPreviewStatus('expired.token.x')).resolves.toBeNull();
+    stubFetch(500, { code: 'internal' });
+    await expect(getPreviewStatus('a.b.c')).rejects.toThrow();
   });
 });

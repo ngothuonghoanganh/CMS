@@ -1,6 +1,12 @@
-import type { PublicPreviewResponse } from '@plp/contracts';
+import type { PublicPreviewResponse, PublicPreviewStatusResponse } from '@plp/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { type PreviewLookup, previewForHost, previewTokenOf } from './preview-gate';
+import {
+  type PreviewLookup,
+  type PreviewStatusLookup,
+  previewForHost,
+  previewStatusForHost,
+  previewTokenOf,
+} from './preview-gate';
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJraW5kIjoiZHJhZnQifQ.c2lnbmF0dXJl';
 
@@ -94,6 +100,53 @@ describe('previewForHost', () => {
     const error = new Error('API down');
     await expect(
       previewForHost({ subdomain: 'smilecare', token: TOKEN }, lookup(error)),
+    ).rejects.toBe(error);
+  });
+});
+
+describe('previewStatusForHost', () => {
+  function statusLookup(answer: PublicPreviewStatusResponse | null | Error) {
+    return vi.fn<PreviewStatusLookup>(() =>
+      answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer),
+    );
+  }
+
+  it('accepts a valid token on the host of its own site, from the status alone', async () => {
+    const status: PublicPreviewStatusResponse = { kind: 'release', subdomain: 'smilecare' };
+    const found = statusLookup(status);
+    await expect(
+      previewStatusForHost({ subdomain: 'smilecare', token: TOKEN }, found),
+    ).resolves.toBe(status);
+    expect(found).toHaveBeenCalledWith(TOKEN);
+  });
+
+  it('is null for a token the API does not accept or a token of another site', async () => {
+    await expect(
+      previewStatusForHost({ subdomain: 'smilecare', token: TOKEN }, statusLookup(null)),
+    ).resolves.toBeNull();
+    await expect(
+      previewStatusForHost(
+        { subdomain: 'smilecare', token: TOKEN },
+        statusLookup({ kind: 'draft', subdomain: 'nhakhoakhac' }),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('is null without asking the API for a host that is not a site or a string that is no token', async () => {
+    const never = statusLookup({ kind: 'draft', subdomain: 'smilecare' });
+    await expect(
+      previewStatusForHost({ subdomain: null, token: TOKEN }, never),
+    ).resolves.toBeNull();
+    await expect(
+      previewStatusForHost({ subdomain: 'smilecare', token: 'abc' }, never),
+    ).resolves.toBeNull();
+    expect(never).not.toHaveBeenCalled();
+  });
+
+  it('lets an API failure through, so the proxy answers 503 rather than 404', async () => {
+    const error = new Error('API down');
+    await expect(
+      previewStatusForHost({ subdomain: 'smilecare', token: TOKEN }, statusLookup(error)),
     ).rejects.toBe(error);
   });
 });

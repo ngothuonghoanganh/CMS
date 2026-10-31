@@ -4,6 +4,7 @@ import {
   previewLinkResponseSchema,
   problemSchema,
   publicPreviewResponseSchema,
+  publicPreviewStatusResponseSchema,
   type Site,
 } from '@plp/contracts';
 import { SignJWT } from 'jose';
@@ -101,12 +102,17 @@ describe('preview links that must not open', () => {
       .sign(new TextEncoder().encode(t.env.PREVIEW_SECRET));
   }
 
-  /** Requests the preview and expects a 404 that says nothing about the page or the token. */
+  /**
+   * Requests the preview, and its status as the renderer's proxy does, and expects each to be a
+   * 404 that says nothing about the page or the token.
+   */
   async function expectRefused(token: string, requestId: string): Promise<void> {
-    const response = await visitor
-      .get(`/public/preview/${token}`)
-      .set('x-request-id', requestId)
-      .expect(404);
+    await expectRefusedAt(`/public/preview/${token}`, token, requestId);
+    await expectRefusedAt(`/public/preview/${token}/status`, token, `${requestId}-status`);
+  }
+
+  async function expectRefusedAt(path: string, token: string, requestId: string): Promise<void> {
+    const response = await visitor.get(path).set('x-request-id', requestId).expect(404);
     const problem = problemSchema.parse(response.body);
     expect(problem).toEqual({
       type: 'about:blank',
@@ -146,6 +152,27 @@ describe('preview links that must not open', () => {
       (await visitor.get(`/public/preview/${token ?? ''}`).expect(200)).body,
     );
     expect(JSON.stringify(preview.data.page.composition)).toContain(DRAFT_HEADING);
+  });
+
+  it('answers the status of a valid link without any of the page', async () => {
+    const draft = await signed({ kind: 'draft', pageId, ...siteClaims(site, workspaceId) });
+    const release = await signed({
+      kind: 'release',
+      releaseId: otherSiteReleaseId,
+      ...siteClaims(otherSite, workspaceId),
+    });
+    const draftStatus = await visitor.get(`/public/preview/${draft}/status`).expect(200);
+    expect(publicPreviewStatusResponseSchema.strict().parse(draftStatus.body)).toEqual({
+      kind: 'draft',
+      subdomain: site.subdomain,
+    });
+    expect(draftStatus.headers['cache-control']).toBe('no-store');
+    expect(draftStatus.headers['x-robots-tag']).toBe('noindex, nofollow');
+    const releaseStatus = await visitor.get(`/public/preview/${release}/status`).expect(200);
+    expect(publicPreviewStatusResponseSchema.strict().parse(releaseStatus.body)).toEqual({
+      kind: 'release',
+      subdomain: otherSite.subdomain,
+    });
   });
 
   it('refuses an expired link', async () => {
@@ -269,6 +296,7 @@ describe('preview links that must not open', () => {
       ...siteClaims(site, workspaceId),
     });
     await visitor.get(`/public/preview/${token}`).expect(200);
+    await visitor.get(`/public/preview/${token}/status`).expect(200);
     await t.connection.collection('pages').deleteOne({ _id: new Types.ObjectId(gone.page.id) });
     await expectRefused(token, 'preview-page-gone');
 

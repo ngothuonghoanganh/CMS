@@ -1,18 +1,19 @@
 import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PublicPreviewResponse } from '@plp/contracts';
-import { getPathStatus, getPreview } from './lib/public-api';
+import type { PublicPreviewStatusResponse } from '@plp/contracts';
+import { getPathStatus, getPreview, getPreviewStatus } from './lib/public-api';
 import { config, proxy, UNKNOWN_USER_AGENT } from './proxy';
 
 vi.mock('./lib/public-api', () => ({
   getPathStatus: vi.fn(),
   getPreview: vi.fn(),
-  CHECK_TIMEOUT_MS: 3000,
+  getPreviewStatus: vi.fn(),
 }));
 
 const getPathStatusMock = vi.mocked(getPathStatus);
 const getPreviewMock = vi.mocked(getPreview);
+const getPreviewStatusMock = vi.mocked(getPreviewStatus);
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJraW5kIjoiZHJhZnQifQ.c2lnbmF0dXJl';
 
@@ -162,50 +163,24 @@ describe('proxy', () => {
   });
 });
 
-function previewOf(subdomain: string): PublicPreviewResponse {
-  return {
-    data: {
-      site: {
-        id: 'a'.repeat(24),
-        name: 'Smile Care',
-        subdomain,
-        themePresetId: 'mint',
-        logo: null,
-        origin: `http://${subdomain}.localhost:3101`,
-      },
-      page: {
-        id: 'b'.repeat(24),
-        slug: '',
-        seo: {
-          title: 'Smile Care',
-          description: '',
-          shareImage: null,
-          noindex: false,
-          canonicalUrl: `http://${subdomain}.localhost:3101/`,
-        },
-        composition: { version: 1, sections: [] },
-      },
-      assets: {},
-      pageLinks: {},
-      releaseId: null,
-      leadCapture: null,
-    },
-    preview: { kind: 'draft', version: null, expiresAt: '2026-11-07T08:00:00.000Z' },
-  };
+function statusOf(subdomain: string): PublicPreviewStatusResponse {
+  return { kind: 'draft', subdomain };
 }
 
 describe('proxy for previews', () => {
-  it('lets a valid preview of this site render, checked within the check timeout', async () => {
-    getPreviewMock.mockResolvedValue(previewOf('smilecare'));
+  it('lets a valid preview of this site render, checking only the token', async () => {
+    getPreviewStatusMock.mockResolvedValue(statusOf('smilecare'));
     const response = await proxy(request(`/_preview/${TOKEN}`));
     expect(response.headers.get('x-middleware-next')).toBe('1');
-    expect(getPreviewMock).toHaveBeenCalledWith(TOKEN, 3000);
+    expect(getPreviewStatusMock).toHaveBeenCalledWith(TOKEN);
+    // The page makes the one full load of the preview.
+    expect(getPreviewMock).not.toHaveBeenCalled();
     expect(getPathStatusMock).not.toHaveBeenCalled();
   });
 
   // An expired token, another key id or a bad signature: the API answers 404 for all of them.
   it('rewrites an invalid or expired token to the server-rendered not-found page', async () => {
-    getPreviewMock.mockResolvedValue(null);
+    getPreviewStatusMock.mockResolvedValue(null);
     const response = await proxy(request(`/_preview/${TOKEN}`));
     expect(response.status).toBe(404);
     expect(response.headers.get('x-middleware-rewrite')).toBe(
@@ -215,7 +190,7 @@ describe('proxy for previews', () => {
   });
 
   it('answers the same 404 for a token of another site', async () => {
-    getPreviewMock.mockResolvedValue(previewOf('nhakhoakhac'));
+    getPreviewStatusMock.mockResolvedValue(statusOf('nhakhoakhac'));
     const response = await proxy(request(`/_preview/${TOKEN}`));
     expect(response.status).toBe(404);
     expect(response.headers.get('x-middleware-rewrite')).toBe(
@@ -230,11 +205,12 @@ describe('proxy for previews', () => {
   ])('answers 404 for %s without asking the API', async (_case, path, host) => {
     const response = await proxy(request(path, host));
     expect(response.status).toBe(404);
+    expect(getPreviewStatusMock).not.toHaveBeenCalled();
     expect(getPreviewMock).not.toHaveBeenCalled();
   });
 
   it('answers 503, still noindex, when the API cannot answer', async () => {
-    getPreviewMock.mockRejectedValue(new Error('API down'));
+    getPreviewStatusMock.mockRejectedValue(new Error('API down'));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await proxy(request(`/_preview/${TOKEN}`));
     expect(response.status).toBe(503);

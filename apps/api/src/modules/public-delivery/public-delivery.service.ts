@@ -7,6 +7,8 @@ import {
   type PublicPageData,
   type PublicPreviewResponse,
   publicPreviewResponseSchema,
+  type PublicPreviewStatusResponse,
+  publicPreviewStatusResponseSchema,
   type ResolveResponse,
   resolveResponseSchema,
   type SitemapResponse,
@@ -19,7 +21,7 @@ import { ActivityRepository } from '../activity/activity.repository.js';
 import { AssetsRepository } from '../assets/assets.repository.js';
 import { AssetsService } from '../assets/assets.service.js';
 import { PagesRepository } from '../pages/pages.repository.js';
-import { PreviewTokens } from '../preview/preview-tokens.js';
+import { PreviewTokens, type VerifiedPreview } from '../preview/preview-tokens.js';
 import { ConsentVersionsRepository } from '../privacy/consent-versions.repository.js';
 import { imageOccurrences, linkedPageIds } from '../publishing/domain/content-refs.js';
 import type { LeadCapture } from '../publishing/domain/lead-capture.js';
@@ -222,18 +224,7 @@ export class PublicDeliveryService {
    * which its next publish will snapshot; a release shows its own snapshot (ADR-015).
    */
   async preview(token: string): Promise<PublicPreviewResponse> {
-    const claims = await this.previews.verify(token);
-    if (!claims) {
-      throw notFound(PUBLIC_PAGE_NOT_FOUND);
-    }
-    const site = await this.sites.findBySubdomain(claims.subdomain);
-    if (
-      !site ||
-      site._id.toHexString() !== claims.siteId ||
-      site.workspaceId.toHexString() !== claims.workspaceId
-    ) {
-      throw notFound(PUBLIC_PAGE_NOT_FOUND);
-    }
+    const { claims, site } = await this.previewSite(token);
     const expiresAt = claims.expiresAt.toISOString();
     if (claims.kind === 'draft') {
       const page = await this.pages.findPublicById(toObjectId(claims.pageId));
@@ -260,6 +251,46 @@ export class PublicDeliveryService {
       data: await this.pageData(site, release.pageId, release, releaseShown(release)),
       preview: { kind: 'release', version: release.version, expiresAt },
     });
+  }
+
+  /**
+   * What a signed preview opens, checked like `preview` but without loading the draft, the release
+   * or any asset: the token, its site, and that the page or release is still in that site. The
+   * renderer's proxy asks this before rendering, and the page then loads the preview once.
+   */
+  async previewStatus(token: string): Promise<PublicPreviewStatusResponse> {
+    const { claims, site } = await this.previewSite(token);
+    const siteId =
+      claims.kind === 'draft'
+        ? (await this.pages.findAccessRef(toObjectId(claims.pageId)))?.siteId
+        : await this.releases.findPublicSiteId(toObjectId(claims.releaseId));
+    if (!siteId?.equals(site._id)) {
+      throw notFound(PUBLIC_PAGE_NOT_FOUND);
+    }
+    return publicPreviewStatusResponseSchema.parse({
+      kind: claims.kind,
+      subdomain: site.subdomain,
+    });
+  }
+
+  /**
+   * The claims of a valid preview token and the site they name. Any invalid, expired or foreign
+   * token is 404, like a page that does not exist.
+   */
+  private async previewSite(token: string): Promise<{ claims: VerifiedPreview; site: SiteRecord }> {
+    const claims = await this.previews.verify(token);
+    if (!claims) {
+      throw notFound(PUBLIC_PAGE_NOT_FOUND);
+    }
+    const site = await this.sites.findBySubdomain(claims.subdomain);
+    if (
+      !site ||
+      site._id.toHexString() !== claims.siteId ||
+      site.workspaceId.toHexString() !== claims.workspaceId
+    ) {
+      throw notFound(PUBLIC_PAGE_NOT_FOUND);
+    }
+    return { claims, site };
   }
 
   private async siteOrNotFound(subdomain: string): Promise<SiteRecord> {

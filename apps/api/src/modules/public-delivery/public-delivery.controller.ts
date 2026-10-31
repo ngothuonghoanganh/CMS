@@ -2,6 +2,7 @@ import { Controller, Get, Header, Param, Query } from '@nestjs/common';
 import {
   type PathStatusResponse,
   type PublicPreviewResponse,
+  type PublicPreviewStatusResponse,
   type ResolveResponse,
   resolveQuerySchema,
   type SitemapResponse,
@@ -45,5 +46,12 @@ export class PublicDeliveryController {
   @Header('X-Robots-Tag', 'noindex, nofollow')
   preview(@Param('token') token: string): Promise<PublicPreviewResponse> {
     return this.delivery.preview(token);
+  }
+
+  @Get('preview/:token/status')
+  @Header('Cache-Control', 'no-store')
+  @Header('X-Robots-Tag', 'noindex, nofollow')
+  previewStatus(@Param('token') token: string): Promise<PublicPreviewStatusResponse> {
+    return this.delivery.previewStatus(token);
   }
 }
