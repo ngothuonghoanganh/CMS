@@ -7,7 +7,7 @@ import type { Leave } from '../shell/screen-leave';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
 import { createDraftSaver, DraftConflictError, type DraftSaver } from './use-draft-saver';
-import { useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
+import { isFragmentNavigation, useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
 
@@ -151,6 +151,24 @@ describe('useBeforeUnloadGuard', () => {
   });
 });
 
+describe('isFragmentNavigation', () => {
+  const page = 'https://admin.example/sites/s/pages/p/seo?focus=title';
+
+  it('is a move within the page when only the fragment changes', () => {
+    expect(isFragmentNavigation(page, `${page}#main-content`)).toBe(true);
+    expect(isFragmentNavigation(`${page}#main-content`, page)).toBe(true);
+  });
+
+  it('is not when the path, the query or the origin changes, or nothing does', () => {
+    expect(isFragmentNavigation(page, 'https://admin.example/sites/s/pages/p/seo#x')).toBe(false);
+    expect(isFragmentNavigation(page, 'https://admin.example/sites/s/pages/p/history')).toBe(false);
+    expect(
+      isFragmentNavigation(page, 'https://other.example/sites/s/pages/p/seo?focus=title#x'),
+    ).toBe(false);
+    expect(isFragmentNavigation(page, page)).toBe(false);
+  });
+});
+
 describe('useLeaveGuard with the browser Back button', () => {
   it('lets Back through when everything is saved', () => {
     const pushState = vi.spyOn(window.history, 'pushState');
@@ -162,6 +180,24 @@ describe('useLeaveGuard with the browser Back button', () => {
     expect(pushState).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
     window.removeEventListener('popstate', later);
+  });
+
+  it('lets a skip link or another in-page fragment through with unsaved changes', () => {
+    const router = vi.fn();
+    window.addEventListener('popstate', router);
+    const { store } = setup();
+    const editorUrl = window.location.href;
+    store.getState().setSpacing(HERO, 'compact');
+    try {
+      // What a click on "#main-content" does: a new entry of the same page, then popstate.
+      window.history.pushState(window.history.state, '', '#main-content');
+      pressBack();
+      expect(router).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      window.history.replaceState(window.history.state, '', editorUrl);
+      window.removeEventListener('popstate', router);
+    }
   });
 
   it('keeps the router from leaving with unsaved changes, restores the entry and asks', () => {

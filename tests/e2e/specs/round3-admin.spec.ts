@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { endpoints, previewLinkResponseSchema } from '@plp/contracts';
 import { seedBoard } from '../support/board.js';
-import { call } from '../support/setup.js';
+import { call, createPageViaApi, setUpSite } from '../support/setup.js';
 import { siteOrigin, urls } from '../urls.js';
 
 /*
@@ -124,5 +124,34 @@ test.describe('Third round · admin and renderer', () => {
       expect(response.status(), file).toBe(503);
       expect(response.headers()['retry-after']).toBe('60');
     }
+  });
+
+  test('the skip link works on SEO with a change still to save, and nothing is lost', async ({
+    page,
+  }) => {
+    const { site } = await setUpSite(page.request);
+    const created = await createPageViaApi(page.request, site.id, {
+      title: 'Giới thiệu',
+      slug: 'gioi-thieu',
+      start: { kind: 'blank' },
+    });
+    const seoUrl = `/sites/${site.id}/pages/${created.page.id}/seo`;
+    await page.goto(seoUrl);
+    const seo = page.getByRole('region', { name: 'Thiết lập SEO' });
+    await seo.getByRole('textbox', { name: 'Mô tả ngắn' }).fill('Tư vấn miễn phí');
+
+    // Browsers fire popstate for an in-page link too; it must not count as leaving (ADR-008).
+    // Taken for leaving, the guard would push the screen's entry back: one entry too many.
+    const entries = await page.evaluate(() => window.history.length);
+    await page.getByRole('link', { name: 'Bỏ qua điều hướng' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`${seoUrl}#main-content$`));
+    expect(await page.evaluate(() => window.history.length)).toBe(entries + 1);
+    await expect(page.locator('main#main-content')).toBeFocused();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(seo.getByRole('status')).toHaveText('Đã lưu bản nháp');
+
+    await page.goto(seoUrl);
+    await expect(seo.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
   });
 });

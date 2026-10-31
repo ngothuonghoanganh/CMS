@@ -496,6 +496,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-31 (vòng test thứ ba, a11y):** thanh công cụ của section đang chọn và nhãn "Thiếu mô tả ảnh" nằm đè lên nội dung của section. Ở 1440 px thanh công cụ che nút của thanh điều hướng; trên khung thu nhỏ (điện thoại) chúng che cả dòng chữ.
   - Khi một chữ của section đang được sửa (focus trong ô sửa trên canvas), hai thứ này trong suốt và không nhận click, nên chữ đang sửa luôn hiện ra (WCAG 2.4.11).
   - Chúng vẫn ở trong thứ tự Tab: Shift+Tab từ chữ đưa focus lên thanh công cụ và nó hiện lại.
+- **Amended 2026-11-01 (vòng test thứ ba):** link trong cùng trang không phải là rời màn.
+  - Chromium, Firefox và WebKit đều bắn `popstate` khi bấm link `#…` trong trang (skip link "Bỏ qua điều hướng" tới `#main-content`), và khi Back giữa hai mục chỉ khác fragment.
+  - Guard của Back/Forward bỏ qua mọi `popstate` mà đường dẫn và query giữ nguyên, chỉ fragment đổi (`isFragmentNavigation`).
+  - Trước đây, ở màn SEO hay editor còn thay đổi chưa lưu, skip link bị coi là Back: guard đẩy lại entry của màn, lưu rồi `history.back()`. Kết quả là thừa một entry lịch sử, và nếu lưu lỗi thì có cả toast "Rời trang, bỏ thay đổi".
+  - E2E kiểm skip link trên màn SEO còn thay đổi chưa lưu: lịch sử tăng đúng một entry, focus vào nội dung chính và thay đổi vẫn được lưu.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 

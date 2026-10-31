@@ -61,6 +61,22 @@ function currentEntry(): HistoryEntry {
 }
 
 /**
+ * Whether going from `from` to `to` only moved within the page: same path and query, another
+ * fragment. Browsers fire `popstate` for that too (a skip link to `#main-content`, Back to the
+ * entry before it), and it leaves nothing, so it must not be taken for leaving the screen.
+ */
+export function isFragmentNavigation(from: string, to: string): boolean {
+  const before = new URL(from);
+  const after = new URL(to);
+  return (
+    before.origin === after.origin &&
+    before.pathname === after.pathname &&
+    before.search === after.search &&
+    before.hash !== after.hash
+  );
+}
+
+/**
  * Browser Back/Forward out of a screen that edits the draft (see `history-guard`). While changes
  * are unsaved the guard keeps the router from handling the event, puts the screen's entry back
  * (with the router's own state, so the router keeps working) and hands `onBlocked` the way to
@@ -92,6 +108,9 @@ export function useHistoryLeaveGuard(
         return false;
       }
       if (!leavingLoses(store, pendingInput)) {
+        return false;
+      }
+      if (isFragmentNavigation(entry.url, window.location.href)) {
         return false;
       }
       window.history.pushState(entry.state, '', entry.url);
