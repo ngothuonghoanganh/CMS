@@ -1,8 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { type LeadRecipient, leadRecipientSchema, problemSchema, type Site } from '@plp/contracts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Types } from 'mongoose';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createSite } from '../../../test/resources.js';
+import { LeadLimitsRepository } from '../leads/lead-limits.repository.js';
 
 /**
  * The daily caps on confirmation emails (ADR-018), counted for real: 5 per site and address, 30
@@ -134,5 +137,98 @@ describe('confirmation email caps', () => {
     const last = await createSite(owner.client, owner.workspaceId);
     await added(owner.client, last, 'thu-50@smilecare.vn');
     await expectCapped(add(owner.client, last, 'thu-51@smilecare.vn').expect(429));
+  });
+
+  it('takes an email back only in the window that counted it, never below zero', async () => {
+    const limits = t.app.get(LeadLimitsRepository);
+    const key = (name: string) => `${name}-${new Types.ObjectId().toHexString()}`;
+    const count = async (limitKey: string) =>
+      (await t.connection.collection<{ count: number }>('lead_limits').findOne({ key: limitKey }))
+        ?.count ?? null;
+    // Windows end an hour ahead, so the TTL monitor leaves the records alone.
+    const now = new Date();
+    const end = new Date(now.getTime() + 3_600_000);
+
+    const once = key('once');
+    const window = await limits.hit(once, now, end);
+    await limits.release([{ key: once, expiresAt: window.expiresAt }], now);
+    expect(await count(once)).toBe(0);
+    await limits.release([{ key: once, expiresAt: window.expiresAt }], now);
+    expect(await count(once)).toBe(0);
+
+    const ended = key('ended');
+    const endedWindow = await limits.hit(ended, now, end);
+    await limits.release(
+      [{ key: ended, expiresAt: endedWindow.expiresAt }],
+      new Date(end.getTime() + 1),
+    );
+    expect(await count(ended)).toBe(1);
+
+    // The window that counted ended and a new one began before the email was taken back.
+    const later = key('later');
+    const first = await limits.hit(later, now, end);
+    const afterEnd = new Date(end.getTime() + 1);
+    const second = await limits.hit(later, afterEnd, new Date(afterEnd.getTime() + 3_600_000));
+    expect(second.count).toBe(1);
+    const other = key('other');
+    const otherWindow = await limits.hit(other, now, end);
+    await limits.release(
+      [
+        { key: later, expiresAt: first.expiresAt },
+        { key: other, expiresAt: otherWindow.expiresAt },
+      ],
+      now,
+    );
+    expect(await count(later)).toBe(1);
+    expect(await count(other)).toBe(0);
+  });
+
+  describe('when an email cannot be taken back', () => {
+    async function failingRelease(body: (logged: () => unknown[]) => Promise<void>) {
+      const release = vi
+        .spyOn(t.app.get(LeadLimitsRepository), 'release')
+        .mockRejectedValueOnce(new Error('not primary'));
+      const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      try {
+        await body(() => logged.mock.calls[0] ?? []);
+      } finally {
+        logged.mockRestore();
+        release.mockRestore();
+      }
+    }
+
+    it('fails a request whose email was not sent instead of answering unsent', async () => {
+      const owner = await signedUpClient(t.app);
+      const site = await createSite(owner.client, owner.workspaceId);
+      t.emails.failNext('smtp_unavailable');
+      await failingRelease(async (logged) => {
+        const response = await add(owner.client, site, 'khong-tra@smilecare.vn').expect(500);
+        expect(problemSchema.parse(response.body).code).toBe('internal');
+        const [entry] = logged();
+        expect(entry).toMatchObject({
+          err: {
+            message: 'Confirmation email not sent, and taking it back from the daily limits failed',
+            cause: { message: 'not primary' },
+          },
+        });
+      });
+    });
+
+    it('keeps both errors of a refused request', async () => {
+      const owner = await signedUpClient(t.app);
+      const site = await createSite(owner.client, owner.workspaceId);
+      await added(owner.client, site, 'hai-lan@smilecare.vn');
+      await failingRelease(async (logged) => {
+        await add(owner.client, site, 'hai-lan@smilecare.vn').expect(500);
+        const [entry] = logged();
+        expect(entry).toMatchObject({
+          err: {
+            message:
+              'Confirmation email request failed, and taking its email back from the daily limits failed too',
+            errors: [{ status: 409, code: 'recipient_exists' }, { message: 'not primary' }],
+          },
+        });
+      });
+    });
   });
 });

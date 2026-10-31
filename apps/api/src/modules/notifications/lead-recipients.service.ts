@@ -14,7 +14,7 @@ import { AppError, notFound } from '../../shared/errors.js';
 import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
-import { LeadLimitsRepository } from '../leads/lead-limits.repository.js';
+import { type CountedHit, LeadLimitsRepository } from '../leads/lead-limits.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import {
   type LeadRecipientRecord,
@@ -118,7 +118,7 @@ export class LeadRecipientsService {
     );
     const invitedAt = await this.sendConfirmation(scope, site, recipient, token, user.name);
     if (invitedAt === null) {
-      await this.uncount(invite);
+      await this.uncountUnsent(invite);
     }
     return toLeadRecipientDto({ ...recipient, invitedAt }, new Date());
   }
@@ -148,13 +148,12 @@ export class LeadRecipientsService {
     );
     if (!renewed) {
       // Removed or confirmed since the site was read.
-      await this.uncount(counted);
-      throw notFound(RECIPIENT_NOT_FOUND);
+      return this.uncountAndThrow(counted, notFound(RECIPIENT_NOT_FOUND));
     }
     const sent = { ...recipient, ...invite, invitedAt: null };
     const invitedAt = await this.sendConfirmation(scope, site, sent, token, user.name);
     if (invitedAt === null) {
-      await this.uncount(counted);
+      await this.uncountUnsent(counted);
     }
     return toLeadRecipientDto({ ...sent, invitedAt }, new Date());
   }
@@ -190,54 +189,78 @@ export class LeadRecipientsService {
   /**
    * Counts one confirmation email against the daily limits (`INVITE_LIMITS_PER_DAY`) before
    * anything is stored or sent, so requests at the same time cannot pass a limit together; over a
-   * limit answers 429 (ADR-018). Returns the keys counted: the caller takes the email back with
-   * `uncount` when it does not go out after all. The limits count emails sent, so a request refused
-   * here counts nowhere either: clicking "Gửi lại" past the cap of one address must not use up the
-   * workspace's other emails.
+   * limit answers 429 (ADR-018). Returns what was counted: the caller takes the email back with
+   * `uncountAndThrow` or `uncountUnsent` when it does not go out after all. The limits count emails
+   * sent, so a request refused here counts nowhere either: clicking "Gửi lại" past the cap of one
+   * address must not use up the workspace's other emails.
    */
   private async countInvite(
     scope: WorkspaceScope,
     siteId: ObjectId,
     email: string,
     now: Date,
-  ): Promise<string[]> {
+  ): Promise<CountedHit[]> {
     const keys = inviteLimitKeys(email, { workspaceId: scope.workspaceId, siteId });
     const windowEnd = new Date(now.getTime() + DAY_MS);
     const counted = await Promise.all(
-      (Object.keys(INVITE_LIMITS_PER_DAY) as InviteLimit[]).map(async (limit) => ({
-        limit,
-        count: (await this.limits.hit(keys[limit], now, windowEnd)).count,
-      })),
+      (Object.keys(INVITE_LIMITS_PER_DAY) as InviteLimit[]).map(async (limit) => {
+        const window = await this.limits.hit(keys[limit], now, windowEnd);
+        return { limit, key: keys[limit], ...window };
+      }),
     );
-    const hit = Object.values(keys);
+    const hits = counted.map(({ key, expiresAt }) => ({ key, expiresAt }));
     if (counted.some(({ limit, count }) => count > INVITE_LIMITS_PER_DAY[limit])) {
-      await this.uncount(hit);
-      throw new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
-        detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
-      });
+      return this.uncountAndThrow(
+        hits,
+        new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
+          detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
+        }),
+      );
     }
-    return hit;
+    return hits;
   }
 
   /** Runs `task`; when it fails, the email counted for it is taken back before the error goes on. */
-  private async uncountedOnError<T>(keys: readonly string[], task: () => Promise<T>): Promise<T> {
+  private async uncountedOnError<T>(
+    hits: readonly CountedHit[],
+    task: () => Promise<T>,
+  ): Promise<T> {
     try {
       return await task();
     } catch (error) {
-      await this.uncount(keys);
-      throw error;
+      return this.uncountAndThrow(hits, error);
     }
   }
 
   /**
-   * Takes back an email `countInvite` counted that did not go out. When the database fails here
-   * the email stays counted, the safe side of a limit; the request goes on with its own outcome.
+   * Rethrows `error`, the request's own outcome, once the email `countInvite` counted for it is
+   * taken back. When taking back fails too, both errors go on together, so neither is lost.
    */
-  private async uncount(keys: readonly string[]): Promise<void> {
+  private async uncountAndThrow(hits: readonly CountedHit[], error: unknown): Promise<never> {
     try {
-      await this.limits.release(keys, new Date());
+      await this.limits.release(hits, new Date());
+    } catch (releaseError) {
+      throw new AggregateError(
+        [error, releaseError],
+        'Confirmation email request failed, and taking its email back from the daily limits failed too',
+        { cause: releaseError },
+      );
+    }
+    throw error;
+  }
+
+  /**
+   * Takes back the email of a confirmation that could not be sent; the address stays `unsent`.
+   * When that fails the request fails with it rather than answer as if the count were right.
+   */
+  private async uncountUnsent(hits: readonly CountedHit[]): Promise<void> {
+    try {
+      await this.limits.release(hits, new Date());
     } catch (error) {
-      this.logger.error({ err: error }, 'Confirmation email not taken back from the daily limits');
+      throw new Error(
+        'Confirmation email not sent, and taking it back from the daily limits failed',
+        { cause: error },
+      );
     }
   }
 
