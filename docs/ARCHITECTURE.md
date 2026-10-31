@@ -983,3 +983,27 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 5. Lead có trong hộp thư, với bằng chứng đồng ý đúng bản đã publish.
 6. Màn Hiệu quả có lượt xem và 1 lead.
 7. Owner ghi nhận yêu cầu xóa và xóa dữ liệu người đó: lead biến mất và số lead về 0.
+
+## 6. Trước khi phát hành
+
+Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR quy định nó. Chưa đủ hết thì không đưa dữ liệu thật của khách vào.
+
+**Hạ tầng production**
+
+- Edge proxy (TLS, load balancer) đứng trước admin và renderer, nối địa chỉ socket vào `X-Forwarded-For`. Đặt `TRUST_PROXY_HOPS=1` cho API (ADR-004) và `TRUST_PROXY=true` cho renderer (ADR-016). Thiếu edge này thì mọi người dùng chung một bucket rate limit.
+- MongoDB chạy replica set (ADR-006). Storage tương thích S3 chỉ cho đọc công khai prefix `public/` (ADR-012).
+- API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).
+- Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
+- GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
+
+**Chủ sản phẩm cần quyết**
+
+- `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
+- MVP có cần xóa trang hay không. Hiện tại chỉ có gỡ xuất bản.
+
+**Người phụ trách pháp lý cần xác nhận** (ADR-017)
+
+- Hạn xử lý yêu cầu dữ liệu: 2 và 20 ngày làm việc, chưa trừ ngày lễ.
+- Thời gian lưu lead mặc định 12 tháng, và nội dung đồng ý mặc định.
+- Thời gian giữ chính các yêu cầu dữ liệu.
