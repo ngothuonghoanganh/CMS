@@ -58,7 +58,8 @@ export class AppModule {
         LoggerModule.forRoot({
           pinoHttp: logDestination ? [requestLog, logDestination] : requestLog,
         }),
-        MongooseModule.forRoot(env.MONGODB_URI),
+        // `IndexBuilder` creates the indexes before the API serves, instead of in the background.
+        MongooseModule.forRoot(env.MONGODB_URI, { autoIndex: false }),
         ThrottlerModule.forRoot([
           { name: 'default', ttl: 60_000, limit: env.AUTH_RATE_LIMIT_PER_MINUTE },
         ]),

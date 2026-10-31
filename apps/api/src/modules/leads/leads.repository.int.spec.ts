@@ -4,11 +4,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient } from '../../../test/client.js';
 import { explainFindOne, indexScans, recordCalls } from '../../../test/explain.js';
+import { createSecondInstance } from '../../../test/instances.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
 import { scopeOf } from '../../../test/resources.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { LeadCriteria } from './domain/lead-filters.js';
-import { LEAD_MODEL, LEADS_SUBMISSION_INDEX } from './lead.schema.js';
+import { LEADS_SUBMISSION_INDEX } from './lead.schema.js';
 import { LeadsRepository } from './leads.repository.js';
 
 const EVERY_INBOX_LEAD: LeadCriteria = {
@@ -198,7 +199,7 @@ describe('LeadsRepository.existsPublicSubmission', () => {
       expect(await leads.existsPublicSubmission(siteId, elsewhere)).toBe(false);
     });
 
-    // Each lookup explained exactly as it was sent: one exact key, one probe of the index, no hint.
+    // Each lookup explained exactly as it was sent: one exact key, held to its index, one probe.
     expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne']);
     for (const call of sent) {
       const [filter, options] = call.params;
@@ -206,7 +207,7 @@ describe('LeadsRepository.existsPublicSubmission', () => {
         siteId,
         submissionId: { $eq: expect.any(String) as unknown, $type: 'string' },
       });
-      expect(options).not.toHaveProperty('hint');
+      expect(options).toHaveProperty('hint', LEADS_SUBMISSION_INDEX);
       const explained = await explainFindOne(t.connection, call);
       expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([LEADS_SUBMISSION_INDEX]);
       expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
@@ -214,28 +215,32 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     }
   });
 
-  it('still answers while the index is not built yet (a new database)', async () => {
+  it('has its index again, built by the next start, before any lookup', async () => {
     const siteId = new Types.ObjectId();
     const submissionId = randomUUID();
+    await insertLeads(t, [
+      {
+        ...storedLead({
+          workspaceId: new Types.ObjectId().toHexString(),
+          siteId: siteId.toHexString(),
+          pageId: new Types.ObjectId().toHexString(),
+          releaseId: new Types.ObjectId().toHexString(),
+        }),
+        submissionId,
+      },
+    ]);
     const leads = t.connection.collection('leads');
     await leads.dropIndex(LEADS_SUBMISSION_INDEX);
+
+    // The API starting on this database again (a deploy, a restart): its first lookup is hinted.
+    const restarted = await createSecondInstance(t);
     try {
-      await insertLeads(t, [
-        {
-          ...storedLead({
-            workspaceId: new Types.ObjectId().toHexString(),
-            siteId: siteId.toHexString(),
-            pageId: new Types.ObjectId().toHexString(),
-            releaseId: new Types.ObjectId().toHexString(),
-          }),
-          submissionId,
-        },
-      ]);
-      const repository = t.app.get(LeadsRepository);
+      expect((await leads.indexes()).map((index) => index.name)).toContain(LEADS_SUBMISSION_INDEX);
+      const repository = restarted.app.get(LeadsRepository);
       expect(await repository.existsPublicSubmission(siteId, submissionId)).toBe(true);
       expect(await repository.existsPublicSubmission(siteId, randomUUID())).toBe(false);
     } finally {
-      await t.connection.model(LEAD_MODEL).syncIndexes();
+      await restarted.close();
     }
   });
 });
