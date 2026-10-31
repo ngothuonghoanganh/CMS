@@ -266,6 +266,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Giới hạn theo tài khoản nằm trong MongoDB, đúng với mọi số instance, và là lớp chặn dò mật khẩu thật.
     - Integration test chạy hai instance trên một database giữ cả hai điều này.
 - **Amended 2026-10-31 (vòng test thứ ba, rate limit `/auth/*`):** throttle theo địa chỉ đếm theo cùng khóa với giới hạn khách của ADR-016 (`addressNetwork`, trong `shared/`): một địa chỉ IPv4, hoặc một mạng IPv6 /64, và mỗi địa chỉ chỉ có một cách viết. Trước đây một client IPv6 đổi địa chỉ trong /64 của mình là có bucket mới.
+  - Sau proxy tin cậy (`TRUST_PROXY_HOPS` ≥ 1), Express lấy `req.ip` từ `X-Forwarded-For` mà không kiểm tra. Địa chỉ không phải IP được đếm vào bucket của địa chỉ socket (proxy): mọi người gửi chuỗi rác chung một bucket, không đổi chuỗi để thoát được. Chỉ khi cả hai địa chỉ đều không phải IP thì mới ném lỗi. Trước đây `X-Forwarded-For: foo` làm `/auth/login` trả 500.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -983,7 +984,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Giới hạn thư xác nhận đếm thư đã gửi đi,** không đếm yêu cầu.
     - Request bị từ chối (429; 409 vì địa chỉ đã có hoặc site đã đủ 5 địa chỉ; 404) và thư không gửi được (địa chỉ `unsent`) được trả lại ở cả ba bộ đếm.
     - Trước đây 5 lần bấm "Gửi lại" lúc SMTP lỗi khóa địa chỉ đó cả ngày, và bấm quá giới hạn của một địa chỉ tiêu hết 50 thư của workspace.
-    - Vẫn đếm trước khi gửi (nguyên tử), nên các request đồng thời không vượt giới hạn. Trả lại là giảm 1 trong cửa sổ còn hiệu lực, không xuống dưới 0. Trả lại lỗi thì thư vẫn bị đếm (phía an toàn) và có log lỗi.
+    - Vẫn đếm trước khi gửi (nguyên tử), nên các request đồng thời không vượt giới hạn. Trả lại là giảm 1 trong đúng cửa sổ đã đếm (khớp `expiresAt` của cửa sổ đó), không xuống dưới 0, không chạm cửa sổ đã hết hay cửa sổ sau, như lần thử đăng nhập của ADR-004.
+    - Trả lại lỗi thì thư vẫn bị đếm (phía an toàn) và request thất bại (500) với lỗi đó, không chỉ ghi log. Request đã có lỗi riêng (429, 409, 404) thì ném `AggregateError` mang cả hai lỗi; thư không gửi được (`unsent`) thì ném lỗi trả lại làm `cause`.
   - **Lỗi SMTP thật,** thử bằng một SMTP stub trên `node:net` qua `SmtpEmailSender` và nodemailer:
     - kết nối bị từ chối → `smtp_unavailable`;
     - máy chủ không chào hoặc không trả lời DATA → `timeout`;
