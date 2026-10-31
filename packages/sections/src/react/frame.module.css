@@ -21,7 +21,7 @@
   padding-block: 72px;
 }
 
-@container plp-page (min-width: 768px) {
+@container plp-page (width >= 768px) {
   .section {
     padding-inline: 40px;
   }
@@ -39,7 +39,7 @@
   }
 }
 
-@container plp-page (max-width: 767px) {
+@container plp-page (width < 768px) {
   .hideMobile {
     display: none;
   }

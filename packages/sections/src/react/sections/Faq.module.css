@@ -92,7 +92,7 @@
   }
 }
 
-@container plp-page (min-width: 768px) {
+@container plp-page (width >= 768px) {
   .root {
     gap: 20px;
   }
