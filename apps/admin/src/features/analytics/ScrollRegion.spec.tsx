@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ScrollRegion } from './ScrollRegion';
@@ -142,6 +142,37 @@ describe('ScrollRegion', () => {
     expect(screen.getByRole('button', { name: 'Sau bảng' })).toHaveFocus();
     expect(region()).toBeNull();
     expect(screen.getByRole('table').parentElement).not.toHaveAttribute('tabindex');
+  });
+
+  it('keeps its focus while the window loses focus, then lets it go when focus moves on', async () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    const user = userEvent.setup();
+    const box = { width: 343 };
+    mockWidths(box);
+    render(
+      <>
+        <Table />
+        <button type="button">Sau bảng</button>
+      </>,
+    );
+    await user.tab();
+    const focused = screen.getByRole('region', { name: 'Bảng nguồn truy cập' });
+    box.width = 760;
+    act(() => {
+      FakeResizeObserver.report();
+    });
+
+    // Another window takes focus: the region is blurred, yet it stays the page's active element.
+    fireEvent.blur(focused);
+    expect(focused).toHaveFocus();
+    expect(focused).toHaveAttribute('tabindex', '0');
+    expect(region()).toBe(focused);
+
+    // Back in this window, focus returns to it; Tab then moves on and the table fits.
+    fireEvent.focus(focused);
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Sau bảng' })).toHaveFocus();
+    expect(region()).toBeNull();
   });
 
   it('measures a table that comes after the first render, as its width changes', async () => {

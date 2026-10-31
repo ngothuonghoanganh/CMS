@@ -14,8 +14,9 @@ export interface ScrollRegionProps {
  * A table that scrolls sideways on a narrow screen. Nothing inside takes focus, so while the table
  * is wider than its box the box is a named region in the tab order, and arrow keys scroll it (WCAG
  * 2.1.1). Where it fits (a desktop width) it is neither: a tab stop there would scroll nothing.
- * Once it holds focus it stays focusable until focus leaves, even if the table comes to fit (the
- * window widens): focus would otherwise fall to the page (WCAG 2.4.3).
+ * Once it holds focus it stays focusable until focus moves elsewhere in the page, even if the table
+ * comes to fit (the window widens) or the window loses focus meanwhile: focus would otherwise fall
+ * to the page (WCAG 2.4.3).
  * Measured again whenever the box or the table changes width (window, rows, fonts), also a table
  * that replaces the first one or comes late.
  */
@@ -67,7 +68,12 @@ export function ScrollRegion({ label, children }: ScrollRegionProps) {
       onFocus={() => {
         setFocused(true);
       }}
-      onBlur={() => {
+      onBlur={(event) => {
+        // The window or tab losing focus blurs the region too, yet it stays the active element
+        // and gets focus back with the window: only a move elsewhere in the page lets it go.
+        if (event.currentTarget.contains(document.activeElement)) {
+          return;
+        }
         setFocused(false);
       }}
       {...(overflows || focused ? { role: 'region', 'aria-label': label, tabIndex: 0 } : {})}
