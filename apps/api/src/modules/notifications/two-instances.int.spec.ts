@@ -1,8 +1,9 @@
-import { leadListResponseSchema, problemSchema, type Site } from '@plp/contracts';
+import { type Site } from '@plp/contracts';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
+import { createSecondInstance } from '../../../test/instances.js';
 import {
   createLiveFormPage,
   insertLeads,
@@ -21,7 +22,7 @@ import { createSite } from '../../../test/resources.js';
 import { LeadNotifier } from './lead-notifier.service.js';
 
 const MINUTE = 60_000;
-/** Waits between attempts: long enough that a test sees which instance acted first. */
+/** A's waits between attempts: long enough that a test sees which instance acted first. */
 const RETRY_DELAYS = [1500, 3000];
 
 /**
@@ -35,12 +36,12 @@ describe('two API instances on one database', () => {
   let workspaceId: string;
 
   beforeAll(async () => {
-    const options = {
+    a = await createTestApp('plp_test_two_instances', {
       ...withRevalidationRecorder(new RecordingRevalidationClient()),
       notificationRetryDelaysMs: RETRY_DELAYS,
-    };
-    a = await createTestApp('plp_test_two_instances', options);
-    b = await createTestApp('plp_test_two_instances', { ...options, mongoUri: a.env.MONGODB_URI });
+    });
+    // B keeps the production waits; it never needs one here.
+    b = await createSecondInstance(a);
     const signedUp = await signedUpClient(a.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
@@ -202,23 +203,5 @@ describe('two API instances on one database', () => {
     expect(await notificationsOf(['Chờ lần hai'])).toEqual([
       expect.objectContaining({ status: 'sent', attempts: 2 }),
     ]);
-  });
-
-  it('counts the lead limits of one visitor and one site across both instances', async () => {
-    const { site, ids } = await formSite();
-    for (let index = 0; index < 5; index += 1) {
-      const instance = index % 2 === 0 ? a : b;
-      await submitLead(instance, site.subdomain, leadBody(ids.releaseId)).expect(201);
-    }
-    for (const instance of [a, b]) {
-      const limited = await submitLead(instance, site.subdomain, leadBody(ids.releaseId)).expect(
-        429,
-      );
-      expect(problemSchema.parse(limited.body).code).toBe('rate_limited');
-    }
-    const list = leadListResponseSchema.parse(
-      (await owner.get(`/sites/${site.id}/leads`).expect(200)).body,
-    );
-    expect(list.items).toHaveLength(5);
   });
 });

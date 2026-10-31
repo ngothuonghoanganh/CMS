@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { pageView, sendPageView } from '../../../test/analytics.js';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
+import { createSecondInstance } from '../../../test/instances.js';
 import {
   createLivePage,
   RecordingRevalidationClient,
@@ -23,12 +24,11 @@ describe('page views on two API instances', () => {
   let workspaceId: string;
 
   beforeAll(async () => {
-    const options = withRevalidationRecorder(new RecordingRevalidationClient());
-    a = await createTestApp('plp_test_two_instances_views', options);
-    b = await createTestApp('plp_test_two_instances_views', {
-      ...options,
-      mongoUri: a.env.MONGODB_URI,
-    });
+    a = await createTestApp(
+      'plp_test_two_instances_views',
+      withRevalidationRecorder(new RecordingRevalidationClient()),
+    );
+    b = await createSecondInstance(a);
     const signedUp = await signedUpClient(a.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
