@@ -86,6 +86,7 @@
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   min-height: 24px;
   font-size: var(--text-body-sm);
   font-weight: 600;

@@ -64,7 +64,7 @@ export function RecentActivity({ siteId, items, now }: RecentActivityProps) {
         <Link href={pageHref(siteId, latestPage.id, 'history')} className={styles.historyLink}>
           Xem lịch sử phiên bản
           <VisuallyHidden> của trang “{latestPage.title}”</VisuallyHidden>
-          <span aria-hidden="true"> →</span>
+          <span aria-hidden="true">→</span>
         </Link>
       )}
     </Card>

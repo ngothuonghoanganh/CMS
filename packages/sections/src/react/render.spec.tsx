@@ -618,6 +618,25 @@ describe('lead form', () => {
     ]);
   });
 
+  it('marks a field error with an icon and ties it to the field', () => {
+    const form = section('lead_form');
+    const markup = renderToStaticMarkup(
+      <LeadFormView
+        sectionId={form.id}
+        content={sampleLeadForm(form)}
+        capture={CAPTURE}
+        releaseId={RELEASE_ID}
+        submissionId={SUBMISSION_ID}
+        errors={{ phone: 'Số điện thoại chưa đúng.' }}
+      />,
+    );
+    const error = new RegExp(
+      `<span id="lead-${form.id}-phone-error"[^>]*><svg aria-hidden="true"[^>]*>.*?</svg>Số điện thoại chưa đúng.</span>`,
+    );
+    expect(markup).toMatch(error);
+    expect(markup).toContain(`aria-describedby="lead-${form.id}-phone-error"`);
+  });
+
   it('draws no submission id where the form cannot send', () => {
     const form = section('lead_form');
     const preview = render(form, liveCtx({ leadCapture: CAPTURE }));

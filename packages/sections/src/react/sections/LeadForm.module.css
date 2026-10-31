@@ -97,6 +97,17 @@
   font-weight: 500;
 }
 
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.errorIcon {
+  flex: none;
+  margin-top: 2px;
+}
+
 .check {
   display: flex;
   align-items: flex-start;

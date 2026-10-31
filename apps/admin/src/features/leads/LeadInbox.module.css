@@ -6,21 +6,26 @@
   gap: 12px;
 }
 
-/* Shrinks to the gutter: a long page title in the page filter must not widen the page. */
+/* Shrinks to the gutter: a long page title in the page filter must not widen the page. It takes
+   the rest of the row: sized to its content, it left the search box a few pixels short of the
+   width it asks for and pushed it onto a second line. */
 .filters {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
 }
 
-/* A long page title truncates inside the select instead of widening the row. */
+/* A long page title truncates inside the select instead of widening the row. At 1440 px the
+   folders, the three filters and the search share one row, as on board 10. */
 .filter {
   flex: 0 1 auto;
   min-width: 150px;
-  max-width: 260px;
+  max-width: 220px;
 }
 
 .search {
@@ -213,8 +218,10 @@
   border-bottom: 1px solid var(--color-divider);
 }
 
+/* The name and the status select share a row, as on board 10; the date wraps under the name. */
 .detailTitle {
   display: flex;
+  flex: 1 1 120px;
   flex-direction: column;
   gap: 4px;
   min-width: 0;

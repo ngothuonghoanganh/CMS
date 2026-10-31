@@ -52,9 +52,25 @@ interface FieldErrorProps {
   message: string | undefined;
 }
 
+/** The message under a field, marked with an icon as on board 09: not by its color alone. */
 function FieldError({ sectionId, field, message }: FieldErrorProps) {
   return message === undefined ? null : (
     <span id={errorId(sectionId, field)} className={styles.error}>
+      <svg
+        aria-hidden="true"
+        className={styles.errorIcon}
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.5v5.5M12 16.2v.1" />
+      </svg>
       {message}
     </span>
   );

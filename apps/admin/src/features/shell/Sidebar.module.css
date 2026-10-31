@@ -202,8 +202,8 @@
   color: var(--color-muted);
 }
 
+/* Right under the sections, as on the Sidebar board. */
 .account {
-  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
 }
