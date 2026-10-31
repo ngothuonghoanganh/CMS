@@ -208,6 +208,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Chỉ bản 11 có bản vá; eslint, typescript-eslint và `@nestjs/cli` vẫn khai báo 10.x.
   - Đây là công cụ dev, pattern lấy từ chính repo. Chúng chỉ gọi `minimatch()` và `new Minimatch().match()`, hai API bản 11 giữ nguyên, và ESLint vẫn lint đúng các file như trước.
   - Bản 11 kéo theo `@isaacs/nonrecursive-glob-match` 1.0.3 (cùng tác giả). Bỏ override khi các gói này khai báo bản 11.
+- **Amended 2026-10-31 (vòng test thứ ba, E2E):** `@axe-core/playwright` 4.14.0 (kèm `axe-core` 4.14.0), dev dependency của `tests/e2e`, để E2E quét WCAG 2.2 AA (ADR-013). Đây là bộ quét của Deque dùng trực tiếp với Playwright đang có; không thêm trình chạy test nào khác.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -486,6 +487,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - lấy cả tóm tắt và checks từ cùng một lần đọc;
     - chờ các lần lưu đang chạy của trang;
     - bỏ qua câu trả lời cũ hơn store thay vì báo xung đột.
+- **Amended 2026-10-31 (vòng test thứ ba, a11y):** thanh công cụ của section đang chọn và nhãn "Thiếu mô tả ảnh" nằm đè lên nội dung của section. Ở 1440 px thanh công cụ che nút của thanh điều hướng; trên khung thu nhỏ (điện thoại) chúng che cả dòng chữ.
+  - Khi một chữ của section đang được sửa (focus trong ô sửa trên canvas), hai thứ này trong suốt và không nhận click, nên chữ đang sửa luôn hiện ra (WCAG 2.4.11).
+  - Chúng vẫn ở trong thứ tự Tab: Shift+Tab từ chữ đưa focus lên thanh công cụ và nó hiện lại.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
@@ -535,6 +539,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **sitemap.xml và robots.txt:** API lỗi thì trả 503 kèm `Retry-After` (trước đây 500, body rỗng).
   - **User-Agent:** proxy đặt `User-Agent: unknown` cho request không có header này, nên Next luôn render chế độ blocking: status lỗi là thật, không còn shell 200.
   - **404 của proxy** render với cùng header như trang. Trước đây request không có User-Agent nhận bản tĩnh `Cache-Control: s-maxage=31536000`, nên cache dùng chung sẽ giữ 404 cả năm sau khi trang được publish.
+- **Amended 2026-10-31 (vòng test thứ ba, E2E):** trang live gọi `await connection()` trước khi sinh `submissionId` của form (ADR-016).
+  - Với `cacheComponents`, Next render trang thêm một lần dưới dạng prerender và gặp `crypto.randomUUID()` ở đó, nên mỗi lượt xem trang có form ghi một dòng lỗi "unstable value … while prerendering" vào log. Trang preview đã làm như vậy từ trước.
+  - Mỗi lần phục vụ trang vẫn có id riêng.
+  - E2E chạy thêm một renderer ở cổng 3102, cùng bản build, trỏ tới một địa chỉ API không có gì lắng nghe. Spec kiểm trang, preview (`noindex`), sitemap và robots trả 503 kèm `Retry-After: 60`.
 
 ### ADR-010 — Preview link có chữ ký
 
@@ -642,6 +650,18 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Trang gửi `Cache-Control: no-store` (trừ `/_next/static`), nên Back sau khi đăng xuất phải hỏi lại server.
   - Next không gắn header của admin vào phản hồi của rewrite `/api` (proxy ra ngoài). Vì vậy API tự gửi `X-Content-Type-Options: nosniff` trên mọi phản hồi, kể cả file CSV, và `no-store` cho dữ liệu cá nhân.
   - Chưa có CSP đầy đủ (`script-src` với nonce): cần nonce sinh trong middleware, để sau.
+- **Amended 2026-10-31 (vòng test thứ ba, a11y và đa trình duyệt):**
+  - **Quét WCAG 2.2 AA trong E2E:** `@axe-core/playwright` với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`, ở 1440 và 375 px. Vi phạm làm E2E đỏ; không loại trừ rule nào.
+    - Admin: đăng nhập, đăng ký, tạo site, bảng điều khiển (trang ở mọi trạng thái, menu), các bước tạo trang, editor có section đang chọn, "Thêm section", hộp thoại xuất bản (kiểm tra và đã live), lịch sử với panel khôi phục, SEO, tên miền, cài đặt site, hộp thư có lead đang mở, "Nơi nhận lead", "Dữ liệu & đồng ý" có yêu cầu, "Hiệu quả" có số liệu, trang xác nhận nơi nhận lead.
+    - Public: trang live ở 4 color scheme của cả 3 theme (mọi section và variant, kèm lỗi của form), preview, trang kết quả `/_lead` (đã nhận và lỗi), các trang 404.
+    - Dữ liệu giống board được gieo qua API (`tests/e2e/support/board.ts`). E2E đặt `LEAD_LIMIT_PER_CLIENT=100`, vì renderer của E2E không tin proxy nào nên mọi khách chung một bucket; giới hạn này có integration test riêng.
+    - Axe đợi animation hữu hạn chạy xong: dialog đang hiện dần làm màu bị trộn và báo sai tương phản.
+  - **Thứ axe không xét được** có spec riêng (`a11y-layout.spec.ts`):
+    - Reflow ở 320 px: mọi màn admin và trang public không cuộn ngang (1.4.10).
+    - Tab qua mọi màn admin và trang live ở 1440 và 375 px, cả khi có toast: control đang focus không bao giờ bị che hoàn toàn (2.4.11).
+    - Kích thước target 24 px (2.5.8) là rule `target-size` của axe trong các lần quét trên.
+  - **Sửa từ các lần quét:** menu (DropdownMenu của `@plp/ui`) không còn modal, vì Radix gắn `aria-hidden` lên phần còn lại của trang trong khi link và nút ở đó vẫn focus được (Tab vẫn bị giữ trong menu, click ra ngoài vẫn đóng menu). Nút đổi workspace, đổi site và chọn bảng màu lấy tên từ chữ hiện trên nút (2.5.3). Bảng của "Hiệu quả" cuộn ngang được bằng bàn phím (2.1.1).
+  - **Đa trình duyệt:** hai project WebKit và Firefox chỉ chạy `cross-browser.spec.ts`: trang live, FAQ `<details>`, ẩn/hiện theo thiết bị quanh 768 px, form tải lười (lỗi tại chỗ, focus vào ô lỗi, gửi), lượt xem được đếm, form không JavaScript, gõ và dán (chữ có định dạng, nhiều đoạn) trên canvas của editor. Phần còn lại của E2E chỉ chạy Chromium để giữ thời gian chạy.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -1068,7 +1088,13 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
 ## 5. Lát cắt giao hàng
 
-Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh chụp so với thiết kế. Dừng để duyệt sau mỗi lát.
+Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một lần so màn hình với thiết kế. Dừng để duyệt sau mỗi lát.
+
+**So màn hình với thiết kế** (sửa ngày 2026-10-31, vòng test thứ ba) là bước làm bằng tay, không phải quality gate tự động:
+
+- `pnpm --filter @plp/e2e visual:capture` (sau `pnpm build` và `pnpm infra:up`) chạy các app đã build trên database riêng `plp_visual`, gieo dữ liệu mẫu của board qua API (workspace "Mây Xanh Agency", site "Nha khoa Smile Care", 6 trang ở mọi trạng thái, lead, lượt xem, yêu cầu dữ liệu), rồi chụp mỗi màn đã làm ở kích thước board của nó vào `tests/e2e/visual-captures/` (gitignore). Công cụ dùng cổng của E2E, nên không chạy cùng `pnpm test:e2e`.
+- Người làm lát đặt từng ảnh cạnh board tương ứng trong `docs/design/plp-ux-v1/screens` và sửa chỗ lệch rõ. Chỗ khác có chủ đích nằm ở §2.1 và các ADR.
+- Không có `toHaveScreenshot`: board chỉ render được bằng runtime của artifact Design, không nằm trong repo; và pixel của trình duyệt khác nhau giữa các hệ điều hành, nên một baseline ảnh sẽ báo lỗi giả.
 
 | Lát      | Nội dung                                                        | Màn         | Trạng thái |
 | -------- | --------------------------------------------------------------- | ----------- | ---------- |
