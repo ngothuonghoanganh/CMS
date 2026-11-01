@@ -14,7 +14,7 @@ import {
   tooltipDayLabel,
 } from './analytics-presentation';
 import styles from './Analytics.module.css';
-import { ScrollRegion } from './ScrollRegion';
+import { ScrollRegion } from '../shell/ScrollRegion';
 
 export interface DailyVisitorsChartProps {
   daily: AnalyticsReport['daily'];

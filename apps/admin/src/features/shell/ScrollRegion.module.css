@@ -1,0 +1,12 @@
+/* Also the containing block of visually hidden text in the table, which is absolutely positioned:
+   without it, that text sits where the table overflows and widens the page. */
+.region {
+  position: relative;
+  overflow-x: auto;
+}
+
+.region:focus-visible {
+  border-radius: 4px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}

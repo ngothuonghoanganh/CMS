@@ -3,7 +3,7 @@ import { Card, VisuallyHidden } from '@plp/ui';
 import { useId } from 'react';
 import { conversionRate, formatCount } from './analytics-presentation';
 import styles from './Analytics.module.css';
-import { ScrollRegion } from './ScrollRegion';
+import { ScrollRegion } from '../shell/ScrollRegion';
 
 /** "Theo nguồn truy cập": visitors, leads and their rate per source/medium pair. */
 export function SourceTable({ sources }: { sources: AnalyticsReport['sources'] }) {
