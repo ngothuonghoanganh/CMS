@@ -8,6 +8,7 @@ import {
 } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { buildCompositionFromGoal } from './blueprints.js';
+import { getAtPath } from './paths.js';
 import {
   bodyInsertionIndex,
   canMoveSection,
@@ -15,6 +16,7 @@ import {
   createSectionInstance,
   getSectionDefinition,
   insertionIndex,
+  listMaximum,
   listMinimum,
   leadFormSectionOf,
   pageCapturesLeads,
@@ -49,6 +51,31 @@ describe('section registry', () => {
       const section = createSectionInstance(type, variant.id, id(1));
       expect(validateComposition({ version: 1, sections: [section] })).toEqual([]);
       expect(section.samplePaths).toEqual(samplePathsOf(section));
+    }
+  });
+
+  it.each(sectionTypes)('keeps the rules of "%s" consistent with its fields', (type) => {
+    const definition = getSectionDefinition(type);
+    for (const key of definition.oneButtonRequired ?? []) {
+      expect(definition.fields.find((field) => field.key === key)?.kind, key).toBe('cta');
+    }
+    for (const variant of definition.variants) {
+      const section = createSectionInstance(type, variant.id, id(1));
+      for (const field of definition.fields) {
+        if (field.kind !== 'list') {
+          continue;
+        }
+        const minimum = listMinimum(type, variant.id, field.key);
+        const maximum = listMaximum(type, variant.id, field.key);
+        expect(minimum, `${variant.id} · ${field.key}`).toBeLessThanOrEqual(maximum);
+        expect(maximum).toBeLessThanOrEqual(field.max);
+      }
+      // A button limited to some kinds of link starts with one of them.
+      for (const leaf of collectLeaves(section, { includeHidden: true })) {
+        if (leaf.field.kind === 'cta' && leaf.field.linkKinds !== undefined) {
+          expect(leaf.field.linkKinds).toContain(getAtPath(leaf.value, 'link.kind'));
+        }
+      }
     }
   });
 
@@ -175,6 +202,134 @@ describe('section registry', () => {
     expect(
       validateComposition({ version: 1, sections: [withItems('testimonials', 'quote', 1)] }),
     ).toEqual([]);
+  });
+
+  it('keeps a process to 3–5 steps, within the 2–6 benefits of the field', () => {
+    expect(listMinimum('benefits', 'steps', 'items')).toBe(3);
+    expect(listMaximum('benefits', 'steps', 'items')).toBe(5);
+    expect(listMaximum('benefits', 'grid', 'items')).toBe(6);
+    expect(listMaximum('logos', 'row', 'items')).toBe(12);
+    expect(listMaximum('hero', 'split', 'heading')).toBe(Infinity);
+
+    function steps(count: number): SectionInstance {
+      const section = createSectionInstance('benefits', 'steps', id(1));
+      const items = section.content.items;
+      if (!Array.isArray(items)) {
+        throw new Error('The sample has no items');
+      }
+      return {
+        ...section,
+        content: {
+          ...section.content,
+          items: Array.from({ length: count }, (_unused, index): unknown => items[index % 3]),
+        },
+      };
+    }
+    expect(validateComposition({ version: 1, sections: [steps(5)] })).toEqual([]);
+    expect(validateComposition({ version: 1, sections: [steps(6)] })).toEqual([
+      {
+        path: ['sections', 0, 'content', 'items'],
+        code: 'too_big',
+        message: 'Bố cục “Quy trình 3 bước” có tối đa 5 lợi ích',
+      },
+    ]);
+    expect(validateComposition({ version: 1, sections: [steps(2)] })).toEqual([
+      {
+        path: ['sections', 0, 'content', 'items'],
+        code: 'too_small',
+        message: 'Bố cục “Quy trình 3 bước” cần ít nhất 3 lợi ích',
+      },
+    ]);
+    // Over the field's own maximum, the schema alone reports it.
+    expect(
+      validateComposition({ version: 1, sections: [steps(7)] }).map((issue) => issue.code),
+    ).toEqual(['too_big']);
+  });
+
+  it('starts a process with steps of its own, not with benefits', () => {
+    const steps = createSectionInstance('benefits', 'steps', id(1));
+    expect(getAtPath(steps.content, 'heading')).toBe('Bắt đầu chỉ với 3 bước');
+    expect(getAtPath(steps.content, 'items.0.title')).toBe('Để lại thông tin');
+    const list = getSectionDefinition('benefits').fields.find((field) => field.key === 'items');
+    if (list?.kind !== 'list') {
+      throw new Error('Benefits have no item list');
+    }
+    expect(list.newItem('steps')).toMatchObject({ title: 'Bước tiếp theo' });
+    expect(list.newItem('grid')).toMatchObject({ title: 'Lợi ích mới' });
+    // The steps show neither the icon nor the image of an item.
+    expect(collectLeaves(steps).map((leaf) => leaf.path)).not.toContainEqual(
+      expect.stringMatching(/\.(icon|image)$/),
+    );
+  });
+
+  it('needs 3 to 12 partner logos, each an image described by the partner name', () => {
+    const logos = createSectionInstance('logos', 'row', id(1));
+    expect(logos.samplePaths).toEqual(['heading']);
+    const items = getAtPath(logos.content, 'items');
+    expect(items).toHaveLength(4);
+    const image = { assetId: 'a'.repeat(24), alt: 'Bệnh viện Hòa Bình', decorative: false };
+    const withLogos = (count: number) => ({
+      ...logos,
+      content: { ...logos.content, items: Array.from({ length: count }, () => ({ image })) },
+    });
+    expect(validateComposition({ version: 1, sections: [withLogos(3)] })).toEqual([]);
+    expect(validateComposition({ version: 1, sections: [withLogos(12)] })).toEqual([]);
+    for (const count of [2, 13]) {
+      expect(validateComposition({ version: 1, sections: [withLogos(count)] })).toEqual([
+        expect.objectContaining({ path: ['sections', 0, 'content', 'items'] }),
+      ]);
+    }
+    expect(
+      collectLeaves(logos)
+        .filter((leaf) => leaf.field.kind === 'image')
+        .map((leaf) => [leaf.path, leaf.field.required]),
+    ).toEqual([
+      ['items.0.image', true],
+      ['items.1.image', true],
+      ['items.2.image', true],
+      ['items.3.image', true],
+    ]);
+  });
+
+  it('requires both photos of a before and after, each with its caption', () => {
+    const pair = createSectionInstance('before_after', 'side_by_side', id(1));
+    expect(
+      collectLeaves(pair)
+        .filter((leaf) => leaf.field.required)
+        .map((leaf) => leaf.path),
+    ).toEqual(['heading', 'beforeImage', 'beforeCaption', 'afterImage', 'afterCaption']);
+    expect(pair.samplePaths).toEqual(['heading', 'beforeCaption', 'afterCaption', 'note']);
+  });
+
+  it('lets the call button only call and the Zalo button only open Zalo', () => {
+    const quick = createSectionInstance('quick_contact', 'buttons', id(1));
+    expect(getSectionDefinition('quick_contact').oneButtonRequired).toEqual(['call', 'zalo']);
+    const withLink = (path: 'call' | 'zalo', link: unknown) => ({
+      ...quick,
+      content: { ...quick.content, [path]: { label: 'Liên hệ', link } },
+    });
+    expect(
+      validateComposition({
+        version: 1,
+        sections: [withLink('call', { kind: 'phone', phone: '0901 234 567' })],
+      }),
+    ).toEqual([]);
+    expect(
+      validateComposition({
+        version: 1,
+        sections: [withLink('zalo', { kind: 'zalo', phone: '0901234567' })],
+      }),
+    ).toEqual([]);
+    for (const [path, link] of [
+      ['call', { kind: 'url', url: 'https://example.com' }],
+      ['call', { kind: 'zalo', phone: '0901234567' }],
+      ['zalo', { kind: 'phone', phone: '0901234567' }],
+      ['zalo', { kind: 'none' }],
+    ] as const) {
+      expect(
+        validateComposition({ version: 1, sections: [withLink(path, link)] })[0]?.path.slice(0, 5),
+      ).toEqual(['sections', 0, 'content', path, 'link']);
+    }
   });
 
   it('places fixed sections at their position and keeps others between them', () => {
@@ -368,13 +523,23 @@ describe('parseComposition', () => {
 });
 
 describe('validateComposition', () => {
-  function withItems(type: 'benefits' | 'testimonials', variant: string, count: number) {
+  /** The sample's items, cut or repeated to `count`. */
+  function withItems(type: 'benefits' | 'testimonials' | 'logos', variant: string, count: number) {
     const section = createSectionInstance(type, variant, id(1));
     const items = section.content.items;
     if (!Array.isArray(items)) {
       throw new Error('The sample has no items');
     }
-    return { ...section, content: { ...section.content, items: items.slice(0, count) } };
+    return {
+      ...section,
+      content: {
+        ...section.content,
+        items: Array.from(
+          { length: count },
+          (_unused, index): unknown => items[index % items.length],
+        ),
+      },
+    };
   }
 
   function blueprint(goal: (typeof pageGoalIds)[number], style: (typeof pageStyleIds)[number]) {
@@ -391,6 +556,7 @@ describe('validateComposition', () => {
   const hero = createSectionInstance('hero', 'split', id(1));
   const faq = createSectionInstance('faq', undefined, id(1));
   const grid = createSectionInstance('benefits', 'grid', id(1));
+  const quick = createSectionInstance('quick_contact', undefined, id(1));
   const { items: _items, ...gridWithoutItems } = grid.content;
   const fixtures: [string, Composition][] = [
     ...sectionTypes.flatMap((type) =>
@@ -446,6 +612,23 @@ describe('validateComposition', () => {
     ['benefits grid of 2', { version: 1, sections: [withItems('benefits', 'grid', 2)] }],
     ['testimonial cards of 1', { version: 1, sections: [withItems('testimonials', 'cards', 1)] }],
     ['missing list', { version: 1, sections: [{ ...grid, content: gridWithoutItems }] }],
+    ['steps of 6', { version: 1, sections: [withItems('benefits', 'steps', 6)] }],
+    ['logos of 2', { version: 1, sections: [withItems('logos', 'row', 2)] }],
+    [
+      'call button to a web page',
+      {
+        version: 1,
+        sections: [
+          {
+            ...quick,
+            content: {
+              ...quick.content,
+              call: { label: 'Gọi', link: { kind: 'url', url: 'https://example.com' } },
+            },
+          },
+        ],
+      },
+    ],
     [
       'issues in several sections',
       {
@@ -465,7 +648,7 @@ describe('validateComposition', () => {
 
   it('covers valid and invalid compositions alike', () => {
     const invalid = fixtures.filter(([, composition]) => validateComposition(composition).length);
-    expect(invalid.length).toBeGreaterThanOrEqual(9);
+    expect(invalid.length).toBeGreaterThanOrEqual(12);
     expect(invalid.length).toBeLessThan(fixtures.length);
   });
 

@@ -291,6 +291,40 @@ describe('editor store: layout and visibility', () => {
     expect(getAtPath(sectionById(store, id).content, 'items')).toHaveLength(1);
   });
 
+  it('keeps a process to its 5 steps, and refuses it to a list with more', () => {
+    const store = makeStore();
+    expect(store.getState().setVariant(BENEFITS, 'steps')).toBe(true);
+    expect(store.getState().addListItem(BENEFITS, 'items')).toBe(true);
+    expect(store.getState().addListItem(BENEFITS, 'items')).toBe(true);
+    expect(store.getState().addListItem(BENEFITS, 'items')).toBe(false);
+    // A new step is a step, marked as sample text.
+    expect(getAtPath(sectionById(store, BENEFITS).content, 'items.4.title')).toBe('Bước tiếp theo');
+    expect(sectionById(store, BENEFITS).samplePaths).toContain('items.4.title');
+
+    expect(store.getState().setVariant(BENEFITS, 'grid')).toBe(true);
+    expect(store.getState().addListItem(BENEFITS, 'items')).toBe(true);
+    const steps = store.getState().history.past.length;
+    expect(store.getState().setVariant(BENEFITS, 'steps')).toBe(false);
+    expect(sectionById(store, BENEFITS).variant).toBe('grid');
+    expect(getAtPath(sectionById(store, BENEFITS).content, 'items')).toHaveLength(6);
+    expect(store.getState().history.past).toHaveLength(steps);
+  });
+
+  it('refuses a link the button cannot lead to', () => {
+    const store = makeStore();
+    store.getState().addSection('quick_contact', 'buttons', 2);
+    const id = sectionIds(store)[2] ?? '';
+    expect(
+      store.getState().updateContent(id, 'call.link', { kind: 'url', url: 'https://example.com' }),
+    ).toBe(false);
+    expect(store.getState().updateContent(id, 'zalo.link', { kind: 'phone', phone: '0901' })).toBe(
+      false,
+    );
+    expect(store.getState().updateContent(id, 'zalo.link', { kind: 'zalo', phone: '0901' })).toBe(
+      true,
+    );
+  });
+
   it('keeps the sample marker of a heading the creation variant hid, so a switch still warns', () => {
     const store = makeStore();
     store.getState().addSection('testimonials', 'quote', 3);

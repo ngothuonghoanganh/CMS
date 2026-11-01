@@ -8,7 +8,14 @@ import {
   spacingLabels,
   spacingPresets,
 } from '@plp/contracts';
-import { getSectionDefinition, getVariant, themePresets } from '@plp/sections/schema';
+import {
+  type AnySectionDefinition,
+  getSectionDefinition,
+  getVariant,
+  listMaximum,
+  type SectionVariant,
+  themePresets,
+} from '@plp/sections/schema';
 import {
   CheckIcon,
   CloseIcon,
@@ -19,7 +26,8 @@ import {
   SettingsIcon,
   Switch,
 } from '@plp/ui';
-import { isFieldHidden } from './content-fields';
+import { useId } from 'react';
+import { isFieldHidden, listItemsOf } from './content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { FieldControl } from './fields/FieldControl';
 import { focusOutlineRow, PROPERTIES_PANEL_ID } from './focus-target';
@@ -40,32 +48,75 @@ function ContentGroup({ section }: { section: SectionInstance }) {
   );
 }
 
+/**
+ * Why a variant cannot be chosen yet: it holds fewer list items than the section has (a process
+ * has at most 5 steps). Items are never dropped by a variant switch; the user removes them.
+ */
+function variantBlocker(
+  section: SectionInstance,
+  definition: AnySectionDefinition,
+  variant: SectionVariant,
+): string | null {
+  for (const field of definition.fields) {
+    if (field.kind !== 'list') {
+      continue;
+    }
+    const maximum = listMaximum(section.type, variant.id, field.key);
+    if (listItemsOf(section.content, field.key).length > maximum) {
+      const item = field.itemLabel.toLowerCase();
+      return `“${variant.label}” có tối đa ${maximum} ${item}. Xóa bớt ${item} để chọn bố cục này.`;
+    }
+  }
+  return null;
+}
+
 function LayoutGroup({ section }: { section: SectionInstance }) {
   const store = useEditorStoreApi();
+  const blockerId = useId();
   const themePresetId = useEditor((state) => state.site.themePresetId);
   const definition = getSectionDefinition(section.type);
   const schemes = themePresets[themePresetId].schemes;
+  const blockers = definition.variants.map((variant) =>
+    variant.id === section.variant ? null : variantBlocker(section, definition, variant),
+  );
   return (
     <div className={styles.group}>
       <h3 className={styles.groupTitle}>BỐ CỤC</h3>
       {definition.variants.length > 1 ? (
-        <div role="group" aria-label="Kiểu bố cục" className={styles.variants}>
-          {definition.variants.map((variant) => (
-            <button
-              key={variant.id}
-              type="button"
-              aria-pressed={variant.id === section.variant}
-              className={styles.variant}
-              title={variant.description}
-              onClick={() => {
-                store.getState().setVariant(section.id, variant.id);
-              }}
-            >
-              <SectionThumbnail type={section.type} variant={variant.id} size="sm" />
-              {variant.label}
-            </button>
-          ))}
-        </div>
+        <>
+          <div role="group" aria-label="Kiểu bố cục" className={styles.variants}>
+            {definition.variants.map((variant, index) => {
+              const blocked = blockers[index] !== null;
+              return (
+                <button
+                  key={variant.id}
+                  type="button"
+                  aria-pressed={variant.id === section.variant}
+                  aria-disabled={blocked ? true : undefined}
+                  aria-describedby={blocked ? `${blockerId}-${variant.id}` : undefined}
+                  className={styles.variant}
+                  title={variant.description}
+                  onClick={() => {
+                    if (!blocked) {
+                      store.getState().setVariant(section.id, variant.id);
+                    }
+                  }}
+                >
+                  <SectionThumbnail type={section.type} variant={variant.id} size="sm" />
+                  {variant.label}
+                </button>
+              );
+            })}
+          </div>
+          {definition.variants.map((variant, index) => {
+            const blocker = blockers[index];
+            return blocker === null || blocker === undefined ? null : (
+              <p key={variant.id} id={`${blockerId}-${variant.id}`} className={styles.help}>
+                {blocker}
+              </p>
+            );
+          })}
+        </>
       ) : null}
       <div className={styles.row}>
         <span className={styles.rowHeader}>

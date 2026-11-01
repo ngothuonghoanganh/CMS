@@ -29,6 +29,7 @@ import {
   getVariant,
   insertionIndex,
   isPathWithin,
+  listMaximum,
   listMinimum,
   setAtPath,
   validateComposition,
@@ -452,10 +453,10 @@ export function createEditorStore(init: EditorInit): EditorStore {
           return false;
         }
         const items = listItemsOf(section.content, listKey);
-        if (items.length >= list.max) {
+        if (items.length >= listMaximum(section.type, section.variant, listKey)) {
           return false;
         }
-        const item = list.newItem();
+        const item = list.newItem(section.variant);
         const content = setAtPath(section.content, listKey, [...items, item]);
         const added = samplePathsOfNewItem(section, listKey, item, items.length);
         return editSection(sectionId, (draft) => {
@@ -550,7 +551,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
           if (missing <= 0) {
             continue;
           }
-          const extra = Array.from({ length: missing }, () => field.newItem());
+          const extra = Array.from({ length: missing }, () => field.newItem(variant));
           extra.forEach((item, offset) => {
             addedSamples.push(
               ...samplePathsOfNewItem(

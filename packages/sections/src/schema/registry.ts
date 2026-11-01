@@ -12,13 +12,16 @@ import type {
   SectionVariant,
 } from './define.js';
 import { getAtPath } from './paths.js';
+import { beforeAfterSection } from './sections/before-after.js';
 import { benefitsSection } from './sections/benefits.js';
 import { ctaBandSection } from './sections/cta-band.js';
 import { faqSection } from './sections/faq.js';
 import { footerSection } from './sections/footer.js';
 import { heroSection } from './sections/hero.js';
 import { leadFormSection } from './sections/lead-form.js';
+import { logosSection } from './sections/logos.js';
 import { navbarSection } from './sections/navbar.js';
+import { quickContactSection } from './sections/quick-contact.js';
 import { testimonialsSection } from './sections/testimonials.js';
 
 function widen<C extends Record<string, unknown>>(
@@ -33,8 +36,11 @@ const sectionDefinitions: { readonly [T in SectionType]: AnySectionDefinition } 
   hero: widen(heroSection),
   benefits: widen(benefitsSection),
   testimonials: widen(testimonialsSection),
+  logos: widen(logosSection),
+  before_after: widen(beforeAfterSection),
   faq: widen(faqSection),
   lead_form: widen(leadFormSection),
+  quick_contact: widen(quickContactSection),
   cta_band: widen(ctaBandSection),
   footer: widen(footerSection),
 };
@@ -153,6 +159,18 @@ export function listMinimum(type: SectionType, variantId: string, listKey: strin
 }
 
 /**
+ * The most items a list field may hold in a variant: the field's own `max`, or the variant's lower
+ * maximum (the steps of a process are 3 to 5). Infinity for a key that is not a list.
+ */
+export function listMaximum(type: SectionType, variantId: string, listKey: string): number {
+  const definition = getSectionDefinition(type);
+  const field = definition.fields.find((candidate) => candidate.key === listKey);
+  const fieldMax = field?.kind === 'list' ? field.max : Infinity;
+  const variantMax = getVariant(definition, variantId)?.listMax?.[listKey] ?? Infinity;
+  return Math.min(fieldMax, variantMax);
+}
+
+/**
  * Where a new section of this type goes when inserted at `requestedIndex`: fixed-position sections
  * go to their place, others stay between them.
  */
@@ -217,7 +235,7 @@ export function createSectionInstance(
   if (!getVariant(definition, variant)) {
     throw new Error(`Section "${type}" has no variant "${variant}"`);
   }
-  const content = definition.sampleContent();
+  const content = definition.sampleContent(variant);
   const draft = { type, variant, content };
   return {
     id,
@@ -309,6 +327,23 @@ function checkSections(
           path: ['sections', index, 'content', listKey],
           code: 'too_small',
           message: `Bố cục “${variant?.label ?? section.variant}” cần ít nhất ${minimum} ${field.itemLabel.toLowerCase()}`,
+        });
+      }
+    }
+    for (const [listKey, maximum] of Object.entries(variant?.listMax ?? {})) {
+      const field = definition.fields.find((candidate) => candidate.key === listKey);
+      const items = getAtPath(section.content, listKey);
+      // Over the field's own maximum the schema reports it below; one issue is enough.
+      if (
+        field?.kind === 'list' &&
+        Array.isArray(items) &&
+        items.length > maximum &&
+        items.length <= field.max
+      ) {
+        issues.push({
+          path: ['sections', index, 'content', listKey],
+          code: 'too_big',
+          message: `Bố cục “${variant?.label ?? section.variant}” có tối đa ${maximum} ${field.itemLabel.toLowerCase()}`,
         });
       }
     }

@@ -12,6 +12,8 @@ export interface CommittedInputProps {
   onCommit: (text: string) => void;
   placeholder?: string | undefined;
   help?: ReactNode;
+  /** What still has to be filled in before publishing; the value may be saved meanwhile. */
+  warning?: ReactNode;
   type?: 'text' | 'url' | 'tel';
   inputMode?: 'text' | 'url' | 'tel';
   mono?: boolean;
@@ -30,6 +32,7 @@ export function CommittedInput({
   onCommit,
   placeholder,
   help,
+  warning,
   type = 'text',
   inputMode,
   mono = false,
@@ -57,7 +60,7 @@ export function CommittedInput({
   }
 
   return (
-    <Field label={label} help={help} error={error ?? undefined}>
+    <Field label={label} help={help} error={error ?? undefined} warning={warning}>
       <Input
         type={type}
         inputMode={inputMode}
