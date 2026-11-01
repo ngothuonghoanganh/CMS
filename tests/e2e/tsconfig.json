@@ -4,5 +4,14 @@
     "noEmit": true,
     "lib": ["ES2023", "DOM"]
   },
-  "include": ["playwright.config.ts", "visual.config.ts", "urls.ts", "specs", "support", "visual"]
+  "include": [
+    "playwright.config.ts",
+    "visual.config.ts",
+    "addresses.config.ts",
+    "urls.ts",
+    "specs",
+    "support",
+    "visual",
+    "addresses"
+  ]
 }
