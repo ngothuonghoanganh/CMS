@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Không thuộc workspace ở địa chỉ này</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 900px; box-sizing: border-box; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column; align-items: center; padding: 64px 16px 48px; gap: 24px">
+  <span style="display: flex; align-items: center; gap: 8px">
+    <span aria-hidden="true" style="width: 26px; height: 26px; border-radius: 7px; background: #4338CA; display: flex; align-items: center; justify-content: center">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+    </span>
+    <span style="font-size: 17px; font-weight: 700">Payload</span>
+  </span>
+
+  <main style="width: 100%; max-width: 520px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; padding: 28px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+    <span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 12px; background: #FFF8EB; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8A5A00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3"></path></svg>
+    </span>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700">Tài khoản này không thuộc workspace ở địa chỉ này</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #3C424E">Bạn đang đăng nhập bằng <strong>khoa@mayxanh.vn</strong> và mở <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #15171C; background: #F0F2F5; border-radius: 6px; padding: 1px 6px; word-break: break-all">{{ address }}</span>.</p>
+      <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #3C424E">Cần vào workspace này? Nhờ người quản lý của nó gửi lời mời tới email của bạn.</p>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px">
+      <a href="WorkspacePicker.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">Mở workspace của tôi</a>
+      <a href="WorkspaceLogin.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid #CDD2DA; background: #FFFFFF; color: #15171C; font-size: 14px; font-weight: 600; text-decoration: none">Đăng nhập bằng tài khoản khác</a>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"address":{"editor":"text","default":"mayxanh.app.payload.vn"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { address: this.props.address ?? 'mayxanh.app.payload.vn' };
+  }
+}
+</script>
+</body>
+</html>

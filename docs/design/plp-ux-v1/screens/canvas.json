@@ -23,7 +23,10 @@
     "DomainConnect.dc.html": {"x": 1520, "y": 5540, "w": 1440, "h": 1080, "title": "14 · Kết nối & xác minh tên miền", "expand": "fill", "is_interactive": true},
     "Members.dc.html": {"x": 3040, "y": 5540, "w": 1440, "h": 1000, "title": "15 · Thành viên workspace", "expand": "fill", "is_interactive": true},
     "Roles.dc.html": {"x": 4560, "y": 5540, "w": 1440, "h": 1080, "title": "16 · Vai trò & phân quyền", "expand": "fill", "is_interactive": true},
-    "InviteAccept.dc.html": {"x": 6080, "y": 5540, "w": 390, "h": 844, "title": "15b · Nhận lời mời (mobile)", "is_interactive": true}
+    "InviteAccept.dc.html": {"x": 6080, "y": 5540, "w": 390, "h": 844, "title": "15b · Nhận lời mời (mobile)", "is_interactive": true},
+    "WorkspaceLogin.dc.html": {"x": 0, "y": 12340, "w": 1440, "h": 900, "title": "34 · Đăng nhập (địa chỉ workspace / địa chỉ chung)", "expand": "fill", "is_interactive": true},
+    "WorkspacePicker.dc.html": {"x": 1520, "y": 12340, "w": 1440, "h": 1000, "title": "35 · Chọn workspace (địa chỉ chung)", "expand": "fill", "is_interactive": true},
+    "NotMember.dc.html": {"x": 3040, "y": 12340, "w": 1440, "h": 900, "title": "36 · Không thuộc workspace ở địa chỉ này", "expand": "fill", "is_interactive": true}
   },
   "order": [
     "Main.dc.html",
@@ -44,7 +47,10 @@
     "DomainConnect.dc.html",
     "Members.dc.html",
     "Roles.dc.html",
-    "InviteAccept.dc.html"
+    "InviteAccept.dc.html",
+    "WorkspaceLogin.dc.html",
+    "WorkspacePicker.dc.html",
+    "NotMember.dc.html"
   ],
   "notes": {
     "rowCreate": {"x": 0, "y": -320, "text": "CREATE — Tạo & biên tập trang", "kind": "title1", "maxW": 6000},
@@ -52,7 +58,9 @@
     "rowConvert": {"x": 0, "y": 2740, "text": "CONVERT — Lead & đo lường (chỉ khi chọn MVP B)", "kind": "title1", "maxW": 4950},
     "assumptions": {"x": -888, "y": 0, "w": 440, "fill": "blue", "text": "Giả định thiết kế (chưa phải quyết định)\n\n• ICP chính: SME marketing + small agency — D-01 còn mở\n• Baseline MVP A (publish-first); hàng CONVERT chỉ áp dụng nếu chọn MVP B — D-02\n• Editor: section builder có hướng dẫn — D-03\n• Workspace agency → nhiều site khách hàng — D-05\n• Nội dung mẫu: khách hàng giả định “Nha khoa Smile Care”; số liệu trong mockup là dữ liệu mẫu\n• Font Be Vietnam Pro + JetBrains Mono"},
     "phase1": {"x": 0, "y": 5220, "text": "PHASE 1 · VẬN HÀNH & ĐỘI NHÓM — Tên miền riêng, thành viên, phân quyền", "kind": "title1", "maxW": 6470},
-    "phase1Decisions": {"x": -888, "y": 5540, "w": 440, "fill": "orange", "text": "Phase 1 · Giả định đang vẽ — cần chốt\n\n• Tên miền: nhận cả tên miền phụ (khuyên dùng) và tên miền gốc; tối đa 5 tên miền mỗi site\n• Một địa chỉ chính; mọi địa chỉ khác chuyển hướng 301 về địa chỉ chính\n• Tên miền đang gắn với site khác: chặn, chủ tên miền xác minh bằng bản ghi TXT rồi mới chuyển\n• Bộ vai trò cố định 6 loại; vai trò tùy chỉnh để sau\n• Phạm vi quyền: toàn workspace hoặc các site được chọn\n• “Xem lead” và “Xuất / xóa dữ liệu cá nhân” là hai quyền riêng\n• Lời mời hết hạn sau 7 ngày, chỉ dùng một lần, gắn với email được mời\n• Bị giới hạn vì gói dịch vụ hiện nhãn “Nâng cấp”, khác với “Không có quyền”"}
+    "phase1Decisions": {"x": -888, "y": 5540, "w": 440, "fill": "orange", "text": "Phase 1 · Giả định đang vẽ — cần chốt\n\n• Tên miền: nhận cả tên miền phụ (khuyên dùng) và tên miền gốc; tối đa 5 tên miền mỗi site\n• Một địa chỉ chính; mọi địa chỉ khác chuyển hướng 301 về địa chỉ chính\n• Tên miền đang gắn với site khác: chặn, chủ tên miền xác minh bằng bản ghi TXT rồi mới chuyển\n• Bộ vai trò cố định 6 loại; vai trò tùy chỉnh để sau\n• Phạm vi quyền: toàn workspace hoặc các site được chọn\n• “Xem lead” và “Xuất / xóa dữ liệu cá nhân” là hai quyền riêng\n• Lời mời hết hạn sau 7 ngày, chỉ dùng một lần, gắn với email được mời\n• Bị giới hạn vì gói dịch vụ hiện nhãn “Nâng cấp”, khác với “Không có quyền”"},
+    "d2": {"x": 0, "y": 12020, "text": "TÁCH DATABASE · ĐỊA CHỈ WORKSPACE (D2, ADR-025) — Mỗi workspace một địa chỉ admin", "kind": "title1", "maxW": 4480},
+    "d2Decisions": {"x": -888, "y": 12340, "w": 440, "fill": "orange", "text": "D2 · Giả định đang vẽ — cần chốt\n\n• Mỗi workspace có địa chỉ admin {slug}.app.<tên miền>, tạo từ tên workspace lúc đăng ký; chưa đổi được\n• Tên miền minh họa app.payload.vn, chốt cùng BASE_DOMAIN (§6); admin và trang công khai dùng hai tên miền khác nhau\n• Một lần đăng nhập dùng cho mọi địa chỉ workspace của người đó\n• Địa chỉ chung: thuộc một workspace thì mở thẳng; nhiều thì chọn (màn 35); không thuộc workspace nào thì hiện trạng thái trống\n• Người ngoài, hoặc địa chỉ không tồn tại: cùng màn 36, không lộ tên workspace\n• Đổi workspace ở Sidebar v2 (bật switcherOpen) mở địa chỉ của workspace kia\n• Email (lời mời, lead, duyệt xuất bản, tên miền) dẫn tới địa chỉ của workspace"}
   },
   "designSystems": []
 }

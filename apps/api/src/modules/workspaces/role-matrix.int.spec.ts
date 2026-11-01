@@ -1009,7 +1009,11 @@ describe('a member kept to some sites', () => {
     expect(me.memberships).toEqual([
       expect.objectContaining({ role: 'owner', siteIds: null }),
       {
-        workspace: { id: workspaceId, name: expect.any(String) as string },
+        workspace: {
+          id: workspaceId,
+          name: expect.any(String) as string,
+          slug: expect.stringMatching(/^[a-z0-9][a-z0-9-]+[a-z0-9]$/) as string,
+        },
         role: 'editor',
         siteIds: [smile.id, spa.id],
       },

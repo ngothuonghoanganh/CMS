@@ -1,7 +1,12 @@
-import { can, endpoints } from '@plp/contracts';
+import { can, endpoints, type MeResponse } from '@plp/contracts';
+import { ToastProvider } from '@plp/ui';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { workspaceHome } from '../features/shell/admin-address';
+import { currentAddress } from '../features/shell/current-address';
 import { siteHref } from '../features/shell/navigation';
+import { NotMember } from '../features/workspaces/NotMember';
+import { WorkspacePicker } from '../features/workspaces/WorkspacePicker';
 import { FormCard } from '../features/shell/FormCard';
 import { CenteredPage } from '../features/shell/CenteredPage';
 import {
@@ -12,13 +17,64 @@ import { ApiError } from '../lib/api-core';
 import { requireMe, serverApi } from '../lib/server-api';
 
 /**
- * Entry point: opens the first site of the preferred workspace, or site creation when the
- * workspace has none yet. Without a workspace chosen (a first sign-in), a member who cannot
- * create sites in the first one opens another workspace's first site, or creates one where they
- * may, instead of a page that only says to wait.
+ * Entry point. With workspace addresses (ADR-025): the common address opens the user's only
+ * workspace at its address, or lets them pick one (screen 35); a workspace's address opens that
+ * workspace, or says the account does not belong to it (screen 36). At the single address of a
+ * deployment without them, see `singleAddressHome`.
  */
 export default async function HomePage() {
   const me = await requireMe();
+  const address = await currentAddress();
+  if (address.kind === 'common') {
+    const [only, ...others] = me.memberships;
+    if (only !== undefined && others.length === 0) {
+      redirect(`${workspaceHome(address.addresses, only.workspace.slug)}/`);
+    }
+    return (
+      <ToastProvider>
+        <CenteredPage width="md">
+          <WorkspacePicker
+            user={me.user}
+            memberships={me.memberships}
+            template={address.addresses.template}
+          />
+        </CenteredPage>
+      </ToastProvider>
+    );
+  }
+  if (address.kind === 'workspace') {
+    const membership = me.memberships.find((item) => item.workspace.slug === address.slug);
+    if (membership === undefined) {
+      return (
+        <ToastProvider>
+          <CenteredPage width="md">
+            <NotMember
+              user={me.user}
+              host={new URL(workspaceHome(address.addresses, address.slug)).host}
+              commonOrigin={address.addresses.commonOrigin}
+            />
+          </CenteredPage>
+        </ToastProvider>
+      );
+    }
+    // The workspace of this address stays open, even without a site to show.
+    const [first] = (await sitesOf(membership.workspace.id)) ?? [];
+    redirect(
+      first === undefined
+        ? `/sites/new?workspace=${encodeURIComponent(membership.workspace.id)}`
+        : siteHref(first.id),
+    );
+  }
+  return singleAddressHome(me);
+}
+
+/**
+ * Opens the first site of the preferred workspace, or site creation when the workspace has none
+ * yet. Without a workspace chosen (a first sign-in), a member who cannot create sites in the first
+ * one opens another workspace's first site, or creates one where they may, instead of a page that
+ * only says to wait.
+ */
+async function singleAddressHome(me: MeResponse) {
   const preferred = (await cookies()).get(WORKSPACE_PREFERENCE_COOKIE)?.value;
   const membership = pickMembership(me.memberships, preferred);
   if (membership === null) {

@@ -1,5 +1,6 @@
+import { WORKSPACE_SLUG_PLACEHOLDER } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
-import { parseAdminEnv } from './env';
+import { parseAdminEnv, SLUG_PLACEHOLDER } from './env';
 
 const valid = {
   API_INTERNAL_URL: 'http://localhost:4100',
@@ -27,5 +28,28 @@ describe('parseAdminEnv', () => {
     expect(() =>
       parseAdminEnv({ ...valid, PUBLIC_SITE_ORIGIN_TEMPLATE: 'http://localhost:3101' }),
     ).toThrow(/PUBLIC_SITE_ORIGIN_TEMPLATE/);
+  });
+
+  it('takes workspace addresses with the common address they share (ADR-025)', () => {
+    const env = parseAdminEnv({
+      ...valid,
+      ADMIN_ORIGIN: 'https://app.example.vn',
+      ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.app.example.vn',
+    });
+    expect(env.ADMIN_WORKSPACE_ORIGIN_TEMPLATE).toBe('https://{slug}.app.example.vn');
+    expect(() =>
+      parseAdminEnv({ ...valid, ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.app.example.vn' }),
+    ).toThrow(/ADMIN_ORIGIN is required/);
+    expect(() =>
+      parseAdminEnv({
+        ...valid,
+        ADMIN_ORIGIN: 'https://app.example.vn',
+        ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://app.example.vn',
+      }),
+    ).toThrow(/must contain \{slug\}/);
+  });
+
+  it('spells the slug placeholder as the contracts do', () => {
+    expect(SLUG_PLACEHOLDER).toBe(WORKSPACE_SLUG_PLACEHOLDER);
   });
 });

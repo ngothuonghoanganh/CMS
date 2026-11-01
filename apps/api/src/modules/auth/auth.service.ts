@@ -12,6 +12,8 @@ import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-join.service.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
+import { freeSlug, slugBaseOf } from '../workspaces/domain/workspace-slug.js';
+import { WORKSPACES_SLUG_INDEX } from '../workspaces/workspace.schema.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
 import {
@@ -29,6 +31,9 @@ export interface IssuedSession {
   expiresAt: Date;
   me: MeResponse;
 }
+
+/** Sign-ups racing for one address: each loser tries the next free one, this many times at most. */
+const SLUG_ATTEMPTS = 3;
 
 function emailTaken(cause?: unknown): AppError {
   return new AppError(409, 'email_taken', 'Email này đã được đăng ký', {
@@ -68,19 +73,46 @@ export class AuthService {
     let userId;
     try {
       await this.databases.build(workspaceId);
-      userId = await this.transactions.run(async (tx) => {
-        const user = await this.users.create(
-          { email: input.email, name: input.name, passwordHash },
-          tx,
-        );
-        await this.workspaces.createWithOwner(workspaceId, input.workspaceName, user._id, tx);
-        return user._id;
-      });
+      userId = await this.createOwner(input, passwordHash, workspaceId);
     } catch (error) {
       await this.dropDatabase(workspaceId, error);
       throw isDuplicateKeyError(error, USERS_EMAIL_INDEX) ? emailTaken(error) : error;
     }
     return this.issueSession({ id: userId, name: input.name, email: input.email });
+  }
+
+  /**
+   * The user, their workspace at the first free address its name asks for, and the owner
+   * membership, in one transaction. Another sign-up can take that address meanwhile: the unique
+   * index refuses the second, which then tries the next free one (ADR-025).
+   */
+  private async createOwner(
+    input: SignupRequest,
+    passwordHash: string,
+    workspaceId: ObjectId,
+  ): Promise<ObjectId> {
+    const base = slugBaseOf(input.workspaceName);
+    for (let attempt = 1; ; attempt += 1) {
+      const slug = freeSlug(base, await this.workspaces.takenSlugs(base));
+      try {
+        return await this.transactions.run(async (tx) => {
+          const user = await this.users.create(
+            { email: input.email, name: input.name, passwordHash },
+            tx,
+          );
+          await this.workspaces.createWithOwner(
+            { id: workspaceId, name: input.workspaceName, slug },
+            user._id,
+            tx,
+          );
+          return user._id;
+        });
+      } catch (error) {
+        if (attempt >= SLUG_ATTEMPTS || !isDuplicateKeyError(error, WORKSPACES_SLUG_INDEX)) {
+          throw error;
+        }
+      }
+    }
   }
 
   /** The database of a workspace that was not created holds nothing and nothing routes to it. */
@@ -214,7 +246,7 @@ export class AuthService {
     return {
       user: { id: user.id.toHexString(), name: user.name, email: user.email },
       memberships: memberships.map(({ workspace, membership }) => ({
-        workspace: { id: workspace._id.toHexString(), name: workspace.name },
+        workspace: { id: workspace._id.toHexString(), name: workspace.name, slug: workspace.slug },
         role: accessOf(membership, roles),
         siteIds: membership.siteIds?.map((id) => id.toHexString()) ?? null,
       })),

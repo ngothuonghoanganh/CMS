@@ -104,4 +104,57 @@ describe('parseEnv', () => {
       parseEnv({ ...valid, NODE_ENV: 'production', DOMAIN_DNS_ZONE_FILE: '/tmp/zone.json' }),
     ).toThrow(/DOMAIN_DNS_ZONE_FILE/);
   });
+  describe('workspace addresses (ADR-025)', () => {
+    const addresses = {
+      ADMIN_ORIGIN: 'https://app.example.vn',
+      ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.app.example.vn',
+      SESSION_COOKIE_DOMAIN: 'app.example.vn',
+    };
+
+    it('stays at one address when no template is set', () => {
+      const env = parseEnv(valid);
+      expect(env.ADMIN_WORKSPACE_ORIGIN_TEMPLATE).toBeUndefined();
+      expect(env.SESSION_COOKIE_DOMAIN).toBeUndefined();
+    });
+
+    it('takes a template with the cookie domain holding every address', () => {
+      const env = parseEnv({ ...valid, ...addresses });
+      expect(env.ADMIN_WORKSPACE_ORIGIN_TEMPLATE).toBe('https://{slug}.app.example.vn');
+      expect(env.SESSION_COOKIE_DOMAIN).toBe('app.example.vn');
+    });
+
+    it('refuses a template without {slug} or that is no URL', () => {
+      expect(() =>
+        parseEnv({
+          ...valid,
+          ...addresses,
+          ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://app.example.vn',
+        }),
+      ).toThrow('must contain {slug}');
+      expect(() =>
+        parseEnv({ ...valid, ...addresses, ADMIN_WORKSPACE_ORIGIN_TEMPLATE: '{slug}' }),
+      ).toThrow('must be a URL');
+    });
+
+    it('needs the cookie domain with a template, holding both the common and the workspace addresses', () => {
+      const { SESSION_COOKIE_DOMAIN: _, ...noDomain } = addresses;
+      expect(() => parseEnv({ ...valid, ...noDomain })).toThrow(
+        'SESSION_COOKIE_DOMAIN is required with ADMIN_WORKSPACE_ORIGIN_TEMPLATE',
+      );
+      expect(() =>
+        parseEnv({ ...valid, ...addresses, ADMIN_ORIGIN: 'https://admin.other.vn' }),
+      ).toThrow('must be under SESSION_COOKIE_DOMAIN');
+      expect(() =>
+        parseEnv({
+          ...valid,
+          ...addresses,
+          ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.other.vn',
+        }),
+      ).toThrow('must be under SESSION_COOKIE_DOMAIN');
+      // A look-alike suffix is not under the domain.
+      expect(() =>
+        parseEnv({ ...valid, ...addresses, ADMIN_ORIGIN: 'https://evilapp.example.vn' }),
+      ).toThrow('must be under SESSION_COOKIE_DOMAIN');
+    });
+  });
 });

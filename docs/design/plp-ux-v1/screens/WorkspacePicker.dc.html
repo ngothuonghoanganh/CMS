@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Chọn workspace</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 1000px; box-sizing: border-box; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; background: #FFFFFF; border-bottom: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span style="display: flex; align-items: center; gap: 8px">
+        <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 6px; background: #4338CA; display: flex; align-items: center; justify-content: center">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+        </span>
+        <span style="font-size: 15px; font-weight: 700">Payload</span>
+      </span>
+      <span style="font-size: 12px; color: #5E6573; font-family: 'JetBrains Mono', ui-monospace, monospace; background: #F0F2F5; border-radius: 999px; padding: 3px 10px">app.payload.vn</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span aria-hidden="true" style="width: 32px; height: 32px; flex: none; border-radius: 999px; background: #EEF0FF; color: #3730A3; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px">MK</span>
+      <span style="display: flex; flex-direction: column">
+        <span style="font-size: 13px; font-weight: 600">Minh Khoa</span>
+        <span style="font-size: 12px; color: #5E6573">khoa@mayxanh.vn</span>
+      </span>
+      <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main style="width: 100%; max-width: 760px; box-sizing: border-box; margin: 0 auto; padding: 56px 24px 48px; display: flex; flex-direction: column; gap: 24px">
+    <sc-if value="{{ hasWorkspaces }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <h1 style="margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em">Chọn workspace</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #3C424E">Mỗi workspace có địa chỉ riêng và dữ liệu riêng. Bạn mở workspace nào thì làm việc ở địa chỉ của nó; đã đăng nhập ở đây thì không phải đăng nhập lại.</p>
+      </div>
+
+      <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px">
+        <sc-for list="{{ workspaces }}" as="ws" hint-placeholder-count="3">
+          <li style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 10px; background: {{ ws.tileBg }}; color: {{ ws.tileFg }}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">{{ ws.initials }}</span>
+            <span style="display: flex; flex-direction: column; gap: 4px; flex: 1 1 280px; min-width: 0">
+              <span style="font-size: 16px; font-weight: 600">{{ ws.name }}</span>
+              <span style="font-size: 13px; color: #3C424E">{{ ws.access }}</span>
+              <span style="font-size: 13px; color: #5E6573; font-family: 'JetBrains Mono', ui-monospace, monospace; word-break: break-all">{{ ws.address }}</span>
+            </span>
+            <a href="Main.dc.html" aria-label="Mở {{ ws.name }}" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">
+              Mở
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+            </a>
+          </li>
+        </sc-for>
+      </ul>
+
+      <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #5E6573">Thiếu một workspace? Nhờ người quản lý của workspace đó gửi lời mời tới <strong style="color: #3C424E">khoa@mayxanh.vn</strong>.</p>
+    </sc-if>
+
+    <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+      <section style="display: flex; flex-direction: column; gap: 16px; padding: 28px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+        <span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 12px; background: #F0F2F5; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v12H4zM9 7V5h6v2M4 12h16"></path></svg>
+        </span>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 700">Tài khoản này chưa thuộc workspace nào</h1>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #3C424E">Khi được mời, bạn nhận email có link tham gia. Nếu vừa bị gỡ khỏi một workspace, hãy nhờ người quản lý mời lại.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px">
+          <button type="button" style="min-height: 44px; padding: 0 18px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Đăng xuất</button>
+        </div>
+      </section>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["several","none"],"default":"several"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'several';
+    var workspaces = [
+      { name: 'Mây Xanh Agency', initials: 'MX', tileBg: '#15171C', tileFg: '#FFFFFF', access: 'Biên tập · 2 site', address: 'mayxanh.app.payload.vn' },
+      { name: 'Nha khoa Smile Care', initials: 'SC', tileBg: '#D9F2EE', tileFg: '#0F5E55', access: 'Chủ sở hữu · toàn workspace', address: 'smilecare.app.payload.vn' },
+      { name: 'Bếp Nhà Lá', initials: 'BN', tileBg: '#FDEBD3', tileFg: '#7A4300', access: 'Chăm sóc khách hàng · 1 site', address: 'bepnhala.app.payload.vn' }
+    ];
+    return {
+      hasWorkspaces: s === 'several',
+      isEmpty: s === 'none',
+      workspaces: workspaces
+    };
+  }
+}
+</script>
+</body>
+</html>

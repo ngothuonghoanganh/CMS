@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { pickMembership, workspacePreferenceCookie } from './workspace-preference';
 
 const agency: Membership = {
-  workspace: { id: '64b0000000000000000000a1', name: 'Mây Xanh Agency' },
+  workspace: { id: '64b0000000000000000000a1', name: 'Mây Xanh Agency', slug: 'may-xanh-agency' },
   role: 'owner',
   siteIds: null,
 };
 const client: Membership = {
-  workspace: { id: '64b0000000000000000000a2', name: 'Smile Care' },
+  workspace: { id: '64b0000000000000000000a2', name: 'Smile Care', slug: 'smile-care' },
   role: 'editor',
   siteIds: null,
 };

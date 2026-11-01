@@ -13,6 +13,7 @@ import { cache } from 'react';
 import { requireMe, serverApi } from '../../lib/server-api';
 import { workspaceHref } from './navigation';
 import { pickSite, SITE_PREFERENCE_COOKIE } from './site-preference';
+import { requireWorkspaceAddress } from './current-address';
 
 /** The frame of a workspace screen (Vai trò & quyền): the workspace and a site for the sidebar. */
 export interface WorkspaceContext {
@@ -41,6 +42,7 @@ export const loadWorkspaceContext = cache(
     if (membership === undefined) {
       notFound();
     }
+    await requireWorkspaceAddress(membership.workspace);
     const { items: sites } = await serverApi(endpoints.listSites, [workspaceId]);
     const site = pickSite(sites, (await cookies()).get(SITE_PREFERENCE_COOKIE)?.value);
     if (site === null) {

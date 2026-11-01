@@ -16,6 +16,7 @@ import {
 import { WorkspaceJoin } from './workspace-join.service.js';
 import { WorkspacesRepository } from './workspaces.repository.js';
 import { WorkspaceIndexBuilder } from './workspace-index-builder.js';
+import { WorkspaceLinks } from './workspace-links.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { WorkspaceIndexBuilder } from './workspace-index-builder.js';
   ],
   providers: [
     WorkspaceIndexBuilder,
+    WorkspaceLinks,
     WorkspacesRepository,
     InvitationsRepository,
     AccessRequestsRepository,
@@ -37,6 +39,7 @@ import { WorkspaceIndexBuilder } from './workspace-index-builder.js';
     WorkspaceJoin,
   ],
   exports: [
+    WorkspaceLinks,
     WorkspacesRepository,
     InvitationsRepository,
     AccessRequestsRepository,

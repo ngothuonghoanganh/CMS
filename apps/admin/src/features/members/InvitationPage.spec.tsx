@@ -50,7 +50,7 @@ function serve(lookup: InvitationLookupResponse, me: MeResponse | null) {
         ...signedIn(lookup.email),
         memberships: [
           {
-            workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+            workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency', slug: 'may-xanh-agency' },
             role: 'editor',
             siteIds: null,
           },

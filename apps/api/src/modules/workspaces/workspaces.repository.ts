@@ -8,6 +8,7 @@ import {
   type Role,
   roleSchema,
   rolesWith,
+  workspaceSlugSchema,
 } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -50,28 +51,60 @@ export class WorkspacesRepository {
     @InjectModel(MEMBERSHIP_MODEL) private readonly memberships: Model<MembershipRecord>,
   ) {}
 
-  /** `workspaceId` is chosen beforehand: its database is created before the workspace (ADR-025). */
+  /**
+   * `workspaceId` is chosen beforehand: its database is created before the workspace (ADR-025).
+   * A `slug` taken meanwhile throws the duplicate key of `WORKSPACES_SLUG_INDEX`.
+   */
   async createWithOwner(
-    workspaceId: ObjectId,
-    name: string,
+    workspace: { id: ObjectId; name: string; slug: string },
     ownerId: ObjectId,
     tx: Tx,
   ): Promise<WorkspaceRecord> {
     const now = new Date();
-    const [workspace] = await this.workspaces.create(
-      [{ _id: workspaceId, name, siteSeq: 0, createdBy: ownerId, createdAt: now }],
+    const [created] = await this.workspaces.create(
+      [
+        {
+          _id: workspace.id,
+          name: workspace.name,
+          slug: workspace.slug,
+          siteSeq: 0,
+          createdBy: ownerId,
+          createdAt: now,
+        },
+      ],
       { session: tx },
     );
-    if (!workspace) {
+    if (!created) {
       throw new Error('Workspace insert returned no document');
     }
     await this.memberships.create(
-      [{ workspaceId: workspace._id, userId: ownerId, role: 'owner', createdAt: now }],
+      [{ workspaceId: created._id, userId: ownerId, role: 'owner', createdAt: now }],
       {
         session: tx,
       },
     );
-    return workspace.toObject();
+    return created.toObject();
+  }
+
+  /**
+   * The addresses already taken among `base` and its numbered forms (`base-2`, …). `base` is a
+   * slug, so it holds nothing a regex treats specially; the anchored prefix uses the index.
+   */
+  async takenSlugs(base: string): Promise<Set<string>> {
+    const taken = await this.workspaces
+      .find({ slug: { $regex: `^${workspaceSlugSchema.parse(base)}(-[0-9]+)?$` } }, { slug: 1 })
+      .lean<Pick<WorkspaceRecord, 'slug'>[]>()
+      .exec();
+    return new Set(taken.map((workspace) => workspace.slug));
+  }
+
+  /** The admin address of a workspace (ADR-025); null when it no longer exists. */
+  async findSlug(workspaceId: ObjectId): Promise<string | null> {
+    const workspace = await this.workspaces
+      .findById(workspaceId, { slug: 1 })
+      .lean<Pick<WorkspaceRecord, 'slug'>>()
+      .exec();
+    return workspace?.slug ?? null;
   }
 
   /** Every workspace id, oldest first, as a stream: for startup work on each workspace database. */

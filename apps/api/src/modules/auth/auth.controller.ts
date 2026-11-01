@@ -86,7 +86,16 @@ export class AuthController {
     return session.me;
   }
 
+  /** With workspace addresses, on their parent domain: one login serves them all (ADR-025). */
   private cookieOptions() {
-    return { httpOnly: true, sameSite: 'lax', secure: this.env.COOKIE_SECURE, path: '/' } as const;
+    return {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: this.env.COOKIE_SECURE,
+      path: '/',
+      ...(this.env.SESSION_COOKIE_DOMAIN === undefined
+        ? {}
+        : { domain: this.env.SESSION_COOKIE_DOMAIN }),
+    } as const;
   }
 }

@@ -410,17 +410,24 @@ describe('MembersScreen', () => {
   });
 
   it('shows the invitations with how long they still work, and no requests to a Quản trị', async () => {
-    const user = userEvent.setup();
-    renderScreen({ viewer: { userId: admin.userId, role: 'admin' }, initialRequests: null });
-    expect(screen.queryByRole('button', { name: /Yêu cầu đổi quyền/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Chuyển quyền sở hữu' })).toBeNull();
-    await user.click(screen.getByRole('button', { name: /Lời mời đang chờ · 1/ }));
-    const row = screen.getByRole('row', { name: /an.tran@bepnhamay.vn/ });
-    expect(row).toHaveTextContent('Hết hạn sau 5 ngày');
-    expect(row).toHaveTextContent('Bếp Nhà Mây');
-    expect(
-      within(row).getByRole('button', { name: 'Thu hồi lời mời tới an.tran@bepnhamay.vn' }),
-    ).toBeInTheDocument();
+    // The screen counts from the browser's clock: fixed at the load time, so the days left do
+    // not depend on when the test runs.
+    vi.useFakeTimers({ toFake: ['Date'], now: LOADED_AT });
+    try {
+      const user = userEvent.setup();
+      renderScreen({ viewer: { userId: admin.userId, role: 'admin' }, initialRequests: null });
+      expect(screen.queryByRole('button', { name: /Yêu cầu đổi quyền/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Chuyển quyền sở hữu' })).toBeNull();
+      await user.click(screen.getByRole('button', { name: /Lời mời đang chờ · 1/ }));
+      const row = screen.getByRole('row', { name: /an.tran@bepnhamay.vn/ });
+      expect(row).toHaveTextContent('Hết hạn sau 5 ngày');
+      expect(row).toHaveTextContent('Bếp Nhà Mây');
+      expect(
+        within(row).getByRole('button', { name: 'Thu hồi lời mời tới an.tran@bepnhamay.vn' }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('never offers a Quản trị to change or remove themselves (ADR-021)', () => {

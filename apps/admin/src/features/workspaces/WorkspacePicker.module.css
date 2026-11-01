@@ -1,0 +1,50 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.access {
+  font-size: var(--text-body-sm);
+  color: var(--color-ink-2);
+}
+
+.address {
+  font-family: var(--font-mono);
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}

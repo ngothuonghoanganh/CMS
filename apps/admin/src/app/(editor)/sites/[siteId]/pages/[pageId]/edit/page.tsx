@@ -9,6 +9,7 @@ import { EditorWithPublish } from '../../../../../../../features/publish/EditorW
 import { pageHref } from '../../../../../../../features/shell/navigation';
 import { ApiError } from '../../../../../../../lib/api-core';
 import { requireMe, serverApi } from '../../../../../../../lib/server-api';
+import { requireWorkspaceAddress } from '../../../../../../../features/shell/current-address';
 
 interface EditPageProps {
   params: Promise<{ siteId: string; pageId: string }>;
@@ -61,6 +62,7 @@ export default async function EditPage({ params }: EditPageProps) {
   if (!membership) {
     notFound();
   }
+  await requireWorkspaceAddress(membership.workspace);
   // Roles that do not edit pages read them in their history: versions and previews (ADR-020).
   if (!can(membership.role, 'pages.edit')) {
     redirect(pageHref(siteId, pageId, 'history'));

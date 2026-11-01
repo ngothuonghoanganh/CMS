@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { can } from '@plp/contracts';
-import type { Env } from '../../config/env.js';
-import { InjectEnv } from '../../shared/env.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { EmailSender, EmailSendError, type EmailMessage } from '../notifications/email-sender.js';
 import {
@@ -14,6 +12,7 @@ import type { SiteRecord } from '../sites/site.schema.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
+import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { ApprovalRecord } from './approval.schema.js';
 
@@ -26,11 +25,11 @@ export class ApprovalNotifier {
   private readonly logger = new Logger(ApprovalNotifier.name);
 
   constructor(
-    @InjectEnv() private readonly env: Env,
     private readonly sender: EmailSender,
     private readonly users: UsersRepository,
     private readonly workspaces: WorkspacesRepository,
     private readonly customRoles: CustomRolesRepository,
+    private readonly links: WorkspaceLinks,
   ) {}
 
   /** One email to every member who may decide on the site's pages; true when it went out. */
@@ -67,7 +66,7 @@ export class ApprovalNotifier {
           siteName: site.name,
           note: approval.note,
           resent,
-          pageUrl: this.pageUrl(page),
+          pageUrl: await this.pageUrl(scope, page),
         }),
       };
     });
@@ -112,14 +111,14 @@ export class ApprovalNotifier {
               pageTitle: page.title,
               rejecterName,
               reason: approval.reason,
-              pageUrl: this.pageUrl(page),
+              pageUrl: await this.pageUrl(scope, page),
             }),
           };
     });
   }
 
-  private pageUrl(page: PageRecord): string {
-    return `${this.env.ADMIN_ORIGIN}/sites/${page.siteId.toHexString()}/pages/${page._id.toHexString()}/edit`;
+  private async pageUrl(scope: WorkspaceScope, page: PageRecord): Promise<string> {
+    return `${await this.links.originOf(scope.workspaceId)}/sites/${page.siteId.toHexString()}/pages/${page._id.toHexString()}/edit`;
   }
 
   /**
