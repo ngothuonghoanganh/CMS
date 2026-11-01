@@ -15,6 +15,7 @@ import {
 import { RevalidationClient } from '../revalidation/revalidation.client.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { AccessService } from '../workspaces/access.service.js';
+import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { DomainDns, DnsUnavailableError } from './domain-dns.js';
 import { DomainTls } from './domain-tls.js';
@@ -48,6 +49,7 @@ export class DomainChecker {
     private readonly users: UsersRepository,
     private readonly access: AccessService,
     private readonly workspaces: WorkspacesRepository,
+    private readonly links: WorkspaceLinks,
     private readonly dns: DomainDns,
     private readonly tls: DomainTls,
     private readonly transactions: TransactionRunner,
@@ -218,7 +220,7 @@ export class DomainChecker {
       const input = {
         hostname: domain.hostname,
         siteName: site.name,
-        domainsUrl: `${this.env.ADMIN_ORIGIN}/sites/${site._id.toHexString()}/domain`,
+        domainsUrl: `${await this.links.originOf(domain.workspaceId)}/sites/${site._id.toHexString()}/domain`,
       };
       const content =
         event === 'active'

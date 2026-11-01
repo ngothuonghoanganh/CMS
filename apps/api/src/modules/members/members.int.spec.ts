@@ -475,7 +475,12 @@ describe('members, invitations and access requests (ADR-021)', () => {
       // No workspace of their own: only the one they were invited to.
       expect(me.memberships).toEqual([
         {
-          workspace: { id: workspaceId, name: 'Mây Xanh Agency' },
+          // Its admin address comes from its name (ADR-025), numbered as other test runs took it.
+          workspace: {
+            id: workspaceId,
+            name: 'Mây Xanh Agency',
+            slug: expect.stringMatching(/^may-xanh-agency(-\d+)?$/) as string,
+          },
           role: 'support',
           siteIds: [smile.id],
         },

@@ -29,3 +29,4 @@ export * from './release.js';
 export * from './site.js';
 export * from './text.js';
 export * from './themes.js';
+export * from './workspace-address.js';

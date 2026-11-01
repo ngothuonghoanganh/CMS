@@ -43,6 +43,7 @@ import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-j
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
+import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MemberGrants } from './member-grants.js';
 
@@ -89,6 +90,7 @@ export class InvitationsService {
     private readonly access: AccessService,
     private readonly invitations: InvitationsRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly links: WorkspaceLinks,
     private readonly users: UsersRepository,
     private readonly sites: SitesRepository,
     private readonly grants: MemberGrants,
@@ -149,6 +151,7 @@ export class InvitationsService {
     const fresh = emails.filter((email) => !outcomes.has(email));
     // Read before anything is counted or stored: the emails need them once the batch is saved.
     const workspaceName = (await this.workspaces.findWorkspace(scope))?.name ?? '';
+    const adminOrigin = await this.links.originOf(scope.workspaceId);
     const scopeLine = await this.grants.scopeLine(scope, input.siteIds);
     const now = new Date();
     const counted = new Map<string, CountedHit[]>();
@@ -224,6 +227,7 @@ export class InvitationsService {
     }
     for (const { invitation, token } of created) {
       const { sent } = await this.send(scope, invitation, token, {
+        adminOrigin,
         workspaceName,
         invitedBy: user.name,
         scope: scopeLine,
@@ -254,6 +258,7 @@ export class InvitationsService {
     // The renewal changes neither the role nor the sites.
     const access = accessOf(existing, await this.customRoles.mapForWorkspace(scope));
     const workspaceName = (await this.workspaces.findWorkspace(scope))?.name ?? '';
+    const adminOrigin = await this.links.originOf(scope.workspaceId);
     const scopeLine = await this.grants.scopeLine(
       scope,
       existing.siteIds?.map((siteId) => siteId.toHexString()) ?? null,
@@ -281,6 +286,7 @@ export class InvitationsService {
       throw notFound(INVITATION_NOT_FOUND);
     }
     const { sent, sentAt } = await this.send(scope, renewed, token, {
+      adminOrigin,
       workspaceName,
       invitedBy: user.name,
       scope: scopeLine,
@@ -376,11 +382,19 @@ export class InvitationsService {
     scope: WorkspaceScope,
     invitation: Pick<InvitationRecord, '_id' | 'email' | 'tokenHash'>,
     token: string,
-    context: { workspaceName: string; invitedBy: string; scope: string; roleLabel: string },
+    context: {
+      /** The workspace's admin address (ADR-025): the invited person lands in it. */
+      adminOrigin: string;
+      workspaceName: string;
+      invitedBy: string;
+      scope: string;
+      roleLabel: string;
+    },
   ): Promise<{ sent: boolean; sentAt: Date | null }> {
+    const { adminOrigin, ...content } = context;
     const email = memberInvitationEmail({
-      ...context,
-      acceptUrl: `${this.env.ADMIN_ORIGIN}${INVITATION_PATH}#token=${token}`,
+      ...content,
+      acceptUrl: `${adminOrigin}${INVITATION_PATH}#token=${token}`,
       validDays: INVITATION_VALID_DAYS,
     });
     try {

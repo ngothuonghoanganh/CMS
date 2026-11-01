@@ -2,11 +2,14 @@ import { type Role, roleSchema } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 
 export const WORKSPACE_MODEL = 'Workspace';
+export const WORKSPACES_SLUG_INDEX = 'workspaces_slug_unique';
 export const MEMBERSHIP_MODEL = 'Membership';
 
 export interface WorkspaceRecord {
   _id: Types.ObjectId;
   name: string;
+  /** The workspace's admin address, unique and fixed once chosen at sign-up (ADR-025). */
+  slug: string;
   /**
    * Sites created in the workspace so far. Every site creation increments it in its transaction,
    * so two concurrent creations write the same document and MongoDB retries the later one, which
@@ -31,6 +34,7 @@ export interface WorkspaceRecord {
 export const workspaceSchema = new Schema<WorkspaceRecord>(
   {
     name: { type: String, required: true },
+    slug: { type: String, required: true, immutable: true },
     siteSeq: { type: Number, default: 0 },
     inviteSeq: { type: Number, default: 0 },
     customRoleSeq: { type: Number, default: 0 },
@@ -39,6 +43,7 @@ export const workspaceSchema = new Schema<WorkspaceRecord>(
   },
   { collection: 'workspaces', versionKey: false },
 );
+workspaceSchema.index({ slug: 1 }, { unique: true, name: WORKSPACES_SLUG_INDEX });
 
 /** A role as stored: a system role, or `custom` with `customRoleId` (ADR-024). */
 export type StoredRole = Role | 'custom';

@@ -12,6 +12,7 @@ import { type LeadRef, LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { confirmedRecipientsOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
+import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import {
   nextAttemptDelay,
@@ -44,6 +45,7 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly sites: SitesRepository,
     private readonly pages: PagesRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly links: WorkspaceLinks,
     private readonly sender: EmailSender,
     @Inject(NOTIFICATION_RETRY_DELAYS) private readonly retryDelays: readonly number[],
   ) {}
@@ -240,7 +242,7 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
         source: lead.source,
         createdAt: lead.createdAt,
       },
-      leadUrl: `${this.env.ADMIN_ORIGIN}/sites/${lead.siteId.toHexString()}/leads?lead=${lead._id.toHexString()}&range=all`,
+      leadUrl: `${await this.links.originOf(lead.workspaceId)}/sites/${lead.siteId.toHexString()}/leads?lead=${lead._id.toHexString()}&range=all`,
     });
     let delivery: EmailDelivery;
     try {

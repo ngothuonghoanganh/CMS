@@ -1,3 +1,4 @@
+import { WORKSPACE_SLUG_PLACEHOLDER } from '@plp/contracts';
 import { z } from 'zod';
 
 const secret = z.string().min(32, 'must be at least 32 characters');
@@ -38,6 +39,26 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  /**
+   * The admin address of each workspace (ADR-025), e.g. "https://{slug}.app.example.vn"; unset,
+   * every workspace opens at `ADMIN_ORIGIN`.
+   */
+  ADMIN_WORKSPACE_ORIGIN_TEMPLATE: z
+    .string()
+    .refine((value) => value.includes(WORKSPACE_SLUG_PLACEHOLDER), 'must contain {slug}')
+    .refine(
+      (value) => URL.canParse(value.replace(WORKSPACE_SLUG_PLACEHOLDER, 'example')),
+      'must be a URL',
+    )
+    .optional(),
+  /**
+   * `Domain` of the session cookie: the parent of the common and the workspace addresses, so one
+   * login serves them all (ADR-025). Required with `ADMIN_WORKSPACE_ORIGIN_TEMPLATE`.
+   */
+  SESSION_COOKIE_DOMAIN: z
+    .string()
+    .regex(/^[a-z0-9.-]+$/, 'must be a host name')
+    .optional(),
 
   /** Public origin of a site's default domain, e.g. "https://{subdomain}.payload.site". */
   PUBLIC_SITE_ORIGIN_TEMPLATE: z
@@ -136,7 +157,32 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
       'Invalid API environment:\nCUSTOM_DOMAIN_IPV4 is required while HTTPS is checked: the check connects to the edge',
     );
   }
+  checkWorkspaceAddresses(result.data);
   return result.data;
+}
+
+/**
+ * Workspace addresses need the session cookie on a domain that holds the common address and
+ * every workspace address; otherwise one of them would sign in alone (ADR-025).
+ */
+function checkWorkspaceAddresses(env: Env): void {
+  const template = env.ADMIN_WORKSPACE_ORIGIN_TEMPLATE;
+  if (template === undefined) {
+    return;
+  }
+  const domain = env.SESSION_COOKIE_DOMAIN;
+  if (domain === undefined) {
+    throw new Error(
+      'Invalid API environment:\nSESSION_COOKIE_DOMAIN is required with ADMIN_WORKSPACE_ORIGIN_TEMPLATE',
+    );
+  }
+  const within = (host: string) => host === domain || host.endsWith(`.${domain}`);
+  const workspaceHost = new URL(template.replace(WORKSPACE_SLUG_PLACEHOLDER, 'example')).hostname;
+  if (!within(new URL(env.ADMIN_ORIGIN).hostname) || !within(workspaceHost)) {
+    throw new Error(
+      `Invalid API environment:\nADMIN_ORIGIN and ADMIN_WORKSPACE_ORIGIN_TEMPLATE must be under SESSION_COOKIE_DOMAIN (${domain})`,
+    );
+  }
 }
 
 /** HTTPS is checked unless turned off; it is on by default only in production (ADR-022). */

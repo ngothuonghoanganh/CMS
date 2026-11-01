@@ -29,6 +29,7 @@ import type { MembershipRecord } from '../workspaces/workspace.schema.js';
 import type { CustomRoleRecord } from '../workspaces/custom-role.schema.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
+import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MEMBER_NOT_FOUND, MemberGrants, toMemberDto } from './member-grants.js';
 
@@ -76,6 +77,7 @@ export class AccessRequestsService {
     private readonly access: AccessService,
     private readonly requests: AccessRequestsRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly links: WorkspaceLinks,
     private readonly users: UsersRepository,
     private readonly grants: MemberGrants,
     private readonly customRoles: CustomRolesRepository,
@@ -250,7 +252,7 @@ export class AccessRequestsService {
       if (!ownerContact || !workspace) {
         throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no owner to ask`);
       }
-      const reviewUrl = `${this.env.ADMIN_ORIGIN}/workspaces/${scope.workspaceId.toHexString()}/members?request=${request._id.toHexString()}`;
+      const reviewUrl = `${this.links.originFor(workspace)}/workspaces/${scope.workspaceId.toHexString()}/members?request=${request._id.toHexString()}`;
       return {
         to: [ownerContact.email],
         ...accessRequestEmail({
@@ -280,17 +282,19 @@ export class AccessRequestsService {
         this.workspaces.findWorkspace(scope),
         decision.accepted ? this.grants.scopeLine(scope, decision.siteIds) : '',
       ]);
-      if (!requester) {
-        throw new Error(`Member ${requesterId.toHexString()} has no account`);
+      if (!requester || !workspace) {
+        throw new Error(
+          `Member ${requesterId.toHexString()} or workspace ${scope.workspaceId.toHexString()} is gone`,
+        );
       }
       return {
         to: [requester.email],
         ...accessDecisionEmail({
-          workspaceName: workspace?.name ?? '',
+          workspaceName: workspace.name,
           accepted: decision.accepted,
           roleLabel: decision.accepted ? decision.roleLabel : '',
           scope: scopeLine,
-          openUrl: `${this.env.ADMIN_ORIGIN}/`,
+          openUrl: `${this.links.originFor(workspace)}/`,
         }),
       };
     });

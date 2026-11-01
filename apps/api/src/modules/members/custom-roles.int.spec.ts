@@ -137,7 +137,11 @@ describe('custom roles (ADR-024)', () => {
     expect(t.emails.to(member.email).at(-1)?.text).toContain(LEAD.name);
     expect(member.me.memberships).toEqual([
       {
-        workspace: { id: workspaceId, name: expect.any(String) as string },
+        workspace: {
+          id: workspaceId,
+          name: expect.any(String) as string,
+          slug: expect.stringMatching(/^[a-z0-9][a-z0-9-]+[a-z0-9]$/) as string,
+        },
         role: {
           customRoleId: role.id,
           name: LEAD.name,
