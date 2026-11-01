@@ -26,6 +26,7 @@ import {
   SettingsIcon,
   Switch,
 } from '@plp/ui';
+import { useId } from 'react';
 import { isFieldHidden, listItemsOf } from './content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from './editor-context';
 import { FieldControl } from './fields/FieldControl';
@@ -71,6 +72,7 @@ function variantBlocker(
 
 function LayoutGroup({ section }: { section: SectionInstance }) {
   const store = useEditorStoreApi();
+  const blockerId = useId();
   const themePresetId = useEditor((state) => state.site.themePresetId);
   const definition = getSectionDefinition(section.type);
   const schemes = themePresets[themePresetId].schemes;
@@ -91,7 +93,7 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
                   type="button"
                   aria-pressed={variant.id === section.variant}
                   aria-disabled={blocked ? true : undefined}
-                  aria-describedby={blocked ? `variant-blocker-${variant.id}` : undefined}
+                  aria-describedby={blocked ? `${blockerId}-${variant.id}` : undefined}
                   className={styles.variant}
                   title={variant.description}
                   onClick={() => {
@@ -109,7 +111,7 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
           {definition.variants.map((variant, index) => {
             const blocker = blockers[index];
             return blocker === null || blocker === undefined ? null : (
-              <p key={variant.id} id={`variant-blocker-${variant.id}`} className={styles.help}>
+              <p key={variant.id} id={`${blockerId}-${variant.id}`} className={styles.help}>
                 {blocker}
               </p>
             );
