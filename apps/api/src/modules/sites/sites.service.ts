@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Permission, Site, SiteListResponse, SubdomainAvailability } from '@plp/contracts';
-import { type Env, siteOrigin } from '../../config/env.js';
+import { customDomainOrigin, type Env, siteOrigin } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { notFound } from '../../shared/errors.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -83,7 +83,18 @@ export class SitesService {
     return siteOrigin(this.env, site.subdomain);
   }
 
+  /**
+   * Where the site's pages live for visitors and search engines (ADR-022): its primary custom
+   * domain, or the default domain. Canonical URLs, the sitemap and live links use it; previews
+   * stay on the default domain.
+   */
+  publicOrigin(site: Pick<SiteRecord, 'subdomain' | 'primaryDomain'>): string {
+    return site.primaryDomain
+      ? customDomainOrigin(this.env, site.primaryDomain.hostname)
+      : this.defaultOrigin(site);
+  }
+
   toDto(site: SiteRecord): Site {
-    return toSiteDto(site, this.defaultOrigin(site));
+    return toSiteDto(site, this.defaultOrigin(site), this.publicOrigin(site));
   }
 }

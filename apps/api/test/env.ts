@@ -30,6 +30,10 @@ export function testEnvInput(
     S3_ACCESS_KEY_ID: process.env['S3_ACCESS_KEY_ID'] ?? 'plp-dev-access',
     S3_SECRET_ACCESS_KEY: process.env['S3_SECRET_ACCESS_KEY'] ?? 'plp-dev-secret',
     S3_PUBLIC_BASE_URL: process.env['S3_PUBLIC_BASE_URL'] ?? 'http://localhost:9100/plp-assets',
+    // Custom domains (ADR-022): checks run when a test asks, against `t.dns` and `t.tls`.
+    CUSTOM_DOMAIN_IPV4: '203.0.113.10',
+    DOMAIN_TLS_CHECK: 'on',
+    DOMAIN_MONITOR_INTERVAL_MS: '0',
   };
   const merged: Record<string, string | undefined> = { ...base };
   for (const [key, value] of Object.entries(overrides)) {

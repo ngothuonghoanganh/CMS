@@ -5,7 +5,8 @@ import {
   type RetentionMonths,
 } from '@plp/contracts';
 import { leadFormContentSchema, leadFormSectionOf } from '@plp/sections/schema';
-import { type Env, siteOrigin } from '../../config/env.js';
+import type { Env } from '../../config/env.js';
+import { SiteHosts } from '../domains/site-hosts.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -69,6 +70,7 @@ export class LeadIntakeService {
     private readonly leads: LeadsRepository,
     private readonly limits: LeadLimitsRepository,
     private readonly notifier: LeadNotifier,
+    private readonly siteHosts: SiteHosts,
   ) {
     this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
   }
@@ -118,7 +120,7 @@ export class LeadIntakeService {
         },
         source: normalizeLeadSource({
           ...input.source,
-          siteHost: new URL(siteOrigin(this.env, site.subdomain)).host,
+          siteHosts: await this.siteHosts.of(site),
         }),
         device: deviceFromUserAgent(client.userAgent),
         spam: { suspected: spam, reasons },

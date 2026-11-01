@@ -1,9 +1,11 @@
 import { PAGE_VIEW_MAX_BYTES, pageViewSchema } from '@plp/contracts';
 import { rendererEnv } from '../../env';
 import { clientAddress } from '../../lib/client-address';
-import { requestHost, subdomainFromHeaders } from '../../lib/host';
+import { requestHost } from '../../lib/host';
 import { relayPageView } from '../../lib/page-view-relay';
+import { getHostSite } from '../../lib/public-api';
 import { readBodyWithin } from '../../lib/request-body';
+import { subdomainForRequest } from '../../lib/request-site';
 import { isCrossSite } from '../../lib/same-site';
 
 // `/_e` (ADR-019): the folder is "%5Fe" because "_e" would be a private folder. Response headers
@@ -27,7 +29,14 @@ function parseView(raw: string): unknown {
  */
 export async function POST(request: Request): Promise<Response> {
   const env = rendererEnv();
-  const subdomain = subdomainFromHeaders(request.headers, env);
+  let subdomain: string | null;
+  try {
+    // A custom domain names its site through the API (ADR-022).
+    subdomain = await subdomainForRequest(request.headers, env, getHostSite);
+  } catch (error) {
+    console.error('Host lookup failed; the page view is not counted', error);
+    return NO_CONTENT.clone();
+  }
   if (subdomain === null || isCrossSite(request, requestHost(request.headers, env.TRUST_PROXY))) {
     return NO_CONTENT.clone();
   }

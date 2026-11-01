@@ -34,6 +34,14 @@ import {
   dataRequestListQuerySchema,
   dataRequestListResponseSchema,
 } from './data-request.js';
+import {
+  addDomainRequestSchema,
+  domainListResponseSchema,
+  domainSchema,
+  hostSiteResponseSchema,
+  setPrimaryDomainRequestSchema,
+  siteAddressResponseSchema,
+} from './domains.js';
 import { healthResponseSchema } from './health.js';
 import { publicLeadRequestSchema, publicLeadResponseSchema } from './lead.js';
 import {
@@ -354,6 +362,45 @@ export const endpoints = {
     request: updateSiteRequestSchema,
     query: null,
     response: siteSchema,
+  }),
+
+  // Custom domains (ADR-022): `domains.manage`
+  listDomains: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/domains`,
+    request: null,
+    query: null,
+    response: domainListResponseSchema,
+  }),
+  addDomain: endpoint({
+    method: 'POST',
+    path: (siteId: string) => `/sites/${e(siteId)}/domains`,
+    request: addDomainRequestSchema,
+    query: null,
+    response: domainSchema,
+  }),
+  /** "Kiểm tra ngay": checks the DNS (and HTTPS) of the domain now. */
+  checkDomain: endpoint({
+    method: 'POST',
+    path: (siteId: string, domainId: string) => `/sites/${e(siteId)}/domains/${e(domainId)}/check`,
+    request: null,
+    query: null,
+    response: domainSchema,
+  }),
+  removeDomain: endpoint({
+    method: 'DELETE',
+    path: (siteId: string, domainId: string) => `/sites/${e(siteId)}/domains/${e(domainId)}`,
+    request: null,
+    query: null,
+    response: null,
+  }),
+  /** The primary address: an active custom domain, or null for the default one. */
+  setPrimaryDomain: endpoint({
+    method: 'PUT',
+    path: (siteId: string) => `/sites/${e(siteId)}/primary-domain`,
+    request: setPrimaryDomainRequestSchema,
+    query: null,
+    response: domainListResponseSchema,
   }),
 
   // Personal data and consent (ADR-017): every member reads, `privacy.manage` writes (ADR-020)
@@ -752,6 +799,21 @@ export const endpoints = {
   }),
 
   // Public delivery (renderer only; no session)
+  /** The site a custom domain serves; 404 unless verified and pointing here (ADR-022). */
+  publicHostSite: endpoint({
+    method: 'GET',
+    path: (host: string) => `/public/hosts/${e(host)}`,
+    request: null,
+    query: null,
+    response: hostSiteResponseSchema,
+  }),
+  publicSiteAddress: endpoint({
+    method: 'GET',
+    path: (subdomain: string) => `/public/sites/${e(subdomain)}/address`,
+    request: null,
+    query: null,
+    response: siteAddressResponseSchema,
+  }),
   publicResolve: endpoint({
     method: 'GET',
     path: (subdomain: string) => `/public/sites/${e(subdomain)}/resolve`,

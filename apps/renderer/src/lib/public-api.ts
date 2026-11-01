@@ -167,3 +167,53 @@ export async function getPreviewStatus(token: string): Promise<PublicPreviewStat
     cache: 'no-store',
   });
 }
+
+/** "No site at this custom domain" is kept a minute: a domain that starts serving shows up soon. */
+const UNKNOWN_HOST_CACHE_LIFE = { stale: 30, revalidate: 60, expire: 60 } as const;
+
+/**
+ * The subdomain of the site a custom domain serves; null when it serves none (ADR-022). Asked by
+ * the proxy on every request to a custom domain, so never cached, like `getPathStatus`.
+ */
+export async function lookupHostSite(hostname: string): Promise<string | null> {
+  const endpoint = endpoints.publicHostSite;
+  const found = await fetchPublicJson({
+    baseUrl: rendererEnv().API_PUBLIC_URL,
+    path: endpoint.path(hostname),
+    schema: endpoint.response,
+    label: 'publicHostSite',
+    timeoutMs: CHECK_TIMEOUT_MS,
+    cache: 'no-store',
+  });
+  return found?.subdomain ?? null;
+}
+
+/**
+ * The same lookup, cached under the site's tag for the routes the proxy does not run for (the
+ * lead form, page views, the SEO files): a domain that moves or stops serving revalidates it.
+ */
+export async function getHostSite(hostname: string): Promise<string | null> {
+  return answerOf('publicHostSite', await cachedHostSite(hostname));
+}
+
+async function cachedHostSite(hostname: string): Promise<CachedLookup<string | null>> {
+  'use cache';
+  const lookup = await lookupForCache('publicHostSite', async () => {
+    const endpoint = endpoints.publicHostSite;
+    const found = await fetchPublicJson({
+      baseUrl: rendererEnv().API_PUBLIC_URL,
+      path: endpoint.path(hostname),
+      schema: endpoint.response,
+      label: 'publicHostSite',
+      timeoutMs: LOOKUP_TIMEOUT_MS,
+    });
+    return found?.subdomain ?? null;
+  });
+  if (lookup.kind === 'answer' && lookup.value !== null) {
+    cacheTag(siteCacheTag(lookup.value));
+    cacheLife(SITE_CACHE_LIFE);
+  } else {
+    cacheLife(lookup.kind === 'answer' ? UNKNOWN_HOST_CACHE_LIFE : UNAVAILABLE_CACHE_LIFE);
+  }
+  return lookup;
+}

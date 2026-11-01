@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { type PageView, vnDayOf } from '@plp/contracts';
-import { type Env, siteOrigin } from '../../config/env.js';
+import type { Env } from '../../config/env.js';
+import { SiteHosts } from '../domains/site-hosts.js';
 import { InjectEnv } from '../../shared/env.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import { addressKeySecret } from '../../shared/renderer-channel/address-key.js';
@@ -34,6 +35,7 @@ export class PageViewCollector {
     private readonly limits: LeadLimitsRepository,
     private readonly analytics: AnalyticsRepository,
     private readonly sourceCap: SourceCapRegistry,
+    private readonly siteHosts: SiteHosts,
   ) {
     this.addressSecret = addressKeySecret(env.RENDERER_API_SECRET);
     this.visitorSecret = visitorHashSecret(env.RENDERER_API_SECRET);
@@ -66,7 +68,7 @@ export class PageViewCollector {
     const firstSightings = await this.analytics.markSeen(site._id, page._id, day, hash);
     const source = normalizeLeadSource({
       ...view.source,
-      siteHost: new URL(siteOrigin(this.env, site.subdomain)).host,
+      siteHosts: await this.siteHosts.of(site),
     });
     const pair = await this.sourceCap.pairFor(
       site._id.toHexString(),

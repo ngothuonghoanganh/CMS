@@ -181,6 +181,29 @@ const ROWS: Row[] = [
         confirmName: workspaceName,
       }),
   },
+  // Custom domains (board 13, ADR-022)
+  {
+    action: 'Xem tên miền',
+    permission: 'domains.manage',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/domains`),
+  },
+  {
+    action: 'Kết nối tên miền riêng',
+    permission: 'domains.manage',
+    scope: 'site',
+    status: 201,
+    call: (client, { site }) =>
+      client.post(`/sites/${site.id}/domains`, { hostname: `go.${site.subdomain}.vn` }),
+  },
+  {
+    action: 'Đặt địa chỉ chính',
+    permission: 'domains.manage',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.put(`/sites/${site.id}/primary-domain`, { domainId: null }),
+  },
   // Pages and drafts
   {
     action: 'Xem danh sách trang',
@@ -716,13 +739,16 @@ describe('the six roles on every endpoint', () => {
         .find({ workspaceId: new Types.ObjectId(workspaceId) })
         .sort({ _id: 1 })
         .toArray();
-    const [activity, limits, memberships, invitations, accessRequests] = await Promise.all([
-      t.connection.collection('activity').countDocuments({ siteId }),
-      t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
-      ofWorkspace('memberships'),
-      ofWorkspace('invitations'),
-      ofWorkspace('access_requests'),
-    ]);
+    const [activity, limits, memberships, invitations, accessRequests, domains] = await Promise.all(
+      [
+        t.connection.collection('activity').countDocuments({ siteId }),
+        t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
+        ofWorkspace('memberships'),
+        ofWorkspace('invitations'),
+        ofWorkspace('access_requests'),
+        collection('domains'),
+      ],
+    );
     return JSON.stringify({
       siteRecord,
       sites,
@@ -738,6 +764,7 @@ describe('the six roles on every endpoint', () => {
       memberships,
       invitations,
       accessRequests,
+      domains,
     });
   }
 

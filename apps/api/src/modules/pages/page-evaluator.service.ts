@@ -111,7 +111,7 @@ export class PageEvaluator {
       ...[...pointerEvents.values()].map((event) => event.actorId),
     ]);
     const existingAssetIds = new Set(assets.keys());
-    const origin = this.sites.defaultOrigin(site);
+    const origin = this.sites.publicOrigin(site);
     const presentation = currentSitePresentation(site);
     const capture = currentSiteLeadCapture(site, consent);
     const leadCaptureGaps = siteLeadCaptureGaps(site, consent);

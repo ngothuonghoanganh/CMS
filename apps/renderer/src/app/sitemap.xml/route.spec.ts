@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSitemap } from '../../lib/public-api';
+import { getHostSite, getSitemap } from '../../lib/public-api';
 import { GET as getRobots } from '../robots.txt/route';
 import { GET as getSitemapXml } from './route';
 
-vi.mock('../../lib/public-api', () => ({ getSitemap: vi.fn() }));
+vi.mock('../../lib/public-api', () => ({ getSitemap: vi.fn(), getHostSite: vi.fn() }));
 
 const SITEMAP = {
   origin: 'http://smilecare.localhost:3101',
@@ -29,6 +29,16 @@ afterEach(() => {
 });
 
 describe('GET /sitemap.xml', () => {
+  it('serves the sitemap of the site a custom domain names (ADR-022)', async () => {
+    vi.mocked(getHostSite).mockResolvedValue('smilecare');
+    vi.mocked(getSitemap).mockResolvedValue({ ...SITEMAP, origin: 'https://go.smilecare.vn' });
+    const response = await getSitemapXml(request('/sitemap.xml', 'go.smilecare.vn:3101'));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('<loc>https://go.smilecare.vn/</loc>');
+    expect(getHostSite).toHaveBeenCalledWith('go.smilecare.vn');
+    expect(getSitemap).toHaveBeenCalledWith('smilecare');
+  });
+
   it('serves the XML sitemap of the site addressed by the host', async () => {
     vi.mocked(getSitemap).mockResolvedValue(SITEMAP);
     const response = await getSitemapXml(request('/sitemap.xml', 'smilecare.localhost:3101'));

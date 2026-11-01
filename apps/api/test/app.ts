@@ -7,8 +7,11 @@ import type { DestinationStream } from 'pino';
 import { AppModule } from '../src/app.module.js';
 import { type Env, type EnvInput, parseEnv } from '../src/config/env.js';
 import { configureApp, NEST_APP_OPTIONS } from '../src/configure-app.js';
+import { DomainDns } from '../src/modules/domains/domain-dns.js';
+import { DomainTls } from '../src/modules/domains/domain-tls.js';
 import { EmailSender } from '../src/modules/notifications/email-sender.js';
 import { NOTIFICATION_RETRY_DELAYS } from '../src/modules/notifications/lead-notifier.service.js';
+import { FakeDomainDns, FakeDomainTls } from './domains.js';
 import { RecordingEmailSender } from './email.js';
 import { testEnvInput } from './env.js';
 import { dropDatabase, isolatedMongoUri } from './mongo.js';
@@ -19,6 +22,9 @@ export interface TestApp {
   connection: Connection;
   /** What the API emailed (ADR-018); nothing leaves the test unless `realEmail` is set. */
   emails: RecordingEmailSender;
+  /** The DNS and HTTPS custom domains are checked against (ADR-022). */
+  dns: FakeDomainDns;
+  tls: FakeDomainTls;
   close(): Promise<void>;
 }
 
@@ -45,9 +51,15 @@ export async function createTestApp(
   const mongoUri = isolatedMongoUri(prefix);
   const env = parseEnv(testEnvInput({ ...options.env, MONGODB_URI: mongoUri }));
   const emails = new RecordingEmailSender();
+  const dns = new FakeDomainDns();
+  const tls = new FakeDomainTls();
   let builder = Test.createTestingModule({
     imports: [AppModule.forRoot(env, options.logDestination)],
-  });
+  })
+    .overrideProvider(DomainDns)
+    .useValue(dns)
+    .overrideProvider(DomainTls)
+    .useValue(tls);
   if (options.realEmail !== true) {
     builder = builder.overrideProvider(EmailSender).useValue(emails);
   }
@@ -73,6 +85,8 @@ export async function createTestApp(
     env,
     connection,
     emails,
+    dns,
+    tls,
     async close() {
       await app.close();
       await dropDatabase(mongoUri);

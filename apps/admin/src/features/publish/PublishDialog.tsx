@@ -64,7 +64,7 @@ const QR_SIZE = 84;
 
 export interface PublishDialogProps extends PublishDialogRenderProps {
   /** The page's site: its default origin is where the page goes live. */
-  site: Pick<Site, 'id' | 'defaultOrigin'>;
+  site: Pick<Site, 'id' | 'publicOrigin'>;
 }
 
 /** The draft, the live pointer or the site settings changed since the dialog loaded them. */
@@ -469,7 +469,7 @@ function PublishSession({
       title={publishTitle(page)}
       description={
         <span className={styles.target}>
-          lên <span className={styles.url}>{targetAddress(site.defaultOrigin, page.slug)}</span>
+          lên <span className={styles.url}>{targetAddress(site.publicOrigin, page.slug)}</span>
         </span>
       }
       footerStart={publishFooterNote(page)}

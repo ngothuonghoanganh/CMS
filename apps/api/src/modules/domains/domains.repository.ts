@@ -1,0 +1,169 @@
+import { Injectable } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { CUSTOM_DOMAINS_MAX } from '@plp/contracts';
+import type { Model } from 'mongoose';
+import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
+import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
+import {
+  DOMAIN_MODEL,
+  type DomainCheck,
+  type DomainRecord,
+  DOMAINS_SITE_HOSTNAME_INDEX,
+} from './domain.schema.js';
+
+/** What a check writes back. */
+export interface CheckOutcome {
+  check: DomainCheck;
+  activeSince: Date | null;
+  lostSince: Date | null;
+  nextCheckAt: Date | null;
+}
+
+@Injectable()
+export class DomainsRepository {
+  constructor(@InjectModel(DOMAIN_MODEL) private readonly domains: Model<DomainRecord>) {}
+
+  /** The site's domains, oldest first; at most `CUSTOM_DOMAINS_MAX`. */
+  listForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<DomainRecord[]> {
+    return this.domains
+      .find({ workspaceId: scope.workspaceId, siteId })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(CUSTOM_DOMAINS_MAX + 1)
+      .lean<DomainRecord[]>()
+      .exec();
+  }
+
+  countForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
+    return this.domains.countDocuments({ workspaceId: scope.workspaceId, siteId }).exec();
+  }
+
+  findForSite(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId): Promise<DomainRecord | null> {
+    return this.domains
+      .findOne({ _id: id, workspaceId: scope.workspaceId, siteId })
+      .lean<DomainRecord>()
+      .exec();
+  }
+
+  /** Stores a new domain; false when the site has this hostname already. */
+  async insert(scope: WorkspaceScope, domain: DomainRecord): Promise<boolean> {
+    if (!domain.workspaceId.equals(scope.workspaceId)) {
+      throw new Error('A domain must belong to the workspace of its scope');
+    }
+    try {
+      await this.domains.create([domain]);
+      return true;
+    } catch (error) {
+      if (isDuplicateKeyError(error, DOMAINS_SITE_HOSTNAME_INDEX)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async remove(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId): Promise<boolean> {
+    const result = await this.domains
+      .deleteOne({ _id: id, workspaceId: scope.workspaceId, siteId })
+      .exec();
+    return result.deletedCount === 1;
+  }
+
+  /** Restarts the quick automatic checks, e.g. after "Kiểm tra ngay". */
+  async rewatch(id: ObjectId, now: Date): Promise<void> {
+    await this.domains.updateOne({ _id: id }, { $set: { watchSince: now } }).exec();
+  }
+
+  /**
+   * Which of `hostnames` another site owns (verified). Only the names come back: who owns them is
+   * never told (board 14).
+   */
+  async ownedElsewhere(hostnames: readonly string[], siteId: ObjectId): Promise<Set<string>> {
+    if (hostnames.length === 0) {
+      return new Set();
+    }
+    const owners = await this.domains
+      .find(
+        {
+          hostname: { $in: [...hostnames] },
+          verifiedAt: { $type: 'date' },
+          siteId: { $ne: siteId },
+        },
+        { hostname: 1 },
+      )
+      .lean<Pick<DomainRecord, 'hostname'>[]>()
+      .exec();
+    return new Set(owners.map((owner) => owner.hostname));
+  }
+
+  // Unscoped: the checks of every site run in the background (ADR-022).
+
+  findById(id: ObjectId): Promise<DomainRecord | null> {
+    return this.domains.findById(id).lean<DomainRecord>().exec();
+  }
+
+  /**
+   * Takes the domain due first, if any, for this instance: its next check moves `leaseMs` ahead,
+   * so another instance does not take it meanwhile.
+   */
+  claimDue(now: Date, leaseMs: number): Promise<DomainRecord | null> {
+    return this.domains
+      .findOneAndUpdate(
+        { nextCheckAt: { $lte: now } },
+        { $set: { nextCheckAt: new Date(now.getTime() + leaseMs) } },
+        { sort: { nextCheckAt: 1 }, new: true },
+      )
+      .lean<DomainRecord>()
+      .exec();
+  }
+
+  async saveCheck(id: ObjectId, outcome: CheckOutcome): Promise<DomainRecord | null> {
+    return this.domains
+      .findOneAndUpdate({ _id: id }, { $set: outcome }, { new: true })
+      .lean<DomainRecord>()
+      .exec();
+  }
+
+  /** The verified owner of a hostname, if any. */
+  findOwner(hostname: string, tx?: Tx): Promise<DomainRecord | null> {
+    return this.domains
+      .findOne({ hostname, verifiedAt: { $type: 'date' } })
+      .session(tx ?? null)
+      .lean<DomainRecord>()
+      .exec();
+  }
+
+  /** Removes the previous owner of a hostname in the transaction that moves it. */
+  async removeInTx(id: ObjectId, tx: Tx): Promise<void> {
+    await this.domains.deleteOne({ _id: id }, { session: tx }).exec();
+  }
+
+  /**
+   * Makes the record the hostname's owner, in the caller's transaction. The partial unique index
+   * on verified hostnames refuses a second owner, also when two verifications race.
+   */
+  async verify(id: ObjectId, now: Date, tx: Tx): Promise<boolean> {
+    const result = await this.domains
+      .updateOne({ _id: id, verifiedAt: null }, { $set: { verifiedAt: now } }, { session: tx })
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  /** A domain that serves pages: verified and pointing here (ADR-022). */
+  findServing(hostname: string): Promise<DomainRecord | null> {
+    return this.domains
+      .findOne({ hostname, verifiedAt: { $type: 'date' }, 'check.routing': 'ok' })
+      .lean<DomainRecord>()
+      .exec();
+  }
+
+  /** Hostnames a site answers on besides its default one, for same-site referrers. */
+  async servingHostnames(siteId: ObjectId): Promise<string[]> {
+    const domains = await this.domains
+      .find({ siteId, verifiedAt: { $type: 'date' } }, { hostname: 1 })
+      .limit(CUSTOM_DOMAINS_MAX)
+      .lean<Pick<DomainRecord, 'hostname'>[]>()
+      .exec();
+    return domains.map((domain) => domain.hostname);
+  }
+}

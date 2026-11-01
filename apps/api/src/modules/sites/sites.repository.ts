@@ -11,6 +11,7 @@ import {
   type LeadRecipientRecord,
   leadRecipientsOf,
   SITE_MODEL,
+  type SitePrimaryDomain,
   type SitePrivacyRecord,
   type SiteRecord,
   SITES_SUBDOMAIN_INDEX,
@@ -354,6 +355,46 @@ export class SitesRepository {
       .lean<Pick<SiteRecord, 'privacy'>>()
       .exec();
     return site === null ? null : sitePrivacyOf(site);
+  }
+
+  /** Sets or clears the primary custom domain (ADR-022); null when the site is gone. */
+  setPrimaryDomain(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    primary: SitePrimaryDomain | null,
+  ): Promise<SiteRecord | null> {
+    return this.sites
+      .findOneAndUpdate(
+        { _id: siteId, workspaceId: scope.workspaceId },
+        { $set: { primaryDomain: primary, updatedAt: new Date() } },
+        { new: true },
+      )
+      .lean<SiteRecord>()
+      .exec();
+  }
+
+  /**
+   * Clears a primary domain that moved to another site, in the transaction of the move. Unscoped:
+   * the site losing it is not the caller's (ADR-022).
+   */
+  async clearPrimaryDomain(siteId: ObjectId, domainId: ObjectId, tx: Tx): Promise<void> {
+    await this.sites
+      .updateOne(
+        { _id: siteId, 'primaryDomain.domainId': domainId },
+        { $set: { primaryDomain: null, updatedAt: new Date() } },
+        { session: tx },
+      )
+      .exec();
+  }
+
+  /** Unscoped, for the domain checks: the site's subdomain, to revalidate it. */
+  findSubdomain(
+    siteId: ObjectId,
+  ): Promise<Pick<SiteRecord, '_id' | 'subdomain' | 'name' | 'primaryDomain'> | null> {
+    return this.sites
+      .findById(siteId, { subdomain: 1, name: 1, primaryDomain: 1 })
+      .lean<Pick<SiteRecord, '_id' | 'subdomain' | 'name' | 'primaryDomain'>>()
+      .exec();
   }
 
   /** Unscoped lookup for public delivery, which resolves a site from the request host. */

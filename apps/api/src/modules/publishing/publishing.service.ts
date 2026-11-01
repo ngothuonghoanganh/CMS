@@ -216,7 +216,7 @@ export class PublishingService {
           name: user.name,
         }),
         page: summary,
-        liveUrl: liveUrlOf(this.sites.defaultOrigin(site), committed.release.slug),
+        liveUrl: liveUrlOf(this.sites.publicOrigin(site), committed.release.slug),
         revalidation,
       },
       replayed: false,
@@ -506,7 +506,7 @@ export class PublishingService {
     return {
       release: toReleaseSummary(release, userRef(users, release.createdBy)),
       page: summary,
-      liveUrl: liveUrlOf(this.sites.defaultOrigin(site), release.slug),
+      liveUrl: liveUrlOf(this.sites.publicOrigin(site), release.slug),
       revalidation: published.data.revalidationFailed ? 'failed' : 'ok',
     };
   }

@@ -281,7 +281,7 @@ export function Sidebar({
                 <SiteTile site={site} />
                 <span className={styles.stack}>
                   <span className={styles.siteName}>{site.name}</span>{' '}
-                  <span className={styles.siteHost}>{hostOf(site.defaultOrigin)}</span>
+                  <span className={styles.siteHost}>{hostOf(site.publicOrigin)}</span>
                 </span>
                 <VisuallyHidden>, đổi site</VisuallyHidden>
                 <span className={styles.chevron}>
@@ -302,7 +302,7 @@ export function Sidebar({
               {sites.map((item) => (
                 <DropdownMenuRadioItem key={item.id} value={item.id}>
                   <span className={styles.menuSiteName}>{item.name}</span>
-                  <span className={styles.menuSiteHost}>{hostOf(item.defaultOrigin)}</span>
+                  <span className={styles.menuSiteHost}>{hostOf(item.publicOrigin)}</span>
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

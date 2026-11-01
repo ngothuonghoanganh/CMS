@@ -21,3 +21,6 @@ playwright-report
 
 # Screens captured by `pnpm --filter @plp/e2e visual:capture` (ARCHITECTURE §5)
 tests/e2e/visual-captures/
+
+# DNS answers of E2E runs for custom domains (tests/e2e/support/dns.ts)
+tests/e2e/.dns/

@@ -40,6 +40,7 @@ import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SitesService } from '../sites/sites.service.js';
+import { SiteHosts } from '../domains/site-hosts.js';
 
 export const PUBLIC_PAGE_NOT_FOUND = 'Không tìm thấy trang';
 
@@ -114,6 +115,7 @@ export class PublicDeliveryService {
     private readonly previews: PreviewTokens,
     private readonly consentVersions: ConsentVersionsRepository,
     private readonly activity: ActivityRepository,
+    private readonly siteHosts: SiteHosts,
   ) {}
 
   /**
@@ -151,13 +153,16 @@ export class PublicDeliveryService {
   async pathStatus(subdomain: string, path: string): Promise<PathStatusResponse> {
     const site = await this.siteOrNotFound(subdomain);
     const slug = slugFromPath(path);
-    const live = await this.pages.findPublicLiveBySlug(site._id, slug);
+    const [live, primaryHost] = await Promise.all([
+      this.pages.findPublicLiveBySlug(site._id, slug),
+      this.siteHosts.activePrimaryHost(site),
+    ]);
     if (live) {
-      return { kind: 'page', releaseId: live.publishedReleaseId.toHexString() };
+      return { kind: 'page', releaseId: live.publishedReleaseId.toHexString(), primaryHost };
     }
     const location = await this.redirectLocation(site, slug);
     if (location !== null) {
-      return { kind: 'redirect', location };
+      return { kind: 'redirect', location, primaryHost };
     }
     throw notFound(PUBLIC_PAGE_NOT_FOUND);
   }
@@ -215,7 +220,7 @@ export class PublicDeliveryService {
           : [{ path: livePath(page.publishedSlug), lastModified: wentLive.toISOString() }];
       })
       .sort((a, b) => a.path.localeCompare(b.path));
-    return sitemapResponseSchema.parse({ origin: this.sitesService.defaultOrigin(site), entries });
+    return sitemapResponseSchema.parse({ origin: this.sitesService.publicOrigin(site), entries });
   }
 
   /**
@@ -340,7 +345,7 @@ export class PublicDeliveryService {
         height: asset.height,
       };
     }
-    const origin = this.sitesService.defaultOrigin(site);
+    const origin = this.sitesService.publicOrigin(site);
     const logoId = presentation.logoAssetId;
     return {
       site: {

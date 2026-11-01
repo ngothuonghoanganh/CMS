@@ -1,7 +1,7 @@
 import type { SitemapResponse } from '@plp/contracts';
 import { rendererEnv } from '../env';
-import { subdomainFromHeaders } from './host';
-import { getSitemap } from './public-api';
+import { getHostSite, getSitemap } from './public-api';
+import { subdomainForRequest } from './request-site';
 import { notFoundText, unavailableText } from './responses';
 
 /**
@@ -14,12 +14,12 @@ export async function answerWithSitemap(
   request: Request,
   render: (sitemap: SitemapResponse) => Response,
 ): Promise<Response> {
-  const subdomain = subdomainFromHeaders(request.headers, rendererEnv());
-  if (subdomain === null) {
-    return notFoundText();
-  }
   let sitemap: SitemapResponse | null;
   try {
+    const subdomain = await subdomainForRequest(request.headers, rendererEnv(), getHostSite);
+    if (subdomain === null) {
+      return notFoundText();
+    }
     sitemap = await getSitemap(subdomain);
   } catch (error) {
     console.error('Sitemap lookup failed; answering 503', error);

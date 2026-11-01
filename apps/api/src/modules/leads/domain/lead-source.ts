@@ -5,8 +5,11 @@ export interface LeadSourceInput {
   utmMedium: string | null;
   utmCampaign: string | null;
   referrer: string | null;
-  /** Host of the site itself: navigating between its pages is not a referral. */
-  siteHost: string;
+  /**
+   * Hosts of the site itself, its default address and custom domains (ADR-022): navigating
+   * between its pages is not a referral.
+   */
+  siteHosts: readonly string[];
 }
 
 const VALUE_MAX = 40;
@@ -100,7 +103,10 @@ export function normalizeLeadSource(input: LeadSourceInput): LeadSource {
     };
   }
   const host = referrerHost(input.referrer);
-  if (host === null || host === bareHost(input.siteHost.split(':')[0] ?? '')) {
+  if (
+    host === null ||
+    input.siteHosts.some((siteHost) => host === bareHost(siteHost.split(':')[0] ?? ''))
+  ) {
     return { ...DIRECT_LEAD_SOURCE, campaign: null };
   }
   const engine = searchEngine(host);

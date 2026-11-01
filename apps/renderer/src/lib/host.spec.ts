@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { requestHost, subdomainFromHeaders, subdomainFromHost } from './host';
+import {
+  hostnameOf,
+  hostTarget,
+  requestHost,
+  subdomainFromHeaders,
+  subdomainFromHost,
+} from './host';
 
 describe('subdomainFromHost', () => {
   describe('with a port in BASE_DOMAIN (development)', () => {
@@ -95,5 +101,40 @@ describe('subdomainFromHeaders', () => {
         env,
       ),
     ).toBeNull();
+  });
+});
+
+describe('hostTarget (ADR-022)', () => {
+  it('reads a default address, or a custom domain on the same port', () => {
+    expect(hostTarget('smilecare.payload.site', 'payload.site')).toEqual({
+      kind: 'default',
+      subdomain: 'smilecare',
+    });
+    expect(hostTarget('Go.SmileCare.vn', 'payload.site')).toEqual({
+      kind: 'custom',
+      hostname: 'go.smilecare.vn',
+    });
+    expect(hostTarget('go.smilecare.vn:3101', 'localhost:3101')).toEqual({
+      kind: 'custom',
+      hostname: 'go.smilecare.vn',
+    });
+  });
+
+  it('is nothing for the system’s own names, other ports and junk', () => {
+    for (const host of [
+      null,
+      'payload.site',
+      'a.b.payload.site',
+      'go.smilecare.vn:8080',
+      'localhost',
+      'go_smile.vn',
+    ]) {
+      expect(hostTarget(host, 'payload.site'), String(host)).toBeNull();
+    }
+  });
+
+  it('names the host without its port', () => {
+    expect(hostnameOf('Go.SmileCare.vn:443')).toBe('go.smilecare.vn');
+    expect(hostnameOf(null)).toBeNull();
   });
 });

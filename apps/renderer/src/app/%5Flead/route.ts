@@ -2,11 +2,13 @@ import { LEAD_ROUTE, submissionIdSchema } from '@plp/contracts';
 import { LEAD_SUBMISSION_FIELD } from '@plp/sections/react';
 import { rendererEnv } from '../../env';
 import { clientAddress } from '../../lib/client-address';
-import { requestHost, subdomainFromHeaders } from '../../lib/host';
+import { requestHost } from '../../lib/host';
 import { relayLead, type RelayOutcome } from '../../lib/lead-relay';
 import { checkLeadRequest, leadRequestCandidate, leadSourceFrom } from '../../lib/lead-request';
 import { campaignQuery, leadResultHtml, safeBackPath } from '../../lib/lead-result-page';
+import { getHostSite } from '../../lib/public-api';
 import { readBodyWithin } from '../../lib/request-body';
+import { subdomainForRequest } from '../../lib/request-site';
 import { RETRY_AFTER_SECONDS } from '../../lib/responses';
 import { isCrossSite } from '../../lib/same-site';
 
@@ -135,9 +137,17 @@ function formAnswer(outcome: RelayOutcome, back: BackLink): Response {
 export async function POST(request: Request): Promise<Response> {
   const env = rendererEnv();
   const host = requestHost(request.headers, env.TRUST_PROXY);
-  const subdomain = subdomainFromHeaders(request.headers, env);
   const type = mediaType(request.headers.get('content-type'));
   const fromScript = type === 'application/json';
+  let subdomain: string | null;
+  try {
+    // A custom domain names its site through the API (ADR-022).
+    subdomain = await subdomainForRequest(request.headers, env, getHostSite);
+  } catch (error) {
+    console.error('Host lookup failed; the lead is not taken', error);
+    const failed: RelayOutcome = { kind: 'failed' };
+    return fromScript ? scriptAnswer(failed) : formAnswer(failed, HOME);
+  }
   if (subdomain === null) {
     return fromScript
       ? json({ ok: false, message: SCRIPT_MESSAGES.not_found }, 404)

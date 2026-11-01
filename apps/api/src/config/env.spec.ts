@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEnv, siteOrigin } from './env.js';
+import { baseDomainOf, customDomainOrigin, parseEnv, siteOrigin, tlsCheckEnabled } from './env.js';
 
 const valid = {
   MONGODB_URI: 'mongodb://localhost:27117/plp',
@@ -75,5 +75,29 @@ describe('parseEnv', () => {
 
   it('builds a site origin from the template', () => {
     expect(siteOrigin(parseEnv(valid), 'smilecare')).toBe('http://smilecare.localhost:3101');
+  });
+
+  it('configures custom domains, HTTPS checks on only in production by default (ADR-022)', () => {
+    const env = parseEnv({ ...valid, CUSTOM_DOMAIN_IPV4: '203.0.113.10, 203.0.113.11' });
+    expect(env.CUSTOM_DOMAIN_CNAME_TARGET).toBe('cname.payload.site');
+    expect(env.CUSTOM_DOMAIN_IPV4).toEqual(['203.0.113.10', '203.0.113.11']);
+    expect(env.DOMAIN_MONITOR_INTERVAL_MS).toBe(60_000);
+    expect(customDomainOrigin(env, 'go.smilecare.vn')).toBe('https://go.smilecare.vn');
+    expect(baseDomainOf(env)).toBe('localhost:3101'.split(':')[0]);
+    expect(tlsCheckEnabled(env)).toBe(false);
+    expect(tlsCheckEnabled(parseEnv({ ...valid, NODE_ENV: 'production' }))).toBe(true);
+    expect(tlsCheckEnabled(parseEnv({ ...valid, DOMAIN_TLS_CHECK: 'on' }))).toBe(true);
+    expect(() => parseEnv({ ...valid, CUSTOM_DOMAIN_IPV4: 'not-an-ip' })).toThrow(
+      /CUSTOM_DOMAIN_IPV4/,
+    );
+  });
+
+  it('answers DNS from a file only outside production', () => {
+    expect(
+      parseEnv({ ...valid, DOMAIN_DNS_ZONE_FILE: '/tmp/zone.json' }).DOMAIN_DNS_ZONE_FILE,
+    ).toBe('/tmp/zone.json');
+    expect(() =>
+      parseEnv({ ...valid, NODE_ENV: 'production', DOMAIN_DNS_ZONE_FILE: '/tmp/zone.json' }),
+    ).toThrow(/DOMAIN_DNS_ZONE_FILE/);
   });
 });

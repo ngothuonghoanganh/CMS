@@ -1,0 +1,132 @@
+import { endpoints } from '@plp/contracts';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../lib/api';
+import { siteFixture } from '../dashboard/test-fixtures';
+import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { DomainsScreen } from './DomainsScreen';
+import { domainFixture, domainList } from './test-fixtures';
+
+const { router } = vi.hoisted(() => ({
+  router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
+}));
+
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
+
+vi.mock(import('../../lib/api'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  api: vi.fn(),
+}));
+
+const apiMock = vi.mocked(api);
+const LOADED_AT = Date.parse('2026-11-01T03:00:00.000Z');
+const site = siteFixture();
+
+const primary = domainFixture({ primary: true });
+const apex = domainFixture({
+  id: '64b0000000000000000000f2',
+  hostname: 'smilecare.vn',
+  kind: 'apex',
+});
+const broken = domainFixture({
+  id: '64b0000000000000000000f3',
+  hostname: 'uudai.smilecare.vn',
+  status: 'misconfigured',
+  httpsValidUntil: null,
+  activeSince: null,
+});
+
+function renderScreen(list = domainList([primary, apex, broken], primary.id)) {
+  apiMock.mockResolvedValue(list);
+  return renderWithProviders(<DomainsScreen site={site} initial={list} loadedAt={LOADED_AT} />);
+}
+
+beforeEach(() => {
+  apiMock.mockReset();
+  router.refresh.mockReset();
+});
+
+describe('DomainsScreen', () => {
+  it('lists every address with its status, HTTPS and what can be done', () => {
+    renderScreen();
+    expect(screen.getByRole('heading', { name: '4 địa chỉ' })).toBeInTheDocument();
+    const rows = screen
+      .getAllByRole('listitem')
+      .filter((item) => item.closest('ul')?.parentElement?.tagName === 'SECTION');
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveTextContent('go.smilecare.vnĐỊA CHỈ CHÍNH');
+    expect(rows[0]).toHaveTextContent('HTTPS hợp lệ tới 12/01/2027');
+    expect(rows[1]).toHaveTextContent('Đang chuyển hướng → go.smilecare.vn');
+    expect(rows[2]).toHaveTextContent('Cấu hình sai');
+    expect(screen.getByRole('link', { name: 'Sửa cấu hình uudai.smilecare.vn' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/domain/connect?domain=${broken.id}`,
+    );
+    // The primary address cannot be disconnected.
+    expect(screen.queryByRole('button', { name: 'Ngắt kết nối go.smilecare.vn' })).toBeNull();
+    expect(rows[3]).toHaveTextContent('smilecare.payload.siteMẶC ĐỊNH');
+  });
+
+  it('makes an active domain primary after saying what changes', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Đặt smilecare.vn làm địa chỉ chính' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Đặt smilecare.vn làm địa chỉ chính?' });
+    expect(dialog).toHaveTextContent('các địa chỉ khác tự chuyển hướng 301 về đây');
+    apiMock.mockResolvedValueOnce(
+      domainList(
+        [
+          { ...primary, primary: false },
+          { ...apex, primary: true },
+        ],
+        apex.id,
+      ),
+    );
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Đặt smilecare.vn làm địa chỉ chính' }),
+    );
+    expect(lastCallTo(apiMock, endpoints.setPrimaryDomain)).toEqual({
+      args: [site.id],
+      options: { body: { domainId: apex.id } },
+    });
+    expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it('warns when the primary address is lost, and offers the default one meanwhile', async () => {
+    const user = userEvent.setup();
+    renderScreen(
+      domainList(
+        [{ ...primary, status: 'lost', lostSince: '2026-11-01T01:12:00.000Z' }],
+        primary.id,
+      ),
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Địa chỉ chính go.smilecare.vn đang không truy cập được');
+    expect(alert).toHaveTextContent('Các trang vẫn mở được qua smilecare.payload.site');
+    apiMock.mockResolvedValueOnce(domainList([primary], null));
+    await user.click(within(alert).getByRole('button', { name: 'Tạm dùng địa chỉ mặc định' }));
+    expect(lastCallTo(apiMock, endpoints.setPrimaryDomain).options).toEqual({
+      body: { domainId: null },
+    });
+  });
+
+  it('disconnects a domain that is not primary', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Ngắt kết nối uudai.smilecare.vn' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Ngắt kết nối uudai.smilecare.vn?' });
+    apiMock.mockResolvedValueOnce(undefined);
+    await user.click(within(dialog).getByRole('button', { name: 'Ngắt kết nối' }));
+    expect(lastCallTo(apiMock, endpoints.removeDomain).args).toEqual([site.id, broken.id]);
+  });
+
+  it('starts from the default address when there is no custom domain', () => {
+    renderScreen(domainList([]));
+    expect(screen.getByRole('heading', { name: 'Chưa có tên miền riêng' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Kết nối tên miền riêng' })).toHaveAttribute(
+      'href',
+      `/sites/${site.id}/domain/connect`,
+    );
+  });
+});

@@ -78,9 +78,17 @@ export type ResolveResponse = z.infer<typeof resolveResponseSchema>;
  * page's cache key: when the pointer moves, the next request cannot be served the previous
  * release.
  */
+/**
+ * `primaryHost`: the site's active primary custom domain, which other hosts redirect to; null when
+ * the default address is primary or the primary one is not active (ADR-022).
+ */
 export const pathStatusResponseSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('page'), releaseId: idSchema }),
-  z.object({ kind: z.literal('redirect'), location: z.string() }),
+  z.object({ kind: z.literal('page'), releaseId: idSchema, primaryHost: z.string().nullable() }),
+  z.object({
+    kind: z.literal('redirect'),
+    location: z.string(),
+    primaryHost: z.string().nullable(),
+  }),
 ]);
 export type PathStatusResponse = z.infer<typeof pathStatusResponseSchema>;
 

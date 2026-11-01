@@ -70,7 +70,7 @@ export function SiteSummary({
       <Card className={styles.card}>
         <span className={styles.label}>Địa chỉ live</span>
         <div className={styles.hostRow}>
-          <span className={styles.host}>{hostOf(site.defaultOrigin)}</span>
+          <span className={styles.host}>{hostOf(site.publicOrigin)}</span>
           <Badge tone="success" icon={<LockIcon size={12} strokeWidth={2.4} />}>
             Luôn hoạt động
           </Badge>

@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { rendererEnv } from './env';
-import { subdomainFromHeaders } from './lib/host';
+import { hostnameOf, requestHost } from './lib/host';
 import { LIVE_RELEASE_HEADER } from './lib/live-release';
 import { NOT_FOUND_ROUTE, pathGate } from './lib/path-gate';
 import { previewStatusForHost, previewTokenOf } from './lib/preview-gate';
-import { getPathStatus, getPreviewStatus } from './lib/public-api';
+import { getPathStatus, getPreviewStatus, lookupHostSite } from './lib/public-api';
+import { primaryAddressUrl, SITE_HEADER, subdomainForRequest } from './lib/request-site';
 import { unavailablePage } from './lib/responses';
 
 /**
@@ -36,21 +37,35 @@ function notFound(request: NextRequest, headers: Headers): NextResponse {
  * - an old slug is a 308 (see `pathGate`);
  * - when the API cannot answer, a 503 with `Retry-After` (ADR-009). Rendering anyway would only
  *   wait on the same API again, and a page cannot answer 503 itself: Next sends 500.
+ * - a page asked on another host of a site whose primary custom domain is active is a 301 there,
+ *   with its path and query (ADR-022). Previews stay where their link points.
  *
- * A live page also gets the id of its live release, which keys its cached lookup (ADR-009).
+ * A live page also gets the id of its live release, which keys its cached lookup (ADR-009), and
+ * every request the subdomain of its site, custom domains resolved (ADR-022).
  */
 export async function proxy(request: NextRequest): Promise<Response> {
   // Only this proxy may say which release is live: a value sent by the client would let anyone
   // fill the cache with entries under made-up keys.
   const forwarded = new Headers(request.headers);
   forwarded.delete(LIVE_RELEASE_HEADER);
+  forwarded.delete(SITE_HEADER);
   // Next renders in blocking mode (real status codes, head tags in <head>) only for requests that
   // send a User-Agent (`htmlLimitedBots`); any other client would get a streamed 200 shell even
   // when the page then fails.
   if ((forwarded.get('user-agent') ?? '').trim() === '') {
     forwarded.set('user-agent', UNKNOWN_USER_AGENT);
   }
-  const subdomain = subdomainFromHeaders(request.headers, rendererEnv());
+  const env = rendererEnv();
+  let subdomain: string | null;
+  try {
+    subdomain = await subdomainForRequest(request.headers, env, lookupHostSite);
+  } catch (error) {
+    console.error('Host lookup failed; answering 503', error);
+    return unavailablePage({ noindex: false });
+  }
+  if (subdomain !== null) {
+    forwarded.set(SITE_HEADER, subdomain);
+  }
   const token = previewTokenOf(request.nextUrl.pathname);
 
   if (token !== null) {
@@ -74,6 +89,13 @@ export async function proxy(request: NextRequest): Promise<Response> {
     );
     if (decision.kind === 'not_found') {
       return notFound(request, forwarded);
+    }
+    const host = hostnameOf(requestHost(request.headers, env.TRUST_PROXY));
+    if (decision.primaryHost !== null && decision.primaryHost !== host) {
+      return NextResponse.redirect(
+        primaryAddressUrl(decision.primaryHost, request.nextUrl, env),
+        301,
+      );
     }
     if (decision.kind === 'redirect') {
       // Next sends a same-host Location as a relative path, as the page's own redirect does. The

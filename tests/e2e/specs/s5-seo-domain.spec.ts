@@ -245,7 +245,9 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
     expect(overflow).toEqual({ past: 0, sideways: 0 });
   });
 
-  test('the domain screen shows the default domain only', async ({ page }) => {
+  test('the domain screen starts with the default domain as the primary address', async ({
+    page,
+  }) => {
     const { site } = await setUpSite(page.request);
     const host = `${site.subdomain}.localhost:3101`;
     await page.goto(`/sites/${site.id}`);
@@ -255,12 +257,14 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
       .click();
     await expect(page).toHaveURL(new RegExp(`/sites/${site.id}/domain$`));
 
-    const card = page.getByRole('region', { name: 'Tên miền đang dùng' });
-    await expect(card.getByText(host, { exact: true })).toBeVisible();
-    await expect(card.getByText('MẶC ĐỊNH · MIỄN PHÍ')).toBeVisible();
-    await expect(card.getByText('Luôn hoạt động')).toBeVisible();
-    await expect(page.getByText('Kết nối tên miền riêng sẽ có ở phiên bản sau.')).toBeVisible();
-    // Custom domains are out of MVP A (ARCHITECTURE §2.1).
-    await expect(page.getByRole('button', { name: /Thêm tên miền/ })).toHaveCount(0);
+    const addresses = page.getByRole('region', { name: '1 địa chỉ' }).getByRole('listitem');
+    await expect(addresses).toHaveCount(1);
+    await expect(addresses.getByText(host, { exact: true })).toBeVisible();
+    await expect(addresses).toContainText('ĐỊA CHỈ CHÍNH');
+    await expect(addresses).toContainText('MẶC ĐỊNH');
+    await expect(addresses).toContainText('Có sẵn khi tạo site, luôn hoạt động.');
+    // Custom domains came with C3 (ADR-022); c3-domains.spec.ts connects one.
+    await expect(page.getByRole('heading', { name: 'Chưa có tên miền riêng' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Kết nối tên miền riêng' }).first()).toBeVisible();
   });
 });

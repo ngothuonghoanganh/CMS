@@ -185,3 +185,43 @@ export function accessDecisionEmail(input: AccessDecisionEmailInput): EmailConte
     html: layout(title, `${paragraph(body)}${button(input.openUrl, `Mở ${input.workspaceName}`)}`),
   };
 }
+
+export interface DomainEmailInput {
+  hostname: string;
+  siteName: string;
+  /** "Tên miền" of the site in the admin. */
+  domainsUrl: string;
+}
+
+/** The domain serves the site's pages (ADR-022). */
+export function domainActiveEmail(input: DomainEmailInput): EmailContent {
+  const title = `${input.hostname} đã hoạt động`;
+  const body = `Các trang đang live của ${input.siteName} mở được qua ${input.hostname}. Bạn có thể đặt tên miền này làm địa chỉ chính ở mục "Tên miền".`;
+  return {
+    subject: title,
+    text: [body, '', input.domainsUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Mở mục Tên miền')}`),
+  };
+}
+
+/** The domain no longer points here; visitors following it get an error (ADR-022). */
+export function domainLostEmail(input: DomainEmailInput): EmailContent {
+  const title = `${input.hostname} đang không truy cập được`;
+  const body = `Bản ghi DNS của ${input.hostname} không còn trỏ tới hệ thống, nên khách mở link tới ${input.siteName} qua tên miền này sẽ gặp lỗi. Các trang vẫn mở được ở địa chỉ mặc định.`;
+  return {
+    subject: title,
+    text: [body, '', input.domainsUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Xem cách sửa')}`),
+  };
+}
+
+/** Its owner proved the domain is theirs from another site, which now has it (ADR-022). */
+export function domainMovedEmail(input: DomainEmailInput): EmailContent {
+  const title = `${input.hostname} đã chuyển khỏi ${input.siteName}`;
+  const body = `Chủ tên miền ${input.hostname} đã xác minh quyền sở hữu bằng bản ghi TXT ở một site khác, nên tên miền không còn dùng cho ${input.siteName}. Các trang vẫn mở được ở địa chỉ mặc định.`;
+  return {
+    subject: title,
+    text: [body, '', input.domainsUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Mở mục Tên miền')}`),
+  };
+}

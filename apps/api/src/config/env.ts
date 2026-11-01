@@ -45,6 +45,40 @@ const envSchema = z.object({
     .refine((value) => value.includes('{subdomain}'), 'must contain {subdomain}')
     .refine((value) => URL.canParse(value.replace('{subdomain}', 'example')), 'must be a URL'),
 
+  /** Custom domains (ADR-022): where a name under a registrable domain points, as a CNAME. */
+  CUSTOM_DOMAIN_CNAME_TARGET: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9.-]+$/, 'must be a hostname')
+    .default('cname.payload.site'),
+  /** Where a registrable domain points, as A records: the edge's static IPv4 addresses. */
+  CUSTOM_DOMAIN_IPV4: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item !== ''),
+    )
+    .pipe(z.array(z.ipv4())),
+  /** Public origin of a custom domain, e.g. "https://{host}". */
+  CUSTOM_DOMAIN_ORIGIN_TEMPLATE: z
+    .string()
+    .refine((value) => value.includes('{host}'), 'must contain {host}')
+    .refine((value) => URL.canParse(value.replace('{host}', 'example.vn')), 'must be a URL')
+    .default('https://{host}'),
+  /**
+   * Answers DNS questions from a JSON file instead of the network, for development and E2E runs,
+   * where test domains have no real records. Refused in production.
+   */
+  DOMAIN_DNS_ZONE_FILE: z.string().min(1).optional(),
+  /** Whether a domain needs a valid HTTPS certificate to be active; on in production. */
+  DOMAIN_TLS_CHECK: z.enum(['on', 'off']).optional(),
+  /** How often each instance checks the domains due; 0 turns the checks off (tests). */
+  DOMAIN_MONITOR_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
+
   RENDERER_INTERNAL_URL: z.url(),
   REVALIDATE_SECRET: secret,
   PREVIEW_SECRET: secret,
@@ -92,7 +126,33 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
   if (!result.success) {
     throw new Error(`Invalid API environment:\n${z.prettifyError(result.error)}`);
   }
+  if (result.data.NODE_ENV === 'production' && result.data.DOMAIN_DNS_ZONE_FILE !== undefined) {
+    throw new Error(
+      'Invalid API environment:\nDOMAIN_DNS_ZONE_FILE answers DNS from a file; production asks real DNS',
+    );
+  }
   return result.data;
+}
+
+/** HTTPS is checked unless turned off; it is on by default only in production (ADR-022). */
+export function tlsCheckEnabled(env: Pick<Env, 'DOMAIN_TLS_CHECK' | 'NODE_ENV'>): boolean {
+  return env.DOMAIN_TLS_CHECK === undefined
+    ? env.NODE_ENV === 'production'
+    : env.DOMAIN_TLS_CHECK === 'on';
+}
+
+/** The system's own domain, from the default origin template: "payload.site". */
+export function baseDomainOf(env: Pick<Env, 'PUBLIC_SITE_ORIGIN_TEMPLATE'>): string {
+  const host = new URL(env.PUBLIC_SITE_ORIGIN_TEMPLATE.replace('{subdomain}', 'x')).hostname;
+  return host.slice(host.indexOf('.') + 1);
+}
+
+/** Public origin of a custom domain. */
+export function customDomainOrigin(
+  env: Pick<Env, 'CUSTOM_DOMAIN_ORIGIN_TEMPLATE'>,
+  hostname: string,
+): string {
+  return env.CUSTOM_DOMAIN_ORIGIN_TEMPLATE.replace('{host}', hostname);
 }
 
 export function siteOrigin(

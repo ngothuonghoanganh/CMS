@@ -59,6 +59,7 @@ const otherSite = siteFixture({
   subdomain: 'hoasen',
   themePresetId: 'sunset',
   defaultOrigin: 'https://hoasen.payload.site',
+  publicOrigin: 'https://hoasen.payload.site',
 });
 
 function renderSidebar(overrides: Partial<SidebarProps> = {}) {
