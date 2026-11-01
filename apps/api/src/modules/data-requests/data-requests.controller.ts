@@ -54,47 +54,51 @@ export class DataRequestsController {
     return this.requests.create(user, siteId, body);
   }
 
-  @Get('data-requests/:requestId')
+  @Get('sites/:siteId/data-requests/:requestId')
   @Header('Cache-Control', NO_STORE)
   get(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
   ): Promise<DataRequestDetail> {
-    return this.requests.get(user, requestId);
+    return this.requests.get(user, siteId, requestId);
   }
 
-  @Post('data-requests/:requestId/respond')
+  @Post('sites/:siteId/data-requests/:requestId/respond')
   @HttpCode(200)
   @Header('Cache-Control', NO_STORE)
   respond(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
   ): Promise<DataRequestDetail> {
-    return this.requests.respond(user, requestId);
+    return this.requests.respond(user, siteId, requestId);
   }
 
-  @Post('data-requests/:requestId/export')
+  @Post('sites/:siteId/data-requests/:requestId/export')
   @HttpCode(200)
   async exportFile(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
     @Body(new ZodPipe(personExportRequestSchema)) body: PersonExportRequest,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     return leadFileResponse(
       response,
-      await this.requests.exportFile(user, requestId, body),
+      await this.requests.exportFile(user, siteId, requestId, body),
       this.logger,
     );
   }
 
-  @Post('data-requests/:requestId/complete')
+  @Post('sites/:siteId/data-requests/:requestId/complete')
   @HttpCode(200)
   @Header('Cache-Control', NO_STORE)
   complete(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
   ): Promise<DataRequestDetail> {
-    return this.requests.complete(user, requestId);
+    return this.requests.complete(user, siteId, requestId);
   }
 }

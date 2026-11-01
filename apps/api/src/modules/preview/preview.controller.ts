@@ -13,12 +13,13 @@ import { PreviewService } from './preview.service.js';
 export class PreviewController {
   constructor(private readonly preview: PreviewService) {}
 
-  @Post('pages/:pageId/preview-links')
+  @Post('sites/:siteId/pages/:pageId/preview-links')
   createLink(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('pageId') pageId: string,
     @Body(new ZodPipe(createPreviewLinkRequestSchema)) body: CreatePreviewLinkRequest,
   ): Promise<PreviewLinkResponse> {
-    return this.preview.createLink(user, pageId, body);
+    return this.preview.createLink(user, siteId, pageId, body);
   }
 }

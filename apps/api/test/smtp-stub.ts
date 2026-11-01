@@ -1,4 +1,5 @@
 import { createServer, type Server, type Socket } from 'node:net';
+import { type ConfirmationLink, confirmationLinkIn } from './recipients.js';
 
 /**
  * How the stub behaves towards the next connections:
@@ -199,15 +200,12 @@ export function plainTextOf(message: StubMessage): string {
   return body;
 }
 
-/** The secret of the last confirmation link the stub saw for `email`. */
-export function stubConfirmationToken(stub: SmtpStub, email: string): string {
+/** The last confirmation link (its site and secret) the stub saw for `email`. */
+export function stubConfirmationLink(stub: SmtpStub, email: string): ConfirmationLink {
   const message = stub.to(email).at(-1);
-  const token =
-    message === undefined
-      ? undefined
-      : /#token=([A-Za-z0-9_-]{43})/.exec(plainTextOf(message))?.[1];
-  if (token === undefined) {
+  const link = message === undefined ? null : confirmationLinkIn(plainTextOf(message));
+  if (link === null) {
     throw new Error(`The SMTP stub received no confirmation link for ${email}`);
   }
-  return token;
+  return link;
 }

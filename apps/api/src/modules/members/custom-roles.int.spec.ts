@@ -151,8 +151,9 @@ describe('custom roles (ADR-024)', () => {
     await member.client.get(`/sites/${site.id}/leads?range=all`).expect(200);
     const refused = await publishRequest(
       member.client,
+      site.id,
       pageId,
-      await currentPublishBody(owner, pageId),
+      await currentPublishBody(owner, site.id, pageId),
     ).expect(403);
     expect(problemSchema.parse(refused.body).title).toBe(
       'Chỉ Chủ sở hữu, Quản trị và Biên tập được thực hiện thao tác này',

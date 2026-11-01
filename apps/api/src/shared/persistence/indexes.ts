@@ -3,7 +3,8 @@ import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 
 /**
- * Creates every collection and index the schemas declare before the API serves (ADR-013). Unique
+ * Creates every collection and index of the master DB before the API serves (ADR-013); the
+ * workspace databases get theirs from `WorkspaceDatabases.build` (ADR-025). Unique
  * indexes guard invariants (one slug per site, one release per idempotency key, one lead per
  * submission, one counter per key), TTL indexes delete what the retention promises, and some
  * lookups name their index (`hint`). Built in the background (Mongoose's `autoIndex`, off in
@@ -19,7 +20,7 @@ export class IndexBuilder implements OnModuleInit {
     await Promise.all(
       Object.values(this.connection.models).map(async (model) => {
         try {
-          await model.init();
+          await model.createCollection();
           await model.createIndexes();
         } catch (error) {
           throw new Error(`Creating the collection and indexes of ${model.modelName} failed`, {

@@ -65,7 +65,8 @@ describe('two API instances on one database', () => {
     expect(problemSchema.parse((await send(a)).body).code).toBe('rate_limited');
     expect((await send(b)).status).toBe(429);
     expect(
-      await a.connection
+      await a
+        .workspaceDb(workspaceId)
         .collection('leads')
         .countDocuments({ siteId: new Types.ObjectId(site.id) }),
     ).toBe(2);

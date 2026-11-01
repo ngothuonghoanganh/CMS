@@ -39,6 +39,7 @@ describe('workspace isolation of pages, publishing and previews', () => {
   let v1: PublishResponse;
   let v2: PublishResponse;
   let rollbackId: string;
+  let workspaceA: string;
   let userB: TestClient;
   let workspaceB: string;
   const revalidation = new RecordingRevalidationClient();
@@ -47,15 +48,16 @@ describe('workspace isolation of pages, publishing and previews', () => {
     t = await createTestApp('plp_test_isolation_pages', withRevalidationRecorder(revalidation));
     const a = await signedUpClient(t.app);
     ownerA = a.client;
+    workspaceA = a.workspaceId;
     siteA = await createSite(ownerA, a.workspaceId);
     assetA = await uploadImage(ownerA, siteA.id);
     const live = await createLivePage(ownerA, siteA.id, uniqueSlug('a'), 'Bản 1');
     pageA = live.pageId;
     v1 = live.published;
-    await editHeroHeading(ownerA, pageA, 'Bản 2');
-    v2 = await publish(ownerA, pageA);
+    await editHeroHeading(ownerA, siteA.id, pageA, 'Bản 2');
+    v2 = await publish(ownerA, siteA.id, pageA);
     const rollback = await ownerA
-      .post(`/pages/${pageA}/pointer`, {
+      .post(`/sites/${siteA.id}/pages/${pageA}/pointer`, {
         targetReleaseId: v1.release.id,
         expectedCurrentReleaseId: v2.release.id,
         reason: 'Sai giá',
@@ -88,18 +90,21 @@ describe('workspace isolation of pages, publishing and previews', () => {
       }),
     );
     await expectNotFound(userB.get(`/sites/${siteA.id}/slug-availability?slug=chen`));
-    await expectNotFound(userB.get(`/pages/${pageA}`));
-    await expectNotFound(userB.put(`/pages/${pageA}/draft`, draft));
+    await expectNotFound(userB.get(`/sites/${siteA.id}/pages/${pageA}`));
+    await expectNotFound(userB.put(`/sites/${siteA.id}/pages/${pageA}/draft`, draft));
     await expectNotFound(
-      userB.post(`/pages/${pageA}/draft/restore`, { baseRevision: 0, releaseId: v1.release.id }),
+      userB.post(`/sites/${siteA.id}/pages/${pageA}/draft/restore`, {
+        baseRevision: 0,
+        releaseId: v1.release.id,
+      }),
     );
   });
 
   it('hides publishing of workspace A from user B', async () => {
-    await expectNotFound(userB.get(`/pages/${pageA}/checks`));
+    await expectNotFound(userB.get(`/sites/${siteA.id}/pages/${pageA}/checks`));
     await expectNotFound(
       userB.agent
-        .post(`/pages/${pageA}/releases`)
+        .post(`/sites/${siteA.id}/pages/${pageA}/releases`)
         .set('Origin', 'http://localhost:3100')
         .set('idempotency-key', randomUUID())
         .send({
@@ -109,21 +114,26 @@ describe('workspace isolation of pages, publishing and previews', () => {
           note: '',
         }),
     );
-    await expectNotFound(userB.get(`/pages/${pageA}/history`));
+    await expectNotFound(userB.get(`/sites/${siteA.id}/pages/${pageA}/history`));
     await expectNotFound(
-      userB.post(`/pages/${pageA}/pointer`, {
+      userB.post(`/sites/${siteA.id}/pages/${pageA}/pointer`, {
         targetReleaseId: null,
         expectedCurrentReleaseId: v1.release.id,
         reason: 'Gỡ trộm',
       }),
     );
-    await expectNotFound(userB.post(`/activity/${rollbackId}/undo`));
+    await expectNotFound(userB.post(`/sites/${siteA.id}/activity/${rollbackId}/undo`));
   });
 
   it('hides preview links of workspace A from user B', async () => {
-    await expectNotFound(userB.post(`/pages/${pageA}/preview-links`, { kind: 'draft' }));
     await expectNotFound(
-      userB.post(`/pages/${pageA}/preview-links`, { kind: 'release', releaseId: v1.release.id }),
+      userB.post(`/sites/${siteA.id}/pages/${pageA}/preview-links`, { kind: 'draft' }),
+    );
+    await expectNotFound(
+      userB.post(`/sites/${siteA.id}/pages/${pageA}/preview-links`, {
+        kind: 'release',
+        releaseId: v1.release.id,
+      }),
     );
   });
 
@@ -131,19 +141,19 @@ describe('workspace isolation of pages, publishing and previews', () => {
     const siteB = await createSite(userB, workspaceB);
     const pageB = await createPage(userB, siteB.id);
     await expectNotFound(
-      userB.post(`/pages/${pageB.page.id}/draft/restore`, {
+      userB.post(`/sites/${siteB.id}/pages/${pageB.page.id}/draft/restore`, {
         baseRevision: 0,
         releaseId: v1.release.id,
       }),
     );
     await expectNotFound(
-      userB.post(`/pages/${pageB.page.id}/preview-links`, {
+      userB.post(`/sites/${siteB.id}/pages/${pageB.page.id}/preview-links`, {
         kind: 'release',
         releaseId: v1.release.id,
       }),
     );
     const response = await userB
-      .put(`/pages/${pageB.page.id}/draft`, {
+      .put(`/sites/${siteB.id}/pages/${pageB.page.id}/draft`, {
         baseRevision: 0,
         slug: pageB.page.slug,
         composition: composition([
@@ -161,15 +171,43 @@ describe('workspace isolation of pages, publishing and previews', () => {
     ]);
   });
 
+  it("does not find workspace A's page, rollback or asset through a site of user B", async () => {
+    // The site routes to its workspace database (ADR-025): an id of A is unknown there.
+    const siteB = await createSite(userB, workspaceB);
+    await expectNotFound(userB.get(`/sites/${siteB.id}/pages/${pageA}`));
+    await expectNotFound(
+      userB.put(`/sites/${siteB.id}/pages/${pageA}/draft`, {
+        baseRevision: 0,
+        ...publishableDraft(uniqueSlug('chen')),
+      }),
+    );
+    await expectNotFound(userB.get(`/sites/${siteB.id}/pages/${pageA}/history`));
+    await expectNotFound(
+      userB.post(`/sites/${siteB.id}/pages/${pageA}/pointer`, {
+        targetReleaseId: null,
+        expectedCurrentReleaseId: v1.release.id,
+        reason: 'Gỡ trộm',
+      }),
+    );
+    await expectNotFound(
+      userB.post(`/sites/${siteB.id}/pages/${pageA}/preview-links`, { kind: 'draft' }),
+    );
+    await expectNotFound(userB.post(`/sites/${siteB.id}/activity/${rollbackId}/undo`));
+    await expectNotFound(
+      userB.patch(`/sites/${siteB.id}/assets/${assetA.id}`, { alt: 'Đổi', decorative: false }),
+    );
+  });
+
   it('leaves workspace A untouched', async () => {
-    const detail = await getPage(ownerA, pageA);
+    const detail = await getPage(ownerA, siteA.id, pageA);
     expect(detail.page.liveRelease?.id).toBe(v1.release.id);
     expect(detail.page.latestVersion).toBe(2);
-    const releases = await t.connection
+    const releases = await t
+      .workspaceDb(workspaceA)
       .collection('releases')
       .countDocuments({ pageId: new Types.ObjectId(pageA) });
     expect(releases).toBe(2);
-    const undo = await ownerA.post(`/activity/${rollbackId}/undo`).expect(200);
+    const undo = await ownerA.post(`/sites/${siteA.id}/activity/${rollbackId}/undo`).expect(200);
     expect(pointerMoveResponseSchema.parse(undo.body).page.liveRelease?.id).toBe(v2.release.id);
   });
 });

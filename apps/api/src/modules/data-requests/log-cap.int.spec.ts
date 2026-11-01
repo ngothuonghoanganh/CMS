@@ -1,4 +1,4 @@
-import { type DataRequestDetail, dataRequestDetailSchema } from '@plp/contracts';
+import { type DataRequestDetail, dataRequestDetailSchema, type Site } from '@plp/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
@@ -34,8 +34,8 @@ describe('the 50-entry log of a data request', () => {
     await t.close();
   });
 
-  async function detail(requestId: string): Promise<DataRequestDetail> {
-    const response = await owner.get(`/data-requests/${requestId}`).expect(200);
+  async function detail(site: Site, requestId: string): Promise<DataRequestDetail> {
+    const response = await owner.get(`/sites/${site.id}/data-requests/${requestId}`).expect(200);
     return dataRequestDetailSchema.parse(response.body);
   }
 
@@ -62,10 +62,12 @@ describe('the 50-entry log of a data request', () => {
 
     for (let index = 0; index < 49; index += 1) {
       await owner
-        .post(`/data-requests/${requestId}/export`, { format: index % 2 === 0 ? 'json' : 'csv' })
+        .post(`/sites/${site.id}/data-requests/${requestId}/export`, {
+          format: index % 2 === 0 ? 'json' : 'csv',
+        })
         .expect(200);
     }
-    const full = await detail(requestId);
+    const full = await detail(site, requestId);
     expect(full.log).toHaveLength(50);
     expect(full.log[0]).toMatchObject({ action: 'created', count: null });
     expect(
@@ -73,20 +75,22 @@ describe('the 50-entry log of a data request', () => {
     ).toBe(true);
 
     // The 51st entry pushes out the first: the record of the creation.
-    await owner.post(`/data-requests/${requestId}/export`, { format: 'json' }).expect(200);
-    const pushed = await detail(requestId);
+    await owner
+      .post(`/sites/${site.id}/data-requests/${requestId}/export`, { format: 'json' })
+      .expect(200);
+    const pushed = await detail(site, requestId);
     expect(pushed.log).toHaveLength(50);
     expect(pushed.log.map((entry) => entry.action)).toEqual(Array(50).fill('exported'));
     expect(pushed.log[0]?.at).toBe(full.log[1]?.at);
 
-    await owner.post(`/data-requests/${requestId}/respond`).expect(200);
-    const responded = await detail(requestId);
+    await owner.post(`/sites/${site.id}/data-requests/${requestId}/respond`).expect(200);
+    const responded = await detail(site, requestId);
     expect(responded.log).toHaveLength(50);
     expect(responded.log.at(-1)).toMatchObject({ action: 'responded', count: null });
     expect(responded.respondedAt).not.toBeNull();
 
-    await owner.post(`/data-requests/${requestId}/complete`).expect(200);
-    const completed = await detail(requestId);
+    await owner.post(`/sites/${site.id}/data-requests/${requestId}/complete`).expect(200);
+    const completed = await detail(site, requestId);
     expect(completed.log).toHaveLength(50);
     expect(completed.log.slice(-2).map((entry) => entry.action)).toEqual([
       'responded',

@@ -184,8 +184,8 @@ export class PagesService {
     return this.detail(scope, site, page);
   }
 
-  async get(user: AuthenticatedUser, pageId: string): Promise<PageDetailResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.view');
+  async get(user: AuthenticatedUser, siteId: string, pageId: string): Promise<PageDetailResponse> {
+    const { scope, site, page } = await this.pageAccess.access(user, siteId, pageId, 'pages.view');
     return this.detail(scope, site, page);
   }
 
@@ -197,10 +197,11 @@ export class PagesService {
    */
   async saveDraft(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     input: SaveDraftRequest,
   ): Promise<SaveDraftResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.edit');
+    const { scope, site, page } = await this.pageAccess.access(user, siteId, pageId, 'pages.edit');
     const parsed = parseComposition(input.composition);
     if (!parsed.success) {
       throw validationFailed(
@@ -233,10 +234,11 @@ export class PagesService {
    */
   async restoreDraft(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     input: RestoreDraftRequest,
   ): Promise<PageDetailResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.edit');
+    const { scope, site, page } = await this.pageAccess.access(user, siteId, pageId, 'pages.edit');
     const release = await this.releases.findById(
       scope,
       toObjectId(input.releaseId, RELEASE_NOT_FOUND),

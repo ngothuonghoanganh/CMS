@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import type { ActivityType } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import {
@@ -12,12 +11,16 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
-  ACTIVITY_MODEL,
+  ACTIVITY_COLLECTION,
   type ActivityData,
   type ActivityRecord,
   EMPTY_ACTIVITY_DATA,
 } from './activity.schema.js';
 import { POINTER_EVENT_TYPES } from './pointer-events.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 /** What happened; the actor is the scope's user and the time is now. */
 export interface ActivityEntry {
@@ -31,15 +34,9 @@ export interface ActivityEntry {
 }
 
 /** The minimum needed to check access to an activity, e.g. for `POST /activity/:id/undo`. */
-export interface ActivityAccessRef {
-  id: ObjectId;
-  workspaceId: ObjectId;
-  siteId: ObjectId;
-}
-
 @Injectable()
 export class ActivityRepository {
-  constructor(@InjectModel(ACTIVITY_MODEL) private readonly activity: Model<ActivityRecord>) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   /** Appends an event done by `scope.userId`; pass `tx` to commit it with the change it logs. */
   async record(scope: WorkspaceScope, entry: ActivityEntry, tx?: Tx): Promise<ObjectId> {
@@ -54,7 +51,7 @@ export class ActivityRepository {
       reason: entry.reason ?? null,
       createdAt: new Date(),
     };
-    const [created] = await this.activity.create([document], tx ? { session: tx } : {});
+    const [created] = await this.activity(scope).create([document], tx ? { session: tx } : {});
     if (!created) {
       throw new Error('Activity insert returned no document');
     }
@@ -69,7 +66,7 @@ export class ActivityRepository {
     limit: number,
     types?: readonly ActivityType[],
   ): Promise<KeysetPage<ActivityRecord>> {
-    const records = await this.activity
+    const records = await this.activity(scope)
       .find({
         workspaceId: scope.workspaceId,
         siteId,
@@ -91,7 +88,7 @@ export class ActivityRepository {
     limit: number,
     types?: readonly ActivityType[],
   ): Promise<KeysetPage<ActivityRecord>> {
-    const records = await this.activity
+    const records = await this.activity(scope)
       .find({
         workspaceId: scope.workspaceId,
         pageId,
@@ -106,21 +103,10 @@ export class ActivityRepository {
   }
 
   findById(scope: WorkspaceScope, id: ObjectId): Promise<ActivityRecord | null> {
-    return this.activity
+    return this.activity(scope)
       .findOne({ _id: id, workspaceId: scope.workspaceId })
       .lean<ActivityRecord>()
       .exec();
-  }
-
-  /** Unscoped lookup by id that only returns where the event lives, for access checks. */
-  async findAccessRef(id: ObjectId): Promise<ActivityAccessRef | null> {
-    const record = await this.activity
-      .findById(id, { workspaceId: 1, siteId: 1 })
-      .lean<Pick<ActivityRecord, '_id' | 'workspaceId' | 'siteId'>>()
-      .exec();
-    return record
-      ? { id: record._id, workspaceId: record.workspaceId, siteId: record.siteId }
-      : null;
   }
 
   /**
@@ -133,7 +119,7 @@ export class ActivityRepository {
     pageIds: readonly ObjectId[],
     tx?: Tx,
   ): Promise<Map<string, ActivityRecord>> {
-    return this.latestPointerEventsWhere({ workspaceId: scope.workspaceId }, pageIds, tx);
+    return this.latestPointerEventsWhere(scope, { workspaceId: scope.workspaceId }, pageIds, tx);
   }
 
   /**
@@ -141,14 +127,16 @@ export class ActivityRepository {
    * there is no member, so the site bounds the read.
    */
   latestPublicPointerEvents(
+    ref: WorkspaceRef,
     siteId: ObjectId,
     pageIds: readonly ObjectId[],
   ): Promise<Map<string, ActivityRecord>> {
-    return this.latestPointerEventsWhere({ siteId }, pageIds);
+    return this.latestPointerEventsWhere(ref, { workspaceId: ref.workspaceId, siteId }, pageIds);
   }
 
   private async latestPointerEventsWhere(
-    owner: { workspaceId: ObjectId } | { siteId: ObjectId },
+    ref: WorkspaceRef,
+    owner: { workspaceId: ObjectId; siteId?: ObjectId },
     pageIds: readonly ObjectId[],
     tx?: Tx,
   ): Promise<Map<string, ActivityRecord>> {
@@ -156,7 +144,7 @@ export class ActivityRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const groups = await this.activity
+    const groups = await this.activity(ref)
       .aggregate<{ _id: ObjectId; latest: ActivityRecord }>([
         {
           $match: {
@@ -174,12 +162,19 @@ export class ActivityRepository {
   }
 
   /** Flags a pointer event whose renderer revalidation failed after the commit (ADR-009). */
-  async markRevalidationFailed(id: ObjectId): Promise<void> {
-    const result = await this.activity
-      .updateOne({ _id: id }, { $set: { 'data.revalidationFailed': true } })
+  async markRevalidationFailed(ref: WorkspaceRef, id: ObjectId): Promise<void> {
+    const result = await this.activity(ref)
+      .updateOne(
+        { _id: id, workspaceId: ref.workspaceId },
+        { $set: { 'data.revalidationFailed': true } },
+      )
       .exec();
     if (result.matchedCount === 0) {
       throw new Error(`Activity ${id.toHexString()} does not exist`);
     }
+  }
+
+  private activity(ref: WorkspaceRef): Model<ActivityRecord> {
+    return this.databases.model(ref, ACTIVITY_COLLECTION);
   }
 }

@@ -25,8 +25,17 @@ export class LeadPersonService {
   ) {}
 
   /** "Xóa dữ liệu người này", from one of their leads. */
-  async deleteFromLead(user: AuthenticatedUser, leadId: string): Promise<PersonDeleteResponse> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'personalData.manage');
+  async deleteFromLead(
+    user: AuthenticatedUser,
+    siteId: string,
+    leadId: string,
+  ): Promise<PersonDeleteResponse> {
+    const { scope, site, lead } = await this.leadAccess.access(
+      user,
+      siteId,
+      leadId,
+      'personalData.manage',
+    );
     return { deletedCount: await this.deletePerson(scope, site._id, personOfLead(lead)) };
   }
 

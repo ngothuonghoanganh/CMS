@@ -1,8 +1,11 @@
 import { type RetentionMonths, type ThemePresetId, themePresetIds } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const SITE_MODEL = 'Site';
 export const SITES_SUBDOMAIN_INDEX = 'sites_subdomain_unique';
+export const SITE_ADDRESS_MODEL = 'SiteAddress';
+export const SITE_ADDRESSES_SUBDOMAIN_INDEX = 'site_addresses_subdomain_unique';
 
 /** Personal data settings of the site, edited by the owner on "Dữ liệu & đồng ý" (ADR-017). */
 export interface SitePrivacyRecord {
@@ -142,3 +145,27 @@ siteSchema.index({ subdomain: 1 }, { unique: true, name: SITES_SUBDOMAIN_INDEX }
 siteSchema.index({ workspaceId: 1, createdAt: 1 });
 // The confirmation link finds its address by the hash of its secret (ADR-018).
 siteSchema.index({ 'leadRecipients.tokenHash': 1 }, { name: 'sites_recipient_token' });
+
+/** In the workspace's own database (ADR-025). */
+export const SITE_COLLECTION = workspaceCollection(SITE_MODEL, siteSchema);
+
+/**
+ * Where a site lives, in the master DB (ADR-025): its workspace, so an id or a subdomain finds the
+ * workspace database, and its subdomain, unique across every workspace (ADR-011).
+ */
+export interface SiteAddressRecord {
+  /** The site's id. */
+  _id: Types.ObjectId;
+  workspaceId: Types.ObjectId;
+  /** Lowercase and immutable, like the site's. */
+  subdomain: string;
+}
+
+export const siteAddressSchema = new Schema<SiteAddressRecord>(
+  {
+    workspaceId: { type: Schema.Types.ObjectId, required: true },
+    subdomain: { type: String, required: true, lowercase: true, immutable: true },
+  },
+  { collection: 'site_addresses', versionKey: false },
+);
+siteAddressSchema.index({ subdomain: 1 }, { unique: true, name: SITE_ADDRESSES_SUBDOMAIN_INDEX });

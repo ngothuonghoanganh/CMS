@@ -51,7 +51,11 @@ export const recipientTokenSchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]{43}$/, 'Liên kết xác nhận không hợp lệ');
 
-export const confirmLeadRecipientRequestSchema = z.object({ token: recipientTokenSchema });
+/** The link names its site: the site's workspace database holds the address (ADR-025). */
+export const confirmLeadRecipientRequestSchema = z.object({
+  siteId: idSchema,
+  token: recipientTokenSchema,
+});
 export type ConfirmLeadRecipientRequest = z.infer<typeof confirmLeadRecipientRequestSchema>;
 
 export const confirmLeadRecipientResponseSchema = z.object({

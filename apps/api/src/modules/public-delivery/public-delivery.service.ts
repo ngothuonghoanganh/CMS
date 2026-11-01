@@ -125,9 +125,9 @@ export class PublicDeliveryService {
   async resolve(subdomain: string, path: string): Promise<ResolveResponse> {
     const site = await this.siteOrNotFound(subdomain);
     const slug = slugFromPath(path);
-    const live = await this.pages.findPublicLiveBySlug(site._id, slug);
+    const live = await this.pages.findPublicLiveBySlug(site, site._id, slug);
     if (live) {
-      const release = await this.releases.findPublicById(live.publishedReleaseId);
+      const release = await this.releases.findPublicById(site, live.publishedReleaseId);
       if (!release || !release.pageId.equals(live._id) || !release.siteId.equals(site._id)) {
         throw new Error(
           `Live page ${live._id.toHexString()} points to an invalid release ${live.publishedReleaseId.toHexString()}`,
@@ -154,7 +154,7 @@ export class PublicDeliveryService {
     const site = await this.siteOrNotFound(subdomain);
     const slug = slugFromPath(path);
     const [live, primaryHost] = await Promise.all([
-      this.pages.findPublicLiveBySlug(site._id, slug),
+      this.pages.findPublicLiveBySlug(site, site._id, slug),
       this.siteHosts.activePrimaryHost(site),
     ]);
     if (live) {
@@ -169,11 +169,11 @@ export class PublicDeliveryService {
 
   /** Live path of the page an old slug redirects to; null when there is none or it is not live. */
   private async redirectLocation(site: SiteRecord, slug: string): Promise<string | null> {
-    const redirect = await this.redirects.findPublic(site._id, slug);
+    const redirect = await this.redirects.findPublic(site, site._id, slug);
     if (!redirect) {
       return null;
     }
-    const target = await this.pages.findPublicById(redirect.pageId);
+    const target = await this.pages.findPublicById(site, redirect.pageId);
     if (
       target?.siteId.equals(site._id) &&
       target.publishedSlug !== null &&
@@ -191,13 +191,15 @@ export class PublicDeliveryService {
    */
   async sitemap(subdomain: string): Promise<SitemapResponse> {
     const site = await this.siteOrNotFound(subdomain);
-    const live = await this.pages.listPublicLiveForSite(site._id);
+    const live = await this.pages.listPublicLiveForSite(site, site._id);
     const [releases, moves] = await Promise.all([
       this.releases.findPublicForSite(
+        site,
         site._id,
         live.map((page) => page.publishedReleaseId),
       ),
       this.activity.latestPublicPointerEvents(
+        site,
         site._id,
         live.map((page) => page._id),
       ),
@@ -232,12 +234,12 @@ export class PublicDeliveryService {
     const { claims, site } = await this.previewSite(token);
     const expiresAt = claims.expiresAt.toISOString();
     if (claims.kind === 'draft') {
-      const page = await this.pages.findPublicById(toObjectId(claims.pageId));
+      const page = await this.pages.findPublicById(site, toObjectId(claims.pageId));
       if (!page?.siteId.equals(site._id)) {
         throw notFound(PUBLIC_PAGE_NOT_FOUND);
       }
       const consent = pageCapturesLeads(page.draft.composition)
-        ? await this.consentVersions.findPublicCurrent(site._id)
+        ? await this.consentVersions.findPublicCurrent(site, site._id)
         : null;
       return publicPreviewResponseSchema.parse({
         data: await this.pageData(site, page._id, page.draft, {
@@ -248,7 +250,7 @@ export class PublicDeliveryService {
         preview: { kind: 'draft', version: null, expiresAt },
       });
     }
-    const release = await this.releases.findPublicById(toObjectId(claims.releaseId));
+    const release = await this.releases.findPublicById(site, toObjectId(claims.releaseId));
     if (!release?.siteId.equals(site._id)) {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
@@ -267,8 +269,8 @@ export class PublicDeliveryService {
     const { claims, site } = await this.previewSite(token);
     const siteId =
       claims.kind === 'draft'
-        ? (await this.pages.findAccessRef(toObjectId(claims.pageId)))?.siteId
-        : await this.releases.findPublicSiteId(toObjectId(claims.releaseId));
+        ? (await this.pages.findPublicById(site, toObjectId(claims.pageId)))?.siteId
+        : await this.releases.findPublicSiteId(site, toObjectId(claims.releaseId));
     if (!siteId?.equals(site._id)) {
       throw notFound(PUBLIC_PAGE_NOT_FOUND);
     }
@@ -334,8 +336,8 @@ export class PublicDeliveryService {
     ];
     const linkedIds = linkedPageIds(snapshot.composition);
     const [found, liveSlugs] = await Promise.all([
-      this.assets.findPublicForSite(site._id, toObjectIds([...imageIds, ...siteImageIds])),
-      this.pages.findPublicLiveSlugs(site._id, toObjectIds(linkedIds)),
+      this.assets.findPublicForSite(site, site._id, toObjectIds([...imageIds, ...siteImageIds])),
+      this.pages.findPublicLiveSlugs(site, site._id, toObjectIds(linkedIds)),
     ]);
     const images: Record<string, PublicImage> = {};
     for (const [id, asset] of found) {

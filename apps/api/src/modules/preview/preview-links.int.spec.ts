@@ -65,11 +65,11 @@ describe('preview links that must not open', () => {
     visitor = new TestClient(t.app);
 
     pageId = (await createLivePage(owner, site.id, uniqueSlug('xem'))).pageId;
-    await editHeroHeading(owner, pageId, DRAFT_HEADING);
+    await editHeroHeading(owner, site.id, pageId, DRAFT_HEADING);
     const otherSitePage = await createLivePage(owner, otherSite.id, uniqueSlug('khac'));
     otherSitePageId = otherSitePage.pageId;
     otherSiteReleaseId = otherSitePage.published.release.id;
-    await editHeroHeading(owner, otherSitePageId, DRAFT_HEADING);
+    await editHeroHeading(owner, otherSite.id, otherSitePageId, DRAFT_HEADING);
 
     const foreign = await signedUpClient(t.app);
     foreignWorkspaceId = foreign.workspaceId;
@@ -77,7 +77,7 @@ describe('preview links that must not open', () => {
     const foreignPage = await createLivePage(foreign.client, foreignSite.id, uniqueSlug('ngoai'));
     foreignPageId = foreignPage.pageId;
     foreignReleaseId = foreignPage.published.release.id;
-    await editHeroHeading(foreign.client, foreignPageId, DRAFT_HEADING);
+    await editHeroHeading(foreign.client, foreignSite.id, foreignPageId, DRAFT_HEADING);
   });
 
   afterAll(async () => {
@@ -145,7 +145,7 @@ describe('preview links that must not open', () => {
 
   it('opens a valid link, so the refusals below are about the token alone', async () => {
     const response = await owner
-      .post(`/pages/${pageId}/preview-links`, { kind: 'draft' })
+      .post(`/sites/${site.id}/pages/${pageId}/preview-links`, { kind: 'draft' })
       .expect(201);
     const token = previewLinkResponseSchema.parse(response.body).url.split('/_preview/')[1];
     const preview = publicPreviewResponseSchema.parse(
@@ -297,7 +297,10 @@ describe('preview links that must not open', () => {
     });
     await visitor.get(`/public/preview/${token}`).expect(200);
     await visitor.get(`/public/preview/${token}/status`).expect(200);
-    await t.connection.collection('pages').deleteOne({ _id: new Types.ObjectId(gone.page.id) });
+    await t
+      .workspaceDb(workspaceId)
+      .collection('pages')
+      .deleteOne({ _id: new Types.ObjectId(gone.page.id) });
     await expectRefused(token, 'preview-page-gone');
 
     await expectRefused(

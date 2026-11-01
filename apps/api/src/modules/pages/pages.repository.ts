@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import { type Composition, MAX_PAGES_PER_SITE, type PageGoal, type Seo } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { AppError } from '../../shared/errors.js';
@@ -8,20 +7,17 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
-  PAGE_MODEL,
+  PAGE_COLLECTION,
   PAGES_DRAFT_SLUG_INDEX,
   PAGES_PUBLISHED_SLUG_INDEX,
   type PageRecord,
 } from './page.schema.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 export const DRAFT_SLUG_TAKEN_MESSAGE = 'Đường dẫn này đã được một trang khác trong site dùng';
-
-/** The minimum needed to check access to a page through its site. */
-export interface PageAccessRef {
-  id: ObjectId;
-  workspaceId: ObjectId;
-  siteId: ObjectId;
-}
 
 /** A page that is live, as other pages see it (slug checks, links, sitemap). */
 export interface LivePageRow {
@@ -102,19 +98,10 @@ function liveAt(slug: string) {
 
 @Injectable()
 export class PagesRepository {
-  constructor(@InjectModel(PAGE_MODEL) private readonly pages: Model<PageRecord>) {}
-
-  /** Unscoped lookup by id that only returns where the page lives, for access checks. */
-  async findAccessRef(id: ObjectId): Promise<PageAccessRef | null> {
-    const page = await this.pages
-      .findById(id, { workspaceId: 1, siteId: 1 })
-      .lean<Pick<PageRecord, '_id' | 'workspaceId' | 'siteId'>>()
-      .exec();
-    return page ? { id: page._id, workspaceId: page.workspaceId, siteId: page.siteId } : null;
-  }
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   findById(scope: WorkspaceScope, id: ObjectId, tx?: Tx): Promise<PageRecord | null> {
-    return this.pages
+    return this.pages(scope)
       .findOne({ _id: id, workspaceId: scope.workspaceId })
       .session(tx ?? null)
       .lean<PageRecord>()
@@ -133,7 +120,7 @@ export class PagesRepository {
     now: Date,
     tx: Tx,
   ): Promise<boolean> {
-    const result = await this.pages
+    const result = await this.pages(scope)
       .updateOne(
         {
           _id: page.id,
@@ -153,7 +140,7 @@ export class PagesRepository {
    * pages (ADR-014), so per-site computations (counts, attention) stay bounded.
    */
   async listForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<PageRecord[]> {
-    const pages = await this.pages
+    const pages = await this.pages(scope)
       .find({ workspaceId: scope.workspaceId, siteId })
       .sort({ updatedAt: -1, _id: -1 })
       .limit(MAX_PAGES_PER_SITE + 1)
@@ -168,7 +155,7 @@ export class PagesRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const pages = await this.pages
+    const pages = await this.pages(scope)
       .find({ workspaceId: scope.workspaceId, _id: { $in: unique } }, { title: 1 })
       .lean<PageTitleRow[]>()
       .exec();
@@ -177,7 +164,7 @@ export class PagesRepository {
 
   /** Id and title of every page of the site, e.g. to name the pages of leads. */
   async listTitlesForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<PageTitleRow[]> {
-    const pages = await this.pages
+    const pages = await this.pages(scope)
       .find({ workspaceId: scope.workspaceId, siteId }, { title: 1 })
       .limit(MAX_PAGES_PER_SITE + 1)
       .lean<PageTitleRow[]>()
@@ -190,7 +177,7 @@ export class PagesRepository {
    * (ADR-014).
    */
   countForSite(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<number> {
-    return this.pages
+    return this.pages(scope)
       .countDocuments({ workspaceId: scope.workspaceId, siteId })
       .session(tx ?? null)
       .exec();
@@ -198,7 +185,7 @@ export class PagesRepository {
 
   /** Pages of the site that are live right now. */
   async listLiveForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<LivePageRow[]> {
-    const pages = await this.pages
+    const pages = await this.pages(scope)
       .find({ workspaceId: scope.workspaceId, siteId, ...LIVE_FILTER }, LIVE_PROJECTION)
       .limit(MAX_PAGES_PER_SITE + 1)
       .lean<LivePageRow[]>()
@@ -213,7 +200,7 @@ export class PagesRepository {
     slug: string,
     exceptPageId: ObjectId | null,
   ): Promise<Pick<PageRecord, '_id' | 'title'> | null> {
-    return this.pages
+    return this.pages(scope)
       .findOne(
         {
           workspaceId: scope.workspaceId,
@@ -233,7 +220,7 @@ export class PagesRepository {
     siteId: ObjectId,
     slug: string,
   ): Promise<Pick<PageRecord, '_id' | 'title'> | null> {
-    return this.pages
+    return this.pages(scope)
       .findOne({ workspaceId: scope.workspaceId, siteId, ...liveAt(slug) }, { title: 1 })
       .lean<Pick<PageRecord, '_id' | 'title'>>()
       .exec();
@@ -263,7 +250,7 @@ export class PagesRepository {
       updatedAt: now,
     };
     try {
-      const [page] = await this.pages.create([document], { session: tx });
+      const [page] = await this.pages(scope).create([document], { session: tx });
       if (!page) {
         throw new Error('Page insert returned no document');
       }
@@ -290,7 +277,7 @@ export class PagesRepository {
   ): Promise<PageRecord | null> {
     const now = new Date();
     try {
-      return await this.pages
+      return await this.pages(scope)
         .findOneAndUpdate(
           { _id: id, workspaceId: scope.workspaceId, 'draft.revision': baseRevision },
           {
@@ -327,7 +314,7 @@ export class PagesRepository {
     revision: number,
     tx: Tx,
   ): Promise<boolean> {
-    const result = await this.pages
+    const result = await this.pages(scope)
       .updateOne(
         {
           _id: page._id,
@@ -356,7 +343,7 @@ export class PagesRepository {
     tx: Tx,
   ): Promise<boolean> {
     try {
-      const result = await this.pages
+      const result = await this.pages(scope)
         .updateOne(
           { _id: id, workspaceId: scope.workspaceId, publishedReleaseId: expectedCurrent },
           {
@@ -379,29 +366,40 @@ export class PagesRepository {
   }
 
   /* Public delivery and signed previews have no user: these lookups are unscoped. The site always
-     comes from the request host or a signed token, and callers check that records belong to it. */
+     comes from the request host or a signed token, routed to its workspace database through the
+     master DB (ADR-025), and callers check that records belong to it. */
 
   /** A page's title for a background job that has no member scope, e.g. a lead email. */
-  async findPublicTitle(id: ObjectId): Promise<string | null> {
-    const page = await this.pages.findById(id, { title: 1 }).lean<PageTitleRow>().exec();
+  async findPublicTitle(ref: WorkspaceRef, id: ObjectId): Promise<string | null> {
+    const page = await this.pages(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId }, { title: 1 })
+      .lean<PageTitleRow>()
+      .exec();
     return page?.title ?? null;
   }
 
-  findPublicById(id: ObjectId): Promise<PageRecord | null> {
-    return this.pages.findById(id).lean<PageRecord>().exec();
+  findPublicById(ref: WorkspaceRef, id: ObjectId): Promise<PageRecord | null> {
+    return this.pages(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId })
+      .lean<PageRecord>()
+      .exec();
   }
 
-  findPublicLiveBySlug(siteId: ObjectId, slug: string): Promise<LivePageRow | null> {
-    return this.pages
-      .findOne({ siteId, ...liveAt(slug) }, LIVE_PROJECTION)
+  findPublicLiveBySlug(
+    ref: WorkspaceRef,
+    siteId: ObjectId,
+    slug: string,
+  ): Promise<LivePageRow | null> {
+    return this.pages(ref)
+      .findOne({ workspaceId: ref.workspaceId, siteId, ...liveAt(slug) }, LIVE_PROJECTION)
       .lean<LivePageRow>()
       .exec();
   }
 
   /** Live pages of a site (sitemap). */
-  async listPublicLiveForSite(siteId: ObjectId): Promise<LivePageRow[]> {
-    const pages = await this.pages
-      .find({ siteId, ...LIVE_FILTER }, LIVE_PROJECTION)
+  async listPublicLiveForSite(ref: WorkspaceRef, siteId: ObjectId): Promise<LivePageRow[]> {
+    const pages = await this.pages(ref)
+      .find({ workspaceId: ref.workspaceId, siteId, ...LIVE_FILTER }, LIVE_PROJECTION)
       .limit(MAX_PAGES_PER_SITE + 1)
       .lean<LivePageRow[]>()
       .exec();
@@ -410,16 +408,24 @@ export class PagesRepository {
 
   /** Live slugs of the pages among `ids` in the site, keyed by id hex; others are absent. */
   async findPublicLiveSlugs(
+    ref: WorkspaceRef,
     siteId: ObjectId,
     ids: readonly ObjectId[],
   ): Promise<Map<string, string>> {
     if (ids.length === 0) {
       return new Map();
     }
-    const pages = await this.pages
-      .find({ siteId, _id: { $in: [...ids] }, ...LIVE_FILTER }, { publishedSlug: 1 })
+    const pages = await this.pages(ref)
+      .find(
+        { workspaceId: ref.workspaceId, siteId, _id: { $in: [...ids] }, ...LIVE_FILTER },
+        { publishedSlug: 1 },
+      )
       .lean<Pick<LivePageRow, '_id' | 'publishedSlug'>[]>()
       .exec();
     return new Map(pages.map((page) => [page._id.toHexString(), page.publishedSlug]));
+  }
+
+  private pages(ref: WorkspaceRef): Model<PageRecord> {
+    return this.databases.model(ref, PAGE_COLLECTION);
   }
 }

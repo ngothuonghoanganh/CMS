@@ -17,7 +17,7 @@ import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { SiteRecord } from './site.schema.js';
-import { type SitePatch, SitesRepository } from './sites.repository.js';
+import { type SitePatch, SitesRepository, subdomainTakenError } from './sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from './sites.service.js';
 
 /** Body of `POST /workspaces/:workspaceId/sites` after the contract schema applied defaults. */
@@ -54,15 +54,20 @@ export class SiteManagementService {
   ): Promise<Site> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'sites.manage');
-    const site = await this.transactions.run(async (tx) => {
-      await this.workspaces.recordSiteCreation(scope, tx);
-      if ((await this.sites.countForWorkspace(scope, tx)) >= MAX_SITES_PER_WORKSPACE) {
-        throw new AppError(409, 'site_limit_reached', SITE_LIMIT_MESSAGE);
-      }
-      const created = await this.sites.create(scope, input, tx);
-      await this.activity.record(scope, { siteId: created._id, type: 'site.created' }, tx);
-      return created;
-    });
+    let site: SiteRecord;
+    try {
+      site = await this.transactions.run(async (tx) => {
+        await this.workspaces.recordSiteCreation(scope, tx);
+        if ((await this.sites.countForWorkspace(scope, tx)) >= MAX_SITES_PER_WORKSPACE) {
+          throw new AppError(409, 'site_limit_reached', SITE_LIMIT_MESSAGE);
+        }
+        const created = await this.sites.create(scope, input, tx);
+        await this.activity.record(scope, { siteId: created._id, type: 'site.created' }, tx);
+        return created;
+      });
+    } catch (error) {
+      throw subdomainTakenError(error);
+    }
     return this.sitesService.toDto(site);
   }
 

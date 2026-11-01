@@ -60,43 +60,50 @@ export async function createPage(
   return pageDetailResponseSchema.parse(response.body);
 }
 
-export async function getPage(client: TestClient, pageId: string): Promise<PageDetailResponse> {
-  const response = await client.get(`/pages/${pageId}`).expect(200);
+export async function getPage(
+  client: TestClient,
+  siteId: string,
+  pageId: string,
+): Promise<PageDetailResponse> {
+  const response = await client.get(`/sites/${siteId}/pages/${pageId}`).expect(200);
   return pageDetailResponseSchema.parse(response.body);
 }
 
 export async function saveDraft(
   client: TestClient,
+  siteId: string,
   pageId: string,
   body: SaveDraftRequest,
 ): Promise<SaveDraftResponse> {
-  const response = await client.put(`/pages/${pageId}/draft`, body).expect(200);
+  const response = await client.put(`/sites/${siteId}/pages/${pageId}/draft`, body).expect(200);
   return saveDraftResponseSchema.parse(response.body);
 }
 
 /** Loads the page and saves `draft` on top of its current revision. */
 export async function replaceDraft(
   client: TestClient,
+  siteId: string,
   pageId: string,
   draft: Omit<SaveDraftRequest, 'baseRevision'>,
 ): Promise<SaveDraftResponse> {
-  const detail = await getPage(client, pageId);
-  return saveDraft(client, pageId, { baseRevision: detail.draft.revision, ...draft });
+  const detail = await getPage(client, siteId, pageId);
+  return saveDraft(client, siteId, pageId, { baseRevision: detail.draft.revision, ...draft });
 }
 
 /** Changes the heading of the draft's first Hero, keeping every section id. */
 export async function editHeroHeading(
   client: TestClient,
+  siteId: string,
   pageId: string,
   heading: string,
 ): Promise<SaveDraftResponse> {
-  const detail = await getPage(client, pageId);
+  const detail = await getPage(client, siteId, pageId);
   const sections = detail.draft.composition.sections.map((section, index, all) =>
     section.type === 'hero' && all.findIndex((other) => other.type === 'hero') === index
       ? { ...section, content: { ...section.content, heading } }
       : section,
   );
-  return saveDraft(client, pageId, {
+  return saveDraft(client, siteId, pageId, {
     baseRevision: detail.draft.revision,
     slug: detail.draft.slug,
     composition: { ...detail.draft.composition, sections },
@@ -104,14 +111,17 @@ export async function editHeroHeading(
   });
 }
 
-/** Sends `POST /pages/:pageId/releases`; the caller sets the expected status. */
+/** Sends `POST /sites/:siteId/pages/:pageId/releases`; the caller sets the expected status. */
 export function publishRequest(
   client: TestClient,
+  siteId: string,
   pageId: string,
   body: PublishRequest,
   idempotencyKey: string | null = randomUUID(),
 ) {
-  const request = client.agent.post(`/pages/${pageId}/releases`).set('Origin', TEST_ADMIN_ORIGIN);
+  const request = client.agent
+    .post(`/sites/${siteId}/pages/${pageId}/releases`)
+    .set('Origin', TEST_ADMIN_ORIGIN);
   return (
     idempotencyKey === null ? request : request.set(IDEMPOTENCY_KEY_HEADER, idempotencyKey)
   ).send(body);
@@ -120,10 +130,11 @@ export function publishRequest(
 /** The body the publish dialog sends for the page as it is now, skipping every warning. */
 export async function currentPublishBody(
   client: TestClient,
+  siteId: string,
   pageId: string,
   note = '',
 ): Promise<PublishRequest> {
-  const detail = await getPage(client, pageId);
+  const detail = await getPage(client, siteId, pageId);
   return {
     expectedRevision: detail.draft.revision,
     expectedPublishedReleaseId: detail.page.liveRelease?.id ?? null,
@@ -136,11 +147,12 @@ export async function currentPublishBody(
 /** Publishes the current draft, acknowledging its warnings. */
 export async function publish(
   client: TestClient,
+  siteId: string,
   pageId: string,
   note = '',
 ): Promise<PublishResponse> {
-  const body = await currentPublishBody(client, pageId, note);
-  const response = await publishRequest(client, pageId, body).expect(201);
+  const body = await currentPublishBody(client, siteId, pageId, note);
+  const response = await publishRequest(client, siteId, pageId, body).expect(201);
   return publishResponseSchema.parse(response.body);
 }
 
@@ -153,8 +165,8 @@ export async function createLivePage(
   title = 'Ưu đãi niềng răng',
 ): Promise<{ pageId: string; published: PublishResponse }> {
   const page = await createPage(client, siteId, { title, slug });
-  await replaceDraft(client, page.page.id, publishableDraft(slug, heading));
-  return { pageId: page.page.id, published: await publish(client, page.page.id) };
+  await replaceDraft(client, siteId, page.page.id, publishableDraft(slug, heading));
+  return { pageId: page.page.id, published: await publish(client, siteId, page.page.id) };
 }
 
 export async function listPages(

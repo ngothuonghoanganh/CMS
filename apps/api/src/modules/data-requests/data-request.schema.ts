@@ -8,6 +8,7 @@ import {
 } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import type { LeadSearchKeys } from '../leads/domain/lead-search.js';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const DATA_REQUEST_MODEL = 'DataRequest';
 
@@ -98,3 +99,6 @@ export const dataRequestSchema = new Schema<DataRequestRecord>(
 );
 // The requests of a site, most recently recorded first.
 dataRequestSchema.index({ siteId: 1, createdAt: -1, _id: -1 }, { name: 'data_requests_site' });
+
+/** In the workspace's own database (ADR-025). */
+export const DATA_REQUEST_COLLECTION = workspaceCollection(DATA_REQUEST_MODEL, dataRequestSchema);

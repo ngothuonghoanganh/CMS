@@ -1,4 +1,5 @@
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const APPROVAL_MODEL = 'PublishApproval';
 export const APPROVAL_PENDING_INDEX = 'publish_approvals_pending_unique';
@@ -67,3 +68,6 @@ approvalSchema.index(
 // The latest request of each page, for the page summaries.
 approvalSchema.index({ pageId: 1, createdAt: -1 });
 approvalSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0 });
+
+/** In the workspace's own database (ADR-025). */
+export const APPROVAL_COLLECTION = workspaceCollection(APPROVAL_MODEL, approvalSchema);

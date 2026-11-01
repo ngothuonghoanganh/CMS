@@ -96,7 +96,10 @@ describe('visitor addresses behind a trusted proxy', () => {
   }
 
   function storedLeadCount(site: Site): Promise<number> {
-    return t.connection.collection('leads').countDocuments({ siteId: new Types.ObjectId(site.id) });
+    return t
+      .workspaceDb(workspaceId)
+      .collection('leads')
+      .countDocuments({ siteId: new Types.ObjectId(site.id) });
   }
 
   it('takes 5 leads per address in 10 minutes, whatever X-Forwarded-For says', async () => {

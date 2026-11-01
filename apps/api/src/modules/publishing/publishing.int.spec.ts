@@ -29,7 +29,8 @@ import {
 } from '../../../test/pages.js';
 import { createSite } from '../../../test/resources.js';
 import { PagesRepository } from '../pages/pages.repository.js';
-import { RELEASE_MODEL } from './release.schema.js';
+import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
+import { RELEASE_COLLECTION } from './release.schema.js';
 
 describe('publishing', () => {
   let t: TestApp;
@@ -56,7 +57,8 @@ describe('publishing', () => {
   });
 
   function releasesOf(pageId: string) {
-    return t.connection
+    return t
+      .workspaceDb(workspaceId)
       .collection('releases')
       .find({ pageId: new Types.ObjectId(pageId) })
       .sort({ version: 1 })
@@ -64,7 +66,8 @@ describe('publishing', () => {
   }
 
   async function storedPage(pageId: string) {
-    const page = await t.connection
+    const page = await t
+      .workspaceDb(workspaceId)
       .collection('pages')
       .findOne({ _id: new Types.ObjectId(pageId) });
     if (!page) {
@@ -81,10 +84,15 @@ describe('publishing', () => {
     return summary;
   }
 
-  async function moveTo(pageId: string, targetReleaseId: string | null, reason: string) {
-    const detail = await getPage(client, pageId);
+  async function moveTo(
+    siteId: string,
+    pageId: string,
+    targetReleaseId: string | null,
+    reason: string,
+  ) {
+    const detail = await getPage(client, siteId, pageId);
     const response = await client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${siteId}/pages/${pageId}/pointer`, {
         targetReleaseId,
         expectedCurrentReleaseId: detail.page.liveRelease?.id ?? null,
         reason,
@@ -100,10 +108,10 @@ describe('publishing', () => {
     const pageId = page.page.id;
     expect((await summaryOf(lifecycleSite.id, pageId)).status.kind).toBe('draft');
 
-    await replaceDraft(client, pageId, publishableDraft(slug, 'Bản 1'));
+    await replaceDraft(client, lifecycleSite.id, pageId, publishableDraft(slug, 'Bản 1'));
     expect((await summaryOf(lifecycleSite.id, pageId)).status.kind).toBe('draft');
 
-    const v1 = await publish(client, pageId, 'Bản đầu tiên');
+    const v1 = await publish(client, lifecycleSite.id, pageId, 'Bản đầu tiên');
     expect(v1.release).toMatchObject({ version: 1, note: 'Bản đầu tiên', slug });
     expect(v1.release.changeSummary.map((change) => change.label)).toEqual([
       'Thêm: Hero',
@@ -118,9 +126,9 @@ describe('publishing', () => {
       lastPointerEvent: { type: 'published', version: 1 },
     });
 
-    await editHeroHeading(client, pageId, 'Bản 2');
-    const detail = await getPage(client, pageId);
-    await replaceDraft(client, pageId, {
+    await editHeroHeading(client, lifecycleSite.id, pageId, 'Bản 2');
+    const detail = await getPage(client, lifecycleSite.id, pageId);
+    await replaceDraft(client, lifecycleSite.id, pageId, {
       slug,
       composition: detail.draft.composition,
       seo: cleanSeo({ title: 'Tiêu đề mới' }),
@@ -138,7 +146,7 @@ describe('publishing', () => {
       ],
     });
 
-    const v2 = await publish(client, pageId);
+    const v2 = await publish(client, lifecycleSite.id, pageId);
     expect(v2.release.version).toBe(2);
     expect(v2.release.changeSummary.map((change) => change.label)).toEqual([
       'Sửa: Hero',
@@ -146,7 +154,7 @@ describe('publishing', () => {
     ]);
     expect((await summaryOf(lifecycleSite.id, pageId)).status.kind).toBe('live');
 
-    const rollback = await moveTo(pageId, v1.release.id, 'Bản 2 sai giá');
+    const rollback = await moveTo(lifecycleSite.id, pageId, v1.release.id, 'Bản 2 sai giá');
     expect(rollback.page.liveRelease?.version).toBe(1);
     expect(await summaryOf(lifecycleSite.id, pageId)).toMatchObject({
       status: { kind: 'live_with_changes', changeCount: 2 },
@@ -154,14 +162,16 @@ describe('publishing', () => {
       latestVersion: 2,
     });
 
-    const undo = await client.post(`/activity/${rollback.activityId}/undo`).expect(200);
+    const undo = await client
+      .post(`/sites/${lifecycleSite.id}/activity/${rollback.activityId}/undo`)
+      .expect(200);
     expect(pointerMoveResponseSchema.parse(undo.body).page.liveRelease?.version).toBe(2);
     expect(await summaryOf(lifecycleSite.id, pageId)).toMatchObject({
       status: { kind: 'live' },
       lastPointerEvent: { type: 'rollback_undone', version: 2 },
     });
 
-    await moveTo(pageId, null, 'Hết chương trình');
+    await moveTo(lifecycleSite.id, pageId, null, 'Hết chương trình');
     expect(await summaryOf(lifecycleSite.id, pageId)).toMatchObject({
       status: { kind: 'unpublished', changeCount: 0 },
       liveRelease: null,
@@ -176,8 +186,8 @@ describe('publishing', () => {
   describe('POST /pages/:pageId/releases', () => {
     it('refuses to publish with blocking checks and returns them', async () => {
       const page = await createPage(client, site.id);
-      const body = await currentPublishBody(client, page.page.id);
-      const response = await publishRequest(client, page.page.id, body).expect(422);
+      const body = await currentPublishBody(client, site.id, page.page.id);
+      const response = await publishRequest(client, site.id, page.page.id, body).expect(422);
       const problem = problemSchema.parse(response.body);
       expect(problem.code).toBe('publish_blocked');
       const checks = checksResultSchema.parse(problem.context?.['checks']);
@@ -191,14 +201,14 @@ describe('publishing', () => {
     it('refuses unacknowledged warnings and accepts them once acknowledged', async () => {
       const slug = uniqueSlug('canh-bao');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, {
+      await replaceDraft(client, site.id, page.page.id, {
         ...publishableDraft(slug),
         seo: cleanSeo({ title: '' }),
       });
-      const body = await currentPublishBody(client, page.page.id);
+      const body = await currentPublishBody(client, site.id, page.page.id);
       expect(body.acknowledgedWarnings).toEqual(['seo_title_missing:seo:title']);
 
-      const blocked = await publishRequest(client, page.page.id, {
+      const blocked = await publishRequest(client, site.id, page.page.id, {
         ...body,
         acknowledgedWarnings: [],
       }).expect(422);
@@ -209,7 +219,7 @@ describe('publishing', () => {
         'seo_title_missing:seo:title',
       ]);
 
-      const published = await publishRequest(client, page.page.id, body).expect(201);
+      const published = await publishRequest(client, site.id, page.page.id, body).expect(201);
       expect(publishResponseSchema.parse(published.body).release.version).toBe(1);
       const [release] = await releasesOf(page.page.id);
       expect(release?.['checks']).toEqual({
@@ -219,24 +229,24 @@ describe('publishing', () => {
 
     it('requires a valid Idempotency-Key header', async () => {
       const page = await createPage(client, site.id);
-      const body = await currentPublishBody(client, page.page.id);
-      const missing = await publishRequest(client, page.page.id, body, null).expect(422);
+      const body = await currentPublishBody(client, site.id, page.page.id);
+      const missing = await publishRequest(client, site.id, page.page.id, body, null).expect(422);
       expect(problemSchema.parse(missing.body).issues?.[0]?.path).toEqual([
         'headers',
         'idempotency-key',
       ]);
-      await publishRequest(client, page.page.id, body, 'short').expect(422);
+      await publishRequest(client, site.id, page.page.id, body, 'short').expect(422);
     });
 
     it('returns the same result for the same Idempotency-Key and creates one release', async () => {
       const slug = uniqueSlug('idem');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
-      const body = await currentPublishBody(client, page.page.id);
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
+      const body = await currentPublishBody(client, site.id, page.page.id);
       const key = randomUUID();
-      const first = await publishRequest(client, page.page.id, body, key).expect(201);
+      const first = await publishRequest(client, site.id, page.page.id, body, key).expect(201);
       const calls = revalidation.calls.length;
-      const second = await publishRequest(client, page.page.id, body, key).expect(200);
+      const second = await publishRequest(client, site.id, page.page.id, body, key).expect(200);
       expect(second.body).toEqual(first.body);
       expect(await releasesOf(page.page.id)).toHaveLength(1);
       expect(revalidation.calls).toHaveLength(calls);
@@ -250,12 +260,12 @@ describe('publishing', () => {
     it('answers two concurrent publishes with the same key with one release and one result', async () => {
       const slug = uniqueSlug('idem-dong-thoi');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
-      const body = await currentPublishBody(client, page.page.id);
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
+      const body = await currentPublishBody(client, site.id, page.page.id);
       const key = randomUUID();
       const responses = await Promise.all([
-        publishRequest(client, page.page.id, body, key),
-        publishRequest(client, page.page.id, body, key),
+        publishRequest(client, site.id, page.page.id, body, key),
+        publishRequest(client, site.id, page.page.id, body, key),
       ]);
       expect(responses.map((response) => response.status).sort()).toEqual([200, 201]);
       const [first, second] = responses;
@@ -266,11 +276,11 @@ describe('publishing', () => {
     it('lets exactly one of two concurrent publishes win', async () => {
       const slug = uniqueSlug('dong-thoi');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
-      const body = await currentPublishBody(client, page.page.id);
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
+      const body = await currentPublishBody(client, site.id, page.page.id);
       const responses = await Promise.all([
-        publishRequest(client, page.page.id, body, randomUUID()),
-        publishRequest(client, page.page.id, body, randomUUID()),
+        publishRequest(client, site.id, page.page.id, body, randomUUID()),
+        publishRequest(client, site.id, page.page.id, body, randomUUID()),
       ]);
       expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
       const loser = responses.find((response) => response.status === 409);
@@ -283,10 +293,10 @@ describe('publishing', () => {
 
     it('answers 409 when the draft revision or the live pointer moved', async () => {
       const { pageId, published } = await createLivePage(client, site.id, uniqueSlug('lech'));
-      await editHeroHeading(client, pageId, 'Bản 2');
-      const body = await currentPublishBody(client, pageId);
+      await editHeroHeading(client, site.id, pageId, 'Bản 2');
+      const body = await currentPublishBody(client, site.id, pageId);
 
-      const staleRevision = await publishRequest(client, pageId, {
+      const staleRevision = await publishRequest(client, site.id, pageId, {
         ...body,
         expectedRevision: body.expectedRevision - 1,
       }).expect(409);
@@ -295,23 +305,30 @@ describe('publishing', () => {
         context: { currentRevision: body.expectedRevision },
       });
 
-      const stalePointer = await publishRequest(client, pageId, {
+      const stalePointer = await publishRequest(client, site.id, pageId, {
         ...body,
         expectedPublishedReleaseId: null,
       }).expect(409);
       expect(problemSchema.parse(stalePointer.body).code).toBe('pointer_conflict');
       expect(await releasesOf(pageId)).toHaveLength(1);
-      expect((await getPage(client, pageId)).page.liveRelease?.id).toBe(published.release.id);
+      expect((await getPage(client, site.id, pageId)).page.liveRelease?.id).toBe(
+        published.release.id,
+      );
     });
 
     it('blocks a slug another page is live at through the checks', async () => {
       const slug = uniqueSlug('dang-dung');
       const owner = await createLivePage(client, site.id, slug, 'Trang A', 'Trang A');
-      await replaceDraft(client, owner.pageId, publishableDraft(uniqueSlug('trang-a-moi')));
+      await replaceDraft(
+        client,
+        site.id,
+        owner.pageId,
+        publishableDraft(uniqueSlug('trang-a-moi')),
+      );
       const page = await createPage(client, site.id);
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
-      const body = await currentPublishBody(client, page.page.id);
-      const response = await publishRequest(client, page.page.id, body).expect(422);
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
+      const body = await currentPublishBody(client, site.id, page.page.id);
+      const response = await publishRequest(client, site.id, page.page.id, body).expect(422);
       const checks = checksResultSchema.parse(
         problemSchema.parse(response.body).context?.['checks'],
       );
@@ -326,15 +343,20 @@ describe('publishing', () => {
     it('rolls the whole transaction back when another page went live at the slug meanwhile', async () => {
       const slug = uniqueSlug('chay-dua');
       const owner = await createLivePage(client, site.id, slug, 'Trang A', 'Trang A');
-      await replaceDraft(client, owner.pageId, publishableDraft(uniqueSlug('trang-a-moi')));
+      await replaceDraft(
+        client,
+        site.id,
+        owner.pageId,
+        publishableDraft(uniqueSlug('trang-a-moi')),
+      );
       const page = await createPage(client, site.id);
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
-      const body = await currentPublishBody(client, page.page.id);
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
+      const body = await currentPublishBody(client, site.id, page.page.id);
       const before = await storedPage(page.page.id);
 
       // The checks ran before the other page went live: they see no live page at the slug.
       vi.spyOn(t.app.get(PagesRepository), 'listLiveForSite').mockResolvedValueOnce([]);
-      const response = await publishRequest(client, page.page.id, body).expect(409);
+      const response = await publishRequest(client, site.id, page.page.id, body).expect(409);
       expect(problemSchema.parse(response.body)).toMatchObject({
         code: 'slug_taken',
         title: `Đường dẫn /${slug} đang được trang “Trang A” dùng`,
@@ -356,7 +378,9 @@ describe('publishing', () => {
   describe('release immutability', () => {
     it('rejects any update or delete query on releases at the model level', async () => {
       const { pageId } = await createLivePage(client, site.id, uniqueSlug('bat-bien'));
-      const releases = t.connection.model(RELEASE_MODEL);
+      const releases = t.app
+        .get(WorkspaceDatabases)
+        .model({ workspaceId: new Types.ObjectId(workspaceId) }, RELEASE_COLLECTION);
       const filter = { pageId: new Types.ObjectId(pageId) };
       await expect(releases.updateOne(filter, { $set: { note: 'Sửa lén' } })).rejects.toThrow(
         'Releases are immutable',
@@ -373,7 +397,9 @@ describe('publishing', () => {
   describe('GET /pages/:pageId/checks', () => {
     it('returns the checks of the current draft', async () => {
       const page = await createPage(client, site.id);
-      const response = await client.get(`/pages/${page.page.id}/checks`).expect(200);
+      const response = await client
+        .get(`/sites/${site.id}/pages/${page.page.id}/checks`)
+        .expect(200);
       expect(checksResultSchema.parse(response.body)).toMatchObject({
         revision: 0,
         blocking: [{ code: 'no_visible_section_desktop' }, { code: 'no_visible_section_mobile' }],
@@ -390,20 +416,22 @@ describe('publishing', () => {
         revalidationSite.id,
         uniqueSlug('rv'),
       );
-      await editHeroHeading(client, pageId, 'Bản 2');
-      await publish(client, pageId);
-      const rollback = await moveTo(pageId, published.release.id, 'Quay lại');
-      await client.post(`/activity/${rollback.activityId}/undo`).expect(200);
-      await moveTo(pageId, null, 'Gỡ');
+      await editHeroHeading(client, revalidationSite.id, pageId, 'Bản 2');
+      await publish(client, revalidationSite.id, pageId);
+      const rollback = await moveTo(revalidationSite.id, pageId, published.release.id, 'Quay lại');
+      await client
+        .post(`/sites/${revalidationSite.id}/activity/${rollback.activityId}/undo`)
+        .expect(200);
+      await moveTo(revalidationSite.id, pageId, null, 'Gỡ');
       expect(revalidation.calls).toEqual(Array(5).fill(revalidationSite.subdomain));
     });
 
     it('reports a failed revalidation and flags the activity, while the publish succeeds', async () => {
       const slug = uniqueSlug('rv-loi');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
       revalidation.result = 'failed';
-      const published = await publish(client, page.page.id);
+      const published = await publish(client, site.id, page.page.id);
       expect(published.revalidation).toBe('failed');
       expect(published.page.status.kind).toBe('live');
       const events = await client.get(`/sites/${site.id}/activity?limit=50`).expect(200);
@@ -414,10 +442,10 @@ describe('publishing', () => {
 
       const rollbackTarget = published.release.id;
       revalidation.result = 'ok';
-      await editHeroHeading(client, page.page.id, 'Bản 2');
-      await publish(client, page.page.id);
+      await editHeroHeading(client, site.id, page.page.id, 'Bản 2');
+      await publish(client, site.id, page.page.id);
       revalidation.result = 'failed';
-      const moved = await moveTo(page.page.id, rollbackTarget, 'Thử lại');
+      const moved = await moveTo(site.id, page.page.id, rollbackTarget, 'Thử lại');
       expect(moved.revalidation).toBe('failed');
     });
   });

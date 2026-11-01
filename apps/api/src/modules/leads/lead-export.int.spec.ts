@@ -197,7 +197,7 @@ describe('lead exports and a person’s data', () => {
   it('exports every lead of a person as JSON or CSV, with the consent text they agreed to', async () => {
     const { site, pageId } = await formSite();
     // Release v2 still carries consent text v1: the file must name the consent version.
-    const releaseId = (await publish(owner, pageId)).release.id;
+    const releaseId = (await publish(owner, site.id, pageId)).release.id;
     await send(site, releaseId, {
       name: 'Nguyễn Thu Hà',
       email: 'thuha@example.com',
@@ -213,7 +213,9 @@ describe('lead exports and a person’s data', () => {
     const leadId = await leadIdOf(site, 'Nguyễn Thu Hà');
 
     const started = new Date();
-    const json = await owner.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(200);
+    const json = await owner
+      .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'json' })
+      .expect(200);
     expect(json.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(
       exportDays(started).map(
@@ -242,7 +244,9 @@ describe('lead exports and a person’s data', () => {
       },
     });
 
-    const csv = await owner.post(`/leads/${leadId}/person/export`, { format: 'csv' }).expect(200);
+    const csv = await owner
+      .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'csv' })
+      .expect(200);
     expect(csv.headers['content-type']).toBe('text/csv; charset=utf-8');
     expect(csv.text.startsWith(BOM)).toBe(true);
     const csvLines = lines(csv.text);
@@ -256,7 +260,9 @@ describe('lead exports and a person’s data', () => {
       ),
     );
 
-    await owner.post(`/leads/${leadId}/person/export`, { format: 'xml' }).expect(422);
+    await owner
+      .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'xml' })
+      .expect(422);
     expect(await leadActivity(site)).toEqual([
       { type: 'lead.exported', count: 3 },
       { type: 'lead.exported', count: 3 },
@@ -281,7 +287,9 @@ describe('lead exports and a person’s data', () => {
       ),
     );
     const leadId = await leadIdOf(site, 'Lần 0');
-    const json = await owner.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(200);
+    const json = await owner
+      .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'json' })
+      .expect(200);
     expect(json.headers[EXPORT_TRUNCATED_HEADER.toLowerCase()]).toBe('true');
     const file = personExportFileSchema.parse(JSON.parse(json.text));
     expect(file.leads).toHaveLength(LEAD_PERSON_EXPORT_MAX);
@@ -304,15 +312,15 @@ describe('lead exports and a person’s data', () => {
     await send(site, releaseId, { name: 'Trần Quốc Bảo', phone: '0938 512 840' });
     const leadId = await leadIdOf(site, 'Nguyễn Thu Hà');
 
-    const response = await owner.delete(`/leads/${leadId}/person`).expect(200);
+    const response = await owner.delete(`/sites/${site.id}/leads/${leadId}/person`).expect(200);
     // The email links the second lead, the phone number the spam lead.
     expect(personDeleteResponseSchema.parse(response.body)).toEqual({ deletedCount: 3 });
     expect((await inbox(site, '?range=all')).items.map((item) => item.name)).toEqual([
       'Trần Quốc Bảo',
     ]);
     expect((await inbox(site, '?range=all&folder=spam')).items).toEqual([]);
-    await owner.get(`/leads/${leadId}`).expect(404);
-    await owner.delete(`/leads/${leadId}/person`).expect(404);
+    await owner.get(`/sites/${site.id}/leads/${leadId}`).expect(404);
+    await owner.delete(`/sites/${site.id}/leads/${leadId}/person`).expect(404);
     expect(await leadActivity(site)).toEqual([{ type: 'lead.person_deleted', count: 3 }]);
   });
 
@@ -322,11 +330,13 @@ describe('lead exports and a person’s data', () => {
     const leadId = await leadIdOf(site, 'Nguyễn Thu Hà');
 
     await support.get(`/sites/${site.id}/leads`).expect(200);
-    await support.get(`/leads/${leadId}`).expect(200);
+    await support.get(`/sites/${site.id}/leads/${leadId}`).expect(200);
     await support.post(`/sites/${site.id}/leads/export`, {}).expect(403);
-    await support.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(403);
-    await support.delete(`/leads/${leadId}/person`).expect(403);
-    await owner.get(`/leads/${leadId}`).expect(200);
+    await support
+      .post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'json' })
+      .expect(403);
+    await support.delete(`/sites/${site.id}/leads/${leadId}/person`).expect(403);
+    await owner.get(`/sites/${site.id}/leads/${leadId}`).expect(200);
     expect(await leadActivity(site)).toEqual([]);
   });
 

@@ -1,4 +1,3 @@
-import { getModelToken } from '@nestjs/mongoose';
 import {
   activityListResponseSchema,
   consentVersionListResponseSchema,
@@ -6,7 +5,7 @@ import {
   problemSchema,
   type Site,
 } from '@plp/contracts';
-import type { Model } from 'mongoose';
+import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
@@ -17,7 +16,8 @@ import {
   savePrivacy,
 } from '../../../test/privacy.js';
 import { addEditor, createSite } from '../../../test/resources.js';
-import { CONSENT_VERSION_MODEL, type ConsentVersionRecord } from './consent-version.schema.js';
+import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
+import { CONSENT_VERSION_COLLECTION } from './consent-version.schema.js';
 
 /** ADR-017: personal data settings and immutable consent versions, read by members, owner-only. */
 describe('privacy settings and consent versions', () => {
@@ -169,7 +169,10 @@ describe('privacy settings and consent versions', () => {
   it('refuses any query that would change a stored version', async () => {
     const site = await createSite(owner, workspaceId);
     const v1 = await saveConsentVersion(owner, site.id, 0);
-    const model = t.app.get<Model<ConsentVersionRecord>>(getModelToken(CONSENT_VERSION_MODEL));
+    // The model as the workspace's database has it (ADR-025), with the schema's guards.
+    const model = t.app
+      .get(WorkspaceDatabases)
+      .model({ workspaceId: new Types.ObjectId(workspaceId) }, CONSENT_VERSION_COLLECTION);
     await expect(
       model.updateOne({ _id: v1.id }, { $set: { requiredText: 'Đã sửa' } }).exec(),
     ).rejects.toThrow('Consent versions are immutable (ADR-017)');

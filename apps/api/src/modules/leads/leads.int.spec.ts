@@ -63,7 +63,8 @@ describe('lead intake', () => {
   }
 
   function storedLeads(site: Site) {
-    return t.connection
+    return t
+      .workspaceDb(workspaceId)
       .collection('leads')
       .find({ siteId: new Types.ObjectId(site.id) })
       .sort({ createdAt: 1 })
@@ -209,7 +210,7 @@ describe('lead intake', () => {
     await submitLead(t, site.subdomain, leadBody(plain.published.release.id)).expect(404);
     // The page was unpublished.
     await client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: null,
         expectedCurrentReleaseId: releaseId,
         reason: 'Tạm dừng chương trình',
@@ -221,8 +222,13 @@ describe('lead intake', () => {
 
   it('accepts the release a visitor opened before a newer publish', async () => {
     const { site, slug, pageId, releaseId } = await formSite();
-    await replaceDraft(client, pageId, formDraft(slug, leadFormSection({ showEmail: true })));
-    const v2 = await publish(client, pageId);
+    await replaceDraft(
+      client,
+      site.id,
+      pageId,
+      formDraft(slug, leadFormSection({ showEmail: true })),
+    );
+    const v2 = await publish(client, site.id, pageId);
     expect(v2.release.version).toBe(2);
     await submitLead(t, site.subdomain, leadBody(releaseId, { email: 'ha@example.com' })).expect(
       201,

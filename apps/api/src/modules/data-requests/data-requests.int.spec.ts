@@ -108,11 +108,14 @@ describe('data requests', () => {
   }
 
   async function step(
+    site: Site,
     requestId: string,
     name: 'respond' | 'complete',
     status = 200,
   ): Promise<DataRequestDetail | null> {
-    const response = await owner.post(`/data-requests/${requestId}/${name}`).expect(status);
+    const response = await owner
+      .post(`/sites/${site.id}/data-requests/${requestId}/${name}`)
+      .expect(status);
     return status === 200 ? dataRequestDetailSchema.parse(response.body) : null;
   }
 
@@ -259,14 +262,16 @@ describe('data requests', () => {
     await seedPerson(form);
     const request = await record(form.site, { type: 'rectify' });
 
-    const responded = await step(request.id, 'respond');
+    const responded = await step(form.site, request.id, 'respond');
     expect(responded?.status).toBe('responded');
     expect(responded?.respondedAt).not.toBeNull();
     expect(responded?.log.map((entry) => entry.action)).toEqual(['created', 'responded']);
-    const again = await owner.post(`/data-requests/${request.id}/respond`).expect(409);
+    const again = await owner
+      .post(`/sites/${form.site.id}/data-requests/${request.id}/respond`)
+      .expect(409);
     expect(problemSchema.parse(again.body).title).toBe('Yêu cầu này đã được phản hồi');
 
-    const completed = await step(request.id, 'complete');
+    const completed = await step(form.site, request.id, 'complete');
     expect(completed?.completedAt).not.toBeNull();
     expect(completed).toMatchObject({
       status: 'completed',
@@ -282,7 +287,9 @@ describe('data requests', () => {
       'completed',
     ]);
     for (const name of ['respond', 'complete'] as const) {
-      const refused = await owner.post(`/data-requests/${request.id}/${name}`).expect(409);
+      const refused = await owner
+        .post(`/sites/${form.site.id}/data-requests/${request.id}/${name}`)
+        .expect(409);
       expect(problemSchema.parse(refused.body).title).toBe('Yêu cầu này đã hoàn tất');
     }
     // A rectification changes nothing by itself: the owner corrected the leads.
@@ -294,7 +301,7 @@ describe('data requests', () => {
     await seedPerson(form);
     const request = await record(form.site, { email: EMAIL });
 
-    const completed = await step(request.id, 'complete');
+    const completed = await step(form.site, request.id, 'complete');
 
     expect(completed).toMatchObject({
       status: 'completed',
@@ -314,7 +321,8 @@ describe('data requests', () => {
       { type: 'data_request.created', count: null },
     ]);
     // Nothing of the person is left in the stored request.
-    const stored = await t.connection
+    const stored = await t
+      .workspaceDb(workspaceId)
       .collection('data_requests')
       .findOne({ _id: new Types.ObjectId(request.id) });
     expect(stored?.['search']).toBeNull();
@@ -332,7 +340,7 @@ describe('data requests', () => {
     const form = await formSite();
     await seedPerson(form);
     const seen = await record(form.site, { email: EMAIL, type: 'access' });
-    await step(seen.id, 'complete');
+    await step(form.site, seen.id, 'complete');
     const pending = await record(form.site, {
       name: '',
       phone: '',
@@ -346,9 +354,10 @@ describe('data requests', () => {
     });
     const deletion = await record(form.site, { email: EMAIL });
 
-    await step(deletion.id, 'complete');
+    await step(form.site, deletion.id, 'complete');
 
-    const stored = await t.connection
+    const stored = await t
+      .workspaceDb(workspaceId)
       .collection('data_requests')
       .find({ siteId: new Types.ObjectId(form.site.id) })
       .toArray();
@@ -391,10 +400,10 @@ describe('data requests', () => {
     }
 
     // A lead with the requested phone number: the same person as the request.
-    await owner.delete(`/leads/${lead.id}/person`).expect(200);
+    await owner.delete(`/sites/${form.site.id}/leads/${lead.id}/person`).expect(200);
 
     const masked = dataRequestDetailSchema.parse(
-      (await owner.get(`/data-requests/${request.id}`).expect(200)).body,
+      (await owner.get(`/sites/${form.site.id}/data-requests/${request.id}`).expect(200)).body,
     );
     expect(masked).toMatchObject({
       masked: true,
@@ -430,8 +439,8 @@ describe('data requests', () => {
     const request = await record(form.site);
     const statuses = (
       await Promise.all([
-        owner.post(`/data-requests/${request.id}/complete`),
-        owner.post(`/data-requests/${request.id}/complete`),
+        owner.post(`/sites/${form.site.id}/data-requests/${request.id}/complete`),
+        owner.post(`/sites/${form.site.id}/data-requests/${request.id}/complete`),
       ])
     )
       .map((response) => response.status)
@@ -458,7 +467,7 @@ describe('data requests', () => {
     ]);
     const request = await record(form.site, { email: EMAIL, type: 'withdraw_marketing' });
 
-    const completed = await step(request.id, 'complete');
+    const completed = await step(form.site, request.id, 'complete');
 
     // The two leads of the person that still had it; Phạm Gia Huy keeps his.
     expect(completed).toMatchObject({ completedCount: 2, masked: false });
@@ -469,7 +478,8 @@ describe('data requests', () => {
     expect(
       completed?.matches.find((lead) => lead.name === 'Lê Mai Anh (cũ)')?.marketingWithdrawnAt,
     ).toBe(earlier.toISOString());
-    const other = await t.connection
+    const other = await t
+      .workspaceDb(workspaceId)
       .collection('leads')
       .findOne({ 'fields.name': 'Phạm Gia Huy', siteId: new Types.ObjectId(form.site.id) });
     expect(other?.['consent']).toMatchObject({ marketing: true, marketingWithdrawnAt: null });
@@ -485,7 +495,7 @@ describe('data requests', () => {
     const request = await record(form.site, { phone: '', email: EMAIL, type: 'access' });
 
     const response = await owner
-      .post(`/data-requests/${request.id}/export`, { format: 'json' })
+      .post(`/sites/${form.site.id}/data-requests/${request.id}/export`, { format: 'json' })
       .expect(200);
 
     expect(response.headers['cache-control']).toBe('no-store');
@@ -495,14 +505,14 @@ describe('data requests', () => {
     const file = personExportFileSchema.parse(JSON.parse(response.text));
     expect(file.leads.map((lead) => lead.name).sort()).toEqual(['Lê Mai Anh', 'Mai Anh']);
     const detail = dataRequestDetailSchema.parse(
-      (await owner.get(`/data-requests/${request.id}`).expect(200)).body,
+      (await owner.get(`/sites/${form.site.id}/data-requests/${request.id}`).expect(200)).body,
     );
     expect(detail.log.at(-1)).toMatchObject({ action: 'exported', count: 2 });
     expect((await activity(form.site))[0]).toEqual({ type: 'lead.exported', count: 2 });
 
     const rectify = await record(form.site, { type: 'rectify' });
     const refused = await owner
-      .post(`/data-requests/${rectify.id}/export`, { format: 'csv' })
+      .post(`/sites/${form.site.id}/data-requests/${rectify.id}/export`, { format: 'csv' })
       .expect(409);
     expect(problemSchema.parse(refused.body).title).toBe(
       'Chỉ yêu cầu xem dữ liệu mới có file xuất',
@@ -518,14 +528,15 @@ describe('data requests', () => {
       action: 'exported',
       count: index,
     }));
-    await t.connection
+    await t
+      .workspaceDb(workspaceId)
       .collection('data_requests')
       .updateOne({ _id: new Types.ObjectId(request.id) }, { $set: { log: old } });
 
-    const responded = await step(request.id, 'respond');
+    const responded = await step(form.site, request.id, 'respond');
     expect(responded?.log).toHaveLength(DATA_REQUEST_LOG_MAX);
     expect(responded?.log[0]?.count).toBe(1);
-    const completed = await step(request.id, 'complete');
+    const completed = await step(form.site, request.id, 'complete');
     expect(completed?.log).toHaveLength(DATA_REQUEST_LOG_MAX);
     expect(completed?.log.slice(-2).map((entry) => entry.action)).toEqual([
       'responded',
@@ -537,7 +548,7 @@ describe('data requests', () => {
     const form = await formSite();
     // "$." in an update pipeline would be read as a field path without `$literal`.
     const request = await record(form.site, { name: '$log', email: 'x@vi-du.vn' });
-    const completed = await step(request.id, 'complete');
+    const completed = await step(form.site, request.id, 'complete');
     expect(completed?.contact).toEqual({
       name: '$.',
       phone: '0987 *** 223',
@@ -550,17 +561,22 @@ describe('data requests', () => {
     const request = await record(form.site);
     await editor.get(`/sites/${form.site.id}/data-requests`).expect(403);
     await editor.post(`/sites/${form.site.id}/data-requests`, requestBody()).expect(403);
-    await editor.get(`/data-requests/${request.id}`).expect(403);
-    await editor.post(`/data-requests/${request.id}/respond`).expect(403);
-    await editor.post(`/data-requests/${request.id}/export`, { format: 'json' }).expect(403);
-    await editor.post(`/data-requests/${request.id}/complete`).expect(403);
-    expect((await step(request.id, 'respond'))?.status).toBe('responded');
+    await editor.get(`/sites/${form.site.id}/data-requests/${request.id}`).expect(403);
+    await editor.post(`/sites/${form.site.id}/data-requests/${request.id}/respond`).expect(403);
+    await editor
+      .post(`/sites/${form.site.id}/data-requests/${request.id}/export`, { format: 'json' })
+      .expect(403);
+    await editor.post(`/sites/${form.site.id}/data-requests/${request.id}/complete`).expect(403);
+    expect((await step(form.site, request.id, 'respond'))?.status).toBe('responded');
   });
 
   it('answers with no-store: a request holds personal data', async () => {
     const form = await formSite();
     const request = await record(form.site);
-    for (const path of [`/sites/${form.site.id}/data-requests`, `/data-requests/${request.id}`]) {
+    for (const path of [
+      `/sites/${form.site.id}/data-requests`,
+      `/sites/${form.site.id}/data-requests/${request.id}`,
+    ]) {
       const response = await owner.get(path).expect(200);
       expect(response.headers['cache-control']).toBe('no-store');
     }
@@ -578,10 +594,10 @@ describe('data requests', () => {
       }
 
       const stored = { _id: new Types.ObjectId(lead.id) };
-      const before = await t.connection.collection('leads').findOne(stored);
+      const before = await t.workspaceDb(workspaceId).collection('leads').findOne(stored);
 
       const response = await owner
-        .patch(`/leads/${lead.id}/contact`, {
+        .patch(`/sites/${form.site.id}/leads/${lead.id}/contact`, {
           name: 'Phạm Huy Hoàng',
           phone: '0912 448 020',
           email: 'Huy.Pham@Gmail.com',
@@ -606,7 +622,7 @@ describe('data requests', () => {
       expect(await search('pham huy hoang')).toEqual([lead.id]);
       expect(await search('Phạm Gia Huy')).toEqual([]);
       // The consent evidence is what the visitor agreed to; correcting the contact leaves it.
-      const after = await t.connection.collection('leads').findOne(stored);
+      const after = await t.workspaceDb(workspaceId).collection('leads').findOne(stored);
       expect(after?.['consent']).toEqual(before?.['consent']);
       expect(after?.['releaseId']).toEqual(before?.['releaseId']);
       const request = await record(form.site, { name: '', phone: '', email: 'huy.pham@gmail.com' });
@@ -620,9 +636,14 @@ describe('data requests', () => {
         (await owner.get(`/sites/${form.site.id}/leads?range=all`).expect(200)).body,
       ).items[0];
       const body = { name: 'Lê Mai Anh', phone: '0987 106 224', email: '' };
-      await editor.patch(`/leads/${lead?.id ?? ''}/contact`, body).expect(403);
+      await editor
+        .patch(`/sites/${form.site.id}/leads/${lead?.id ?? ''}/contact`, body)
+        .expect(403);
       const invalid = await owner
-        .patch(`/leads/${lead?.id ?? ''}/contact`, { ...body, phone: '12345' })
+        .patch(`/sites/${form.site.id}/leads/${lead?.id ?? ''}/contact`, {
+          ...body,
+          phone: '12345',
+        })
         .expect(422);
       expect(problemSchema.parse(invalid.body).issues?.[0]?.path).toEqual(['phone']);
     });

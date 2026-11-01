@@ -27,22 +27,20 @@ export class PageAccessService {
 
   /**
    * Entry point of every page endpoint (pages, publishing, preview): checks membership in the
-   * page's workspace, the member's sites and the permission through its site. Unknown and foreign
-   * pages are both 404 (ADR-003); a role without the permission is 403 (ADR-020).
+   * site's workspace, the member's sites and the permission through the site, then finds the page
+   * in that site (ADR-025). Unknown and foreign pages are both 404 (ADR-003); a role without the
+   * permission is 403 (ADR-020).
    */
   async access(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     permission: Permission,
   ): Promise<PageAccess> {
     const id = toObjectId(pageId, PAGE_NOT_FOUND);
-    const ref = await this.pages.findAccessRef(id);
-    if (!ref) {
-      throw notFound(PAGE_NOT_FOUND);
-    }
     const { scope, site } = await this.sites.accessById(
       user,
-      ref.siteId,
+      toObjectId(siteId, PAGE_NOT_FOUND),
       permission,
       PAGE_NOT_FOUND,
     );

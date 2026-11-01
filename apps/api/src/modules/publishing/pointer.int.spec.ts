@@ -58,7 +58,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       reason: string;
     },
   ) {
-    return client.post(`/pages/${pageId}/pointer`, body);
+    return client.post(`/sites/${site.id}/pages/${pageId}/pointer`, body);
   }
 
   async function moveTo(
@@ -66,7 +66,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     targetReleaseId: string | null,
     reason = 'Lý do',
   ): Promise<PointerMoveResponse> {
-    const detail = await getPage(client, pageId);
+    const detail = await getPage(client, site.id, pageId);
     const response = await pointer(pageId, {
       targetReleaseId,
       expectedCurrentReleaseId: detail.page.liveRelease?.id ?? null,
@@ -84,20 +84,21 @@ describe('rollback, undo, unpublish, redirects and history', () => {
 
   async function snapshotDocuments(pageId: string) {
     const id = new Types.ObjectId(pageId);
-    const releases = await t.connection
+    const db = t.workspaceDb(workspaceId);
+    const releases = await db
       .collection('releases')
       .find({ pageId: id })
       .sort({ version: 1 })
       .toArray();
-    const page = await t.connection.collection('pages').findOne({ _id: id });
+    const page = await db.collection('pages').findOne({ _id: id });
     return { releases, draft: page?.['draft'] as unknown };
   }
 
   /** A page with v1 and v2 published, v2 live. */
   async function twoVersions(slug = uniqueSlug('hai-ban')) {
     const { pageId, published: v1 } = await createLivePage(client, site.id, slug, 'Bản 1');
-    await editHeroHeading(client, pageId, 'Bản 2');
-    const v2 = await publish(client, pageId);
+    await editHeroHeading(client, site.id, pageId, 'Bản 2');
+    const v2 = await publish(client, site.id, pageId);
     return { pageId, v1, v2 };
   }
 
@@ -114,8 +115,8 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     const realRun = runner.run.bind(runner);
     const published: PublishResponse[] = [];
     const spy = vi.spyOn(runner, 'run').mockImplementationOnce(async (work) => {
-      await editHeroHeading(client, pageId, 'Bản 3');
-      published.push(await publish(client, pageId));
+      await editHeroHeading(client, site.id, pageId, 'Bản 3');
+      published.push(await publish(client, site.id, pageId));
       return realRun(work);
     });
     try {
@@ -137,7 +138,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
   describe('rollback', () => {
     it('moves only the pointer: releases and the draft stay byte for byte', async () => {
       const { pageId, v1 } = await twoVersions();
-      await editHeroHeading(client, pageId, 'Bản nháp 3');
+      await editHeroHeading(client, site.id, pageId, 'Bản nháp 3');
       const before = await snapshotDocuments(pageId);
       const moved = await moveTo(pageId, v1.release.id, 'Bản 2 sai giá');
       expect(moved.page.liveRelease?.version).toBe(1);
@@ -201,7 +202,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       );
       expect(problemSchema.parse(response.body).code).toBe('pointer_conflict');
       expect(published.map((item) => item.release.version)).toEqual([3]);
-      expect((await getPage(client, pageId)).page.liveRelease?.version).toBe(3);
+      expect((await getPage(client, site.id, pageId)).page.liveRelease?.version).toBe(3);
       const activity = await pageActivityTypes(pageId);
       expect(activity[0]).toBe('page.published');
       expect(activity).not.toContain('page.rolled_back');
@@ -223,7 +224,9 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       const { pageId, v1, v2 } = await twoVersions();
       const rollback = await moveTo(pageId, v1.release.id, 'Sai giá');
       const before = await snapshotDocuments(pageId);
-      const response = await client.post(`/activity/${rollback.activityId}/undo`).expect(200);
+      const response = await client
+        .post(`/sites/${site.id}/activity/${rollback.activityId}/undo`)
+        .expect(200);
       const undone = pointerMoveResponseSchema.parse(response.body);
       expect(undone.page.liveRelease?.id).toBe(v2.release.id);
       const after = await snapshotDocuments(pageId);
@@ -238,7 +241,9 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       });
       expect(original).toMatchObject({ id: rollback.activityId, undoable: false });
 
-      const again = await client.post(`/activity/${rollback.activityId}/undo`).expect(409);
+      const again = await client
+        .post(`/sites/${site.id}/activity/${rollback.activityId}/undo`)
+        .expect(409);
       expect(problemSchema.parse(again.body)).toMatchObject({
         code: 'undo_not_available',
         title: 'Không thể hoàn tác vì trang đã thay đổi sau lần khôi phục này',
@@ -248,11 +253,13 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     it('is not available after another publish', async () => {
       const { pageId, v1 } = await twoVersions();
       const rollback = await moveTo(pageId, v1.release.id, 'Sai giá');
-      await editHeroHeading(client, pageId, 'Bản 3');
-      await publish(client, pageId);
-      const response = await client.post(`/activity/${rollback.activityId}/undo`).expect(409);
+      await editHeroHeading(client, site.id, pageId, 'Bản 3');
+      await publish(client, site.id, pageId);
+      const response = await client
+        .post(`/sites/${site.id}/activity/${rollback.activityId}/undo`)
+        .expect(409);
       expect(problemSchema.parse(response.body).code).toBe('undo_not_available');
-      expect((await getPage(client, pageId)).page.liveRelease?.version).toBe(3);
+      expect((await getPage(client, site.id, pageId)).page.liveRelease?.version).toBe(3);
     });
 
     it('re-checks inside its transaction: a publish and rollback committed meanwhile win', async () => {
@@ -265,19 +272,21 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       // back to v1 again. The pointer is on v1 as the first rollback left it, but that rollback
       // is no longer the page's latest pointer event.
       const spy = vi.spyOn(runner, 'run').mockImplementationOnce(async (work) => {
-        await editHeroHeading(client, pageId, 'Bản 3');
-        await publish(client, pageId);
+        await editHeroHeading(client, site.id, pageId, 'Bản 3');
+        await publish(client, site.id, pageId);
         concurrent = await moveTo(pageId, v1.release.id, 'Lại sai giá');
         return realRun(work);
       });
       try {
-        const response = await client.post(`/activity/${rollback.activityId}/undo`).expect(409);
+        const response = await client
+          .post(`/sites/${site.id}/activity/${rollback.activityId}/undo`)
+          .expect(409);
         expect(problemSchema.parse(response.body).code).toBe('undo_not_available');
       } finally {
         spy.mockRestore();
       }
       expect(concurrent).not.toBeNull();
-      const detail = await getPage(client, pageId);
+      const detail = await getPage(client, site.id, pageId);
       expect(detail.page.liveRelease?.version).toBe(1);
       expect(detail.page.lastPointerEvent).toMatchObject({ type: 'rolled_back', version: 1 });
       const events = await client.get(`/sites/${site.id}/activity?limit=5`).expect(200);
@@ -292,10 +301,14 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     it('is only available for rollbacks', async () => {
       const { pageId } = await twoVersions();
       const unpublished = await moveTo(pageId, null, 'Gỡ');
-      const response = await client.post(`/activity/${unpublished.activityId}/undo`).expect(409);
+      const response = await client
+        .post(`/sites/${site.id}/activity/${unpublished.activityId}/undo`)
+        .expect(409);
       expect(problemSchema.parse(response.body).code).toBe('undo_not_available');
-      await client.post(`/activity/${new Types.ObjectId().toHexString()}/undo`).expect(404);
-      await client.post('/activity/not-an-id/undo').expect(404);
+      await client
+        .post(`/sites/${site.id}/activity/${new Types.ObjectId().toHexString()}/undo`)
+        .expect(404);
+      await client.post(`/sites/${site.id}/activity/not-an-id/undo`).expect(404);
     });
   });
 
@@ -334,7 +347,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       );
       expect(problemSchema.parse(response.body).code).toBe('pointer_conflict');
       expect(published.map((item) => item.release.version)).toEqual([3]);
-      expect((await getPage(client, pageId)).page.liveRelease?.version).toBe(3);
+      expect((await getPage(client, site.id, pageId)).page.liveRelease?.version).toBe(3);
       expect((await resolve(site, slug)).kind).toBe('page');
       const activity = await pageActivityTypes(pageId);
       expect(activity[0]).toBe('page.published');
@@ -347,12 +360,12 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       const a = uniqueSlug('a');
       const b = uniqueSlug('b');
       const { pageId } = await createLivePage(client, site.id, a);
-      await replaceDraft(client, pageId, publishableDraft(b));
+      await replaceDraft(client, site.id, pageId, publishableDraft(b));
       // The draft slug changed, but nothing is live at b and a still serves the page.
       expect((await resolve(site, a)).kind).toBe('page');
       await visitor.get(`/public/sites/${site.subdomain}/resolve?path=${b}`).expect(404);
 
-      const v2 = await publish(client, pageId);
+      const v2 = await publish(client, site.id, pageId);
       expect(v2.liveUrl).toBe(`${site.defaultOrigin}/${b}`);
       expect(await resolve(site, a)).toEqual({ kind: 'redirect', location: `/${b}` });
       expect((await resolve(site, b)).kind).toBe('page');
@@ -361,14 +374,15 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     it('drops the redirect when another page goes live at the old slug', async () => {
       const a = uniqueSlug('a');
       const { pageId } = await createLivePage(client, site.id, a);
-      await replaceDraft(client, pageId, publishableDraft(uniqueSlug('b')));
-      await publish(client, pageId);
+      await replaceDraft(client, site.id, pageId, publishableDraft(uniqueSlug('b')));
+      await publish(client, site.id, pageId);
       expect((await resolve(site, a)).kind).toBe('redirect');
 
       const other = await createLivePage(client, site.id, a, 'Trang mới', 'Trang mới');
       const resolved = await resolve(site, a);
       expect(resolved.kind === 'page' && resolved.data.page.id).toBe(other.pageId);
-      const redirect = await t.connection
+      const redirect = await t
+        .workspaceDb(workspaceId)
         .collection('redirects')
         .findOne({ siteId: new Types.ObjectId(site.id), fromSlug: a });
       expect(redirect).toBeNull();
@@ -378,8 +392,8 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       const a = uniqueSlug('a');
       const b = uniqueSlug('b');
       const { pageId, published: v1 } = await createLivePage(client, site.id, a);
-      await replaceDraft(client, pageId, publishableDraft(b));
-      await publish(client, pageId);
+      await replaceDraft(client, site.id, pageId, publishableDraft(b));
+      await publish(client, site.id, pageId);
 
       const moved = await moveTo(pageId, v1.release.id, 'Giữ đường dẫn cũ');
       expect(moved.page.liveUrl).toBe(`${site.defaultOrigin}/${a}`);
@@ -390,8 +404,8 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     it('refuses a rollback to a slug another page is live at, changing nothing', async () => {
       const a = uniqueSlug('a');
       const { pageId, published: v1 } = await createLivePage(client, site.id, a);
-      await replaceDraft(client, pageId, publishableDraft(uniqueSlug('b')));
-      const v2 = await publish(client, pageId);
+      await replaceDraft(client, site.id, pageId, publishableDraft(uniqueSlug('b')));
+      const v2 = await publish(client, site.id, pageId);
       await createLivePage(client, site.id, a, 'Trang chiếm chỗ', 'Trang chiếm chỗ');
       const before = await snapshotDocuments(pageId);
 
@@ -405,7 +419,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
         title: `Đường dẫn /${a} đang được trang “Trang chiếm chỗ” dùng`,
       });
       expect(await snapshotDocuments(pageId)).toEqual(before);
-      expect((await getPage(client, pageId)).page.liveRelease?.id).toBe(v2.release.id);
+      expect((await getPage(client, site.id, pageId)).page.liveRelease?.id).toBe(v2.release.id);
     });
   });
 
@@ -413,12 +427,14 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     it('interleaves releases and pointer moves newest first, with a cursor across both', async () => {
       const { pageId, v1, v2 } = await twoVersions();
       const rollback = await moveTo(pageId, v1.release.id, 'Sai giá');
-      await client.post(`/activity/${rollback.activityId}/undo`).expect(200);
-      await editHeroHeading(client, pageId, 'Bản 3');
-      const v3 = await publish(client, pageId, 'Bản ba');
+      await client.post(`/sites/${site.id}/activity/${rollback.activityId}/undo`).expect(200);
+      await editHeroHeading(client, site.id, pageId, 'Bản 3');
+      const v3 = await publish(client, site.id, pageId, 'Bản ba');
       const unpublished = await moveTo(pageId, null, 'Tạm gỡ');
 
-      const response = await client.get(`/pages/${pageId}/history?limit=50`).expect(200);
+      const response = await client
+        .get(`/sites/${site.id}/pages/${pageId}/history?limit=50`)
+        .expect(200);
       const history = historyResponseSchema.parse(response.body);
       expect(history.liveReleaseId).toBeNull();
       expect(history.releaseCount).toBe(3);
@@ -448,7 +464,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       do {
         const query: string = cursor === null ? '?limit=4' : `?limit=4&cursor=${cursor}`;
         const page = historyResponseSchema.parse(
-          (await client.get(`/pages/${pageId}/history${query}`).expect(200)).body,
+          (await client.get(`/sites/${site.id}/pages/${pageId}/history${query}`).expect(200)).body,
         );
         seen.push(
           ...page.items.map((item) =>
@@ -468,7 +484,7 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       const { pageId, v1, v2 } = await twoVersions();
       const rollback = await moveTo(pageId, v1.release.id, 'Sai giá');
       const history = historyResponseSchema.parse(
-        (await client.get(`/pages/${pageId}/history`).expect(200)).body,
+        (await client.get(`/sites/${site.id}/pages/${pageId}/history`).expect(200)).body,
       );
       expect(history.liveReleaseId).toBe(v1.release.id);
       expect(history.items[0]).toMatchObject({

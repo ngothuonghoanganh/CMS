@@ -319,7 +319,7 @@ describe('custom domains (ADR-022)', () => {
       expect(
         siteSchema.parse((await client.get(`/sites/${site.id}`).expect(200)).body).publicOrigin,
       ).toBe(publicOrigin);
-      expect((await getPage(client, pageId)).page.liveUrl).toBe(`${publicOrigin}/${slug}`);
+      expect((await getPage(client, site.id, pageId)).page.liveUrl).toBe(`${publicOrigin}/${slug}`);
       expect(
         sitemapResponseSchema.parse(
           (await anyone().get(`/public/sites/${site.subdomain}/sitemap`).expect(200)).body,

@@ -311,7 +311,7 @@ export class InvitationsService {
       this.users.findContactsByEmail([invitation.email]),
       invitation.siteIds === null
         ? null
-        : this.sites.findNamesForInvitation(invitation.workspaceId, invitation.siteIds),
+        : this.sites.findNamesForInvitation(invitation, invitation.siteIds),
       invitation.customRoleId
         ? this.customRoles.findOfMembership(invitation.workspaceId, invitation.customRoleId)
         : null,

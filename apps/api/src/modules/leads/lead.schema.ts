@@ -12,6 +12,7 @@ import {
 } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 import type { LeadSearchKeys } from './domain/lead-search.js';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const LEAD_MODEL = 'Lead';
 export const LEADS_SUBMISSION_INDEX = 'leads_site_submission_unique';
@@ -176,3 +177,6 @@ export const leadLimitSchema = new Schema<LeadLimitRecord>(
 );
 leadLimitSchema.index({ key: 1 }, { unique: true, name: LEAD_LIMITS_KEY_INDEX });
 leadLimitSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+/** In the workspace's own database (ADR-025). */
+export const LEAD_COLLECTION = workspaceCollection(LEAD_MODEL, leadSchema);

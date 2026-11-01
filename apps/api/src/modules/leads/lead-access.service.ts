@@ -32,23 +32,21 @@ export class LeadAccessService {
   ) {}
 
   /**
-   * Entry point of every lead endpoint: checks membership in the lead's workspace, the member's
-   * sites and the permission through its site. Unknown leads and leads of another workspace are
-   * both 404 (ADR-003); a role without the permission is 403 (ADR-020).
+   * Entry point of every lead endpoint: checks membership in the site's workspace, the member's
+   * sites and the permission through the site, then finds the lead in that site (ADR-025). Unknown
+   * leads and leads of another site or workspace are all 404 (ADR-003); a role without the
+   * permission is 403 (ADR-020).
    */
   async access(
     user: AuthenticatedUser,
+    siteId: string,
     leadId: string,
     permission: Permission,
   ): Promise<LeadAccess> {
     const id = toObjectId(leadId, LEAD_NOT_FOUND);
-    const ref = await this.leads.findAccessRef(id);
-    if (!ref) {
-      throw notFound(LEAD_NOT_FOUND);
-    }
     const { scope, site } = await this.sites.accessById(
       user,
-      ref.siteId,
+      toObjectId(siteId, LEAD_NOT_FOUND),
       permission,
       LEAD_NOT_FOUND,
     );

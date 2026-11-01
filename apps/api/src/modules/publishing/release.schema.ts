@@ -8,6 +8,7 @@ import {
 import { Schema, type Types } from 'mongoose';
 import type { LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const RELEASE_MODEL = 'Release';
 export const RELEASES_VERSION_INDEX = 'releases_page_version_unique';
@@ -131,3 +132,6 @@ releaseSchema.pre(
     throw new Error('Releases are immutable (ADR-005)');
   },
 );
+
+/** In the workspace's own database (ADR-025). */
+export const RELEASE_COLLECTION = workspaceCollection(RELEASE_MODEL, releaseSchema);

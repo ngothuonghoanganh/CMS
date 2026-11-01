@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import type { AssetMimeType } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import {
@@ -11,7 +10,11 @@ import {
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { ASSET_MODEL, type AssetRecord } from './asset.schema.js';
+import { ASSET_COLLECTION, type AssetRecord } from './asset.schema.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 export interface CreateAssetInput {
   /** Chosen before the upload, because the storage key contains it. */
@@ -42,7 +45,7 @@ function uniqueIds(ids: readonly ObjectId[]): ObjectId[] {
 
 @Injectable()
 export class AssetsRepository {
-  constructor(@InjectModel(ASSET_MODEL) private readonly assets: Model<AssetRecord>) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   /** Inserts an asset uploaded by the scope's user. */
   async create(scope: WorkspaceScope, input: CreateAssetInput, tx?: Tx): Promise<AssetRecord> {
@@ -54,7 +57,7 @@ export class AssetsRepository {
       uploadedBy: scope.userId,
       createdAt: new Date(),
     };
-    const [asset] = await this.assets.create([document], tx ? { session: tx } : {});
+    const [asset] = await this.assets(scope).create([document], tx ? { session: tx } : {});
     if (!asset) {
       throw new Error('Asset insert returned no document');
     }
@@ -68,7 +71,7 @@ export class AssetsRepository {
     cursor: string | undefined,
     limit: number,
   ): Promise<KeysetPage<AssetRecord>> {
-    const records = await this.assets
+    const records = await this.assets(scope)
       .find({ workspaceId: scope.workspaceId, siteId, ...afterCursor(cursor) })
       .sort(NEWEST_FIRST)
       .limit(limit + 1)
@@ -77,25 +80,19 @@ export class AssetsRepository {
     return toKeysetPage(records, limit);
   }
 
-  /** Unscoped lookup by id that only returns the asset's site, for access checks. */
-  async findAccessRef(id: ObjectId): Promise<AssetAccessRef | null> {
-    const asset = await this.assets
-      .findById(id, { siteId: 1 })
-      .lean<Pick<AssetRecord, '_id' | 'siteId'>>()
-      .exec();
-    return asset ? { id: asset._id, siteId: asset.siteId } : null;
-  }
-
   /**
    * Changes the default description. The document is saved (not updated in place) so the
    * model-level alt/decorative rule validates the result.
    */
   async update(
     scope: WorkspaceScope,
+    siteId: ObjectId,
     id: ObjectId,
     patch: { alt: string | null; decorative: boolean },
   ): Promise<AssetRecord | null> {
-    const asset = await this.assets.findOne({ _id: id, workspaceId: scope.workspaceId }).exec();
+    const asset = await this.assets(scope)
+      .findOne({ _id: id, workspaceId: scope.workspaceId, siteId })
+      .exec();
     if (!asset) {
       return null;
     }
@@ -115,7 +112,7 @@ export class AssetsRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const assets = await this.assets
+    const assets = await this.assets(scope)
       .find({ workspaceId: scope.workspaceId, siteId, _id: { $in: unique } })
       .lean<AssetRecord[]>()
       .exec();
@@ -127,6 +124,7 @@ export class AssetsRepository {
    * the request host and the ids from a published release.
    */
   async findPublicForSite(
+    ref: WorkspaceRef,
     siteId: ObjectId,
     ids: readonly ObjectId[],
   ): Promise<Map<string, AssetRecord>> {
@@ -134,10 +132,14 @@ export class AssetsRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const assets = await this.assets
-      .find({ siteId, _id: { $in: unique } })
+    const assets = await this.assets(ref)
+      .find({ workspaceId: ref.workspaceId, siteId, _id: { $in: unique } })
       .lean<AssetRecord[]>()
       .exec();
     return byId(assets);
+  }
+
+  private assets(ref: WorkspaceRef): Model<AssetRecord> {
+    return this.databases.model(ref, ASSET_COLLECTION);
   }
 }

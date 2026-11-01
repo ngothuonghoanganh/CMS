@@ -15,6 +15,7 @@ import {
 } from './workspace.schema.js';
 import { WorkspaceJoin } from './workspace-join.service.js';
 import { WorkspacesRepository } from './workspaces.repository.js';
+import { WorkspaceIndexBuilder } from './workspace-index-builder.js';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { WorkspacesRepository } from './workspaces.repository.js';
     ]),
   ],
   providers: [
+    WorkspaceIndexBuilder,
     WorkspacesRepository,
     InvitationsRepository,
     AccessRequestsRepository,

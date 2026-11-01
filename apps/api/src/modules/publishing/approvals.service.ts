@@ -62,11 +62,13 @@ export class ApprovalsService {
    */
   async request(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     input: RequestApproval,
   ): Promise<ApprovalResponse> {
     const { scope, site, page } = await this.pageAccess.access(
       user,
+      siteId,
       pageId,
       'pages.requestPublish',
     );
@@ -106,9 +108,14 @@ export class ApprovalsService {
   }
 
   /** The sender takes their pending request back. */
-  async withdraw(user: AuthenticatedUser, pageId: string): Promise<ApprovalResponse> {
+  async withdraw(
+    user: AuthenticatedUser,
+    siteId: string,
+    pageId: string,
+  ): Promise<ApprovalResponse> {
     const { scope, site, page } = await this.pageAccess.access(
       user,
+      siteId,
       pageId,
       'pages.requestPublish',
     );
@@ -128,11 +135,13 @@ export class ApprovalsService {
   /** Refuses the request the approver saw, with a reason the sender reads in an email. */
   async reject(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     input: RejectApproval,
   ): Promise<ApprovalResponse> {
     const { scope, site, page } = await this.pageAccess.access(
       user,
+      siteId,
       pageId,
       'publishApprovals.decide',
     );

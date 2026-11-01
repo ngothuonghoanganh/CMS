@@ -109,10 +109,16 @@ export class LeadExportService {
   /** "Xuất dữ liệu người này", from one of their leads. */
   async exportPerson(
     user: AuthenticatedUser,
+    siteId: string,
     leadId: string,
     request: PersonExportRequest,
   ): Promise<LeadFile> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'personalData.manage');
+    const { scope, site, lead } = await this.leadAccess.access(
+      user,
+      siteId,
+      leadId,
+      'personalData.manage',
+    );
     return (await this.exportPersonFile(scope, site, personOfLead(lead), request)).file;
   }
 

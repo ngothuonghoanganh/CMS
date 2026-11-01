@@ -1,4 +1,5 @@
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const CONSENT_VERSION_MODEL = 'ConsentVersion';
 export const CONSENT_VERSIONS_SITE_VERSION_INDEX = 'consent_versions_site_version_unique';
@@ -56,4 +57,10 @@ consentVersionSchema.pre(
   function () {
     throw new Error('Consent versions are immutable (ADR-017)');
   },
+);
+
+/** In the workspace's own database (ADR-025). */
+export const CONSENT_VERSION_COLLECTION = workspaceCollection(
+  CONSENT_VERSION_MODEL,
+  consentVersionSchema,
 );

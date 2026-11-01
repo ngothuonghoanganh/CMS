@@ -50,10 +50,16 @@ export class WorkspacesRepository {
     @InjectModel(MEMBERSHIP_MODEL) private readonly memberships: Model<MembershipRecord>,
   ) {}
 
-  async createWithOwner(name: string, ownerId: ObjectId, tx: Tx): Promise<WorkspaceRecord> {
+  /** `workspaceId` is chosen beforehand: its database is created before the workspace (ADR-025). */
+  async createWithOwner(
+    workspaceId: ObjectId,
+    name: string,
+    ownerId: ObjectId,
+    tx: Tx,
+  ): Promise<WorkspaceRecord> {
     const now = new Date();
     const [workspace] = await this.workspaces.create(
-      [{ name, siteSeq: 0, createdBy: ownerId, createdAt: now }],
+      [{ _id: workspaceId, name, siteSeq: 0, createdBy: ownerId, createdAt: now }],
       { session: tx },
     );
     if (!workspace) {
@@ -66,6 +72,18 @@ export class WorkspacesRepository {
       },
     );
     return workspace.toObject();
+  }
+
+  /** Every workspace id, oldest first, as a stream: for startup work on each workspace database. */
+  async *allIds(): AsyncGenerator<ObjectId> {
+    const cursor = this.workspaces
+      .find({}, { _id: 1 })
+      .sort({ _id: 1 })
+      .lean<Pick<WorkspaceRecord, '_id'>>()
+      .cursor();
+    for await (const workspace of cursor) {
+      yield workspace._id;
+    }
   }
 
   /**

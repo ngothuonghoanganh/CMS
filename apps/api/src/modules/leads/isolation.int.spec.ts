@@ -18,6 +18,7 @@ import { createSite } from '../../../test/resources.js';
 describe('workspace isolation of leads', () => {
   let t: TestApp;
   let ownerA: TestClient;
+  let workspaceA: string;
   let siteA: Site;
   let leadId: string;
   let pageIdA: string;
@@ -31,6 +32,7 @@ describe('workspace isolation of leads', () => {
     );
     const a = await signedUpClient(t.app);
     ownerA = a.client;
+    workspaceA = a.workspaceId;
     siteA = await createSite(ownerA, a.workspaceId);
     await configurePrivacy(ownerA, siteA.id);
     await addConfirmedRecipient(t, ownerA, siteA.id);
@@ -68,25 +70,36 @@ describe('workspace isolation of leads', () => {
   });
 
   it('hides a lead of site A, and refuses to change, export or delete it', async () => {
-    await expectNotFound(ownerB.get(`/leads/${leadId}`));
-    await expectNotFound(ownerB.patch(`/leads/${leadId}`, { status: 'won', note: 'chen ngang' }));
-    await expectNotFound(ownerB.post(`/leads/${leadId}/person/export`, { format: 'json' }));
-    await expectNotFound(ownerB.delete(`/leads/${leadId}/person`));
+    // Through site A, whose workspace B is not a member of, and through B's own site, whose
+    // workspace database does not hold the lead (ADR-025).
+    for (const siteId of [siteA.id, siteB.id]) {
+      const lead = `/sites/${siteId}/leads/${leadId}`;
+      await expectNotFound(ownerB.get(lead));
+      await expectNotFound(ownerB.patch(lead, { status: 'won', note: 'chen ngang' }));
+      await expectNotFound(ownerB.post(`${lead}/person/export`, { format: 'json' }));
+      await expectNotFound(ownerB.delete(`${lead}/person`));
+    }
   });
 
   it('refuses to send the email of a lead of site A again for workspace B', async () => {
-    await t.connection.collection('leads').updateOne(
-      { _id: new Types.ObjectId(leadId) },
-      {
-        $set: {
-          'notification.status': 'failed',
-          'notification.attempts': 3,
-          'notification.lastErrorCode': 'smtp_unavailable',
+    await t
+      .workspaceDb(workspaceA)
+      .collection('leads')
+      .updateOne(
+        { _id: new Types.ObjectId(leadId) },
+        {
+          $set: {
+            'notification.status': 'failed',
+            'notification.attempts': 3,
+            'notification.lastErrorCode': 'smtp_unavailable',
+          },
         },
-      },
+      );
+    await expectNotFound(ownerB.post(`/sites/${siteA.id}/leads/${leadId}/notification/retry`));
+    await expectNotFound(ownerB.post(`/sites/${siteB.id}/leads/${leadId}/notification/retry`));
+    const lead = leadDetailSchema.parse(
+      (await ownerA.get(`/sites/${siteA.id}/leads/${leadId}`).expect(200)).body,
     );
-    await expectNotFound(ownerB.post(`/leads/${leadId}/notification/retry`));
-    const lead = leadDetailSchema.parse((await ownerA.get(`/leads/${leadId}`).expect(200)).body);
     expect(lead.notification).toMatchObject({ status: 'failed', attempts: 3 });
   });
 
@@ -98,7 +111,9 @@ describe('workspace isolation of leads', () => {
   });
 
   it('leaves the lead of site A untouched', async () => {
-    const lead = leadDetailSchema.parse((await ownerA.get(`/leads/${leadId}`).expect(200)).body);
+    const lead = leadDetailSchema.parse(
+      (await ownerA.get(`/sites/${siteA.id}/leads/${leadId}`).expect(200)).body,
+    );
     expect(lead).toMatchObject({ status: 'new', note: '' });
   });
 });

@@ -53,7 +53,7 @@ export class PageViewCollector {
     if (!(await this.withinLimits(site._id, client.ip, now))) {
       return;
     }
-    const page = await this.pages.findPublicLiveBySlug(site._id, slugFromPath(view.path));
+    const page = await this.pages.findPublicLiveBySlug(site, site._id, slugFromPath(view.path));
     if (!page) {
       return;
     }
@@ -65,7 +65,7 @@ export class PageViewCollector {
       ip: client.ip,
       userAgent: client.userAgent,
     });
-    const firstSightings = await this.analytics.markSeen(site._id, page._id, day, hash);
+    const firstSightings = await this.analytics.markSeen(site, site._id, page._id, day, hash);
     const source = normalizeLeadSource({
       ...view.source,
       siteHosts: await this.siteHosts.of(site),
@@ -74,7 +74,7 @@ export class PageViewCollector {
       site._id.toHexString(),
       day,
       { source: source.source, medium: source.medium },
-      () => this.analytics.pairsOf(site._id, day),
+      () => this.analytics.pairsOf(site, site._id, day),
     );
     await this.analytics.addView(
       {

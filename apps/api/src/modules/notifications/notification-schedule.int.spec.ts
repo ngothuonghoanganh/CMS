@@ -51,8 +51,9 @@ describe('lead email retry schedule', () => {
     await t.close();
   });
 
-  async function notificationOf(leadId: string): Promise<LeadNotification | null> {
-    const response = await owner.get(`/leads/${leadId}`).expect(200);
+  /** `lead` is the lead's path, under its site (ADR-025). */
+  async function notificationOf(lead: string): Promise<LeadNotification | null> {
+    const response = await owner.get(lead).expect(200);
     return leadDetailSchema.parse(response.body).notification;
   }
 
@@ -65,14 +66,14 @@ describe('lead email retry schedule', () => {
    * attempt never came. The notifier's waits are the only timers this test fakes.
    */
   async function settles(
-    leadId: string,
+    lead: string,
     expected: Partial<LeadNotification> & { attempts: number },
   ): Promise<void> {
     const waits = expected.status === 'pending' ? 1 : 0;
     const deadline = Date.now() + SETTLE_BUDGET_MS;
     let notification: LeadNotification | null = null;
     while (Date.now() < deadline) {
-      notification = await notificationOf(leadId);
+      notification = await notificationOf(lead);
       if (
         notification !== null &&
         notification.status !== 'sending' &&
@@ -90,9 +91,9 @@ describe('lead email retry schedule', () => {
   }
 
   /** Lets real time pass and checks that no attempt ran meanwhile. */
-  async function staysAt(leadId: string, attempts: number): Promise<void> {
+  async function staysAt(lead: string, attempts: number): Promise<void> {
     await sleep(150);
-    expect(await notificationOf(leadId)).toMatchObject({ status: 'pending', attempts });
+    expect(await notificationOf(lead)).toMatchObject({ status: 'pending', attempts });
   }
 
   // Three attempts may each use their whole budget on a loaded machine.
@@ -112,35 +113,35 @@ describe('lead email retry schedule', () => {
         const list = leadListResponseSchema.parse(
           (await owner.get(`/sites/${site.id}/leads`).expect(200)).body,
         );
-        const leadId = list.items[0]?.id ?? '';
+        const lead = `/sites/${site.id}/leads/${list.items[0]?.id ?? ''}`;
         // Queued, not yet tried: even "at once" waits for the clock to move.
-        expect(await notificationOf(leadId)).toMatchObject({ status: 'pending', attempts: 0 });
+        expect(await notificationOf(lead)).toMatchObject({ status: 'pending', attempts: 0 });
 
         await vi.advanceTimersByTimeAsync(0);
-        await settles(leadId, {
+        await settles(lead, {
           status: 'pending',
           attempts: 1,
           lastErrorCode: 'smtp_unavailable',
         });
 
         await vi.advanceTimersByTimeAsync(59_999);
-        await staysAt(leadId, 1);
+        await staysAt(lead, 1);
         await vi.advanceTimersByTimeAsync(1);
-        await settles(leadId, {
+        await settles(lead, {
           status: 'pending',
           attempts: 2,
           lastErrorCode: 'smtp_unavailable',
         });
 
         await vi.advanceTimersByTimeAsync(299_999);
-        await staysAt(leadId, 2);
+        await staysAt(lead, 2);
         await vi.advanceTimersByTimeAsync(1);
-        await settles(leadId, { status: 'failed', attempts: 3, lastErrorCode: 'smtp_unavailable' });
+        await settles(lead, { status: 'failed', attempts: 3, lastErrorCode: 'smtp_unavailable' });
 
         // Nothing more is scheduled for this lead: an hour later it is still the same.
         await vi.advanceTimersByTimeAsync(3_600_000);
         await sleep(150);
-        expect(await notificationOf(leadId)).toMatchObject({ status: 'failed', attempts: 3 });
+        expect(await notificationOf(lead)).toMatchObject({ status: 'failed', attempts: 3 });
         expect(t.emails.sent.filter((email) => email.subject.includes('Lead mới'))).toEqual([]);
       } finally {
         vi.useRealTimers();

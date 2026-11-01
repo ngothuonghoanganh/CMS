@@ -518,7 +518,7 @@ export const endpoints = {
   }),
   getLead: endpoint({
     method: 'GET',
-    path: (leadId: string) => `/leads/${e(leadId)}`,
+    path: (siteId: string, leadId: string) => `/sites/${e(siteId)}/leads/${e(leadId)}`,
     request: null,
     query: null,
     response: leadDetailSchema,
@@ -526,7 +526,7 @@ export const endpoints = {
   /** Status, internal note, or moving to and from "Nghi ngờ spam". */
   updateLead: endpoint({
     method: 'PATCH',
-    path: (leadId: string) => `/leads/${e(leadId)}`,
+    path: (siteId: string, leadId: string) => `/sites/${e(siteId)}/leads/${e(leadId)}`,
     request: updateLeadRequestSchema,
     query: null,
     response: leadDetailSchema,
@@ -537,7 +537,7 @@ export const endpoints = {
    */
   updateLeadContact: endpoint({
     method: 'PATCH',
-    path: (leadId: string) => `/leads/${e(leadId)}/contact`,
+    path: (siteId: string, leadId: string) => `/sites/${e(siteId)}/leads/${e(leadId)}/contact`,
     request: updateLeadContactRequestSchema,
     query: null,
     response: leadDetailSchema,
@@ -548,7 +548,8 @@ export const endpoints = {
    */
   exportLeadPerson: endpoint({
     method: 'POST',
-    path: (leadId: string) => `/leads/${e(leadId)}/person/export`,
+    path: (siteId: string, leadId: string) =>
+      `/sites/${e(siteId)}/leads/${e(leadId)}/person/export`,
     request: personExportRequestSchema,
     query: null,
     response: null,
@@ -559,7 +560,7 @@ export const endpoints = {
    */
   deleteLeadPerson: endpoint({
     method: 'DELETE',
-    path: (leadId: string) => `/leads/${e(leadId)}/person`,
+    path: (siteId: string, leadId: string) => `/sites/${e(siteId)}/leads/${e(leadId)}/person`,
     request: null,
     query: null,
     response: personDeleteResponseSchema,
@@ -568,7 +569,8 @@ export const endpoints = {
   /** `leads.handle`: sends the lead's email notification again after it failed (ADR-018). */
   retryLeadNotification: endpoint({
     method: 'POST',
-    path: (leadId: string) => `/leads/${e(leadId)}/notification/retry`,
+    path: (siteId: string, leadId: string) =>
+      `/sites/${e(siteId)}/leads/${e(leadId)}/notification/retry`,
     request: null,
     query: null,
     response: leadDetailSchema,
@@ -613,7 +615,8 @@ export const endpoints = {
   }),
   getDataRequest: endpoint({
     method: 'GET',
-    path: (requestId: string) => `/data-requests/${e(requestId)}`,
+    path: (siteId: string, requestId: string) =>
+      `/sites/${e(siteId)}/data-requests/${e(requestId)}`,
     request: null,
     query: null,
     response: dataRequestDetailSchema,
@@ -621,7 +624,8 @@ export const endpoints = {
   /** The person was answered. 409 `conflict` unless the request is `open`. */
   respondDataRequest: endpoint({
     method: 'POST',
-    path: (requestId: string) => `/data-requests/${e(requestId)}/respond`,
+    path: (siteId: string, requestId: string) =>
+      `/sites/${e(siteId)}/data-requests/${e(requestId)}/respond`,
     request: null,
     query: null,
     response: dataRequestDetailSchema,
@@ -632,7 +636,8 @@ export const endpoints = {
    */
   exportDataRequest: endpoint({
     method: 'POST',
-    path: (requestId: string) => `/data-requests/${e(requestId)}/export`,
+    path: (siteId: string, requestId: string) =>
+      `/sites/${e(siteId)}/data-requests/${e(requestId)}/export`,
     request: personExportRequestSchema,
     query: null,
     response: null,
@@ -644,7 +649,8 @@ export const endpoints = {
    */
   completeDataRequest: endpoint({
     method: 'POST',
-    path: (requestId: string) => `/data-requests/${e(requestId)}/complete`,
+    path: (siteId: string, requestId: string) =>
+      `/sites/${e(siteId)}/data-requests/${e(requestId)}/complete`,
     request: null,
     query: null,
     response: dataRequestDetailSchema,
@@ -738,21 +744,22 @@ export const endpoints = {
   }),
   getPage: endpoint({
     method: 'GET',
-    path: (pageId: string) => `/pages/${e(pageId)}`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}`,
     request: null,
     query: null,
     response: pageDetailResponseSchema,
   }),
   saveDraft: endpoint({
     method: 'PUT',
-    path: (pageId: string) => `/pages/${e(pageId)}/draft`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/draft`,
     request: saveDraftRequestSchema,
     query: null,
     response: saveDraftResponseSchema,
   }),
   restoreDraft: endpoint({
     method: 'POST',
-    path: (pageId: string) => `/pages/${e(pageId)}/draft/restore`,
+    path: (siteId: string, pageId: string) =>
+      `/sites/${e(siteId)}/pages/${e(pageId)}/draft/restore`,
     request: restoreDraftRequestSchema,
     query: null,
     response: pageDetailResponseSchema,
@@ -761,7 +768,7 @@ export const endpoints = {
   // Publishing
   getChecks: endpoint({
     method: 'GET',
-    path: (pageId: string) => `/pages/${e(pageId)}/checks`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/checks`,
     request: null,
     query: null,
     response: checksResultSchema,
@@ -769,14 +776,14 @@ export const endpoints = {
   /** Requires the `Idempotency-Key` header. */
   publish: endpoint({
     method: 'POST',
-    path: (pageId: string) => `/pages/${e(pageId)}/releases`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/releases`,
     request: publishRequestSchema,
     query: null,
     response: publishResponseSchema,
   }),
   history: endpoint({
     method: 'GET',
-    path: (pageId: string) => `/pages/${e(pageId)}/history`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/history`,
     request: null,
     query: cursorQuerySchema,
     response: historyResponseSchema,
@@ -784,21 +791,22 @@ export const endpoints = {
   /** A request to publish, its withdrawal by the sender and its refusal (ADR-023). */
   requestApproval: endpoint({
     method: 'POST',
-    path: (pageId: string) => `/pages/${e(pageId)}/approval`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/approval`,
     request: requestApprovalSchema,
     query: null,
     response: approvalResponseSchema,
   }),
   withdrawApproval: endpoint({
     method: 'DELETE',
-    path: (pageId: string) => `/pages/${e(pageId)}/approval`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/approval`,
     request: null,
     query: null,
     response: approvalResponseSchema,
   }),
   rejectApproval: endpoint({
     method: 'POST',
-    path: (pageId: string) => `/pages/${e(pageId)}/approval/reject`,
+    path: (siteId: string, pageId: string) =>
+      `/sites/${e(siteId)}/pages/${e(pageId)}/approval/reject`,
     request: rejectApprovalSchema,
     query: null,
     response: approvalResponseSchema,
@@ -806,21 +814,23 @@ export const endpoints = {
   /** Rollback (target = older release) or unpublish (target = null). */
   movePointer: endpoint({
     method: 'POST',
-    path: (pageId: string) => `/pages/${e(pageId)}/pointer`,
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}/pointer`,
     request: pointerMoveRequestSchema,
     query: null,
     response: pointerMoveResponseSchema,
   }),
   undoActivity: endpoint({
     method: 'POST',
-    path: (activityId: string) => `/activity/${e(activityId)}/undo`,
+    path: (siteId: string, activityId: string) =>
+      `/sites/${e(siteId)}/activity/${e(activityId)}/undo`,
     request: null,
     query: null,
     response: pointerMoveResponseSchema,
   }),
   createPreviewLink: endpoint({
     method: 'POST',
-    path: (pageId: string) => `/pages/${e(pageId)}/preview-links`,
+    path: (siteId: string, pageId: string) =>
+      `/sites/${e(siteId)}/pages/${e(pageId)}/preview-links`,
     request: createPreviewLinkRequestSchema,
     query: null,
     response: previewLinkResponseSchema,
@@ -855,7 +865,7 @@ export const endpoints = {
   }),
   updateAsset: endpoint({
     method: 'PATCH',
-    path: (assetId: string) => `/assets/${e(assetId)}`,
+    path: (siteId: string, assetId: string) => `/sites/${e(siteId)}/assets/${e(assetId)}`,
     request: updateAssetRequestSchema,
     query: null,
     response: assetSchema,

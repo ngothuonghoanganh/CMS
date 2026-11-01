@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import type { ChangeItem, Composition, Seo } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
@@ -14,7 +13,15 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
-import { RELEASE_MODEL, RELEASES_IDEMPOTENCY_INDEX, type ReleaseRecord } from './release.schema.js';
+import {
+  RELEASE_COLLECTION,
+  RELEASES_IDEMPOTENCY_INDEX,
+  type ReleaseRecord,
+} from './release.schema.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 export interface InsertReleaseInput {
   siteId: ObjectId;
@@ -54,7 +61,7 @@ function uniqueIds(ids: readonly ObjectId[]): ObjectId[] {
  */
 @Injectable()
 export class ReleasesRepository {
-  constructor(@InjectModel(RELEASE_MODEL) private readonly releases: Model<ReleaseRecord>) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   /** Inserts a release created by the scope's user, inside the publish transaction. */
   async insert(scope: WorkspaceScope, input: InsertReleaseInput, tx: Tx): Promise<ReleaseRecord> {
@@ -67,7 +74,7 @@ export class ReleasesRepository {
       createdAt: new Date(),
     };
     try {
-      const [release] = await this.releases.create([document], { session: tx });
+      const [release] = await this.releases(scope).create([document], { session: tx });
       if (!release) {
         throw new Error('Release insert returned no document');
       }
@@ -81,7 +88,7 @@ export class ReleasesRepository {
   }
 
   findById(scope: WorkspaceScope, id: ObjectId): Promise<ReleaseRecord | null> {
-    return this.releases
+    return this.releases(scope)
       .findOne({ _id: id, workspaceId: scope.workspaceId })
       .lean<ReleaseRecord>()
       .exec();
@@ -96,7 +103,7 @@ export class ReleasesRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const releases = await this.releases
+    const releases = await this.releases(scope)
       .find({ workspaceId: scope.workspaceId, _id: { $in: unique } })
       .lean<ReleaseRecord[]>()
       .exec();
@@ -115,7 +122,7 @@ export class ReleasesRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const releases = await this.releases
+    const releases = await this.releases(scope)
       .find({ workspaceId: scope.workspaceId, _id: { $in: unique } }, { leadCapture: 1 })
       .lean<ReleaseLeadCaptureRow[]>()
       .exec();
@@ -127,7 +134,7 @@ export class ReleasesRepository {
     pageId: ObjectId,
     idempotencyKey: string,
   ): Promise<ReleaseRecord | null> {
-    return this.releases
+    return this.releases(scope)
       .findOne({ workspaceId: scope.workspaceId, pageId, idempotencyKey })
       .lean<ReleaseRecord>()
       .exec();
@@ -140,7 +147,7 @@ export class ReleasesRepository {
     cursor: string | undefined,
     limit: number,
   ): Promise<KeysetPage<ReleaseRecord>> {
-    const records = await this.releases
+    const records = await this.releases(scope)
       .find({ workspaceId: scope.workspaceId, pageId, ...afterCursor(cursor) })
       .sort(NEWEST_FIRST)
       .limit(limit + 1)
@@ -153,14 +160,17 @@ export class ReleasesRepository {
    * Unscoped lookup for public delivery and signed previews, which have no user. Callers check
    * that the release belongs to the site resolved from the request (host or signed token).
    */
-  findPublicById(id: ObjectId): Promise<ReleaseRecord | null> {
-    return this.releases.findById(id).lean<ReleaseRecord>().exec();
+  findPublicById(ref: WorkspaceRef, id: ObjectId): Promise<ReleaseRecord | null> {
+    return this.releases(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId })
+      .lean<ReleaseRecord>()
+      .exec();
   }
 
   /** The site of a release, without its content: a signed preview's check (ADR-010). */
-  async findPublicSiteId(id: ObjectId): Promise<ObjectId | null> {
-    const release = await this.releases
-      .findById(id, { siteId: 1 })
+  async findPublicSiteId(ref: WorkspaceRef, id: ObjectId): Promise<ObjectId | null> {
+    const release = await this.releases(ref)
+      .findOne({ _id: id, workspaceId: ref.workspaceId }, { siteId: 1 })
       .lean<Pick<ReleaseRecord, '_id' | 'siteId'>>()
       .exec();
     return release?.siteId ?? null;
@@ -168,6 +178,7 @@ export class ReleasesRepository {
 
   /** Unscoped variant of `findByIds` for public delivery, limited to one site (the sitemap). */
   async findPublicForSite(
+    ref: WorkspaceRef,
     siteId: ObjectId,
     ids: readonly ObjectId[],
   ): Promise<Map<string, ReleaseRecord>> {
@@ -175,10 +186,14 @@ export class ReleasesRepository {
     if (unique.length === 0) {
       return new Map();
     }
-    const releases = await this.releases
-      .find({ siteId, _id: { $in: unique } })
+    const releases = await this.releases(ref)
+      .find({ workspaceId: ref.workspaceId, siteId, _id: { $in: unique } })
       .lean<ReleaseRecord[]>()
       .exec();
     return new Map(releases.map((release) => [release._id.toHexString(), release]));
   }
+
+  // A property, not a method: the prototype holds only inserts and reads (ADR-005).
+  private readonly releases = (ref: WorkspaceRef): Model<ReleaseRecord> =>
+    this.databases.model(ref, RELEASE_COLLECTION);
 }

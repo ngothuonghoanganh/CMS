@@ -84,7 +84,9 @@ describe('public delivery and previews', () => {
   }
 
   async function previewLink(pageId: string, body: object): Promise<string> {
-    const response = await client.post(`/pages/${pageId}/preview-links`, body).expect(201);
+    const response = await client
+      .post(`/sites/${site.id}/pages/${pageId}/preview-links`, body)
+      .expect(201);
     const link = previewLinkResponseSchema.parse(response.body);
     const [origin, token] = link.url.split('/_preview/');
     expect(origin).toBe(site.defaultOrigin);
@@ -101,7 +103,7 @@ describe('public delivery and previews', () => {
     it('serves the live release, never the newer draft', async () => {
       const slug = uniqueSlug('ban-live');
       const { pageId, published } = await createLivePage(client, site.id, slug, 'Bản đã xuất bản');
-      await editHeroHeading(client, pageId, 'Bản nháp chưa xuất bản');
+      await editHeroHeading(client, site.id, pageId, 'Bản nháp chưa xuất bản');
       const data = await resolvePage(site, slug);
       expect(heroHeading(data)).toBe('Bản đã xuất bản');
       expect(data.page).toMatchObject({ id: pageId, slug });
@@ -143,14 +145,14 @@ describe('public delivery and previews', () => {
       const share = await uploadImage(client, site.id, { alt: 'Ảnh chia sẻ' });
       const slug = uniqueSlug('anh');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, {
+      await replaceDraft(client, site.id, page.page.id, {
         slug,
         composition: composition([
           heroSection({ image: { assetId: used.id, alt: 'Phòng khám', decorative: false } }),
         ]),
         seo: cleanSeo({ shareImageAssetId: share.id }),
       });
-      await publish(client, page.page.id);
+      await publish(client, site.id, page.page.id);
       const data = await resolvePage(site, slug);
       expect(data.assets).toEqual({
         [used.id]: { url: used.url, width: used.width, height: used.height },
@@ -169,7 +171,7 @@ describe('public delivery and previews', () => {
       const draftOnly = await createPage(client, site.id);
       const slug = uniqueSlug('lien-ket');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, {
+      await replaceDraft(client, site.id, page.page.id, {
         slug,
         composition: composition([
           heroSection({
@@ -180,7 +182,7 @@ describe('public delivery and previews', () => {
         ]),
         seo: cleanSeo(),
       });
-      await publish(client, page.page.id);
+      await publish(client, site.id, page.page.id);
       expect((await resolvePage(site, slug)).pageLinks).toEqual({
         [target.pageId]: `/${target.published.release.slug}`,
         [draftOnly.page.id]: null,
@@ -192,7 +194,7 @@ describe('public delivery and previews', () => {
       await visitor.get(`/public/sites/${site.subdomain}/resolve?path=khong-co`).expect(404);
       const slug = uniqueSlug('chi-nhap');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, publishableDraft(slug));
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug));
       const response = await visitor
         .get(`/public/sites/${site.subdomain}/resolve?path=${slug}`)
         .expect(404);
@@ -210,10 +212,15 @@ describe('public delivery and previews', () => {
       const oldSlug = uniqueSlug('cu');
       const newSlug = uniqueSlug('moi');
       const { pageId } = await createLivePage(client, statusSite.id, oldSlug);
-      await replaceDraft(client, pageId, publishableDraft(newSlug));
-      const second = await publish(client, pageId);
+      await replaceDraft(client, statusSite.id, pageId, publishableDraft(newSlug));
+      const second = await publish(client, statusSite.id, pageId);
       const draftOnly = await createPage(client, statusSite.id);
-      await replaceDraft(client, draftOnly.page.id, publishableDraft(draftOnly.page.slug));
+      await replaceDraft(
+        client,
+        statusSite.id,
+        draftOnly.page.id,
+        publishableDraft(draftOnly.page.slug),
+      );
 
       const live = await pathStatus(statusSite.subdomain, `/${newSlug}/`).expect(200);
       expect(pathStatusResponseSchema.parse(live.body)).toEqual({
@@ -239,8 +246,8 @@ describe('public delivery and previews', () => {
       const statusSite = await createSite(client, workspaceId);
       const slug = uniqueSlug('uu-dai');
       const { pageId, published: first } = await createLivePage(client, statusSite.id, slug);
-      await editHeroHeading(client, pageId, 'Bản 2');
-      const second = await publish(client, pageId);
+      await editHeroHeading(client, statusSite.id, pageId, 'Bản 2');
+      const second = await publish(client, statusSite.id, pageId);
       const releaseAt = async () =>
         pathStatusResponseSchema.parse(
           (await pathStatus(statusSite.subdomain, slug).expect(200)).body,
@@ -252,7 +259,7 @@ describe('public delivery and previews', () => {
       });
 
       await client
-        .post(`/pages/${pageId}/pointer`, {
+        .post(`/sites/${statusSite.id}/pages/${pageId}/pointer`, {
           targetReleaseId: first.release.id,
           expectedCurrentReleaseId: second.release.id,
           reason: 'Bản 2 sai giá',
@@ -272,15 +279,20 @@ describe('public delivery and previews', () => {
       const home = await createLivePage(client, mapSite.id, '');
       const indexed = await createLivePage(client, mapSite.id, uniqueSlug('co-index'));
       const hidden = await createLivePage(client, mapSite.id, uniqueSlug('noindex'));
-      const detail = await getPage(client, hidden.pageId);
-      await replaceDraft(client, hidden.pageId, {
+      const detail = await getPage(client, mapSite.id, hidden.pageId);
+      await replaceDraft(client, mapSite.id, hidden.pageId, {
         slug: detail.draft.slug,
         composition: detail.draft.composition,
         seo: { ...detail.draft.seo, noindex: true },
       });
-      await publish(client, hidden.pageId);
+      await publish(client, mapSite.id, hidden.pageId);
       const draftOnly = await createPage(client, mapSite.id);
-      await replaceDraft(client, draftOnly.page.id, publishableDraft(draftOnly.page.slug));
+      await replaceDraft(
+        client,
+        mapSite.id,
+        draftOnly.page.id,
+        publishableDraft(draftOnly.page.slug),
+      );
 
       const response = await visitor.get(`/public/sites/${mapSite.subdomain}/sitemap`).expect(200);
       expect(sitemapResponseSchema.parse(response.body)).toEqual({
@@ -301,8 +313,8 @@ describe('public delivery and previews', () => {
       const mapSite = await createSite(client, workspaceId);
       const slug = uniqueSlug('uu-dai');
       const { pageId, published: first } = await createLivePage(client, mapSite.id, slug);
-      await editHeroHeading(client, pageId, 'Bản 2');
-      const second = await publish(client, pageId);
+      await editHeroHeading(client, mapSite.id, pageId, 'Bản 2');
+      const second = await publish(client, mapSite.id, pageId);
       const lastModified = async () => {
         const response = await visitor
           .get(`/public/sites/${mapSite.subdomain}/sitemap`)
@@ -310,7 +322,8 @@ describe('public delivery and previews', () => {
         return sitemapResponseSchema.parse(response.body).entries[0]?.lastModified ?? '';
       };
       const pointerEvent = async (type: string) => {
-        const record = await t.connection
+        const record = await t
+          .workspaceDb(workspaceId)
           .collection('activity')
           .findOne({ pageId: new Types.ObjectId(pageId), type }, { sort: { createdAt: -1 } });
         return record?.['createdAt'] instanceof Date ? record['createdAt'].toISOString() : '';
@@ -318,7 +331,7 @@ describe('public delivery and previews', () => {
       expect(await lastModified()).toBe(second.release.createdAt);
 
       const rolledBack = await client
-        .post(`/pages/${pageId}/pointer`, {
+        .post(`/sites/${mapSite.id}/pages/${pageId}/pointer`, {
           targetReleaseId: first.release.id,
           expectedCurrentReleaseId: second.release.id,
           reason: 'Bản 2 sai giá',
@@ -330,7 +343,7 @@ describe('public delivery and previews', () => {
       expect(afterRollback > second.release.createdAt).toBe(true);
 
       const { activityId } = pointerMoveResponseSchema.parse(rolledBack.body);
-      await client.post(`/activity/${activityId}/undo`, {}).expect(200);
+      await client.post(`/sites/${mapSite.id}/activity/${activityId}/undo`, {}).expect(200);
       const afterUndo = await lastModified();
       expect(afterUndo).toBe(await pointerEvent('page.rollback_undone'));
       expect(afterUndo > afterRollback).toBe(true);
@@ -341,7 +354,7 @@ describe('public delivery and previews', () => {
     it('shows the latest draft with a draft token', async () => {
       const slug = uniqueSlug('xem-truoc');
       const page = await createPage(client, site.id, { slug });
-      await replaceDraft(client, page.page.id, publishableDraft(slug, 'Bản nháp 1'));
+      await replaceDraft(client, site.id, page.page.id, publishableDraft(slug, 'Bản nháp 1'));
       const token = await previewLink(page.page.id, { kind: 'draft' });
 
       const first = publicPreviewResponseSchema.parse(
@@ -350,7 +363,7 @@ describe('public delivery and previews', () => {
       expect(heroHeading(first.data)).toBe('Bản nháp 1');
       expect(first.preview).toMatchObject({ kind: 'draft', version: null });
 
-      await editHeroHeading(client, page.page.id, 'Bản nháp 2');
+      await editHeroHeading(client, site.id, page.page.id, 'Bản nháp 2');
       const response = await visitor.get(`/public/preview/${token}`).expect(200);
       expect(response.headers['cache-control']).toBe('no-store');
       expect(response.headers['x-robots-tag']).toBe('noindex, nofollow');
@@ -364,8 +377,8 @@ describe('public delivery and previews', () => {
         uniqueSlug('phien-ban'),
         'Bản 1',
       );
-      await editHeroHeading(client, pageId, 'Bản 2');
-      await publish(client, pageId);
+      await editHeroHeading(client, site.id, pageId, 'Bản 2');
+      await publish(client, site.id, pageId);
       const token = await previewLink(pageId, { kind: 'release', releaseId: published.release.id });
       const preview = publicPreviewResponseSchema.parse(
         (await visitor.get(`/public/preview/${token}`).expect(200)).body,
@@ -378,7 +391,7 @@ describe('public delivery and previews', () => {
       const a = await createLivePage(client, site.id, uniqueSlug('a'));
       const b = await createLivePage(client, site.id, uniqueSlug('b'));
       await client
-        .post(`/pages/${a.pageId}/preview-links`, {
+        .post(`/sites/${site.id}/pages/${a.pageId}/preview-links`, {
           kind: 'release',
           releaseId: b.published.release.id,
         })

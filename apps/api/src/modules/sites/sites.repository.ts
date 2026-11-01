@@ -4,17 +4,23 @@ import { LEAD_RECIPIENTS_MAX, MAX_SITES_PER_WORKSPACE, type ThemePresetId } from
 import type { Model } from 'mongoose';
 import { AppError } from '../../shared/errors.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
-import type { ObjectId } from '../../shared/persistence/object-id.js';
+import { newObjectId, type ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   type LeadRecipientRecord,
   leadRecipientsOf,
-  SITE_MODEL,
+  SITE_ADDRESS_MODEL,
+  SITE_ADDRESSES_SUBDOMAIN_INDEX,
+  SITE_COLLECTION,
+  type SiteAddressRecord,
   type SitePrimaryDomain,
   type SitePrivacyRecord,
   type SiteRecord,
-  SITES_SUBDOMAIN_INDEX,
   sitePrivacyOf,
 } from './site.schema.js';
 import { SUBDOMAIN_TAKEN_MESSAGE } from './subdomain-availability.js';
@@ -61,18 +67,21 @@ export interface SitePatch {
 
 @Injectable()
 export class SitesRepository {
-  constructor(@InjectModel(SITE_MODEL) private readonly sites: Model<SiteRecord>) {}
+  constructor(
+    @InjectModel(SITE_ADDRESS_MODEL) private readonly addresses: Model<SiteAddressRecord>,
+    private readonly databases: WorkspaceDatabases,
+  ) {}
 
   /**
-   * The only unscoped lookup by id. It returns the owning workspace so the caller can build a
-   * scope with `AccessService.scopeFor` before reading the site itself.
+   * The only unscoped lookup by id, in the master DB (ADR-025). It returns the owning workspace
+   * so the caller can build a scope with `AccessService.scopeFor` before reading the site itself.
    */
   async findAccessRef(siteId: ObjectId): Promise<SiteAccessRef | null> {
-    const site = await this.sites
+    const address = await this.addresses
       .findById(siteId, { workspaceId: 1 })
-      .lean<Pick<SiteRecord, '_id' | 'workspaceId'>>()
+      .lean<Pick<SiteAddressRecord, '_id' | 'workspaceId'>>()
       .exec();
-    return site ? { id: site._id, workspaceId: site.workspaceId } : null;
+    return address ? { id: address._id, workspaceId: address.workspaceId } : null;
   }
 
   /**
@@ -80,11 +89,11 @@ export class SitesRepository {
    * invited person is not a member yet, and the link is what shows them these sites.
    */
   async findNamesForInvitation(
-    workspaceId: ObjectId,
+    invitation: WorkspaceRef,
     siteIds: readonly ObjectId[],
   ): Promise<string[]> {
-    const sites = await this.sites
-      .find({ _id: { $in: [...siteIds] }, workspaceId }, { name: 1 })
+    const sites = await this.sites(invitation)
+      .find({ _id: { $in: [...siteIds] }, workspaceId: invitation.workspaceId }, { name: 1 })
       .sort({ createdAt: 1, _id: 1 })
       .lean<Pick<SiteRecord, '_id' | 'name'>[]>()
       .exec();
@@ -93,7 +102,7 @@ export class SitesRepository {
 
   /** In `tx` when given, e.g. publish reads the settings a release snapshots (ADR-015). */
   findById(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<SiteRecord | null> {
-    return this.sites
+    return this.sites(scope)
       .findOne({ _id: siteId, workspaceId: scope.workspaceId })
       .session(tx ?? null)
       .lean<SiteRecord>()
@@ -106,7 +115,7 @@ export class SitesRepository {
    * of silently losing sites from the switcher.
    */
   async listForWorkspace(scope: WorkspaceScope): Promise<SiteRecord[]> {
-    const sites = await this.sites
+    const sites = await this.sites(scope)
       .find({ workspaceId: scope.workspaceId })
       .sort({ createdAt: 1, _id: 1 })
       .limit(MAX_SITES_PER_WORKSPACE + 1)
@@ -122,13 +131,26 @@ export class SitesRepository {
 
   /** Sites of the workspace, counted inside the site-creation transaction (ADR-014). */
   countForWorkspace(scope: WorkspaceScope, tx: Tx): Promise<number> {
-    return this.sites.countDocuments({ workspaceId: scope.workspaceId }, { session: tx }).exec();
+    return this.sites(scope)
+      .countDocuments({ workspaceId: scope.workspaceId }, { session: tx })
+      .exec();
   }
 
-  /** Inserts a site created by the scope's user. A duplicate subdomain is 409 `subdomain_taken`. */
-  async create(scope: WorkspaceScope, input: CreateSiteInput, tx?: Tx): Promise<SiteRecord> {
+  /**
+   * Inserts a site created by the scope's user, with its address in the master DB (ADR-025). A
+   * subdomain already taken throws the duplicate key of `SITE_ADDRESSES_SUBDOMAIN_INDEX`: inside a
+   * transaction the error aborts it, so the caller maps it once the transaction is over
+   * (`subdomainTakenError`).
+   */
+  async create(scope: WorkspaceScope, input: CreateSiteInput, tx: Tx): Promise<SiteRecord> {
     const now = new Date();
+    const siteId = newObjectId();
+    await this.addresses.create(
+      [{ _id: siteId, workspaceId: scope.workspaceId, subdomain: input.subdomain }],
+      { session: tx },
+    );
     const document = {
+      _id: siteId,
       workspaceId: scope.workspaceId,
       name: input.name,
       subdomain: input.subdomain,
@@ -142,28 +164,16 @@ export class SitesRepository {
       createdAt: now,
       updatedAt: now,
     };
-    try {
-      const [site] = await this.sites.create([document], tx ? { session: tx } : {});
-      if (!site) {
-        throw new Error('Site insert returned no document');
-      }
-      return site.toObject();
-    } catch (error) {
-      if (isDuplicateKeyError(error, SITES_SUBDOMAIN_INDEX)) {
-        throw new AppError(409, 'subdomain_taken', SUBDOMAIN_TAKEN_MESSAGE, {
-          issues: [
-            { path: ['subdomain'], code: 'subdomain_taken', message: SUBDOMAIN_TAKEN_MESSAGE },
-          ],
-          cause: error,
-        });
-      }
-      throw error;
+    const [site] = await this.sites(scope).create([document], { session: tx });
+    if (!site) {
+      throw new Error('Site insert returned no document');
     }
+    return site.toObject();
   }
 
   /** Applies a settings patch and returns the updated site, or null when it is not in scope. */
   update(scope: WorkspaceScope, siteId: ObjectId, patch: SitePatch): Promise<SiteRecord | null> {
-    return this.sites
+    return this.sites(scope)
       .findOneAndUpdate(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $set: { ...patch, updatedAt: new Date() } },
@@ -180,7 +190,7 @@ export class SitesRepository {
     privacy: SitePrivacyRecord,
     tx: Tx,
   ): Promise<SiteRecord | null> {
-    return this.sites
+    return this.sites(scope)
       .findOneAndUpdate(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $set: { privacy, updatedAt: privacy.updatedAt } },
@@ -200,7 +210,7 @@ export class SitesRepository {
     recipient: LeadRecipientRecord,
     tx: Tx,
   ): Promise<AddRecipientOutcome> {
-    const updated = await this.sites
+    const updated = await this.sites(scope)
       .findOneAndUpdate(
         {
           _id: siteId,
@@ -235,7 +245,7 @@ export class SitesRepository {
     recipientId: ObjectId,
     tx: Tx,
   ): Promise<number | null> {
-    const updated = await this.sites
+    const updated = await this.sites(scope)
       .findOneAndUpdate(
         { _id: siteId, workspaceId: scope.workspaceId, 'leadRecipients._id': recipientId },
         { $pull: { leadRecipients: { _id: recipientId } }, $set: { updatedAt: new Date() } },
@@ -256,7 +266,7 @@ export class SitesRepository {
     recipientId: ObjectId,
     invite: RecipientInvite,
   ): Promise<boolean> {
-    const result = await this.sites
+    const result = await this.sites(scope)
       .updateOne(
         {
           _id: siteId,
@@ -282,7 +292,7 @@ export class SitesRepository {
     recipientId: ObjectId,
     invitedAt: Date,
   ): Promise<void> {
-    await this.sites
+    await this.sites(scope)
       .updateOne(
         { _id: siteId, workspaceId: scope.workspaceId, 'leadRecipients._id': recipientId },
         { $set: { 'leadRecipients.$.invitedAt': invitedAt } },
@@ -296,12 +306,17 @@ export class SitesRepository {
    * null for an unknown, used or expired link. The secret works once.
    */
   async confirmLeadRecipient(
+    site: SiteAccessRef,
     tokenHash: string,
     now: Date,
   ): Promise<{ siteName: string; email: string } | null> {
-    const before = await this.sites
+    const before = await this.sites(site)
       .findOneAndUpdate(
-        { leadRecipients: { $elemMatch: { tokenHash, tokenExpiresAt: { $gt: now } } } },
+        {
+          _id: site.id,
+          workspaceId: site.workspaceId,
+          leadRecipients: { $elemMatch: { tokenHash, tokenExpiresAt: { $gt: now } } },
+        },
         {
           $set: {
             'leadRecipients.$.confirmedAt': now,
@@ -321,9 +336,9 @@ export class SitesRepository {
    * The site of a lead being notified, read by the background sender, which has no member scope;
    * only the name and the addresses.
    */
-  findNotificationSite(siteId: ObjectId): Promise<NotificationSite | null> {
-    return this.sites
-      .findById(siteId, { name: 1, leadRecipients: 1 })
+  findNotificationSite(lead: WorkspaceRef, siteId: ObjectId): Promise<NotificationSite | null> {
+    return this.sites(lead)
+      .findOne({ _id: siteId, workspaceId: lead.workspaceId }, { name: 1, leadRecipients: 1 })
       .lean<NotificationSite>()
       .exec();
   }
@@ -333,7 +348,7 @@ export class SitesRepository {
    * in the site conflict, so the page count read afterwards in the same transaction is exact.
    */
   async recordPageCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
-    const result = await this.sites
+    const result = await this.sites(scope)
       .updateOne(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $inc: { pageSeq: 1 } },
@@ -347,7 +362,7 @@ export class SitesRepository {
 
   /** Increments `domainSeq` inside the transaction that adds a custom domain (ADR-022). */
   async recordDomainCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
-    const result = await this.sites
+    const result = await this.sites(scope)
       .updateOne(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $inc: { domainSeq: 1 } },
@@ -363,9 +378,9 @@ export class SitesRepository {
    * The privacy settings of a site as they are now, for the public lead intake: it reads them
    * again after storing a lead, in case the owner changed the retention period meanwhile.
    */
-  async findPublicPrivacy(siteId: ObjectId): Promise<SitePrivacyRecord | null> {
-    const site = await this.sites
-      .findById(siteId, { privacy: 1 })
+  async findPublicPrivacy(ref: WorkspaceRef, siteId: ObjectId): Promise<SitePrivacyRecord | null> {
+    const site = await this.sites(ref)
+      .findOne({ _id: siteId, workspaceId: ref.workspaceId }, { privacy: 1 })
       .lean<Pick<SiteRecord, 'privacy'>>()
       .exec();
     return site === null ? null : sitePrivacyOf(site);
@@ -378,7 +393,7 @@ export class SitesRepository {
     primary: SitePrimaryDomain | null,
     tx: Tx,
   ): Promise<SiteRecord | null> {
-    return this.sites
+    return this.sites(scope)
       .findOneAndUpdate(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $set: { primaryDomain: primary, updatedAt: new Date() } },
@@ -392,10 +407,15 @@ export class SitesRepository {
    * Clears a primary domain that moved to another site, in the transaction of the move. Unscoped:
    * the site losing it is not the caller's (ADR-022).
    */
-  async clearPrimaryDomain(siteId: ObjectId, domainId: ObjectId, tx: Tx): Promise<void> {
-    await this.sites
+  async clearPrimaryDomain(
+    domain: WorkspaceRef,
+    siteId: ObjectId,
+    domainId: ObjectId,
+    tx: Tx,
+  ): Promise<void> {
+    await this.sites(domain)
       .updateOne(
-        { _id: siteId, 'primaryDomain.domainId': domainId },
+        { _id: siteId, workspaceId: domain.workspaceId, 'primaryDomain.domainId': domainId },
         { $set: { primaryDomain: null, updatedAt: new Date() } },
         { session: tx },
       )
@@ -404,21 +424,56 @@ export class SitesRepository {
 
   /** Unscoped, for the domain checks: the site's subdomain, to revalidate it. */
   findSubdomain(
+    domain: WorkspaceRef,
     siteId: ObjectId,
   ): Promise<Pick<SiteRecord, '_id' | 'subdomain' | 'name' | 'primaryDomain'> | null> {
-    return this.sites
-      .findById(siteId, { subdomain: 1, name: 1, primaryDomain: 1 })
+    return this.sites(domain)
+      .findOne(
+        { _id: siteId, workspaceId: domain.workspaceId },
+        { subdomain: 1, name: 1, primaryDomain: 1 },
+      )
       .lean<Pick<SiteRecord, '_id' | 'subdomain' | 'name' | 'primaryDomain'>>()
       .exec();
   }
 
-  /** Unscoped lookup for public delivery, which resolves a site from the request host. */
-  findBySubdomain(subdomain: string): Promise<SiteRecord | null> {
-    return this.sites.findOne({ subdomain: subdomain.toLowerCase() }).lean<SiteRecord>().exec();
+  /**
+   * Unscoped lookup for public delivery, which resolves a site from the request host: the master
+   * DB tells the workspace, whose database holds the site (ADR-025).
+   */
+  async findBySubdomain(subdomain: string): Promise<SiteRecord | null> {
+    const address = await this.addresses
+      .findOne({ subdomain: subdomain.toLowerCase() })
+      .lean<SiteAddressRecord>()
+      .exec();
+    return address === null
+      ? null
+      : this.sites(address)
+          .findOne({ _id: address._id, workspaceId: address.workspaceId })
+          .lean<SiteRecord>()
+          .exec();
   }
 
   async subdomainExists(subdomain: string): Promise<boolean> {
-    const site = await this.sites.exists({ subdomain: subdomain.toLowerCase() }).exec();
-    return site !== null;
+    const address = await this.addresses.exists({ subdomain: subdomain.toLowerCase() }).exec();
+    return address !== null;
   }
+
+  private sites(ref: WorkspaceRef): Model<SiteRecord> {
+    return this.databases.model(ref, SITE_COLLECTION);
+  }
+}
+
+/**
+ * The 409 for a subdomain another site took meanwhile, from the error of a site-creation
+ * transaction; any other error is returned as it is.
+ */
+export function subdomainTakenError(error: unknown): unknown {
+  return isDuplicateKeyError(error, SITE_ADDRESSES_SUBDOMAIN_INDEX)
+    ? new AppError(409, 'subdomain_taken', SUBDOMAIN_TAKEN_MESSAGE, {
+        issues: [
+          { path: ['subdomain'], code: 'subdomain_taken', message: SUBDOMAIN_TAKEN_MESSAGE },
+        ],
+        cause: error,
+      })
+    : error;
 }

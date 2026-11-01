@@ -106,18 +106,24 @@ export class LeadInboxService {
     return { new: toCappedCount(fresh), last7Days: toCappedCount(recent) };
   }
 
-  async get(user: AuthenticatedUser, leadId: string): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'leads.view');
+  async get(user: AuthenticatedUser, siteId: string, leadId: string): Promise<LeadDetail> {
+    const { scope, site, lead } = await this.leadAccess.access(user, siteId, leadId, 'leads.view');
     return this.detail(scope, site, lead);
   }
 
   /** Status, note and spam flag; the last change wins, like any field edited in place. */
   async update(
     user: AuthenticatedUser,
+    siteId: string,
     leadId: string,
     input: UpdateLeadValues,
   ): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'leads.handle');
+    const { scope, site, lead } = await this.leadAccess.access(
+      user,
+      siteId,
+      leadId,
+      'leads.handle',
+    );
     const updated = await this.leads.update(scope, lead._id, input);
     if (!updated) {
       // Deleted (by the owner or its retention period) since it was read.
@@ -132,10 +138,16 @@ export class LeadInboxService {
    */
   async updateContact(
     user: AuthenticatedUser,
+    siteId: string,
     leadId: string,
     contact: UpdateLeadContactValues,
   ): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'personalData.manage');
+    const { scope, site, lead } = await this.leadAccess.access(
+      user,
+      siteId,
+      leadId,
+      'personalData.manage',
+    );
     const updated = await this.leads.updateContact(scope, lead._id, contact);
     if (!updated) {
       throw notFound(LEAD_NOT_FOUND);
@@ -144,15 +156,24 @@ export class LeadInboxService {
   }
 
   /** "Gửi lại": a failed email notification starts over with three new attempts (ADR-018). */
-  async retryNotification(user: AuthenticatedUser, leadId: string): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'leads.handle');
+  async retryNotification(
+    user: AuthenticatedUser,
+    siteId: string,
+    leadId: string,
+  ): Promise<LeadDetail> {
+    const { scope, site, lead } = await this.leadAccess.access(
+      user,
+      siteId,
+      leadId,
+      'leads.handle',
+    );
     const reset = await this.leads.resetFailedNotification(scope, lead._id, new Date());
     if (!reset) {
       throw new AppError(409, 'conflict', 'Email thông báo của lead này không ở trạng thái lỗi', {
         detail: 'Tải lại để xem trạng thái mới nhất.',
       });
     }
-    this.notifier.enqueue(reset._id);
+    this.notifier.enqueue({ workspaceId: scope.workspaceId, leadId: reset._id });
     return this.detail(scope, site, reset);
   }
 

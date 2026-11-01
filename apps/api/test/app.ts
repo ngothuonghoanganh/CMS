@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
-import type { Connection } from 'mongoose';
+import { type Connection, Types } from 'mongoose';
 import type { DestinationStream } from 'pino';
 import { AppModule } from '../src/app.module.js';
 import { type Env, type EnvInput, parseEnv } from '../src/config/env.js';
@@ -11,6 +11,7 @@ import { DomainDns } from '../src/modules/domains/domain-dns.js';
 import { DomainTls } from '../src/modules/domains/domain-tls.js';
 import { EmailSender } from '../src/modules/notifications/email-sender.js';
 import { NOTIFICATION_RETRY_DELAYS } from '../src/modules/notifications/lead-notifier.service.js';
+import { WorkspaceDatabases } from '../src/shared/persistence/workspace-databases.js';
 import { FakeDomainDns, FakeDomainTls } from './domains.js';
 import { RecordingEmailSender } from './email.js';
 import { testEnvInput } from './env.js';
@@ -19,7 +20,10 @@ import { dropDatabase, isolatedMongoUri } from './mongo.js';
 export interface TestApp {
   app: NestExpressApplication;
   env: Env;
+  /** The master DB (ADR-025). */
   connection: Connection;
+  /** The database of a workspace: sites, pages, leads and the rest of its data (ADR-025). */
+  workspaceDb: (workspaceId: string | Types.ObjectId) => Connection;
   /** What the API emailed (ADR-018); nothing leaves the test unless `realEmail` is set. */
   emails: RecordingEmailSender;
   /** The DNS and HTTPS custom domains are checked against (ADR-022). */
@@ -80,10 +84,13 @@ export async function createTestApp(
   await app.init();
   // Its collections and indexes exist once it is initialized (`IndexBuilder`), as before serving.
   const connection = app.get<Connection>(getConnectionToken());
+  const databases = app.get(WorkspaceDatabases);
   return {
     app,
     env,
     connection,
+    workspaceDb: (workspaceId) =>
+      connection.useDb(databases.nameOf(new Types.ObjectId(workspaceId)), { useCache: true }),
     emails,
     dns,
     tls,

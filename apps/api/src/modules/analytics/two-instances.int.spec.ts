@@ -78,7 +78,8 @@ describe('page views on two API instances', () => {
     await campaign(a, 'a-moi');
     await campaign(b, 'b-moi');
 
-    const rows = await a.connection
+    const rows = await a
+      .workspaceDb(workspaceId)
       .collection('analytics_daily')
       .find({ siteId: new Types.ObjectId(site.id), pageId: null, day })
       .toArray();

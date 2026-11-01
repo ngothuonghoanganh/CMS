@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { InvitedSignupRequest, LoginRequest, MeResponse, SignupRequest } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
+import { newObjectId, type ObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
 import { hashInvitationToken, invitationState } from '../workspaces/domain/member-rules.js';
 import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-join.service.js';
@@ -28,8 +30,17 @@ export interface IssuedSession {
   me: MeResponse;
 }
 
+function emailTaken(cause?: unknown): AppError {
+  return new AppError(409, 'email_taken', 'Email này đã được đăng ký', {
+    issues: [{ path: ['email'], code: 'email_taken', message: 'Email này đã được đăng ký' }],
+    cause,
+  });
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectEnv() private readonly env: Env,
     private readonly users: UsersRepository,
@@ -40,31 +51,48 @@ export class AuthService {
     private readonly invitations: InvitationsRepository,
     private readonly join: WorkspaceJoin,
     private readonly transactions: TransactionRunner,
+    private readonly databases: WorkspaceDatabases,
   ) {}
 
-  /** Creates the user, their workspace and owner membership atomically, then signs them in. */
+  /**
+   * Creates the user, their workspace and owner membership atomically, then signs them in. The
+   * workspace's database is created first, so the workspace never exists without it (ADR-025).
+   */
   async signup(input: SignupRequest): Promise<IssuedSession> {
     const passwordHash = await hashPassword(input.password);
+    // The unique index decides; this only spares creating a database for a taken email.
+    if ((await this.users.findByEmail(input.email)) !== null) {
+      throw emailTaken();
+    }
+    const workspaceId = newObjectId();
     let userId;
     try {
+      await this.databases.build(workspaceId);
       userId = await this.transactions.run(async (tx) => {
         const user = await this.users.create(
           { email: input.email, name: input.name, passwordHash },
           tx,
         );
-        await this.workspaces.createWithOwner(input.workspaceName, user._id, tx);
+        await this.workspaces.createWithOwner(workspaceId, input.workspaceName, user._id, tx);
         return user._id;
       });
     } catch (error) {
-      if (isDuplicateKeyError(error, USERS_EMAIL_INDEX)) {
-        throw new AppError(409, 'email_taken', 'Email này đã được đăng ký', {
-          issues: [{ path: ['email'], code: 'email_taken', message: 'Email này đã được đăng ký' }],
-          cause: error,
-        });
-      }
-      throw error;
+      await this.dropDatabase(workspaceId, error);
+      throw isDuplicateKeyError(error, USERS_EMAIL_INDEX) ? emailTaken(error) : error;
     }
     return this.issueSession({ id: userId, name: input.name, email: input.email });
+  }
+
+  /** The database of a workspace that was not created holds nothing and nothing routes to it. */
+  private async dropDatabase(workspaceId: ObjectId, cause: unknown): Promise<void> {
+    try {
+      await this.databases.drop(workspaceId);
+    } catch (error) {
+      this.logger.error(
+        { err: error, cause, workspaceId: workspaceId.toHexString() },
+        'Database of a workspace not created was not dropped',
+      );
+    }
   }
 
   /**

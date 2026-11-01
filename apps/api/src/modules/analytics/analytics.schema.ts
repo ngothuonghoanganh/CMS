@@ -1,5 +1,6 @@
 import { type LeadDevice, leadDevices, type VnDay } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const ANALYTICS_SALT_MODEL = 'AnalyticsSalt';
 export const ANALYTICS_SEEN_MODEL = 'AnalyticsSeen';
@@ -98,3 +99,15 @@ analyticsDailySchema.index(
   { unique: true, name: 'analytics_daily_unique' },
 );
 analyticsDailySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+/** In the workspace's own database (ADR-025). */
+export const ANALYTICS_SEEN_COLLECTION = workspaceCollection(
+  ANALYTICS_SEEN_MODEL,
+  analyticsSeenSchema,
+);
+
+/** In the workspace's own database (ADR-025). */
+export const ANALYTICS_DAILY_COLLECTION = workspaceCollection(
+  ANALYTICS_DAILY_MODEL,
+  analyticsDailySchema,
+);

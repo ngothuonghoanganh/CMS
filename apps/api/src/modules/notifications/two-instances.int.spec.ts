@@ -19,6 +19,7 @@ import {
 import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { createSite } from '../../../test/resources.js';
+import type { LeadRef } from '../leads/leads.repository.js';
 import { LeadNotifier } from './lead-notifier.service.js';
 
 const MINUTE = 60_000;
@@ -70,16 +71,18 @@ describe('two API instances on one database', () => {
     );
   }
 
-  function idOf(record: Record<string, unknown>): Types.ObjectId {
+  /** The lead as the notifier works on it, with the workspace whose database holds it (ADR-025). */
+  function refOf(record: Record<string, unknown>): LeadRef {
     const id = record['_id'];
     if (!(id instanceof Types.ObjectId)) {
       throw new Error('insertMany did not set an id');
     }
-    return id;
+    return { workspaceId: new Types.ObjectId(workspaceId), leadId: id };
   }
 
   async function notificationsOf(names: string[]) {
-    const leads = await a.connection
+    const leads = await a
+      .workspaceDb(workspaceId)
       .collection('leads')
       .find({ 'fields.name': { $in: names } })
       .toArray();
@@ -93,8 +96,8 @@ describe('two API instances on one database', () => {
     );
     await insertLeads(a, leads);
     for (const lead of leads) {
-      a.app.get(LeadNotifier).enqueue(idOf(lead));
-      b.app.get(LeadNotifier).enqueue(idOf(lead));
+      a.app.get(LeadNotifier).enqueue(refOf(lead));
+      b.app.get(LeadNotifier).enqueue(refOf(lead));
     }
     const names = leads.map((_, index) => `Cùng lúc ${index}`);
     await vi.waitFor(

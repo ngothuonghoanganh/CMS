@@ -63,7 +63,7 @@ describe('workspace isolation of sites, activity and assets', () => {
     await expectNotFound(userB.get(`/sites/${siteA.id}/assets`));
     await expectNotFound(uploadRequest(userB, siteA.id, await pngImage()));
     await expectNotFound(
-      userB.patch(`/assets/${assetA.id}`, { alt: 'Sửa trộm', decorative: false }),
+      userB.patch(`/sites/${siteA.id}/assets/${assetA.id}`, { alt: 'Sửa trộm', decorative: false }),
     );
   });
 
@@ -78,7 +78,8 @@ describe('workspace isolation of sites, activity and assets', () => {
   it('leaves workspace A untouched', async () => {
     const sites = await ownerA.get(`/workspaces/${workspaceA}/sites`).expect(200);
     expect(siteListResponseSchema.parse(sites.body).items).toEqual([siteA]);
-    const asset = await t.connection
+    const asset = await t
+      .workspaceDb(workspaceA)
       .collection('assets')
       .findOne({ _id: new Types.ObjectId(assetA.id) });
     expect(asset?.['alt']).toBe(assetA.alt);

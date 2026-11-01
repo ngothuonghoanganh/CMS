@@ -159,9 +159,12 @@ describe('LeadsRepository.countPeople', () => {
  */
 describe('LeadsRepository.existsPublicSubmission', () => {
   let t: TestApp;
+  // A workspace that signed up, so its database exists with its indexes (ADR-025).
+  let workspaceId: string;
 
   beforeAll(async () => {
     t = await createTestApp('plp_test_leads_submission');
+    workspaceId = (await signedUpClient(t.app)).workspaceId;
   });
 
   afterAll(async () => {
@@ -170,8 +173,9 @@ describe('LeadsRepository.existsPublicSubmission', () => {
 
   it('looks a submission up in its unique index, without reading the leads of the site', async () => {
     const siteId = new Types.ObjectId();
+    const workspace = { workspaceId: new Types.ObjectId(workspaceId) };
     const ids = {
-      workspaceId: new Types.ObjectId().toHexString(),
+      workspaceId,
       siteId: siteId.toHexString(),
       pageId: new Types.ObjectId().toHexString(),
       releaseId: new Types.ObjectId().toHexString(),
@@ -193,10 +197,11 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     ]);
     const leads = t.app.get(LeadsRepository);
 
-    const sent = await recordCalls(t.connection, 'leads', async () => {
-      expect(await leads.existsPublicSubmission(siteId, submissionId)).toBe(true);
-      expect(await leads.existsPublicSubmission(siteId, randomUUID())).toBe(false);
-      expect(await leads.existsPublicSubmission(siteId, elsewhere)).toBe(false);
+    const db = t.workspaceDb(workspaceId);
+    const sent = await recordCalls(db, 'leads', async () => {
+      expect(await leads.existsPublicSubmission(workspace, siteId, submissionId)).toBe(true);
+      expect(await leads.existsPublicSubmission(workspace, siteId, randomUUID())).toBe(false);
+      expect(await leads.existsPublicSubmission(workspace, siteId, elsewhere)).toBe(false);
     });
 
     // Each lookup explained exactly as it was sent: one exact key, held to its index, one probe.
@@ -204,11 +209,12 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     for (const call of sent) {
       const [filter, options] = call.params;
       expect(filter).toEqual({
+        workspaceId: workspace.workspaceId,
         siteId,
         submissionId: { $eq: expect.any(String) as unknown, $type: 'string' },
       });
       expect(options).toHaveProperty('hint', LEADS_SUBMISSION_INDEX);
-      const explained = await explainFindOne(t.connection, call);
+      const explained = await explainFindOne(db, call);
       expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([LEADS_SUBMISSION_INDEX]);
       expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
       expect(explained.executionStats.totalDocsExamined).toBeLessThanOrEqual(1);
@@ -217,11 +223,12 @@ describe('LeadsRepository.existsPublicSubmission', () => {
 
   it('has its index again, built by the next start, before any lookup', async () => {
     const siteId = new Types.ObjectId();
+    const workspace = { workspaceId: new Types.ObjectId(workspaceId) };
     const submissionId = randomUUID();
     await insertLeads(t, [
       {
         ...storedLead({
-          workspaceId: new Types.ObjectId().toHexString(),
+          workspaceId,
           siteId: siteId.toHexString(),
           pageId: new Types.ObjectId().toHexString(),
           releaseId: new Types.ObjectId().toHexString(),
@@ -229,7 +236,8 @@ describe('LeadsRepository.existsPublicSubmission', () => {
         submissionId,
       },
     ]);
-    const leads = t.connection.collection('leads');
+    // The workspace database's own index (ADR-025), rebuilt at startup for every workspace.
+    const leads = t.workspaceDb(workspaceId).collection('leads');
     await leads.dropIndex(LEADS_SUBMISSION_INDEX);
 
     // The API starting on this database again (a deploy, a restart): its first lookup is hinted.
@@ -237,8 +245,8 @@ describe('LeadsRepository.existsPublicSubmission', () => {
     try {
       expect((await leads.indexes()).map((index) => index.name)).toContain(LEADS_SUBMISSION_INDEX);
       const repository = restarted.app.get(LeadsRepository);
-      expect(await repository.existsPublicSubmission(siteId, submissionId)).toBe(true);
-      expect(await repository.existsPublicSubmission(siteId, randomUUID())).toBe(false);
+      expect(await repository.existsPublicSubmission(workspace, siteId, submissionId)).toBe(true);
+      expect(await repository.existsPublicSubmission(workspace, siteId, randomUUID())).toBe(false);
     } finally {
       await restarted.close();
     }

@@ -115,8 +115,8 @@ export async function createLiveFormPage(
   draft = formDraft(slug),
 ): Promise<{ pageId: string; published: PublishResponse }> {
   const page = await createPage(client, siteId, { title: 'Đăng ký tư vấn', slug });
-  await replaceDraft(client, page.page.id, draft);
-  return { pageId: page.page.id, published: await publish(client, page.page.id) };
+  await replaceDraft(client, siteId, page.page.id, draft);
+  return { pageId: page.page.id, published: await publish(client, siteId, page.page.id) };
 }
 
 export interface StoredLeadInput {
@@ -193,6 +193,14 @@ export function storedLead(input: StoredLeadInput): Record<string, unknown> {
   };
 }
 
+/** Stores leads made by `storedLead`, each in its workspace's database (ADR-025). */
 export async function insertLeads(t: TestApp, leads: Record<string, unknown>[]): Promise<void> {
-  await t.connection.collection('leads').insertMany(leads);
+  const byWorkspace = new Map<string, Record<string, unknown>[]>();
+  for (const lead of leads) {
+    const workspaceId = String(lead['workspaceId']);
+    byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), lead]);
+  }
+  for (const [workspaceId, group] of byWorkspace) {
+    await t.workspaceDb(workspaceId).collection('leads').insertMany(group);
+  }
 }

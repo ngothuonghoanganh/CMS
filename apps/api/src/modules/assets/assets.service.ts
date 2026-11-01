@@ -81,16 +81,18 @@ export class AssetsService {
   /** Changes the default description; access goes through the asset's site. */
   async update(
     user: AuthenticatedUser,
+    siteId: string,
     assetId: string,
     input: UpdateAssetRequest,
   ): Promise<Asset> {
     const id = toObjectId(assetId, ASSET_NOT_FOUND);
-    const ref = await this.assets.findAccessRef(id);
-    if (!ref) {
-      throw notFound(ASSET_NOT_FOUND);
-    }
-    const { scope } = await this.sites.accessById(user, ref.siteId, 'pages.edit', ASSET_NOT_FOUND);
-    const updated = await this.assets.update(scope, id, {
+    const { scope, site } = await this.sites.accessById(
+      user,
+      toObjectId(siteId, ASSET_NOT_FOUND),
+      'pages.edit',
+      ASSET_NOT_FOUND,
+    );
+    const updated = await this.assets.update(scope, site._id, id, {
       alt: input.decorative ? null : input.alt,
       decorative: input.decorative,
     });

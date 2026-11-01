@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import { DATA_REQUEST_LOG_MAX } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import {
@@ -13,12 +12,16 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 import type { LeadPerson } from '../leads/leads.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
-  DATA_REQUEST_MODEL,
+  DATA_REQUEST_COLLECTION,
   type DataRequestContact,
   type DataRequestLogRecord,
   type DataRequestRecord,
 } from './data-request.schema.js';
 import { maskContact } from './domain/mask-contact.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 export type NewDataRequest = Pick<
   DataRequestRecord,
@@ -48,9 +51,7 @@ function pushLog(entry: DataRequestLogRecord) {
 
 @Injectable()
 export class DataRequestsRepository {
-  constructor(
-    @InjectModel(DATA_REQUEST_MODEL) private readonly requests: Model<DataRequestRecord>,
-  ) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   async insert(
     scope: WorkspaceScope,
@@ -59,7 +60,7 @@ export class DataRequestsRepository {
     at: Date,
     tx: Tx,
   ): Promise<DataRequestRecord> {
-    const [created] = await this.requests.create(
+    const [created] = await this.requests(scope).create(
       [
         {
           ...request,
@@ -90,7 +91,7 @@ export class DataRequestsRepository {
     cursor: string | undefined,
     limit: number,
   ): Promise<KeysetPage<DataRequestListRow>> {
-    const records = await this.requests
+    const records = await this.requests(scope)
       .find({ $and: [{ workspaceId: scope.workspaceId, siteId }, afterCursor(cursor)] })
       .select({ log: 0 })
       .sort(NEWEST_FIRST)
@@ -100,17 +101,8 @@ export class DataRequestsRepository {
     return toKeysetPage(records, limit);
   }
 
-  /** Unscoped lookup by id that only returns where the request lives, for access checks. */
-  async findAccessRef(id: ObjectId): Promise<DataRequestAccessRef | null> {
-    const request = await this.requests
-      .findById(id, { workspaceId: 1, siteId: 1 })
-      .lean<Pick<DataRequestRecord, 'workspaceId' | 'siteId'>>()
-      .exec();
-    return request ? { workspaceId: request.workspaceId, siteId: request.siteId } : null;
-  }
-
   findById(scope: WorkspaceScope, id: ObjectId): Promise<DataRequestRecord | null> {
-    return this.requests
+    return this.requests(scope)
       .findOne({ _id: id, workspaceId: scope.workspaceId })
       .lean<DataRequestRecord>()
       .exec();
@@ -122,7 +114,7 @@ export class DataRequestsRepository {
     id: ObjectId,
     entry: DataRequestLogRecord,
   ): Promise<DataRequestRecord | null> {
-    return this.requests
+    return this.requests(scope)
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, status: 'open' },
         { $set: { status: 'responded', respondedAt: entry.at }, $push: pushLog(entry) },
@@ -138,7 +130,7 @@ export class DataRequestsRepository {
     id: ObjectId,
     entry: DataRequestLogRecord,
   ): Promise<boolean> {
-    const result = await this.requests
+    const result = await this.requests(scope)
       .updateOne(
         { _id: id, workspaceId: scope.workspaceId, status: { $ne: 'completed' } },
         { $push: pushLog(entry) },
@@ -159,7 +151,7 @@ export class DataRequestsRepository {
     tx: Tx,
   ): Promise<DataRequestRecord | null> {
     const { entry, count, maskedContact } = completion;
-    return this.requests
+    return this.requests(scope)
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, status: { $in: ['open', 'responded'] } },
         [
@@ -207,7 +199,7 @@ export class DataRequestsRepository {
     if (keys.length === 0) {
       return 0;
     }
-    const requests = await this.requests
+    const requests = await this.requests(scope)
       .find({ workspaceId: scope.workspaceId, siteId, masked: false, $or: keys }, { contact: 1 })
       .session(tx)
       .lean<Pick<DataRequestRecord, '_id' | 'contact'>[]>()
@@ -215,7 +207,7 @@ export class DataRequestsRepository {
     if (requests.length === 0) {
       return 0;
     }
-    await this.requests.bulkWrite(
+    await this.requests(scope).bulkWrite(
       requests.map((request) => ({
         updateOne: {
           filter: { _id: request._id, workspaceId: scope.workspaceId },
@@ -225,5 +217,9 @@ export class DataRequestsRepository {
       { session: tx },
     );
     return requests.length;
+  }
+
+  private requests(ref: WorkspaceRef): Model<DataRequestRecord> {
+    return this.databases.model(ref, DATA_REQUEST_COLLECTION);
   }
 }

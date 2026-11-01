@@ -25,7 +25,7 @@ import {
   plainTextOf,
   SmtpStub,
   type StubMessage,
-  stubConfirmationToken,
+  stubConfirmationLink,
 } from '../../../test/smtp-stub.js';
 import { parseEnv } from '../../config/env.js';
 import { EmailSendError } from './email-sender.js';
@@ -164,7 +164,7 @@ describe('lead emails over a failing SMTP server', () => {
   /** Adds and confirms the address through the link the stub received. */
   async function addConfirmed(site: Site, email: string): Promise<void> {
     await addRecipient(site, email);
-    await confirmRecipient(t, stubConfirmationToken(stub, email)).expect(200);
+    await confirmRecipient(t, stubConfirmationLink(stub, email)).expect(200);
   }
 
   async function formSite(): Promise<{ site: Site; releaseId: string }> {
@@ -187,11 +187,17 @@ describe('lead emails over a failing SMTP server', () => {
     return lead.id;
   }
 
-  async function settled(leadId: string, status: 'sent' | 'failed'): Promise<LeadDetail> {
+  async function settled(
+    { site }: { site: Site },
+    leadId: string,
+    status: 'sent' | 'failed',
+  ): Promise<LeadDetail> {
     let lead: LeadDetail | undefined;
     await vi.waitFor(
       async () => {
-        lead = leadDetailSchema.parse((await owner.get(`/leads/${leadId}`).expect(200)).body);
+        lead = leadDetailSchema.parse(
+          (await owner.get(`/sites/${site.id}/leads/${leadId}`).expect(200)).body,
+        );
         expect(lead.notification?.status).toBe(status);
       },
       { timeout: 10_000, interval: 25 },
@@ -211,7 +217,7 @@ describe('lead emails over a failing SMTP server', () => {
     const form = await formSite();
     await stub.stop();
     const leadId = await send(form, 'Mất kết nối');
-    expect((await settled(leadId, 'failed')).notification).toEqual({
+    expect((await settled(form, leadId, 'failed')).notification).toEqual({
       status: 'failed',
       attempts: 3,
       lastErrorCode: 'smtp_unavailable',
@@ -225,20 +231,22 @@ describe('lead emails over a failing SMTP server', () => {
     expect(list.items.find((item) => item.id === leadId)?.notificationFailed).toBe(true);
 
     // "Gửi lại" while the server is still down starts three attempts over, which fail the same way.
-    const retried = await support.post(`/leads/${leadId}/notification/retry`).expect(200);
+    const retried = await support
+      .post(`/sites/${form.site.id}/leads/${leadId}/notification/retry`)
+      .expect(200);
     expect(leadDetailSchema.parse(retried.body).notification).toMatchObject({
       status: 'pending',
       attempts: 0,
       lastErrorCode: null,
     });
-    expect((await settled(leadId, 'failed')).notification).toMatchObject({
+    expect((await settled(form, leadId, 'failed')).notification).toMatchObject({
       attempts: 3,
       lastErrorCode: 'smtp_unavailable',
     });
 
     await stub.restart();
-    await owner.post(`/leads/${leadId}/notification/retry`).expect(200);
-    expect((await settled(leadId, 'sent')).notification).toMatchObject({
+    await owner.post(`/sites/${form.site.id}/leads/${leadId}/notification/retry`).expect(200);
+    expect((await settled(form, leadId, 'sent')).notification).toMatchObject({
       attempts: 1,
       lastErrorCode: null,
       recipients: 1,
@@ -251,7 +259,7 @@ describe('lead emails over a failing SMTP server', () => {
     const form = await formSite();
     stub.mode = 'stall';
     const leadId = await send(form, 'Máy chủ treo');
-    expect((await settled(leadId, 'failed')).notification).toMatchObject({
+    expect((await settled(form, leadId, 'failed')).notification).toMatchObject({
       attempts: 3,
       lastErrorCode: 'timeout',
       sentAt: null,
@@ -263,7 +271,7 @@ describe('lead emails over a failing SMTP server', () => {
     await addConfirmed(form.site, 'da-nghi@smilecare.vn');
     stub.refuse('da-nghi@smilecare.vn');
     const leadId = await send(form, 'Một địa chỉ bị từ chối');
-    expect((await settled(leadId, 'sent')).notification).toMatchObject({
+    expect((await settled(form, leadId, 'sent')).notification).toMatchObject({
       status: 'sent',
       attempts: 1,
       recipients: 1,
@@ -308,7 +316,7 @@ describe('lead emails over a failing SMTP server', () => {
     expect(problemSchema.parse(capped.body).code).toBe('rate_limited');
     expect(stub.to('le-tan@smilecare.vn')).toHaveLength(5);
 
-    await confirmRecipient(t, stubConfirmationToken(stub, 'le-tan@smilecare.vn')).expect(200);
+    await confirmRecipient(t, stubConfirmationLink(stub, 'le-tan@smilecare.vn')).expect(200);
     expect(await recipients(site)).toMatchObject([{ status: 'confirmed' }]);
   });
 });
