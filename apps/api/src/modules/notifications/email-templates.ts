@@ -94,3 +94,94 @@ export function recipientConfirmationEmail(input: ConfirmationEmailInput): Email
     ),
   };
 }
+
+/** A button every client renders. */
+function button(href: string, label: string): string {
+  return `<p style="margin:0 0 16px"><a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">${escapeHtml(label)}</a></p>`;
+}
+
+function paragraph(text: string): string {
+  return `<p style="margin:0 0 16px;line-height:1.55">${escapeHtml(text)}</p>`;
+}
+
+function smallPrint(text: string): string {
+  return `<p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(text)}</p>`;
+}
+
+export interface MemberInvitationEmailInput {
+  workspaceName: string;
+  invitedBy: string;
+  roleLabel: string;
+  /** "toàn workspace" or the sites, e.g. "site Nha khoa Smile Care". */
+  scope: string;
+  acceptUrl: string;
+  validDays: number;
+}
+
+/** The invitation to join a workspace (board 15b, ADR-021). */
+export function memberInvitationEmail(input: MemberInvitationEmailInput): EmailContent {
+  const title = `${input.invitedBy} mời bạn vào ${input.workspaceName}`;
+  const intro = `Bạn được mời làm ${input.roleLabel} trên ${input.scope} của ${input.workspaceName}.`;
+  const validity = `Lời mời dùng được một lần, cho đúng địa chỉ email này, trong ${input.validDays} ngày. Không biết người mời? Bạn có thể bỏ qua email này, tài khoản sẽ không được tạo.`;
+  return {
+    subject: title,
+    text: [intro, '', `Nhận lời mời tại: ${input.acceptUrl}`, '', validity].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(intro)}${button(input.acceptUrl, 'Nhận lời mời')}${smallPrint(validity)}`,
+    ),
+  };
+}
+
+export interface AccessRequestEmailInput {
+  workspaceName: string;
+  requesterName: string;
+  requesterEmail: string;
+  currentRole: string;
+  requestedRole: string;
+  /** "toàn workspace" or "các site hiện tại". */
+  scope: string;
+  note: string;
+  reviewUrl: string;
+}
+
+/** Tells Chủ sở hữu a member asks for another role; the link only opens the request (ADR-021). */
+export function accessRequestEmail(input: AccessRequestEmailInput): EmailContent {
+  const title = `${input.requesterName} xin đổi quyền trong ${input.workspaceName}`;
+  const intro = `${input.requesterName} (${input.requesterEmail}) đang là ${input.currentRole} và xin làm ${input.requestedRole} trên ${input.scope}.`;
+  const note = input.note === '' ? null : `Lời nhắn: ${input.note}`;
+  const action =
+    'Mở yêu cầu để chấp nhận, chỉnh vai trò và site trước khi lưu, hoặc từ chối. Quyền chỉ đổi khi bạn lưu trên màn Thành viên.';
+  return {
+    subject: title,
+    text: [intro, ...(note === null ? [] : ['', note]), '', action, input.reviewUrl].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(input.reviewUrl, 'Xem yêu cầu')}${smallPrint(action)}`,
+    ),
+  };
+}
+
+export interface AccessDecisionEmailInput {
+  workspaceName: string;
+  accepted: boolean;
+  /** The role and sites decided, for an accepted request. */
+  roleLabel: string;
+  scope: string;
+  openUrl: string;
+}
+
+/** Tells the member how Chủ sở hữu decided their request (ADR-021). */
+export function accessDecisionEmail(input: AccessDecisionEmailInput): EmailContent {
+  const title = input.accepted
+    ? `Yêu cầu đổi quyền trong ${input.workspaceName} đã được chấp nhận`
+    : `Yêu cầu đổi quyền trong ${input.workspaceName} chưa được chấp nhận`;
+  const body = input.accepted
+    ? `Bạn là ${input.roleLabel} trên ${input.scope}. Quyền mới có hiệu lực ngay.`
+    : 'Chủ sở hữu đã từ chối yêu cầu. Quyền của bạn giữ nguyên; bạn có thể gửi yêu cầu khác.';
+  return {
+    subject: title,
+    text: [body, '', input.openUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(input.openUrl, `Mở ${input.workspaceName}`)}`),
+  };
+}

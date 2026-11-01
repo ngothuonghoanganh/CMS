@@ -18,8 +18,13 @@ export const permissionSchema = z.enum([
   'sites.manage',
   'domains.manage',
   'members.manage',
+  'accessRequests.decide',
+  'workspace.transferOwnership',
 ]);
 export type Permission = z.infer<typeof permissionSchema>;
+
+/** Duyệt yêu cầu đổi quyền and the ownership stay with Chủ sở hữu (ADR-021). */
+const ownerOnly: readonly Permission[] = ['accessRequests.decide', 'workspace.transferOwnership'];
 
 /**
  * The permissions of each role. "Xem lead" and "Xuất / xóa dữ liệu cá nhân" are separate rows:
@@ -27,7 +32,7 @@ export type Permission = z.infer<typeof permissionSchema>;
  */
 const grants: Record<Role, readonly Permission[]> = {
   owner: permissionSchema.options,
-  admin: permissionSchema.options,
+  admin: permissionSchema.options.filter((permission) => !ownerOnly.includes(permission)),
   editor: ['pages.view', 'pages.edit', 'pages.publish', 'pages.manageLive'],
   contributor: ['pages.view', 'pages.edit'],
   support: ['pages.view', 'leads.view', 'leads.handle'],
@@ -107,7 +112,11 @@ export const permissionGroups: readonly PermissionGroup[] = [
   },
   {
     title: 'Thành viên',
-    rows: [{ permission: 'members.manage', label: 'Xem vai trò & quyền, quản lý thành viên' }],
+    rows: [
+      { permission: 'members.manage', label: 'Mời, đổi quyền, gỡ thành viên; xem vai trò & quyền' },
+      { permission: 'accessRequests.decide', label: 'Duyệt yêu cầu đổi quyền' },
+      { permission: 'workspace.transferOwnership', label: 'Chuyển quyền sở hữu workspace' },
+    ],
   },
 ];
 

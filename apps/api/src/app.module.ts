@@ -21,6 +21,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module.js';
 import { PublicDeliveryModule } from './modules/public-delivery/public-delivery.module.js';
 import { PublishingModule } from './modules/publishing/publishing.module.js';
 import { RevalidationModule } from './modules/revalidation/revalidation.module.js';
+import { MembersModule } from './modules/members/members.module.js';
 import { SitesModule } from './modules/sites/sites.module.js';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 import { EnvModule } from './shared/env.js';
@@ -68,6 +69,7 @@ export class AppModule {
         WorkspacesModule,
         AuthModule,
         SitesModule,
+        MembersModule,
         ActivityModule,
         AssetsModule,
         PagesModule,

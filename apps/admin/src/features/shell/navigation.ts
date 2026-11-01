@@ -4,7 +4,7 @@ import type { Permission } from '@plp/contracts';
 export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'privacy' | 'settings';
 
 /** Workspace sections in the sidebar (Sidebar v2). */
-export type WorkspaceNavKey = 'roles';
+export type WorkspaceNavKey = 'members' | 'roles';
 
 export interface NavItem<Key extends string> {
   key: Key;
@@ -56,8 +56,19 @@ export function rolesHref(workspaceId: string): string {
   return `${workspaceHref(workspaceId)}/roles`;
 }
 
+/** "Thành viên" (board 15, ADR-021), optionally with a request open: `?request=`. */
+export function membersHref(workspaceId: string, search = ''): string {
+  return `${workspaceHref(workspaceId)}/members${search}`;
+}
+
 export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
   return [
+    {
+      key: 'members',
+      label: 'Thành viên',
+      href: membersHref(workspaceId),
+      permission: 'members.manage',
+    },
     {
       key: 'roles',
       label: 'Vai trò & quyền',

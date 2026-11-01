@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import type { LoginRequest, MeResponse, SignupRequest } from '@plp/contracts';
+import type { InvitedSignupRequest, LoginRequest, MeResponse, SignupRequest } from '@plp/contracts';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
-import { AppError } from '../../shared/errors.js';
+import { AppError, notFound } from '../../shared/errors.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { hashInvitationToken, invitationState } from '../workspaces/domain/member-rules.js';
+import { InvitationsRepository } from '../workspaces/invitations.repository.js';
+import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-join.service.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
 import {
@@ -31,6 +34,8 @@ export class AuthService {
     private readonly sessions: SessionsRepository,
     private readonly loginAttempts: LoginAttemptsRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly invitations: InvitationsRepository,
+    private readonly join: WorkspaceJoin,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -57,6 +62,42 @@ export class AuthService {
       throw error;
     }
     return this.issueSession({ id: userId, name: input.name, email: input.email });
+  }
+
+  /**
+   * Creates the account of an invited email from its link, and joins the workspace in the same
+   * transaction (ADR-021): no workspace of its own. The email is the invitation's, so the link
+   * proves it. An email with an account already must log in and accept instead.
+   */
+  async signupInvited(input: InvitedSignupRequest): Promise<IssuedSession> {
+    const invitation = await this.invitations.findByTokenHash(hashInvitationToken(input.token));
+    if (!invitation) {
+      throw notFound('Liên kết mời không hợp lệ');
+    }
+    if (invitationState(invitation, new Date()) !== 'pending') {
+      throw new AppError(409, 'invitation_unavailable', INVITATION_UNAVAILABLE);
+    }
+    const passwordHash = await hashPassword(input.password);
+    let userId;
+    try {
+      userId = await this.transactions.run(async (tx) => {
+        const user = await this.users.create(
+          { email: invitation.email, name: input.name, passwordHash },
+          tx,
+        );
+        await this.join.join(invitation, user._id, new Date(), tx);
+        return user._id;
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error, USERS_EMAIL_INDEX)) {
+        throw new AppError(409, 'email_taken', 'Email này đã có tài khoản', {
+          detail: 'Đăng nhập bằng email này rồi mở lại link mời để tham gia.',
+          cause: error,
+        });
+      }
+      throw error;
+    }
+    return this.issueSession({ id: userId, name: input.name, email: invitation.email });
   }
 
   /**

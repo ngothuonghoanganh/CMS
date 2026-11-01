@@ -1,8 +1,11 @@
-import { SESSION_COOKIE } from '@plp/contracts';
+import { INVITATION_PATH, SESSION_COOKIE } from '@plp/contracts';
 import { type NextRequest, NextResponse } from 'next/server';
 
-/** Pages without a session: sign-in, and confirming a lead address from its email (ADR-018). */
-const PUBLIC_PATHS = ['/login', '/signup', '/lead-recipients/confirm'];
+/**
+ * Pages without a session: sign-in, confirming a lead address from its email (ADR-018), and the
+ * invitation page, where a new member signs up (ADR-021).
+ */
+const PUBLIC_PATHS = ['/login', '/signup', '/lead-recipients/confirm', INVITATION_PATH];
 
 /**
  * Optimistic check only: without a session cookie the visitor is sent to the login page. Every

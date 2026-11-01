@@ -74,6 +74,22 @@ export class SitesRepository {
     return site ? { id: site._id, workspaceId: site.workspaceId } : null;
   }
 
+  /**
+   * Names of the sites an invitation gives, for the invitation page (ADR-021). Unscoped: the
+   * invited person is not a member yet, and the link is what shows them these sites.
+   */
+  async findNamesForInvitation(
+    workspaceId: ObjectId,
+    siteIds: readonly ObjectId[],
+  ): Promise<string[]> {
+    const sites = await this.sites
+      .find({ _id: { $in: [...siteIds] }, workspaceId }, { name: 1 })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean<Pick<SiteRecord, '_id' | 'name'>[]>()
+      .exec();
+    return sites.map((site) => site.name);
+  }
+
   /** In `tx` when given, e.g. publish reads the settings a release snapshots (ADR-015). */
   findById(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<SiteRecord | null> {
     return this.sites

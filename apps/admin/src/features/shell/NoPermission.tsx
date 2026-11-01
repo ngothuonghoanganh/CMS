@@ -1,6 +1,7 @@
-import { type Membership, roleLabels } from '@plp/contracts';
+import { can, type Membership, roleLabels } from '@plp/contracts';
 import { ButtonLink, LockIcon } from '@plp/ui';
 import Link from 'next/link';
+import { RequestAccessButton } from './RequestAccessButton';
 import styles from './NoPermission.module.css';
 
 export interface NoPermissionProps {
@@ -11,13 +12,21 @@ export interface NoPermissionProps {
   holders: string;
   /** Where to go instead, e.g. the site's pages. */
   back: { href: string; label: string };
+  /** Offers "Yêu cầu đổi quyền" to roles that cannot change roles themselves (ADR-021). */
+  requestAccess?: boolean | undefined;
 }
 
 /**
  * A screen the user's role may not open (board 16, "noPermission"): their role and who may,
  * instead of an error. The API refuses the same actions (ADR-020).
  */
-export function NoPermission({ title, membership, holders, back }: NoPermissionProps) {
+export function NoPermission({
+  title,
+  membership,
+  holders,
+  back,
+  requestAccess = false,
+}: NoPermissionProps) {
   const sites = membership.siteIds === null ? '' : ` trên ${membership.siteIds.length} site`;
   return (
     <div className={styles.root}>
@@ -29,9 +38,14 @@ export function NoPermission({ title, membership, holders, back }: NoPermissionP
         Vai trò của bạn là <strong>{roleLabels[membership.role]}</strong>
         {sites}. {holders}
       </p>
-      <ButtonLink as={Link} href={back.href} variant="secondary">
-        {back.label}
-      </ButtonLink>
+      <div className={styles.actions}>
+        {requestAccess && !can(membership.role, 'members.manage') ? (
+          <RequestAccessButton workspaceId={membership.workspace.id} role={membership.role} />
+        ) : null}
+        <ButtonLink as={Link} href={back.href} variant="secondary">
+          {back.label}
+        </ButtonLink>
+      </div>
     </div>
   );
 }
