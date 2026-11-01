@@ -66,7 +66,7 @@ export class ActivityService {
     const [actors, latestByPage, deletedPages] = await Promise.all([
       this.users.findRefs(records.map((record) => record.actorId)),
       this.activity.latestPointerEvents(scope, rolledBackPageIds),
-      this.activity.deletedPages(
+      this.activity.findGonePages(
         scope,
         records.flatMap((record) => (record.pageId === null ? [] : [record.pageId])),
       ),

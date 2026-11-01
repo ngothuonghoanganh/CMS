@@ -165,7 +165,7 @@ export class ActivityRepository {
    * The pages among `pageIds` that were deleted (ADR-027), as id hex: those with a `page.deleted`
    * event, recorded in the transaction that deleted the page. One query on the page index.
    */
-  async deletedPages(scope: WorkspaceScope, pageIds: readonly ObjectId[]): Promise<Set<string>> {
+  async findGonePages(scope: WorkspaceScope, pageIds: readonly ObjectId[]): Promise<Set<string>> {
     const unique = [...new Map(pageIds.map((id) => [id.toHexString(), id])).values()];
     if (unique.length === 0) {
       return new Set();
