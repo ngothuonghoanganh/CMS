@@ -6,7 +6,7 @@ import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import { ApprovalsRepository } from '../publishing/approvals.repository.js';
 import { RedirectsRepository } from '../publishing/redirects.repository.js';
-import { ReleaseErasure } from '../publishing/release-erasure.js';
+import { ReleaseErasureRepository } from '../publishing/release-erasure.repository.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
 import { PagesRepository } from './pages.repository.js';
 
@@ -28,7 +28,7 @@ export class PageDeletionService {
     private readonly pages: PagesRepository,
     private readonly redirects: RedirectsRepository,
     private readonly approvals: ApprovalsRepository,
-    private readonly releases: ReleaseErasure,
+    private readonly releases: ReleaseErasureRepository,
     private readonly leads: LeadsRepository,
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,

@@ -7,7 +7,7 @@ import { PagesModule } from '../pages/pages.module.js';
 import { RevalidationModule } from '../revalidation/revalidation.module.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import { SiteDeletionService } from './site-deletion.service.js';
-import { SiteErasure } from './site-erasure.js';
+import { SiteErasureRepository } from './site-erasure.repository.js';
 import { SiteManagementService } from './site-management.service.js';
 import { SitesCoreModule } from './sites-core.module.js';
 import { SitesController } from './sites.controller.js';
@@ -29,7 +29,7 @@ import { SitesController } from './sites.controller.js';
     RevalidationModule,
   ],
   controllers: [SitesController],
-  providers: [SiteManagementService, SiteDeletionService, SiteErasure],
+  providers: [SiteManagementService, SiteDeletionService, SiteErasureRepository],
   exports: [SitesCoreModule],
 })
 export class SitesModule {}

@@ -13,7 +13,7 @@ import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { SiteRecord } from './site.schema.js';
-import { SiteErasure } from './site-erasure.js';
+import { SiteErasureRepository } from './site-erasure.repository.js';
 import { SitesRepository } from './sites.repository.js';
 import { SITE_NOT_FOUND, type SiteAccess, SitesService } from './sites.service.js';
 
@@ -26,7 +26,7 @@ export class SiteDeletionService {
     private readonly sitesService: SitesService,
     private readonly access: AccessService,
     private readonly sites: SitesRepository,
-    private readonly erasure: SiteErasure,
+    private readonly erasure: SiteErasureRepository,
     private readonly pages: PagesRepository,
     private readonly leads: LeadsRepository,
     private readonly domains: DomainsRepository,

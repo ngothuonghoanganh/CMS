@@ -41,7 +41,7 @@ import { DomainChecker } from '../domains/domain-checker.service.js';
 import type { DomainRecord } from '../domains/domain.schema.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import { LeadNotifier } from '../notifications/lead-notifier.service.js';
-import { SiteErasure } from './site-erasure.js';
+import { SiteErasureRepository } from './site-erasure.repository.js';
 
 const DAY_MS = 86_400_000;
 
@@ -402,7 +402,7 @@ describe('DELETE /sites/:siteId', () => {
     it('removes, after the commit, a lead stored while the transaction ran', async () => {
       const site = await createSite(owner, workspaceId, { name: 'Trong lúc xóa' });
       const page = await createPage(owner, site.id);
-      const erasure = t.app.get(SiteErasure);
+      const erasure = t.app.get(SiteErasureRepository);
       const erase = erasure.erase.bind(erasure);
       const leads = () =>
         t

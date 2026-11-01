@@ -34,7 +34,7 @@ interface SiteDocument {
  * of releases and consent versions require (ADR-005, ADR-017).
  */
 @Injectable()
-export class SiteErasure {
+export class SiteErasureRepository {
   constructor(private readonly databases: WorkspaceDatabases) {}
 
   /**

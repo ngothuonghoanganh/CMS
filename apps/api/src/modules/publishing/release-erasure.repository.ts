@@ -12,7 +12,7 @@ import { RELEASE_COLLECTION, type ReleaseRecord } from './release.schema.js';
  * reads (ADR-005). Nothing here edits a release.
  */
 @Injectable()
-export class ReleaseErasure {
+export class ReleaseErasureRepository {
   constructor(private readonly databases: WorkspaceDatabases) {}
 
   /**
