@@ -53,10 +53,10 @@ export default async function LoginPage({
       }
       footer={
         address.kind === 'workspace' ? (
-          <>
+          <span className={formStyles.note}>
             Một lần đăng nhập dùng được cho mọi workspace của bạn. Muốn mở workspace khác?{' '}
             <a href={`${commonOrigin}/`}>Xem tất cả workspace</a>
-          </>
+          </span>
         ) : undefined
       }
     >

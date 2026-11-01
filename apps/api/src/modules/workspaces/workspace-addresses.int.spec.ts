@@ -17,6 +17,8 @@ import { publishableDraft } from '../../../test/compositions.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
 import { insertMembership, uniqueSubdomain } from '../../../test/resources.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
+import { newSessionToken, hashSessionToken } from '../auth/session-token.js';
+import { SessionsRepository } from '../auth/sessions.repository.js';
 import { LeadNotifier } from '../notifications/lead-notifier.service.js';
 
 // The common address takes the reserved name `app`; public sites stay on `*.localhost`.
@@ -226,6 +228,19 @@ describe('workspace addresses', () => {
     // A cookie of another scope first, as the browser sends the older one first.
     await me(`${SESSION_COOKIE}=not-a-session; ${newer}`).expect(200);
     await me(`${older}; ${newer}`).expect(200);
+    // However many a request carries, one query looks at four at most.
+    const lookups = vi.spyOn(t.app.get(SessionsRepository), 'findActive');
+    try {
+      const many = Array.from(
+        { length: 200 },
+        (_, index) => `${SESSION_COOKIE}=x${index.toString()}`,
+      );
+      await me(many.join('; ')).expect(401);
+      expect(lookups).toHaveBeenCalledOnce();
+      expect(lookups.mock.calls[0]?.[0]).toHaveLength(4);
+    } finally {
+      lookups.mockRestore();
+    }
 
     const out = await request(t.app.getHttpServer())
       .post('/auth/logout')
@@ -237,6 +252,22 @@ describe('workspace addresses', () => {
     expect(cleared.some((item) => !/; Domain=/i.test(item))).toBe(true);
     await me(older).expect(401);
     await me(newer).expect(401);
+  });
+
+  it('refuses a host-only session left from the one-address mode', async () => {
+    const me = await new AddressClient(t, COMMON).signUp(`Cũ ${randomUUID().slice(0, 6)}`);
+    const token = newSessionToken();
+    // As the API wrote it before workspace addresses: no cookie domain.
+    await t.connection.collection('sessions').insertOne({
+      tokenHash: hashSessionToken(token),
+      userId: new Types.ObjectId(me.user.id),
+      expiresAt: new Date(Date.now() + 3_600_000),
+      createdAt: new Date(),
+    });
+    await request(t.app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', `${SESSION_COOKIE}=${token}`)
+      .expect(401);
   });
 
   it('takes state changes from the common address and every workspace address only', async () => {

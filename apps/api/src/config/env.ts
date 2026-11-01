@@ -58,7 +58,10 @@ const envSchema = z.object({
    */
   SESSION_COOKIE_DOMAIN: z
     .string()
-    .regex(/^[a-z0-9.-]+$/, 'must be a host name')
+    .regex(
+      /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/,
+      'must be a lowercase host name, without a leading dot',
+    )
     .optional(),
 
   /** Public origin of a site's default domain, e.g. "https://{subdomain}.payload.site". */

@@ -353,6 +353,19 @@ describe('Sidebar', () => {
     expect(loadPageMock).toHaveBeenCalledWith('https://app.example.vn/');
   });
 
+  it('lists no other workspaces to someone who has one', async () => {
+    const user = userEvent.setup();
+    renderSidebar({
+      memberships: [agency],
+      addresses: {
+        template: 'https://{slug}.app.example.vn',
+        commonOrigin: 'https://app.example.vn',
+      },
+    });
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Xem tất cả workspace' })).toBeNull();
+  });
+
   it('keeps the one-address switcher as it was', async () => {
     const user = userEvent.setup();
     renderSidebar();

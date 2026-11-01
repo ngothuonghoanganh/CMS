@@ -189,6 +189,12 @@ describe('parseEnv', () => {
       }
     });
 
+    it('takes the cookie domain as a plain host name', () => {
+      expect(() =>
+        parseEnv({ ...valid, ...addresses, SESSION_COOKIE_DOMAIN: '.app.example.vn' }),
+      ).toThrow('without a leading dot');
+    });
+
     it('never lets the session reach a public site', () => {
       const publicSites = {
         ...valid,

@@ -8,6 +8,7 @@ import { workspaceHome } from '../features/shell/admin-address';
 import { currentAddress } from '../features/shell/current-address';
 import { siteHref } from '../features/shell/navigation';
 import { NotMember } from '../features/workspaces/NotMember';
+import { SignOutButton } from '../features/workspaces/SignOutButton';
 import { WorkspacePicker } from '../features/workspaces/WorkspacePicker';
 import { FormCard } from '../features/shell/FormCard';
 import { CenteredPage } from '../features/shell/CenteredPage';
@@ -98,14 +99,18 @@ async function singleAddressHome(me: MeResponse) {
   const membership = pickMembership(me.memberships, preferred);
   if (membership === null) {
     return (
-      <CenteredPage>
-        <FormCard
-          title="Chưa có workspace"
-          description="Tài khoản của bạn chưa thuộc workspace nào. Hãy nhờ Chủ sở hữu hoặc Quản trị của agency thêm bạn vào workspace."
-        >
-          {null}
-        </FormCard>
-      </CenteredPage>
+      <ToastProvider>
+        <CenteredPage>
+          <FormCard
+            title="Chưa có workspace"
+            description="Tài khoản của bạn chưa thuộc workspace nào. Hãy nhờ Chủ sở hữu hoặc Quản trị của agency thêm bạn vào workspace."
+          >
+            <div>
+              <SignOutButton />
+            </div>
+          </FormCard>
+        </CenteredPage>
+      </ToastProvider>
     );
   }
   const [first] = (await sitesOf(membership.workspace.id)) ?? [];

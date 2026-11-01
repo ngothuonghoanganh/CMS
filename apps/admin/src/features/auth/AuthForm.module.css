@@ -24,3 +24,9 @@
 .switch a:hover {
   color: var(--color-primary-pressed);
 }
+
+/* The note under the login card of a workspace address (screen 34). */
+.note {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}

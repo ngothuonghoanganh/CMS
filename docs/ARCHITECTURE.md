@@ -1570,9 +1570,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Dữ liệu local từ trước D1 nằm hết trong một database, nên API không còn thấy site và trang của nó. Xóa database phát triển rồi đăng ký lại: `docker compose exec mongo mongosh --port 27117 --quiet --eval 'db.getSiblingDB("plp").dropDatabase()'`.
 - **Amended 2026-11-02 (vòng test sau D2):**
   - **Địa chỉ trống:** tìm theo lô 20 dạng (`base`, `base-2`, … đã cắt cho vừa 40 ký tự) bằng truy vấn khớp đúng, không đọc mọi workspace cùng tiền tố. Trước đây dạng đã cắt không được thấy, nên tên dài trùng nhau từ lần thứ ba trở đi luôn lỗi 500. Đăng ký cùng lúc giành một địa chỉ thử tối đa 10 lần.
-  - **Tên dành riêng** nằm ở `@plp/contracts`. Host mang tên dành riêng không bao giờ là địa chỉ workspace: không cho kiểm tra `Origin`, không cho admin. Địa chỉ chung vì vậy được dùng tên dành riêng ngang hàng với workspace (`app.example.vn` cạnh `{slug}.example.vn`), và admin không bao giờ coi địa chỉ chung là của workspace.
+  - **Tên dành riêng** nằm ở `@plp/contracts`. Host mang tên dành riêng không bao giờ là địa chỉ workspace: không cho kiểm tra `Origin`, không cho admin. Địa chỉ chung vì vậy đặt được ngang hàng với workspace (`app.example.vn` cạnh `{slug}.example.vn`), và admin không bao giờ coi địa chỉ chung là của workspace.
+  - **Miền cookie chỉ dành cho admin:** mọi host dưới `SESSION_COOKIE_DOMAIN` nhận cookie phiên, và mọi tên không dành riêng dưới mẫu được kiểm tra `Origin` tin là một workspace. Vì vậy miền đó (ví dụ `app.example.vn` của `{slug}.app.example.vn`, hay một tên miền riêng cho admin) không được có host nào khác: không blog, mail hay dịch vụ bên thứ ba. API không tự kiểm tra được điều này.
   - **API không khởi động** khi mẫu địa chỉ có `{slug}` ngoài host hay có đường dẫn, khi địa chỉ chung đọc ra một workspace, khi `SESSION_COOKIE_DOMAIN` đặt mà không có mẫu, hoặc khi miền cookie và `BASE_DOMAIN` chứa nhau.
-  - **Cookie hai phạm vi** (host-only và miền cha, khi đổi chế độ): API thử mọi cookie phiên trình duyệt gửi; đăng xuất kết thúc tất cả và xóa cả hai phạm vi; đăng nhập có miền cookie thì xóa cookie host-only cùng tên.
+  - **Cookie hai phạm vi** (host-only và miền cha, khi đổi chế độ): mỗi phiên lưu miền cookie lúc tạo (`cookieDomain`), và chỉ được nhận khi API đang đặt cookie đúng như vậy; đổi chế độ thì mọi người đăng nhập lại một lần, không cookie cũ nào đứng thay ai. API xét tối đa 4 cookie phiên trong một request bằng một truy vấn; đăng xuất kết thúc tất cả và xóa cả hai phạm vi; đăng nhập có miền cookie thì xóa cookie host-only cùng tên.
   - **Đăng ký lỗi** chỉ xóa database khi workspace không có ở master: một commit mất câu trả lời vẫn giữ dữ liệu. Log lỗi không mang thông báo của lỗi gốc (có thể chứa email).
   - **Nhận lại email lead lúc khởi động** lấy 500 cái cũ nhất trên mọi workspace, như khi có một database; workspace nào lỗi thì log và bỏ qua, không chặn khởi động.
   - **Nhận lời mời** trả thêm `slug`; admin mở workspace vừa tham gia ở địa chỉ của nó, kể cả khi link được mở ở địa chỉ chung.
@@ -1664,8 +1665,12 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - **Index mới hay đổi của collection trong workspace DB:** sau khi mọi instance cũ đã dừng, khởi động lại instance mới một lần, để workspace nào đăng ký trên instance cũ trong lúc chuyển cũng có index đó. Đổi option của index đã có vẫn là bước migration chạy trước khi deploy, trên mọi workspace DB.
   - **Đăng ký mở** tạo một database mỗi lần. Trước khi mở cho khách thật cần xác minh email hoặc giới hạn số workspace, vì ADR-025 tính cho dưới 500 workspace trên một cluster.
 - Địa chỉ admin của workspace (ADR-025):
-  - Bản ghi DNS wildcard và chứng chỉ wildcard `*.{miền admin}` qua DNS-01, cùng lý do với `*.{BASE_DOMAIN}` (giới hạn chứng chỉ của CA). Tên dành riêng (`api`, `cdn`, `www`, …) dưới miền admin không trỏ về admin.
-  - API và admin cùng đặt `ADMIN_ORIGIN` (địa chỉ chung, nên dùng tên dành riêng `app`) và `ADMIN_WORKSPACE_ORIGIN_TEMPLATE`; API đặt thêm `SESSION_COOKIE_DOMAIN`. Miền cookie và `BASE_DOMAIN` không chứa nhau; API kiểm tra lúc khởi động.
+  - Bản ghi DNS wildcard và chứng chỉ wildcard `*.{miền admin}` qua DNS-01, cùng lý do với `*.{BASE_DOMAIN}` (giới hạn chứng chỉ của CA).
+  - API và admin cùng đặt `ADMIN_ORIGIN` và `ADMIN_WORKSPACE_ORIGIN_TEMPLATE`; API đặt thêm `SESSION_COOKIE_DOMAIN`. Hai cách đặt:
+    - địa chỉ chung ở miền cha: `https://app.example.vn` với `https://{slug}.app.example.vn`, miền cookie `app.example.vn`;
+    - địa chỉ chung ngang hàng, mang tên dành riêng `app`: `https://app.admin-domain.vn` với `https://{slug}.admin-domain.vn`, miền cookie `admin-domain.vn`. Chỉ dùng khi cả tên miền đó là của admin.
+  - Mọi host dưới miền cookie là admin: không đặt blog, mail hay dịch vụ bên thứ ba ở đó, vì chúng nhận cookie phiên và được kiểm tra `Origin` tin. Miền cookie và `BASE_DOMAIN` không chứa nhau; API kiểm tra điều này lúc khởi động.
+  - Admin được build và chạy với cùng các biến này.
   - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
 - Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).

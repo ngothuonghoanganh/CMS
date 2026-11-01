@@ -1,5 +1,7 @@
 import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Env } from '../../config/env.js';
+import { InjectEnv } from '../../shared/env.js';
 import { AppError } from '../../shared/errors.js';
 import type { RequestWithUser } from './current-user.decorator.js';
 import { IS_PUBLIC } from './public.decorator.js';
@@ -16,6 +18,7 @@ function unauthenticated(): AppError {
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(
+    @InjectEnv() private readonly env: Env,
     private readonly reflector: Reflector,
     private readonly sessions: SessionsRepository,
     private readonly users: UsersRepository,
@@ -30,15 +33,13 @@ export class SessionGuard implements CanActivate {
       return true;
     }
     const request = context.switchToHttp().getRequest<RequestWithUser>();
-    // The first token that is still a session: a stale cookie of another scope may come first.
-    const now = new Date();
-    let session = null;
-    for (const token of sessionTokensOf(request)) {
-      session = await this.sessions.findActive(hashSessionToken(token), now);
-      if (session) {
-        break;
-      }
-    }
+    // The first token that is still a session of the current cookie scope: a stale cookie of the
+    // other scope may come first (ADR-025).
+    const session = await this.sessions.findActive(
+      sessionTokensOf(request).map(hashSessionToken),
+      new Date(),
+      this.env.SESSION_COOKIE_DOMAIN ?? null,
+    );
     if (!session) {
       throw unauthenticated();
     }

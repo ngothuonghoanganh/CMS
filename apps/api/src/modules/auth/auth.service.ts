@@ -258,9 +258,7 @@ export class AuthService {
 
   /** Ends every session the browser presented (ADR-025: up to one per cookie scope). */
   async logout(tokens: readonly string[]): Promise<void> {
-    for (const token of tokens) {
-      await this.sessions.delete(hashSessionToken(token));
-    }
+    await this.sessions.deleteAll(tokens.map(hashSessionToken));
   }
 
   async me(user: AuthenticatedUser): Promise<MeResponse> {
@@ -284,7 +282,12 @@ export class AuthService {
   private async issueSession(user: AuthenticatedUser): Promise<IssuedSession> {
     const token = newSessionToken();
     const expiresAt = new Date(Date.now() + this.env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-    await this.sessions.create(user.id, hashSessionToken(token), expiresAt);
+    await this.sessions.create(
+      user.id,
+      hashSessionToken(token),
+      expiresAt,
+      this.env.SESSION_COOKIE_DOMAIN ?? null,
+    );
     return { token, expiresAt, me: await this.me(user) };
   }
 }

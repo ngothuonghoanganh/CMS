@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getHostSite, getSitemap } from '../../lib/public-api';
+import { getCachedSitemap, getHostSite, getSitemap } from '../../lib/public-api';
 import { GET as getRobots } from '../robots.txt/route';
 import { GET as getSitemapXml } from './route';
 
-vi.mock('../../lib/public-api', () => ({ getSitemap: vi.fn(), getHostSite: vi.fn() }));
+vi.mock('../../lib/public-api', () => ({
+  getSitemap: vi.fn(),
+  getCachedSitemap: vi.fn(),
+  getHostSite: vi.fn(),
+}));
 
 const SITEMAP = {
   origin: 'http://smilecare.localhost:3101',
@@ -37,6 +41,7 @@ describe('GET /sitemap.xml', () => {
     expect(await response.text()).toContain('<loc>https://go.smilecare.vn/</loc>');
     expect(getHostSite).toHaveBeenCalledWith('go.smilecare.vn');
     expect(getSitemap).toHaveBeenCalledWith('smilecare');
+    expect(getCachedSitemap).not.toHaveBeenCalled();
   });
 
   it('serves the XML sitemap of the site addressed by the host', async () => {
@@ -64,9 +69,12 @@ describe('GET /sitemap.xml', () => {
 });
 
 describe('GET /robots.txt', () => {
-  it('allows crawling and links the sitemap of the same origin', async () => {
-    vi.mocked(getSitemap).mockResolvedValue(SITEMAP);
+  it('allows crawling and links the sitemap of the same origin, from the cached lookup', async () => {
+    vi.mocked(getCachedSitemap).mockResolvedValue(SITEMAP);
     const response = await getRobots(request('/robots.txt', 'smilecare.localhost:3101'));
+    // Crawlers ask often; only the origin is used, which a publish does not change (ADR-009).
+    expect(getCachedSitemap).toHaveBeenCalledWith('smilecare');
+    expect(getSitemap).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
     expect(await response.text()).toBe(
@@ -76,7 +84,7 @@ describe('GET /robots.txt', () => {
 
   it('answers 404 for unknown hosts and unknown sites', async () => {
     expect((await getRobots(request('/robots.txt', 'evil.example'))).status).toBe(404);
-    vi.mocked(getSitemap).mockResolvedValue(null);
+    vi.mocked(getCachedSitemap).mockResolvedValue(null);
     expect((await getRobots(request('/robots.txt', 'nobody.localhost:3101'))).status).toBe(404);
   });
 });
@@ -90,6 +98,7 @@ describe('SEO files while the API cannot answer', () => {
   ])('%s answers 503 with Retry-After and logs the cause', async (path, get) => {
     const error = new Error('Public API lookup publicSitemap failed');
     vi.mocked(getSitemap).mockRejectedValue(error);
+    vi.mocked(getCachedSitemap).mockRejectedValue(error);
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await get(request(path, 'smilecare.localhost:3101'));
     expect(response.status).toBe(503);

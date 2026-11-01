@@ -9,9 +9,9 @@ export const workspaceSlugSchema = z
   .regex(/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/, 'Địa chỉ workspace không hợp lệ');
 
 /**
- * Host names the admin keeps for itself (ADR-025): never a workspace's address, and never trusted
- * as one, so the common address and services such as `api.` or `cdn.` can share the template's
- * domain.
+ * Host names never given to a workspace, nor trusted as one (ADR-025), so the common address can
+ * sit next to the workspaces (`app.` beside `{slug}.`). Every host under the session cookie's
+ * domain still receives the session: that domain belongs to the admin alone.
  */
 export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
   'admin',

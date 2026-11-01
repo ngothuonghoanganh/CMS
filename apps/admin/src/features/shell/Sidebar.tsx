@@ -263,7 +263,7 @@ export function Sidebar({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
-        {addresses === null ? null : (
+        {addresses === null || memberships.length < 2 ? null : (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem

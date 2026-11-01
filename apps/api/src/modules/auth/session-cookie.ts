@@ -1,10 +1,14 @@
 import { SESSION_COOKIE } from '@plp/contracts';
 import type { Request } from 'express';
 
+/** Browsers hold one session cookie per scope; more than this is not a browser's. */
+const MAX_SESSION_TOKENS = 4;
+
 /**
- * Every session token the browser sent. Usually one; two when a host-only cookie and one on the
- * workspace addresses' parent domain meet, after a deployment switched modes (ADR-025). Read from
- * the raw header: a parsed cookie map keeps only one of them.
+ * The session tokens the browser sent, distinct, in their order, at most `MAX_SESSION_TOKENS`.
+ * Usually one; two when a host-only cookie and one on the workspace addresses' parent domain meet,
+ * after a deployment switched modes (ADR-025). Read from the raw header: a parsed cookie map keeps
+ * only one of them.
  */
 export function sessionTokensOf(request: Pick<Request, 'headers'>): string[] {
   const header = request.headers.cookie ?? '';
@@ -20,5 +24,5 @@ export function sessionTokensOf(request: Pick<Request, 'headers'>): string[] {
       }
     }
   }
-  return tokens.filter((token) => token !== '');
+  return [...new Set(tokens.filter((token) => token !== ''))].slice(0, MAX_SESSION_TOKENS);
 }

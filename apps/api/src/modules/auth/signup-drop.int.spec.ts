@@ -28,7 +28,14 @@ describe('a sign-up whose database cannot be dropped either', () => {
     const email = `rieng-tu-${Types.ObjectId.createFromTime(1).toHexString()}@example.com`;
     const create = vi
       .spyOn(WorkspacesRepository.prototype, 'createWithOwner')
-      .mockRejectedValueOnce(new Error(`E11000 duplicate key: { email: "${email}" }`));
+      // Shaped like MongoDB's: the duplicate value sits in enumerable fields a logger copies.
+      .mockRejectedValueOnce(
+        Object.assign(new Error('E11000 duplicate key error'), {
+          code: 11000,
+          keyValue: { email },
+          errorResponse: { errmsg: `E11000 duplicate key: { email: "${email}" }` },
+        }),
+      );
     const drop = vi
       .spyOn(WorkspaceDatabases.prototype, 'drop')
       .mockRejectedValueOnce(new Error('MongoDB went away'));

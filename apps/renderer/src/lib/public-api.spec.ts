@@ -10,6 +10,7 @@ import {
   getSitemap,
   LOOKUP_TIMEOUT_MS,
   SITE_CACHE_LIFE,
+  getCachedSitemap,
 } from './public-api';
 
 vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
@@ -162,6 +163,25 @@ describe('getSitemap', () => {
     await expect(getSitemap('smilecare')).rejects.toThrow(
       'Public API request publicSitemap answered HTTP 500',
     );
+  });
+});
+
+describe('getCachedSitemap', () => {
+  it('is tagged by site, for robots.txt', async () => {
+    const sitemap: SitemapResponse = { origin: 'http://smilecare.localhost:3101', entries: [] };
+    stubFetch(200, sitemap);
+    await expect(getCachedSitemap('smilecare')).resolves.toEqual(sitemap);
+    expect(cacheTag).toHaveBeenCalledWith('site:smilecare');
+    expect(cacheLife).toHaveBeenCalledWith(SITE_CACHE_LIFE);
+  });
+
+  it('keeps an API error out of the cache and throws it outside', async () => {
+    stubFetch(500, { code: 'internal' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(getCachedSitemap('smilecare')).rejects.toThrow(
+      'Public API lookup publicSitemap failed',
+    );
+    expect(cacheLife).toHaveBeenCalledWith({ stale: 0, revalidate: 0, expire: 0 });
   });
 });
 

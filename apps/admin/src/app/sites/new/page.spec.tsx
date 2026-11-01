@@ -1,8 +1,10 @@
 import { endpoints, type Membership } from '@plp/contracts';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminAddress } from '../../../features/shell/admin-address';
 import { renderWithProviders } from '../../../features/shell/test-utils';
+import { loadPage } from '../../../lib/page-load';
 import NewSitePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -19,6 +21,12 @@ vi.mock('../../../features/shell/current-address', () => ({
   requireWorkspaceAddress: () => Promise.resolve(),
 }));
 
+const kitchen: Membership = {
+  workspace: { id: '64b0000000000000000000b2', name: 'Bếp Nhà Lá', slug: 'bep-nha-la' },
+  role: 'owner',
+  siteIds: null,
+};
+let memberships: Membership[] = [];
 const viewer: Membership = {
   workspace: { id: '64b0000000000000000000a1', name: 'Mây Xanh Agency', slug: 'may-xanh' },
   role: 'viewer',
@@ -28,7 +36,7 @@ vi.mock('../../../lib/server-api', () => ({
   requireMe: () =>
     Promise.resolve({
       user: { id: 'u', name: 'Thu Hà', email: 'thuha@mayxanh.vn' },
-      memberships: [viewer],
+      memberships,
     }),
   serverApi: (endpoint: unknown) =>
     endpoint === endpoints.listSites
@@ -38,12 +46,17 @@ vi.mock('../../../lib/server-api', () => ({
 
 const query = () => Promise.resolve({ workspace: viewer.workspace.id });
 
+vi.mock(import('../../../lib/page-load'), () => ({ loadPage: vi.fn() }));
+
 beforeEach(() => {
   address = { kind: 'single' };
+  memberships = [viewer];
+  vi.mocked(loadPage).mockReset();
 });
 
 describe('site creation for a member who may not create sites', () => {
   it('leads to the other workspaces and out, when the workspace has no site yet (ADR-025)', async () => {
+    memberships = [viewer, kitchen];
     address = {
       kind: 'workspace',
       slug: 'may-xanh',
@@ -66,5 +79,30 @@ describe('site creation for a member who may not create sites', () => {
     renderWithProviders(await NewSitePage({ searchParams: query() }));
     expect(screen.queryByRole('link', { name: 'Xem tất cả workspace' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
+  });
+
+  it('opens their other workspaces at the one address', async () => {
+    const user = userEvent.setup();
+    memberships = [viewer, kitchen];
+    renderWithProviders(await NewSitePage({ searchParams: query() }));
+
+    await user.click(screen.getByRole('button', { name: 'Mở Bếp Nhà Lá' }));
+    expect(document.cookie).toContain(`plp_ws=${kitchen.workspace.id}`);
+    expect(loadPage).toHaveBeenCalledWith('/');
+  });
+
+  it('offers the common address only when there are other workspaces to see there', async () => {
+    address = {
+      kind: 'workspace',
+      slug: 'may-xanh',
+      addresses: {
+        template: 'https://{slug}.app.example.vn',
+        commonOrigin: 'https://app.example.vn',
+      },
+    };
+    memberships = [viewer];
+    renderWithProviders(await NewSitePage({ searchParams: query() }));
+    // With one workspace, the common address would only open this page again.
+    expect(screen.queryByRole('link', { name: 'Xem tất cả workspace' })).toBeNull();
   });
 });

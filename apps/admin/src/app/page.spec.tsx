@@ -103,6 +103,13 @@ describe('start page', () => {
     expect(await landing()).toBe('/sites/new');
   });
 
+  it('lets an account without a workspace sign out', async () => {
+    given();
+    renderWithProviders(await HomePage());
+    expect(screen.getByRole('heading', { name: 'Chưa có workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
+  });
+
   describe('with workspace addresses (ADR-025)', () => {
     it('opens the only workspace at its address from the common one', async () => {
       address = { kind: 'common', addresses };

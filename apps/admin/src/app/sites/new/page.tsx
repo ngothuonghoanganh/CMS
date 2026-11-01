@@ -14,6 +14,7 @@ import {
   WORKSPACE_PREFERENCE_COOKIE,
 } from '../../../features/shell/workspace-preference';
 import { CreateSiteForm } from '../../../features/sites/CreateSiteForm';
+import { OtherWorkspaces } from '../../../features/workspaces/OtherWorkspaces';
 import { SignOutButton } from '../../../features/workspaces/SignOutButton';
 import styles from '../../../features/workspaces/WorkspacePicker.module.css';
 import { requireMe, serverApi } from '../../../lib/server-api';
@@ -54,14 +55,18 @@ export default async function NewSitePage({
   const membership = await chooseMembership(me.memberships, (await searchParams).workspace);
   if (membership === null) {
     return (
-      <CenteredPage width="md">
-        <FormCard
-          title="Tạo site khách hàng"
-          description="Tài khoản của bạn chưa thuộc workspace nào, nên chưa thể tạo site."
-        >
-          {null}
-        </FormCard>
-      </CenteredPage>
+      <ToastProvider>
+        <CenteredPage width="md">
+          <FormCard
+            title="Tạo site khách hàng"
+            description="Tài khoản của bạn chưa thuộc workspace nào, nên chưa thể tạo site."
+          >
+            <div className={styles.actions}>
+              <SignOutButton />
+            </div>
+          </FormCard>
+        </CenteredPage>
+      </ToastProvider>
     );
   }
 
@@ -72,9 +77,10 @@ export default async function NewSitePage({
   const workspaceName = membership.workspace.name;
 
   if (!can(membership.role, 'sites.manage')) {
-    // Without a site to go back to, the page still leads somewhere: the other workspaces at the
-    // common address (ADR-025), or signing out.
+    // Without a site to go back to, the page still leads somewhere: the user's other workspaces
+    // (at the common address with workspace addresses, ADR-025), or signing out.
     const address = await currentAddress();
+    const others = me.memberships.filter((item) => item.workspace.id !== membership.workspace.id);
     return (
       <ToastProvider>
         <CenteredPage width="md">
@@ -88,7 +94,10 @@ export default async function NewSitePage({
                   Quay lại danh sách trang
                 </ButtonLink>
               )}
-              {address.kind === 'single' ? null : (
+              {address.kind === 'single' ? (
+                <OtherWorkspaces memberships={others} />
+              ) : others.length === 0 ? null : (
+                // The common address lists them; with no other, it would only come back here.
                 <ButtonLink href={`${address.addresses.commonOrigin}/`} variant="secondary">
                   Xem tất cả workspace
                 </ButtonLink>

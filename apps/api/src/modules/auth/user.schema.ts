@@ -30,6 +30,12 @@ export interface SessionRecord {
   userId: Types.ObjectId;
   expiresAt: Date;
   createdAt: Date;
+  /**
+   * The `Domain` its cookie was set with (ADR-025); null or absent for a host-only cookie. A
+   * session only counts while the API sets cookies the same way, so a cookie left from before a
+   * change of mode never stands for anyone.
+   */
+  cookieDomain?: string | null;
 }
 
 export const sessionSchema = new Schema<SessionRecord>(
@@ -38,6 +44,7 @@ export const sessionSchema = new Schema<SessionRecord>(
     userId: { type: Schema.Types.ObjectId, required: true },
     expiresAt: { type: Date, required: true },
     createdAt: { type: Date, required: true },
+    cookieDomain: { type: String, default: null },
   },
   { collection: 'sessions', versionKey: false },
 );

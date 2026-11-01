@@ -132,6 +132,31 @@ export async function getSitemap(subdomain: string): Promise<SitemapResponse | n
 }
 
 /**
+ * The same lookup, cached under the site's tag, for robots.txt: it only uses the site's origin,
+ * which changes with the primary address, and crawlers ask for it often.
+ */
+export async function getCachedSitemap(subdomain: string): Promise<SitemapResponse | null> {
+  return answerOf('publicSitemap', await cachedSitemap(subdomain));
+}
+
+async function cachedSitemap(subdomain: string): Promise<CachedLookup<SitemapResponse | null>> {
+  'use cache';
+  cacheTag(siteCacheTag(subdomain));
+  const endpoint = endpoints.publicSitemap;
+  const lookup = await lookupForCache('publicSitemap', () =>
+    fetchPublicJson({
+      baseUrl: rendererEnv().API_PUBLIC_URL,
+      path: endpoint.path(subdomain),
+      schema: endpoint.response,
+      label: 'publicSitemap',
+      timeoutMs: LOOKUP_TIMEOUT_MS,
+    }),
+  );
+  cacheLife(lookup.kind === 'answer' ? SITE_CACHE_LIFE : UNAVAILABLE_CACHE_LIFE);
+  return lookup;
+}
+
+/**
  * The page behind a signed preview token; null when the token is invalid or expired. Never
  * cached: a draft preview always shows the latest draft (ADR-010). Loaded once, by the page.
  */
