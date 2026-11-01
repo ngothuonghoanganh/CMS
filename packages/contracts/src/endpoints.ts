@@ -7,7 +7,16 @@ import {
   assetSchema,
   updateAssetRequestSchema,
 } from './asset.js';
-import { loginRequestSchema, signupRequestSchema } from './auth.js';
+import {
+  accountEmailRequestSchema,
+  accountEmailResponseSchema,
+  changePasswordRequestSchema,
+  loginRequestSchema,
+  resetPasswordRequestSchema,
+  signupRequestSchema,
+  signupVerifyRequestSchema,
+  updateMeRequestSchema,
+} from './auth.js';
 import { meResponseSchema } from './membership.js';
 import {
   acceptInvitationResponseSchema,
@@ -162,10 +171,58 @@ export const endpoints = {
   }),
 
   // Auth
+  /** 202: emails a confirmation link; the account exists once it is confirmed (ADR-026). */
   signup: endpoint({
     method: 'POST',
     path: () => '/auth/signup',
     request: signupRequestSchema,
+    query: null,
+    response: accountEmailResponseSchema,
+  }),
+  /** The link's secret: creates the account and its workspace, then signs in. */
+  verifySignup: endpoint({
+    method: 'POST',
+    path: () => '/auth/signup/verify',
+    request: signupVerifyRequestSchema,
+    query: null,
+    response: meResponseSchema,
+  }),
+  /** 202 always: a new link for a sign-up still waiting for its confirmation. */
+  resendSignup: endpoint({
+    method: 'POST',
+    path: () => '/auth/signup/resend',
+    request: accountEmailRequestSchema,
+    query: null,
+    response: accountEmailResponseSchema,
+  }),
+  /** 202 always: a reset link, when the email has an account. */
+  forgotPassword: endpoint({
+    method: 'POST',
+    path: () => '/auth/password/forgot',
+    request: accountEmailRequestSchema,
+    query: null,
+    response: accountEmailResponseSchema,
+  }),
+  /** The link's secret and a new password: ends every session, then signs in. */
+  resetPassword: endpoint({
+    method: 'POST',
+    path: () => '/auth/password/reset',
+    request: resetPasswordRequestSchema,
+    query: null,
+    response: meResponseSchema,
+  }),
+  /** The signed-in user's password; their other sessions end. */
+  changePassword: endpoint({
+    method: 'POST',
+    path: () => '/auth/password',
+    request: changePasswordRequestSchema,
+    query: null,
+    response: null,
+  }),
+  updateMe: endpoint({
+    method: 'PATCH',
+    path: () => '/auth/me',
+    request: updateMeRequestSchema,
     query: null,
     response: meResponseSchema,
   }),

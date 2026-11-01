@@ -27,6 +27,49 @@
 
 /* The note under the login card of a workspace address (screen 34). */
 .note {
+  margin: 0;
   font-size: var(--text-body-sm);
   color: var(--color-muted);
+}
+
+/* "Quên mật khẩu?" under the password of the login form (ADR-026). */
+.forgot {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  /* A target of 24px on its own line (WCAG 2.5.8). */
+  min-height: 24px;
+  margin-top: -10px;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--color-primary-ink);
+}
+
+.forgot:hover {
+  color: var(--color-primary-pressed);
+}
+
+/* What replaces a form once its email went out, e.g. "Kiểm tra email". */
+.sent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sent:focus {
+  outline: none;
+}
+
+.message {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }

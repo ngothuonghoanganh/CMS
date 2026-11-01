@@ -10,17 +10,22 @@ interface MailpitSummary {
 }
 
 export interface MailpitMessage {
+  ID: string;
   Subject: string;
   Text: string;
   HTML: string;
   To: Array<{ Address: string }>;
 }
 
-/** Waits for the newest email to `to` whose subject contains `subject`, and reads it. */
+/**
+ * Waits for the newest email to `to` whose subject contains `subject`, and reads it. With
+ * `newerThan`, waits for one that is not that email, e.g. after "Gửi lại".
+ */
 export async function waitForEmail(
   request: APIRequestContext,
   to: string,
   subject: string,
+  newerThan?: MailpitMessage,
 ): Promise<MailpitMessage> {
   let found: MailpitSummary | undefined;
   await expect
@@ -31,7 +36,7 @@ export async function waitForEmail(
         );
         const { messages } = (await response.json()) as { messages: MailpitSummary[] };
         found = messages.find((message) => message.Subject.includes(subject));
-        return found !== undefined;
+        return found !== undefined && found.ID !== newerThan?.ID;
       },
       { message: `an email to ${to} about "${subject}"`, timeout: 15_000 },
     )
@@ -53,4 +58,27 @@ export function confirmationLink(message: MailpitMessage): string {
     throw new Error(`No confirmation link in "${message.Subject}"`);
   }
   return link;
+}
+
+/** Subjects of the account emails (ADR-026). */
+export const SIGNUP_EMAIL_SUBJECT = 'Xác nhận email để tạo workspace';
+export const RESET_EMAIL_SUBJECT = 'Đặt lại mật khẩu';
+
+/**
+ * The account link of an email (ADR-026): `{admin address}{path}#token=…`, at whichever address
+ * the API's `ADMIN_ORIGIN` names.
+ */
+export function accountLink(message: MailpitMessage, path: string): string {
+  const link = new RegExp(`https?://[a-z0-9.:-]+${path}#token=[A-Za-z0-9_-]{43}`).exec(
+    message.Text,
+  )?.[0];
+  if (link === undefined) {
+    throw new Error(`No ${path} link in "${message.Subject}"`);
+  }
+  return link;
+}
+
+/** The secret of an account link. */
+export function tokenOf(link: string): string {
+  return new URLSearchParams(new URL(link).hash.slice(1)).get('token') ?? '';
 }

@@ -1,12 +1,27 @@
-import { INVITATION_PATH, SESSION_COOKIE } from '@plp/contracts';
+import {
+  FORGOT_PASSWORD_PATH,
+  INVITATION_PATH,
+  RESET_PASSWORD_PATH,
+  SESSION_COOKIE,
+  SIGNUP_VERIFY_PATH,
+} from '@plp/contracts';
 import { type NextRequest, NextResponse } from 'next/server';
 import { REQUEST_PATH_HEADER } from './features/shell/request-path';
 
 /**
- * Pages without a session: sign-in, confirming a lead address from its email (ADR-018), and the
+ * Pages without a session: sign-in and sign-up with its confirmation link, a forgotten password
+ * and its reset link (ADR-026), confirming a lead address from its email (ADR-018), and the
  * invitation page, where a new member signs up (ADR-021).
  */
-const PUBLIC_PATHS = ['/login', '/signup', '/lead-recipients/confirm', INVITATION_PATH];
+const PUBLIC_PATHS = [
+  '/login',
+  '/signup',
+  SIGNUP_VERIFY_PATH,
+  FORGOT_PASSWORD_PATH,
+  RESET_PASSWORD_PATH,
+  '/lead-recipients/confirm',
+  INVITATION_PATH,
+];
 
 /**
  * Optimistic check only: without a session cookie the visitor is sent to the login page. Every

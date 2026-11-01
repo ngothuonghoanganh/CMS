@@ -4,7 +4,7 @@ import { problemSchema, type Site } from '@plp/contracts';
 import { type Connection, Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
+import { requestSignup, signedUpClient, signupInput, TestClient } from '../../../test/client.js';
 import { RecordingEmailSender } from '../../../test/email.js';
 import { createSecondInstance } from '../../../test/instances.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
@@ -109,6 +109,9 @@ describe('workspace databases', () => {
   it('drops the database again when the sign-up does not complete', async () => {
     const before = await workspaceDatabases();
     const input = signupInput();
+    // The database is built when the email is confirmed (ADR-026), not by the form.
+    const token = await requestSignup(t.app, input);
+    expect(await workspaceDatabases()).toEqual(before);
     let builtFirst = false;
     const create = vi
       .spyOn(WorkspacesRepository.prototype, 'createWithOwner')
@@ -120,7 +123,9 @@ describe('workspace databases', () => {
         throw new Error('MongoDB went away');
       });
     try {
-      const response = await new TestClient(t.app).post('/auth/signup', input).expect(500);
+      const response = await new TestClient(t.app)
+        .post('/auth/signup/verify', { token })
+        .expect(500);
       expect(problemSchema.parse(response.body).code).toBe('internal');
     } finally {
       create.mockRestore();

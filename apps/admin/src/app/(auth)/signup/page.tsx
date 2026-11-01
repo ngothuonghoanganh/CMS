@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { authPageHref, safeNextPath } from '../../../features/auth/next-path';
 import { SignupForm } from '../../../features/auth/SignupForm';
 import { currentAddress } from '../../../features/shell/current-address';
-import { FormCard } from '../../../features/shell/FormCard';
 
 export const metadata: Metadata = { title: 'Tạo tài khoản' };
 
@@ -21,16 +20,12 @@ export default async function SignupPage({
     redirect(`${address.addresses.commonOrigin}/signup`);
   }
   return (
-    <FormCard
-      title="Tạo tài khoản"
-      description="Tạo workspace cho agency hoặc doanh nghiệp của bạn, rồi thêm site khách hàng đầu tiên."
+    <SignupForm
       footer={
         <>
           Đã có tài khoản? <Link href={authPageHref('/login', next)}>Đăng nhập</Link>
         </>
       }
-    >
-      <SignupForm next={next} />
-    </FormCard>
+    />
   );
 }
