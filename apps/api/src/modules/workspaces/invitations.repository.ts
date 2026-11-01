@@ -167,6 +167,17 @@ export class InvitationsRepository {
     return this.close({ _id: id, workspaceId: scope.workspaceId }, 'revoked', now);
   }
 
+  /** Revokes the pending invitations a member sent, once they may no longer invite (ADR-021). */
+  async revokeSentBy(scope: WorkspaceScope, invitedBy: ObjectId, now: Date, tx: Tx): Promise<void> {
+    await this.invitations
+      .updateMany(
+        { workspaceId: scope.workspaceId, invitedBy, status: 'pending' },
+        { $set: { status: 'revoked', closedAt: now, purgeAt: purgeAfter(now) } },
+        { session: tx },
+      )
+      .exec();
+  }
+
   /**
    * Closes the invitation of a link as accepted or declined, once: only while it is pending, still
    * has that link (`tokenHash`: "Gửi lại" at the same moment ends the old one) and, for an

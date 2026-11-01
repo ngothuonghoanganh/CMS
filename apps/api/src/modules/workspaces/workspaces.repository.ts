@@ -9,12 +9,8 @@ import {
   roleSchema,
 } from '@plp/contracts';
 import type { Model } from 'mongoose';
-import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
-
-/** The default name of the unique (workspaceId, userId) index, built since MVP A. */
-export const MEMBERSHIP_UNIQUE_INDEX = 'workspaceId_1_userId_1';
 
 /** A grant as stored: site ids parsed, a custom role as `custom` with its id (ADR-024). */
 export interface StoredGrant {
@@ -230,7 +226,8 @@ export class WorkspacesRepository {
 
   /**
    * Adds the user to the workspace an invitation is for (ADR-021): no scope yet, the invitation
-   * is the authority. False when they are a member already.
+   * is the authority. False when they are a member already. Read in the transaction, not caught as
+   * a duplicate key: a write error aborts a MongoDB transaction, and committing it then retries.
    */
   async joinByInvitation(
     workspaceId: ObjectId,
@@ -239,31 +236,33 @@ export class WorkspacesRepository {
     now: Date,
     tx: Tx,
   ): Promise<boolean> {
-    try {
-      await this.memberships.create(
-        [
-          {
-            workspaceId,
-            userId,
-            role: grant.role,
-            customRoleId: grant.customRoleId,
-            siteIds: grant.siteIds,
-            createdAt: now,
-          },
-        ],
-        { session: tx },
-      );
-      return true;
-    } catch (error) {
-      if (isDuplicateKeyError(error, MEMBERSHIP_UNIQUE_INDEX)) {
-        return false;
-      }
-      throw error;
+    const existing = await this.memberships.exists({ workspaceId, userId }).session(tx).exec();
+    if (existing !== null) {
+      return false;
     }
+    await this.memberships.create(
+      [
+        {
+          workspaceId,
+          userId,
+          role: grant.role,
+          customRoleId: grant.customRoleId,
+          siteIds: grant.siteIds,
+          createdAt: now,
+        },
+      ],
+      { session: tx },
+    );
+    return true;
   }
 
   findMembership(workspaceId: ObjectId, userId: ObjectId): Promise<MembershipRecord | null> {
     return this.memberships.findOne({ workspaceId, userId }).lean<MembershipRecord>().exec();
+  }
+
+  /** Chủ sở hữu, for a job that acts for nobody (the domain monitor's emails). */
+  findOwnerOf(workspaceId: ObjectId): Promise<MembershipRecord | null> {
+    return this.memberships.findOne({ workspaceId, role: 'owner' }).lean<MembershipRecord>().exec();
   }
 
   /** Memberships of a user with their workspace names, oldest first. */

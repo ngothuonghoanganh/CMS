@@ -2,16 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { CUSTOM_DOMAINS_MAX } from '@plp/contracts';
 import type { Model } from 'mongoose';
-import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import {
-  DOMAIN_MODEL,
-  type DomainCheck,
-  type DomainRecord,
-  DOMAINS_SITE_HOSTNAME_INDEX,
-} from './domain.schema.js';
+import { DOMAIN_MODEL, type DomainCheck, type DomainRecord } from './domain.schema.js';
 
 /** What a check writes back. */
 /**
@@ -38,8 +32,10 @@ export class DomainsRepository {
       .exec();
   }
 
-  countForSite(scope: WorkspaceScope, siteId: ObjectId): Promise<number> {
-    return this.domains.countDocuments({ workspaceId: scope.workspaceId, siteId }).exec();
+  countForSite(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<number> {
+    return this.domains
+      .countDocuments({ workspaceId: scope.workspaceId, siteId }, tx ? { session: tx } : {})
+      .exec();
   }
 
   findForSite(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId): Promise<DomainRecord | null> {
@@ -49,20 +45,16 @@ export class DomainsRepository {
       .exec();
   }
 
-  /** Stores a new domain; false when the site has this hostname already. */
-  async insert(scope: WorkspaceScope, domain: DomainRecord): Promise<boolean> {
+  /**
+   * Stores a new domain in the caller's transaction. A hostname the site has already fails with
+   * `DOMAINS_SITE_HOSTNAME_INDEX`, raised: a write error aborts the transaction, so the caller
+   * answers it once the transaction has ended.
+   */
+  async insert(scope: WorkspaceScope, domain: DomainRecord, tx: Tx): Promise<void> {
     if (!domain.workspaceId.equals(scope.workspaceId)) {
       throw new Error('A domain must belong to the workspace of its scope');
     }
-    try {
-      await this.domains.create([domain]);
-      return true;
-    } catch (error) {
-      if (isDuplicateKeyError(error, DOMAINS_SITE_HOSTNAME_INDEX)) {
-        return false;
-      }
-      throw error;
-    }
+    await this.domains.create([domain], { session: tx });
   }
 
   async remove(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId, tx: Tx): Promise<boolean> {

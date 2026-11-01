@@ -148,6 +148,23 @@ describe('custom domains (ADR-022)', () => {
       expect(problemSchema.parse(full.body).code).toBe('domain_limit_reached');
     });
 
+    it('keeps the limit when domains are added at the same moment', async () => {
+      const { client, site } = await siteOf();
+      for (let index = 1; index < CUSTOM_DOMAINS_MAX; index += 1) {
+        await add(client, site.id, newDomain());
+      }
+      const answers = await Promise.all(
+        [newDomain(), newDomain(), newDomain()].map((hostname) =>
+          client.post(`/sites/${site.id}/domains`, { hostname }),
+        ),
+      );
+      expect(answers.map((answer) => answer.status).sort()).toEqual([201, 409, 409]);
+      const list = domainListResponseSchema.parse(
+        (await client.get(`/sites/${site.id}/domains`).expect(200)).body,
+      );
+      expect(list.items).toHaveLength(CUSTOM_DOMAINS_MAX);
+    });
+
     it('is for Chủ sở hữu and Quản trị only', async () => {
       const { workspaceId, site } = await siteOf();
       const admin = await addMember(t, workspaceId, 'admin');
@@ -191,6 +208,24 @@ describe('custom domains (ADR-022)', () => {
         ),
       ).toEqual({ subdomain: site.subdomain });
       await anyone().get(`/public/tls/allowed?domain=${hostname}`).expect(200);
+    });
+
+    it('tells Chủ sở hữu instead of who added it once they no longer manage it', async () => {
+      const { client: owner, me, site, workspaceId } = await siteOf();
+      const admin = await addMember(t, workspaceId, 'admin');
+      const hostname = newDomain();
+      const added = await add(admin.client, site.id, hostname);
+      await owner
+        .patch(`/workspaces/${workspaceId}/members/${admin.me.user.id}`, {
+          role: 'editor',
+          siteIds: null,
+        })
+        .expect(200);
+
+      pointHere(t.dns, hostname, tokenOf(added));
+      expect((await check(owner, site.id, added.id)).status).toBe('active');
+      expect(t.emails.to(admin.me.user.email)).toEqual([]);
+      expect(t.emails.to(me.user.email).at(-1)?.subject).toBe(`${hostname} đã hoạt động`);
     });
 
     it('waits for HTTPS for an hour, then needs attention', async () => {

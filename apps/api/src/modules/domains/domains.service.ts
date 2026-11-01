@@ -10,6 +10,7 @@ import {
 import { baseDomainOf, type Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
+import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
@@ -22,7 +23,7 @@ import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { DomainChecker } from './domain-checker.service.js';
 import { DOMAIN_NOT_FOUND, toDomainDto } from './domain-dto.js';
 import { domainStatus, newDomainToken } from './domain/domain-rules.js';
-import { type DomainRecord, EMPTY_CHECK } from './domain.schema.js';
+import { type DomainRecord, DOMAINS_SITE_HOSTNAME_INDEX, EMPTY_CHECK } from './domain.schema.js';
 import { DomainsRepository } from './domains.repository.js';
 
 /** "Kiểm tra ngay" more often than this answers with the last check. */
@@ -65,13 +66,6 @@ export class DomainsService {
         { path: ['hostname'], code: 'invalid', message: 'Đây là địa chỉ của hệ thống' },
       ]);
     }
-    if ((await this.domains.countForSite(scope, site._id)) >= CUSTOM_DOMAINS_MAX) {
-      throw new AppError(
-        409,
-        'domain_limit_reached',
-        `Mỗi site có tối đa ${CUSTOM_DOMAINS_MAX} tên miền riêng`,
-      );
-    }
     const now = new Date();
     const record: DomainRecord = {
       _id: newObjectId(),
@@ -88,8 +82,25 @@ export class DomainsService {
       watchSince: now,
       nextCheckAt: now,
     };
-    if (!(await this.domains.insert(scope, record))) {
-      throw new AppError(409, 'domain_exists', 'Site đã có tên miền này');
+    try {
+      // Adding writes the site, so two at once in one site conflict: the later one counts the
+      // other's domain against the limit.
+      await this.transactions.run(async (tx) => {
+        await this.sites.recordDomainCreation(scope, site._id, tx);
+        if ((await this.domains.countForSite(scope, site._id, tx)) >= CUSTOM_DOMAINS_MAX) {
+          throw new AppError(
+            409,
+            'domain_limit_reached',
+            `Mỗi site có tối đa ${CUSTOM_DOMAINS_MAX} tên miền riêng`,
+          );
+        }
+        await this.domains.insert(scope, record, tx);
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error, DOMAINS_SITE_HOSTNAME_INDEX)) {
+        throw new AppError(409, 'domain_exists', 'Site đã có tên miền này', { cause: error });
+      }
+      throw error;
     }
     const checked = await this.checker.check(record, now);
     return this.dto(site, checked);

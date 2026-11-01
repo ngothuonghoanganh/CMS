@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { invitationToken, invite, newEmail } from '../../../test/members.js';
-import { addMember, createSite } from '../../../test/resources.js';
+import { addMember, createSite, insertMembership } from '../../../test/resources.js';
 import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 
@@ -147,6 +147,92 @@ describe('members, invitations and access requests (ADR-021)', () => {
       expect(problemSchema.parse(remove.body).title).toBe('Không thể gỡ Chủ sở hữu');
     });
 
+    it('lets nobody change or remove themselves', async () => {
+      const { workspaceId } = await workspace();
+      const admin = await addMember(t, workspaceId, 'admin');
+      const url = `/workspaces/${workspaceId}/members/${admin.me.user.id}`;
+      const change = await admin.client.patch(url, { role: 'viewer', siteIds: null }).expect(409);
+      expect(problemSchema.parse(change.body).title).toBe('Không tự đổi quyền của mình được');
+      await admin.client.delete(url).expect(409);
+      expect((await members(admin.client, workspaceId)).map((member) => member.role)).toEqual([
+        'owner',
+        'admin',
+      ]);
+    });
+
+    it('ends the invitations of a Quản trị removed or no longer managing members', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const removed = await addMember(t, workspaceId, 'admin');
+      const demoted = await addMember(t, workspaceId, 'admin');
+      const kept = await addMember(t, workspaceId, 'admin');
+      const tokens = {
+        removed: await invite(t, removed.client, workspaceId, newEmail('a'), {
+          role: 'admin',
+          siteIds: null,
+        }),
+        demoted: await invite(t, demoted.client, workspaceId, newEmail('b')),
+        kept: await invite(t, kept.client, workspaceId, newEmail('c')),
+      };
+
+      await owner.delete(`/workspaces/${workspaceId}/members/${removed.me.user.id}`).expect(204);
+      await owner
+        .patch(`/workspaces/${workspaceId}/members/${demoted.me.user.id}`, {
+          role: 'editor',
+          siteIds: null,
+        })
+        .expect(200);
+      // Changing the sites of a Quản trị keeps what they sent.
+      await owner
+        .patch(`/workspaces/${workspaceId}/members/${kept.me.user.id}`, {
+          role: 'admin',
+          siteIds: null,
+        })
+        .expect(200);
+
+      const states = await Promise.all(
+        Object.values(tokens).map(
+          async (token) =>
+            invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body).state,
+        ),
+      );
+      expect(states).toEqual(['revoked', 'revoked', 'pending']);
+    });
+
+    it('closes a pending request once its sender changes roles without asking', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const ask = (member: { client: TestClient }) =>
+        member.client
+          .post(`/workspaces/${workspaceId}/access-requests`, {
+            role: 'admin',
+            wholeWorkspace: true,
+            note: '',
+          })
+          .expect(201);
+      const promoted = await addMember(t, workspaceId, 'editor');
+      const moved = await addMember(t, workspaceId, 'editor');
+      await ask(promoted);
+      await ask(moved);
+
+      await owner
+        .patch(`/workspaces/${workspaceId}/members/${promoted.me.user.id}`, {
+          role: 'admin',
+          siteIds: null,
+        })
+        .expect(200);
+      // A change that leaves them asking keeps the request for Chủ sở hữu to decide.
+      await owner
+        .patch(`/workspaces/${workspaceId}/members/${moved.me.user.id}`, {
+          role: 'support',
+          siteIds: null,
+        })
+        .expect(200);
+
+      const pending = accessRequestListResponseSchema.parse(
+        (await owner.get(`/workspaces/${workspaceId}/access-requests`).expect(200)).body,
+      ).items;
+      expect(pending.map((request) => request.user.id)).toEqual([moved.me.user.id]);
+    });
+
     it('removes a member with their pending request; the workspace is then not found', async () => {
       const { client: owner, workspaceId, smile } = await workspace();
       const member = await addMember(t, workspaceId, 'support');
@@ -187,6 +273,19 @@ describe('members, invitations and access requests (ADR-021)', () => {
       expect(problemSchema.parse(notAdmin.body).title).toBe(
         'Chỉ Quản trị mới nhận được quyền sở hữu',
       );
+      // Asked for as Biên tập at the moment they were made Quản trị.
+      await t.connection.collection('access_requests').insertOne({
+        workspaceId: new Types.ObjectId(workspaceId),
+        userId: new Types.ObjectId(admin.me.user.id),
+        role: 'admin',
+        wholeWorkspace: true,
+        note: '',
+        status: 'pending',
+        createdAt: new Date(),
+        decidedAt: null,
+        decidedBy: null,
+        purgeAt: null,
+      });
 
       const after = memberListResponseSchema.parse(
         (
@@ -199,6 +298,12 @@ describe('members, invitations and access requests (ADR-021)', () => {
         admin.me.user.id,
       ]);
       expect(after.find((member) => member.userId === me.user.id)?.role).toBe('admin');
+      // Chủ sở hữu decides requests: theirs, which none could decide, is closed.
+      expect(
+        await t.connection
+          .collection('access_requests')
+          .countDocuments({ userId: new Types.ObjectId(admin.me.user.id), status: 'pending' }),
+      ).toBe(0);
       // The former owner may no longer hand it on; the new one may.
       await owner.post(url, { toUserId: me.user.id, confirmName: 'Mây Xanh Agency' }).expect(403);
       await admin.client
@@ -331,6 +436,23 @@ describe('members, invitations and access requests (ADR-021)', () => {
         invitationLookupResponseSchema.parse((await lookup(declinedToken).expect(200)).body).state,
       ).toBe('declined');
       await declined.client.post('/invitations/accept', { token: declinedToken }).expect(409);
+    });
+
+    it('closes the invitation of someone who became a member meanwhile, keeping their role', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const someone = await signedUpClient(t.app);
+      const token = await invite(t, owner, workspaceId, someone.me.user.email);
+      // Joined another way while the invitation waited (a race with the batch that invited them).
+      await insertMembership(t, workspaceId, someone.me.user.id, 'viewer');
+
+      const started = Date.now();
+      await someone.client.post('/invitations/accept', { token }).expect(200);
+      expect(Date.now() - started).toBeLessThan(5_000);
+      expect(
+        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body).state,
+      ).toBe('accepted');
+      const me = meResponseSchema.parse((await someone.client.get('/auth/me').expect(200)).body);
+      expect(me.memberships.map((membership) => membership.role)).toEqual(['owner', 'viewer']);
     });
 
     it('expires after 7 days; "Gửi lại" gives a new link and the old one stops working', async () => {
@@ -639,6 +761,32 @@ describe('members, invitations and access requests (ADR-021)', () => {
       );
       const stranger = (await signedUpClient(t.app)).client;
       await stranger.post(url, body).expect(404);
+    });
+
+    it('keeps the request when Chủ sở hữu cannot be read for the email', async () => {
+      const { workspaceId } = await workspace();
+      const member = await addMember(t, workspaceId, 'support');
+      t.emails.sent.length = 0;
+      const findOwner = vi
+        .spyOn(t.app.get(WorkspacesRepository), 'findOwner')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        const created = myAccessRequestResponseSchema.parse(
+          (
+            await member.client
+              .post(`/workspaces/${workspaceId}/access-requests`, {
+                role: 'editor',
+                wholeWorkspace: false,
+                note: '',
+              })
+              .expect(201)
+          ).body,
+        );
+        expect(created.request?.role).toBe('editor');
+      } finally {
+        findOwner.mockRestore();
+      }
+      expect(t.emails.sent).toEqual([]);
     });
 
     it('declines, keeping the role, and tells the member', async () => {

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { can } from '@plp/contracts';
 import { type Env, tlsCheckEnabled } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
@@ -13,6 +14,8 @@ import {
 } from '../notifications/email-templates.js';
 import { RevalidationClient } from '../revalidation/revalidation.client.js';
 import { SitesRepository } from '../sites/sites.repository.js';
+import { AccessService } from '../workspaces/access.service.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { DomainDns, DnsUnavailableError } from './domain-dns.js';
 import { DomainTls } from './domain-tls.js';
 import {
@@ -43,6 +46,8 @@ export class DomainChecker {
     private readonly domains: DomainsRepository,
     private readonly sites: SitesRepository,
     private readonly users: UsersRepository,
+    private readonly access: AccessService,
+    private readonly workspaces: WorkspacesRepository,
     private readonly dns: DomainDns,
     private readonly tls: DomainTls,
     private readonly transactions: TransactionRunner,
@@ -180,12 +185,29 @@ export class DomainChecker {
     }
   }
 
-  /** Emails who added the domain; a failure is logged, the check stands. */
+  /**
+   * Who hears about the domain: who added it while they still manage the site's domains, else
+   * Chủ sở hữu, so someone removed or demoted is told nothing and the news still reaches someone.
+   */
+  private async contactOf(domain: DomainRecord): Promise<ObjectId | null> {
+    const adder = await this.access.memberAccess(domain.workspaceId, domain.addedBy);
+    if (
+      adder !== null &&
+      can(adder.access, 'domains.manage') &&
+      this.access.coversSite(adder, domain.siteId)
+    ) {
+      return domain.addedBy;
+    }
+    return (await this.workspaces.findOwnerOf(domain.workspaceId))?.userId ?? null;
+  }
+
+  /** Emails the domain's contact; a failure is logged, the check stands. */
   private async notify(domain: DomainRecord, event: 'active' | 'lost' | 'moved'): Promise<void> {
-    const [site, [contact]] = await Promise.all([
+    const [site, contactId] = await Promise.all([
       this.sites.findSubdomain(domain.siteId),
-      this.users.findContacts([domain.addedBy]),
+      this.contactOf(domain),
     ]);
+    const [contact] = contactId === null ? [] : await this.users.findContacts([contactId]);
     if (site === null || contact === undefined) {
       return;
     }

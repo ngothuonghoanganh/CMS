@@ -269,10 +269,9 @@ export class PublishingService {
         throw await this.publishConflict(scope, page._id, page.draft.revision);
       }
       // The site settings are read in the transaction that makes the release live (ADR-015, 017).
-      const [current, consent] = await Promise.all([
-        this.siteRecords.findById(scope, site._id, tx),
-        this.consentVersions.findCurrent(scope, site._id, tx),
-      ]);
+      // One after the other: a session runs one operation at a time.
+      const current = await this.siteRecords.findById(scope, site._id, tx);
+      const consent = await this.consentVersions.findCurrent(scope, site._id, tx);
       if (!current) {
         throw new Error(`Site ${site._id.toHexString()} of page ${page._id.toHexString()} is gone`);
       }

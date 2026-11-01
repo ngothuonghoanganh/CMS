@@ -345,6 +345,20 @@ export class SitesRepository {
     }
   }
 
+  /** Increments `domainSeq` inside the transaction that adds a custom domain (ADR-022). */
+  async recordDomainCreation(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<void> {
+    const result = await this.sites
+      .updateOne(
+        { _id: siteId, workspaceId: scope.workspaceId },
+        { $inc: { domainSeq: 1 } },
+        { session: tx },
+      )
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Site ${siteId.toHexString()} is not in the workspace of the scope`);
+    }
+  }
+
   /**
    * The privacy settings of a site as they are now, for the public lead intake: it reads them
    * again after storing a lead, in case the owner changed the retention period meanwhile.

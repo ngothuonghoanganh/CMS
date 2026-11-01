@@ -54,6 +54,8 @@ export interface SiteRecord {
    * one, which then counts the other's page against the limit (ADR-014).
    */
   pageSeq: number;
+  /** Custom domains added so far; the same guard as `pageSeq`, for their limit (ADR-022). */
+  domainSeq?: number;
   /**
    * Null until the owner saves the settings once. Sites created before ADR-017 lack the field;
    * read it through `sitePrivacyOf`.
@@ -127,6 +129,7 @@ export const siteSchema = new Schema<SiteRecord>(
     logoAssetId: { type: Schema.Types.ObjectId, default: null },
     defaultShareImageAssetId: { type: Schema.Types.ObjectId, default: null },
     pageSeq: { type: Number, default: 0 },
+    domainSeq: { type: Number, default: 0 },
     privacy: { type: sitePrivacySchema, default: null },
     leadRecipients: { type: [leadRecipientSchema], default: [] },
     createdBy: { type: Schema.Types.ObjectId, required: true },

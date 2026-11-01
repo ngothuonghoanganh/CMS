@@ -309,6 +309,40 @@ describe('requests to publish', () => {
     expect((await getPage(contributor.client, pageId)).page.approval).toBeNull();
   });
 
+  it('shows the waiting request even when an answered one has a later clock', async () => {
+    const pageId = await draftPage();
+    const first = await askNow(contributor, pageId);
+    await refuse(owner, pageId, first, 'Giá sai').expect(200);
+    await askNow(contributor, pageId);
+    // The refused request was stored by an instance whose clock ran a minute ahead.
+    await t.connection
+      .collection('publish_approvals')
+      .updateOne(
+        { _id: new Types.ObjectId(first?.id) },
+        { $set: { createdAt: new Date(Date.now() + 60_000) } },
+      );
+
+    expect((await getPage(owner.client, pageId)).page.approval?.status).toBe('pending');
+  });
+
+  it('tells its sender the answer only while they still open the site', async () => {
+    const pageId = await draftPage();
+    const sender = await addMember(t, workspaceId, 'contributor');
+    const approval = await askNow(sender, pageId);
+    const elsewhere = await createSite(owner.client, workspaceId, { name: 'Bếp Nhà Mây' });
+    await t.connection.collection('memberships').updateOne(
+      {
+        workspaceId: new Types.ObjectId(workspaceId),
+        userId: new Types.ObjectId(sender.me.user.id),
+      },
+      { $set: { siteIds: [new Types.ObjectId(elsewhere.id)] } },
+    );
+    t.emails.sent.length = 0;
+
+    await refuse(owner, pageId, approval, 'Giá sai').expect(200);
+    expect(t.emails.sent).toEqual([]);
+  });
+
   it('is sent again only as its sender saw it, never reopened for a page that went live', async () => {
     const pageId = await draftPage();
     const first = await askNow(contributor, pageId);

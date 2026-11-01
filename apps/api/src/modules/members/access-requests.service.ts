@@ -236,32 +236,34 @@ export class AccessRequestsService {
   }
 
   /** Emails Chủ sở hữu; true when it went out. The request stays on "Thành viên" either way. */
-  private async notifyOwner(
+  private notifyOwner(
     scope: WorkspaceScope,
     request: AccessRequestRecord,
     requester: AuthenticatedUser,
   ): Promise<boolean> {
-    const [owner, workspace] = await Promise.all([
-      this.workspaces.findOwner(scope),
-      this.workspaces.findWorkspace(scope),
-    ]);
-    const [ownerContact] = owner ? await this.users.findContacts([owner.userId]) : [];
-    if (!ownerContact || !workspace) {
-      throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no owner to ask`);
-    }
-    const reviewUrl = `${this.env.ADMIN_ORIGIN}/workspaces/${scope.workspaceId.toHexString()}/members?request=${request._id.toHexString()}`;
-    return this.sendTo(scope, {
-      to: [ownerContact.email],
-      ...accessRequestEmail({
-        workspaceName: workspace.name,
-        requesterName: requester.name,
-        requesterEmail: requester.email,
-        currentRole: accessLabel(scope.access),
-        requestedRole: roleLabels[request.role],
-        scope: request.wholeWorkspace ? 'toàn workspace' : 'các site hiện tại',
-        note: request.note,
-        reviewUrl,
-      }),
+    return this.sendTo(scope, async () => {
+      const [owner, workspace] = await Promise.all([
+        this.workspaces.findOwner(scope),
+        this.workspaces.findWorkspace(scope),
+      ]);
+      const [ownerContact] = owner ? await this.users.findContacts([owner.userId]) : [];
+      if (!ownerContact || !workspace) {
+        throw new Error(`Workspace ${scope.workspaceId.toHexString()} has no owner to ask`);
+      }
+      const reviewUrl = `${this.env.ADMIN_ORIGIN}/workspaces/${scope.workspaceId.toHexString()}/members?request=${request._id.toHexString()}`;
+      return {
+        to: [ownerContact.email],
+        ...accessRequestEmail({
+          workspaceName: workspace.name,
+          requesterName: requester.name,
+          requesterEmail: requester.email,
+          currentRole: accessLabel(scope.access),
+          requestedRole: roleLabels[request.role],
+          scope: request.wholeWorkspace ? 'toàn workspace' : 'các site hiện tại',
+          note: request.note,
+          reviewUrl,
+        }),
+      };
     });
   }
 
@@ -270,27 +272,36 @@ export class AccessRequestsService {
     requester: UserContact,
     decision: { accepted: boolean; roleLabel: string; scope: string },
   ): Promise<void> {
-    const workspace = await this.workspaces.findWorkspace(scope);
-    await this.sendTo(scope, {
-      to: [requester.email],
-      ...accessDecisionEmail({
-        workspaceName: workspace?.name ?? '',
-        ...decision,
-        openUrl: `${this.env.ADMIN_ORIGIN}/`,
-      }),
+    await this.sendTo(scope, async () => {
+      const workspace = await this.workspaces.findWorkspace(scope);
+      return {
+        to: [requester.email],
+        ...accessDecisionEmail({
+          workspaceName: workspace?.name ?? '',
+          ...decision,
+          openUrl: `${this.env.ADMIN_ORIGIN}/`,
+        }),
+      };
     });
   }
 
-  /** A failed email is logged, not raised: the decision or request is stored already. */
-  private async sendTo(scope: WorkspaceScope, message: EmailMessage): Promise<boolean> {
+  /**
+   * Builds the email and sends it. Reading what it needs is part of it: a failure is logged, not
+   * raised, since the decision or request is stored already.
+   */
+  private async sendTo(
+    scope: WorkspaceScope,
+    build: () => Promise<EmailMessage>,
+  ): Promise<boolean> {
     try {
-      await this.sender.send(message);
+      await this.sender.send(await build());
       return true;
     } catch (error) {
       this.logger.warn(
         {
           workspaceId: scope.workspaceId.toHexString(),
           code: error instanceof EmailSendError ? error.code : 'unknown',
+          err: error instanceof EmailSendError ? undefined : error,
         },
         'Access request email not sent',
       );
