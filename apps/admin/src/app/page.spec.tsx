@@ -128,6 +128,10 @@ describe('start page', () => {
         'https://ws-0000b2.app.example.vn/',
       );
       expect(screen.getByText('ws-0000b2.app.example.vn')).toBeInTheDocument();
+      // The header names the common address and who is signed in, with a way out (board 35).
+      expect(screen.getByText('app.example.vn')).toBeInTheDocument();
+      expect(screen.getByRole('banner')).toHaveTextContent('khoa@mayxanh.vn');
+      expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeInTheDocument();
     });
 
     it('says when the account belongs to no workspace', async () => {

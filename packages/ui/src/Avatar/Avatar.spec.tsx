@@ -26,4 +26,9 @@ describe('Avatar', () => {
     render(<Avatar name="Mây Xanh Agency" shape="square" size={28} labelled />);
     expect(screen.getByRole('img', { name: 'Mây Xanh Agency' })).toHaveTextContent('MX');
   });
+
+  it('comes in 44 pixels for a workspace standing on its own', () => {
+    const { container } = render(<Avatar name="Mây Xanh Agency" shape="square" size={44} />);
+    expect(container.firstElementChild?.className).toMatch(/size-44/);
+  });
 });

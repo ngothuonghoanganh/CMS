@@ -1,10 +1,10 @@
 'use client';
 
 import type { SessionUser } from '@plp/contracts';
-import { ButtonLink } from '@plp/ui';
-import { FormCard } from '../shell/FormCard';
+import { ButtonLink, Card, LockIcon } from '@plp/ui';
 import { SignOutButton } from './SignOutButton';
-import styles from './WorkspacePicker.module.css';
+import addressStyles from './address.module.css';
+import styles from './NotMember.module.css';
 
 export interface NotMemberProps {
   user: SessionUser;
@@ -20,20 +20,26 @@ export interface NotMemberProps {
  */
 export function NotMember({ user, host, commonOrigin }: NotMemberProps) {
   return (
-    <FormCard
-      title="Tài khoản này không thuộc workspace ở địa chỉ này"
-      description={
-        <>
+    <Card as="section" padding="lg" aria-labelledby="not-member-title" className={styles.card}>
+      <span className={styles.icon} aria-hidden="true">
+        <LockIcon size={22} />
+      </span>
+      <div className={styles.text}>
+        <h1 id="not-member-title" className={styles.title}>
+          Tài khoản này không thuộc workspace ở địa chỉ này
+        </h1>
+        <p className={styles.paragraph}>
           Bạn đang đăng nhập bằng <strong>{user.email}</strong> và mở{' '}
-          <span className={styles.address}>{host}</span>. Cần vào workspace này? Nhờ người quản lý
-          của nó gửi lời mời tới email của bạn.
-        </>
-      }
-    >
+          <span className={addressStyles.address}>{host}</span>.
+        </p>
+        <p className={styles.paragraph}>
+          Cần vào workspace này? Nhờ người quản lý của nó gửi lời mời tới email của bạn.
+        </p>
+      </div>
       <div className={styles.actions}>
         <ButtonLink href={`${commonOrigin}/`}>Mở workspace của tôi</ButtonLink>
         <SignOutButton>Đăng nhập bằng tài khoản khác</SignOutButton>
       </div>
-    </FormCard>
+    </Card>
   );
 }

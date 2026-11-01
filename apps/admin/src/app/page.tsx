@@ -32,13 +32,12 @@ export default async function HomePage() {
     }
     return (
       <ToastProvider>
-        <CenteredPage width="md">
-          <WorkspacePicker
-            user={me.user}
-            memberships={me.memberships}
-            template={address.addresses.template}
-          />
-        </CenteredPage>
+        <WorkspacePicker
+          user={me.user}
+          memberships={me.memberships}
+          template={address.addresses.template}
+          commonOrigin={address.addresses.commonOrigin}
+        />
       </ToastProvider>
     );
   }
