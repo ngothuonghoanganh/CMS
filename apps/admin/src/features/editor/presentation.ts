@@ -1,4 +1,10 @@
-import type { ChecksResult, PageStatusKind, PageSummary } from '@plp/contracts';
+import {
+  can,
+  type ChecksResult,
+  type PageStatusKind,
+  type PageSummary,
+  type Role,
+} from '@plp/contracts';
 import type { CSSProperties } from 'react';
 import { formatRelativeTime } from '../../lib/format';
 import type { Device, SaveFailure, SaveState, VisibilityGroup } from './store';
@@ -230,7 +236,14 @@ export function checksSummaryView(checks: ChecksResult): ChecksSummaryView {
 }
 
 /** "Xuất bản thay đổi" (with the count beside it) only when there are changes to publish. */
-export function publishButtonLabel(page: PageSummary): string {
+/**
+ * The top bar's publish button. A role that cannot publish sends the draft for approval instead
+ * (ADR-023) and sees when its request waits.
+ */
+export function publishButtonLabel(page: PageSummary, role: Role): string {
+  if (!can(role, 'pages.publish') && can(role, 'pages.requestPublish')) {
+    return page.approval?.status === 'pending' ? 'Đang chờ duyệt' : 'Gửi duyệt';
+  }
   return pendingChangeCount(page) === 0 ? 'Xuất bản' : 'Xuất bản thay đổi';
 }
 

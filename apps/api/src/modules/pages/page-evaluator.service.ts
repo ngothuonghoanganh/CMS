@@ -7,6 +7,8 @@ import { AssetsRepository } from '../assets/assets.repository.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { ConsentVersionsRepository } from '../privacy/consent-versions.repository.js';
 import { evaluateChecks, type LivePageRef } from '../publishing/domain/checks.js';
+import { ApprovalsRepository } from '../publishing/approvals.repository.js';
+import { visibleApproval } from '../publishing/domain/approval-rules.js';
 import { referencedAssetIds } from '../publishing/domain/content-refs.js';
 import { diffLeadCapture } from '../publishing/domain/lead-capture.js';
 import { derivePageStatus } from '../publishing/domain/page-status.js';
@@ -23,7 +25,7 @@ import { ReleasesRepository } from '../publishing/releases.repository.js';
 import { confirmedRecipientsOf, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { toDraft, toPageSummary, toPointerEvent } from './page-dto.js';
+import { toDraft, toPageApproval, toPageSummary, toPointerEvent } from './page-dto.js';
 import type { PageRecord } from './page.schema.js';
 import { type LivePageRow, PagesRepository } from './pages.repository.js';
 
@@ -46,8 +48,8 @@ function userRef(users: ReadonlyMap<string, UserRef>, id: ObjectId, what: string
 /**
  * `evaluateDraft` of ADR-005: status + checks of pages, used by the page list, the editor,
  * autosave and publishing. Evaluating any number of pages of one site takes a constant number of
- * queries (live releases with one `$in`, pointer events with one aggregation, assets and users
- * with one query each), never one per page. `siteChanges` (ADR-015, ADR-017) compares those
+ * queries (live releases with one `$in`, pointer events and requests to publish with one
+ * aggregation each, assets and users with one query each), never one per page. `siteChanges` (ADR-015, ADR-017) compares those
  * releases with the site the caller already loaded and, when the site has consent settings or a
  * page has a form, with its current consent version (one more query).
  */
@@ -61,6 +63,7 @@ export class PageEvaluator {
     private readonly users: UsersRepository,
     private readonly sites: SitesService,
     private readonly consentVersions: ConsentVersionsRepository,
+    private readonly approvals: ApprovalsRepository,
   ) {}
 
   /** One page; loads the live pages of its site for the slug and link checks. */
@@ -94,21 +97,34 @@ export class PageEvaluator {
     const readsConsent =
       sitePrivacyOf(site) !== null ||
       pages.some((page) => pageCapturesLeads(page.draft.composition));
-    const [liveReleases, pointerEvents, assets, consent] = await Promise.all([
+    const pageIds = pages.map((page) => page._id);
+    const [liveReleases, pointerEvents, assets, consent, latestApprovals] = await Promise.all([
       this.releases.findByIds(
         scope,
         pages.flatMap((page) => (page.publishedReleaseId ? [page.publishedReleaseId] : [])),
       ),
-      this.activity.latestPointerEvents(
-        scope,
-        pages.map((page) => page._id),
-      ),
+      this.activity.latestPointerEvents(scope, pageIds),
       this.assets.findForSite(scope, site._id, assetIds),
       readsConsent ? this.consentVersions.findCurrent(scope, site._id) : null,
+      this.approvals.latestOf(scope, pageIds),
     ]);
+    const approvals = new Map(
+      pages.flatMap((page) => {
+        const latest = latestApprovals.get(page._id.toHexString()) ?? null;
+        const live = this.liveReleaseOf(page, liveReleases);
+        return latest !== null && visibleApproval(latest, live?.sourceRevision ?? null)
+          ? [[page._id.toHexString(), latest] as const]
+          : [];
+      }),
+    );
     const users = await this.users.findRefs([
       ...pages.flatMap((page) => [page.createdBy, page.draft.updatedBy]),
       ...[...pointerEvents.values()].map((event) => event.actorId),
+      ...[...approvals.values()].flatMap((approval) =>
+        approval.decidedBy === null
+          ? [approval.requestedBy]
+          : [approval.requestedBy, approval.decidedBy],
+      ),
     ]);
     const existingAssetIds = new Set(assets.keys());
     const origin = this.sites.publicOrigin(site);
@@ -140,6 +156,7 @@ export class PageEvaluator {
         leadDestinationReady,
       });
       const event = pointerEvents.get(pageId);
+      const approval = approvals.get(pageId);
       const summary = toPageSummary({
         page,
         status,
@@ -160,6 +177,11 @@ export class PageEvaluator {
           : null,
         origin,
         checks: { blocking: checks.blocking.length, warnings: checks.warnings.length },
+        approval: approval
+          ? toPageApproval(approval, (id) =>
+              userRef(users, id, `Approval ${approval._id.toHexString()}`),
+            )
+          : null,
         createdBy: userRef(users, page.createdBy, `Page ${pageId}`),
       });
       const draft = toDraft(page, userRef(users, page.draft.updatedBy, `Draft of page ${pageId}`));

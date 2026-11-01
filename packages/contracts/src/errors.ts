@@ -23,6 +23,7 @@ export const errorCodes = [
   'invitation_unavailable',
   'invitation_email_mismatch',
   'access_request_pending',
+  'approval_pending',
   'domain_exists',
   'domain_limit_reached',
   'rate_limited',

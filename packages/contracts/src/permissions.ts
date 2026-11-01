@@ -9,6 +9,8 @@ export const permissionSchema = z.enum([
   'pages.view',
   'pages.edit',
   'pages.publish',
+  'pages.requestPublish',
+  'publishApprovals.decide',
   'pages.manageLive',
   'leads.view',
   'leads.handle',
@@ -26,15 +28,20 @@ export type Permission = z.infer<typeof permissionSchema>;
 /** Duyệt yêu cầu đổi quyền and the ownership stay with Chủ sở hữu (ADR-021). */
 const ownerOnly: readonly Permission[] = ['accessRequests.decide', 'workspace.transferOwnership'];
 
+/** Asking to publish is for roles that cannot publish themselves (ADR-023). */
+const askOnly: readonly Permission[] = ['pages.requestPublish'];
+
 /**
  * The permissions of each role. "Xem lead" and "Xuất / xóa dữ liệu cá nhân" are separate rows:
  * Chăm sóc khách hàng handles leads but never exports or deletes a person's data.
  */
 const grants: Record<Role, readonly Permission[]> = {
-  owner: permissionSchema.options,
-  admin: permissionSchema.options.filter((permission) => !ownerOnly.includes(permission)),
+  owner: permissionSchema.options.filter((permission) => !askOnly.includes(permission)),
+  admin: permissionSchema.options.filter(
+    (permission) => !ownerOnly.includes(permission) && !askOnly.includes(permission),
+  ),
   editor: ['pages.view', 'pages.edit', 'pages.publish', 'pages.manageLive'],
-  contributor: ['pages.view', 'pages.edit'],
+  contributor: ['pages.view', 'pages.edit', 'pages.requestPublish'],
   support: ['pages.view', 'leads.view', 'leads.handle'],
   viewer: ['pages.view'],
 };
@@ -60,9 +67,16 @@ export function onlyHoldersMessage(permission: Permission): string {
   return `Chỉ ${holdersOf(permission)} được thực hiện thao tác này`;
 }
 
+export interface PermissionRow {
+  permission: Permission;
+  label: string;
+  /** Roles holding this one ask instead: the "Yêu cầu" cell of board 16 (ADR-023). */
+  request?: Permission;
+}
+
 export interface PermissionGroup {
   title: string;
-  rows: readonly { permission: Permission; label: string }[];
+  rows: readonly PermissionRow[];
 }
 
 /** Rows of board 16 in its order, only for what the product does today. */
@@ -77,7 +91,12 @@ export const permissionGroups: readonly PermissionGroup[] = [
   {
     title: 'Xuất bản',
     rows: [
-      { permission: 'pages.publish', label: 'Xuất bản, cập nhật trang live' },
+      {
+        permission: 'pages.publish',
+        label: 'Xuất bản, cập nhật trang live',
+        request: 'pages.requestPublish',
+      },
+      { permission: 'publishApprovals.decide', label: 'Duyệt hoặc từ chối yêu cầu xuất bản' },
       { permission: 'pages.manageLive', label: 'Rollback, hoàn tác, gỡ trang khỏi live' },
     ],
   },

@@ -94,11 +94,14 @@ import {
   sitemapResponseSchema,
 } from './public.js';
 import {
+  approvalResponseSchema,
   historyResponseSchema,
   pointerMoveRequestSchema,
   pointerMoveResponseSchema,
   publishRequestSchema,
   publishResponseSchema,
+  rejectApprovalSchema,
+  requestApprovalSchema,
 } from './release.js';
 import {
   createSiteRequestSchema,
@@ -739,6 +742,28 @@ export const endpoints = {
     request: null,
     query: cursorQuerySchema,
     response: historyResponseSchema,
+  }),
+  /** A request to publish, its withdrawal by the sender and its refusal (ADR-023). */
+  requestApproval: endpoint({
+    method: 'POST',
+    path: (pageId: string) => `/pages/${e(pageId)}/approval`,
+    request: requestApprovalSchema,
+    query: null,
+    response: approvalResponseSchema,
+  }),
+  withdrawApproval: endpoint({
+    method: 'DELETE',
+    path: (pageId: string) => `/pages/${e(pageId)}/approval`,
+    request: null,
+    query: null,
+    response: approvalResponseSchema,
+  }),
+  rejectApproval: endpoint({
+    method: 'POST',
+    path: (pageId: string) => `/pages/${e(pageId)}/approval/reject`,
+    request: rejectApprovalSchema,
+    query: null,
+    response: approvalResponseSchema,
   }),
   /** Rollback (target = older release) or unpublish (target = null). */
   movePointer: endpoint({

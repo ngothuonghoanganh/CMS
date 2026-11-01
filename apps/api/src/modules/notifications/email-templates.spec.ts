@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  approvalPublishedEmail,
+  approvalRejectedEmail,
+  approvalRequestEmail,
   escapeHtml,
   leadNotificationEmail,
   recipientConfirmationEmail,
@@ -96,5 +99,54 @@ describe('recipientConfirmationEmail', () => {
     );
     expect(email.text).toContain('Liên kết có hiệu lực 7 ngày.');
     expect(email.html).toContain('href="http://localhost:3100/lead-recipients/confirm#token=abc"');
+  });
+});
+
+describe('approval emails (ADR-023)', () => {
+  const pageUrl = 'http://localhost:3100/sites/s1/pages/p1';
+
+  it('asks the approvers, with the note, escaped', () => {
+    const email = approvalRequestEmail({
+      requesterName: 'Minh',
+      pageTitle: 'Ưu đãi <b>tháng 11</b>',
+      siteName: 'Nha khoa Smile Care',
+      note: 'Đổi giá & ảnh hero',
+      resent: false,
+      pageUrl,
+    });
+    expect(email.subject).toBe('Minh gửi yêu cầu xuất bản "Ưu đãi <b>tháng 11</b>"');
+    expect(email.text).toContain('đang chờ bạn duyệt');
+    expect(email.text).toContain('Ghi chú: Đổi giá & ảnh hero');
+    expect(email.html).toContain('Ưu đãi &lt;b&gt;tháng 11&lt;/b&gt;');
+    expect(email.html).toContain(`href="${pageUrl}"`);
+    expect(
+      approvalRequestEmail({
+        requesterName: 'Minh',
+        pageTitle: 'Ưu đãi',
+        siteName: 'Smile Care',
+        note: '',
+        resent: true,
+        pageUrl,
+      }),
+    ).toMatchObject({ subject: 'Minh gửi lại yêu cầu xuất bản "Ưu đãi"' });
+  });
+
+  it('tells the sender the version went live, or why not', () => {
+    expect(
+      approvalPublishedEmail({
+        pageTitle: 'Ưu đãi',
+        publisherName: 'Ngọc Anh',
+        version: 3,
+        liveUrl: 'https://go.smilecare.vn/uu-dai',
+      }).text,
+    ).toContain('Ngọc Anh đã duyệt và xuất bản phiên bản v3.');
+    const rejected = approvalRejectedEmail({
+      pageTitle: 'Ưu đãi',
+      rejecterName: 'Ngọc Anh',
+      reason: 'Giá chưa đúng',
+      pageUrl,
+    });
+    expect(rejected.subject).toBe('Yêu cầu xuất bản "Ưu đãi" chưa được duyệt');
+    expect(rejected.text).toContain('Lý do: Giá chưa đúng');
   });
 });

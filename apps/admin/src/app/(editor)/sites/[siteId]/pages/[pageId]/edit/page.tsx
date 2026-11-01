@@ -76,6 +76,7 @@ export default async function EditPage({ params }: EditPageProps) {
         assets,
         pages,
         role: membership.role,
+        userId: me.user.id,
         leadCapture: leadCaptureViewOf(privacy),
       }}
     />

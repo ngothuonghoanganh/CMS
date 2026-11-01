@@ -174,13 +174,14 @@ describe('editor presentation', () => {
   });
 
   it('labels the publish button and live paths', () => {
-    expect(publishButtonLabel(pageSummary())).toBe('Xuất bản');
+    expect(publishButtonLabel(pageSummary(), 'owner')).toBe('Xuất bản');
     expect(
       publishButtonLabel(
         pageSummary({
           status: { kind: 'live_with_changes', changeCount: 3, changes: [] },
           liveRelease,
         }),
+        'owner',
       ),
     ).toBe('Xuất bản thay đổi');
     // Nothing differs from live (no changes, or the draft was restored from live): no count.
@@ -190,11 +191,13 @@ describe('editor presentation', () => {
           status: { kind: 'live_with_changes', changeCount: 0, changes: [] },
           liveRelease,
         }),
+        'owner',
       ),
     ).toBe('Xuất bản');
     expect(
       publishButtonLabel(
         pageSummary({ status: { kind: 'live', changeCount: 0, changes: [] }, liveRelease }),
+        'owner',
       ),
     ).toBe('Xuất bản');
     // Applying the site's new look is a change too (ADR-015).
@@ -205,8 +208,26 @@ describe('editor presentation', () => {
           siteChanges: [siteChange],
           liveRelease,
         }),
+        'owner',
       ),
     ).toBe('Xuất bản thay đổi');
+    // A Cộng tác viên sends the draft for approval and sees it wait (ADR-023).
+    expect(publishButtonLabel(pageSummary(), 'contributor')).toBe('Gửi duyệt');
+    expect(
+      publishButtonLabel(
+        pageSummary({
+          approval: {
+            status: 'pending',
+            id: '64b0000000000000000000a1',
+            requestedBy: { id: '64b0000000000000000000a2', name: 'Minh' },
+            revision: 3,
+            note: '',
+            sentAt: '2026-10-24T09:50:00.000Z',
+          },
+        }),
+        'contributor',
+      ),
+    ).toBe('Đang chờ duyệt');
     expect(livePathOf({ liveRelease })).toBe('/uu-dai-thang-11');
     expect(livePathOf({ liveRelease: { ...liveRelease, slug: '' } })).toBe('/');
     expect(livePathOf({ liveRelease: null })).toBeNull();

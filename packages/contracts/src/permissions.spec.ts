@@ -14,6 +14,8 @@ const BOARD: Record<string, string> = {
   'pages.view': 'yyyyyy',
   'pages.edit': 'yyyynn',
   'pages.publish': 'yyynnn',
+  'pages.requestPublish': 'nnnynn',
+  'publishApprovals.decide': 'yynnnn',
   'pages.manageLive': 'yyynnn',
   'leads.view': 'yynnyn',
   'leads.handle': 'yynnyn',
@@ -40,8 +42,18 @@ describe('the role matrix', () => {
     expect(can('editor', 'leads.view')).toBe(false);
   });
 
-  it('shows every permission exactly once on the board', () => {
-    const rows = permissionGroups.flatMap((group) => group.rows.map((row) => row.permission));
+  it('lets only roles that cannot publish ask to publish', () => {
+    for (const role of rolesWith('pages.requestPublish')) {
+      expect(can(role, 'pages.publish')).toBe(false);
+    }
+  });
+
+  it('shows every permission exactly once on the board, asking as the cell of its row', () => {
+    const rows = permissionGroups.flatMap((group) =>
+      group.rows.flatMap((row) =>
+        row.request === undefined ? [row.permission] : [row.permission, row.request],
+      ),
+    );
     expect([...rows].sort()).toEqual([...permissionSchema.options].sort());
   });
 

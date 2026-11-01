@@ -1,4 +1,5 @@
 import {
+  approvalResponseSchema,
   leadRecipientListResponseSchema,
   meResponseSchema,
   type MeResponse,
@@ -62,6 +63,8 @@ interface Fixture {
   failedLeadId: string;
   pendingRecipientId: string;
   requestId: string;
+  /** The Cộng tác viên's pending request to publish the page (ADR-023). */
+  approvalId: string;
 }
 
 interface Row {
@@ -302,6 +305,32 @@ const ROWS: Row[] = [
     status: 201,
     call: async (client, { owner, pageId }) =>
       publishRequest(client, pageId, await currentPublishBody(owner, pageId)),
+  },
+  {
+    action: 'Gửi yêu cầu xuất bản',
+    permission: 'pages.requestPublish',
+    scope: 'site',
+    status: 200,
+    call: async (client, { owner, pageId }) =>
+      client.post(`/pages/${pageId}/approval`, {
+        expectedRevision: (await getPage(owner, pageId)).draft.revision,
+        note: 'Đổi giá ưu đãi',
+      }),
+  },
+  {
+    action: 'Rút yêu cầu xuất bản',
+    permission: 'pages.requestPublish',
+    scope: 'site',
+    status: 200,
+    call: (client, { pageId }) => client.delete(`/pages/${pageId}/approval`),
+  },
+  {
+    action: 'Từ chối yêu cầu xuất bản',
+    permission: 'publishApprovals.decide',
+    scope: 'site',
+    status: 200,
+    call: (client, { pageId, approvalId }) =>
+      client.post(`/pages/${pageId}/approval/reject`, { approvalId, reason: 'Giá chưa đúng' }),
   },
   {
     action: 'Lịch sử phiên bản',
@@ -663,6 +692,16 @@ describe('the six roles on every endpoint', () => {
       ).body,
     );
     const asset = await uploadImage(owner, site.id);
+    const asked = approvalResponseSchema.parse(
+      (
+        await memberOf('contributor')
+          .client.post(`/pages/${pageId}/approval`, {
+            expectedRevision: (await getPage(owner, pageId)).draft.revision,
+            note: '',
+          })
+          .expect(200)
+      ).body,
+    );
 
     const ids = { workspaceId, siteId: site.id, pageId, releaseId: v1.release.id };
     const lead = storedLead({
@@ -711,6 +750,7 @@ describe('the six roles on every endpoint', () => {
       failedLeadId: idOf(failed),
       pendingRecipientId: pending?.id ?? '',
       requestId: (request.body as { id: string }).id,
+      approvalId: asked.page.approval?.id ?? '',
     };
   }
 
@@ -719,20 +759,31 @@ describe('the six roles on every endpoint', () => {
     const siteId = new Types.ObjectId(site.id);
     const collection = (name: string) =>
       t.connection.collection(name).find({ siteId }).sort({ _id: 1 }).toArray();
-    const [siteRecord, sites, pages, releases, redirects, assets, leads, requests, versions] =
-      await Promise.all([
-        t.connection.collection('sites').findOne({ _id: siteId }),
-        t.connection
-          .collection('sites')
-          .countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
-        collection('pages'),
-        collection('releases'),
-        collection('redirects'),
-        collection('assets'),
-        collection('leads'),
-        collection('data_requests'),
-        collection('consent_versions'),
-      ]);
+    const [
+      siteRecord,
+      sites,
+      pages,
+      releases,
+      redirects,
+      assets,
+      leads,
+      requests,
+      versions,
+      approvals,
+    ] = await Promise.all([
+      t.connection.collection('sites').findOne({ _id: siteId }),
+      t.connection
+        .collection('sites')
+        .countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
+      collection('pages'),
+      collection('releases'),
+      collection('redirects'),
+      collection('assets'),
+      collection('leads'),
+      collection('data_requests'),
+      collection('consent_versions'),
+      collection('publish_approvals'),
+    ]);
     const ofWorkspace = (name: string) =>
       t.connection
         .collection(name)
@@ -759,6 +810,7 @@ describe('the six roles on every endpoint', () => {
       leads,
       requests,
       versions,
+      approvals,
       activity,
       limits,
       memberships,

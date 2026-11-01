@@ -2,6 +2,7 @@ import {
   type CheckItem,
   type ChecksResult,
   endpoints,
+  type PageApproval,
   type PageSummary,
   type PublishResponse,
   type Role,
@@ -29,6 +30,21 @@ const LIVE_RELEASE = {
   publishedAt: '2026-10-24T06:02:00.000Z',
 };
 const LIVE_URL = 'https://smilecare.payload.site/uu-dai-thang-11';
+const OWNER_ID = '64b000000000000000000004';
+const CONTRIBUTOR = { id: '64b0000000000000000000c1', name: 'Minh' };
+
+/** Minh's request to publish revision 5, the draft the dialog reviews (ADR-023). */
+function waiting(overrides: Partial<Extract<PageApproval, { status: 'pending' }>> = {}) {
+  return {
+    status: 'pending' as const,
+    id: '64b0000000000000000000a1',
+    requestedBy: CONTRIBUTOR,
+    revision: 5,
+    note: 'Đổi giá ưu đãi',
+    sentAt: '2026-10-24T07:50:00.000Z',
+    ...overrides,
+  };
+}
 
 function livePage(overrides: Partial<PageSummary> = {}): PageSummary {
   return pageSummary({
@@ -114,15 +130,22 @@ interface Setup {
   page?: PageSummary;
   result?: ChecksResult;
   role?: Role;
+  userId?: string;
 }
 
-function renderDialog({ page = livePage(), result = checks(), role = 'owner' }: Setup = {}) {
+function renderDialog({
+  page = livePage(),
+  result = checks(),
+  role = 'owner',
+  userId = OWNER_ID,
+}: Setup = {}) {
   const props = {
     onOpenChange: vi.fn(),
     ensureSaved: vi.fn(() => Promise.resolve(saved(page))),
     onFixTarget: vi.fn(),
     onPageUpdated: vi.fn(),
     role,
+    userId,
   };
   apiMock.mockImplementation((endpoint) =>
     endpoint === endpoints.getChecks
@@ -489,5 +512,146 @@ describe('PublishDialog', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Không kết nối được máy chủ');
     expect(publishButton()).toBeEnabled();
+  });
+});
+
+describe('PublishDialog · requests to publish (ADR-023)', () => {
+  it('lets a Cộng tác viên send the draft, leaving warnings to the approver', async () => {
+    const user = userEvent.setup();
+    const props = renderDialog({
+      role: 'contributor',
+      userId: CONTRIBUTOR.id,
+      result: checks({ warnings: [altWarning] }),
+    });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Gửi yêu cầu xuất bản' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bỏ qua lần này' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Chỉ Chủ sở hữu và Quản trị duyệt được. Trang live giữ nguyên tới khi được duyệt.',
+      ),
+    ).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/Ghi chú cho người duyệt/), 'Đổi giá');
+
+    const sent = livePage({ approval: waiting({ note: 'Đổi giá' }) });
+    apiMock.mockResolvedValueOnce({ page: sent });
+    await user.click(screen.getByRole('button', { name: 'Gửi yêu cầu duyệt' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Đã gửi yêu cầu duyệt' }),
+    ).toBeInTheDocument();
+    expect(apiMock).toHaveBeenCalledWith(endpoints.requestApproval, [PAGE_ID], {
+      body: { expectedRevision: 5, note: 'Đổi giá' },
+    });
+    expect(props.onPageUpdated).toHaveBeenCalledWith(sent, expect.anything());
+  });
+
+  it('refuses to send a draft with a blocking error', async () => {
+    renderDialog({
+      role: 'contributor',
+      userId: CONTRIBUTOR.id,
+      result: checks({ blocking: [blockingItem] }),
+    });
+    expect(await screen.findByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeDisabled();
+    expect(screen.getByText('Sửa 1 lỗi để gửi yêu cầu')).toBeInTheDocument();
+  });
+
+  it('shows the sender’s own waiting request: send again or withdraw it', async () => {
+    const user = userEvent.setup();
+    const props = renderDialog({
+      role: 'contributor',
+      userId: CONTRIBUTOR.id,
+      page: livePage({ approval: waiting({ revision: 4 }) }),
+    });
+
+    expect(await screen.findByRole('button', { name: 'Gửi lại yêu cầu' })).toBeEnabled();
+    expect(screen.getByLabelText(/Ghi chú cho người duyệt/)).toHaveValue('Đổi giá ưu đãi');
+    expect(
+      screen.getByText('Bản nháp có thay đổi sau khi gửi. Gửi lại để người duyệt biết có bản mới.'),
+    ).toBeInTheDocument();
+
+    const withdrawn = livePage({ approval: null });
+    apiMock.mockResolvedValueOnce({ page: withdrawn });
+    await user.click(screen.getByRole('button', { name: 'Rút yêu cầu' }));
+    expect(await screen.findByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeInTheDocument();
+    expect(apiMock).toHaveBeenCalledWith(endpoints.withdrawApproval, [PAGE_ID]);
+    expect(props.onPageUpdated).toHaveBeenCalledWith(withdrawn);
+  });
+
+  it('waits for someone else’s request instead of sending another', async () => {
+    renderDialog({
+      role: 'contributor',
+      userId: '64b0000000000000000000c2',
+      page: livePage({ approval: waiting() }),
+    });
+    expect(await screen.findByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeDisabled();
+    expect(screen.getByText('Đang chờ duyệt yêu cầu của Minh')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rút yêu cầu' })).not.toBeInTheDocument();
+  });
+
+  it('lets Chủ sở hữu approve by publishing, or refuse with a reason', async () => {
+    const user = userEvent.setup();
+    const props = renderDialog({ page: livePage({ approval: waiting() }) });
+
+    expect(
+      await screen.findByRole('button', { name: 'Duyệt và xuất bản v13' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Minh gửi yêu cầu xuất bản · /)).toBeInTheDocument();
+    expect(screen.getByText('“Đổi giá ưu đãi”')).toBeInTheDocument();
+    // The request's note is the first suggestion for the version note.
+    expect(screen.getByLabelText(/Ghi chú cho phiên bản/)).toHaveValue('Đổi giá ưu đãi');
+
+    await user.click(screen.getByRole('button', { name: 'Từ chối' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Từ chối yêu cầu của Minh' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Từ chối yêu cầu' }));
+    expect(screen.getByText('Nhập lý do để người gửi biết cần sửa gì')).toBeInTheDocument();
+    expect(apiMock).not.toHaveBeenCalledWith(
+      endpoints.rejectApproval,
+      expect.anything(),
+      expect.anything(),
+    );
+
+    const refused = livePage({ approval: null });
+    apiMock.mockResolvedValueOnce({ page: refused });
+    await user.type(screen.getByLabelText(/Lý do/), 'Giá chưa đúng');
+    await user.click(screen.getByRole('button', { name: 'Từ chối yêu cầu' }));
+    expect(apiMock).toHaveBeenCalledWith(endpoints.rejectApproval, [PAGE_ID], {
+      body: { approvalId: '64b0000000000000000000a1', reason: 'Giá chưa đúng' },
+    });
+    expect(props.onPageUpdated).toHaveBeenCalledWith(refused);
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('tells a Biên tập that publishing answers the request, without refusing it', async () => {
+    renderDialog({ role: 'editor', page: livePage({ approval: waiting({ revision: 4 }) }) });
+    expect(await screen.findByRole('button', { name: 'Xuất bản v13' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Từ chối' })).not.toBeInTheDocument();
+    expect(screen.getByText('Xuất bản trang cũng trả lời yêu cầu này.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Bản nháp đã thay đổi sau khi gửi yêu cầu. Bạn đang xem bản nháp hiện tại.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows why the last request was refused', async () => {
+    renderDialog({
+      role: 'contributor',
+      userId: CONTRIBUTOR.id,
+      page: livePage({
+        approval: {
+          ...waiting(),
+          status: 'rejected',
+          rejectedBy: { id: OWNER_ID, name: 'Ngọc Anh' },
+          rejectedAt: '2026-10-24T07:55:00.000Z',
+          reason: 'Giá chưa đúng',
+        },
+      }),
+    });
+    expect(await screen.findByText(/^Ngọc Anh chưa duyệt yêu cầu · /)).toBeInTheDocument();
+    expect(screen.getByText('Lý do: Giá chưa đúng')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeEnabled();
   });
 });

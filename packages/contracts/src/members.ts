@@ -193,7 +193,7 @@ export const roleDescriptions: Record<Role, string> = {
   owner: 'Mọi quyền, gồm chuyển quyền sở hữu và duyệt yêu cầu đổi quyền.',
   admin: 'Mọi thứ trừ chuyển quyền sở hữu và duyệt yêu cầu đổi quyền.',
   editor: 'Sửa, xuất bản, rollback trang. Không xem lead.',
-  contributor: 'Sửa bản nháp. Không xuất bản.',
+  contributor: 'Sửa bản nháp, gửi yêu cầu xuất bản.',
   support: 'Xem và xử lý lead. Không sửa trang.',
   viewer: 'Xem trang và hiệu quả. Không sửa gì.',
 };

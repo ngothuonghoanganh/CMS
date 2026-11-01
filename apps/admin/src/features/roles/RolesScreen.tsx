@@ -30,6 +30,18 @@ export function RolesScreen({ workspaceName, counts }: RolesScreenProps) {
         context={workspaceName}
         title="Vai trò & quyền"
         description="Vai trò quyết định một người được làm gì. Chủ sở hữu và Quản trị làm việc trên mọi site của workspace; các vai trò khác có thể chỉ được vào một số site."
+        actions={
+          <ul className={styles.legend} aria-label="Chú thích">
+            <li>
+              <CheckIcon size={16} strokeWidth={2.6} className={styles.yes} />
+              Được phép
+            </li>
+            <li>
+              <span className={styles.request}>Yêu cầu</span>
+              Phải được duyệt
+            </li>
+          </ul>
+        }
       />
       <div className={styles.columns}>
         <nav aria-label="Danh sách vai trò" className={styles.roleList}>
@@ -111,6 +123,11 @@ export function RolesScreen({ workspaceName, counts }: RolesScreenProps) {
                               <CheckIcon size={18} strokeWidth={2.4} className={styles.yes} />
                               <VisuallyHidden>Được phép</VisuallyHidden>
                             </>
+                          ) : row.request !== undefined && can(role, row.request) ? (
+                            <span className={styles.request}>
+                              Yêu cầu
+                              <VisuallyHidden> (phải được duyệt)</VisuallyHidden>
+                            </span>
                           ) : (
                             <>
                               <span aria-hidden="true" className={styles.no}>

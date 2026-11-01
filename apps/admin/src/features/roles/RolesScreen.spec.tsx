@@ -10,7 +10,7 @@ function renderRoles() {
   return renderWithProviders(<RolesScreen workspaceName="Mây Xanh Agency" counts={counts} />);
 }
 
-/** The row named `label`, one letter per role: y when the role may, n otherwise. */
+/** The row named `label`, one letter per role: y when the role may, r when it asks, n otherwise. */
 function rowOf(label: string): string {
   const header = screen.getByRole('rowheader', { name: label });
   const row = header.closest('tr');
@@ -19,7 +19,13 @@ function rowOf(label: string): string {
   }
   return within(row)
     .getAllByRole('cell')
-    .map((cell) => (within(cell).queryByText('Được phép') === null ? 'n' : 'y'))
+    .map((cell) =>
+      within(cell).queryByText('Được phép') !== null
+        ? 'y'
+        : within(cell).queryByText('Yêu cầu') !== null
+          ? 'r'
+          : 'n',
+    )
     .join('');
 }
 
@@ -49,7 +55,12 @@ describe('RolesScreen', () => {
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
     ).toEqual(['QUYỀN', 'Chủ sở hữu', 'Quản trị', 'Biên tập', 'Cộng tác viên', 'CSKH', 'Chỉ xem']);
-    expect(rowOf('Xuất bản, cập nhật trang live')).toBe('yyynnn');
+    // A Cộng tác viên asks; Chủ sở hữu and Quản trị approve (ADR-023).
+    expect(rowOf('Xuất bản, cập nhật trang live')).toBe('yyyrnn');
+    expect(rowOf('Duyệt hoặc từ chối yêu cầu xuất bản')).toBe('yynnnn');
+    expect(within(table).getAllByText('(phải được duyệt)')).toHaveLength(1);
+    const legend = screen.getByRole('list', { name: 'Chú thích' });
+    expect(legend).toHaveTextContent('Yêu cầuPhải được duyệt');
     expect(rowOf('Xem lead và nơi nhận lead')).toBe('yynnyn');
     expect(rowOf('Xuất lead ra CSV / Excel')).toBe('yynnnn');
     expect(rowOf('Xem trang, bản nháp và hiệu quả')).toBe('yyyyyy');

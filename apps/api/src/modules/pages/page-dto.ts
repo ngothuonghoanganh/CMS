@@ -3,12 +3,15 @@ import type {
   CheckCounts,
   Draft,
   LiveReleaseRef,
+  PageApproval,
   PageStatus,
   PageSummary,
   PointerEvent,
   UserRef,
 } from '@plp/contracts';
+import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { ActivityRecord } from '../activity/activity.schema.js';
+import type { ApprovalRecord } from '../publishing/approval.schema.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import type { PageRecord } from './page.schema.js';
 
@@ -55,6 +58,38 @@ export function toLiveReleaseRef(release: ReleaseRecord): LiveReleaseRef {
   };
 }
 
+/** `PageSummary.approval` of a request `visibleApproval` shows (ADR-023). */
+export function toPageApproval(
+  approval: ApprovalRecord,
+  userRef: (id: ObjectId) => UserRef,
+): PageApproval {
+  const base = {
+    id: approval._id.toHexString(),
+    requestedBy: userRef(approval.requestedBy),
+    revision: approval.revision,
+    note: approval.note,
+    sentAt: approval.sentAt.toISOString(),
+  };
+  if (approval.status === 'pending') {
+    return { status: 'pending', ...base };
+  }
+  if (
+    approval.status === 'rejected' &&
+    approval.decidedBy !== null &&
+    approval.decidedAt !== null &&
+    approval.reason !== null
+  ) {
+    return {
+      status: 'rejected',
+      ...base,
+      rejectedBy: userRef(approval.decidedBy),
+      rejectedAt: approval.decidedAt.toISOString(),
+      reason: approval.reason,
+    };
+  }
+  throw new Error(`Approval ${base.id} (${approval.status}) is not shown on its page`);
+}
+
 export interface PageSummaryInput {
   page: PageRecord;
   status: PageStatus;
@@ -63,6 +98,7 @@ export interface PageSummaryInput {
   lastPointerEvent: PointerEvent | null;
   origin: string;
   checks: CheckCounts;
+  approval: PageApproval | null;
   createdBy: UserRef;
 }
 
@@ -81,6 +117,7 @@ export function toPageSummary(input: PageSummaryInput): PageSummary {
     lastPointerEvent: input.lastPointerEvent,
     liveUrl: page.publishedSlug === null ? null : liveUrlOf(input.origin, page.publishedSlug),
     checks: input.checks,
+    approval: input.approval,
     createdBy: input.createdBy,
     createdAt: page.createdAt.toISOString(),
     updatedAt: page.updatedAt.toISOString(),

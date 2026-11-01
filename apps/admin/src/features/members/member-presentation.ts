@@ -4,6 +4,7 @@ import {
   can,
   type Invitation,
   permissionGroups,
+  type PermissionRow,
   type Role,
   roleDescriptions,
   roleLabels,
@@ -50,9 +51,13 @@ export function invitationStatus(
 /** What a role may and may not do, from the table the API enforces (ADR-020). */
 export function permissionSummary(role: Role): { allowed: string[]; denied: string[] } {
   const rows = permissionGroups.flatMap((group) => group.rows);
+  // A role that asks for a row does it once approved (ADR-023).
+  const asks = (row: PermissionRow) => row.request !== undefined && can(role, row.request);
   return {
-    allowed: rows.filter((row) => can(role, row.permission)).map((row) => row.label),
-    denied: rows.filter((row) => !can(role, row.permission)).map((row) => row.label),
+    allowed: rows.flatMap((row) =>
+      can(role, row.permission) ? [row.label] : asks(row) ? [`${row.label} (cần được duyệt)`] : [],
+    ),
+    denied: rows.filter((row) => !can(role, row.permission) && !asks(row)).map((row) => row.label),
   };
 }
 

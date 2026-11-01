@@ -3,6 +3,7 @@
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
+  Badge,
   Button,
   CheckCircleIcon,
   CheckIcon,
@@ -116,6 +117,7 @@ export function TopBar({
 }: TopBarProps) {
   const store = useEditorStoreApi();
   const page = useEditor((state) => state.page);
+  const role = useEditor((state) => state.role);
   const checks = useEditor((state) => state.checks);
   const device = useEditor((state) => state.device);
   const canUndo = useEditor((state) => state.history.past.length > 0);
@@ -123,7 +125,7 @@ export function TopBar({
   const live = liveStatusView(page);
   const summary = checksSummaryView(checks);
   const pageBase = `/sites/${siteId}/pages/${pageId}`;
-  const publishLabel = publishButtonLabel(page);
+  const publishLabel = publishButtonLabel(page, role);
   const changeCount = pendingChangeCount(page);
 
   const checksButton = (
@@ -178,6 +180,11 @@ export function TopBar({
             <StatusBadge status={live.kind} size="sm">
               {live.text}
             </StatusBadge>
+            {page.approval?.status === 'pending' ? (
+              <Badge tone="info" size="sm">
+                Chờ duyệt
+              </Badge>
+            ) : null}
           </span>
         </div>
       </div>

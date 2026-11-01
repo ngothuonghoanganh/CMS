@@ -235,6 +235,30 @@ describe('Dashboard', () => {
     expect(within(draftRow).getAllByRole('cell')[4]).toHaveTextContent('—');
   });
 
+  it('marks a page waiting for approval in its status (ADR-023)', () => {
+    renderDashboard({
+      pages: pageListFixture([
+        pageFixture({
+          approval: {
+            status: 'pending',
+            id: '64b0000000000000000000a1',
+            requestedBy: { id: '64b0000000000000000000c1', name: 'Minh' },
+            revision: 4,
+            note: '',
+            sentAt: '2026-10-24T06:00:00.000Z',
+          },
+        }),
+        draftPage,
+      ]),
+    });
+    const [, waitingRow, draftRow] = screen.getAllByRole('row');
+    if (waitingRow === undefined || draftRow === undefined) {
+      throw new Error('missing rows');
+    }
+    expect(within(waitingRow).getAllByRole('cell')[1]).toHaveTextContent('Chờ duyệt');
+    expect(within(draftRow).getAllByRole('cell')[1]).not.toHaveTextContent('Chờ duyệt');
+  });
+
   it('caps the lead counts at 999+ and hides "chưa xử lý" without new leads', () => {
     renderDashboard({
       leadCounts: { new: { count: 0, capped: false }, last7Days: { count: 999, capped: true } },

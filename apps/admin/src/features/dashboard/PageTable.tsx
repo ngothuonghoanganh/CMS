@@ -3,6 +3,7 @@
 import type { PageListItem, PageSummary } from '@plp/contracts';
 import {
   AlertCircleIcon,
+  Badge,
   ButtonLink,
   CheckIcon,
   DropdownMenu,
@@ -185,6 +186,11 @@ export function PageTable({
               <td>
                 <div className={styles.statusCell}>
                   <StatusBadge status={view.badge} />
+                  {page.approval?.status === 'pending' ? (
+                    <Badge tone="info" size="sm">
+                      Chờ duyệt
+                    </Badge>
+                  ) : null}
                   <span className={styles.sub}>{view.subtext}</span>
                   {/* Shown instead of the version column when the list is narrow. */}
                   <span className={cx(styles.stack, styles.versionInline)}>

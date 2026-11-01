@@ -31,6 +31,7 @@ function initial(): EditorInitialData {
     assets: [asset],
     pages: [],
     role: 'owner',
+    userId: '64b000000000000000000004',
     leadCapture: null,
   };
 }

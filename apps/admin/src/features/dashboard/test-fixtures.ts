@@ -70,6 +70,7 @@ export function pageFixture(overrides: Partial<PageListItem> = {}): PageListItem
     lastPointerEvent: pointerEvent(),
     liveUrl: 'https://smilecare.payload.site/uu-dai-thang-11',
     checks: { blocking: 0, warnings: 0 },
+    approval: null,
     createdBy: minh,
     createdAt: '2026-09-01T03:00:00.000Z',
     updatedAt: '2026-10-24T06:00:00.000Z',

@@ -78,6 +78,7 @@ export function pageSummary(overrides: Partial<PageSummary> = {}): PageSummary {
     lastPointerEvent: null,
     liveUrl: null,
     checks: { blocking: 0, warnings: 0 },
+    approval: null,
     createdBy: USER,
     createdAt: '2026-10-20T08:00:00.000Z',
     updatedAt: '2026-10-24T08:00:00.000Z',
