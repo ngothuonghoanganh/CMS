@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
 <style>
 body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
 :focus-visible{outline:2px solid #4338CA;outline-offset:2px}
 </style>
 </helmet>
@@ -23,7 +24,7 @@ body{margin:0}
     <span style="font-size: 15px; font-weight: 700; letter-spacing: -0.01em">Payload</span>
   </div>
 
-  <button type="button" aria-label="Đổi workspace — hiện tại: Mây Xanh Agency" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 1px solid #E2E5EA; border-radius: 10px; background: #FFFFFF; cursor: pointer; text-align: left; font: inherit; color: inherit">
+  <button type="button" aria-label="Đổi workspace — hiện tại: Mây Xanh Agency" aria-expanded="{{ switcherExpanded }}" style="display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 1px solid #E2E5EA; border-radius: 10px; background: #FFFFFF; cursor: pointer; text-align: left; font: inherit; color: inherit">
     <span aria-hidden="true" style="width: 32px; height: 32px; flex: none; border-radius: 8px; background: #15171C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">MX</span>
     <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
       <span style="font-size: 11px; color: #5E6573; font-weight: 500">Workspace · {{ planLabel }}</span>
@@ -31,6 +32,25 @@ body{margin:0}
     </span>
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"></path></svg>
   </button>
+
+  <sc-if value="{{ switcherOpen }}" hint-placeholder-val="{{ false }}">
+    <div role="group" aria-label="Workspace của bạn" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; margin-top: -8px; border: 1px solid #E2E5EA; border-radius: 12px; background: #FFFFFF; box-shadow: 0 8px 24px rgba(21, 23, 28, 0.12)">
+      <span style="font-size: 11px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em; padding: 6px 8px 4px">WORKSPACE CỦA BẠN</span>
+      <sc-for list="{{ workspaces }}" as="ws" hint-placeholder-count="3">
+        <a href="Main.dc.html" aria-current="{{ ws.cur }}" style="display: flex; align-items: center; gap: 10px; min-height: 48px; box-sizing: border-box; padding: 6px 8px; border-radius: 8px; text-decoration: none; color: #15171C; background: {{ ws.bg }}">
+          <span aria-hidden="true" style="width: 28px; height: 28px; flex: none; border-radius: 7px; background: {{ ws.tileBg }}; color: {{ ws.tileFg }}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 11px">{{ ws.initials }}</span>
+          <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+            <span style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ ws.name }}</span>
+            <span style="font-size: 11px; color: #5E6573; font-family: 'JetBrains Mono', ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ ws.address }}</span>
+          </span>
+          <sc-if value="{{ ws.isCurrent }}" hint-placeholder-val="{{ false }}">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3730A3" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"></path></svg>
+          </sc-if>
+        </a>
+      </sc-for>
+      <a href="WorkspacePicker.dc.html" style="display: flex; align-items: center; min-height: 40px; padding: 0 8px; margin-top: 2px; border-top: 1px solid #EEF0F3; font-size: 13px; font-weight: 600; text-decoration: none">Xem tất cả workspace</a>
+    </div>
+  </sc-if>
 
   <div style="display: flex; flex-direction: column; gap: 2px">
     <span style="font-size: 11px; font-weight: 600; color: #5E6573; letter-spacing: 0.06em; padding: 0 8px 4px">WORKSPACE</span>
@@ -90,7 +110,7 @@ body{margin:0}
   </div>
 </nav>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","options":["sites","templates","marketplace","members","roles","billing","pages","leads","crm","analytics","automation","domain","settings","consent","none"],"default":"none"},"role":{"editor":"enum","options":["owner","editor","sales"],"default":"owner"},"planLimited":{"editor":"boolean","default":false},"$preview":{"width":248,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","options":["sites","templates","marketplace","members","roles","billing","pages","leads","crm","analytics","automation","domain","settings","consent","none"],"default":"none"},"role":{"editor":"enum","options":["owner","editor","sales"],"default":"owner"},"planLimited":{"editor":"boolean","default":false},"switcherOpen":{"editor":"boolean","default":false},"$preview":{"width":248,"height":1000}}'>
 class Component extends DCLogic {
   renderVals() {
     var active = this.props.active ?? 'none';
@@ -154,7 +174,20 @@ class Component extends DCLogic {
       editor: { n: 'Minh Khoa', i: 'MK', r: 'Biên tập · 2 site' },
       sales: { n: 'Thu Hà', i: 'TH', r: 'Chăm sóc khách hàng · 1 site' }
     }[role];
+    var open = this.props.switcherOpen ?? false;
+    var workspaces = [
+      { name: 'Mây Xanh Agency', initials: 'MX', tileBg: '#15171C', tileFg: '#FFFFFF', address: 'mayxanh.app.payload.vn', isCurrent: true },
+      { name: 'Nha khoa Smile Care', initials: 'SC', tileBg: '#D9F2EE', tileFg: '#0F5E55', address: 'smilecare.app.payload.vn', isCurrent: false },
+      { name: 'Bếp Nhà Lá', initials: 'BN', tileBg: '#FDEBD3', tileFg: '#7A4300', address: 'bepnhala.app.payload.vn', isCurrent: false }
+    ].map(function (w) {
+      w.cur = w.isCurrent ? 'page' : null;
+      w.bg = w.isCurrent ? '#EEF0FF' : 'transparent';
+      return w;
+    });
     return {
+      switcherOpen: open,
+      switcherExpanded: open ? 'true' : 'false',
+      workspaces: workspaces,
       wsItems: ws, siteItems: site,
       userName: people.n, initials: people.i, roleLabel: people.r,
       planLabel: limited ? 'Gói Cơ bản' : 'Gói Agency'

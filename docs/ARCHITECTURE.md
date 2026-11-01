@@ -1531,15 +1531,22 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Transaction lỗi thì xóa database vừa tạo; xóa cũng lỗi thì log cả hai lỗi. Một database rỗng còn sót không chứa dữ liệu và không được định tuyến tới.
   - **Index** (ADR-013): lúc khởi động, API dựng index của master và của từng workspace DB (theo danh sách `workspaces`, tối đa 8 database cùng lúc). Không dựng được một index thì không khởi động.
   - **Việc chạy nền:** vòng tự kiểm tra tên miền đọc `domains` ở master. Lượt nhận lại thông báo lead lúc khởi động (ADR-018) đi qua từng workspace DB.
-  - **Địa chỉ admin** (lát D2):
-    - `workspaces.slug`: duy nhất, `[a-z0-9-]` 3–40 ký tự, tạo từ tên workspace lúc đăng ký (bỏ dấu, chữ thường), thêm hậu tố số khi trùng. Một danh sách tên dành riêng (`app`, `www`, `api`, `admin`, …) không được dùng.
-    - Workspace mở ở `ADMIN_WORKSPACE_ORIGIN_TEMPLATE` (ví dụ `https://{slug}.app.example.vn`). Địa chỉ chung là `ADMIN_ORIGIN`.
-    - Cookie session đặt `Domain` là miền cha của các địa chỉ đó, nên một lần đăng nhập dùng được cho mọi workspace của người đó. Miền admin khác `BASE_DOMAIN` của trang công khai.
-    - Kiểm tra `Origin` (ADR-004) chấp nhận địa chỉ chung và mọi địa chỉ khớp mẫu.
-    - Ở địa chỉ của một workspace: thành viên vào thẳng workspace đó; người khác thấy "Tài khoản này không thuộc workspace ở địa chỉ này" và link về địa chỉ chung. Không lộ tên workspace cho người ngoài.
-    - Ở địa chỉ chung: thuộc một workspace thì chuyển tới địa chỉ của nó; nhiều thì chọn; không thuộc workspace nào thì báo như vậy.
-    - Chuyển workspace ở Sidebar mở địa chỉ của workspace kia. Mở một site của workspace khác thì chuyển sang đúng địa chỉ.
-    - Email (lời mời, lead, duyệt xuất bản, yêu cầu đổi quyền, tên miền) dẫn tới địa chỉ của workspace.
+  - **Địa chỉ admin** (lát D2, màn 34–36 và Sidebar v2 của canvas, phiên bản `1793546061-78b0`):
+    - `workspaces.slug`: duy nhất (unique index), 3–40 ký tự `[a-z0-9-]`, không bắt đầu hay kết thúc bằng `-`. Tạo từ tên workspace lúc đăng ký: bỏ dấu (`đ` thành `d`), chữ thường, mọi ký tự khác thành `-`; ngắn hơn 3 ký tự thì thêm `-ws`. Trùng một workspace khác, hoặc trùng tên dành riêng (`app`, `www`, `api`, `admin`, `mail`, `static`, `cdn`, `assets`, `help`, `status`, `docs`), thì thêm `-2`, `-3`, …
+    - **Hai chế độ**, theo `ADMIN_WORKSPACE_ORIGIN_TEMPLATE` (đặt cho cả API và admin, chứa `{slug}`, ví dụ `https://{slug}.app.example.vn`):
+      - Có biến này: mỗi workspace mở ở địa chỉ của nó; `ADMIN_ORIGIN` là địa chỉ chung.
+      - Không có: một địa chỉ như trước, chọn workspace trong admin. Dành cho phát triển local và bộ E2E chính, vì WebKit không phân giải được tên miền con của `localhost`.
+    - **Cookie session** đặt `Domain` bằng `SESSION_COOKIE_DOMAIN` (API), nên một lần đăng nhập dùng được cho mọi địa chỉ. API không khởi động khi có template mà thiếu biến này, hay khi địa chỉ chung hoặc mẫu địa chỉ không nằm dưới miền đó. Miền admin khác `BASE_DOMAIN` của trang công khai (§6).
+    - **Kiểm tra `Origin`** (ADR-004) chấp nhận địa chỉ chung và mọi địa chỉ khớp mẫu.
+    - **Địa chỉ của một workspace:**
+      - Thành viên vào thẳng workspace đó, như trang bắt đầu hiện nay nhưng chỉ trong workspace này.
+      - Người không phải thành viên, hay địa chỉ không có workspace nào, cùng thấy màn 36 "Tài khoản này không thuộc workspace ở địa chỉ này", không lộ tên workspace.
+      - Đăng nhập (màn 34) nói đang mở địa chỉ nào. "Tạo workspace mới" và đăng ký xong dẫn về địa chỉ chung.
+    - **Địa chỉ chung:** thuộc một workspace thì chuyển tới địa chỉ của nó; nhiều thì chọn (màn 35); không thuộc workspace nào thì báo như vậy.
+    - **Mọi màn của site hay workspace** (khung workspace, editor, tạo trang, tạo site) mở ở địa chỉ của workspace sở hữu nó. Mở ở địa chỉ khác (chung hay của workspace khác) thì chuyển sang đúng địa chỉ, giữ đường dẫn. Proxy của admin chuyển đường dẫn của request cho trang qua một header để làm việc này.
+    - **Đổi workspace** ở Sidebar mở địa chỉ của workspace kia; cookie workspace ưu tiên chỉ dùng ở chế độ một địa chỉ.
+    - **Email** (lời mời, lead, duyệt xuất bản, yêu cầu đổi quyền, tên miền) dẫn tới địa chỉ của workspace. Thư xác nhận nơi nhận lead vẫn dẫn tới địa chỉ chung: người nhận không cần là thành viên.
+    - **E2E:** `addresses.config.ts` chạy Chromium ở `app.e2e.test` và `{slug}.app.e2e.test` (ánh xạ về máy như tên miền riêng của ADR-022), với API, admin và database riêng; `pnpm test:e2e` chạy cả hai cấu hình.
 - **Ngoài phạm vi:**
   - Đổi địa chỉ admin sau khi tạo; tên miền riêng cho admin.
   - Xóa workspace và database của nó.
@@ -1624,10 +1631,10 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 
 **Tách database (ADR-025):**
 
-| Lát | Nội dung                                                                                                        | Màn                         | Trạng thái |
-| --- | --------------------------------------------------------------------------------------------------------------- | --------------------------- | ---------- |
-| D1  | Master DB và workspace DB, endpoint mang `siteId`, tạo DB lúc đăng ký, index mọi DB, đường công khai qua master | —                           | Đang làm   |
-| D2  | Địa chỉ admin riêng mỗi workspace, cookie dùng chung, chọn workspace ở địa chỉ chung, link email theo workspace | 01, Sidebar, chọn workspace | Chưa làm   |
+| Lát | Nội dung                                                                                                        | Màn                    | Trạng thái |
+| --- | --------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------- |
+| D1  | Master DB và workspace DB, endpoint mang `siteId`, tạo DB lúc đăng ký, index mọi DB, đường công khai qua master | —                      | Xong       |
+| D2  | Địa chỉ admin riêng mỗi workspace, cookie dùng chung, chọn workspace ở địa chỉ chung, link email theo workspace | 34, 35, 36, Sidebar v2 | Đang làm   |
 
 ## 6. Trước khi phát hành
 

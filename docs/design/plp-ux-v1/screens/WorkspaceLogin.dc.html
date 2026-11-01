@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Đăng nhập</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 900px; box-sizing: border-box; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column; align-items: center; padding: 64px 16px 48px; gap: 24px">
+  <span style="display: flex; align-items: center; gap: 8px">
+    <span aria-hidden="true" style="width: 26px; height: 26px; border-radius: 7px; background: #4338CA; display: flex; align-items: center; justify-content: center">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+    </span>
+    <span style="font-size: 17px; font-weight: 700">Payload</span>
+  </span>
+
+  <main style="width: 100%; max-width: 420px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; padding: 28px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 700">Đăng nhập</h1>
+      <sc-if value="{{ atWorkspace }}" hint-placeholder-val="{{ true }}">
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Bạn đang mở <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; color: #15171C; background: #F0F2F5; border-radius: 6px; padding: 1px 6px">mayxanh.app.payload.vn</span>. Đăng nhập xong, workspace ở địa chỉ này mở ra ngay.</p>
+      </sc-if>
+      <sc-if value="{{ atCommon }}" hint-placeholder-val="{{ false }}">
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Đăng nhập xong, bạn chọn workspace muốn mở. Nếu chỉ thuộc một workspace, nó mở ra ngay.</p>
+      </sc-if>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="wl-email" style="font-size: 14px; font-weight: 600">Email</label>
+      <input id="wl-email" type="email" autocomplete="email" style="min-height: 48px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 15px">
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="wl-pw" style="font-size: 14px; font-weight: 600">Mật khẩu</label>
+      <input id="wl-pw" type="password" autocomplete="current-password" style="min-height: 48px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 15px">
+    </div>
+    <button type="button" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đăng nhập</button>
+    <span style="font-size: 13px; line-height: 1.5; color: #5E6573; text-align: center">Chưa có tài khoản? <a href="#" style="font-weight: 600; text-decoration: none">Tạo workspace mới</a></span>
+  </main>
+
+  <sc-if value="{{ atWorkspace }}" hint-placeholder-val="{{ true }}">
+    <p style="margin: 0; max-width: 420px; font-size: 13px; line-height: 1.6; color: #5E6573; text-align: center">Một lần đăng nhập dùng được cho mọi workspace của bạn. Muốn mở workspace khác? <a href="WorkspacePicker.dc.html" style="font-weight: 600; text-decoration: none">Xem tất cả workspace</a></p>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"address":{"editor":"enum","options":["workspace","common"],"default":"workspace"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var a = this.props.address ?? 'workspace';
+    return { atWorkspace: a === 'workspace', atCommon: a === 'common' };
+  }
+}
+</script>
+</body>
+</html>
