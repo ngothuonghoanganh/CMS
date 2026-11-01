@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import type { Env } from '../../config/env.js';
+import { type Env, tlsCheckEnabled } from '../../config/env.js';
 import { ENV } from '../../shared/env.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { EmailModule } from '../notifications/email.module.js';
@@ -28,7 +28,13 @@ import { PublicDomainsService } from './public-domains.service.js';
           ? new NetworkDomainDns()
           : new ZoneFileDomainDns(env.DOMAIN_DNS_ZONE_FILE),
     },
-    { provide: DomainTls, useClass: NetworkDomainTls },
+    {
+      provide: DomainTls,
+      inject: [ENV],
+      // parseEnv requires an edge address whenever HTTPS is checked; unchecked, no probe runs.
+      useFactory: (env: Env): DomainTls =>
+        new NetworkDomainTls(tlsCheckEnabled(env) ? (env.CUSTOM_DOMAIN_IPV4[0] ?? '') : ''),
+    },
     DomainChecker,
     DomainsService,
     PublicDomainsService,

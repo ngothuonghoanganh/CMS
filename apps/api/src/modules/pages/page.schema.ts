@@ -30,6 +30,12 @@ export interface PageRecord {
   publishedSlug: string | null;
   /** Number of releases created; the next release gets `releaseSeq + 1`. */
   releaseSeq: number;
+  /**
+   * When a request to publish was last stored for the page (ADR-023). Written in that
+   * transaction, guarded by the draft revision and the pointer, so a publish or a save at the
+   * same moment conflicts with it.
+   */
+  approvalAskedAt?: Date | null;
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -60,6 +66,7 @@ export const pageSchema = new Schema<PageRecord>(
     publishedReleaseId: { type: Schema.Types.ObjectId, default: null },
     publishedSlug: { type: String, default: null },
     releaseSeq: { type: Number, required: true, min: 0 },
+    approvalAskedAt: { type: Date, default: null },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },
     updatedAt: { type: Date, required: true },

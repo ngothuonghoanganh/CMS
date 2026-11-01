@@ -155,6 +155,20 @@ describe('MembersScreen', () => {
     expect(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' })).toBeInTheDocument();
   });
 
+  it('starts "Đổi quyền" from the member as they are, whatever was left last time', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' }));
+    let dialog = await screen.findByRole('dialog');
+    await user.selectOptions(within(dialog).getByLabelText('Vai trò'), 'viewer');
+    expect(within(dialog).getByLabelText('Vai trò')).toHaveValue('viewer');
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+
+    await user.click(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' }));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Vai trò')).toHaveValue('editor');
+  });
+
   it('filters by role, site and name', async () => {
     const user = userEvent.setup();
     renderScreen();

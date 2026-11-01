@@ -11,7 +11,7 @@ import {
   sitemapResponseSchema,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { pointHere } from '../../../test/domains.js';
@@ -24,7 +24,11 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { addMember, createSite } from '../../../test/resources.js';
-import { DomainMonitor } from './domain-monitor.service.js';
+import { DomainChecker } from './domain-checker.service.js';
+import { DOMAINS_PER_ROUND, DomainMonitor, ROUND_BUDGET_MS } from './domain-monitor.service.js';
+import { DomainsRepository } from './domains.repository.js';
+
+const DAY_MS = 86_400_000;
 
 let counter = 0;
 
@@ -197,6 +201,10 @@ describe('custom domains (ADR-022)', () => {
       t.tls.result = { ok: false };
       try {
         expect((await check(client, site.id, added.id)).status).toBe('issuing');
+        // The edge is getting the certificate: checked again in a minute, not ten.
+        const stored = await t.connection.collection('domains').findOne({ hostname });
+        const next = stored?.['nextCheckAt'] as unknown;
+        expect(next instanceof Date && next.getTime() - Date.now() <= 60_000).toBe(true);
         await t.connection
           .collection('domains')
           .updateOne(
@@ -361,10 +369,12 @@ describe('custom domains (ADR-022)', () => {
   });
 
   describe('for the edge and the renderer', () => {
-    it('lets Caddy get certificates only for the sites’ addresses and their serving domains', async () => {
+    it('lets Caddy get certificates only for serving custom domains', async () => {
       const { client, site } = await siteOf();
+      // Default addresses use the wildcard certificate: asking for one per site would let anyone
+      // creating sites use up the CA's limits for the base domain.
       const defaultHost = new URL(site.defaultOrigin).hostname;
-      await anyone().get(`/public/tls/allowed?domain=${defaultHost}`).expect(200);
+      await anyone().get(`/public/tls/allowed?domain=${defaultHost}`).expect(404);
       const base = defaultHost.slice(defaultHost.indexOf('.') + 1);
       await anyone().get(`/public/tls/allowed?domain=khong-co-site.${base}`).expect(404);
       await anyone().get(`/public/tls/allowed?domain=${base}`).expect(404);
@@ -410,6 +420,167 @@ describe('custom domains (ADR-022)', () => {
       } finally {
         await second.close();
       }
+    });
+  });
+
+  describe('checks at the same moment (test round of Phase 1)', () => {
+    const stored = (id: string) => t.app.get(DomainsRepository).findById(new Types.ObjectId(id));
+
+    it('lets the edge get the certificate during the first HTTPS check of a domain', async () => {
+      const { client, site } = await siteOf();
+      const hostname = newDomain();
+      const added = await add(client, site.id, hostname);
+      pointHere(t.dns, hostname, tokenOf(added));
+      const asked: number[] = [];
+      t.tls.during = async (host) => {
+        asked.push((await anyone().get(`/public/tls/allowed?domain=${host}`)).status);
+      };
+      try {
+        expect((await check(client, site.id, added.id)).status).toBe('active');
+      } finally {
+        t.tls.during = null;
+      }
+      expect(asked).toEqual([200]);
+    });
+
+    it('announces a domain once when two checks see it go active together', async () => {
+      const { client, site, me } = await siteOf();
+      const hostname = newDomain();
+      const added = await add(client, site.id, hostname);
+      pointHere(t.dns, hostname, tokenOf(added));
+      const record = await stored(added.id);
+      if (record === null) {
+        throw new Error('The domain was not stored');
+      }
+      const checker = t.app.get(DomainChecker);
+      await Promise.all([checker.check(record), checker.check(record)]);
+      expect(
+        t.emails.to(me.user.email).filter((email) => email.subject === `${hostname} đã hoạt động`),
+      ).toHaveLength(1);
+      expect((await stored(added.id))?.activeSince).toBeInstanceOf(Date);
+    });
+
+    it('leaves the owner its domain when the proof it saw was taken back meanwhile', async () => {
+      const first = await siteOf();
+      const active = await activeDomain(first.client, first.site.id);
+      const second = await siteOf();
+      const claim = await add(second.client, second.site.id, active.hostname);
+      const stale = await stored(claim.id);
+      if (stale === null) {
+        throw new Error('The claim was not stored');
+      }
+      await second.client.delete(`/sites/${second.site.id}/domains/${claim.id}`).expect(204);
+      pointHere(t.dns, active.hostname, tokenOf(claim));
+      // The check started before the claim was disconnected: nothing moves.
+      await t.app.get(DomainChecker).check(stale);
+      expect(await stored(active.id)).toMatchObject({ verifiedAt: expect.any(Date) as Date });
+    });
+
+    it('stops asking a DNS that never answers about a domain never verified, after 7 days', async () => {
+      const { client, site } = await siteOf();
+      const added = await add(client, site.id, newDomain());
+      await t.connection
+        .collection('domains')
+        .updateOne(
+          { _id: new Types.ObjectId(added.id) },
+          { $set: { watchSince: new Date(Date.now() - 8 * DAY_MS) } },
+        );
+      const record = await stored(added.id);
+      if (record === null) {
+        throw new Error('The domain was not stored');
+      }
+      t.dns.fail();
+      try {
+        await t.app.get(DomainChecker).check(record);
+      } finally {
+        t.dns.recover();
+      }
+      expect((await stored(added.id))?.nextCheckAt).toBeNull();
+    });
+
+    it('never leaves the primary address on a domain disconnected at the same moment', async () => {
+      const { client, site } = await siteOf();
+      for (let round = 0; round < 3; round += 1) {
+        const active = await activeDomain(client, site.id);
+        const [primary, removed] = await Promise.all([
+          client.put(`/sites/${site.id}/primary-domain`, { domainId: active.id }),
+          client.delete(`/sites/${site.id}/domains/${active.id}`),
+        ]);
+        const siteNow = siteSchema.parse((await client.get(`/sites/${site.id}`).expect(200)).body);
+        if ((await stored(active.id)) === null) {
+          expect(removed.status).toBe(204);
+          expect(primary.status).toBe(409);
+          expect(siteNow.publicOrigin).toBe(siteNow.defaultOrigin);
+        } else {
+          expect(primary.status).toBe(200);
+          expect(removed.status).toBe(409);
+          expect(siteNow.publicOrigin).toContain(active.hostname);
+          await client.put(`/sites/${site.id}/primary-domain`, { domainId: null }).expect(200);
+          await client.delete(`/sites/${site.id}/domains/${active.id}`).expect(204);
+        }
+      }
+    });
+
+    it('takes at most its size of domains in a round, however many workers ask', async () => {
+      const due = new Date('1999-01-01T00:00:00.000Z');
+      const ids = Array.from({ length: DOMAINS_PER_ROUND + 10 }, () => new Types.ObjectId());
+      await t.connection.collection('domains').insertMany(
+        ids.map((_id, index) => ({
+          _id,
+          workspaceId: new Types.ObjectId(),
+          siteId: new Types.ObjectId(),
+          hostname: `vong-${index}.${newDomain()}`,
+          nextCheckAt: due,
+        })),
+      );
+      const fast = vi
+        .spyOn(t.app.get(DomainChecker), 'check')
+        .mockImplementation((domain) => Promise.resolve(domain));
+      try {
+        expect(await t.app.get(DomainMonitor).runDue()).toBe(DOMAINS_PER_ROUND);
+      } finally {
+        fast.mockRestore();
+      }
+      expect(
+        await t.connection
+          .collection('domains')
+          .countDocuments({ _id: { $in: ids }, nextCheckAt: due }),
+      ).toBe(10);
+      await t.connection.collection('domains').deleteMany({ _id: { $in: ids } });
+    });
+
+    it('takes no new domain once a round ran out of time', async () => {
+      const ids: string[] = [];
+      for (const owner of [await siteOf(), await siteOf()]) {
+        for (let index = 0; index < 4; index += 1) {
+          ids.push((await add(owner.client, owner.site.id, newDomain())).id);
+        }
+      }
+      // Due long ago, so this round takes them before any other test's domain.
+      await t.connection
+        .collection('domains')
+        .updateMany(
+          { _id: { $in: ids.map((id) => new Types.ObjectId(id)) } },
+          { $set: { nextCheckAt: new Date('2000-01-01T00:00:00.000Z') } },
+        );
+      let elapsed = 0;
+      const realNow = Date.now.bind(Date);
+      const clock = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + elapsed);
+      const slow = vi.spyOn(t.app.get(DomainChecker), 'check').mockImplementation((domain) => {
+        elapsed += ROUND_BUDGET_MS;
+        return Promise.resolve(domain);
+      });
+      try {
+        expect(await t.app.get(DomainMonitor).runDue()).toBe(5);
+      } finally {
+        clock.mockRestore();
+        slow.mockRestore();
+      }
+      const left = await t.connection.collection('domains').countDocuments({
+        _id: { $in: ids.map((id) => new Types.ObjectId(id)) },
+        nextCheckAt: new Date('2000-01-01T00:00:00.000Z'),
+      });
+      expect(left).toBe(3);
     });
   });
 });

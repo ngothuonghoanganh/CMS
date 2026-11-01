@@ -113,11 +113,39 @@ export class PagesRepository {
     return page ? { id: page._id, workspaceId: page.workspaceId, siteId: page.siteId } : null;
   }
 
-  findById(scope: WorkspaceScope, id: ObjectId): Promise<PageRecord | null> {
+  findById(scope: WorkspaceScope, id: ObjectId, tx?: Tx): Promise<PageRecord | null> {
     return this.pages
       .findOne({ _id: id, workspaceId: scope.workspaceId })
+      .session(tx ?? null)
       .lean<PageRecord>()
       .exec();
+  }
+
+  /**
+   * Marks the page in the transaction that stores a request to publish it (ADR-023), only while
+   * the draft revision and the pointer are the ones the sender saw. Publishing writes the page
+   * too, so the two never both commit on what they read; false means the draft was saved or the
+   * page published meanwhile.
+   */
+  async holdForApproval(
+    scope: WorkspaceScope,
+    page: { id: ObjectId; revision: number; publishedReleaseId: ObjectId | null },
+    now: Date,
+    tx: Tx,
+  ): Promise<boolean> {
+    const result = await this.pages
+      .updateOne(
+        {
+          _id: page.id,
+          workspaceId: scope.workspaceId,
+          'draft.revision': page.revision,
+          publishedReleaseId: page.publishedReleaseId,
+        },
+        { $set: { approvalAskedAt: now } },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
   }
 
   /**

@@ -12,12 +12,15 @@ export function approvalPurgeAt(closedAt: Date): Date {
 
 /**
  * What `PageSummary.approval` shows from the page's latest request: a pending one, or a refusal
- * until a draft at least as new as the refused one goes live. Published and withdrawn requests,
- * and refusals a later publish answered, show nothing.
+ * until the page is published again after it (drafts only grow, so that publish is at least as
+ * new as what was refused). Published and withdrawn requests, and refusals a later publish
+ * answered, show nothing, even after that release is unpublished or rolled back. A release from
+ * before the refusal answers nothing, even of the same draft (a page rolled back, then asked for
+ * again). Release counts, not clocks: two API instances may disagree on the time.
  */
 export function visibleApproval(
-  latest: Pick<ApprovalRecord, 'status' | 'revision'> | null,
-  liveSourceRevision: number | null,
+  latest: Pick<ApprovalRecord, 'status' | 'releaseSeq'> | null,
+  pageReleaseSeq: number,
 ): boolean {
   if (latest === null) {
     return false;
@@ -26,7 +29,7 @@ export function visibleApproval(
     case 'pending':
       return true;
     case 'rejected':
-      return liveSourceRevision === null || liveSourceRevision < latest.revision;
+      return (latest.releaseSeq ?? null) === null || pageReleaseSeq <= (latest.releaseSeq ?? 0);
     case 'published':
     case 'withdrawn':
       return false;

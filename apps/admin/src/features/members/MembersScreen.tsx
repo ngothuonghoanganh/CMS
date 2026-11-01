@@ -121,6 +121,8 @@ export function MembersScreen({
       : null;
   });
   const [editOpen, setEditOpen] = useState(editing !== null);
+  // Each opening of "Đổi quyền" starts from the member as they are: nothing left from the last.
+  const [editKey, setEditKey] = useState(0);
   const [revoking, setRevoking] = useState<{ id: string; email: string } | null>(null);
 
   function refresh() {
@@ -332,6 +334,7 @@ export function MembersScreen({
                               aria-label={`Đổi quyền của ${member.name}`}
                               onClick={() => {
                                 setEditing({ kind: 'member', member });
+                                setEditKey((key) => key + 1);
                                 setEditOpen(true);
                               }}
                             >
@@ -489,6 +492,7 @@ export function MembersScreen({
                               aria-label={`Xem và duyệt yêu cầu của ${request.user.name}`}
                               onClick={() => {
                                 setEditing({ kind: 'request', member, request });
+                                setEditKey((key) => key + 1);
                                 setEditOpen(true);
                               }}
                             >
@@ -518,7 +522,7 @@ export function MembersScreen({
       )}
       {editing === null ? null : (
         <ChangeAccessDialog
-          key={editing.kind === 'request' ? editing.request.id : editing.member.userId}
+          key={editKey}
           workspaceId={workspace.id}
           member={editing.member}
           sites={sites}

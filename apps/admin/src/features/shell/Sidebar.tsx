@@ -396,6 +396,7 @@ export function Sidebar({
         <AccessRequestDialog
           workspaceId={workspace.id}
           role={membership.role}
+          siteLimited={membership.siteIds !== null}
           open={requestOpen}
           onOpenChange={setRequestOpen}
         />

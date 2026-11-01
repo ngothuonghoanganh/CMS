@@ -47,13 +47,22 @@ export type PublishResponse = z.infer<typeof publishResponseSchema>;
 /** A request to publish the saved draft, from a role that cannot publish (ADR-023). */
 export const requestApprovalSchema = z.object({
   expectedRevision: z.number().int().nonnegative(),
+  /** The live release the sender saw, as for publish: published since, the request is a 409. */
+  expectedPublishedReleaseId: idSchema.nullable(),
+  /**
+   * The sender's own waiting request they saw, to send again; null for a new one. Anything else
+   * waiting, or that request answered meanwhile, is a 409, so nobody asks again for a page that
+   * went live under them.
+   */
+  approvalId: idSchema.nullable(),
   note: z.string().trim().max(200, 'Ghi chú tối đa 200 ký tự'),
 });
 export type RequestApproval = z.infer<typeof requestApprovalSchema>;
 
 export const rejectApprovalSchema = z.object({
-  /** The request the approver saw; a newer or closed one is not refused by mistake. */
+  /** The request and the revision the approver saw: one sent again since is not refused. */
   approvalId: idSchema,
+  revision: z.number().int().nonnegative(),
   reason: z.string().trim().min(1, 'Nhập lý do').max(500, 'Lý do tối đa 500 ký tự'),
 });
 export type RejectApproval = z.infer<typeof rejectApprovalSchema>;

@@ -35,25 +35,31 @@ export class LeadLimitsRepository {
   }
 
   /**
-   * Takes back requests `hit` counted, one per key: for limits that count what was done, not what
-   * was asked, such as confirmation emails (ADR-018). Like `LoginAttemptsRepository.giveBack`, only
-   * in the window that counted it: never in a later window, never in one that has ended, and never
-   * below zero.
+   * Takes back requests `hit` counted, each hit once (a key counted three times goes down by
+   * three): for limits that count what was done, not what was asked, such as confirmation emails
+   * (ADR-018). Like `LoginAttemptsRepository.giveBack`, only in the window that counted it: never
+   * in a later window, never in one that has ended, and never below zero.
    */
   async release(counted: readonly CountedHit[], now: Date): Promise<void> {
-    if (counted.length === 0) {
+    const windows = new Map<string, { key: string; expiresAt: Date; hits: number }>();
+    for (const { key, expiresAt } of counted) {
+      const id = `${key}@${expiresAt.toISOString()}`;
+      const window = windows.get(id) ?? { key, expiresAt, hits: 0 };
+      window.hits += 1;
+      windows.set(id, window);
+    }
+    if (windows.size === 0) {
       return;
     }
-    await this.limits
-      .updateMany(
-        {
-          $or: counted.map(({ key, expiresAt }) => ({ key, expiresAt })),
-          count: { $gt: 0 },
-          expiresAt: { $gt: now },
+    await this.limits.bulkWrite(
+      [...windows.values()].map(({ key, expiresAt, hits }) => ({
+        updateOne: {
+          filter: { key, expiresAt: { $eq: expiresAt, $gt: now }, count: { $gt: 0 } },
+          update: [{ $set: { count: { $max: [{ $subtract: ['$count', hits] }, 0] } } }],
         },
-        { $inc: { count: -1 } },
-      )
-      .exec();
+      })),
+      { ordered: false },
+    );
   }
 
   private async increment(key: string, now: Date, windowEnd: Date): Promise<LimitWindow> {

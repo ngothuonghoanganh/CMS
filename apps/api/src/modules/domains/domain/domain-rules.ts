@@ -146,7 +146,12 @@ export function domainStatus(
 export function nextCheckAt(
   domain: Pick<DomainRecord, 'verifiedAt' | 'watchSince'>,
   now: Date,
+  status?: DomainStatus,
 ): Date | null {
+  // The edge is getting the certificate: looked at again soon, so the domain is active soon.
+  if (status === 'issuing') {
+    return new Date(now.getTime() + MINUTE_MS);
+  }
   if (domain.verifiedAt !== null) {
     return new Date(now.getTime() + 10 * MINUTE_MS);
   }

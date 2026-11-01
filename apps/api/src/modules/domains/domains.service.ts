@@ -13,6 +13,7 @@ import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { RevalidationClient } from '../revalidation/revalidation.client.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
@@ -38,6 +39,7 @@ export class DomainsService {
     private readonly users: UsersRepository,
     private readonly checker: DomainChecker,
     private readonly revalidation: RevalidationClient,
+    private readonly transactions: TransactionRunner,
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<DomainListResponse> {
@@ -111,14 +113,19 @@ export class DomainsService {
   async remove(user: AuthenticatedUser, siteId: string, domainId: string): Promise<void> {
     const { scope, site } = await this.sitesService.access(user, siteId, 'domains.manage');
     const domain = await this.find(scope, site, domainId);
-    if (site.primaryDomain?.domainId.equals(domain._id)) {
-      throw new AppError(409, 'conflict', 'Không ngắt được địa chỉ chính', {
-        detail: 'Hãy đặt một địa chỉ khác làm địa chỉ chính trước.',
-      });
-    }
-    if (!(await this.domains.remove(scope, site._id, domain._id))) {
-      throw notFound(DOMAIN_NOT_FOUND);
-    }
+    // In one transaction with the primary address it checks: making the domain primary at the same
+    // moment writes it too, so one of the two waits for the other.
+    await this.transactions.run(async (tx) => {
+      const current = await this.sites.findById(scope, site._id, tx);
+      if (current?.primaryDomain?.domainId.equals(domain._id)) {
+        throw new AppError(409, 'conflict', 'Không ngắt được địa chỉ chính', {
+          detail: 'Hãy đặt một địa chỉ khác làm địa chỉ chính trước.',
+        });
+      }
+      if (!(await this.domains.remove(scope, site._id, domain._id, tx))) {
+        throw notFound(DOMAIN_NOT_FOUND);
+      }
+    });
     await this.revalidation.revalidateSite(site.subdomain);
   }
 
@@ -132,22 +139,27 @@ export class DomainsService {
     input: SetPrimaryDomainRequest,
   ): Promise<DomainListResponse> {
     const { scope, site } = await this.sitesService.access(user, siteId, 'domains.manage');
-    let primary = null;
-    if (input.domainId !== null) {
-      const domain = await this.find(scope, site, input.domainId);
-      if (domainStatus(domain, false, new Date()) !== 'active') {
-        throw new AppError(
-          409,
-          'conflict',
-          'Chỉ tên miền đang hoạt động mới làm địa chỉ chính được',
-          {
-            detail: 'Đợi tên miền hoạt động với HTTPS rồi thử lại.',
-          },
-        );
-      }
-      primary = { domainId: domain._id, hostname: domain.hostname };
+    const notActive = () =>
+      new AppError(409, 'conflict', 'Chỉ tên miền đang hoạt động mới làm địa chỉ chính được', {
+        detail: 'Đợi tên miền hoạt động với HTTPS rồi thử lại.',
+      });
+    const chosen = input.domainId === null ? null : await this.find(scope, site, input.domainId);
+    if (chosen !== null && domainStatus(chosen, false, new Date()) !== 'active') {
+      throw notActive();
     }
-    const updated = await this.sites.setPrimaryDomain(scope, site._id, primary);
+    // The domain is written in the transaction too: moved to another site or disconnected at the
+    // same moment, it conflicts here rather than leave the address on a domain that is gone.
+    const updated = await this.transactions.run(async (tx) => {
+      let primary = null;
+      if (chosen !== null) {
+        const held = await this.domains.holdForPrimary(scope, site._id, chosen._id, new Date(), tx);
+        if (held === null) {
+          throw notActive();
+        }
+        primary = { domainId: held._id, hostname: held.hostname };
+      }
+      return this.sites.setPrimaryDomain(scope, site._id, primary, tx);
+    });
     if (!updated) {
       throw notFound(SITE_NOT_FOUND);
     }

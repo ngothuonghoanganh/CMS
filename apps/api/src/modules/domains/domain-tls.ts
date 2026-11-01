@@ -4,17 +4,31 @@ import { connect } from 'node:tls';
 export type TlsProbeResult = { ok: true; validUntil: Date } | { ok: false };
 
 /**
- * Checks that the domain serves a valid certificate for itself on port 443 (ADR-022). An
+ * Checks that visitors of the domain get a valid certificate for it on port 443 (ADR-022). An
  * abstract class so integration tests can replace it.
  */
 export abstract class DomainTls {
   abstract probe(hostname: string): Promise<TlsProbeResult>;
 }
 
+/**
+ * Asks the edge itself, with the domain as SNI: a verified domain points there, so this is the
+ * certificate its visitors get. Connecting to wherever the customer's DNS points instead would
+ * let a domain aim the API at hosts of the internal network.
+ */
 export class NetworkDomainTls extends DomainTls {
+  constructor(private readonly edgeAddress: string) {
+    super();
+  }
+
   probe(hostname: string): Promise<TlsProbeResult> {
     return new Promise((resolve) => {
-      const socket = connect({ host: hostname, port: 443, servername: hostname, timeout: 5000 });
+      const socket = connect({
+        host: this.edgeAddress,
+        port: 443,
+        servername: hostname,
+        timeout: 5000,
+      });
       const done = (result: TlsProbeResult) => {
         socket.destroy();
         resolve(result);

@@ -40,7 +40,11 @@ export function NoPermission({
       </p>
       <div className={styles.actions}>
         {requestAccess && !can(membership.role, 'members.manage') ? (
-          <RequestAccessButton workspaceId={membership.workspace.id} role={membership.role} />
+          <RequestAccessButton
+            workspaceId={membership.workspace.id}
+            role={membership.role}
+            siteLimited={membership.siteIds !== null}
+          />
         ) : null}
         <ButtonLink as={Link} href={back.href} variant="secondary">
           {back.label}

@@ -32,7 +32,7 @@ export class ApprovalNotifier {
   ) {}
 
   /** One email to every member who may decide on the site's pages; true when it went out. */
-  async requested(
+  requested(
     scope: WorkspaceScope,
     site: SiteRecord,
     page: PageRecord,
@@ -40,27 +40,30 @@ export class ApprovalNotifier {
     requesterName: string,
     resent: boolean,
   ): Promise<boolean> {
-    const approvers = (await this.workspaces.listMembers(scope)).filter(
-      (member) =>
-        (can(member.role, 'publishApprovals.decide') &&
-          // A membership without `siteIds` covers the whole workspace (ADR-020).
-          (member.siteIds ?? null) === null) ||
-        (member.siteIds ?? []).some((id) => id.equals(site._id)),
-    );
-    const contacts = await this.users.findContacts(approvers.map((member) => member.userId));
-    if (contacts.length === 0) {
-      throw new Error(`Workspace ${scope.workspaceId.toHexString()} has nobody to approve`);
-    }
-    return this.send(scope, approval, {
-      to: contacts.map((contact) => contact.email),
-      ...approvalRequestEmail({
-        requesterName,
-        pageTitle: page.title,
-        siteName: site.name,
-        note: approval.note,
-        resent,
-        pageUrl: this.pageUrl(page),
-      }),
+    return this.send(scope, approval, async () => {
+      const approvers = (await this.workspaces.listMembers(scope)).filter((member) => {
+        // A membership without `siteIds` covers the whole workspace (ADR-020).
+        const siteIds = member.siteIds ?? null;
+        return (
+          can(member.role, 'publishApprovals.decide') &&
+          (siteIds === null || siteIds.some((id) => id.equals(site._id)))
+        );
+      });
+      const contacts = await this.users.findContacts(approvers.map((member) => member.userId));
+      if (contacts.length === 0) {
+        throw new Error(`Workspace ${scope.workspaceId.toHexString()} has nobody to approve`);
+      }
+      return {
+        to: contacts.map((contact) => contact.email),
+        ...approvalRequestEmail({
+          requesterName,
+          pageTitle: page.title,
+          siteName: site.name,
+          note: approval.note,
+          resent,
+          pageUrl: this.pageUrl(page),
+        }),
+      };
     });
   }
 
@@ -70,18 +73,19 @@ export class ApprovalNotifier {
     approval: ApprovalRecord,
     release: { version: number; publisherName: string; liveUrl: string },
   ): Promise<void> {
-    const email = await this.requesterEmail(scope, approval.requestedBy);
-    if (email === null) {
-      return;
-    }
-    await this.send(scope, approval, {
-      to: [email],
-      ...approvalPublishedEmail({
-        pageTitle: page.title,
-        publisherName: release.publisherName,
-        version: release.version,
-        liveUrl: release.liveUrl,
-      }),
+    await this.send(scope, approval, async () => {
+      const email = await this.requesterEmail(scope, approval.requestedBy);
+      return email === null
+        ? null
+        : {
+            to: [email],
+            ...approvalPublishedEmail({
+              pageTitle: page.title,
+              publisherName: release.publisherName,
+              version: release.version,
+              liveUrl: release.liveUrl,
+            }),
+          };
     });
   }
 
@@ -91,18 +95,19 @@ export class ApprovalNotifier {
     approval: ApprovalRecord,
     rejecterName: string,
   ): Promise<void> {
-    const email = await this.requesterEmail(scope, approval.requestedBy);
-    if (email === null || approval.reason === null) {
-      return;
-    }
-    await this.send(scope, approval, {
-      to: [email],
-      ...approvalRejectedEmail({
-        pageTitle: page.title,
-        rejecterName,
-        reason: approval.reason,
-        pageUrl: this.pageUrl(page),
-      }),
+    await this.send(scope, approval, async () => {
+      const email = await this.requesterEmail(scope, approval.requestedBy);
+      return email === null || approval.reason === null
+        ? null
+        : {
+            to: [email],
+            ...approvalRejectedEmail({
+              pageTitle: page.title,
+              rejecterName,
+              reason: approval.reason,
+              pageUrl: this.pageUrl(page),
+            }),
+          };
     });
   }
 
@@ -119,12 +124,20 @@ export class ApprovalNotifier {
     return membership && contact ? contact.email : null;
   }
 
+  /**
+   * Builds the email (null: nobody to tell) and sends it. Reading its recipients is part of it:
+   * any failure is logged, never raised, since the request or the release is stored already.
+   */
   private async send(
     scope: WorkspaceScope,
     approval: ApprovalRecord,
-    message: EmailMessage,
+    build: () => Promise<EmailMessage | null>,
   ): Promise<boolean> {
     try {
+      const message = await build();
+      if (message === null) {
+        return false;
+      }
       await this.sender.send(message);
       return true;
     } catch (error) {
@@ -133,6 +146,7 @@ export class ApprovalNotifier {
           workspaceId: scope.workspaceId.toHexString(),
           approvalId: approval._id.toHexString(),
           code: error instanceof EmailSendError ? error.code : 'unknown',
+          err: error instanceof EmailSendError ? undefined : error,
         },
         'Approval email not sent',
       );

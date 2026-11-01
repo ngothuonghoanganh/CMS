@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { APPROVAL_MODEL, APPROVAL_PENDING_INDEX, type ApprovalRecord } from './approval.schema.js';
+import { APPROVAL_MODEL, type ApprovalRecord } from './approval.schema.js';
 import { approvalPurgeAt } from './domain/approval-rules.js';
 
 /** Requests to publish (ADR-023); every query is scoped to the workspace. */
@@ -13,28 +12,24 @@ import { approvalPurgeAt } from './domain/approval-rules.js';
 export class ApprovalsRepository {
   constructor(@InjectModel(APPROVAL_MODEL) private readonly approvals: Model<ApprovalRecord>) {}
 
-  /** Stores the member's request; false when the page has a pending one already. */
-  async create(scope: WorkspaceScope, approval: ApprovalRecord): Promise<boolean> {
+  /**
+   * Stores the member's request in the caller's transaction. The unique index refuses a second
+   * pending request of the page (`isDuplicateKeyError` with `APPROVAL_PENDING_INDEX`).
+   */
+  async create(scope: WorkspaceScope, approval: ApprovalRecord, tx: Tx): Promise<void> {
     if (
       !approval.workspaceId.equals(scope.workspaceId) ||
       !approval.requestedBy.equals(scope.userId)
     ) {
       throw new Error('A member asks for themselves, in the workspace of their scope');
     }
-    try {
-      await this.approvals.create([approval]);
-      return true;
-    } catch (error) {
-      if (isDuplicateKeyError(error, APPROVAL_PENDING_INDEX)) {
-        return false;
-      }
-      throw error;
-    }
+    await this.approvals.create([approval], { session: tx });
   }
 
-  findPending(scope: WorkspaceScope, pageId: ObjectId): Promise<ApprovalRecord | null> {
+  findPending(scope: WorkspaceScope, pageId: ObjectId, tx?: Tx): Promise<ApprovalRecord | null> {
     return this.approvals
       .findOne({ workspaceId: scope.workspaceId, pageId, status: 'pending' })
+      .session(tx ?? null)
       .lean<ApprovalRecord>()
       .exec();
   }
@@ -44,12 +39,13 @@ export class ApprovalsRepository {
     scope: WorkspaceScope,
     id: ObjectId,
     change: { revision: number; note: string; at: Date },
+    tx: Tx,
   ): Promise<ApprovalRecord | null> {
     return this.approvals
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, requestedBy: scope.userId, status: 'pending' },
         { $set: { revision: change.revision, note: change.note, sentAt: change.at } },
-        { new: true },
+        { new: true, session: tx },
       )
       .lean<ApprovalRecord>()
       .exec();
@@ -57,13 +53,16 @@ export class ApprovalsRepository {
 
   /**
    * Closes the page's pending request with this id, once: withdrawn by its sender, or refused.
-   * Null when it was no longer pending (published, refused or withdrawn meanwhile).
+   * Null when it was no longer pending (published, refused or withdrawn meanwhile), or was sent
+   * again for another revision than the one refused.
    */
   close(
     scope: WorkspaceScope,
     pageId: ObjectId,
     id: ObjectId,
-    change: { status: 'withdrawn'; at: Date } | { status: 'rejected'; at: Date; reason: string },
+    change:
+      | { status: 'withdrawn'; at: Date }
+      | { status: 'rejected'; at: Date; reason: string; revision: number; releaseSeq: number },
   ): Promise<ApprovalRecord | null> {
     return this.approvals
       .findOneAndUpdate(
@@ -72,8 +71,10 @@ export class ApprovalsRepository {
           workspaceId: scope.workspaceId,
           pageId,
           status: 'pending',
-          // Only the sender withdraws their request.
-          ...(change.status === 'withdrawn' ? { requestedBy: scope.userId } : {}),
+          // Only the sender withdraws their request; a refusal answers the revision reviewed.
+          ...(change.status === 'withdrawn'
+            ? { requestedBy: scope.userId }
+            : { revision: change.revision }),
         },
         {
           $set: {
@@ -81,6 +82,7 @@ export class ApprovalsRepository {
             decidedAt: change.at,
             decidedBy: scope.userId,
             reason: change.status === 'rejected' ? change.reason : null,
+            releaseSeq: change.status === 'rejected' ? change.releaseSeq : null,
             purgeAt: approvalPurgeAt(change.at),
           },
         },
