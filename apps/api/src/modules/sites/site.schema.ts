@@ -34,6 +34,11 @@ export interface LeadRecipientRecord {
   tokenExpiresAt: Date | null;
 }
 
+export interface SitePrimaryDomain {
+  domainId: Types.ObjectId;
+  hostname: string;
+}
+
 export interface SiteRecord {
   _id: Types.ObjectId;
   workspaceId: Types.ObjectId;
@@ -56,6 +61,11 @@ export interface SiteRecord {
   privacy?: SitePrivacyRecord | null;
   /** At most `LEAD_RECIPIENTS_MAX`. Sites created before ADR-018 lack the field. */
   leadRecipients?: LeadRecipientRecord[];
+  /**
+   * The primary address when it is a custom domain (ADR-022); null or absent for the default one.
+   * The hostname is copied so public URLs need no lookup.
+   */
+  primaryDomain?: SitePrimaryDomain | null;
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -104,6 +114,16 @@ export const siteSchema = new Schema<SiteRecord>(
     name: { type: String, required: true },
     subdomain: { type: String, required: true, lowercase: true, immutable: true },
     themePresetId: { type: String, enum: themePresetIds, required: true },
+    primaryDomain: {
+      type: new Schema<SitePrimaryDomain>(
+        {
+          domainId: { type: Schema.Types.ObjectId, required: true },
+          hostname: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     logoAssetId: { type: Schema.Types.ObjectId, default: null },
     defaultShareImageAssetId: { type: Schema.Types.ObjectId, default: null },
     pageSeq: { type: Number, default: 0 },

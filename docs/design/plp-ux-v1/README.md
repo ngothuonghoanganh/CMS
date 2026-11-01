@@ -15,21 +15,21 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 
 ## Danh sách màn
 
-| #   | Board                                 | File                 | MVP A                      |
-| --- | ------------------------------------- | -------------------- | -------------------------- |
-| 01  | Bảng điều khiển — danh sách trang     | `Main.dc.html`       | Có (S1, S3, S4)            |
-| 02  | Tạo trang — chọn mục tiêu & brief     | `Onboarding.dc.html` | Có (S6)                    |
-| 03  | Editor — section builder có hướng dẫn | `Editor.dc.html`     | Có (S2)                    |
-| 04  | Thêm section                          | `AddSection.dc.html` | Có (S2)                    |
-| 05  | Xuất bản — kiểm tra trước khi live    | `Publish.dc.html`    | Có (S3)                    |
-| 06  | Lịch sử phiên bản & rollback          | `History.dc.html`    | Có (S4)                    |
-| 07  | SEO & chia sẻ                         | `SEO.dc.html`        | Có (S5)                    |
-| 08  | Tên miền                              | `Domain.dc.html`     | Chỉ tên miền mặc định (S5) |
-| 09  | Trang public trên mobile              | `PublicPage.dc.html` | Có, không có form (S3)     |
-| 10  | Hộp thư lead                          | `Leads.dc.html`      | Không (MVP B)              |
-| 11  | Hiệu quả trang                        | `Analytics.dc.html`  | Không (MVP B)              |
-| 12  | Dữ liệu cá nhân & đồng ý              | `Consent.dc.html`    | Không (MVP B)              |
-| —   | Sidebar điều hướng                    | `Sidebar.dc.html`    | Có (S1)                    |
+| #   | Board                                 | File                 | MVP A                  |
+| --- | ------------------------------------- | -------------------- | ---------------------- |
+| 01  | Bảng điều khiển — danh sách trang     | `Main.dc.html`       | Có (S1, S3, S4)        |
+| 02  | Tạo trang — chọn mục tiêu & brief     | `Onboarding.dc.html` | Có (S6)                |
+| 03  | Editor — section builder có hướng dẫn | `Editor.dc.html`     | Có (S2)                |
+| 04  | Thêm section                          | `AddSection.dc.html` | Có (S2)                |
+| 05  | Xuất bản — kiểm tra trước khi live    | `Publish.dc.html`    | Có (S3)                |
+| 06  | Lịch sử phiên bản & rollback          | `History.dc.html`    | Có (S4)                |
+| 07  | SEO & chia sẻ                         | `SEO.dc.html`        | Có (S5)                |
+| 08  | Tên miền                              | `Domain.dc.html`     | Thay bằng màn 13 (C3)  |
+| 09  | Trang public trên mobile              | `PublicPage.dc.html` | Có, không có form (S3) |
+| 10  | Hộp thư lead                          | `Leads.dc.html`      | Không (MVP B)          |
+| 11  | Hiệu quả trang                        | `Analytics.dc.html`  | Không (MVP B)          |
+| 12  | Dữ liệu cá nhân & đồng ý              | `Consent.dc.html`    | Không (MVP B)          |
+| —   | Sidebar điều hướng                    | `Sidebar.dc.html`    | Có (S1)                |
 
 **Phase 1 — Vận hành & đội nhóm** (ARCHITECTURE §5, ADR-020):
 

@@ -174,7 +174,7 @@ function SeoScreenBody({
   const slug = useEditor((state) => state.draft.slug);
   const composition = useEditor((state) => state.draft.composition);
   const assetsById = useEditor((state) => state.assetsById);
-  const host = hostOf(site.defaultOrigin);
+  const host = hostOf(site.publicOrigin);
   const shareImageId = seo.shareImageAssetId ?? site.defaultShareImageAssetId;
 
   // During a leave without saving, any other leave goes at once too.

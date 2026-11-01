@@ -2,18 +2,20 @@ import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublicPreviewStatusResponse } from '@plp/contracts';
-import { getPathStatus, getPreview, getPreviewStatus } from './lib/public-api';
+import { getPathStatus, getPreview, getPreviewStatus, lookupHostSite } from './lib/public-api';
 import { config, proxy, UNKNOWN_USER_AGENT } from './proxy';
 
 vi.mock('./lib/public-api', () => ({
   getPathStatus: vi.fn(),
   getPreview: vi.fn(),
   getPreviewStatus: vi.fn(),
+  lookupHostSite: vi.fn(),
 }));
 
 const getPathStatusMock = vi.mocked(getPathStatus);
 const getPreviewMock = vi.mocked(getPreview);
 const getPreviewStatusMock = vi.mocked(getPreviewStatus);
+const lookupHostSiteMock = vi.mocked(lookupHostSite);
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJraW5kIjoiZHJhZnQifQ.c2lnbmF0dXJl';
 
@@ -59,6 +61,47 @@ describe('proxy', () => {
     expect(getPathStatusMock).toHaveBeenCalledWith('smilecare', 'khong-co');
   });
 
+  describe('custom domains (ADR-022)', () => {
+    it('serves the site a custom domain names, and hands pages its subdomain', async () => {
+      lookupHostSiteMock.mockResolvedValue('smilecare');
+      getPathStatusMock.mockResolvedValue({
+        kind: 'page',
+        releaseId: RELEASE_ID,
+        primaryHost: 'go.smilecare.vn',
+      });
+      const response = await proxy(
+        request('/uu-dai', 'go.smilecare.vn:3101', { 'x-plp-site': 'forged' }),
+      );
+      expect(response.status).toBe(200);
+      expect(lookupHostSiteMock).toHaveBeenCalledWith('go.smilecare.vn');
+      expect(getPathStatusMock).toHaveBeenCalledWith('smilecare', 'uu-dai');
+      expect(forwardedHeader(response, 'x-plp-site')).toBe('smilecare');
+    });
+
+    it('sends every other host of the site to the active primary domain, path and query kept', async () => {
+      getPathStatusMock.mockResolvedValue({
+        kind: 'page',
+        releaseId: RELEASE_ID,
+        primaryHost: 'go.smilecare.vn',
+      });
+      const response = await proxy(request('/uu-dai?utm_source=fb'));
+      expect(response.status).toBe(301);
+      expect(response.headers.get('location')).toBe(
+        'http://go.smilecare.vn:3101/uu-dai?utm_source=fb',
+      );
+      expect(lookupHostSiteMock).not.toHaveBeenCalled();
+    });
+
+    it('is a 404 on a domain that serves no site, and a 503 when the API cannot tell', async () => {
+      lookupHostSiteMock.mockResolvedValueOnce(null);
+      expect((await proxy(request('/', 'la.example.vn:3101'))).status).toBe(404);
+      expect(getPathStatusMock).not.toHaveBeenCalled();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      lookupHostSiteMock.mockRejectedValueOnce(new Error('down'));
+      expect((await proxy(request('/', 'la.example.vn:3101'))).status).toBe(503);
+    });
+  });
+
   it('rewrites an unknown host without asking the API', async () => {
     const response = await proxy(request('/', 'evil.example'));
     expect(response.status).toBe(404);
@@ -66,7 +109,7 @@ describe('proxy', () => {
   });
 
   it('lets a live page render and hands it the live release for its cache key', async () => {
-    getPathStatusMock.mockResolvedValue({ kind: 'page', releaseId: RELEASE_ID });
+    getPathStatusMock.mockResolvedValue({ kind: 'page', releaseId: RELEASE_ID, primaryHost: null });
     const response = await proxy(request('/uu-dai'));
     expect(response.status).toBe(200);
     expect(response.headers.get('x-middleware-next')).toBe('1');
@@ -75,7 +118,7 @@ describe('proxy', () => {
   });
 
   it('replaces a live release sent by the client with its own', async () => {
-    getPathStatusMock.mockResolvedValue({ kind: 'page', releaseId: RELEASE_ID });
+    getPathStatusMock.mockResolvedValue({ kind: 'page', releaseId: RELEASE_ID, primaryHost: null });
     const response = await proxy(
       request('/uu-dai', 'smilecare.localhost:3101', { 'x-plp-live-release': FORGED_ID }),
     );
@@ -84,7 +127,7 @@ describe('proxy', () => {
 
   it('answers an old slug with a 308 itself, before the page renders', async () => {
     // Without a User-Agent, Next would stream the page's own redirect as a 200 shell.
-    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '/moi' });
+    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '/moi', primaryHost: null });
     const response = await proxy(request('/cu'));
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe('http://smilecare.localhost:3101/moi');
@@ -95,7 +138,7 @@ describe('proxy', () => {
   });
 
   it('keeps the visitor’s query on the redirect: utm tags and click ids reach the new slug', async () => {
-    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '/moi' });
+    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '/moi', primaryHost: null });
     const response = await proxy(request('/cu?utm_source=zalo&utm_campaign=t11&gclid=abc123'));
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe(
@@ -105,7 +148,11 @@ describe('proxy', () => {
   });
 
   it('never follows a redirect the API names off the site', async () => {
-    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '//evil.example/x' });
+    getPathStatusMock.mockResolvedValue({
+      kind: 'redirect',
+      location: '//evil.example/x',
+      primaryHost: null,
+    });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await proxy(
       request('/cu', 'smilecare.localhost:3101', { 'x-plp-live-release': FORGED_ID }),
@@ -140,7 +187,7 @@ describe('proxy', () => {
 
   // Next renders in blocking mode (real statuses) only for requests that send a User-Agent.
   it('gives a request without a User-Agent one, so the page never streams a 200 shell', async () => {
-    getPathStatusMock.mockResolvedValue({ kind: 'page', releaseId: RELEASE_ID });
+    getPathStatusMock.mockResolvedValue({ kind: 'page', releaseId: RELEASE_ID, primaryHost: null });
     const bare = await proxy(request('/uu-dai'));
     expect(forwardedHeader(bare, 'user-agent')).toBe(UNKNOWN_USER_AGENT);
     const blank = await proxy(

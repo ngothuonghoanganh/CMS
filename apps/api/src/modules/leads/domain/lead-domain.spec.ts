@@ -24,14 +24,14 @@ describe('normalizeLeadSource', () => {
         utmSource: 'Face\nbook',
         utmMedium: ' c\r\n\tp  c ',
         utmCampaign: '\u0000',
-        siteHost: SITE_HOST,
+        siteHosts: [SITE_HOST],
       }),
     ).toEqual({ source: 'face book', medium: 'c p c', campaign: null });
   });
 
   it('never cuts a character in two at the 40th unit: an emoji, a flag, a joined emoji', () => {
     const cut = (tag: string) =>
-      normalizeLeadSource({ ...NONE, utmSource: tag, utmCampaign: tag, siteHost: SITE_HOST });
+      normalizeLeadSource({ ...NONE, utmSource: tag, utmCampaign: tag, siteHosts: [SITE_HOST] });
     expect(cut(`${'u'.repeat(39)}🔥 sale`)).toEqual({
       source: 'u'.repeat(39),
       medium: '(none)',
@@ -53,10 +53,10 @@ describe('normalizeLeadSource', () => {
         utmMedium: 'CPC',
         utmCampaign: `uu-dai-${'x'.repeat(60)}`,
         referrer: 'https://www.google.com/',
-        siteHost: SITE_HOST,
+        siteHosts: [SITE_HOST],
       }),
     ).toEqual({ source: 'facebook', medium: 'cpc', campaign: `uu-dai-${'x'.repeat(33)}` });
-    expect(normalizeLeadSource({ ...NONE, utmSource: 'zalo', siteHost: SITE_HOST })).toEqual({
+    expect(normalizeLeadSource({ ...NONE, utmSource: 'zalo', siteHosts: [SITE_HOST] })).toEqual({
       source: 'zalo',
       medium: '(none)',
       campaign: null,
@@ -65,7 +65,7 @@ describe('normalizeLeadSource', () => {
 
   it('names search engines as organic and other sites as referrals', () => {
     const from = (referrer: string) =>
-      normalizeLeadSource({ ...NONE, referrer, siteHost: SITE_HOST });
+      normalizeLeadSource({ ...NONE, referrer, siteHosts: [SITE_HOST] });
     expect(from('https://www.google.com.vn/search?q=nieng')).toEqual({
       source: 'google',
       medium: 'organic',
@@ -83,11 +83,21 @@ describe('normalizeLeadSource', () => {
 
   it('treats no referrer, the site itself and junk as direct', () => {
     for (const referrer of [null, `https://${SITE_HOST}/uu-dai`, 'not a url', 'javascript:x']) {
-      expect(normalizeLeadSource({ ...NONE, referrer, siteHost: `${SITE_HOST}:443` })).toEqual({
+      expect(normalizeLeadSource({ ...NONE, referrer, siteHosts: [`${SITE_HOST}:443`] })).toEqual({
         ...DIRECT_LEAD_SOURCE,
         campaign: null,
       });
     }
+  });
+
+  it('treats every host of the site as the site itself, its custom domains too (ADR-022)', () => {
+    expect(
+      normalizeLeadSource({
+        ...NONE,
+        referrer: 'https://go.smilecare.vn/uu-dai',
+        siteHosts: [SITE_HOST, 'go.smilecare.vn'],
+      }),
+    ).toEqual({ ...DIRECT_LEAD_SOURCE, campaign: null });
   });
 });
 

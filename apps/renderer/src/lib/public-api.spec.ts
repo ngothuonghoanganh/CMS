@@ -132,7 +132,7 @@ describe('timeouts', () => {
 
   it('give the proxy check the shorter one', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout');
-    stubFetch(200, { kind: 'page', releaseId: RELEASE_ID });
+    stubFetch(200, { kind: 'page', releaseId: RELEASE_ID, primaryHost: null });
     await getPathStatus('smilecare', '');
     expect(timeout).toHaveBeenCalledWith(CHECK_TIMEOUT_MS);
     expect(CHECK_TIMEOUT_MS).toBeLessThan(LOOKUP_TIMEOUT_MS);

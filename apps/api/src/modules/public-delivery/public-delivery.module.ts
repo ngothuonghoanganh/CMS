@@ -1,3 +1,4 @@
+import { DomainsCoreModule } from '../domains/domains-core.module.js';
 import { Module } from '@nestjs/common';
 import { ActivityModule } from '../activity/activity.module.js';
 import { AssetsModule } from '../assets/assets.module.js';
@@ -14,6 +15,7 @@ import { PublicDeliveryService } from './public-delivery.service.js';
   imports: [
     ActivityModule,
     AssetsModule,
+    DomainsCoreModule,
     PagesModule,
     PreviewModule,
     PrivacyCoreModule,

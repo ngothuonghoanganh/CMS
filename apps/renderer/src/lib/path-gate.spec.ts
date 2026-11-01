@@ -10,24 +10,27 @@ function lookup(status: PathStatusResponse | null) {
 
 describe('pathGate', () => {
   it('renders a live page and names its live release', async () => {
-    const found = lookup({ kind: 'page', releaseId: RELEASE_ID });
+    const found = lookup({ kind: 'page', releaseId: RELEASE_ID, primaryHost: null });
     expect(await pathGate({ subdomain: 'smilecare', pathname: '/uu-dai' }, found)).toEqual({
       kind: 'render',
       liveReleaseId: RELEASE_ID,
+      primaryHost: null,
     });
     expect(found).toHaveBeenLastCalledWith('smilecare', 'uu-dai');
     expect(await pathGate({ subdomain: 'smilecare', pathname: '/' }, found)).toEqual({
       kind: 'render',
       liveReleaseId: RELEASE_ID,
+      primaryHost: null,
     });
     expect(found).toHaveBeenLastCalledWith('smilecare', '');
   });
 
   it('answers a redirect itself with the location the old slug moved to, in one lookup', async () => {
-    const moved = lookup({ kind: 'redirect', location: '/moi' });
+    const moved = lookup({ kind: 'redirect', location: '/moi', primaryHost: null });
     expect(await pathGate({ subdomain: 'smilecare', pathname: '/cu' }, moved)).toEqual({
       kind: 'redirect',
       location: '/moi',
+      primaryHost: null,
     });
     expect(moved).toHaveBeenCalledOnce();
     expect(moved).toHaveBeenCalledWith('smilecare', 'cu');
@@ -38,7 +41,7 @@ describe('pathGate', () => {
       await expect(
         pathGate(
           { subdomain: 'smilecare', pathname: '/cu' },
-          lookup({ kind: 'redirect', location }),
+          lookup({ kind: 'redirect', location, primaryHost: null }),
         ),
       ).rejects.toThrow('leaves the site');
     }
@@ -51,7 +54,7 @@ describe('pathGate', () => {
   });
 
   it('answers not found without asking the API for a non-site host or an impossible path', async () => {
-    const status = lookup({ kind: 'page', releaseId: RELEASE_ID });
+    const status = lookup({ kind: 'page', releaseId: RELEASE_ID, primaryHost: null });
     for (const request of [
       { subdomain: null, pathname: '/uu-dai' },
       { subdomain: 'smilecare', pathname: '/a/b' },

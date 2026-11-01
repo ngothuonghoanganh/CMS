@@ -219,12 +219,14 @@ describe('public delivery and previews', () => {
       expect(pathStatusResponseSchema.parse(live.body)).toEqual({
         kind: 'page',
         releaseId: second.release.id,
+        primaryHost: null,
       });
-      expect(live.body).toEqual({ kind: 'page', releaseId: second.release.id });
+      expect(live.body).toEqual({ kind: 'page', releaseId: second.release.id, primaryHost: null });
       const moved = await pathStatus(statusSite.subdomain, oldSlug).expect(200);
       expect(pathStatusResponseSchema.parse(moved.body)).toEqual({
         kind: 'redirect',
         location: `/${newSlug}`,
+        primaryHost: null,
       });
 
       const draft = await pathStatus(statusSite.subdomain, draftOnly.page.slug).expect(404);
@@ -243,7 +245,11 @@ describe('public delivery and previews', () => {
         pathStatusResponseSchema.parse(
           (await pathStatus(statusSite.subdomain, slug).expect(200)).body,
         );
-      expect(await releaseAt()).toEqual({ kind: 'page', releaseId: second.release.id });
+      expect(await releaseAt()).toEqual({
+        kind: 'page',
+        releaseId: second.release.id,
+        primaryHost: null,
+      });
 
       await client
         .post(`/pages/${pageId}/pointer`, {
@@ -252,7 +258,11 @@ describe('public delivery and previews', () => {
           reason: 'Bản 2 sai giá',
         })
         .expect(200);
-      expect(await releaseAt()).toEqual({ kind: 'page', releaseId: first.release.id });
+      expect(await releaseAt()).toEqual({
+        kind: 'page',
+        releaseId: first.release.id,
+        primaryHost: null,
+      });
     });
   });
 

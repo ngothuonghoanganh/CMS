@@ -6,10 +6,13 @@ export const NOT_FOUND_ROUTE = '/_not-found';
 
 export type GateDecision =
   | { kind: 'not_found' }
-  /** `location`: absolute path on the same site the old slug moved to. */
-  | { kind: 'redirect'; location: string }
+  /**
+   * `location`: absolute path on the same site the old slug moved to. `primaryHost`: the site's
+   * active primary custom domain, which other hosts redirect to first (ADR-022).
+   */
+  | { kind: 'redirect'; location: string; primaryHost: string | null }
   /** `liveReleaseId`: the release live at the path. */
-  | { kind: 'render'; liveReleaseId: string };
+  | { kind: 'render'; liveReleaseId: string; primaryHost: string | null };
 
 /** What answers at the path; null when nothing does. */
 export type PathStatusLookup = (
@@ -58,6 +61,10 @@ export async function pathGate(
     return NOT_FOUND;
   }
   return status.kind === 'page'
-    ? { kind: 'render', liveReleaseId: status.releaseId }
-    : { kind: 'redirect', location: sameSiteLocation(status.location) };
+    ? { kind: 'render', liveReleaseId: status.releaseId, primaryHost: status.primaryHost }
+    : {
+        kind: 'redirect',
+        location: sameSiteLocation(status.location),
+        primaryHost: status.primaryHost,
+      };
 }

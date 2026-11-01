@@ -271,7 +271,7 @@ export function CreatePageWizard({ site }: CreatePageWizardProps) {
   const shownStep = useRef(state.step);
   // A field to focus once its step is on screen (after a server error on another step).
   const pendingFocus = useRef<ContentErrors | null>(null);
-  const host = hostOf(site.defaultOrigin);
+  const host = hostOf(site.publicOrigin);
   const slugCheck = useSlugAvailability(site.id, state.slug);
   const outlineTypes = goalOutline(state.goal).map((item) => item.type);
 

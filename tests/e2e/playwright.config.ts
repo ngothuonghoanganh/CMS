@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { DNS_ZONE_FILE } from './support/dns.js';
 import { urls } from './urls.js';
 
 // Runs against production builds (`pnpm build`) and the docker compose infrastructure (`pnpm infra:up`).
@@ -19,6 +20,14 @@ const apiEnv = {
   // (ADR-016). The board's inbox (support/board.ts) needs more than its 5 leads per 10 minutes;
   // the limit itself is covered by the API integration tests.
   LEAD_LIMIT_PER_CLIENT: '100',
+  // Custom domains (ADR-022): test domains end in `.e2e.test`, which Chromium sends to this
+  // machine (below), and whose DNS answers come from a file the specs write (support/dns.ts).
+  // There is no TLS edge, so HTTPS is not checked; checks run when a spec asks.
+  DOMAIN_DNS_ZONE_FILE: DNS_ZONE_FILE,
+  DOMAIN_TLS_CHECK: 'off',
+  DOMAIN_MONITOR_INTERVAL_MS: '0',
+  CUSTOM_DOMAIN_IPV4: '127.0.0.1',
+  CUSTOM_DOMAIN_ORIGIN_TEMPLATE: `http://{host}:${new URL(urls.renderer).port}`,
 };
 
 // Servers are never reused: one started outside this config may point at another database. A
@@ -48,7 +57,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } },
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 1000 },
+        // Custom domains of the specs reach the local renderer, as DNS would send them to the edge.
+        launchOptions: { args: ['--host-resolver-rules=MAP *.e2e.test 127.0.0.1'] },
+      },
     },
     {
       name: 'webkit',

@@ -56,6 +56,52 @@ export function subdomainFromHost(host: string | null, baseDomain: string): stri
   return parsed.success && parsed.data === label ? label : null;
 }
 
+/** What a host addresses: a site's default address, or a custom domain to look up (ADR-022). */
+export type HostTarget =
+  { kind: 'default'; subdomain: string } | { kind: 'custom'; hostname: string };
+
+const LABEL = /^(?!-)[a-z0-9-]{1,63}(?<!-)$/;
+
+/**
+ * The site a host addresses: one label under BASE_DOMAIN is a default address; any other domain
+ * on the same port, not under BASE_DOMAIN, may be a site's custom domain. Null for anything else.
+ */
+export function hostTarget(host: string | null, baseDomain: string): HostTarget | null {
+  const subdomain = subdomainFromHost(host, baseDomain);
+  if (subdomain !== null) {
+    return { kind: 'default', subdomain };
+  }
+  if (host === null) {
+    return null;
+  }
+  const requested = splitHost(
+    host
+      .trim()
+      .toLowerCase()
+      .replace(/\.(?=:|$)/, ''),
+  );
+  const base = splitHost(baseDomain.trim().toLowerCase());
+  if (requested === null || base === null || !portMatches(requested.port, base.port)) {
+    return null;
+  }
+  const { hostname } = requested;
+  const labels = hostname.split('.');
+  if (
+    hostname === base.hostname ||
+    hostname.endsWith(`.${base.hostname}`) ||
+    labels.length < 2 ||
+    !labels.every((label) => LABEL.test(label))
+  ) {
+    return null;
+  }
+  return { kind: 'custom', hostname };
+}
+
+/** The host name without its port, as the API names a custom domain. */
+export function hostnameOf(host: string | null): string | null {
+  return host === null ? null : (splitHost(host.trim().toLowerCase())?.hostname ?? null);
+}
+
 /** The host the visitor asked for; `x-forwarded-host` counts only behind a trusted proxy. */
 export function requestHost(headers: HeaderSource, trustProxy: boolean): string | null {
   if (trustProxy) {

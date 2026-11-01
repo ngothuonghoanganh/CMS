@@ -30,7 +30,7 @@ import styles from './RollbackPanel.module.css';
 const REASON_MAX = 300;
 
 export interface RollbackPanelProps {
-  site: Pick<Site, 'defaultOrigin' | 'themePresetId'>;
+  site: Pick<Site, 'publicOrigin' | 'themePresetId'>;
   page: PageSummary;
   /** The older release to make live. */
   release: ReleaseSummary;
@@ -68,7 +68,7 @@ export function RollbackPanel({
   const live = page.liveRelease;
   const thumbnail = themePresets[site.themePresetId].schemes.brand;
   const address = displayUrl(
-    release.slug === '' ? site.defaultOrigin : `${site.defaultOrigin}/${release.slug}`,
+    release.slug === '' ? site.publicOrigin : `${site.publicOrigin}/${release.slug}`,
   );
   const changeCount = page.status.changeCount;
 

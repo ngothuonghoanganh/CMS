@@ -1,3 +1,4 @@
+import { DomainsCoreModule } from '../domains/domains-core.module.js';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RendererSignatureGuard } from '../../shared/renderer-channel/renderer-request.js';
@@ -28,6 +29,7 @@ import { PublicEventsController } from './public-events.controller.js';
       { name: ANALYTICS_SEEN_MODEL, schema: analyticsSeenSchema },
       { name: ANALYTICS_DAILY_MODEL, schema: analyticsDailySchema },
     ]),
+    DomainsCoreModule,
     LeadsCoreModule,
     PagesModule,
     SitesCoreModule,

@@ -31,7 +31,7 @@ describe('toSiteDto', () => {
       { PUBLIC_SITE_ORIGIN_TEMPLATE: 'https://{subdomain}.payload.site' },
       site.subdomain,
     );
-    const dto = toSiteDto(site, origin);
+    const dto = toSiteDto(site, origin, 'https://go.smilecare.vn');
     expect(siteSchema.parse(dto)).toEqual({
       id: site._id.toHexString(),
       workspaceId: site.workspaceId.toHexString(),
@@ -41,6 +41,7 @@ describe('toSiteDto', () => {
       logoAssetId: null,
       defaultShareImageAssetId: null,
       defaultOrigin: 'https://smilecare.payload.site',
+      publicOrigin: 'https://go.smilecare.vn',
       privacyConfigured: false,
       confirmedLeadRecipients: 0,
       createdAt: '2026-10-24T08:30:00.000Z',
@@ -72,6 +73,7 @@ describe('toSiteDto', () => {
         ],
       }),
       'http://smilecare.localhost:3101',
+      'http://smilecare.localhost:3101',
     );
     expect(dto).toMatchObject({ privacyConfigured: true, confirmedLeadRecipients: 1 });
     expect(dto).not.toHaveProperty('leadRecipients');
@@ -82,6 +84,7 @@ describe('toSiteDto', () => {
     const share = newObjectId();
     const dto = toSiteDto(
       siteRecord({ logoAssetId: logo, defaultShareImageAssetId: share }),
+      'http://smilecare.localhost:3101',
       'http://smilecare.localhost:3101',
     );
     expect(dto.logoAssetId).toBe(logo.toHexString());
@@ -102,6 +105,7 @@ describe('toSiteDto', () => {
     ]) {
       const { name, themePresetId, logoAssetId, defaultShareImageAssetId } = toSiteDto(
         site,
+        'http://smilecare.localhost:3101',
         'http://smilecare.localhost:3101',
       );
       expect({ name, themePresetId, logoAssetId, defaultShareImageAssetId }).toEqual(
