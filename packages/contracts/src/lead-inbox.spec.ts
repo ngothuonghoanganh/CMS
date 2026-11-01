@@ -5,6 +5,7 @@ import {
   leadListQuerySchema,
   leadSearchRequestSchema,
   leadSourceLabel,
+  pageTitleLabel,
   updateLeadRequestSchema,
 } from './lead-inbox.js';
 
@@ -173,5 +174,12 @@ describe('leadSourceLabel', () => {
   it('writes the source and medium, or "trực tiếp" for a direct visit', () => {
     expect(leadSourceLabel({ source: 'facebook', medium: 'cpc' })).toBe('facebook / cpc');
     expect(leadSourceLabel({ source: '(direct)', medium: '(none)' })).toBe('trực tiếp');
+  });
+});
+
+describe('pageTitleLabel', () => {
+  it('names a deleted page "Trang đã xóa" and keeps the title of the others (ADR-027)', () => {
+    expect(pageTitleLabel(null)).toBe('Trang đã xóa');
+    expect(pageTitleLabel('Ưu đãi tháng 11')).toBe('Ưu đãi tháng 11');
   });
 });

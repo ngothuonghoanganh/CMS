@@ -111,6 +111,8 @@ import {
 } from './release.js';
 import {
   createSiteRequestSchema,
+  deleteSiteRequestSchema,
+  siteDeletionSummarySchema,
   siteListResponseSchema,
   siteSchema,
   subdomainAvailabilityQuerySchema,
@@ -403,6 +405,29 @@ export const endpoints = {
     request: updateSiteRequestSchema,
     query: null,
     response: siteSchema,
+  }),
+  /**
+   * `sites.manage` and `personalData.manage` (ADR-027): what deleting the site removes, for the
+   * card "Xóa site".
+   */
+  siteDeletionSummary: endpoint({
+    method: 'GET',
+    path: (siteId: string) => `/sites/${e(siteId)}/deletion-summary`,
+    request: null,
+    query: null,
+    response: siteDeletionSummarySchema,
+  }),
+  /**
+   * `sites.manage` and `personalData.manage` (ADR-027): deletes the site and all of its data, leads
+   * included, and frees its subdomain and custom domains. 422 when `confirmName` is not the site's
+   * name. No undo.
+   */
+  deleteSite: endpoint({
+    method: 'DELETE',
+    path: (siteId: string) => `/sites/${e(siteId)}`,
+    request: deleteSiteRequestSchema,
+    query: null,
+    response: null,
   }),
 
   // Custom domains (ADR-022): `domains.manage`
@@ -763,6 +788,18 @@ export const endpoints = {
     request: restoreDraftRequestSchema,
     query: null,
     response: pageDetailResponseSchema,
+  }),
+  /**
+   * `pages.manageLive` (ADR-027): deletes a page that is not live, with its versions (except those
+   * leads keep as their consent evidence), redirects and requests to publish. Leads, "Hiệu quả" and
+   * the activity stay. 409 `page_live` while the page is live.
+   */
+  deletePage: endpoint({
+    method: 'DELETE',
+    path: (siteId: string, pageId: string) => `/sites/${e(siteId)}/pages/${e(pageId)}`,
+    request: null,
+    query: null,
+    response: null,
   }),
 
   // Publishing

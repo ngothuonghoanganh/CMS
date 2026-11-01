@@ -8,6 +8,7 @@ describe('endpoints', () => {
   it('reaches data of a workspace database through its site (ADR-025)', () => {
     const paths = [
       endpoints.getPage.path(SITE_ID, ID),
+      endpoints.deletePage.path(SITE_ID, ID),
       endpoints.saveDraft.path(SITE_ID, ID),
       endpoints.publish.path(SITE_ID, ID),
       endpoints.movePointer.path(SITE_ID, ID),

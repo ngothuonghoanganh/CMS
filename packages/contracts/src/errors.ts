@@ -15,6 +15,7 @@ export const errorCodes = [
   'invalid_credentials',
   'publish_blocked',
   'undo_not_available',
+  'page_live',
   'page_limit_reached',
   'site_limit_reached',
   'recipient_exists',
