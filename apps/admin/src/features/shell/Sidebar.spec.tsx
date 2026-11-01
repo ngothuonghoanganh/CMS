@@ -43,12 +43,16 @@ beforeAll(() => {
 });
 
 const agency: Membership = {
-  workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+  workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency', slug: 'may-xanh-agency' },
   role: 'owner',
   siteIds: null,
 };
 const otherWorkspace: Membership = {
-  workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
+  workspace: {
+    id: '64b0000000000000000000a2',
+    name: 'Phòng khám Gia Đình',
+    slug: 'phong-kham-gia-dinh',
+  },
   role: 'editor',
   siteIds: null,
 };
@@ -72,6 +76,7 @@ function renderSidebar(overrides: Partial<SidebarProps> = {}) {
       sites={[site, otherSite]}
       pageCount={6}
       leadCounts={NO_LEADS}
+      addresses={null}
       {...overrides}
     />,
   );
@@ -310,6 +315,26 @@ describe('Sidebar', () => {
     });
     expect(queryClient.getQueryData(leadQueryKeys.lists(site.id))).toEqual({ items: [] });
     expect(screen.getByRole('link', { name: 'Leads 4 mới' })).toBeInTheDocument();
+  });
+
+  it('opens another workspace at its own address when workspaces have addresses (ADR-025)', async () => {
+    const user = userEvent.setup();
+    document.cookie = 'plp_ws=; Max-Age=0; Path=/';
+    renderSidebar({
+      addresses: {
+        template: 'https://{slug}.app.example.vn',
+        commonOrigin: 'https://app.example.vn',
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    const other = screen.getByRole('menuitemradio', { name: /Phòng khám Gia Đình/ });
+    expect(other).toHaveTextContent('phong-kham-gia-dinh.app.example.vn');
+    await user.click(other);
+
+    expect(loadPageMock).toHaveBeenCalledWith('https://phong-kham-gia-dinh.app.example.vn/');
+    // The address says which workspace opens; no preference is kept.
+    expect(document.cookie).not.toContain('plp_ws=64b0000000000000000000a2');
   });
 
   it('stays when the current workspace is chosen again', async () => {

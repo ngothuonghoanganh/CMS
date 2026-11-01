@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AppShell } from '../../../../features/shell/AppShell';
 import { loadSiteContext } from '../../../../features/shell/site-context';
+import { workspaceAddresses } from '../../../../features/shell/current-address';
 
 /**
  * The workspace frame of a site: sidebar, workspace and site switchers, toasts and the `<main>`
@@ -24,6 +25,7 @@ export default async function SiteLayout({
       sites={sites}
       pageCount={pageCount}
       leadCounts={leadCounts}
+      addresses={workspaceAddresses()}
     >
       {children}
     </AppShell>

@@ -11,6 +11,7 @@ import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import { ApiError } from '../../lib/api-core';
 import { requireMe, serverApi } from '../../lib/server-api';
+import { requireWorkspaceAddress } from './current-address';
 import { siteHref } from './navigation';
 
 /** Everything the workspace frame needs about the current site and the signed-in user. */
@@ -56,6 +57,7 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
   if (membership === undefined) {
     notFound();
   }
+  await requireWorkspaceAddress(membership.workspace);
   // The count endpoint skips the page evaluation that `listPages` runs for statuses and checks.
   const [siteList, pageCount, leadCounts] = await Promise.all([
     serverApi(endpoints.listSites, [site.workspaceId]),

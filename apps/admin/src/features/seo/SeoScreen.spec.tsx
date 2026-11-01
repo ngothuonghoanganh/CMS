@@ -817,12 +817,16 @@ describe('SeoScreen', () => {
 
   describe('leaving through the sidebar menus', () => {
     const agency: Membership = {
-      workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+      workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency', slug: 'may-xanh-agency' },
       role: 'owner',
       siteIds: null,
     };
     const clinic: Membership = {
-      workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
+      workspace: {
+        id: '64b0000000000000000000a2',
+        name: 'Phòng khám Gia Đình',
+        slug: 'phong-kham-gia-dinh',
+      },
       role: 'editor',
       siteIds: null,
     };
@@ -841,6 +845,7 @@ describe('SeoScreen', () => {
             sites={[site]}
             pageCount={1}
             leadCounts={NO_LEADS}
+            addresses={null}
           />
           <SeoScreen
             initial={{ detail, site, assets: [], role: 'editor' }}

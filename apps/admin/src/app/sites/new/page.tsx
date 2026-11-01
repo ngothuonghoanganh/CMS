@@ -3,9 +3,11 @@ import { ButtonLink } from '@plp/ui';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { parseAdminEnv } from '../../../env';
 import { CenteredPage } from '../../../features/shell/CenteredPage';
 import { FormCard } from '../../../features/shell/FormCard';
+import { currentAddress, requireWorkspaceAddress } from '../../../features/shell/current-address';
 import { siteHref } from '../../../features/shell/navigation';
 import {
   pickMembership,
@@ -16,7 +18,10 @@ import { requireMe, serverApi } from '../../../lib/server-api';
 
 export const metadata: Metadata = { title: 'Tạo site khách hàng' };
 
-/** `?workspace=` (from the sidebar) wins over the remembered workspace when the user is a member. */
+/**
+ * `?workspace=` (from the sidebar) wins when the user is a member; then the workspace of this
+ * address (ADR-025); then the remembered one.
+ */
 async function chooseMembership(
   memberships: readonly Membership[],
   requested: string | string[] | undefined,
@@ -24,6 +29,15 @@ async function chooseMembership(
   const fromQuery = memberships.find((item) => item.workspace.id === requested);
   if (fromQuery !== undefined) {
     return fromQuery;
+  }
+  const address = await currentAddress();
+  if (address.kind === 'workspace') {
+    const here = memberships.find((item) => item.workspace.slug === address.slug);
+    if (here === undefined) {
+      // The start page says the account does not belong to this address (screen 36).
+      redirect('/');
+    }
+    return here;
   }
   const preferred = (await cookies()).get(WORKSPACE_PREFERENCE_COOKIE)?.value;
   return pickMembership(memberships, preferred);
@@ -49,6 +63,7 @@ export default async function NewSitePage({
     );
   }
 
+  await requireWorkspaceAddress(membership.workspace);
   const { items: sites } = await serverApi(endpoints.listSites, [membership.workspace.id]);
   const firstSite = sites[0];
   const backHref = firstSite === undefined ? null : siteHref(firstSite.id);

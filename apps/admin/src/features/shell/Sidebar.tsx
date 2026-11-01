@@ -54,6 +54,7 @@ import {
 import { leaveScreen } from './screen-leave';
 import { siteInitial, siteTileStyle } from './site-tile';
 import { useLogout } from './use-logout';
+import { type WorkspaceAddresses, workspaceHome } from './admin-address';
 import { workspacePreferenceCookie } from './workspace-preference';
 import styles from './Sidebar.module.css';
 
@@ -83,6 +84,8 @@ export interface SidebarProps {
    * roles that do not see leads (ADR-020).
    */
   leadCounts: LeadCounts | null;
+  /** How workspace addresses are made (ADR-025); null when every workspace opens at one address. */
+  addresses: WorkspaceAddresses | null;
   /** Called before navigating, so the mobile drawer can close. */
   onNavigate?: (() => void) | undefined;
 }
@@ -160,6 +163,7 @@ export function Sidebar({
   sites,
   pageCount,
   leadCounts,
+  addresses,
   onNavigate,
 }: SidebarProps) {
   const router = useRouter();
@@ -184,14 +188,19 @@ export function Sidebar({
     });
   }
 
-  function switchWorkspace(workspaceId: string) {
+  function switchWorkspace(target: Membership['workspace']) {
     onNavigate?.();
     leaveScreen(() => {
+      if (addresses !== null) {
+        // The other workspace opens at its own address (ADR-025).
+        loadPage(`${workspaceHome(addresses, target.slug)}/`);
+        return 'leaving';
+      }
       // A UI preference only; the API checks membership on every request. Written once the user
       // really leaves: a failed save keeps them in this workspace. The screen calls this only once
       // it saved or the user chose to leave without saving, and then the browser does not ask to
       // stay (`useBeforeUnloadGuard`), so the page load below goes ahead.
-      document.cookie = workspacePreferenceCookie(workspaceId);
+      document.cookie = workspacePreferenceCookie(target.id);
       // A full page load rather than a client navigation: the screen on display unmounts with
       // this workspace's queries instead of fetching them again on its way out, and nothing of
       // this workspace's sites (leads, "N mới") stays in memory to show up on coming back.
@@ -228,14 +237,24 @@ export function Sidebar({
         <DropdownMenuRadioGroup
           value={workspace.id}
           onValueChange={(workspaceId) => {
-            if (workspaceId !== workspace.id) {
-              switchWorkspace(workspaceId);
+            const target = memberships.find((item) => item.workspace.id === workspaceId);
+            if (target !== undefined && workspaceId !== workspace.id) {
+              switchWorkspace(target.workspace);
             }
           }}
         >
           {memberships.map((item) => (
             <DropdownMenuRadioItem key={item.workspace.id} value={item.workspace.id}>
-              {item.workspace.name}
+              {addresses === null ? (
+                item.workspace.name
+              ) : (
+                <span className={styles.workspaceOption}>
+                  <span>{item.workspace.name}</span>
+                  <span className={styles.workspaceAddress}>
+                    {new URL(workspaceHome(addresses, item.workspace.slug)).host}
+                  </span>
+                </span>
+              )}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

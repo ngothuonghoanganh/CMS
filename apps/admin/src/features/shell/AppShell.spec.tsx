@@ -31,7 +31,7 @@ beforeAll(() => {
 
 function renderShell() {
   const membership: Membership = {
-    workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+    workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency', slug: 'may-xanh-agency' },
     role: 'owner',
     siteIds: null,
   };
@@ -47,6 +47,7 @@ function renderShell() {
         sites={[site]}
         pageCount={2}
         leadCounts={NO_LEADS}
+        addresses={null}
       >
         <h1>Tên miền</h1>
       </AppShell>
