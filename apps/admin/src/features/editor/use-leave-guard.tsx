@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { setHistoryGuard } from '../shell/history-guard';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import type { Leave, LeaveOutcome } from '../shell/screen-leave';
-import type { EditorStore, SaveState } from './store';
+import { type EditorStore, isLeavingWithoutSaving, type SaveState } from './store';
 import { type DraftSaver, DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
@@ -21,11 +21,14 @@ export type PendingInput = () => boolean;
 
 /**
  * Whether leaving now drops changes, so it must ask or save first. Not while a leave without saving
- * ("Rời trang, bỏ thay đổi") is under way: the user already chose to go without them.
+ * ("Rời trang, bỏ thay đổi") is under way and the draft is still what the user chose to go
+ * without; a change made since is theirs to keep, so it asks again.
  */
 export function leavingLoses(store: EditorStore, pendingInput?: PendingInput): boolean {
   const state = store.getState();
-  return !state.leavingWithoutSaving && (isUnsaved(state.saveState) || pendingInput?.() === true);
+  return (
+    !isLeavingWithoutSaving(state) && (isUnsaved(state.saveState) || pendingInput?.() === true)
+  );
 }
 
 /**

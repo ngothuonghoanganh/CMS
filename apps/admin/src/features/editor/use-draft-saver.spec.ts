@@ -278,6 +278,32 @@ describe('draft saver', () => {
     stop();
   });
 
+  it('saves on stopping a change made after a leave without saving began', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
+    // The navigation is slow: the user edits again before the screen unmounts.
+    store.getState().setSpacing(HERO, 'spacious');
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('spacious');
+  });
+
+  it('saves on stopping again once a change follows a leave that kept the screen', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    // The leave went to the URL already open: it reports 'leaving', yet the screen stays.
+    await expect(saver.discardFor(() => 'leaving')).resolves.toBe('leaving');
+    store.getState().setSpacing(HERO, 'spacious');
+    stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('spacious');
+  });
+
   it('saves on stopping again once the user stays after all', async () => {
     const { store, saver, stop } = setup();
     saveMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));

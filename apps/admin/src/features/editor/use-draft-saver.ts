@@ -10,6 +10,7 @@ import {
   currentSaveResponse,
   type EditorStore,
   hasUnsavedChanges,
+  isLeavingWithoutSaving,
   type SaveFailure,
 } from './store';
 
@@ -33,16 +34,18 @@ export interface DraftSaver {
   retry: () => void;
   /**
    * "Rời trang, bỏ thay đổi": runs `leave` without waiting for a save, asking, or saving on the way
-   * out (`leavingWithoutSaving`). Autosave goes on meanwhile: a save that lands before the screen
-   * is gone keeps those changes in the draft, which the live page does not show. When the user
-   * stays (`'stayed'`, or `leave` throws), leaving asks and saves again. Resolves with the leave's
-   * outcome.
+   * out. That holds for the draft as it is now (`leavingWithoutSaving`); a change made meanwhile
+   * ends it, and is saved and asked about as usual. Autosave goes on meanwhile: a save that lands
+   * before the screen is gone keeps those changes in the draft, which the live page does not show.
+   * When the user stays (`'stayed'`, or `leave` throws), leaving asks and saves again. Resolves
+   * with the leave's outcome.
    */
   discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
    * Starts listening to the store; returns the function that stops it. Stopping (the screen
    * unmounts: a link, Back/Forward) saves pending changes right away instead of dropping them, but
-   * schedules no more retries. Not during a leave without saving (`discardFor`).
+   * schedules no more retries. Not while the draft is the version a leave without saving gave up
+   * (`discardFor`).
    */
   start: () => () => void;
 }
@@ -221,19 +224,20 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       flushInBackground();
     },
     async discardFor(leave) {
-      const { setLeavingWithoutSaving } = store.getState();
-      // Leaves under way at once share the flag: one that stays clears it for the others, and the
-      // browser may then ask once before a page load one of them starts.
-      setLeavingWithoutSaving(true);
+      // Leaves under way at once share the flag: one that stays clears it for the others, so the
+      // browser may ask once before a page load another one starts, or the screen save once on its
+      // way out (after signing out, a 401). Nothing is lost either way.
+      const { draftVersion, setLeavingWithoutSaving } = store.getState();
+      setLeavingWithoutSaving(draftVersion);
       let outcome: LeaveOutcome;
       try {
         outcome = await leave();
       } catch (error) {
-        setLeavingWithoutSaving(false);
+        setLeavingWithoutSaving(null);
         throw error;
       }
       if (outcome === 'stayed') {
-        setLeavingWithoutSaving(false);
+        setLeavingWithoutSaving(null);
       }
       return outcome;
     },
@@ -257,7 +261,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         clearTimers();
         const state = store.getState();
         if (
-          !state.leavingWithoutSaving &&
+          !isLeavingWithoutSaving(state) &&
           hasUnsavedChanges(state) &&
           state.saveState !== 'conflict'
         ) {

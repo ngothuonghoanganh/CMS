@@ -149,6 +149,18 @@ describe('useBeforeUnloadGuard', () => {
     expect(closeTab()).toBe(true);
   });
 
+  it('asks again for a change made after a leave without saving that kept the screen', async () => {
+    const store = makeStore();
+    render(<BeforeUnloadGuarded store={store} />);
+    failSave(store);
+    // The way out went to the URL already open: the leave reports 'leaving', yet the screen stays.
+    await createDraftSaver(store).discardFor(() => 'leaving');
+    expect(closeTab()).toBe(false);
+
+    store.getState().setSpacing(HERO, 'spacious');
+    expect(closeTab()).toBe(true);
+  });
+
   it('lets the tab close when everything is saved, and stops asking once unmounted', () => {
     const store = makeStore();
     const { unmount } = render(<BeforeUnloadGuarded store={store} />);
@@ -332,6 +344,18 @@ describe('useLeaveGuard with links', () => {
     const { store, push } = setup();
     failSave(store);
     await createDraftSaver(store).discardFor(() => 'stayed');
+
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    expect(screen.getByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeVisible();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('asks before a link again for a change made after a leave without saving', async () => {
+    const user = userEvent.setup();
+    const { store, push } = setup();
+    failSave(store);
+    await createDraftSaver(store).discardFor(() => 'leaving');
+    store.getState().setSpacing(HERO, 'spacious');
 
     await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
     expect(screen.getByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeVisible();
