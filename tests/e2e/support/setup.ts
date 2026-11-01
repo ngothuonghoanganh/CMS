@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import {
+  accountEmailResponseSchema,
   confirmLeadRecipientResponseSchema,
   consentVersionSchema,
   type CreatePageRequest,
@@ -13,11 +14,18 @@ import {
   privacySettingsSchema,
   type Site,
   siteSchema,
+  SIGNUP_VERIFY_PATH,
   SUGGESTED_MARKETING_CONSENT_TEXT,
   SUGGESTED_REQUIRED_CONSENT_TEXT,
 } from '@plp/contracts';
 import { urls } from '../urls.js';
-import { confirmationLink, waitForEmail } from './mailpit.js';
+import {
+  accountLink,
+  confirmationLink,
+  SIGNUP_EMAIL_SUBJECT,
+  tokenOf,
+  waitForEmail,
+} from './mailpit.js';
 
 export const PASSWORD = 'MatKhau-e2e-an-toan-2026';
 
@@ -66,8 +74,19 @@ export async function call<T>(
   return schema.parse(await response.json());
 }
 
-export function signUpViaApi(request: APIRequestContext, account: Account): Promise<MeResponse> {
-  return call(request, 'POST', endpoints.signup.path(), meResponseSchema, account);
+/**
+ * Signs `account` up through both steps of ADR-026, as its owner would: the form, then the link
+ * Mailpit received. `request` holds the session afterwards.
+ */
+export async function signUpViaApi(
+  request: APIRequestContext,
+  account: Account,
+): Promise<MeResponse> {
+  await call(request, 'POST', endpoints.signup.path(), accountEmailResponseSchema, account);
+  const email = await waitForEmail(request, account.email, SIGNUP_EMAIL_SUBJECT);
+  return call(request, 'POST', endpoints.verifySignup.path(), meResponseSchema, {
+    token: tokenOf(accountLink(email, SIGNUP_VERIFY_PATH)),
+  });
 }
 
 export function createSiteViaApi(
