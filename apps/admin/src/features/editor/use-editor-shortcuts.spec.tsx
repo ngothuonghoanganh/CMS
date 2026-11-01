@@ -9,6 +9,27 @@ function press(init: KeyboardEventInit, target: EventTarget = document.body) {
   return event;
 }
 
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+/** A structure row whose button has the focus, and a way to move it as React reorders rows. */
+function focusedRow() {
+  const list = document.createElement('ol');
+  const row = document.createElement('li');
+  const button = document.createElement('button');
+  row.append(button);
+  list.append(row, document.createElement('li'));
+  document.body.append(list);
+  button.focus();
+  return {
+    button,
+    moveDown: () => {
+      list.append(row);
+    },
+  };
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -110,5 +131,38 @@ describe('editor shortcuts', () => {
     field.remove();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(document.activeElement).toBe(row);
+  });
+
+  it('gives the focus back to the control a move took it from', async () => {
+    const store = makeStore();
+    renderHook(() => {
+      useEditorShortcuts(store, vi.fn());
+    });
+    store.getState().select('hero00000001');
+    const { button, moveDown } = focusedRow();
+
+    press({ key: 'ArrowDown', altKey: true }, button);
+    moveDown();
+    expect(document.activeElement).toBe(document.body);
+    await nextFrame();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('leaves the focus where the user put it right after a move', async () => {
+    const store = makeStore();
+    renderHook(() => {
+      useEditorShortcuts(store, vi.fn());
+    });
+    store.getState().select('hero00000001');
+    const { button, moveDown } = focusedRow();
+    const handle = document.createElement('button');
+    document.body.append(handle);
+
+    press({ key: 'ArrowDown', altKey: true }, button);
+    moveDown();
+    // The next key goes to the drag handle focused before the next frame, not back to the button.
+    handle.focus();
+    await nextFrame();
+    expect(document.activeElement).toBe(handle);
   });
 });

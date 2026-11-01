@@ -30,11 +30,13 @@ import {
 } from '@plp/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { loadPage } from '../../lib/page-load';
 import { hostOf } from '../../lib/site-url';
 import { newLeadsBadge } from '../leads/lead-presentation';
 import { useLeadCounts } from '../leads/queries';
 import { Brand } from './Brand';
 import { navCurrent, newLeadsHref, siteHref, siteNavItems, type SiteNavKey } from './navigation';
+import { leaveScreen } from './screen-leave';
 import { siteInitial, siteTileStyle } from './site-tile';
 import { useLogout } from './use-logout';
 import { workspacePreferenceCookie } from './workspace-preference';
@@ -89,9 +91,29 @@ export function Sidebar({
   const workspace = membership.workspace;
   const newLeads = newLeadsBadge(useLeadCounts(site.id, leadCounts).data);
 
+  // Code navigation leaves through the screen on display, which saves what it holds first.
   function go(href: string) {
     onNavigate?.();
-    router.push(href);
+    leaveScreen(() => {
+      router.push(href);
+      return 'leaving';
+    });
+  }
+
+  function switchWorkspace(workspaceId: string) {
+    onNavigate?.();
+    leaveScreen(() => {
+      // A UI preference only; the API checks membership on every request. Written once the user
+      // really leaves: a failed save keeps them in this workspace. The screen calls this only once
+      // it saved or the user chose to leave without saving, and then the browser does not ask to
+      // stay (`useBeforeUnloadGuard`), so the page load below goes ahead.
+      document.cookie = workspacePreferenceCookie(workspaceId);
+      // A full page load rather than a client navigation: the screen on display unmounts with
+      // this workspace's queries instead of fetching them again on its way out, and nothing of
+      // this workspace's sites (leads, "N mới") stays in memory to show up on coming back.
+      loadPage('/');
+      return 'leaving';
+    });
   }
 
   return (
@@ -103,16 +125,15 @@ export function Sidebar({
       <DropdownMenu
         align="start"
         trigger={
-          <button
-            type="button"
-            className={styles.workspaceButton}
-            aria-label={`Đổi workspace — hiện tại: ${workspace.name}`}
-          >
+          // Named by what it shows, then what it does: a label of its own would leave out the
+          // visible words, and people who speak to their computer say what they see (WCAG 2.5.3).
+          <button type="button" className={styles.workspaceButton}>
             <Avatar name={workspace.name} shape="square" />
             <span className={styles.stack}>
-              <span className={styles.caption}>Workspace</span>
+              <span className={styles.caption}>Workspace</span>{' '}
               <span className={styles.workspaceName}>{workspace.name}</span>
             </span>
+            <VisuallyHidden>, đổi workspace</VisuallyHidden>
             <span className={styles.chevron}>
               <ChevronUpDownIcon size={16} />
             </span>
@@ -123,12 +144,9 @@ export function Sidebar({
         <DropdownMenuRadioGroup
           value={workspace.id}
           onValueChange={(workspaceId) => {
-            if (workspaceId === workspace.id) {
-              return;
+            if (workspaceId !== workspace.id) {
+              switchWorkspace(workspaceId);
             }
-            // A UI preference only; the API checks membership on every request.
-            document.cookie = workspacePreferenceCookie(workspaceId);
-            go('/');
           }}
         >
           {memberships.map((item) => (
@@ -146,16 +164,13 @@ export function Sidebar({
         <DropdownMenu
           align="start"
           trigger={
-            <button
-              type="button"
-              className={styles.siteButton}
-              aria-label={`Đổi site — hiện tại: ${site.name}`}
-            >
+            <button type="button" className={styles.siteButton}>
               <SiteTile site={site} />
               <span className={styles.stack}>
-                <span className={styles.siteName}>{site.name}</span>
+                <span className={styles.siteName}>{site.name}</span>{' '}
                 <span className={styles.siteHost}>{hostOf(site.defaultOrigin)}</span>
               </span>
+              <VisuallyHidden>, đổi site</VisuallyHidden>
               <span className={styles.chevron}>
                 <ChevronUpDownIcon size={16} />
               </span>
@@ -238,7 +253,7 @@ export function Sidebar({
             <button type="button" className={styles.accountButton}>
               <Avatar name={user.name} />
               <span className={styles.stack}>
-                <span className={styles.userName}>{user.name}</span>
+                <span className={styles.userName}>{user.name}</span>{' '}
                 <span className={styles.userRole}>{roleLabels[membership.role]}</span>
               </span>
               <span className={styles.chevron}>
@@ -252,7 +267,8 @@ export function Sidebar({
             icon={<LogoutIcon size={18} />}
             disabled={logout.isPending}
             onSelect={() => {
-              logout.mutate();
+              // Saved first: once the session is gone, a save sent as the screen unmounts fails.
+              leaveScreen(logout.signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
             }}
           >
             Đăng xuất

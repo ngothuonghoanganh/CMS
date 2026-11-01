@@ -340,6 +340,12 @@
   overflow-x: auto;
 }
 
+.tableScroll:focus-visible {
+  border-radius: 4px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
 /* Sources on the left; pages and devices stacked on the right. */
 .columns {
   display: flex;

@@ -233,22 +233,51 @@ export function createSectionInstance(
 }
 
 /**
- * Validates every section against its own definition. Returns issues with paths relative to the
- * composition, e.g. ["sections", 2, "content", "heading"]. An empty list means valid.
+ * Paths a section may mark as sample text: its text fields and button labels, including the fields
+ * the variant hides and every list item that exists (the candidates of `samplePathsOf`).
  */
-export function validateComposition(composition: Composition): ProblemIssue[] {
+function samplePathCandidates(
+  section: Pick<SectionInstance, 'type' | 'variant' | 'content'>,
+): Set<string> {
+  const paths = new Set<string>();
+  for (const leaf of collectLeaves(section, { includeHidden: true })) {
+    if (leaf.field.kind === 'text') {
+      paths.add(leaf.path);
+    } else if (leaf.field.kind === 'cta') {
+      paths.add(`${leaf.path}.label`);
+    }
+  }
+  return paths;
+}
+
+export type CompositionParseResult =
+  | { success: true; composition: Composition; issues: [] }
+  | { success: false; issues: ProblemIssue[] };
+
+/**
+ * The one rule set of `parseComposition` and `validateComposition`: checks every section against
+ * its own definition and returns the issues, with paths relative to the composition, e.g.
+ * ["sections", 2, "content", "heading"]. Each section without issues of its content goes to
+ * `onParsed` with that content as its section schema parsed it; `validateComposition` passes none,
+ * so the editor's check on every command builds nothing more than the issues.
+ */
+function checkSections(
+  composition: Composition,
+  onParsed?: (section: SectionInstance, content: SectionInstance['content']) => void,
+): ProblemIssue[] {
   const issues: ProblemIssue[] = [];
   const singletonsSeen = new Set<SectionType>();
+  const lastIndex = composition.sections.length - 1;
   composition.sections.forEach((section, index) => {
     const definition = getSectionDefinition(section.type);
-    if (!getVariant(definition, section.variant)) {
+    const variant = getVariant(definition, section.variant);
+    if (!variant) {
       issues.push({
         path: ['sections', index, 'variant'],
         code: 'invalid_variant',
         message: `Kiểu bố cục "${section.variant}" không có trong section ${definition.label}`,
       });
     }
-    const lastIndex = composition.sections.length - 1;
     if (
       (definition.position === 'first' && index !== 0) ||
       (definition.position === 'last' && index !== lastIndex)
@@ -272,7 +301,6 @@ export function validateComposition(composition: Composition): ProblemIssue[] {
       }
       singletonsSeen.add(section.type);
     }
-    const variant = getVariant(definition, section.variant);
     for (const [listKey, minimum] of Object.entries(variant?.listMin ?? {})) {
       const field = definition.fields.find((candidate) => candidate.key === listKey);
       const items = getAtPath(section.content, listKey);
@@ -298,7 +326,45 @@ export function validateComposition(composition: Composition): ProblemIssue[] {
           message: issue.message,
         });
       }
+      return;
     }
+    onParsed?.(section, result.data);
   });
   return issues;
+}
+
+/**
+ * Validates every section against its own definition and returns the composition as validated:
+ * each content as its section schema parsed it, so keys no schema knows (in the content, a button,
+ * a link) are dropped, and sample paths that name no text field are dropped too. Store and publish
+ * this result, never the input. Issues are those of `validateComposition`. The frame
+ * (`compositionSchema`) must already be valid.
+ */
+export function parseComposition(composition: Composition): CompositionParseResult {
+  const sections: SectionInstance[] = [];
+  const issues = checkSections(composition, (section, content) => {
+    const known = samplePathCandidates({ ...section, content });
+    sections.push({
+      id: section.id,
+      type: section.type,
+      variant: section.variant,
+      colorScheme: section.colorScheme,
+      spacing: section.spacing,
+      visibility: { desktop: section.visibility.desktop, mobile: section.visibility.mobile },
+      mobileOrder: section.mobileOrder,
+      content,
+      samplePaths: [...new Set(section.samplePaths)].filter((path) => known.has(path)),
+    });
+  });
+  return issues.length > 0
+    ? { success: false, issues }
+    : { success: true, composition: { version: composition.version, sections }, issues: [] };
+}
+
+/**
+ * The issues of `parseComposition`, without building the parsed composition or its sample paths:
+ * the editor runs it on every command, each keystroke included. An empty list means valid.
+ */
+export function validateComposition(composition: Composition): ProblemIssue[] {
+  return checkSections(composition);
 }

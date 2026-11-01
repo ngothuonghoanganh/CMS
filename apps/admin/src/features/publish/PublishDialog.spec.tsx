@@ -4,6 +4,7 @@ import {
   endpoints,
   type PageSummary,
   type PublishResponse,
+  type Role,
   type SaveDraftResponse,
 } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
@@ -112,14 +113,16 @@ function publishResponse(overrides: Partial<PublishResponse> = {}): PublishRespo
 interface Setup {
   page?: PageSummary;
   result?: ChecksResult;
+  role?: Role;
 }
 
-function renderDialog({ page = livePage(), result = checks() }: Setup = {}) {
+function renderDialog({ page = livePage(), result = checks(), role = 'owner' }: Setup = {}) {
   const props = {
     onOpenChange: vi.fn(),
     ensureSaved: vi.fn(() => Promise.resolve(saved(page))),
     onFixTarget: vi.fn(),
     onPageUpdated: vi.fn(),
+    role,
   };
   apiMock.mockImplementation((endpoint) =>
     endpoint === endpoints.getChecks
@@ -272,6 +275,63 @@ describe('PublishDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Sửa ngay' }));
     expect(props.onFixTarget).toHaveBeenCalledWith(blockingItem.target);
+  });
+
+  describe('a form missing site settings only the Owner may change', () => {
+    const consentMissing: CheckItem = {
+      code: 'consent_not_configured',
+      severity: 'blocking',
+      fingerprint: 'consent_not_configured:form00000001',
+      title: 'Form chưa có nội dung đồng ý',
+      description: 'Cài đặt dữ liệu cá nhân và nội dung đồng ý của site.',
+      target: { kind: 'privacy', sectionId: 'form00000001' },
+    };
+    const destinationMissing: CheckItem = {
+      code: 'lead_destination_missing',
+      severity: 'blocking',
+      fingerprint: 'lead_destination_missing:form00000001',
+      title: 'Chưa chọn nơi nhận lead',
+      description: 'Thêm và xác nhận một email nhận lead.',
+      target: { kind: 'lead_recipients', sectionId: 'form00000001' },
+    };
+
+    it('tells an Editor to ask the Owner instead of opening screens they cannot use', async () => {
+      const result = checks({ blocking: [consentMissing, destinationMissing, blockingItem] });
+      const props = renderDialog({ result, role: 'editor' });
+
+      const consent = (await screen.findByText(/Form chưa có nội dung đồng ý/)).closest('li');
+      const destination = screen.getByText(/Chưa chọn nơi nhận lead/).closest('li');
+      if (consent === null || destination === null) {
+        throw new Error('check rows missing');
+      }
+      expect(within(consent).queryByRole('button')).toBeNull();
+      expect(consent).toHaveTextContent(
+        'Chỉ Owner của workspace cài đặt được dữ liệu cá nhân và nội dung đồng ý. Hãy nhờ Owner làm bước này, rồi xuất bản lại.',
+      );
+      expect(within(destination).queryByRole('button')).toBeNull();
+      expect(destination).toHaveTextContent(
+        'Chỉ Owner của workspace chọn được nơi nhận lead. Hãy nhờ Owner thêm và xác nhận một email, rồi xuất bản lại.',
+      );
+      // What the Editor can fix keeps its button.
+      expect(screen.getAllByRole('button', { name: 'Sửa ngay' })).toHaveLength(1);
+      expect(props.onFixTarget).not.toHaveBeenCalled();
+    });
+
+    it('takes the Owner to the setting', async () => {
+      const user = userEvent.setup();
+      const result = checks({ blocking: [consentMissing, destinationMissing] });
+      const props = renderDialog({ result, role: 'owner' });
+
+      const buttons = await screen.findAllByRole('button', { name: 'Sửa ngay' });
+      expect(buttons).toHaveLength(2);
+      expect(screen.queryByText(/Hãy nhờ Owner/)).toBeNull();
+      const [consentFix, destinationFix] = buttons;
+      if (consentFix === undefined || destinationFix === undefined) {
+        throw new Error('fix buttons missing');
+      }
+      await user.click(destinationFix);
+      expect(props.onFixTarget).toHaveBeenCalledWith(destinationMissing.target);
+    });
   });
 
   it('uses the first-publish copy for a page that was never published', async () => {

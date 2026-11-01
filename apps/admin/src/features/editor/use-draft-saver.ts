@@ -4,11 +4,13 @@ import { endpoints, type SaveDraftResponse } from '@plp/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import type { Leave, LeaveOutcome } from '../shell/screen-leave';
 import { markPageScreensStale } from './stale-screens';
 import {
   currentSaveResponse,
   type EditorStore,
   hasUnsavedChanges,
+  isLeavingWithoutSaving,
   type SaveFailure,
 } from './store';
 
@@ -31,14 +33,20 @@ export interface DraftSaver {
   /** "Thử lại": saves now and restarts the automatic retries. */
   retry: () => void;
   /**
-   * "Rời trang, bỏ thay đổi": drops the pending save, and stopping will not save these changes.
-   * A later change is saved as usual again.
+   * "Rời trang, bỏ thay đổi": runs `leave` without waiting for a save, asking, or saving on the way
+   * out. That holds for the draft as it is now (`leavingWithoutSaving`): its debounce and retry
+   * timers are dropped and no retry is scheduled for it; a change made meanwhile ends it, and is
+   * saved and asked about as usual. A save already running ends as usual: what it saves stays in
+   * the draft, which the live page does not show. When the user stays (`'stayed'`, or `leave`
+   * throws), leaving asks and saves again, and autosave resumes, except for the very draft the
+   * server refused for good. Resolves with the leave's outcome.
    */
-  discard: () => void;
+  discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
    * Starts listening to the store; returns the function that stops it. Stopping (the screen
    * unmounts: a link, Back/Forward) saves pending changes right away instead of dropping them, but
-   * schedules no more retries.
+   * schedules no more retries. Not while the draft is the version a leave without saving gave up
+   * (`discardFor`).
    */
   start: () => () => void;
 }
@@ -63,7 +71,8 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
     if (error.status === 422) {
       return { kind: 'invalid', message: firstIssueMessage(error) };
     }
-    if (error.status >= 500) {
+    // Server errors and a timeout (408) pass; trying again can succeed.
+    if (error.status >= 500 || error.status === 408) {
       return { kind: 'retryable', message: error.problem.title };
     }
     return { kind: 'other', message: error.problem.detail ?? error.problem.title };
@@ -113,9 +122,10 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
+  /** Draft version the server refused for good (not retryable); null once a save succeeds. */
+  let refusedVersion: number | null = null;
   let running: Promise<SaveDraftResponse> | null = null;
   let stopped = true;
-  let discarded = false;
 
   function clearTimers() {
     if (debounceTimer !== null) {
@@ -130,7 +140,9 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 
   function scheduleRetry() {
     const delay = retryDelays[retryAttempt];
-    if (delay === undefined || stopped) {
+    // Changes given up for a leave under way are not tried again: a retry during a slow sign-out
+    // would write them into the draft.
+    if (delay === undefined || stopped || isLeavingWithoutSaving(store.getState())) {
       return;
     }
     retryAttempt += 1;
@@ -159,10 +171,17 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       store.getState().markSaveFailed(failure);
       if (failure.kind === 'retryable') {
         scheduleRetry();
+      } else {
+        refusedVersion = version;
+        // An edit made while this save ran is a draft the server has not seen: send it.
+        if (!stopped && store.getState().draftVersion !== version) {
+          scheduleSave();
+        }
       }
       throw error;
     }
     retryAttempt = 0;
+    refusedVersion = null;
     store.getState().applySaved(response, version);
     options.onSaved?.();
   }
@@ -211,22 +230,50 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }, debounceMs);
   }
 
+  /**
+   * A leave without saving did not happen: leaving asks and saves again, and autosave resumes with
+   * its full retry budget. The very draft the server refused for good (422, 401, 403, 404…) is not
+   * sent again, since it would fail the same way; a draft changed since that refusal is.
+   */
+  function stay() {
+    store.getState().setLeavingWithoutSaving(null);
+    retryAttempt = 0;
+    const state = store.getState();
+    const worthTrying = state.saveState !== 'error' || refusedVersion !== state.draftVersion;
+    if (!stopped && hasUnsavedChanges(state) && state.saveState !== 'conflict' && worthTrying) {
+      scheduleSave();
+    }
+  }
+
   return {
     ensureSaved: flush,
     retry() {
       retryAttempt = 0;
       flushInBackground();
     },
-    discard() {
-      discarded = true;
+    async discardFor(leave) {
       clearTimers();
+      // Leaves under way at once share the flag: one that stays clears it for the others. The
+      // browser may then ask once before a page load another one starts, the draft may keep the
+      // changes another leave meant to drop, or a save on the way out may meet a 401 after signing
+      // out (ADR-008, accepted).
+      const { draftVersion, setLeavingWithoutSaving } = store.getState();
+      setLeavingWithoutSaving(draftVersion);
+      let outcome: LeaveOutcome;
+      try {
+        outcome = await leave();
+      } catch (error) {
+        stay();
+        throw error;
+      }
+      if (outcome === 'stayed') {
+        stay();
+      }
+      return outcome;
     },
     start() {
       stopped = false;
       const unsubscribe = store.subscribe((state, previous) => {
-        if (state.draftVersion !== previous.draftVersion) {
-          discarded = false;
-        }
         if (
           state.draftVersion !== previous.draftVersion &&
           hasUnsavedChanges(state) &&
@@ -243,7 +290,11 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         unsubscribe();
         clearTimers();
         const state = store.getState();
-        if (!discarded && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
+        if (
+          !isLeavingWithoutSaving(state) &&
+          hasUnsavedChanges(state) &&
+          state.saveState !== 'conflict'
+        ) {
           flushInBackground();
         }
       };
@@ -255,7 +306,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 export function useDraftSaver(
   store: EditorStore,
   options?: DraftSaverOptions,
-): Pick<DraftSaver, 'ensureSaved' | 'retry' | 'discard'> {
+): Pick<DraftSaver, 'ensureSaved' | 'retry' | 'discardFor'> {
   const queryClient = useQueryClient();
   const [saver] = useState(() =>
     createDraftSaver(store, {

@@ -62,6 +62,7 @@ import {
 import {
   pathStatusResponseSchema,
   publicPreviewResponseSchema,
+  publicPreviewStatusResponseSchema,
   resolveQuerySchema,
   resolveResponseSchema,
   sitemapResponseSchema,
@@ -623,6 +624,14 @@ export const endpoints = {
     request: null,
     query: null,
     response: publicPreviewResponseSchema,
+  }),
+  /** 200 when the token opens a page or release of its site, 404 otherwise; no page data. */
+  publicPreviewStatus: endpoint({
+    method: 'GET',
+    path: (token: string) => `/public/preview/${e(token)}/status`,
+    request: null,
+    query: null,
+    response: publicPreviewStatusResponseSchema,
   }),
 } as const;
 

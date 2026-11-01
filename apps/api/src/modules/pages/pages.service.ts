@@ -19,7 +19,7 @@ import {
   type slugAvailabilityQuerySchema,
   slugSchema,
 } from '@plp/contracts';
-import { buildCompositionFromGoal, splitPath, validateComposition } from '@plp/sections/schema';
+import { buildCompositionFromGoal, parseComposition, splitPath } from '@plp/sections/schema';
 import type { z } from 'zod';
 import { AppError, notFound, validationFailed } from '../../shared/errors.js';
 import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -187,7 +187,8 @@ export class PagesService {
   /**
    * Autosave (ADR-005): validates the composition with the section registry, requires every image
    * to come from this site's library, then replaces the draft if it is still at `baseRevision`.
-   * Saving never changes what is live.
+   * The draft stored is the composition as the registry parsed it, never the raw input, so nothing
+   * the schemas do not know reaches a release or a public page. Saving never changes what is live.
    */
   async saveDraft(
     user: AuthenticatedUser,
@@ -195,19 +196,20 @@ export class PagesService {
     input: SaveDraftRequest,
   ): Promise<SaveDraftResponse> {
     const { scope, site, page } = await this.pageAccess.access(user, pageId);
-    const issues = validateComposition(input.composition).map((issue) => ({
-      ...issue,
-      path: ['composition', ...issue.path],
-    }));
-    if (issues.length > 0) {
-      throw validationFailed(issues, 'Nội dung trang không hợp lệ');
+    const parsed = parseComposition(input.composition);
+    if (!parsed.success) {
+      throw validationFailed(
+        parsed.issues.map((issue) => ({ ...issue, path: ['composition', ...issue.path] })),
+        'Nội dung trang không hợp lệ',
+      );
     }
-    await this.requireSiteAssets(scope, site, input);
-    const saved = await this.pages.replaceDraft(scope, page._id, input.baseRevision, {
+    const draft: DraftContent = {
       slug: input.slug,
-      composition: input.composition,
+      composition: parsed.composition,
       seo: input.seo,
-    });
+    };
+    await this.requireSiteAssets(scope, site, draft);
+    const saved = await this.pages.replaceDraft(scope, page._id, input.baseRevision, draft);
     if (!saved) {
       throw await this.conflictFor(scope, page._id);
     }
@@ -321,13 +323,13 @@ export class PagesService {
       siteName: site.name,
       newId: newSectionId,
     });
-    const issues = validateComposition(composition);
-    if (issues.length > 0) {
+    const parsed = parseComposition(composition);
+    if (!parsed.success) {
       throw new Error(
-        `The "${start.goal}" blueprint produced an invalid composition: ${JSON.stringify(issues)}`,
+        `The "${start.goal}" blueprint produced an invalid composition: ${JSON.stringify(parsed.issues)}`,
       );
     }
-    return composition;
+    return parsed.composition;
   }
 
   /** 422 for any image or share image whose asset is not in this site (no cross-site reference). */

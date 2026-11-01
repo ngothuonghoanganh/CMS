@@ -5,7 +5,8 @@ import { type RefObject, useRef } from 'react';
 /**
  * Where focus goes back to when a dialog closes: the element that opened it. A menu item is gone
  * once its menu closes, so for a dialog opened from a `DropdownMenu` item it is the menu's trigger
- * (Radix labels the menu with its trigger's id).
+ * (Radix labels the menu with its trigger's id). A menu whose trigger cannot be found keeps the
+ * item: focus returns to it if it is still there, otherwise to the fallback.
  */
 function returnTargetFor(active: Element | null): HTMLElement | null {
   if (!(active instanceof HTMLElement) || active === document.body) {
@@ -17,7 +18,7 @@ function returnTargetFor(active: Element | null): HTMLElement | null {
   }
   const triggerId = menu.getAttribute('aria-labelledby');
   const trigger = triggerId === null ? null : document.getElementById(triggerId);
-  return trigger instanceof HTMLElement ? trigger : null;
+  return trigger instanceof HTMLElement ? trigger : active;
 }
 
 /**

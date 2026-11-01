@@ -2,6 +2,7 @@ import { siteSchema } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { siteOrigin } from '../../config/env.js';
 import { newObjectId } from '../../shared/persistence/object-id.js';
+import { currentSitePresentation } from '../publishing/release-presentation.js';
 import { toSiteDto } from './site-dto.js';
 import type { SiteRecord } from './site.schema.js';
 
@@ -87,5 +88,25 @@ describe('toSiteDto', () => {
     expect(dto.defaultShareImageAssetId).toBe(share.toHexString());
     expect(dto).not.toHaveProperty('createdBy');
     expect(dto).not.toHaveProperty('updatedAt');
+  });
+
+  it('shows the look exactly as the next publish snapshots it (ADR-015)', () => {
+    for (const site of [
+      siteRecord(),
+      siteRecord({
+        name: 'Smile Care Quận 3',
+        themePresetId: 'sunset',
+        logoAssetId: newObjectId(),
+        defaultShareImageAssetId: newObjectId(),
+      }),
+    ]) {
+      const { name, themePresetId, logoAssetId, defaultShareImageAssetId } = toSiteDto(
+        site,
+        'http://smilecare.localhost:3101',
+      );
+      expect({ name, themePresetId, logoAssetId, defaultShareImageAssetId }).toEqual(
+        currentSitePresentation(site),
+      );
+    }
   });
 });

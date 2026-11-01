@@ -13,6 +13,7 @@ import {
   Skeleton,
 } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
+import Image from 'next/image';
 import { type RefObject, useId, useRef, useState } from 'react';
 import { ApiError, uploadAsset } from '../../lib/api';
 import { useFocusNewItems } from '../shell/use-focus-new-items';
@@ -260,7 +261,14 @@ function AssetGrid({
                   onPick(asset);
                 }}
               >
-                <img src={asset.url} alt="" className={styles.tileImage} loading="lazy" />
+                <Image
+                  src={asset.url}
+                  alt=""
+                  width={asset.width}
+                  height={asset.height}
+                  unoptimized
+                  className={styles.tileImage}
+                />
                 <span className={styles.tileName}>{name}</span>
                 <span className={styles.tileMeta}>
                   {asset.width} × {asset.height} · {formatBytes(asset.bytes)}

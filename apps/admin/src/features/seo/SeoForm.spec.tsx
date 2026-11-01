@@ -6,7 +6,13 @@ import { api } from '../../lib/api';
 import { EditorStoreProvider, type EditorStore } from '../editor';
 import { asset, makeStore, PAGE_ID, pageDetail, SITE_ID } from '../editor/test-fixtures';
 import { renderWithProviders } from '../shell/test-utils';
-import { type SeoFocus, SeoForm } from './SeoForm';
+import { type SeoFocus, SeoForm, type SeoFormProps, useDraftSlugField } from './SeoForm';
+
+/** The form with its slug field, as the SEO screen wires them. */
+function FormWithSlug(props: Omit<SeoFormProps, 'slugField'>) {
+  const slugField = useDraftSlugField();
+  return <SeoForm {...props} slugField={slugField} />;
+}
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -32,7 +38,7 @@ function renderForm(page: Partial<PageSummary> = {}, initialFocus: SeoFocus | nu
   const onRetrySave = vi.fn();
   renderWithProviders(
     <EditorStoreProvider store={store}>
-      <SeoForm
+      <FormWithSlug
         host="smilecare.payload.site"
         initialFocus={initialFocus}
         onRetrySave={onRetrySave}

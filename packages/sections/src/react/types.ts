@@ -6,4 +6,9 @@ export interface SectionProps<C> {
   section: SectionInstance;
   content: C;
   ctx: RenderContext;
+  /**
+   * The first section of the page body (after the navigation bar): its first image is the likely
+   * largest paint, so it loads at once instead of lazily (see `SectionImage`).
+   */
+  leading: boolean;
 }

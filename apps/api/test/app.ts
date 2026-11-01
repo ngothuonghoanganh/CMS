@@ -66,9 +66,8 @@ export async function createTestApp(
   });
   configureApp(app, env);
   await app.init();
+  // Its collections and indexes exist once it is initialized (`IndexBuilder`), as before serving.
   const connection = app.get<Connection>(getConnectionToken());
-  // Collections and unique indexes must exist before tests rely on them and before transactions write.
-  await Promise.all(Object.values(connection.models).map((model) => model.init()));
   return {
     app,
     env,

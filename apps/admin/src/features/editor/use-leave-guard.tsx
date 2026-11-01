@@ -1,23 +1,45 @@
 'use client';
 
-import type { SaveDraftResponse } from '@plp/contracts';
 import { Button, Callout, Dialog } from '@plp/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { setHistoryGuard } from '../shell/history-guard';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import type { EditorStore, SaveState } from './store';
-import { DraftConflictError } from './use-draft-saver';
+import type { Leave, LeaveOutcome } from '../shell/screen-leave';
+import { type EditorStore, isLeavingWithoutSaving, type SaveState } from './store';
+import { type DraftSaver, DraftConflictError } from './use-draft-saver';
 
 /** States in which leaving would lose changes. */
 export function isUnsaved(saveState: SaveState): boolean {
   return saveState === 'dirty' || saveState === 'saving' || saveState === 'error';
 }
 
-/** Asks the browser to confirm closing or reloading the tab while changes are unsaved. */
-export function useBeforeUnloadGuard(store: EditorStore): void {
+/**
+ * A change a field holds before it reaches the store (a slug being checked); leaving would drop
+ * it as surely as an unsaved draft. Pass a stable function.
+ */
+export type PendingInput = () => boolean;
+
+/**
+ * Whether leaving now drops changes, so it must ask or save first. Not while a leave without saving
+ * ("Rời trang, bỏ thay đổi") is under way and the draft is still what the user chose to go
+ * without; a change made since is theirs to keep, so it asks again.
+ */
+export function leavingLoses(store: EditorStore, pendingInput?: PendingInput): boolean {
+  const state = store.getState();
+  return (
+    !isLeavingWithoutSaving(state) && (isUnsaved(state.saveState) || pendingInput?.() === true)
+  );
+}
+
+/**
+ * Asks the browser to confirm closing or reloading the tab while changes are unsaved. Not during a
+ * leave without saving: a prompt would let the user stay after a full page load already began
+ * (the sidebar's workspace switch remembers the new workspace first).
+ */
+export function useBeforeUnloadGuard(store: EditorStore, pendingInput?: PendingInput): void {
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
-      if (isUnsaved(store.getState().saveState)) {
+      if (leavingLoses(store, pendingInput)) {
         event.preventDefault();
       }
     }
@@ -25,7 +47,7 @@ export function useBeforeUnloadGuard(store: EditorStore): void {
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [store]);
+  }, [store, pendingInput]);
 }
 
 /** Where the user wanted to go: a link in the editor, or the browser's Back/Forward. */
@@ -42,20 +64,37 @@ function currentEntry(): HistoryEntry {
 }
 
 /**
+ * Whether `url` is still the document of the screen's entry: same path and query, whatever the
+ * fragment. Browsers fire `popstate` for a move within the document too (a skip link to
+ * `#main-content`, then Back to the URL without it), and it leaves nothing, so it must not be
+ * taken for leaving the screen.
+ */
+export function isSameDocument(entryUrl: string, url: string): boolean {
+  const entry = new URL(entryUrl);
+  const now = new URL(url);
+  return (
+    entry.origin === now.origin && entry.pathname === now.pathname && entry.search === now.search
+  );
+}
+
+/**
  * Browser Back/Forward out of a screen that edits the draft (see `history-guard`). While changes
  * are unsaved the guard keeps the router from handling the event, puts the screen's entry back
  * (with the router's own state, so the router keeps working) and hands `onBlocked` the way to
  * leave after all: going back once more. The screen's entry was pushed right after the one the
- * user chose, so `history.back()` reaches it whichever direction they went.
+ * user chose, so `history.back()` reaches it whichever direction they went. A popstate that stays
+ * on the screen's document (only the fragment differs from its entry) is not a leave.
  */
 export function useHistoryLeaveGuard(
   store: EditorStore,
-  onBlocked: (leave: () => void) => void,
-): () => void {
+  onBlocked: (leave: Leave) => void,
+  pendingInput?: PendingInput,
+): () => LeaveOutcome {
   const allowNext = useRef(false);
-  const leave = useCallback(() => {
+  const leave = useCallback((): LeaveOutcome => {
     allowNext.current = true;
     window.history.back();
+    return 'leaving';
   }, []);
 
   useEffect(() => {
@@ -70,7 +109,10 @@ export function useHistoryLeaveGuard(
         allowNext.current = false;
         return false;
       }
-      if (!isUnsaved(store.getState().saveState)) {
+      if (!leavingLoses(store, pendingInput)) {
+        return false;
+      }
+      if (isSameDocument(entry.url, window.location.href)) {
         return false;
       }
       window.history.pushState(entry.state, '', entry.url);
@@ -81,7 +123,7 @@ export function useHistoryLeaveGuard(
       unsubscribe();
       removeGuard();
     };
-  }, [store, onBlocked, leave]);
+  }, [store, onBlocked, leave, pendingInput]);
 
   return leave;
 }
@@ -99,10 +141,10 @@ export interface LeaveGuard {
  */
 export function useLeaveGuard(
   store: EditorStore,
-  saver: { ensureSaved: () => Promise<SaveDraftResponse>; discard: () => void },
+  saver: Pick<DraftSaver, 'ensureSaved' | 'discardFor'>,
   push: (href: string) => void,
 ): LeaveGuard {
-  const { ensureSaved, discard } = saver;
+  const { ensureSaved, discardFor } = saver;
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +160,7 @@ export function useLeaveGuard(
 
   const navigate = useCallback(
     (href: string) => {
-      if (isUnsaved(store.getState().saveState)) {
+      if (leavingLoses(store)) {
         ask({ kind: 'link', href });
         return;
       }
@@ -127,17 +169,24 @@ export function useLeaveGuard(
     [store, push, ask],
   );
 
+  function go(target: PendingLeave): LeaveOutcome {
+    if (target.kind === 'history') {
+      return goBackInHistory();
+    }
+    push(target.href);
+    return 'leaving';
+  }
+
   function leave(target: PendingLeave, saved: boolean) {
     setPending(null);
-    if (!saved) {
-      // Leaving unmounts the editor, which would otherwise save these changes on the way out.
-      discard();
+    if (saved) {
+      go(target);
+      return;
     }
-    if (target.kind === 'link') {
-      push(target.href);
-    } else {
-      goBackInHistory();
-    }
+    // Leaving unmounts the editor, which would otherwise save these changes on the way out.
+    discardFor(() => go(target)).catch((error: unknown) => {
+      reportUnexpected('Leaving the editor without saving failed', error);
+    });
   }
 
   async function saveAndLeave(target: PendingLeave) {
@@ -148,7 +197,7 @@ export function useLeaveGuard(
       leave(target, true);
     } catch (caught) {
       if (caught instanceof DraftConflictError) {
-        // The blocking conflict dialog takes over; nothing here can be saved any more.
+        // The blocking conflict dialog takes over.
         setPending(null);
       } else {
         reportUnexpected('Saving the draft before leaving the editor failed', caught);

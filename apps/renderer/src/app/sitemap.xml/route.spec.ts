@@ -25,6 +25,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('GET /sitemap.xml', () => {
@@ -67,5 +68,25 @@ describe('GET /robots.txt', () => {
     expect((await getRobots(request('/robots.txt', 'evil.example'))).status).toBe(404);
     vi.mocked(getSitemap).mockResolvedValue(null);
     expect((await getRobots(request('/robots.txt', 'nobody.localhost:3101'))).status).toBe(404);
+  });
+});
+
+// A 404 would tell crawlers the file is gone (for robots.txt: that everything may be crawled), an
+// error without a retry hint leaves them guessing; the API being down is neither.
+describe('SEO files while the API cannot answer', () => {
+  it.each([
+    ['/sitemap.xml', getSitemapXml],
+    ['/robots.txt', getRobots],
+  ])('%s answers 503 with Retry-After and logs the cause', async (path, get) => {
+    const error = new Error('Public API lookup publicSitemap failed');
+    vi.mocked(getSitemap).mockRejectedValue(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const response = await get(request(path, 'smilecare.localhost:3101'));
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(await response.text()).toBe('Trang tạm thời chưa mở được\n');
+    expect(log).toHaveBeenCalledWith('Sitemap lookup failed; answering 503', error);
   });
 });

@@ -97,18 +97,25 @@ export function useLatestServerDraft(store: EditorStore): void {
 }
 
 /**
- * Reads the page again and takes its summary (status, live release, site reminders). When the
- * draft changed on the server meanwhile (a teammate saved, then published), the summary belongs
- * to that newer draft: with nothing left to save here the store is marked conflicting, so the
- * reload dialog opens now instead of at a save that may never come; otherwise the running or
- * pending save gets the 409 itself.
+ * Reads the page again and takes its summary (status, live release, site reminders) and checks,
+ * both from that one read, so they describe the same server state. The read waits for the saves
+ * of the page running in this tab: a save the server handled before the change would otherwise
+ * land after the read with the older summary.
+ * - When the draft changed on the server meanwhile (a teammate saved, then published), the read
+ *   belongs to that newer draft: with nothing left to save here the store is marked conflicting,
+ *   so the reload dialog opens now instead of at a save that may never come; otherwise the running
+ *   or pending save gets the 409 itself.
+ * - A read older than the store (a save of this tab landed after it) is dropped: that save
+ *   brought a newer summary and checks.
  */
 export async function refreshPageSummary(store: EditorStore): Promise<void> {
-  const detail = await api(endpoints.getPage, [store.getState().page.id]);
+  const pageId = store.getState().page.id;
+  await runningSavesSettled(pageId);
+  const detail = await api(endpoints.getPage, [pageId]);
   const state = store.getState();
   if (detail.draft.revision === state.baseRevision) {
-    state.setServerState({ page: detail.page });
-  } else if (state.saveState === 'saved') {
+    state.setServerState({ page: detail.page, checks: detail.checks });
+  } else if (detail.draft.revision > state.baseRevision && state.saveState === 'saved') {
     state.markConflict();
   }
 }

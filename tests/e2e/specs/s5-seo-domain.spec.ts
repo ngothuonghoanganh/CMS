@@ -226,7 +226,10 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
       .getByRole('button', { name: 'Chọn ảnh' })
       .click();
     const dialog = page.getByRole('dialog', { name: 'Chọn ảnh' });
-    await expect(dialog.getByText('Tải ảnh mới')).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Tải ảnh mới' })).toBeVisible();
+    // Measured once the empty library has loaded: its note also names “Tải ảnh mới”, which made
+    // a text match ambiguous whenever the library answered first.
+    await expect(dialog.getByText(/^Tải ảnh đầu tiên của site lên/)).toBeVisible();
     // Nothing in the dialog reaches past its right edge, and nothing scrolls sideways.
     const overflow = await dialog.evaluate((element) => {
       const edge = element.getBoundingClientRect().right;

@@ -114,6 +114,12 @@ export interface EditorState {
   /** Local counter of draft changes. Everything is saved when it equals `savedVersion`. */
   draftVersion: number;
   savedVersion: number;
+  /**
+   * The `draftVersion` a leave without saving ("Rời trang, bỏ thay đổi") under way gave up, or null.
+   * While the draft is still at it (`isLeavingWithoutSaving`), leaving asks nothing and the screen
+   * does not save on its way out; the next change ends that (`DraftSaver.discardFor`).
+   */
+  leavingWithoutSaving: number | null;
   /** Field whose typing currently merges into the last undo step. */
   mergeKey: string | null;
 
@@ -159,6 +165,7 @@ export interface EditorState {
   applySaved: (response: SaveDraftResponse, savedVersion: number) => void;
   markSaveFailed: (failure: SaveFailure) => void;
   markConflict: () => void;
+  setLeavingWithoutSaving: (version: number | null) => void;
   /** After publish, rollback or unpublish: the page summary and checks changed on the server. */
   setServerState: (update: { page?: PageSummary; checks?: ChecksResult }) => void;
   setSite: (site: Site) => void;
@@ -173,6 +180,13 @@ export function randomSectionId(): string {
 
 export function hasUnsavedChanges(state: Pick<EditorState, 'draftVersion' | 'savedVersion'>) {
   return state.draftVersion !== state.savedVersion;
+}
+
+/** A leave without saving is under way, and the draft is still the version it gave up. */
+export function isLeavingWithoutSaving(
+  state: Pick<EditorState, 'draftVersion' | 'leavingWithoutSaving'>,
+): boolean {
+  return state.leavingWithoutSaving === state.draftVersion;
 }
 
 /** A save response built from the store when there is nothing new to save. */
@@ -333,6 +347,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
       leadCapture: init.leadCapture,
       draftVersion: 0,
       savedVersion: 0,
+      leavingWithoutSaving: null,
       mergeKey: null,
 
       addSection(type, variant, requestedIndex) {
@@ -708,6 +723,10 @@ export function createEditorStore(init: EditorInit): EditorStore {
 
       markConflict() {
         set({ saveState: 'conflict', saveError: null });
+      },
+
+      setLeavingWithoutSaving(version) {
+        set({ leavingWithoutSaving: version });
       },
 
       setServerState(update) {

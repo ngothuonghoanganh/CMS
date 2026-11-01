@@ -10,6 +10,12 @@ export interface LimitWindow {
   expiresAt: Date;
 }
 
+/** A request `hit` counted: its key, and the end of the window that counted it. */
+export interface CountedHit {
+  key: string;
+  expiresAt: Date;
+}
+
 /** Rate-limit counters shared by every API instance (ADR-016), like `login_attempts`. */
 @Injectable()
 export class LeadLimitsRepository {
@@ -26,6 +32,28 @@ export class LeadLimitsRepository {
       }
       throw error;
     }
+  }
+
+  /**
+   * Takes back requests `hit` counted, one per key: for limits that count what was done, not what
+   * was asked, such as confirmation emails (ADR-018). Like `LoginAttemptsRepository.giveBack`, only
+   * in the window that counted it: never in a later window, never in one that has ended, and never
+   * below zero.
+   */
+  async release(counted: readonly CountedHit[], now: Date): Promise<void> {
+    if (counted.length === 0) {
+      return;
+    }
+    await this.limits
+      .updateMany(
+        {
+          $or: counted.map(({ key, expiresAt }) => ({ key, expiresAt })),
+          count: { $gt: 0 },
+          expiresAt: { $gt: now },
+        },
+        { $inc: { count: -1 } },
+      )
+      .exec();
   }
 
   private async increment(key: string, now: Date, windowEnd: Date): Promise<LimitWindow> {

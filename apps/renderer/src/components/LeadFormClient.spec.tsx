@@ -47,6 +47,7 @@ const PROPS: LeadFormViewProps = {
     policyUrl: 'https://smilecare.vn/chinh-sach',
   },
   releaseId: RELEASE_ID,
+  submissionId: '9b2f1c4e-0d6a-4e1f-8c3b-5a7d9e0f1a2b',
 };
 
 /** What `new FormData(form)` reads from the controls of a form a visitor filled in. */

@@ -73,6 +73,21 @@ describe('DropdownMenu', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('leaves the rest of the page to assistive technology while open', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <>
+        <a href="/sites">Trang</a>
+        <PageActions onEdit={vi.fn()} onUnpublish={vi.fn()} />
+      </>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác cho Trang chủ' }));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    // A modal menu marks everything else aria-hidden, links and buttons included.
+    expect(container).not.toHaveAttribute('aria-hidden');
+    expect(screen.getByRole('link', { name: 'Trang' })).toBeInTheDocument();
+  });
+
   it('closes with Escape without running anything', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();

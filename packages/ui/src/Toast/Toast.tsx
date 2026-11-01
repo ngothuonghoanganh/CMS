@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -21,6 +22,7 @@ import {
 } from '../icons';
 import { cx } from '../internal/cx';
 import { hasContent } from '../internal/hasContent';
+import { type ToastPlacement, toastPlacement } from './placement';
 import styles from './Toast.module.css';
 
 export type ToastTone = 'neutral' | 'success' | 'warning' | 'danger';
@@ -83,10 +85,78 @@ export interface ToastProviderProps {
   children: ReactNode;
 }
 
-/** Holds the toasts and renders their region ("Thông báo") at the bottom right. */
+/**
+ * Holds the toasts and renders their region ("Thông báo") at the bottom right, or at the top
+ * right while the control in focus is under the bottom corner: a toast never hides it (WCAG
+ * 2.4.11). The corner is chosen again whenever focus moves or leaves, the stack changes size (a
+ * second toast), or the page scrolls or resizes, since each can bring the stack over the control.
+ * With no control in focus there is nothing to keep in sight: the usual corner.
+ */
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<readonly ToastRecord[]>([]);
+  const [placement, setPlacement] = useState<ToastPlacement>('bottom');
   const lastId = useRef(0);
+  const viewportRef = useRef<HTMLOListElement>(null);
+  const showing = toasts.length > 0;
+
+  useEffect(() => {
+    if (!showing) {
+      // The next toast starts from the usual corner.
+      const reset = requestAnimationFrame(() => {
+        setPlacement('bottom');
+      });
+      return () => {
+        cancelAnimationFrame(reset);
+      };
+    }
+    let frame = 0;
+    function place() {
+      // After the browser has scrolled the newly focused control into view.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const stack = viewportRef.current;
+        const focused = document.activeElement;
+        // Focus inside the stack stays where it is: moving the stack would move it from under the
+        // pointer or the user's eyes.
+        if (stack === null || (focused !== null && stack.contains(focused))) {
+          return;
+        }
+        // Focus fell to the page (the control was removed, or a click on no control blurred it).
+        if (focused === null || focused === document.body || focused === document.documentElement) {
+          setPlacement('bottom');
+          return;
+        }
+        setPlacement(
+          toastPlacement(
+            focused.getBoundingClientRect(),
+            stack.getBoundingClientRect(),
+            window.innerHeight,
+          ),
+        );
+      });
+    }
+    place();
+    document.addEventListener('focusin', place);
+    // Focus leaving for no control fires no focusin. Chromium fires focusout when the focused
+    // control is removed too; Firefox and Safari fire nothing, and the next move places the stack.
+    document.addEventListener('focusout', place);
+    // Capture: scrolling any container, not only the page, moves the control.
+    window.addEventListener('scroll', place, { capture: true, passive: true });
+    window.addEventListener('resize', place);
+    const stack = viewportRef.current;
+    const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    if (stack !== null) {
+      resized?.observe(stack);
+    }
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('focusin', place);
+      document.removeEventListener('focusout', place);
+      window.removeEventListener('scroll', place, { capture: true });
+      window.removeEventListener('resize', place);
+      resized?.disconnect();
+    };
+  }, [showing]);
 
   const dismiss = useCallback((id: number) => {
     setToasts((current) => current.filter((item) => item.id !== id));
@@ -145,7 +215,12 @@ export function ToastProvider({ children }: ToastProviderProps) {
             </RadixToast.Root>
           );
         })}
-        <RadixToast.Viewport label="Thông báo" className={styles.viewport} />
+        <RadixToast.Viewport
+          ref={viewportRef}
+          label="Thông báo"
+          className={styles.viewport}
+          data-placement={placement}
+        />
       </RadixToast.Provider>
     </ToastContext.Provider>
   );

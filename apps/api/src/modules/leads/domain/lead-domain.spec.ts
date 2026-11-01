@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { DIRECT_LEAD_SOURCE } from '@plp/contracts';
+import { DIRECT_LEAD_SOURCE, publicLeadRequestSchema } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { toObjectId } from '../../../shared/persistence/object-id.js';
 import { addressKey, addressKeySecret } from '../../../shared/renderer-channel/address-key.js';
@@ -9,6 +9,7 @@ import {
   deviceFromUserAgent,
   siteLimitKey,
   spamReasons,
+  submissionKey,
 } from './lead-intake-rules.js';
 import { isStandardSource, normalizeLeadSource } from './lead-source.js';
 
@@ -135,6 +136,51 @@ describe('lead intake rules', () => {
     expect(key).not.toContain(createHash('sha256').update('203.0.113.7').digest('hex'));
     expect(clientLimitKey(secret, siteId, null)).toBe('lead:ip:64b0000000000000000000a1:unknown');
     expect(siteLimitKey(siteId)).toBe('lead:site:64b0000000000000000000a1');
+  });
+
+  it('keys a submission by its id and what the visitor entered, as the contract reads it', () => {
+    const id = '3f1c2a9e-7b5d-4e8f-9a01-6c2d3e4f5a6b';
+    const entries = (overrides: Record<string, unknown> = {}) =>
+      publicLeadRequestSchema.parse({
+        releaseId: '64b0000000000000000000b2',
+        submissionId: id,
+        name: 'Nguyễn Thu Hà',
+        phone: '0901 234 567',
+        email: '',
+        message: '',
+        consent: true,
+        marketing: false,
+        honeypot: '',
+        elapsedMs: 9000,
+        source: NONE,
+        ...overrides,
+      });
+    const key = submissionKey(id, entries());
+
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+    expect(key).not.toContain(id);
+    // The same entries, however spelled, and a script retry with a longer fill time.
+    expect(submissionKey(id, entries({ phone: '0901.234.567', name: ' Nguyễn Thu Hà ' }))).toBe(
+      key,
+    );
+    expect(submissionKey(id, entries({ elapsedMs: 24_000, honeypot: 'x', source: NONE }))).toBe(
+      key,
+    );
+    // Any entry the visitor changed, or another form's id, is another lead.
+    for (const changed of [
+      { name: 'Nguyễn Thu Hằng' },
+      { phone: '0938 512 840' },
+      { email: 'ha@example.com' },
+      { message: 'Gọi sau 18h' },
+      { marketing: true },
+    ]) {
+      expect(submissionKey(id, entries(changed))).not.toBe(key);
+    }
+    expect(submissionKey('0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f', entries())).not.toBe(key);
+    // Entries cannot run into each other.
+    expect(submissionKey(id, entries({ name: 'Hà', message: 'b' }))).not.toBe(
+      submissionKey(id, entries({ name: 'Hà b', message: '' })),
+    );
   });
 });
 

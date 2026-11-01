@@ -192,3 +192,13 @@
 .insertButton {
   zoom: var(--chrome-zoom, 1);
 }
+
+/* The toolbar and the photo badge lie over the section's own content: on a scaled frame they hide
+   whole lines, and the navigation bar's button sits right under the toolbar. While a text of the
+   section is being edited they step aside, so the text in focus always shows (WCAG 2.4.11). They
+   stay in the tab order: Shift+Tab from the text brings the toolbar back. */
+.chrome:has([contenteditable]:focus) > .toolbar,
+.chrome:has([contenteditable]:focus) > .altWarning {
+  opacity: 0;
+  pointer-events: none;
+}

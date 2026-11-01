@@ -204,6 +204,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-26 (test toàn dự án):**
   - `docker compose` chỉ mở cổng trên `127.0.0.1`. MongoDB chạy không xác thực, còn Mailpit giữ thư thông báo lead và link xác nhận, nên không dịch vụ nào được nghe thấy từ mạng. `localhost` vẫn dùng được như cũ.
   - `multer` được ép lên 2.5.0 (`overrides` của pnpm), để vá lỗi DoS GHSA-q7qp-rjg7-q26m. `@nestjs/platform-express` 12.2.0 vẫn khai báo 2.4.0. Bỏ override khi Nest khai báo bản đã vá.
+- **Amended 2026-10-31 (vòng test thứ ba):** `minimatch` được ép lên 11.0.3 (`overrides` của pnpm) để vá GHSA-g3hv-75wg-m249 (DoS khi tiền xử lý glob, mức trung bình).
+  - Chỉ bản 11 có bản vá; eslint, typescript-eslint và `@nestjs/cli` vẫn khai báo 10.x.
+  - Đây là công cụ dev, pattern lấy từ chính repo. Chúng chỉ gọi `minimatch()` và `new Minimatch().match()`, hai API bản 11 giữ nguyên, và ESLint vẫn lint đúng các file như trước.
+  - Bản 11 kéo theo `@isaacs/nonrecursive-glob-match` 1.0.3 (cùng tác giả). Bỏ override khi các gói này khai báo bản 11.
+- **Amended 2026-10-31 (vòng test thứ ba, E2E):** `@axe-core/playwright` 4.14.0 (kèm `axe-core` 4.14.0), dev dependency của `tests/e2e`, để E2E quét WCAG 2.2 AA (ADR-013). Đây là bộ quét của Deque dùng trực tiếp với Playwright đang có; không thêm trình chạy test nào khác.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -249,6 +254,20 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
       - Người khác biết email có thể khóa đăng nhập của tài khoản đó tối đa một cửa sổ. Đây là đánh đổi có chủ đích để chặn dò mật khẩu.
 - **Amended 2026-10-25 (MVP B):** quyền với lead, cài đặt dữ liệu cá nhân và yêu cầu về dữ liệu nằm ở ADR-017. Editor xem và xử lý lead; chỉ Owner sửa cài đặt, xuất và xóa dữ liệu.
 - **Amended 2026-10-26 (test toàn dự án):** session hết hiệu lực đúng lúc `expiresAt`. Guard so với thời điểm của từng request, không đợi TTL monitor của MongoDB (chạy khoảng mỗi phút) xóa bản ghi. Integration test giữ điều này.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Khóa đếm đăng nhập** là HMAC-SHA256 của email đã chuẩn hóa với `LOGIN_ATTEMPT_SECRET` (bắt buộc, ít nhất 32 ký tự), thay cho sha256. Băm một danh sách email là đảo ngược được sha256, nên trước đây một bản sao database cho biết email nào đã thử đăng nhập. Đổi secret thì mọi bộ đếm bắt đầu lại.
+  - **Lỗi phía hệ thống không tốn lượt:**
+    - Lần thử vẫn được đếm trước khi kiểm mật khẩu.
+    - Khi tra tài khoản, kiểm mật khẩu, xóa bộ đếm hoặc tạo session ném lỗi, API trả lại lần thử đó: giảm 1 trong đúng cửa sổ đã đếm, không xuống dưới 0, không chạm cửa sổ đã hết hay cửa sổ sau.
+    - Trả lại cũng lỗi thì log cả hai lỗi.
+    - Chỉ mật khẩu sai mới tiêu lượt của tài khoản.
+  - **Nhiều instance API:**
+    - Rate limit theo địa chỉ của `/auth/*` (`@nestjs/throttler`) đếm trong bộ nhớ của từng tiến trình, nên N instance cho một địa chỉ tối đa N × `AUTH_RATE_LIMIT_PER_MINUTE` lần mỗi phút.
+    - Giới hạn theo tài khoản nằm trong MongoDB, đúng với mọi số instance, và là lớp chặn dò mật khẩu thật.
+    - Integration test chạy hai instance trên một database giữ cả hai điều này.
+- **Amended 2026-10-31 (vòng test thứ ba, rate limit `/auth/*`):** throttle theo địa chỉ đếm theo cùng khóa với giới hạn khách của ADR-016 (`addressNetwork`, trong `shared/`): một địa chỉ IPv4, hoặc một mạng IPv6 /64, và mỗi địa chỉ chỉ có một cách viết. Trước đây một client IPv6 đổi địa chỉ trong /64 của mình là có bucket mới.
+  - Sau proxy tin cậy (`TRUST_PROXY_HOPS` ≥ 1), Express lấy `req.ip` từ `X-Forwarded-For` mà không kiểm tra. Địa chỉ không phải IP được đếm vào bucket của địa chỉ socket (proxy): mọi người gửi chuỗi rác chung một bucket, không đổi chuỗi để thoát được. Chỉ khi cả hai địa chỉ đều không phải IP thì mới ném lỗi. Trước đây `X-Forwarded-For: foo` làm `/auth/login` trả 500.
+  - Một số load balancer ghi cả cổng vào `X-Forwarded-For` (`ip:port`, `[v6]:port`). Trước khi kiểm tra địa chỉ, API bỏ cổng của IPv4, bỏ ngoặc vuông và cổng của IPv6 (`withoutPort`, trong `shared/`), nên `203.0.113.7:51234` và `203.0.113.7` là một bucket. Chỉ giá trị vẫn không phải IP sau bước đó mới đếm vào bucket của proxy. Trước đây mọi client sau một load balancer như vậy chung bucket của proxy.
 
 ### ADR-005 — Mô hình miền Draft/Release và trạng thái suy ra
 
@@ -391,6 +410,19 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Trong nút và trên ảnh của Hero, chữ gợi ý giữ màu của chữ thật ở đó, vì `muted` không đạt AA trên nền đó.
   - Chữ gợi ý in nghiêng, để ô trống không bị nhầm với nội dung đã nhập.
   - `styles.spec.ts` kiểm các quy tắc CSS này.
+- **Amended 2026-10-31 (vòng test thứ ba):** server lưu composition đã kiểm tra, không lưu input thô.
+  - **`parseComposition`** trả composition đã parse:
+    - content của mỗi section là kết quả parse của schema section đó, nên key lạ trong content, nút, link hay mục danh sách bị bỏ;
+    - `samplePaths` chỉ giữ đường dẫn tới field chữ và nhãn nút có trong section (kể cả field variant ẩn), mỗi đường dẫn một lần.
+  - Autosave, trang tạo theo mục tiêu và publish lưu kết quả này. Publish parse lại bản nháp, nên bản nháp lưu trước thay đổi này cũng không đưa key lạ vào release hay JSON public.
+  - **`validateComposition`** chỉ trả danh sách lỗi, không dựng composition đã parse hay `samplePaths`, vì store của editor gọi nó sau mỗi command, kể cả mỗi lần gõ phím. Hai hàm dùng chung một bộ quy tắc (`checkSections`), và test kiểm chúng báo cùng lỗi trên mọi mẫu section, mọi trang tạo theo mục tiêu và các ca lỗi.
+  - **Key lạ bị bỏ chứ không bị từ chối,** như mọi body khác của API (mặc định của Zod), nên bản nháp cũ vẫn autosave được. Field bị variant ẩn vẫn được kiểm như mọi field (URL, độ dài, ảnh thuộc site) và vẫn được giữ.
+  - Release cũ không bị viết lại; chỉ database dev local có thể còn release mang key lạ.
+- **Amended 2026-10-31 (vòng test thứ ba, renderer):**
+  - **Breakpoint:** mọi container/media query theo độ rộng dùng cú pháp khoảng (`width < 768px` / `width >= 768px`).
+    - Cặp `max-width: 767px` / `min-width: 768px` để hở một khoảng: ở độ rộng lẻ (zoom, thanh cuộn) như 767,5 px, section ẩn trên một loại thiết bị lại hiện trên cả hai.
+    - Unit test cấm `min-width`/`max-width` trong CSS của sections và renderer.
+  - **Ảnh đầu trang:** ảnh đầu tiên của section đầu tiên trong thân trang (sau thanh điều hướng) tải ngay với `fetchpriority="high"`; mọi ảnh khác giữ `loading="lazy"`. Canvas của admin không đổi.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -443,6 +475,60 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Lý do: lần lưu gửi lúc unmount tới sau khi màn kế tiếp đã đọc trang, nên màn đó hiện trạng thái cũ; và nếu lần lưu đó lỗi thì thay đổi mất mà không ai biết.
     - Sidebar có bốn chỗ điều hướng bằng code, không qua link: đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất". Ba chỗ đầu vẫn lưu thay đổi đang chờ lúc unmount như trước. Với "Đăng xuất", session đã bị xóa trước khi màn unmount, nên lần lưu đó trả 401 và thay đổi đang chờ bị mất.
     - Khi đọc lại trang (sau xung đột lúc gỡ xuất bản, hoặc sau khi đổi giao diện site trong editor) mà thấy bản nháp đã đổi trên server và màn không còn gì để lưu, store chuyển sang trạng thái xung đột để hộp thoại tải lại mở ngay, thay vì chờ một lần lưu có thể không bao giờ tới.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Đường dẫn đang được kiểm tra cũng là thay đổi chưa lưu.**
+    - Đường dẫn gõ ở màn SEO chỉ vào bản nháp sau 400 ms nghỉ gõ và khi server xác nhận còn trống; trước đó store vẫn ở trạng thái đã lưu.
+    - Khi rời màn (link, Back/Forward, đóng tab), đường dẫn mà ô đang giữ nhưng chưa vào bản nháp được coi là chưa lưu. Màn kiểm tra ngay (không chờ hết 400 ms), chờ kết quả và lần lưu, rồi mới rời đi.
+    - Đường dẫn bị từ chối hoặc không kiểm tra được thì ở lại, báo "Chưa lưu được đường dẫn trang", kèm nút "Rời trang, bỏ thay đổi".
+    - Wizard tạo trang và hộp thoại "Bắt đầu trống" gửi đường dẫn cùng yêu cầu tạo trang và server kiểm tra lại, nên không cần chờ.
+  - **Điều hướng bằng code ở sidebar cũng lưu trước** (thay câu về bốn chỗ điều hướng bằng code ở trên):
+    - Đổi workspace, đổi site, "Tạo site mới" và "Đăng xuất" rời màn qua màn đang hiện (`screen-leave`). Màn lưu xong mới cho đi, và vẫn chỉ giữ một lần rời trang đang chờ.
+    - Lưu lỗi thì ở lại, kèm nút bỏ thay đổi ("Đăng xuất, bỏ thay đổi" khi đăng xuất).
+    - Cookie chọn workspace chỉ được ghi khi người dùng thật sự rời đi. Đăng xuất nhận 401 (phiên đã hết) vẫn mở trang đăng nhập.
+  - **Đổi workspace tải lại cả trang** (`window.location.assign('/')`, sau khi màn đang hiện lưu xong và cookie chọn workspace đã ghi): không dữ liệu nào của các site thuộc workspace cũ (lead, "N mới") còn trong bộ nhớ hay hiện lại từ cache khi quay lại.
+    - Trước đây sidebar gọi `queryClient.clear()` rồi `router.push('/')` trong khi màn cũ còn mount: các query đang mount dựng lại và tải lại dữ liệu của workspace cũ, nên màn nháy lên trước khi rời đi.
+    - Đổi site vẫn là điều hướng phía client và giữ cache của workspace.
+    - **Không hộp thoại "Rời khỏi trang?" nào hiện sau khi cookie chọn workspace đã ghi:** màn chỉ cho sidebar đi khi đã lưu xong hoặc khi người dùng chọn rời trang không lưu, và lúc đó `beforeunload` không hỏi (amendment 2026-11-01, rời trang không lưu). Trước đây hộp thoại đó vẫn hiện; người dùng bấm ở lại thì vẫn ở workspace cũ trong khi cookie đã chọn workspace mới.
+  - **Đọc lại tóm tắt trang** (sau khi đổi giao diện site, sau xung đột lúc gỡ xuất bản):
+    - lấy cả tóm tắt và checks từ cùng một lần đọc;
+    - chờ các lần lưu đang chạy của trang;
+    - bỏ qua câu trả lời cũ hơn store thay vì báo xung đột.
+- **Amended 2026-10-31 (vòng test thứ ba, a11y):** thanh công cụ của section đang chọn và nhãn "Thiếu mô tả ảnh" nằm đè lên nội dung của section. Ở 1440 px thanh công cụ che nút của thanh điều hướng; trên khung thu nhỏ (điện thoại) chúng che cả dòng chữ.
+  - Khi một chữ của section đang được sửa (focus trong ô sửa trên canvas), hai thứ này trong suốt và không nhận click, nên chữ đang sửa luôn hiện ra (WCAG 2.4.11).
+  - Chúng vẫn ở trong thứ tự Tab: Shift+Tab từ chữ đưa focus lên thanh công cụ và nó hiện lại.
+- **Amended 2026-11-01 (vòng test thứ ba):** link trong cùng trang không phải là rời màn.
+  - Chromium, Firefox và WebKit đều bắn `popstate` khi bấm link `#…` trong trang (skip link "Bỏ qua điều hướng" tới `#main-content`), và khi Back giữa hai mục chỉ khác fragment.
+  - Guard của Back/Forward chỉ coi `popstate` là rời màn khi đường dẫn hoặc query khác với entry của màn (URL ghi lại khi màn bắt đầu có thay đổi chưa lưu). Cùng đường dẫn và query thì, dù fragment là gì, người dùng vẫn ở tài liệu này và guard để sự kiện đi qua (`isSameDocument`).
+  - Trước đây, ở màn SEO hay editor còn thay đổi chưa lưu, skip link bị coi là Back: guard đẩy lại entry của màn, lưu rồi `history.back()`. Kết quả là thừa một entry lịch sử, và nếu lưu lỗi thì có cả toast "Rời trang, bỏ thay đổi".
+  - E2E kiểm trên màn SEO còn thay đổi chưa lưu (lưu đang lỗi):
+    - skip link thêm đúng một entry và đưa focus vào nội dung chính;
+    - Back về URL của màn không có fragment: lịch sử không tăng, entry của skip link vẫn ở phía trước (Forward về lại `#main-content`), không hộp thoại, không toast;
+    - sau "Thử lại", thay đổi được lưu.
+- **Amended 2026-11-01 (vòng test thứ ba, rời trang không lưu):**
+  - **"Rời trang, bỏ thay đổi"** (hộp thoại của editor, nút trên toast của màn SEO, kể cả "Đăng xuất, bỏ thay đổi") nghĩa là: lần rời trang này không chờ lưu, không hỏi và không lưu trên đường đi những thay đổi đang có lúc bấm. Không hơn.
+  - **Store ghi phiên bản bản nháp bị bỏ, `leavingWithoutSaving`:** `draftVersion` lúc bấm, hoặc `null`. Cờ chỉ có hiệu lực khi `draftVersion` vẫn bằng nó (`isLeavingWithoutSaving`).
+    - `discardFor(leave)` của saver ghi phiên bản khi lần rời trang bắt đầu, và xóa khi lần đó báo `'stayed'` hoặc ném lỗi. Lần rời trang báo `'leaving'` thì phiên bản giữ nguyên, kể cả khi màn không unmount (nút bỏ thay đổi trên toast của màn SEO trỏ tới chính URL đang mở).
+    - Thay đổi mới tăng `draftVersion` nên tự kết thúc cờ: thay đổi đó được hỏi, autosave và lưu lúc unmount như thường. Lần lưu đó gửi cả bản nháp, gồm cả các thay đổi đã bỏ trước đó.
+    - Khi cờ có hiệu lực, `leavingLoses` trả false: `beforeunload` không hỏi, guard của Back/Forward để sự kiện đi qua, màn SEO và editor cho mọi lần rời trang khác đi ngay, kể cả khi đường dẫn còn đang chờ kiểm tra.
+    - Saver không lưu lúc dừng (màn unmount) khi cờ có hiệu lực.
+  - **Hẹn giờ của saver:**
+    - `discardFor` hủy hẹn giờ debounce và hẹn giờ thử lại khi bắt đầu, và saver không hẹn lần thử lại nào khi cờ có hiệu lực: lần thử lại không ghi các thay đổi đã bỏ vào bản nháp trong lúc đăng xuất chậm.
+    - Lần rời trang báo `'stayed'` hoặc ném lỗi thì saver hẹn lại một lần lưu nếu còn thay đổi chưa lưu, với đủ số lần thử lại, nên autosave chạy tiếp mà không cần sửa gì thêm. Chính bản nháp server đã từ chối hẳn (422, 401, 403, 404…) thì không gửi lại, vì sẽ lỗi y như vậy; bản nháp đã đổi kể từ lần từ chối đó thì được gửi. Lỗi 408 được thử lại như lỗi server; 429 thì không, vì các lần thử lại không chờ theo `Retry-After`. Ngoài lúc rời trang cũng vậy: thay đổi gõ trong lúc một lần lưu đang chạy, nếu lần lưu đó bị từ chối hẳn, được gửi ngay sau đó, không đợi lần sửa kế tiếp.
+  - **Lần lưu đang chạy lúc bấm thì chạy tới hết,** kể cả phần thay đổi đến trong lúc nó chạy, và bản nháp giữ các thay đổi đó. Chấp nhận được: đó là bản nháp, trang live không đổi (quy tắc 1), và không mất dữ liệu.
+  - `ensureSaved`, "Thử lại", xuất bản, xem trước và "Quay về bản live" không xét cờ: chúng luôn lưu.
+  - Tab của chính màn đang mở (tab có `aria-current`, kể cả khi URL có `?focus=`) và link tới đúng tài liệu đang mở (cùng đường dẫn và query, `isSameDocument`) không phải là rời trang: không lưu trước, không có lối thoát bỏ thay đổi. Lần rời trang khác đang chờ lưu bị hủy, vì nơi người dùng chọn sau cùng là màn này. Link tới cùng màn với query khác (`?focus=title`) vẫn được đi, sau khi lưu.
+  - Màn SEO vẫn giữ một lần rời trang đang chờ lưu. Nút bỏ thay đổi trên toast xóa lần đang chờ đó rồi mới rời đi, nên người dùng rời đi một lần, tới đích của nút vừa bấm.
+  - **Kết quả của "Đăng xuất"** (`useLogout`):
+    - Chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".
+    - Sau khi request thành công: xóa cache, `router.replace('/login')`, rồi `router.refresh()`. Bước nào lỗi thì được báo (`reportUnexpected`) và không cản việc mở trang đăng nhập.
+    - `router.replace('/login')` ném lỗi thì báo lỗi rồi tải lại cả trang tới `/login` (`loadPage`); kết quả vẫn là `'leaving'`.
+    - Tải trang cũng lỗi thì báo lỗi, hiện toast danger "Bạn đã đăng xuất" ("Không mở được trang đăng nhập. Hãy tải lại trang.") và trả `'stayed'`: màn giữ thay đổi, lưu và hỏi lại như thường.
+  - **Chấp nhận như hiện tại:**
+    - Các lần rời trang chồng nhau dùng chung cờ: lần nào báo `'stayed'` cũng xóa cờ của các lần kia và cho autosave chạy lại. Hệ quả: trình duyệt có thể hỏi một lần trước khi lần kia tải lại trang; bản nháp có thể giữ các thay đổi lần kia định bỏ; một lần lưu lúc unmount sau khi đã đăng xuất có thể nhận 401. Trang live không đổi.
+    - Thay đổi gõ trong lúc request đăng xuất đang chạy không thuộc phần đã bỏ, nên màn lưu nó lúc unmount; khi đăng xuất đã xong, lần lưu đó nhận 401 và thay đổi đó mất. Cửa sổ này chỉ dài bằng một request.
+    - Khi cả `router.replace` lẫn `loadPage` đều lỗi, tải lại trang như toast hướng dẫn có thể gặp hộp thoại rời trang của trình duyệt, vì màn vẫn còn thay đổi không lưu được.
+    - Fallback `loadPage('/login')` có thể làm trình duyệt hiện hộp thoại rời trang của nó khi đăng xuất không đi qua `discardFor` mà màn còn thay đổi chưa lưu.
+    - `refocus` của `Alt+↑/↓` (`use-editor-shortcuts.ts`) chỉ trả focus khi focus đã rơi về `body`: trình duyệt đưa focus về đó khi phần tử đang focus bị gỡ hoặc bị vô hiệu hóa.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
@@ -478,6 +564,24 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (MVP B):**
   - DTO public có thêm `releaseId` để form gửi kèm release khách đang xem (ADR-016). Id không mở quyền truy cập nào (ADR-003).
   - Renderer có thêm hai route không cache: `POST /_lead` (gửi form, ADR-016) và `POST /_e` (beacon, ADR-019). Cả hai gọi API qua kênh ký HMAC của ADR-016.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **API lỗi hoặc treo:**
+    - Đo trên renderer thật, mọi request trang (đã cache hay chưa, có hay không User-Agent) đều treo không kết thúc.
+    - Nguyên nhân: bước kiểm tra của proxy lỗi nên page render với khóa `''`, khóa này không có trong cache. Lookup lỗi, và Next 16 gửi status 500 nhưng không đóng body khi metadata và page cùng chờ một lời gọi `'use cache'` ném lỗi.
+    - Vì vậy câu "API lỗi không làm hỏng trang đang có trong cache" của amendment 2026-10-25 không đúng.
+  - **Proxy trả 503** kèm `Retry-After: 60`, `Cache-Control: no-store` và trang HTML tiếng Việt dựng sẵn ("Trang tạm thời chưa mở được") khi không hỏi được `path-status`; trang không render.
+  - **Hàm `'use cache'` không bao giờ ném lỗi:** lỗi được log rồi trả về dưới dạng giá trị với `cacheLife` bằng 0, hàm gọi bên ngoài ném lỗi. Page kết thúc bằng 500 ngay; request kế tiếp hỏi lại API.
+  - **Hệ quả:**
+    - Khi API không trả lời `path-status`, trang không được phục vụ từ cache.
+    - Khi `path-status` trả lời mà `resolve` lỗi, entry còn trong `revalidate` (5 phút) vẫn được phục vụ. Quá hạn đó Next tạo lại ngay trong request nên khách nhận 500, vì page không tự trả 503 được.
+  - **Thời gian chờ:** kiểm tra của proxy 3 giây; lookup của page, sitemap và robots 5 giây. Khách chờ API tối đa 8 giây (trước đây 10 + 10).
+  - **sitemap.xml và robots.txt:** API lỗi thì trả 503 kèm `Retry-After` (trước đây 500, body rỗng).
+  - **User-Agent:** proxy đặt `User-Agent: unknown` cho request không có header này, nên Next luôn render chế độ blocking: status lỗi là thật, không còn shell 200.
+  - **404 của proxy** render với cùng header như trang. Trước đây request không có User-Agent nhận bản tĩnh `Cache-Control: s-maxage=31536000`, nên cache dùng chung sẽ giữ 404 cả năm sau khi trang được publish.
+- **Amended 2026-10-31 (vòng test thứ ba, E2E):** trang live gọi `await connection()` trước khi sinh `submissionId` của form (ADR-016).
+  - Với `cacheComponents`, Next render trang thêm một lần dưới dạng prerender và gặp `crypto.randomUUID()` ở đó, nên mỗi lượt xem trang có form ghi một dòng lỗi "unstable value … while prerendering" vào log. Trang preview đã làm như vậy từ trước.
+  - Mỗi lần phục vụ trang vẫn có id riêng.
+  - E2E chạy thêm một renderer ở cổng 3102, cùng bản build, trỏ tới một địa chỉ API không có gì lắng nghe. Spec kiểm trang, preview (`noindex`), sitemap và robots trả 503 kèm `Retry-After: 60`.
 
 ### ADR-010 — Preview link có chữ ký
 
@@ -489,6 +593,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Giao diện:** banner "Bản xem trước".
 - **Reason:** Quy tắc 6; chia sẻ cho khách hàng mà không cần đăng nhập.
 - **Consequences:** Link không thu hồi riêng lẻ được trước hạn; xoay khóa thì mọi link mất hiệu lực.
+- **Amended 2026-10-31 (vòng test thứ ba):** proxy kiểm tra token trước khi render (`previewStatusForHost`: token hợp lệ và thuộc site của host).
+  - Token hết hạn, sai `kid`, sai chữ ký hay của site khác: rewrite sang trang not-found dựng sẵn, status 404, `X-Robots-Tag: noindex, nofollow`. Câu tiếng Việt có sẵn trong HTML nên đọc được khi tắt JavaScript.
+  - Trước đây thông báo chỉ hiện sau hydrate, và request không có User-Agent nhận 200.
+  - Lượt kiểm tra trạng thái của proxy lỗi (API không trả lời, hết giờ, 5xx): 503 `noindex` kèm `Retry-After: 60`, do proxy dựng.
+  - **Proxy chỉ hỏi trạng thái của token:** `GET /public/preview/:token/status` (contract `publicPreviewStatusResponseSchema`, thêm mới, không đổi contract cũ) kiểm token, site của token và việc trang hay release còn thuộc site đó (chỉ đọc `siteId`), rồi trả `{ kind, subdomain }`. Không nạp bản nháp, release hay asset. Cùng 404, `no-store` và `noindex` như endpoint đầy đủ.
+    - Page nạp preview đầy đủ đúng một lần (`GET /public/preview/:token`) khi lần nạp đó thành công.
+    - Trước đây mỗi lần xem preview gọi endpoint đầy đủ hai lần (proxy rồi page): gấp đôi việc của API.
+  - **Lần nạp đầy đủ của page lỗi sau khi kiểm tra trạng thái đã qua thì trả 500, không phải 503:** page của Next không đặt được status 503. Phản hồi 500 đó vẫn có `X-Robots-Tag: noindex, nofollow`, `Cache-Control: no-store` và `Referrer-Policy: no-referrer` (header của `next.config.ts` theo đường dẫn `/_preview/…`), cùng `<meta name="robots" content="noindex">` do Next tự thêm vào trang lỗi. Đã kiểm bằng bản build của renderer với một API giả trả lời lượt kiểm tra trạng thái và trả 500 cho lần nạp đầy đủ. Khi lỗi như vậy, Next gọi lần nạp đầy đủ hai lần.
 
 ### ADR-011 — SEO, slug, redirect, sitemap, robots, tên miền mặc định
 
@@ -538,6 +650,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Mỗi tiến trình API mã hóa lại một ảnh một lúc;** tối đa 8 ảnh chờ, ảnh tiếp theo nhận 429.
     - AVIF 25 megapixel vẫn tốn khoảng 0,5 GB lúc giải mã, nên production cần ít nhất 1 GB RAM cho API.
     - Một ảnh JPEG 12 MP mất dưới 1 giây; AVIF có thể mất vài giây.
+- **Amended 2026-10-31 (vòng test thứ ba):** integration test kiểm bucket đang chạy bằng client ẩn danh.
+  - Đọc được object dưới `public/`, không đọc được object ngoài `public/`.
+  - Không liệt kê được: ListObjects v1/v2, prefix, versions, uploads, HEAD bucket.
+  - Không đọc được policy, ACL, CORS, location.
+  - Không PUT hay DELETE được, kể cả dưới `public/`.
+  - Storage production phải giữ đúng chính sách này.
 
 ### ADR-013 — Boundary, lỗi, logging, quality gate
 
@@ -568,6 +686,35 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Quy tắc "API không có React" và "schema không có React" xét cả chuỗi import, cả import chỉ lấy type và cả file `.tsx`.
     - `@plp/contracts` không import package nào khác của workspace; chỉ admin và renderer import `@plp/sections/react`.
   - **Lint:** luật React hooks áp dụng cả cho code React dùng chung (`packages/sections/src/react`, `packages/ui`).
+- **Amended 2026-10-31 (vòng test thứ ba):** header của admin (`next.config.ts`, `http-headers.ts`).
+  - Mọi phản hồi có `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin` và `X-Content-Type-Options: nosniff`; không gửi `X-Powered-By`.
+  - `Strict-Transport-Security: max-age=31536000` chỉ khi `COOKIE_SECURE=true` (đọc lúc build như rewrite, mặc định true như API).
+  - Trang gửi `Cache-Control: no-store` (trừ `/_next/static`), nên Back sau khi đăng xuất phải hỏi lại server.
+  - Next không gắn header của admin vào phản hồi của rewrite `/api` (proxy ra ngoài). Vì vậy API tự gửi `X-Content-Type-Options: nosniff` trên mọi phản hồi, kể cả file CSV và lỗi 400/413 của body parser (middleware này đứng đầu, trước body parser), và `no-store` cho dữ liệu cá nhân.
+  - Chưa có CSP đầy đủ (`script-src` với nonce): cần nonce sinh trong middleware, để sau.
+- **Amended 2026-10-31 (vòng test thứ ba, a11y và đa trình duyệt):**
+  - **Quét WCAG 2.2 AA trong E2E:** `@axe-core/playwright` với tag `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`, ở 1440 và 375 px. Vi phạm làm E2E đỏ; không loại trừ rule nào.
+    - Admin: đăng nhập, đăng ký, tạo site, bảng điều khiển (trang ở mọi trạng thái, menu), các bước tạo trang, editor có section đang chọn, "Thêm section", hộp thoại xuất bản (kiểm tra và đã live), lịch sử với panel khôi phục, SEO, tên miền, cài đặt site, hộp thư có lead đang mở, "Nơi nhận lead", "Dữ liệu & đồng ý" có yêu cầu, "Hiệu quả" có số liệu, trang xác nhận nơi nhận lead.
+    - Public: trang live ở 4 color scheme của cả 3 theme (mọi section và variant, kèm lỗi của form), preview, trang kết quả `/_lead` (đã nhận và lỗi), các trang 404.
+    - Dữ liệu giống board được gieo qua API (`tests/e2e/support/board.ts`). E2E đặt `LEAD_LIMIT_PER_CLIENT=100`, vì renderer của E2E không tin proxy nào nên mọi khách chung một bucket; giới hạn này có integration test riêng.
+    - Axe đợi animation hữu hạn chạy xong: dialog đang hiện dần làm màu bị trộn và báo sai tương phản.
+  - **Thứ axe không xét được** có spec riêng (`a11y-layout.spec.ts`):
+    - Reflow ở 320 px: mọi màn admin và trang public không cuộn ngang (1.4.10).
+    - Tab qua mọi màn admin và trang live ở 1440 và 375 px, cả khi có toast: control đang focus không bao giờ bị che hoàn toàn (2.4.11).
+    - Kích thước target 24 px (2.5.8) là rule `target-size` của axe trong các lần quét trên.
+  - **Sửa từ các lần quét:** menu (DropdownMenu của `@plp/ui`) không còn modal, vì Radix gắn `aria-hidden` lên phần còn lại của trang trong khi link và nút ở đó vẫn focus được (Tab vẫn bị giữ trong menu, click ra ngoài vẫn đóng menu). Nút đổi workspace, đổi site và chọn bảng màu lấy tên từ chữ hiện trên nút (2.5.3). Bảng của "Hiệu quả" cuộn ngang được bằng bàn phím (2.1.1): khi bảng rộng hơn khung (đo lại bằng `ResizeObserver` khi khung hay bảng đổi kích thước), khung là region có tên và nhận focus; khi bảng vừa khung (màn desktop) khung không có role, tên hay `tabindex`, nên không thêm điểm dừng Tab vô ích. Khung đang giữ focus thì giữ role và `tabindex` tới khi focus sang chỗ khác trong trang, kể cả khi bảng đã vừa khung; cửa sổ hay tab mất focus không tính, vì khung vẫn là phần tử đang active (2.4.3).
+  - **Toast không che control đang focus (2.4.11):** chồng toast ở góc dưới phải, và chuyển lên góc trên phải khi control đang focus nằm dưới góc dưới (ví dụ "Chuyển vào spam" của lead đang mở ở 1440 × 900), rồi về chỗ cũ khi focus rời đi. Hàm thuần `toastPlacement` trong `@plp/ui` quyết định góc. Góc được chọn lại mỗi khi focus đổi, chồng toast đổi kích thước (`ResizeObserver` trên viewport, ví dụ toast thứ hai) hay trang cuộn (cả vùng cuộn bên trong) hoặc đổi kích thước, vì mỗi điều đó đều có thể đưa chồng toast lên control.
+    - Không còn control nào giữ focus (focus rơi về `body` vì control bị gỡ, hoặc click vào chỗ không có control) thì chồng toast về góc dưới phải. Focus rời đi không bắn `focusin`, nên chồng toast nghe cả `focusout`. Chromium bắn `focusout` cả khi control đang focus bị gỡ; Firefox và Safari không bắn gì, nên chồng toast về góc dưới ở lần đổi kế tiếp (cuộn, đổi kích thước, toast thêm hay bớt). Trước đây nó ở lại góc trên. Focus nằm trong chồng toast thì chồng toast đứng yên.
+  - **Đa trình duyệt:** hai project WebKit và Firefox chỉ chạy `cross-browser.spec.ts`: trang live, FAQ `<details>`, ẩn/hiện theo thiết bị quanh 768 px, form tải lười (lỗi tại chỗ, focus vào ô lỗi, gửi), lượt xem được đếm, form không JavaScript, gõ và dán (chữ có định dạng, nhiều đoạn) trên canvas của editor. Phần còn lại của E2E chỉ chạy Chromium để giữ thời gian chạy.
+- **Amended 2026-11-01 (vòng test thứ ba):** index có trước khi API phục vụ.
+  - `IndexBuilder` (trong `PersistenceModule`, một chỗ chung cho mọi repository) tạo collection và mọi index mà các schema khai báo trong `onModuleInit`, nên API chỉ nhận request sau khi chúng có. Mongoose không tự dựng index ở nền nữa (`autoIndex: false`).
+  - Lý do: nhiều index unique là chốt chặn của bất biến (email người dùng, session, lượt đăng nhập, membership, subdomain, slug bản nháp và slug đã xuất bản, phiên bản và khóa idempotency của release, redirect, phiên bản đồng ý, lead theo `submissionId`, bộ đếm giới hạn, salt và bộ đếm của analytics); TTL index xóa dữ liệu hết hạn; một số truy vấn có `hint`. Dựng ở nền thì trên database mới, request đầu tiên tới trước index: bản trùng lọt vào (lần dựng index sau đó thất bại, và Mongoose bỏ qua lỗi), truy vấn có `hint` bị từ chối.
+  - Không dựng được một index (ví dụ dữ liệu đã có bản trùng) thì API không khởi động; lỗi nêu tên model.
+  - Integration test: sau khi khởi động không model nào thiếu index (`diffIndexes`); một index unique gặp dữ liệu trùng làm khởi động thất bại; index của lead bị xóa được dựng lại ở lần khởi động sau, trước lượt kiểm tra đầu tiên.
+  - **Quy tắc vận hành** (hệ quả của việc dựng index lúc khởi động, xem §6):
+    - Đổi option của một index đã có (`expireAfterSeconds` của TTL, `partialFilterExpression`, unique) là một bước migration chạy trước khi deploy: xóa rồi tạo lại index, hoặc `collMod` với TTL. Thiếu bước này thì phiên bản mới không khởi động được, MongoDB báo `IndexOptionsConflict`.
+    - Index mới trên collection lớn được dựng trước khi deploy, để lúc khởi động index đã có sẵn.
+    - Không xóa hay đổi tên index khi API đang chạy. Lượt kiểm tra gửi lại của lead công khai dùng `hint` (ADR-016), nên thất bại trong lúc thiếu index của nó; chỉ lần khởi động sau mới tạo lại index.
 
 ### ADR-014 — Giới hạn và quyết định triển khai MVP A
 
@@ -694,6 +841,34 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Bước 4 chạy trước bước 3:** gửi lại cùng `submissionId` của một lead đã nhận trả 200, kể cả khi khách đã vượt giới hạn, và không tính vào giới hạn.
     - Lệnh kiểm truy vấn kèm `$type: 'string'`, để index unique-partial phục vụ. Nhờ vậy lệnh kiểm chỉ là một lần dò index, dù site có bao nhiêu lead.
   - **User agent dài:** renderer cắt user agent ở 512 ký tự, rồi ký đúng giá trị header gửi đi. Headers bỏ khoảng trắng ở hai đầu, nên phần cắt kết thúc bằng khoảng trắng tới API mất các khoảng trắng đó. Trước đây chữ ký không khớp và lead bị từ chối.
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Form không JavaScript có `submissionId`:**
+    - Renderer sinh id mới cho mỗi lần phục vụ trang, đặt trong ô ẩn `submissionId`. `/_lead` chuyển tiếp id nếu hợp lệ theo `submissionIdSchema`, không thì gửi `null`.
+    - Gửi lại sau khi relay hết giờ, hoặc tải lại trang kết quả, được API trả như lần đầu, không tạo lead hay email thứ hai.
+    - Trang live không bao giờ được cache dùng chung (`private, no-store`) nên hai khách không chung id. Script của trang vẫn dùng id riêng cho mỗi form.
+    - Giới hạn: link "Quay lại trang" trên trang lỗi mở trang mới với id mới.
+    - **Khóa chống trùng là id cộng nội dung khách nhập** (`submissionKey`): sha256 của `submissionId`, họ tên, số điện thoại, email, lời nhắn và lựa chọn nhận tin, sau khi contract chuẩn hóa.
+      - Cùng id, cùng nội dung là gửi lại, trả như lần đầu. Cùng id, nội dung khác là lead mới: khách không có JavaScript gửi form, bấm Back (bfcache giữ form và id), sửa số điện thoại rồi gửi lại. Trước đây lead thứ hai bị coi là gửi lại và mất. Gửi lại lead thứ hai đó vẫn là gửi lại.
+      - Thời gian điền không thuộc khóa, nên script gửi lại với `elapsedMs` lớn hơn vẫn là cùng lead, như trước.
+      - Khóa lưu vào trường `submissionId` của lead, nên index unique-partial `(siteId, submissionId)` không đổi. Lượt kiểm tra gửi lại là một phép so bằng đúng khóa đó (kèm `$type: 'string'`, không `$in`), có `hint` tới index đó: một lần dò index. Không có `hint`, lượt thử của planner có thể thấy index `siteId, createdAt` ngang ngửa và cache plan đó, rồi các lần kiểm tra sau của một site lớn đọc mọi lead của site. `hint` không bao giờ gặp database thiếu index, vì index có trước khi API phục vụ (ADR-013, 2026-11-01).
+      - Lead lưu trước thay đổi này giữ id thô. Chúng chỉ có trong database dev local; MVP A/B không có dữ liệu production (ADR-001, §6). Một lần gửi lại vắt qua thay đổi này không được nối: nó thành lead mới.
+      - Id ngẫu nhiên không được lưu, nên khóa không cho suy ra nội dung.
+  - **Relay lỗi** (API không tới được, hết giờ, 5xx): `/_lead` trả 503 kèm `Retry-After: 60` thay cho 502.
+  - **Địa chỉ khách:**
+    - Phần tử cuối của `X-Forwarded-For` được chuẩn hóa: IPv4 trong IPv6 (`::ffff:a.b.c.d`) thành IPv4, IPv6 viết gọn chữ thường, bỏ cổng và ngoặc vuông. Một khách chỉ có một bucket.
+    - Đã kiểm end-to-end qua proxy nối `X-Forwarded-For`: hai địa chỉ có giới hạn riêng, header giả không chọn được bucket.
+- **Amended 2026-10-31 (vòng test thứ ba, API):** địa chỉ của khách sau proxy tin cậy.
+  - **Một địa chỉ, một cách viết** (`canonicalAddress`) trước khi tạo khóa rate limit hay hash khách:
+    - Địa chỉ IPv4 đi qua socket IPv6 (`::ffff:203.0.113.7`) là chính địa chỉ IPv4 đó.
+    - Địa chỉ IPv6 viết đủ 8 nhóm, chữ thường, bỏ số 0 đầu mỗi nhóm; bỏ zone (`%eth0`).
+    - Trước đây hai cách viết của cùng một địa chỉ là hai bucket và hai khách.
+  - **Giới hạn theo địa chỉ tính theo mạng /64 với IPv6** (`addressNetwork`): 5 lead mỗi 10 phút và 60 lượt xem mỗi 10 phút (ADR-019), cho mỗi địa chỉ IPv4 hoặc mỗi mạng IPv6 /64.
+    - Lý do: một thuê bao (điện thoại, router gia đình) giữ cả một /64 và tự chọn địa chỉ trong đó, nên giới hạn theo từng địa chỉ IPv6 không giới hạn được ai.
+    - Đánh đổi: các máy chung một /64 chung một bucket, như các máy chung một IPv4 sau NAT.
+    - Khách duy nhất (ADR-019) vẫn tính theo địa chỉ đầy đủ: hai điện thoại trong một /64 là hai khách.
+  - **Integration test** chạy với `TRUST_PROXY_HOPS=1`, địa chỉ do renderer ký và giới hạn mặc định.
+    - Kiểm: 5 lead và 60 lượt xem cho mỗi địa chỉ; hai địa chỉ cùng trình duyệt là hai khách; IPv6 và IPv4-mapped.
+    - Route relay không đọc `X-Forwarded-For`, kể cả khi header có phần tử giả ở đầu.
 
 ### ADR-017 — Đồng ý, dữ liệu cá nhân, thời gian lưu và yêu cầu về dữ liệu
 
@@ -770,6 +945,12 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-26 (test toàn dự án):** thời gian lưu luôn theo cài đặt cuối cùng, kể cả khi có thay đổi đúng lúc.
   - Lead tới trong lúc Owner đổi thời gian lưu: sau khi lưu lead, phần nhận lead đọc lại thời gian lưu hiện tại và sửa `expiresAt` nếu khác. Cài đặt được commit trước khi tính lại mọi lead, nên hoặc lần tính lại đó đã gồm lead này, hoặc lần đọc lại thấy giá trị mới.
   - Hai lần lưu cùng lúc: sau khi tính lại, lần lưu đọc lại giá trị đã lưu và tính lại lần nữa nếu khác. Lead theo giá trị được lưu sau cùng.
+- **Amended 2026-10-31 (vòng test thứ ba):** nhật ký 50 mục bỏ mục cũ nhất trước, kể cả mục "Ghi nhận".
+  - Thời điểm ghi nhận, phản hồi và hoàn tất vẫn nằm trên yêu cầu (`createdAt`, `respondedAt`, `completedAt`).
+  - Integration test đi qua API: ghi nhận cộng 49 lần xuất là 50 mục, và lần xuất thứ 50 đẩy mục ghi nhận ra. Phản hồi và hoàn tất (update pipeline) giữ 50 mục, cũ nhất trước.
+- **Amended 2026-10-31 (vòng test thứ ba, admin):**
+  - Với Editor, hộp thoại xuất bản không có "Sửa ngay" cho `consent_not_configured` và `lead_destination_missing`. Thay vào đó, hộp thoại ghi rõ chỉ Owner của workspace làm được và đề nghị nhờ Owner.
+  - Checklist "Thiết lập site" của màn 01 ghi "Owner của workspace làm bước này" cho các bước của Owner, thay vì link tới màn chỉ đọc.
 
 ### ADR-018 — Hộp thư lead và email thông báo
 
@@ -856,6 +1037,32 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Không tính lần thử; lead vẫn `pending`.
   - Thử giành lại một lần sau lần chờ đầu (1 phút). Lỗi nữa thì lượt quét lúc khởi động xử lý.
   - Trước đây lead kẹt ở `pending` tới lần khởi động sau, và không có nút "Gửi lại".
+- **Amended 2026-10-31 (vòng test thứ ba):**
+  - **Giới hạn thư xác nhận đếm thư đã gửi đi,** không đếm yêu cầu.
+    - Request bị từ chối (429; 409 vì địa chỉ đã có hoặc site đã đủ 5 địa chỉ; 404) và thư không gửi được (địa chỉ `unsent`) được trả lại ở cả ba bộ đếm.
+    - Trước đây 5 lần bấm "Gửi lại" lúc SMTP lỗi khóa địa chỉ đó cả ngày, và bấm quá giới hạn của một địa chỉ tiêu hết 50 thư của workspace.
+    - Vẫn đếm trước khi gửi (nguyên tử), nên các request đồng thời không vượt giới hạn. Trả lại là giảm 1 trong đúng cửa sổ đã đếm (khớp `expiresAt` của cửa sổ đó), không xuống dưới 0, không chạm cửa sổ đã hết hay cửa sổ sau, như lần thử đăng nhập của ADR-004.
+    - Trả lại lỗi thì thư vẫn bị đếm (phía an toàn: cửa sổ hết trong một ngày) và lỗi được ghi log mức error kèm tên các bộ đếm và id của site, workspace (không kèm hash của địa chỉ, vì log không chứa dữ liệu cá nhân, kể cả dạng bí danh) và nguyên nhân. Request giữ kết quả của chính nó: vẫn là 429, 409 hay 404 như cũ, hoặc địa chỉ `unsent` được thêm thành công. Lý do: dọn bộ đếm không được đổi điều người dùng được báo. Trả 500 sẽ mất thông báo họ làm theo được, và báo lỗi cho một lần thêm hay gửi lại đã lưu thật.
+    - Ba bộ đếm tăng song song. Một bộ đếm lỗi thì các bộ đếm đã tăng được trả lại, rồi request thất bại (500) với lỗi đó làm `cause`.
+    - Lỗi đó (ví dụ lỗi trùng khóa của MongoDB) có thể nêu khóa bộ đếm, tức hash của địa chỉ, và `ProblemFilter` ghi cả lỗi. Lưới an toàn ở log redaction của API: serializer `err` của pino thay mọi chuỗi từ 64 chữ số hex trở lên bằng `[hash]` trong lỗi được ghi (message, stack, `errmsg`, `keyValue`, `cause` và `errors` lồng nhau, có chặn vòng lặp). Không log nào cần giá trị sha256.
+      - Bổ sung 2026-11-01: serializer `err` và việc che token preview trong `params` của serializer `req` dùng chung một hàm duyệt chuỗi (`mapStrings`). Hàm chặn vòng lặp, kể cả vòng lặp qua giá trị `toJSON()` trả về (một object mới trỏ lại chính nó): trước đây việc duyệt tràn stack ngay trong `logger.error` của `ProblemFilter`, nên log mất lỗi gốc, và `params` tự trỏ lại mình cũng làm tràn stack.
+  - **Lỗi SMTP thật,** thử bằng một SMTP stub trên `node:net` qua `SmtpEmailSender` và nodemailer:
+    - kết nối bị từ chối → `smtp_unavailable`;
+    - máy chủ không chào hoặc không trả lời DATA → `timeout`;
+    - 550 cho một trong hai địa chỉ → `sent` với `recipients` 1, `rejectedRecipients` 1 và mã `smtp_rejected`, không thử lại;
+    - 550 cho mọi địa chỉ → `smtp_rejected`.
+    - Timeout của nodemailer đặt được bằng query của `SMTP_URL` (`?socketTimeout=…`).
+  - **Lịch thử lại:** test chỉ giả lập `setTimeout` (database, HTTP và `Date` vẫn thật) giữ đúng lịch production: thử ngay, sau 1 phút, sau 5 phút, rồi `failed`.
+  - **Nhiều instance API:**
+    - Giành lead và lượt quét lúc khởi động đúng như đã ghi. Hai instance cùng thử 40 lead thì mỗi lead đi một thư, một lần thử. Hai lượt quét chạy cùng lúc nhận backlog một lần. Lead đang `sending` dưới 10 phút được để lại.
+    - Lịch 0/1/5 phút chỉ đúng trong một instance.
+      - Lượt quét của một instance khởi động lại nhận cả lead `pending` mà instance khác đang chờ thử lại, và thử ngay. Lần thử đã hẹn của instance kia sau đó thấy lead đã xử lý và không gửi gì.
+      - Thư không bao giờ trùng, nhưng ba lần thử có thể dồn sát nhau khi deploy cuốn chiếu.
+    - "Lần khởi động sau" ở Consequences nghĩa là lần khởi động sau của bất kỳ instance nào.
+  - **Phân trang hộp thư** (170 lead ở 7 thời điểm): qua nhiều trang 50 và 20 mục, không lead nào lặp hay bị bỏ. Điều này đúng cả khi lọc trang + trạng thái, trong thư mục spam, khi tìm theo số điện thoại và theo tên. Số trên thư mục, các trang và file CSV giữ cùng các lead theo cùng thứ tự.
+  - **Lọc trang + trạng thái** dùng `leads_inbox_page` hoặc `leads_inbox_status`, không quét collection và không sort trong bộ nhớ.
+    - Đo bằng `explain` trên 54.000 lead có trạng thái lệch.
+    - Lệnh đếm tệ nhất quét 3.200 key.
 
 ### ADR-019 — Hiệu quả trang, đo không dùng cookie
 
@@ -936,12 +1143,21 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Script đếm view chỉ import `@plp/contracts/page-view`, một module không có zod.
     - Script của form được tải lười (`React.lazy`, fallback là form tĩnh vẽ ở server, vẫn gửi được khi tắt JavaScript).
     - Kết quả đo trên build production: trang không có form không còn tải chunk 38 KB gzip của schema và form. Chỉ còn phần nền của framework và khoảng 1 KB của script đếm view.
+- **Amended 2026-10-31 (vòng test thứ ba):** sửa câu "Khi chạy nhiều instance, một site có thể lưu nhiều hơn 50 cặp một chút".
+  - Mỗi instance đọc các cặp đã lưu một lần, ở lượt xem có chiến dịch đầu tiên trong ngày, rồi đếm riêng. Với N instance, một site lưu được gần N × 50 cặp mỗi ngày; test với hai instance ra 99 cặp.
+  - Số khách duy nhất và số lượt xem cộng đúng qua các instance.
 
 ---
 
 ## 5. Lát cắt giao hàng
 
-Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh chụp so với thiết kế. Dừng để duyệt sau mỗi lát.
+Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một lần so màn hình với thiết kế. Dừng để duyệt sau mỗi lát.
+
+**So màn hình với thiết kế** (sửa ngày 2026-10-31, vòng test thứ ba) là bước làm bằng tay, không phải quality gate tự động:
+
+- `pnpm --filter @plp/e2e visual:capture` (sau `pnpm build` và `pnpm infra:up`) chạy các app đã build trên database riêng `plp_visual`, gieo dữ liệu mẫu của board qua API (workspace "Mây Xanh Agency", site "Nha khoa Smile Care", 6 trang ở mọi trạng thái, lead, lượt xem, yêu cầu dữ liệu), rồi chụp mỗi màn đã làm ở kích thước board của nó vào `tests/e2e/visual-captures/` (gitignore). Công cụ dùng cổng của E2E, nên không chạy cùng `pnpm test:e2e`.
+- Người làm lát đặt từng ảnh cạnh board tương ứng trong `docs/design/plp-ux-v1/screens` và sửa chỗ lệch rõ. Chỗ khác có chủ đích nằm ở §2.1 và các ADR.
+- Không có `toHaveScreenshot`: board chỉ render được bằng runtime của artifact Design, không nằm trong repo; và pixel của trình duyệt khác nhau giữa các hệ điều hành, nên một baseline ảnh sẽ báo lỗi giả.
 
 | Lát      | Nội dung                                                        | Màn         | Trạng thái |
 | -------- | --------------------------------------------------------------- | ----------- | ---------- |
@@ -983,3 +1199,31 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và ảnh
 5. Lead có trong hộp thư, với bằng chứng đồng ý đúng bản đã publish.
 6. Màn Hiệu quả có lượt xem và 1 lead.
 7. Owner ghi nhận yêu cầu xóa và xóa dữ liệu người đó: lead biến mất và số lead về 0.
+
+## 6. Trước khi phát hành
+
+Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR quy định nó. Chưa đủ hết thì không đưa dữ liệu thật của khách vào.
+
+**Hạ tầng production**
+
+- Edge proxy (TLS, load balancer) đứng trước admin và renderer, nối địa chỉ socket vào `X-Forwarded-For`. Đặt `TRUST_PROXY_HOPS=1` cho API (ADR-004) và `TRUST_PROXY=true` cho renderer (ADR-016). Thiếu edge này thì mọi người dùng chung một bucket rate limit.
+- MongoDB chạy replica set (ADR-006). Storage tương thích S3 chỉ cho đọc công khai prefix `public/` (ADR-012).
+- API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
+- Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).
+- Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
+- GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
+- API dựng index lúc khởi động và không khởi động khi một index không dựng được (ADR-013). Vì vậy:
+  - đổi option của index đã có (`expireAfterSeconds` của TTL, `partialFilterExpression`, unique) là bước migration chạy trước khi deploy (xóa rồi tạo lại, hoặc `collMod` với TTL); thiếu bước này thì bản mới dừng ở `IndexOptionsConflict`;
+  - index mới trên collection lớn được dựng trước khi deploy;
+  - không xóa hay đổi tên index khi API đang chạy.
+
+**Chủ sản phẩm cần quyết**
+
+- `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
+- MVP có cần xóa trang hay không. Hiện tại chỉ có gỡ xuất bản.
+
+**Người phụ trách pháp lý cần xác nhận** (ADR-017)
+
+- Hạn xử lý yêu cầu dữ liệu: 2 và 20 ngày làm việc, chưa trừ ngày lễ.
+- Thời gian lưu lead mặc định 12 tháng, và nội dung đồng ý mặc định.
+- Thời gian giữ chính các yêu cầu dữ liệu.

@@ -83,7 +83,6 @@ function LayoutGroup({ section }: { section: SectionInstance }) {
                 key={id}
                 type="button"
                 aria-pressed={id === section.colorScheme}
-                aria-label={scheme.label}
                 className={styles.scheme}
                 onClick={() => {
                   store.getState().setColorScheme(section.id, id);

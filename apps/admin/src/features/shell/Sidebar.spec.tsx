@@ -1,11 +1,14 @@
 import { endpoints, type Membership } from '@plp/contracts';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
+import { loadPage } from '../../lib/page-load';
 import { NO_LEADS, siteFixture, SITE_ID, WORKSPACE_ID } from '../dashboard/test-fixtures';
+import { leadQueryKeys } from '../leads/queries';
+import { type Leave, setScreenLeave } from './screen-leave';
 import { Sidebar, type SidebarProps } from './Sidebar';
-import { renderWithProviders } from './test-utils';
+import { apiError, renderWithProviders } from './test-utils';
 
 const { router, pathname } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
@@ -22,7 +25,10 @@ vi.mock(import('../../lib/api'), async (importOriginal) => ({
   api: vi.fn(),
 }));
 
+vi.mock(import('../../lib/page-load'), () => ({ loadPage: vi.fn() }));
+
 const apiMock = vi.mocked(api);
+const loadPageMock = vi.mocked(loadPage);
 
 // jsdom has no pointer capture; Radix menus call it while handling pointer events.
 beforeAll(() => {
@@ -72,6 +78,8 @@ beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
   router.replace.mockReset();
+  router.refresh.mockReset();
+  loadPageMock.mockReset();
   pathname.current = `/sites/${SITE_ID}`;
   document.cookie = 'plp_ws=; Max-Age=0; Path=/';
 });
@@ -82,12 +90,15 @@ describe('Sidebar', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
     expect(nav).toHaveTextContent('Payload');
+    // The switchers are named by the words they show first (WCAG 2.5.3), then what they do.
     expect(
-      screen.getByRole('button', { name: 'Đổi workspace — hiện tại: Mây Xanh Agency' }),
+      screen.getByRole('button', { name: 'Workspace Mây Xanh Agency, đổi workspace' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Đổi site — hiện tại: Nha khoa Smile Care' }),
-    ).toHaveTextContent('smilecare.payload.site');
+      screen.getByRole('button', {
+        name: 'Nha khoa Smile Care smilecare.payload.site, đổi site',
+      }),
+    ).toBeInTheDocument();
 
     const pages = screen.getByRole('link', { name: 'Trang 6 trang' });
     expect(pages).toHaveAttribute('href', `/sites/${SITE_ID}`);
@@ -110,7 +121,8 @@ describe('Sidebar', () => {
       'href',
       `/sites/${SITE_ID}/analytics`,
     );
-    expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Owner');
+    // Words of their own, not "Ngọc AnhOwner".
+    expect(screen.getByRole('button', { name: 'Ngọc Anh Owner' })).toBeInTheDocument();
   });
 
   it('marks "Tên miền" on the domain page', () => {
@@ -154,7 +166,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     expect(screen.getByRole('menuitemradio', { name: /Nha khoa Smile Care/ })).toBeChecked();
     expect(screen.getByRole('menuitem', { name: 'Tạo site mới' })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
@@ -166,7 +178,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Tạo site mới' }));
 
     expect(router.push).toHaveBeenCalledWith(`/sites/new?workspace=${WORKSPACE_ID}`);
@@ -177,19 +189,70 @@ describe('Sidebar', () => {
     renderSidebar({ membership: { ...agency, role: 'editor' } });
 
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Editor');
-    await user.click(screen.getByRole('button', { name: /Đổi site/ }));
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     expect(screen.queryByRole('menuitem', { name: 'Tạo site mới' })).not.toBeInTheDocument();
   });
 
-  it('remembers the chosen workspace and opens it', async () => {
+  it('remembers the chosen workspace and opens it with a full page load', async () => {
     const user = userEvent.setup();
     renderSidebar();
 
-    await user.click(screen.getByRole('button', { name: /Đổi workspace/ }));
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
     await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
 
     expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
-    expect(router.push).toHaveBeenCalledWith('/');
+    // Nothing of this workspace's sites (leads, "N mới") stays in memory after a page load.
+    expect(loadPageMock).toHaveBeenCalledWith('/');
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('leaves the screen on display alone until the page unloads', async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderSidebar();
+    // "N mới" and the inbox of a site of this workspace, which the screen on display shows.
+    queryClient.setQueryData(leadQueryKeys.counts(site.id), {
+      ...NO_LEADS,
+      new: { count: 4, capped: false },
+    });
+    queryClient.setQueryData(leadQueryKeys.lists(site.id), { items: [] });
+
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
+
+    // Clearing the cache here would make the mounted queries refetch this workspace's data.
+    expect(loadPageMock).toHaveBeenCalledWith('/');
+    expect(queryClient.getQueryData(leadQueryKeys.counts(site.id))).toMatchObject({
+      new: { count: 4 },
+    });
+    expect(queryClient.getQueryData(leadQueryKeys.lists(site.id))).toEqual({ items: [] });
+    expect(screen.getByRole('link', { name: 'Leads 4 mới' })).toBeInTheDocument();
+  });
+
+  it('stays when the current workspace is chosen again', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Mây Xanh Agency' }));
+
+    expect(loadPageMock).not.toHaveBeenCalled();
+    expect(document.cookie).not.toContain('plp_ws=');
+  });
+
+  it('keeps the cached data of the workspace when only the site changes', async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderSidebar();
+    queryClient.setQueryData(leadQueryKeys.counts(otherSite.id), {
+      ...NO_LEADS,
+      new: { count: 4, capped: false },
+    });
+
+    await user.click(screen.getByRole('button', { name: /đổi site$/ }));
+    await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
+
+    expect(queryClient.getQueryData(leadQueryKeys.counts(otherSite.id))).toMatchObject({
+      new: { count: 4 },
+    });
   });
 
   it('signs out and opens the login page', async () => {
@@ -217,5 +280,230 @@ describe('Sidebar', () => {
 
     expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('opens the login page when the session had already ended', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValueOnce(apiError(401, 'unauthenticated', 'Phiên đăng nhập đã hết hạn'));
+    renderSidebar();
+
+    await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+
+    await vi.waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/login');
+    });
+    expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+  });
+
+  describe('over a screen holding changes not saved yet', () => {
+    /** The screen on display: it lets the user leave only when the test says it saved. */
+    function holdingScreen() {
+      const asked: Array<{ leave: Leave; discardLabel: string }> = [];
+      const remove = setScreenLeave((leave, { discardLabel }) => {
+        asked.push({ leave, discardLabel });
+      });
+      onTestFinished(remove);
+      return asked;
+    }
+
+    it('switches site once the screen saved', async () => {
+      const user = userEvent.setup();
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /đổi site$/ }));
+      await user.click(screen.getByRole('menuitemradio', { name: /Spa Hoa Sen/ }));
+
+      expect(router.push).not.toHaveBeenCalled();
+      expect(asked).toHaveLength(1);
+      expect(asked[0]?.leave()).toBe('leaving');
+      expect(router.push).toHaveBeenCalledWith('/sites/64b000000000000000000002');
+    });
+
+    it('opens site creation once the screen saved', async () => {
+      const user = userEvent.setup();
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /đổi site$/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Tạo site mới' }));
+
+      expect(router.push).not.toHaveBeenCalled();
+      expect(asked[0]?.leave()).toBe('leaving');
+      expect(router.push).toHaveBeenCalledWith(`/sites/new?workspace=${WORKSPACE_ID}`);
+    });
+
+    it('remembers another workspace only when the user really leaves', async () => {
+      const user = userEvent.setup();
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+      await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
+
+      // The save may fail and the user stay: this workspace is still the one they work in.
+      expect(document.cookie).not.toContain('plp_ws=');
+      expect(loadPageMock).not.toHaveBeenCalled();
+      expect(asked[0]?.leave()).toBe('leaving');
+      expect(document.cookie).toContain('plp_ws=64b0000000000000000000a2');
+      expect(loadPageMock).toHaveBeenCalledWith('/');
+    });
+
+    it('ends the session only after the screen saved, offering to sign out without the change', async () => {
+      const user = userEvent.setup();
+      apiMock.mockResolvedValueOnce(undefined);
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+
+      expect(apiMock).not.toHaveBeenCalled();
+      expect(asked[0]?.discardLabel).toBe('Đăng xuất, bỏ thay đổi');
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+      expect(outcome).toBe('leaving');
+      expect(router.replace).toHaveBeenCalledWith('/login');
+      expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+    });
+
+    it('reports that the user stays when signing out fails', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      apiMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      // The screen that let this leave go without saving saves and asks again.
+      expect(outcome).toBe('stayed');
+      expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it('opens the login page with a page load when the router cannot, and reports a leave', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      apiMock.mockResolvedValueOnce(undefined);
+      const broken = new Error('The router is not mounted');
+      router.replace.mockImplementationOnce(() => {
+        throw broken;
+      });
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      // The session is gone: the screen must not save or ask as if the user stayed.
+      expect(outcome).toBe('leaving');
+      expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+      expect(loadPageMock).toHaveBeenCalledWith('/login');
+      expect(logged).toHaveBeenCalledWith(
+        'Opening the login page after signing out failed',
+        broken,
+      );
+      expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+    });
+
+    it('tells the user to reload, and stays, when not even a page load opens the login page', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      apiMock.mockResolvedValueOnce(undefined);
+      router.replace.mockImplementationOnce(() => {
+        throw new Error('The router is not mounted');
+      });
+      const blocked = new Error('Navigation was blocked');
+      loadPageMock.mockImplementationOnce(() => {
+        throw blocked;
+      });
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      // Still on the screen: it saves and asks again before the tab closes. The session is gone,
+      // and the user learns it, with what to do.
+      expect(outcome).toBe('stayed');
+      expect(logged).toHaveBeenCalledWith(
+        'Loading the login page after signing out failed',
+        blocked,
+      );
+      const told = await screen.findByText('Bạn đã đăng xuất');
+      expect(told.closest('[data-tone]')).toHaveAttribute('data-tone', 'danger');
+      expect(
+        screen.getByText('Không mở được trang đăng nhập. Hãy tải lại trang.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+    });
+
+    it('still opens the login page when dropping the cached data fails', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      apiMock.mockResolvedValueOnce(undefined);
+      const asked = holdingScreen();
+      const { queryClient } = renderSidebar();
+      const broken = new Error('A cache listener threw');
+      vi.spyOn(queryClient, 'clear').mockImplementation(() => {
+        throw broken;
+      });
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      expect(outcome).toBe('leaving');
+      expect(router.replace).toHaveBeenCalledWith('/login');
+      expect(router.refresh).toHaveBeenCalledTimes(1);
+      expect(logged).toHaveBeenCalledWith('Dropping cached data after signing out failed', broken);
+      expect(screen.queryByText('Chưa đăng xuất được')).toBeNull();
+    });
+
+    it('reports a leave when the session had already ended', async () => {
+      const user = userEvent.setup();
+      apiMock.mockRejectedValueOnce(apiError(401, 'unauthenticated', 'Phiên đăng nhập đã hết hạn'));
+      const asked = holdingScreen();
+      renderSidebar();
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      let outcome: unknown;
+      await act(async () => {
+        outcome = await asked[0]?.leave();
+      });
+
+      expect(outcome).toBe('leaving');
+      expect(router.replace).toHaveBeenCalledWith('/login');
+    });
   });
 });

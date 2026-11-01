@@ -1,7 +1,7 @@
 import { addVnDays, type AnalyticsReport, endpoints } from '@plp/contracts';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { siteFixture } from '../dashboard/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
@@ -160,6 +160,38 @@ describe('AnalyticsScreen', () => {
         .map((cell) => cell.textContent),
     ).toEqual(['502', '402', '9', '2,2%']);
     expect(within(rows[5] ?? chart).getByRole('rowheader')).toHaveTextContent('Thứ 5, 22/10');
+    // At this width (jsdom lays nothing out) the tables fit: they add no tab stop.
+    expect(screen.queryByRole('region', { name: /dạng bảng$|^Bảng nguồn/ })).toBeNull();
+  });
+
+  it('lets the keyboard reach a table that scrolls sideways on a phone', async () => {
+    // A phone: each table is wider than its box.
+    const clientWidth = vi
+      .spyOn(Element.prototype, 'clientWidth', 'get')
+      .mockImplementation(function (this: Element) {
+        return this.firstElementChild?.tagName === 'TABLE' ? 343 : 0;
+      });
+    const scrollWidth = vi
+      .spyOn(Element.prototype, 'scrollWidth', 'get')
+      .mockImplementation(function (this: Element) {
+        return this.firstElementChild?.tagName === 'TABLE' ? 520 : 0;
+      });
+    onTestFinished(() => {
+      clientWidth.mockRestore();
+      scrollWidth.mockRestore();
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(within(chart()).getByRole('button', { name: 'Xem dạng bảng' }));
+    // With nothing focusable inside, the keyboard reaches each table through its region (WCAG
+    // 2.1.1).
+    expect(
+      within(chart()).getByRole('region', { name: 'Khách duy nhất mỗi ngày, dạng bảng' }),
+    ).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('region', { name: 'Bảng nguồn truy cập' })).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
   });
 
   it('keeps a day tapped by a finger or a pen, and lets a hover or a scroll go', () => {

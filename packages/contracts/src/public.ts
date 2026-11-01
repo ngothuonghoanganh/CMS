@@ -84,15 +84,30 @@ export const pathStatusResponseSchema = z.discriminatedUnion('kind', [
 ]);
 export type PathStatusResponse = z.infer<typeof pathStatusResponseSchema>;
 
+/** A preview shows the latest draft of a page, or one release (ADR-010). */
+export const previewKindSchema = z.enum(['draft', 'release']);
+
 export const publicPreviewResponseSchema = z.object({
   data: publicPageDataSchema,
   preview: z.object({
-    kind: z.enum(['draft', 'release']),
+    kind: previewKindSchema,
     version: z.number().int().positive().nullable(),
     expiresAt: isoDateTimeSchema,
   }),
 });
 export type PublicPreviewResponse = z.infer<typeof publicPreviewResponseSchema>;
+
+/**
+ * Whether a preview token opens something, without any page data (ADR-010). The renderer's proxy
+ * asks this before rendering, so an invalid, expired or foreign token is the server-rendered 404
+ * and the page then loads the preview once. `subdomain` is the site the token belongs to: the
+ * preview opens on that site's host only.
+ */
+export const publicPreviewStatusResponseSchema = z.object({
+  kind: previewKindSchema,
+  subdomain: z.string(),
+});
+export type PublicPreviewStatusResponse = z.infer<typeof publicPreviewStatusResponseSchema>;
 
 export const sitemapResponseSchema = z.object({
   origin: z.url(),

@@ -18,7 +18,7 @@ import { themePresets } from '../schema/themes.js';
 import type { RenderContext } from './context.js';
 import type { LeadFormViewProps } from './lead-form-view.js';
 import frame from './frame.module.css';
-import { LeadFormSent, LeadFormView } from './lead-form-view.js';
+import { LEAD_SUBMISSION_FIELD, LeadFormSent, LeadFormView } from './lead-form-view.js';
 import { MAIN_CONTENT_ID, PageView } from './PageView.js';
 import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
@@ -349,6 +349,79 @@ describe('images', () => {
   });
 });
 
+describe('image loading', () => {
+  const PHOTO = { assetId: ASSET_ID, alt: 'Ảnh', decorative: false };
+
+  /** Every <img> of a page, in document order, with how it loads. */
+  function imagesOf(composition: Composition, ctx: RenderContext) {
+    const markup = renderToStaticMarkup(
+      <PageView composition={composition} themePresetId="mint" ctx={ctx} />,
+    );
+    return [...markup.matchAll(/<img [^>]*>/g)].map(([tag]) => ({
+      loading: /loading="([^"]+)"/.exec(tag)?.[1] ?? null,
+      // HTML attribute names are case-insensitive; React writes this one as `fetchPriority`.
+      fetchpriority: /fetchpriority="([^"]+)"/i.exec(tag)?.[1] ?? null,
+    }));
+  }
+
+  function withImages(...targets: SectionInstance[]): Composition {
+    return { version: 1, sections: targets };
+  }
+
+  const EAGER = { loading: 'eager', fetchpriority: 'high' };
+  const LAZY = { loading: 'lazy', fetchpriority: null };
+
+  // The Hero photo is the largest paint of most pages: lazy loading waits for layout first.
+  it.each(['split', 'background'])(
+    'loads the photo of a %s Hero after the navigation bar at once, with high priority',
+    (variant) => {
+      const images = imagesOf(
+        withImages(
+          section('navbar'),
+          withContent(section('hero', variant), 'image', PHOTO),
+          withContent(section('benefits', 'alternate'), 'items.0.image', PHOTO),
+          section('footer'),
+        ),
+        liveCtx(),
+      );
+      expect(images).toEqual([EAGER, LAZY]);
+    },
+  );
+
+  it('prioritises only the first image of the first section, whatever its type', () => {
+    let benefits = section('benefits', 'alternate');
+    for (const index of [0, 1, 2]) {
+      benefits = withContent(benefits, `items.${index}.image`, PHOTO);
+    }
+    const images = imagesOf(
+      withImages(benefits, withContent(section('hero', 'split'), 'image', PHOTO)),
+      liveCtx(),
+    );
+    expect(images).toEqual([EAGER, LAZY, LAZY, LAZY]);
+  });
+
+  it('keeps every image lazy when the first section draws none', () => {
+    const images = imagesOf(
+      withImages(
+        section('navbar'),
+        section('hero', 'centered'),
+        withContent(section('benefits', 'alternate'), 'items.0.image', PHOTO),
+      ),
+      liveCtx(),
+    );
+    expect(images).toEqual([LAZY]);
+  });
+
+  // The canvas draws the draft for editing: nothing there changes how it loads.
+  it('leaves the images of the admin canvas lazy', () => {
+    const images = imagesOf(
+      withImages(section('navbar'), withContent(section('hero', 'split'), 'image', PHOTO)),
+      editCtx(),
+    );
+    expect(images).toEqual([LAZY]);
+  });
+});
+
 describe('section specifics', () => {
   it('shows the site logo or the brand text in the navigation bar', () => {
     const navbar = section('navbar');
@@ -471,6 +544,7 @@ describe('lead form', () => {
     policyUrl: 'https://smilecare.vn/chinh-sach',
   };
   const RELEASE_ID = 'c3'.repeat(12);
+  const SUBMISSION_ID = '5e0b7c1d-2f3a-4b5c-8d9e-0f1a2b3c4d5e';
 
   it('posts a plain form to /_lead with the release the visitor sees', () => {
     const form = section('lead_form');
@@ -478,7 +552,11 @@ describe('lead form', () => {
       form,
       liveCtx({
         leadCapture: CAPTURE,
-        leadSubmission: { releaseId: RELEASE_ID, render: () => 'interactive form' },
+        leadSubmission: {
+          releaseId: RELEASE_ID,
+          submissionId: SUBMISSION_ID,
+          render: () => 'interactive form',
+        },
       }),
     );
     // A host with an interactive form renders it instead of the plain view.
@@ -490,12 +568,17 @@ describe('lead form', () => {
         content={sampleLeadForm(form)}
         capture={CAPTURE}
         releaseId={RELEASE_ID}
+        submissionId={SUBMISSION_ID}
       />,
     );
     expect(plain).toContain('<form');
     expect(plain).toContain('method="post"');
     expect(plain).toContain('action="/_lead"');
     expect(plain).toContain(`name="releaseId" value="${RELEASE_ID}"`);
+    // Sent again after a timeout, the same form is a replay, not a second lead (ADR-016).
+    expect(plain).toContain(
+      `<input type="hidden" name="${LEAD_SUBMISSION_FIELD}" value="${SUBMISSION_ID}"/>`,
+    );
     // The honeypot: out of the tab order, whatever the attribute order.
     expect(plain).toMatch(/<input(?=[^>]*name="website")(?=[^>]*tabindex="-1")[^>]*>/);
     expect(plain).toContain('href="https://smilecare.vn/chinh-sach"');
@@ -516,6 +599,7 @@ describe('lead form', () => {
         leadCapture: CAPTURE,
         leadSubmission: {
           releaseId: RELEASE_ID,
+          submissionId: SUBMISSION_ID,
           render: (view) => {
             seen.push(view);
             return null;
@@ -529,8 +613,35 @@ describe('lead form', () => {
         content: sampleLeadForm(form),
         capture: CAPTURE,
         releaseId: RELEASE_ID,
+        submissionId: SUBMISSION_ID,
       },
     ]);
+  });
+
+  it('marks a field error with an icon and ties it to the field', () => {
+    const form = section('lead_form');
+    const markup = renderToStaticMarkup(
+      <LeadFormView
+        sectionId={form.id}
+        content={sampleLeadForm(form)}
+        capture={CAPTURE}
+        releaseId={RELEASE_ID}
+        submissionId={SUBMISSION_ID}
+        errors={{ phone: 'Số điện thoại chưa đúng.' }}
+      />,
+    );
+    const error = new RegExp(
+      `<span id="lead-${form.id}-phone-error"[^>]*><svg aria-hidden="true"[^>]*>.*?</svg>Số điện thoại chưa đúng.</span>`,
+    );
+    expect(markup).toMatch(error);
+    expect(markup).toContain(`aria-describedby="lead-${form.id}-phone-error"`);
+  });
+
+  it('draws no submission id where the form cannot send', () => {
+    const form = section('lead_form');
+    const preview = render(form, liveCtx({ leadCapture: CAPTURE }));
+    expect(preview).not.toContain(`name="${LEAD_SUBMISSION_FIELD}"`);
+    expect(preview).not.toContain('name="releaseId"');
   });
 
   it('keeps the send button focusable while sending, so a refusal finds the visitor on it', () => {
@@ -541,6 +652,7 @@ describe('lead form', () => {
         content={sampleLeadForm(form)}
         capture={CAPTURE}
         releaseId={RELEASE_ID}
+        submissionId={SUBMISSION_ID}
         submitting
       />,
     );

@@ -32,7 +32,7 @@
   font-size: 14px;
 }
 
-@container plp-page (min-width: 768px) {
+@container plp-page (width >= 768px) {
   .brand {
     font-size: 19px;
   }

@@ -1,9 +1,11 @@
 import type {
   ChangeItem,
+  CheckTarget,
   ChecksResult,
   LiveReleaseRef,
   PageSummary,
   PublishResponse,
+  Role,
 } from '@plp/contracts';
 import { pendingChangeCount } from '../editor/presentation';
 
@@ -242,6 +244,25 @@ export function publishDisabledReason(tally: ChecksTally): string | null {
     return `Sửa hoặc bỏ qua ${tally.openWarnings} cảnh báo`;
   }
   return null;
+}
+
+/**
+ * What an Editor reads instead of "Sửa ngay" when the fix is a site setting only the Owner may
+ * change (ADR-004, ADR-017, ADR-018): those screens would only show it read-only. Null when the
+ * user can fix the item themselves.
+ */
+export function ownerOnlyFixNote(target: CheckTarget, role: Role): string | null {
+  if (role === 'owner') {
+    return null;
+  }
+  switch (target.kind) {
+    case 'privacy':
+      return 'Chỉ Owner của workspace cài đặt được dữ liệu cá nhân và nội dung đồng ý. Hãy nhờ Owner làm bước này, rồi xuất bản lại.';
+    case 'lead_recipients':
+      return 'Chỉ Owner của workspace chọn được nơi nhận lead. Hãy nhờ Owner thêm và xác nhận một email, rồi xuất bản lại.';
+    default:
+      return null;
+  }
 }
 
 /** When the live version went live: its pointer move (publish, rollback, undo) or its release. */

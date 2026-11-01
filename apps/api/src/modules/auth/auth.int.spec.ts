@@ -1,12 +1,17 @@
+import { createHash, createHmac } from 'node:crypto';
+import { Logger } from '@nestjs/common';
 import { meResponseSchema, problemSchema, SESSION_COOKIE } from '@plp/contracts';
 import { Types } from 'mongoose';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
+import { TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
 import { createSite } from '../../../test/resources.js';
+import { LoginAttemptsRepository } from './login-attempts.repository.js';
 import { hashSessionToken, newSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
+import { UsersRepository } from './users.repository.js';
 
 describe('auth', () => {
   let t: TestApp;
@@ -216,6 +221,59 @@ describe('auth rate limit behind a trusted edge proxy', () => {
     await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(429);
     await fromClient('198.51.100.40', '/auth/signup', signupInput()).expect(201);
   });
+
+  it('counts an IPv6 client per /64, however its address is written', async () => {
+    const login = (address: string) =>
+      new TestClient(t.app)
+        .post('/auth/login', { email: 'ipv6@example.com', password: 'whatever-123' })
+        .set('X-Forwarded-For', address);
+
+    // Two addresses of one /64 (a phone rotating its address) share one bucket.
+    await login('2001:db8:aa:1::1').expect(401);
+    await login('2001:DB8:AA:1:0:0:0:2').expect(401);
+    await login('2001:db8:aa:1:ffff::9').expect(429);
+    // Another /64 has its own bucket.
+    await login('2001:db8:aa:2::1').expect(401);
+    // An IPv4 address seen through an IPv6 socket is that IPv4 address.
+    await login('::ffff:203.0.113.77').expect(401);
+    await login('203.0.113.77').expect(401);
+    await login('203.0.113.77').expect(429);
+  });
+
+  it('counts a forwarded address that is not an IP address under the proxy', async () => {
+    // Express takes X-Forwarded-For as written; garbage there must neither fail the request nor
+    // open a fresh bucket per string.
+    const login = (address: string) =>
+      new TestClient(t.app)
+        .post('/auth/login', { email: 'garbage-xff@example.com', password: 'whatever-123' })
+        .set('X-Forwarded-For', address);
+
+    await login('foo').expect(401);
+    await login('not an address').expect(401);
+    await login('203.0.113.007').expect(429);
+    // A client with a real address keeps its own bucket.
+    await login('203.0.113.88').expect(401);
+  });
+
+  it('counts a forwarded address written with a port under the address itself', async () => {
+    // Some load balancers write `ip:port` or `[v6]:port` into X-Forwarded-For.
+    const login = (address: string, email: string) =>
+      new TestClient(t.app)
+        .post('/auth/login', { email, password: 'whatever-123' })
+        .set('X-Forwarded-For', address);
+
+    await login('203.0.113.7:51234', 'port-v4@example.com').expect(401);
+    await login('203.0.113.7', 'port-v4@example.com').expect(401);
+    await login('203.0.113.7:40000', 'port-v4@example.com').expect(429);
+    // Another client's ip:port has its own bucket, not the proxy's.
+    await login('198.51.100.9:51234', 'port-other@example.com').expect(401);
+    await login('198.51.100.9:51235', 'port-other@example.com').expect(401);
+    await login('198.51.100.9:51236', 'port-other@example.com').expect(429);
+    // An IPv6 address in brackets, with or without a port, counts in its /64.
+    await login('[2001:db8:bb:1::1]:443', 'port-v6@example.com').expect(401);
+    await login('[2001:db8:bb:1::2]', 'port-v6@example.com').expect(401);
+    await login('2001:db8:bb:1::3', 'port-v6@example.com').expect(429);
+  });
 });
 
 describe('per-account login limit', () => {
@@ -277,6 +335,166 @@ describe('per-account login limit', () => {
     );
     const statuses = responses.map((response) => response.status).sort();
     expect(statuses).toEqual([401, 401, 401, 429, 429, 429, 429, 429, 429, 429]);
+  });
+
+  /** The stored attempt counter of an email, read straight from the collection. */
+  async function storedAttempts(email: string): Promise<number | null> {
+    const key = createHmac('sha256', TEST_LOGIN_ATTEMPT_SECRET).update(email).digest('hex');
+    const record = await t.connection
+      .collection<{ count: number }>('login_attempts')
+      .findOne({ accountKey: key });
+    return record?.count ?? null;
+  }
+
+  /** Runs `body` with Nest's error log muted; a forced failure is an expected 500 here. */
+  async function withMutedErrors(body: () => Promise<void>): Promise<void> {
+    const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      await body();
+    } finally {
+      logged.mockRestore();
+    }
+  }
+
+  it('keys the counter with an HMAC of the email, never a plain hash of it', async () => {
+    const email = `hmac-${String(process.pid)}@example.com`;
+    await login(email, 'wrong-password').expect(401);
+    const stored = await t.connection
+      .collection<{ accountKey: string }>('login_attempts')
+      .find({ accountKey: { $in: [createHash('sha256').update(email).digest('hex')] } })
+      .toArray();
+    // A list of emails hashed with sha256 finds nothing; only the secret finds the counter.
+    expect(stored).toEqual([]);
+    expect(await storedAttempts(email)).toBe(1);
+  });
+
+  it('gives the attempt back when looking the account up fails', async () => {
+    const user = await signUp();
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, 'wrong-password').expect(401);
+    const lookup = vi
+      .spyOn(t.app.get(UsersRepository), 'findByEmail')
+      .mockRejectedValueOnce(new Error('connection reset'));
+    await withMutedErrors(async () => {
+      const response = await login(user.email, user.password).expect(500);
+      expect(problemSchema.parse(response.body).code).toBe('internal');
+    });
+    lookup.mockRestore();
+    expect(await storedAttempts(user.email)).toBe(2);
+    // The outage used up nothing: the third wrong password is still a plain 401.
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, user.password).expect(429);
+  });
+
+  it('gives the attempt back when checking the password fails', async () => {
+    const user = await signUp();
+    await login(user.email, 'wrong-password').expect(401);
+    const users = t.connection.collection('users');
+    const stored = await users.findOne({ email: user.email });
+    // argon2 throws on a hash it cannot read, as it would on a corrupted record.
+    await users.updateOne({ email: user.email }, { $set: { passwordHash: 'not-an-argon2-hash' } });
+    await withMutedErrors(async () => {
+      await login(user.email, user.password).expect(500);
+      await login(user.email, user.password).expect(500);
+    });
+    expect(await storedAttempts(user.email)).toBe(1);
+    await users.updateOne(
+      { email: user.email },
+      { $set: { passwordHash: stored?.['passwordHash'] as unknown } },
+    );
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, user.password).expect(200);
+  });
+
+  it('burns no attempt when the session cannot be created or the counter cleared', async () => {
+    const user = await signUp();
+    await login(user.email, 'wrong-password').expect(401);
+    await login(user.email, 'wrong-password').expect(401);
+    const clear = vi
+      .spyOn(t.app.get(LoginAttemptsRepository), 'clear')
+      .mockRejectedValueOnce(new Error('write concern timeout'));
+    await withMutedErrors(async () => {
+      await login(user.email, user.password).expect(500);
+    });
+    clear.mockRestore();
+    expect(await storedAttempts(user.email)).toBe(2);
+
+    const create = vi
+      .spyOn(t.app.get(SessionsRepository), 'create')
+      .mockRejectedValueOnce(new Error('connection reset'));
+    await withMutedErrors(async () => {
+      await login(user.email, user.password).expect(500);
+    });
+    create.mockRestore();
+    // The right password cleared the count before the session failed; nothing was counted since.
+    expect(await storedAttempts(user.email)).toBeNull();
+    await login(user.email, user.password).expect(200);
+  });
+
+  it('rethrows both errors when the attempt cannot be given back either', async () => {
+    const user = await signUp();
+    const repository = t.app.get(LoginAttemptsRepository);
+    const lookup = vi
+      .spyOn(t.app.get(UsersRepository), 'findByEmail')
+      .mockRejectedValueOnce(new Error('connection reset'));
+    const giveBack = vi
+      .spyOn(repository, 'giveBack')
+      .mockRejectedValueOnce(new Error('not primary'));
+    const logged = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      await login(user.email, user.password).expect(500);
+      const [entry]: unknown[] = logged.mock.calls[0] ?? [];
+      expect(entry).toMatchObject({
+        err: {
+          message: 'Login failed, and giving its attempt back failed too',
+          errors: [{ message: 'connection reset' }, { message: 'not primary' }],
+        },
+      });
+    } finally {
+      logged.mockRestore();
+      giveBack.mockRestore();
+      lookup.mockRestore();
+    }
+  });
+
+  it('gives back only within the window that counted, never below zero', async () => {
+    const attempts = t.app.get(LoginAttemptsRepository);
+    const key = (name: string) => `${name}-${new Types.ObjectId().toHexString()}`;
+    const count = async (accountKey: string) =>
+      (
+        await t.connection
+          .collection<{ count: number; expiresAt: Date }>('login_attempts')
+          .findOne({ accountKey })
+      )?.count ?? null;
+    // Windows end an hour ahead, so the TTL monitor leaves the records alone.
+    const now = new Date();
+    const end = new Date(now.getTime() + 3_600_000);
+
+    const once = key('once');
+    const window = await attempts.begin(once, now, end);
+    await attempts.giveBack(once, window, now);
+    expect(await count(once)).toBe(0);
+    await attempts.giveBack(once, window, now);
+    expect(await count(once)).toBe(0);
+
+    const ended = key('ended');
+    const endedWindow = await attempts.begin(ended, now, end);
+    await attempts.giveBack(ended, endedWindow, new Date(end.getTime() + 1));
+    expect(await count(ended)).toBe(1);
+
+    const later = key('later');
+    const first = await attempts.begin(later, now, end);
+    const afterEnd = new Date(end.getTime() + 1);
+    const second = await attempts.begin(later, afterEnd, new Date(afterEnd.getTime() + 3_600_000));
+    expect(second.count).toBe(1);
+    await attempts.giveBack(later, first, afterEnd);
+    expect(await count(later)).toBe(1);
+
+    const cleared = key('cleared');
+    const clearedWindow = await attempts.begin(cleared, now, end);
+    await attempts.clear(cleared);
+    await attempts.giveBack(cleared, clearedWindow, now);
+    expect(await count(cleared)).toBeNull();
   });
 
   it('starts a new window once the previous one has ended', async () => {

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient } from '../../../test/client.js';
 import { explainFindOne, indexScans, recordCalls } from '../../../test/explain.js';
+import { createSecondInstance } from '../../../test/instances.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
 import { scopeOf } from '../../../test/resources.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
@@ -198,13 +199,48 @@ describe('LeadsRepository.existsPublicSubmission', () => {
       expect(await leads.existsPublicSubmission(siteId, elsewhere)).toBe(false);
     });
 
-    // Each lookup explained exactly as it was sent.
+    // Each lookup explained exactly as it was sent: one exact key, held to its index, one probe.
     expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne']);
     for (const call of sent) {
+      const [filter, options] = call.params;
+      expect(filter).toEqual({
+        siteId,
+        submissionId: { $eq: expect.any(String) as unknown, $type: 'string' },
+      });
+      expect(options).toHaveProperty('hint', LEADS_SUBMISSION_INDEX);
       const explained = await explainFindOne(t.connection, call);
       expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([LEADS_SUBMISSION_INDEX]);
       expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
       expect(explained.executionStats.totalDocsExamined).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('has its index again, built by the next start, before any lookup', async () => {
+    const siteId = new Types.ObjectId();
+    const submissionId = randomUUID();
+    await insertLeads(t, [
+      {
+        ...storedLead({
+          workspaceId: new Types.ObjectId().toHexString(),
+          siteId: siteId.toHexString(),
+          pageId: new Types.ObjectId().toHexString(),
+          releaseId: new Types.ObjectId().toHexString(),
+        }),
+        submissionId,
+      },
+    ]);
+    const leads = t.connection.collection('leads');
+    await leads.dropIndex(LEADS_SUBMISSION_INDEX);
+
+    // The API starting on this database again (a deploy, a restart): its first lookup is hinted.
+    const restarted = await createSecondInstance(t);
+    try {
+      expect((await leads.indexes()).map((index) => index.name)).toContain(LEADS_SUBMISSION_INDEX);
+      const repository = restarted.app.get(LeadsRepository);
+      expect(await repository.existsPublicSubmission(siteId, submissionId)).toBe(true);
+      expect(await repository.existsPublicSubmission(siteId, randomUUID())).toBe(false);
+    } finally {
+      await restarted.close();
     }
   });
 });

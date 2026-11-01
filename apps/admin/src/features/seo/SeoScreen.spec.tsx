@@ -1,28 +1,41 @@
 import {
   type Composition,
   endpoints,
+  type Membership,
   type PageDetailResponse,
   type PageSummary,
 } from '@plp/contracts';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, type Mock, onTestFinished, vi } from 'vitest';
 import { api } from '../../lib/api';
+import { loadPage } from '../../lib/page-load';
+import { NO_LEADS, WORKSPACE_ID } from '../dashboard/test-fixtures';
 import { pageDetail, PAGE_ID, site, SITE_ID } from '../editor/test-fixtures';
 import { installHistoryGuard } from '../shell/history-guard';
+import { type LeaveOutcome, leaveScreen } from '../shell/screen-leave';
+import { Sidebar } from '../shell/Sidebar';
 import { apiError, renderWithProviders } from '../shell/test-utils';
+import { WORKSPACE_PREFERENCE_COOKIE } from '../shell/workspace-preference';
 import { SeoScreen } from './SeoScreen';
 
 const { router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => router,
+  usePathname: () => `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+}));
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
   api: vi.fn(),
 }));
+
+vi.mock(import('../../lib/page-load'), () => ({ loadPage: vi.fn() }));
+
+const loadPageMock = vi.mocked(loadPage);
 
 const apiMock = vi.mocked(api) as unknown as Mock<(endpoint: unknown) => Promise<unknown>>;
 
@@ -37,6 +50,11 @@ function answerApi(
   apiMock.mockImplementation((endpoint) =>
     endpoint === endpoints.getPage ? Promise.resolve(detail) : other(endpoint),
   );
+}
+
+/** How many saves of the draft were sent. */
+function savesSent(): number {
+  return apiMock.mock.calls.filter(([endpoint]) => endpoint === endpoints.saveDraft).length;
 }
 
 function renderScreen(composition?: Composition) {
@@ -55,6 +73,15 @@ function renderScreen(composition?: Composition) {
 // As the root providers do while loading: ahead of any router listener.
 installHistoryGuard();
 
+/** Where the tests start, and where each one comes back to. */
+const START_URL = window.location.href;
+
+/** What the browser does on Back: move to the previous entry (the site), then fire popstate. */
+function pressBack(state?: unknown) {
+  window.history.replaceState(state ?? null, '', `/sites/${SITE_ID}`);
+  window.dispatchEvent(new PopStateEvent('popstate', { state }));
+}
+
 // jsdom has no pointer capture; Radix menus call it while handling pointer events.
 beforeAll(() => {
   for (const method of ['hasPointerCapture', 'setPointerCapture', 'releasePointerCapture']) {
@@ -70,6 +97,8 @@ beforeAll(() => {
 beforeEach(() => {
   apiMock.mockReset();
   router.push.mockReset();
+  router.replace.mockReset();
+  window.history.replaceState(null, '', START_URL);
 });
 
 describe('SeoScreen', () => {
@@ -310,8 +339,8 @@ describe('SeoScreen', () => {
       const link = outsideLink();
       try {
         await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        pressBack();
+        pressBack();
         await user.click(link);
         await waitFor(() => {
           expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
@@ -371,6 +400,128 @@ describe('SeoScreen', () => {
       link.remove();
     });
 
+    it('leaves once, where the toast action goes, while another link waits for its save', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      const link = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+
+      // Another link waits for a save that takes a while; meanwhile the user takes the way out
+      // the first failure offers.
+      const answerSave = heldSave(detail);
+      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
+
+      // The save ends, and keeps the change in the draft; the link that waited for it goes nowhere.
+      answerSave();
+      expect(await screen.findByText('Đã lưu bản nháp')).toBeInTheDocument();
+      expect(savesSent()).toBe(2);
+      expect(router.push).toHaveBeenCalledTimes(1);
+      link.remove();
+    });
+
+    it('does nothing for the tab of this very page: no save first, no way out offered', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      // Opened from a publish check: the tab has no query, the screen is the same.
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo?focus=description`,
+      );
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      const saves = savesSent();
+
+      await user.click(screen.getByRole('link', { name: 'SEO & chia sẻ' }));
+      expect(router.push).not.toHaveBeenCalled();
+      expect(savesSent()).toBe(saves);
+      expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Rời trang, bỏ thay đổi' })).toBeNull();
+    });
+
+    it('follows a link to this screen with another query, after saving', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+      );
+      answerApi(() =>
+        Promise.resolve({
+          revision: 4,
+          updatedAt: '2026-10-24T08:05:00.000Z',
+          page: detail.page,
+          checks: detail.checks,
+        }),
+      );
+      const link = outsideLink();
+      link.href = `/sites/${SITE_ID}/pages/${PAGE_ID}/seo?focus=title`;
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+
+      // Another query is another place on the screen (a field to focus): it is not swallowed.
+      await waitFor(() => {
+        expect(router.push).toHaveBeenCalledWith(
+          `/sites/${SITE_ID}/pages/${PAGE_ID}/seo?focus=title`,
+        );
+      });
+      link.remove();
+    });
+
+    it('calls off a leave still waiting for its save when a link to this very URL is clicked', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      const here = `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`;
+      window.history.replaceState(window.history.state, '', here);
+      const answerSave = heldSave(detail);
+      const away = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(away);
+      await waitFor(() => {
+        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      });
+
+      // A plain link (breadcrumb, sidebar) to the URL already open: the router handles it.
+      const toHere = outsideLink();
+      toHere.href = here;
+      expect(clickAndSee(toHere)).toBe(false);
+      answerSave();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(router.push).not.toHaveBeenCalled();
+      away.remove();
+      toHere.remove();
+    });
+
+    it('calls off a leave still waiting for its save when the tab of this very page is clicked', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+      );
+      const answerSave = heldSave(detail);
+      const link = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+      await waitFor(() => {
+        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      });
+
+      // The user changes their mind and stays: the last place asked for is this screen.
+      await user.click(screen.getByRole('link', { name: 'SEO & chia sẻ' }));
+      answerSave();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(router.push).not.toHaveBeenCalled();
+      link.remove();
+    });
+
     it('opens the reload dialog, not an error, when the draft changed elsewhere', async () => {
       const user = userEvent.setup();
       renderScreen();
@@ -412,12 +563,40 @@ describe('SeoScreen', () => {
       const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
       try {
         await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        pressBack();
 
         expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
         expect(back).not.toHaveBeenCalled();
         expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
       } finally {
+        back.mockRestore();
+      }
+    });
+
+    it('stays put for the skip link and for Back from it to the same URL', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+      const routerListener = vi.fn();
+      window.addEventListener('popstate', routerListener);
+      try {
+        await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+        // The skip link: a new entry of this page at #main-content, then popstate.
+        window.history.pushState(window.history.state, '', '#main-content');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        // Back: the URL the changes were made on, without the fragment.
+        window.history.replaceState(window.history.state, '', START_URL);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Neither left the page: no save to leave, no going back, no toast.
+        expect(routerListener).toHaveBeenCalledTimes(2);
+        expect(apiMock).not.toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(back).not.toHaveBeenCalled();
+        expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      } finally {
+        window.removeEventListener('popstate', routerListener);
         back.mockRestore();
       }
     });
@@ -445,7 +624,7 @@ describe('SeoScreen', () => {
       window.addEventListener('popstate', routerListener);
       try {
         await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
-        window.dispatchEvent(new PopStateEvent('popstate', { state: { previous: true } }));
+        pressBack({ previous: true });
 
         // The router never saw this Back; the screen's entry is back in place while it saves.
         expect(routerListener).not.toHaveBeenCalled();
@@ -463,6 +642,371 @@ describe('SeoScreen', () => {
         pushState.mockRestore();
         back.mockRestore();
       }
+    });
+  });
+
+  describe('with a slug still being checked', () => {
+    const saved = (detail: PageDetailResponse) => ({
+      revision: 4,
+      updatedAt: '2026-10-24T08:05:00.000Z',
+      page: detail.page,
+      checks: detail.checks,
+    });
+
+    /** The server's answer about a slug; saves succeed. */
+    function answerSlug(detail: PageDetailResponse, availability: () => Promise<unknown>) {
+      answerApi((endpoint) =>
+        endpoint === endpoints.slugAvailability ? availability() : Promise.resolve(saved(detail)),
+      );
+    }
+
+    function free(slug: string) {
+      return () => Promise.resolve({ slug, available: true, reason: null, message: null });
+    }
+
+    /** Types a new slug and leaves before the typing pause is over. */
+    async function typeSlug(user: ReturnType<typeof userEvent.setup>, slug: string) {
+      const input = screen.getByRole('textbox', { name: 'Đường dẫn trang' });
+      await user.clear(input);
+      await user.type(input, slug);
+    }
+
+    function savedSlugs(): unknown[] {
+      return apiMock.mock.calls
+        .filter(([endpoint]) => endpoint === endpoints.saveDraft)
+        .map((call) => (call as unknown[])[2])
+        .map((options) => (options as { body: { slug: string } }).body.slug);
+    }
+
+    it('checks and saves the typed slug before following a link', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerSlug(detail, free('uu-dai-tet'));
+      await typeSlug(user, 'uu-dai-tet');
+      // Nothing reached the draft yet: the store alone would let the user go.
+      expect(router.push).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+
+      await waitFor(() => {
+        expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+      });
+      expect(savedSlugs()).toEqual(['uu-dai-tet']);
+    });
+
+    it('stays and says why when the slug is taken, with a way to leave without it', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerSlug(detail, () =>
+        Promise.resolve({
+          slug: 'bang-gia',
+          available: false,
+          reason: 'taken',
+          message: 'Đường dẫn này đang được trang “Bảng giá” dùng',
+        }),
+      );
+      await typeSlug(user, 'bang-gia');
+
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+
+      expect(await screen.findByText('Chưa lưu được đường dẫn trang')).toBeInTheDocument();
+      expect(router.push).not.toHaveBeenCalled();
+      expect(savedSlugs()).toEqual([]);
+      expect(screen.getByRole('textbox', { name: 'Đường dẫn trang' })).toHaveValue('bang-gia');
+      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+    });
+
+    it('follows any later link at once after leaving without the slug, without checking it', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      const taken = vi.fn(() =>
+        Promise.resolve({
+          slug: 'bang-gia',
+          available: false,
+          reason: 'taken',
+          message: 'Đường dẫn này đang được trang “Bảng giá” dùng',
+        }),
+      );
+      answerSlug(detail, taken);
+      await typeSlug(user, 'bang-gia');
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+      await user.click(await screen.findByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+      const checks = taken.mock.calls.length;
+
+      // The editor has not shown yet: another link goes at once too, and the slug stays unsaved.
+      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+      expect(router.push).toHaveBeenLastCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
+      expect(taken).toHaveBeenCalledTimes(checks);
+      expect(savedSlugs()).toEqual([]);
+    });
+
+    it('stays when the check cannot reach the server', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const detail = renderScreen();
+      answerSlug(detail, () => Promise.reject(new TypeError('Failed to fetch')));
+      await typeSlug(user, 'uu-dai-tet');
+
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+
+      expect(await screen.findByText('Chưa lưu được đường dẫn trang')).toBeInTheDocument();
+      expect(router.push).not.toHaveBeenCalled();
+      expect(savedSlugs()).toEqual([]);
+    });
+
+    it('waits for the slug before the browser goes Back', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerSlug(detail, free('uu-dai-tet'));
+      const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+      try {
+        await typeSlug(user, 'uu-dai-tet');
+        pressBack({ previous: true });
+
+        await waitFor(() => {
+          expect(back).toHaveBeenCalledTimes(1);
+        });
+        expect(savedSlugs()).toEqual(['uu-dai-tet']);
+      } finally {
+        back.mockRestore();
+      }
+    });
+
+    it('asks the browser to confirm closing the tab', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerSlug(detail, () => new Promise(() => undefined));
+      await typeSlug(user, 'uu-dai-tet');
+
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+    });
+  });
+
+  describe('leaving through the sidebar menus', () => {
+    const agency: Membership = {
+      workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
+      role: 'owner',
+    };
+    const clinic: Membership = {
+      workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
+      role: 'editor',
+    };
+
+    /** The real sidebar next to the screen, whose saves fail: the server is down. */
+    function renderWithSidebar(memberships: Membership[] = [agency]) {
+      const detail = pageDetail();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')), detail);
+      renderWithProviders(
+        <>
+          <Sidebar
+            user={{ id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngocanh@mayxanh.vn' }}
+            memberships={memberships}
+            membership={agency}
+            site={site}
+            sites={[site]}
+            pageCount={1}
+            leadCounts={NO_LEADS}
+          />
+          <SeoScreen
+            initial={{ detail, site, assets: [], role: 'editor' }}
+            loadedAt={Date.now()}
+            focus={null}
+          />
+        </>,
+      );
+      return detail;
+    }
+
+    /**
+     * Page loads begin as the browser does: the page may still ask the user to stay. Records where
+     * each load goes, whether the page asked, and the cookies then.
+     */
+    function recordPageLoads() {
+      const loads: Array<{ href: string; prompted: boolean; cookie: string }> = [];
+      loadPageMock.mockImplementation((href) => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        loads.push({ href, prompted: event.defaultPrevented, cookie: document.cookie });
+      });
+      onTestFinished(() => {
+        loadPageMock.mockReset();
+      });
+      return loads;
+    }
+
+    it('switches workspace with no prompt from the browser when leaving without the change', async () => {
+      const user = userEvent.setup();
+      // A user who stayed would be left in this workspace with the cookie naming the other one.
+      const loads = recordPageLoads();
+      onTestFinished(() => {
+        document.cookie = `${WORKSPACE_PREFERENCE_COOKIE}=; Path=/; Max-Age=0`;
+      });
+      renderWithSidebar([agency, clinic]);
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      await user.click(screen.getByRole('button', { name: /đổi workspace$/ }));
+      await user.click(screen.getByRole('menuitemradio', { name: 'Phòng khám Gia Đình' }));
+
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+      expect(loadPageMock).not.toHaveBeenCalled();
+      expect(document.cookie).not.toContain(`${WORKSPACE_PREFERENCE_COOKIE}=`);
+      await user.click(screen.getByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
+
+      expect(loads).toMatchObject([{ href: '/', prompted: false }]);
+      expect(loads[0]?.cookie).toContain(`${WORKSPACE_PREFERENCE_COOKIE}=64b0000000000000000000a2`);
+    });
+
+    it('signs out with no prompt from the browser when leaving without the change', async () => {
+      const user = userEvent.setup();
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      onTestFinished(() => {
+        logged.mockRestore();
+      });
+      const loads = recordPageLoads();
+      const detail = renderWithSidebar();
+      // The session ends, but the router cannot open the login page: a page load opens it.
+      answerApi(
+        (endpoint) =>
+          endpoint === endpoints.logout
+            ? Promise.resolve()
+            : Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')),
+        detail,
+      );
+      router.replace.mockImplementation(() => {
+        throw new Error('The router is not mounted');
+      });
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+
+      await waitFor(() => {
+        expect(loads).toMatchObject([{ href: '/login', prompted: false }]);
+      });
+    });
+
+    it('saves first, and offers to sign out without the change when the save fails', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      const signOut = vi.fn((): LeaveOutcome => 'leaving');
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      leaveScreen(signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
+
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+      expect(signOut).not.toHaveBeenCalled();
+      expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      await user.click(screen.getByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      expect(signOut).toHaveBeenCalledTimes(1);
+    });
+
+    it('follows a link at once while signing out without the change, and keeps it when that fails', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      let stay: () => void = () => undefined;
+      const signOut = vi.fn(
+        () =>
+          new Promise<LeaveOutcome>((resolve) => {
+            stay = () => {
+              resolve('stayed');
+            };
+          }),
+      );
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      leaveScreen(signOut, { discardLabel: 'Đăng xuất, bỏ thay đổi' });
+      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+      expect(signOut).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      });
+      const saves = savesSent();
+
+      // Signing out takes a while; the user follows a link meanwhile. They chose to leave without
+      // the change, so nothing is saved first.
+      await user.click(screen.getByRole('link', { name: 'Mở editor' }));
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
+      expect(savesSent()).toBe(saves);
+      expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+
+      // Signing out failed before the editor showed: the user is still here, with the change. The
+      // tab asks again, and a link saves first again.
+      stay();
+      await waitFor(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+      });
+      expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
+      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
+      expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
+      expect(router.push).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks before the tab closes again when signing out without the change fails', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      renderWithSidebar();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      await user.click(screen.getByRole('button', { name: /Ngọc Anh/ }));
+      await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
+      await user.click(await screen.findByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
+
+      // The server is down: signing out fails too, and the user stays with the change.
+      expect(await screen.findByText('Chưa đăng xuất được')).toBeInTheDocument();
+      expect(apiMock).toHaveBeenCalledWith(endpoints.logout, []);
+      expect(router.replace).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue('Tư vấn miễn phí');
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('leaves once the save is done', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      answerApi(() =>
+        Promise.resolve({
+          revision: 4,
+          updatedAt: '2026-10-24T08:05:00.000Z',
+          page: detail.page,
+          checks: detail.checks,
+        }),
+      );
+      const switchSite = vi.fn();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+
+      leaveScreen(switchSite);
+      expect(switchSite).not.toHaveBeenCalled();
+
+      await waitFor(() => {
+        expect(switchSite).toHaveBeenCalledTimes(1);
+      });
+      expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+    });
+
+    it('leaves at once when everything is saved, and stops taking the menus once gone', () => {
+      const { unmount } = renderWithProviders(
+        <SeoScreen
+          initial={{ detail: pageDetail(), site, assets: [], role: 'editor' }}
+          loadedAt={Date.now()}
+          focus={null}
+        />,
+      );
+      const leave = vi.fn();
+      leaveScreen(leave);
+      expect(leave).toHaveBeenCalledTimes(1);
+      unmount();
+      leaveScreen(leave);
+      expect(leave).toHaveBeenCalledTimes(2);
     });
   });
 

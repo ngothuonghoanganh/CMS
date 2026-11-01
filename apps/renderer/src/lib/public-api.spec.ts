@@ -1,7 +1,16 @@
 import type { PublicPageData, ResolveResponse, SitemapResponse } from '@plp/contracts';
 import { cacheLife, cacheTag } from 'next/cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPreview, getResolved, getSitemap, SITE_CACHE_LIFE } from './public-api';
+import {
+  CHECK_TIMEOUT_MS,
+  getPathStatus,
+  getPreview,
+  getPreviewStatus,
+  getResolved,
+  getSitemap,
+  LOOKUP_TIMEOUT_MS,
+  SITE_CACHE_LIFE,
+} from './public-api';
 
 vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 
@@ -56,6 +65,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe('getResolved', () => {
@@ -89,9 +99,43 @@ describe('getResolved', () => {
     expect(cacheTag).toHaveBeenCalledWith('site:smilecare');
   });
 
-  it('throws on other API errors instead of caching them', async () => {
+  // The cached function must never throw: Next 16 never ends a response that awaits a failed
+  // cached lookup from both its metadata and its page. The failure is kept for no time at all and
+  // thrown by the caller, outside the cache.
+  it('keeps an API error out of the cache and throws it outside, after logging its cause', async () => {
     stubFetch(503, { code: 'internal' });
-    await expect(getResolved('smilecare', '', RELEASE_ID)).rejects.toThrow('HTTP 503');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(getResolved('smilecare', '', RELEASE_ID)).rejects.toThrow(
+      'Public API lookup publicResolve failed',
+    );
+    expect(cacheLife).toHaveBeenCalledOnce();
+    expect(cacheLife).toHaveBeenCalledWith({ stale: 0, revalidate: 0, expire: 0 });
+    expect(log).toHaveBeenCalledWith(
+      'Public API lookup publicResolve failed; nothing cached',
+      expect.objectContaining({ message: 'Public API request publicResolve answered HTTP 503' }),
+    );
+  });
+
+  it('gives up on a hung API after the lookup timeout', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    stubFetch(200, { kind: 'redirect', location: '/moi' });
+    await getResolved('smilecare', 'cu', '');
+    expect(timeout).toHaveBeenCalledWith(LOOKUP_TIMEOUT_MS);
+  });
+});
+
+describe('timeouts', () => {
+  // The proxy's check, then the page's lookup: a visitor never waits on the API for longer.
+  it('keep the wait of a page request within 8 seconds', () => {
+    expect(CHECK_TIMEOUT_MS + LOOKUP_TIMEOUT_MS).toBeLessThanOrEqual(8000);
+  });
+
+  it('give the proxy check the shorter one', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    stubFetch(200, { kind: 'page', releaseId: RELEASE_ID });
+    await getPathStatus('smilecare', '');
+    expect(timeout).toHaveBeenCalledWith(CHECK_TIMEOUT_MS);
+    expect(CHECK_TIMEOUT_MS).toBeLessThan(LOOKUP_TIMEOUT_MS);
   });
 });
 
@@ -110,6 +154,14 @@ describe('getSitemap', () => {
     stubFetch(404, { code: 'not_found' });
     await expect(getSitemap('khong-co')).resolves.toBeNull();
   });
+
+  it('keeps an API error out of the cache and throws it outside', async () => {
+    stubFetch(500, { code: 'internal' });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(getSitemap('smilecare')).rejects.toThrow('Public API lookup publicSitemap failed');
+    expect(cacheLife).toHaveBeenCalledOnce();
+    expect(cacheLife).toHaveBeenCalledWith({ stale: 0, revalidate: 0, expire: 0 });
+  });
 });
 
 describe('getPreview', () => {
@@ -118,9 +170,13 @@ describe('getPreview', () => {
       data: pageData,
       preview: { kind: 'draft', version: null, expiresAt: '2026-10-31T08:00:00.000Z' },
     });
-    await expect(getPreview('a.b.c')).resolves.toMatchObject({ preview: { kind: 'draft' } });
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    await expect(getPreview('a.b.c')).resolves.toMatchObject({
+      preview: { kind: 'draft' },
+    });
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/public/preview/a.b.c');
     expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe('no-store');
+    expect(timeout).toHaveBeenCalledWith(LOOKUP_TIMEOUT_MS);
     expect(cacheTag).not.toHaveBeenCalled();
     expect(cacheLife).not.toHaveBeenCalled();
   });
@@ -128,5 +184,27 @@ describe('getPreview', () => {
   it('returns null for an invalid or expired token', async () => {
     stubFetch(404, { code: 'not_found' });
     await expect(getPreview('expired.token.x')).resolves.toBeNull();
+  });
+});
+
+describe('getPreviewStatus', () => {
+  it('asks the light status endpoint within the check timeout, never cached', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = stubFetch(200, { kind: 'draft', subdomain: 'smilecare' });
+    await expect(getPreviewStatus('a.b.c')).resolves.toEqual({
+      kind: 'draft',
+      subdomain: 'smilecare',
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/public/preview/a.b.c/status');
+    expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe('no-store');
+    expect(timeout).toHaveBeenCalledWith(CHECK_TIMEOUT_MS);
+    expect(cacheTag).not.toHaveBeenCalled();
+  });
+
+  it('returns null for an invalid, expired or foreign token, and throws when the API fails', async () => {
+    stubFetch(404, { code: 'not_found' });
+    await expect(getPreviewStatus('expired.token.x')).resolves.toBeNull();
+    stubFetch(500, { code: 'internal' });
+    await expect(getPreviewStatus('a.b.c')).rejects.toThrow();
   });
 });

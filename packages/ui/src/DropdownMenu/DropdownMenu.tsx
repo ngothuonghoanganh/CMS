@@ -21,7 +21,13 @@ export interface DropdownMenuProps {
   className?: string | undefined;
 }
 
-/** Menu of actions. Arrow keys move, Enter selects, Escape closes and returns focus. */
+/**
+ * Menu of actions. Arrow keys move, Enter selects, Escape closes and returns focus.
+ *
+ * Not modal: Radix's modal menu hides the rest of the page with `aria-hidden` while it is open,
+ * although the page keeps its links and buttons (WCAG 4.1.2, axe `aria-hidden-focus`). A menu is
+ * not a dialog; Tab still stays in it and a click outside closes it.
+ */
 export function DropdownMenu({
   trigger,
   children,
@@ -33,6 +39,7 @@ export function DropdownMenu({
 }: DropdownMenuProps) {
   return (
     <RadixMenu.Root
+      modal={false}
       {...(open === undefined ? {} : { open })}
       {...(onOpenChange === undefined ? {} : { onOpenChange })}
     >

@@ -25,6 +25,7 @@ describe('problem filter', () => {
       .post('/auth/login', { email: 'nobody@example.com', password: 'x'.repeat(1_100_000) })
       .expect(413);
     expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(problemSchema.parse(response.body)).toMatchObject({
       status: 413,
       code: 'payload_too_large',
@@ -40,6 +41,7 @@ describe('problem filter', () => {
       .set('Content-Type', 'application/json')
       .send('{"email":')
       .expect(400);
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(problemSchema.parse(response.body)).toMatchObject({
       status: 400,
       code: 'validation_failed',

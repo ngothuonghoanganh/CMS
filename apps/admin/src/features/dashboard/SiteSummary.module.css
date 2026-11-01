@@ -104,7 +104,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Text-sized, yet a 24px target (WCAG 2.5.8). */
 .pending {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   font-size: var(--text-body-sm);
   color: var(--color-muted);
   text-decoration: underline;

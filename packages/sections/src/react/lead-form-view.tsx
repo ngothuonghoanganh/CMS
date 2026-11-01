@@ -7,6 +7,14 @@ import styles from './sections/LeadForm.module.css';
 /** Fields that can show an error under them. */
 export type LeadFormErrorField = 'name' | 'phone' | 'email' | 'message' | 'consent';
 
+/**
+ * Name of the hidden control that carries the form's submission id when JavaScript is off: the
+ * renderer draws a new id with every page it serves, so sending the same form again, after a
+ * timeout or by reloading the result page, is answered as a replay and never stored twice
+ * (ADR-016).
+ */
+export const LEAD_SUBMISSION_FIELD = 'submissionId';
+
 /** The send button's label while a lead is on its way. */
 const SENDING_LABEL = 'Đang gửi…';
 
@@ -17,6 +25,8 @@ export interface LeadFormViewProps {
   capture: PublicLeadCapture | null;
   /** The release the form sends back (ADR-016); null when the form cannot send (previews). */
   releaseId: string | null;
+  /** Drawn by the server for this page view; null when the form cannot send (previews). */
+  submissionId: string | null;
 }
 
 /** State of an interactive form, set by the renderer's client component. */
@@ -42,9 +52,25 @@ interface FieldErrorProps {
   message: string | undefined;
 }
 
+/** The message under a field, marked with an icon as on board 09: not by its color alone. */
 function FieldError({ sectionId, field, message }: FieldErrorProps) {
   return message === undefined ? null : (
     <span id={errorId(sectionId, field)} className={styles.error}>
+      <svg
+        aria-hidden="true"
+        className={styles.errorIcon}
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7.5v5.5M12 16.2v.1" />
+      </svg>
       {message}
     </span>
   );
@@ -66,6 +92,7 @@ export function LeadFormView({
   content,
   capture,
   releaseId,
+  submissionId,
   errors = {},
   formError = null,
   submitting = false,
@@ -94,6 +121,9 @@ export function LeadFormView({
       >
         {releaseId === null ? null : (
           <input type="hidden" name={names.releaseId} value={releaseId} />
+        )}
+        {submissionId === null ? null : (
+          <input type="hidden" name={LEAD_SUBMISSION_FIELD} value={submissionId} />
         )}
         <div className={styles.trap} aria-hidden="true">
           <label>

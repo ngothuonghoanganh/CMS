@@ -8,7 +8,13 @@ const valid = {
 
 describe('parseAdminEnv', () => {
   it('accepts the internal API URL and the site origin template', () => {
-    expect(parseAdminEnv(valid)).toEqual(valid);
+    expect(parseAdminEnv(valid)).toEqual({ ...valid, COOKIE_SECURE: true });
+  });
+
+  it('assumes HTTPS, as the API does, unless cookies are explicitly not secure', () => {
+    expect(parseAdminEnv({ ...valid, COOKIE_SECURE: 'false' }).COOKIE_SECURE).toBe(false);
+    expect(parseAdminEnv({ ...valid, COOKIE_SECURE: 'true' }).COOKIE_SECURE).toBe(true);
+    expect(() => parseAdminEnv({ ...valid, COOKIE_SECURE: 'yes' })).toThrow(/COOKIE_SECURE/);
   });
 
   it('fails fast when the API URL is missing', () => {

@@ -2,12 +2,13 @@
 
 import type { Asset } from '@plp/contracts';
 import { Button, ImageIcon } from '@plp/ui';
+import Image from 'next/image';
 import { type ReactNode, type RefObject, useRef, useState } from 'react';
 import { type AssetSelection, AssetPickerDialog } from './AssetPickerDialog';
 import styles from './assets.module.css';
 
 /** A small preview of an asset, or an empty tile when none is chosen (decorative). */
-export function AssetThumb({ asset }: { asset: Pick<Asset, 'url'> | null }) {
+export function AssetThumb({ asset }: { asset: Pick<Asset, 'url' | 'width' | 'height'> | null }) {
   if (!asset) {
     return (
       <span className={`${styles.thumb} ${styles.thumbEmpty}`} aria-hidden="true">
@@ -15,7 +16,17 @@ export function AssetThumb({ asset }: { asset: Pick<Asset, 'url'> | null }) {
       </span>
     );
   }
-  return <img src={asset.url} alt="" className={styles.thumb} />;
+  // The stored file as is, like every asset preview: its size gives the ratio, CSS the tile.
+  return (
+    <Image
+      src={asset.url}
+      alt=""
+      width={asset.width}
+      height={asset.height}
+      unoptimized
+      className={styles.thumb}
+    />
+  );
 }
 
 export interface AssetFieldProps {

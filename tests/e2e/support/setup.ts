@@ -47,18 +47,19 @@ export function newSubdomain(prefix = 'e2e'): string {
  * in the same cookie jar as the page that owns `request` (`page.request`). State-changing requests
  * carry the admin `Origin`, which the API requires.
  */
-async function call<T>(
+export async function call<T>(
   request: APIRequestContext,
-  method: 'GET' | 'POST' | 'PUT',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   schema: { parse: (value: unknown) => T },
   data?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<T> {
   const url = `${urls.admin}/api${path}`;
   const response =
     method === 'GET'
-      ? await request.get(url)
-      : await request.fetch(url, { method, data, headers: { origin: urls.admin } });
+      ? await request.get(url, { headers })
+      : await request.fetch(url, { method, data, headers: { ...headers, origin: urls.admin } });
   if (!response.ok()) {
     throw new Error(`${method} ${path} answered ${response.status()}: ${await response.text()}`);
   }

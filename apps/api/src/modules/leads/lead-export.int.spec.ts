@@ -124,6 +124,8 @@ describe('lead exports and a person’s data', () => {
     const started = new Date();
     const response = await owner.post(`/sites/${site.id}/leads/export`, {}).expect(200);
     expect(response.headers['content-type']).toBe('text/csv; charset=utf-8');
+    // Served through the admin's /api rewrite, which adds no headers of its own (ADR-013).
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(
       exportDays(started).map((day) => `attachment; filename="leads-${site.subdomain}-${day}.csv"`),
     ).toContain(response.headers['content-disposition']);

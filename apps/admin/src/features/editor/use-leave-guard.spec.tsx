@@ -3,10 +3,11 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installHistoryGuard } from '../shell/history-guard';
+import type { Leave } from '../shell/screen-leave';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
-import { DraftConflictError } from './use-draft-saver';
-import { useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
+import { createDraftSaver, DraftConflictError, type DraftSaver } from './use-draft-saver';
+import { isSameDocument, useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
 
@@ -16,15 +17,15 @@ installHistoryGuard();
 function Guarded({
   store,
   ensureSaved,
-  discard,
+  discardFor,
   push,
 }: {
   store: EditorStore;
   ensureSaved: () => Promise<SaveDraftResponse>;
-  discard: () => void;
+  discardFor: DraftSaver['discardFor'];
   push: (href: string) => void;
 }) {
-  const guard = useLeaveGuard(store, { ensureSaved, discard }, push);
+  const guard = useLeaveGuard(store, { ensureSaved, discardFor }, push);
   return (
     <>
       <button
@@ -42,17 +43,29 @@ function Guarded({
 
 function setup(ensureSaved?: () => Promise<SaveDraftResponse>) {
   const store = makeStore();
-  const discard = vi.fn();
+  const discard = vi.fn((leave: Leave) => Promise.resolve(leave()));
   const push = vi.fn();
   const saved = ensureSaved ?? (() => Promise.resolve(currentSaveResponse(store.getState())));
-  render(<Guarded store={store} ensureSaved={saved} discard={discard} push={push} />);
+  render(<Guarded store={store} ensureSaved={saved} discardFor={discard} push={push} />);
   return { store, discard, push };
 }
 
-/** What the browser does on Back: move to the previous entry, then fire popstate. */
-function pressBack() {
+/** Where the tests start, and where each one comes back to. */
+const START_URL = window.location.href;
+
+/** What the browser does on Back: move to the previous entry (`to`), then fire popstate. */
+function pressBack(to = '/sites/s/pages') {
   act(() => {
+    window.history.replaceState({ previous: true }, '', to);
     window.dispatchEvent(new PopStateEvent('popstate', { state: { previous: true } }));
+  });
+}
+
+/** What a click on the skip link does: a new entry of the same page at `#main-content`, then popstate. */
+function followSkipLink() {
+  act(() => {
+    window.history.pushState(window.history.state, '', '#main-content');
+    window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state as unknown }));
   });
 }
 
@@ -62,8 +75,14 @@ function failSave(store: EditorStore) {
   store.getState().markSaveFailed({ kind: 'retryable', message: 'Không kết nối được máy chủ' });
 }
 
-function BeforeUnloadGuarded({ store }: { store: EditorStore }) {
-  useBeforeUnloadGuard(store);
+function BeforeUnloadGuarded({
+  store,
+  pendingInput,
+}: {
+  store: EditorStore;
+  pendingInput?: () => boolean;
+}) {
+  useBeforeUnloadGuard(store, pendingInput);
   return null;
 }
 
@@ -76,6 +95,7 @@ function closeTab(): boolean {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.history.replaceState(null, '', START_URL);
 });
 
 describe('useBeforeUnloadGuard', () => {
@@ -101,6 +121,46 @@ describe('useBeforeUnloadGuard', () => {
     expect(closeTab()).toBe(true);
   });
 
+  it('lets the tab close during a leave without saving, a slug still being checked too', () => {
+    const store = makeStore();
+    render(<BeforeUnloadGuarded store={store} pendingInput={() => true} />);
+    failSave(store);
+    void createDraftSaver(store).discardFor(() => 'leaving');
+    expect(closeTab()).toBe(false);
+  });
+
+  it('asks again once a leave without saving stays', async () => {
+    const store = makeStore();
+    render(<BeforeUnloadGuarded store={store} pendingInput={() => true} />);
+    failSave(store);
+    let stay: () => void = () => undefined;
+    const left = createDraftSaver(store).discardFor(
+      () =>
+        new Promise((resolve) => {
+          stay = () => {
+            resolve('stayed');
+          };
+        }),
+    );
+    expect(closeTab()).toBe(false);
+
+    stay();
+    await left;
+    expect(closeTab()).toBe(true);
+  });
+
+  it('asks again for a change made after a leave without saving that kept the screen', async () => {
+    const store = makeStore();
+    render(<BeforeUnloadGuarded store={store} />);
+    failSave(store);
+    // The way out went to the URL already open: the leave reports 'leaving', yet the screen stays.
+    await createDraftSaver(store).discardFor(() => 'leaving');
+    expect(closeTab()).toBe(false);
+
+    store.getState().setSpacing(HERO, 'spacious');
+    expect(closeTab()).toBe(true);
+  });
+
   it('lets the tab close when everything is saved, and stops asking once unmounted', () => {
     const store = makeStore();
     const { unmount } = render(<BeforeUnloadGuarded store={store} />);
@@ -109,6 +169,24 @@ describe('useBeforeUnloadGuard', () => {
     store.getState().setSpacing(HERO, 'compact');
     unmount();
     expect(closeTab()).toBe(false);
+  });
+});
+
+describe('isSameDocument', () => {
+  const page = 'https://admin.example/sites/s/pages/p/seo?focus=title';
+
+  it('is the same document whatever the fragment', () => {
+    expect(isSameDocument(page, `${page}#main-content`)).toBe(true);
+    expect(isSameDocument(`${page}#main-content`, page)).toBe(true);
+    expect(isSameDocument(page, page)).toBe(true);
+  });
+
+  it('is not when the path, the query or the origin changes', () => {
+    expect(isSameDocument(page, 'https://admin.example/sites/s/pages/p/seo#x')).toBe(false);
+    expect(isSameDocument(page, 'https://admin.example/sites/s/pages/p/history')).toBe(false);
+    expect(isSameDocument(page, 'https://other.example/sites/s/pages/p/seo?focus=title#x')).toBe(
+      false,
+    );
   });
 });
 
@@ -123,6 +201,41 @@ describe('useLeaveGuard with the browser Back button', () => {
     expect(pushState).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
     window.removeEventListener('popstate', later);
+  });
+
+  it('lets a skip link or another in-page fragment through with unsaved changes', () => {
+    const router = vi.fn();
+    window.addEventListener('popstate', router);
+    const { store } = setup();
+    store.getState().setSpacing(HERO, 'compact');
+    try {
+      followSkipLink();
+      expect(router).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      window.removeEventListener('popstate', router);
+    }
+  });
+
+  it('lets Back from the skip link through to the same URL, with unsaved changes', () => {
+    const pushState = vi.spyOn(window.history, 'pushState');
+    const router = vi.fn();
+    window.addEventListener('popstate', router);
+    const { store } = setup();
+    const editorUrl = window.location.href;
+    // The changes became unsaved on this very URL: Back from the skip link lands on it again.
+    store.getState().setSpacing(HERO, 'compact');
+    try {
+      followSkipLink();
+      pressBack(editorUrl);
+      expect(router).toHaveBeenCalledTimes(2);
+      expect(window.location.href).toBe(editorUrl);
+      // Only the skip link added an entry; the guard put none back.
+      expect(pushState).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      window.removeEventListener('popstate', router);
+    }
   });
 
   it('keeps the router from leaving with unsaved changes, restores the entry and asks', () => {
@@ -190,7 +303,7 @@ describe('useLeaveGuard with the browser Back button', () => {
 });
 
 describe('useLeaveGuard with links', () => {
-  it('discards the changes when leaving without saving, so unmounting does not save them', async () => {
+  it('leaves without saving through discardFor, so unmounting does not save either', async () => {
     const user = userEvent.setup();
     const { store, discard, push } = setup();
     store.getState().setSpacing(HERO, 'compact');
@@ -211,6 +324,41 @@ describe('useLeaveGuard with links', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('follows a link at once during a leave without saving', async () => {
+    const user = userEvent.setup();
+    const { store, push } = setup();
+    failSave(store);
+    // A leave said it was under way, but the editor is still here.
+    void createDraftSaver(store).discardFor(() => 'leaving');
+
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(push).toHaveBeenCalledWith('/sites/s/pages/p/history');
+  });
+
+  it('asks before a link again once a leave without saving stayed', async () => {
+    const user = userEvent.setup();
+    const { store, push } = setup();
+    failSave(store);
+    await createDraftSaver(store).discardFor(() => 'stayed');
+
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    expect(screen.getByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeVisible();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('asks before a link again for a change made after a leave without saving', async () => {
+    const user = userEvent.setup();
+    const { store, push } = setup();
+    failSave(store);
+    await createDraftSaver(store).discardFor(() => 'leaving');
+    store.getState().setSpacing(HERO, 'spacious');
+
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    expect(screen.getByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeVisible();
     expect(push).not.toHaveBeenCalled();
   });
 

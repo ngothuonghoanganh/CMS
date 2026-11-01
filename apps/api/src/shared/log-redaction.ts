@@ -28,20 +28,68 @@ export function redactPreviewToken(url: string): string {
   return url.replace(PREVIEW_TOKEN_IN_PATH, `$1${REDACTED}`);
 }
 
-/** A copy of `value` with every occurrence of `secret` in its strings replaced. */
-function redactSecret(value: unknown, secret: string): unknown {
-  if (typeof value === 'string') {
-    return value.split(secret).join(REDACTED);
+/** Fields of an error that are not enumerable but say what went wrong. */
+const ERROR_FIELDS = ['name', 'message', 'stack', 'errmsg', 'cause', 'errors'] as const;
+
+function hasToJson(value: object): value is { toJSON: () => unknown } {
+  return 'toJSON' in value && typeof value.toJSON === 'function';
+}
+
+/**
+ * A copy of `value` with `map` applied to each of its strings, at any depth, in what the log
+ * writes for it: an object's `toJSON()` (an ObjectId's hex string, a Date's ISO string) and an
+ * error's own fields, which are not enumerable. A value met again is the copy already made, so a
+ * cycle, also one through what a `toJSON()` returns, ends the walk instead of the stack. The value
+ * itself is not changed.
+ */
+function mapStrings(value: unknown, map: (text: string) => string): unknown {
+  const copies = new WeakMap<object, unknown>();
+  function walk(item: unknown): unknown {
+    if (typeof item === 'string') {
+      return map(item);
+    }
+    if (typeof item !== 'object' || item === null) {
+      return item;
+    }
+    if (copies.has(item)) {
+      return copies.get(item);
+    }
+    const written: unknown = item instanceof Error || !hasToJson(item) ? item : item.toJSON();
+    if (typeof written !== 'object' || written === null) {
+      const copy = walk(written);
+      copies.set(item, copy);
+      return copy;
+    }
+    if (copies.has(written)) {
+      const copy = copies.get(written);
+      copies.set(item, copy);
+      return copy;
+    }
+    if (Array.isArray(written)) {
+      const copy: unknown[] = [];
+      copies.set(item, copy);
+      copies.set(written, copy);
+      for (const entry of written) {
+        copy.push(walk(entry));
+      }
+      return copy;
+    }
+    const copy: Record<string, unknown> = {};
+    copies.set(item, copy);
+    copies.set(written, copy);
+    if (written instanceof Error) {
+      for (const field of ERROR_FIELDS) {
+        if (field in written) {
+          copy[field] = walk(Reflect.get(written, field));
+        }
+      }
+    }
+    for (const [key, entry] of Object.entries(written)) {
+      copy[key] = walk(entry);
+    }
+    return copy;
   }
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSecret(item, secret));
-  }
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, redactSecret(item, secret)]),
-    );
-  }
-  return value;
+  return walk(value);
 }
 
 /** `q=` of a query string: a search, which in the lead inbox is a phone number, email or name. */
@@ -102,6 +150,28 @@ export function serializeRequest<R extends LoggableRequest>(req: R): R {
     return req;
   }
   req.url = redactPreviewToken(req.url);
-  req.params = redactSecret(req.params, token);
+  req.params = mapStrings(req.params, (text) => text.split(token).join(REDACTED));
   return req;
+}
+
+/** What a logged error shows in place of a sha256 (or any longer run of hex digits). */
+export const HASH_PLACEHOLDER = '[hash]';
+
+/**
+ * 64 hex digits or more. Some keys hold an unsalted sha256 of an email address (the confirmation
+ * email limits, ADR-018), a pseudonym of personal data; no log needs a sha256 value. Ids (24 hex
+ * digits) and request ids (UUIDs) are shorter and stay readable.
+ */
+const HEX_RUN = /[0-9a-f]{64,}/gi;
+
+/**
+ * pino's error serializer (`err`, after the standard one, which folds the causes' messages and
+ * stacks into the error's own): every run of 64 hex digits in the logged error becomes `[hash]`,
+ * in its message and stack, the driver's `errmsg` and `keyValue`, and its nested `cause` and
+ * `errors` (AggregateError), at any depth. A net under logs that pass an error on whole, e.g. a
+ * duplicate key error on a limit key that holds the hash of an address, rethrown as the cause of
+ * a 500 (`ProblemFilter`). Returns a copy; the error itself is not changed.
+ */
+export function serializeError(error: unknown): unknown {
+  return mapStrings(error, (text) => text.replace(HEX_RUN, HASH_PLACEHOLDER));
 }

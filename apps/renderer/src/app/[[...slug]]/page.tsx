@@ -1,6 +1,7 @@
 import type { PublicPageData } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { PageViewBeacon } from '../../components/PageViewBeacon';
 import { SitePage } from '../../components/SitePage';
 import { pageMetadata } from '../../lib/metadata';
@@ -49,13 +50,17 @@ export async function generateMetadata({ params }: PublicPageProps): Promise<Met
 export default async function PublicPage({ params, searchParams }: PublicPageProps) {
   const resolution = await resolveRequest(params);
   if (resolution.kind === 'redirect') {
-    // The proxy answers redirects before rendering (see `pathGate`); this is the fallback when its
-    // check failed. The query goes along, as with the proxy.
+    // The proxy answers redirects before rendering (see `pathGate`); this is the fallback when the
+    // slug moved between its check and this lookup. The query goes along, as with the proxy.
     permanentRedirect(`${resolution.location}${queryOf(await searchParams)}`);
   }
   if (resolution.kind === 'not_found') {
     notFound();
   }
+  // The form's submission id is drawn for this request (SitePage). Without this, Next renders the
+  // page once more as a prerender, meets `crypto.randomUUID()` there and logs an error for every
+  // live page served.
+  await connection();
   // Only live pages count views: never previews or the not-found page (ADR-019).
   return (
     <>

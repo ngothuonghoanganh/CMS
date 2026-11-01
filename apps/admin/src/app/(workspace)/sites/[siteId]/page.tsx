@@ -32,6 +32,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       initialActivity={data.activity}
       initialLeadCounts={leadCounts}
       loadedAt={data.loadedAt}
+      role={membership.role}
     />
   );
 }

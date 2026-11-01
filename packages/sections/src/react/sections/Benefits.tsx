@@ -45,7 +45,7 @@ function BenefitIconSvg({ icon }: { icon: BenefitIcon }) {
   );
 }
 
-export function BenefitsSection({ section, content, ctx }: SectionProps<BenefitsContent>) {
+export function BenefitsSection({ section, content, ctx, leading }: SectionProps<BenefitsContent>) {
   const alternate = section.variant === 'alternate';
   const header = (
     <div className={styles.header}>
@@ -112,7 +112,12 @@ export function BenefitsSection({ section, content, ctx }: SectionProps<Benefits
             <li key={index} className={styles.row}>
               <div className={styles.rowText}>{itemText(index, item.title, item.description)}</div>
               <div className={styles.media}>
-                <SectionImage ctx={ctx} image={item.image} className={styles.image} />
+                <SectionImage
+                  ctx={ctx}
+                  image={item.image}
+                  className={styles.image}
+                  priority={leading && index === 0}
+                />
               </div>
             </li>
           ))}

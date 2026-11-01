@@ -6,6 +6,14 @@ const adminEnvSchema = z.object({
   PUBLIC_SITE_ORIGIN_TEMPLATE: z
     .string()
     .refine((value) => value.includes('{subdomain}'), 'must contain {subdomain}'),
+  /**
+   * The API's setting, read here too: secure cookies mean the admin is served over HTTPS, so its
+   * responses ask browsers to keep using HTTPS (HSTS). Read at build time, like the rewrites.
+   */
+  COOKIE_SECURE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 });
 
 export type AdminEnv = z.infer<typeof adminEnvSchema>;

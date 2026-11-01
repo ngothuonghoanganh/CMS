@@ -36,8 +36,10 @@ export {
   useDraftSaver,
 } from './use-draft-saver';
 export {
-  isUnsaved,
+  isSameDocument,
   type LeaveGuard,
+  leavingLoses,
+  type PendingInput,
   useBeforeUnloadGuard,
   useHistoryLeaveGuard,
   useLeaveGuard,
