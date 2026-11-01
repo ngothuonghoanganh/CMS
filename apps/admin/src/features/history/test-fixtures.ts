@@ -19,6 +19,7 @@ export function releaseFixture(version: number, overrides: Partial<ReleaseSummar
     note: `Ghi chú v${version}`,
     changeSummary: [{ kind: 'modified' as const, label: 'Sửa: Hero', sectionId: 'hero00000001' }],
     sourceRevision: version * 2,
+    capturesLeads: false,
     createdBy: ngocAnh,
     createdAt: `2026-10-${String(10 + version).padStart(2, '0')}T02:40:00.000Z`,
     ...overrides,
