@@ -379,7 +379,7 @@ describe('DataRequestsSection', () => {
       );
 
       await user.click(within(dialog).getByRole('button', { name: 'Đã phản hồi người yêu cầu' }));
-      expect(lastCallTo(apiMock, endpoints.respondDataRequest).args).toEqual([REQUEST_ID]);
+      expect(lastCallTo(apiMock, endpoints.respondDataRequest).args).toEqual([SITE_ID, REQUEST_ID]);
       expect(await within(dialog).findByText(/Đã phản hồi người yêu cầu$/)).toBeInTheDocument();
       expect(
         within(dialog).queryByRole('button', { name: 'Đã phản hồi người yêu cầu' }),
@@ -399,7 +399,10 @@ describe('DataRequestsSection', () => {
       expect(within(dialog).getByText(/Không hoàn tác được/)).toBeInTheDocument();
       await user.click(within(dialog).getByRole('button', { name: 'Xác nhận' }));
 
-      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([REQUEST_ID]);
+      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([
+        SITE_ID,
+        REQUEST_ID,
+      ]);
       expect(
         await within(dialog).findByText(/Dữ liệu của người này đã được xóa/),
       ).toBeInTheDocument();
@@ -424,7 +427,10 @@ describe('DataRequestsSection', () => {
       // The consequences are read with the focused button.
       expect(confirm).toHaveAccessibleDescription(expect.stringContaining('(1 lead)'));
       await user.click(confirm);
-      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([REQUEST_ID]);
+      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([
+        SITE_ID,
+        REQUEST_ID,
+      ]);
     });
 
     it('completes a correction at once: the owner already fixed the leads', async () => {
@@ -436,7 +442,10 @@ describe('DataRequestsSection', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Sửa thông tin' });
       await user.click(await within(dialog).findByRole('button', { name: 'Đã sửa xong' }));
 
-      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([REQUEST_ID]);
+      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([
+        SITE_ID,
+        REQUEST_ID,
+      ]);
       expect(within(dialog).queryByRole('button', { name: 'Xác nhận' })).toBeNull();
     });
 
@@ -448,7 +457,10 @@ describe('DataRequestsSection', () => {
       });
       apiMock.mockImplementation((endpoint, args) => {
         if (endpoint === endpoints.getDataRequest) {
-          const [id] = args as [string];
+          const [siteId, id] = args as [string, string];
+          if (siteId !== SITE_ID) {
+            return Promise.reject(apiError(404, 'not_found', 'Không tìm thấy yêu cầu'));
+          }
           return Promise.resolve(
             id === REQUEST_ID ? dataRequestDetail() : dataRequestDetail({ ...other }),
           );
@@ -485,15 +497,22 @@ describe('DataRequestsSection', () => {
       await user.click(await within(dialog).findByRole('button', { name: 'Xuất dữ liệu' }));
       await user.click(screen.getByRole('menuitem', { name: 'File CSV (Excel)' }));
 
-      expect(downloadMock).toHaveBeenCalledWith(endpoints.exportDataRequest, [REQUEST_ID], {
-        body: { format: 'csv' },
-      });
+      expect(downloadMock).toHaveBeenCalledWith(
+        endpoints.exportDataRequest,
+        [SITE_ID, REQUEST_ID],
+        {
+          body: { format: 'csv' },
+        },
+      );
       expect(
         await screen.findByText('Đã xuất dữ liệu của người yêu cầu', { exact: true }),
       ).toBeInTheDocument();
       // Sending the copy completes the request, with no extra confirmation.
       await user.click(within(dialog).getByRole('button', { name: 'Đã gửi bản sao' }));
-      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([REQUEST_ID]);
+      expect(lastCallTo(apiMock, endpoints.completeDataRequest).args).toEqual([
+        SITE_ID,
+        REQUEST_ID,
+      ]);
     });
 
     it('stays open while exporting, so a failed export is seen', async () => {

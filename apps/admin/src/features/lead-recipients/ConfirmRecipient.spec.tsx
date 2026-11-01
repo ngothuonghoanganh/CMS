@@ -13,10 +13,17 @@ vi.mock(import('../../lib/api'), async (importOriginal) => ({
 
 const apiMock = vi.mocked(api);
 const TOKEN = 'a'.repeat(43);
+const SITE_ID = '64b000000000000000000001';
+
+/** The link of the confirmation email: its site, then its secret (ADR-025). */
+function openLink(token: string, siteId: string | null = SITE_ID) {
+  const site = siteId === null ? '' : `site=${siteId}&`;
+  window.history.replaceState(null, '', `/lead-recipients/confirm#${site}token=${token}`);
+}
 
 beforeEach(() => {
   apiMock.mockReset();
-  window.history.replaceState(null, '', `/lead-recipients/confirm#token=${TOKEN}`);
+  openLink(TOKEN);
 });
 
 describe('ConfirmRecipient', () => {
@@ -34,7 +41,7 @@ describe('ConfirmRecipient', () => {
 
     expect(apiMock).toHaveBeenCalledTimes(1);
     expect(lastCallTo(apiMock, endpoints.confirmLeadRecipient).options).toEqual({
-      body: { token: TOKEN },
+      body: { siteId: SITE_ID, token: TOKEN },
     });
     expect(await screen.findByRole('status')).toHaveTextContent(
       'sales@smilecare.vn sẽ nhận email khi có lead mới từ Nha khoa Smile Care.',
@@ -64,13 +71,13 @@ describe('ConfirmRecipient', () => {
     // Only the fragment changes, so the page is not loaded again.
     const other = 'b'.repeat(43);
     act(() => {
-      window.history.replaceState(null, '', `/lead-recipients/confirm#token=${other}`);
+      openLink(other);
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Xác nhận nhận lead' }));
     expect(lastCallTo(apiMock, endpoints.confirmLeadRecipient).options).toEqual({
-      body: { token: other },
+      body: { siteId: SITE_ID, token: other },
     });
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Liên kết xác nhận không còn hiệu lực',
@@ -78,16 +85,30 @@ describe('ConfirmRecipient', () => {
 
     // The first link's error is not shown for a third one.
     act(() => {
-      window.history.replaceState(null, '', `/lead-recipients/confirm#token=${'c'.repeat(43)}`);
+      openLink('c'.repeat(43));
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('asks to open the email again when the link lost its secret', () => {
-    window.history.replaceState(null, '', '/lead-recipients/confirm#token=ngan');
+    openLink('ngan');
     renderWithProviders(<ConfirmRecipient />);
     expect(screen.getByText('Liên kết không đầy đủ')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Xác nhận nhận lead' })).not.toBeInTheDocument();
+  });
+
+  it('asks to open the email again when the link does not name its site', () => {
+    openLink(TOKEN, null);
+    renderWithProviders(<ConfirmRecipient />);
+    expect(screen.getByText('Liên kết không đầy đủ')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xác nhận nhận lead' })).not.toBeInTheDocument();
+  });
+
+  it('asks to open the email again when the site of the link is not an id', () => {
+    openLink(TOKEN, 'smilecare');
+    renderWithProviders(<ConfirmRecipient />);
+    expect(screen.getByText('Liên kết không đầy đủ')).toBeInTheDocument();
+    expect(apiMock).not.toHaveBeenCalled();
   });
 });

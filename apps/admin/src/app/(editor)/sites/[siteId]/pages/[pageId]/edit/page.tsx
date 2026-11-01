@@ -30,19 +30,21 @@ async function orNotFound<T>(load: Promise<T>): Promise<T> {
 const authorize = cache((siteId: string, pageId: string) =>
   requireMe(`/sites/${siteId}/pages/${pageId}/edit`),
 );
-const loadPage = cache((pageId: string) => serverApi(endpoints.getPage, [pageId]));
+const loadPage = cache((siteId: string, pageId: string) =>
+  serverApi(endpoints.getPage, [siteId, pageId]),
+);
 
 export async function generateMetadata({ params }: EditPageProps): Promise<Metadata> {
   const { siteId, pageId } = await params;
   await authorize(siteId, pageId);
-  const detail = await orNotFound(loadPage(pageId));
+  const detail = await orNotFound(loadPage(siteId, pageId));
   return { title: `Sửa “${detail.page.title}”` };
 }
 
 export default async function EditPage({ params }: EditPageProps) {
   const { siteId, pageId } = await params;
   const me = await authorize(siteId, pageId);
-  const detail = await orNotFound(loadPage(pageId));
+  const detail = await orNotFound(loadPage(siteId, pageId));
   if (detail.page.siteId !== siteId) {
     notFound();
   }

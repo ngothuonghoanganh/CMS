@@ -57,7 +57,7 @@ export function RestoreDraftDialog({
   const base = useQuery({
     queryKey: baseKey,
     queryFn: async ({ signal }) => {
-      const detail = await api(endpoints.getPage, [page.id], { signal });
+      const detail = await api(endpoints.getPage, [page.siteId, page.id], { signal });
       onPageRead(detail.page);
       return detail;
     },
@@ -68,7 +68,7 @@ export function RestoreDraftDialog({
 
   const restore = useMutation({
     mutationFn: (detail: PageDetailResponse) =>
-      api(endpoints.restoreDraft, [page.id], {
+      api(endpoints.restoreDraft, [page.siteId, page.id], {
         body: { baseRevision: detail.draft.revision, releaseId: release.id },
       }),
     onSuccess: (detail) => {

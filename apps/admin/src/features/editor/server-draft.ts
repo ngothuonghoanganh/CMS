@@ -59,7 +59,7 @@ export function useLatestServerDraft(store: EditorStore): void {
 
     async function check() {
       await runningSavesSettled(loaded.page.id);
-      const detail = await api(endpoints.getPage, [loaded.page.id], {
+      const detail = await api(endpoints.getPage, [loaded.page.siteId, loaded.page.id], {
         signal: controller.signal,
       });
       const untouched = () => {
@@ -109,9 +109,9 @@ export function useLatestServerDraft(store: EditorStore): void {
  *   brought a newer summary and checks.
  */
 export async function refreshPageSummary(store: EditorStore): Promise<void> {
-  const pageId = store.getState().page.id;
+  const { siteId, id: pageId } = store.getState().page;
   await runningSavesSettled(pageId);
-  const detail = await api(endpoints.getPage, [pageId]);
+  const detail = await api(endpoints.getPage, [siteId, pageId]);
   const state = store.getState();
   if (detail.draft.revision === state.baseRevision) {
     state.setServerState({ page: detail.page, checks: detail.checks });

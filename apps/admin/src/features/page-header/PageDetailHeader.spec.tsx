@@ -162,7 +162,7 @@ describe('PageDetailHeader', () => {
     await vi.waitFor(() => {
       expect(onUnpublished).toHaveBeenCalledWith(result);
     });
-    expect(apiMock).toHaveBeenCalledWith(endpoints.movePointer, [page.id], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.movePointer, [page.siteId, page.id], {
       body: {
         targetReleaseId: null,
         expectedCurrentReleaseId: page.liveRelease?.id,

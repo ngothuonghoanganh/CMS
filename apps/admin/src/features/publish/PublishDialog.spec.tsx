@@ -178,7 +178,7 @@ describe('PublishDialog', () => {
 
     expect(await screen.findByRole('heading', { name: 'Xuất bản 2 thay đổi' })).toBeInTheDocument();
     expect(props.ensureSaved).toHaveBeenCalledTimes(1);
-    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [PAGE_ID]);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [SITE_ID, PAGE_ID]);
     expect(screen.getByText('smilecare.payload.site/uu-dai-thang-11')).toBeInTheDocument();
     expect(screen.getByText('Đang live')).toBeInTheDocument();
     expect(screen.getByText('v13 · bản nháp hiện tại')).toBeInTheDocument();
@@ -259,7 +259,7 @@ describe('PublishDialog', () => {
     await user.click(publishButton());
 
     expect(await screen.findByText('Trang vừa thay đổi trong lúc xuất bản')).toBeInTheDocument();
-    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [PAGE_ID]);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [SITE_ID, PAGE_ID]);
     expect(
       within(screen.getByRole('list', { name: 'Các thay đổi' })).getByText(
         'Giao diện site: giao diện',
@@ -390,7 +390,7 @@ describe('PublishDialog', () => {
 
     expect(await screen.findByRole('heading', { name: 'v13 đã live' })).toBeInTheDocument();
     const { args, options } = lastCallTo(apiMock, endpoints.publish);
-    expect(args).toEqual([PAGE_ID]);
+    expect(args).toEqual([SITE_ID, PAGE_ID]);
     expect(options).toEqual({
       body: {
         expectedRevision: 5,
@@ -489,7 +489,7 @@ describe('PublishDialog', () => {
     await user.click(publishButton());
 
     expect(await screen.findByText('Trang vừa thay đổi trong lúc xuất bản')).toBeInTheDocument();
-    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [PAGE_ID]);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [SITE_ID, PAGE_ID]);
     expect(props.ensureSaved).toHaveBeenCalledTimes(2);
     expect(publishButton()).toHaveTextContent('Xuất bản v15');
 
@@ -567,7 +567,7 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
     expect(
       await screen.findByRole('heading', { name: 'Đã gửi yêu cầu duyệt' }),
     ).toBeInTheDocument();
-    expect(apiMock).toHaveBeenCalledWith(endpoints.requestApproval, [PAGE_ID], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.requestApproval, [SITE_ID, PAGE_ID], {
       body: {
         expectedRevision: 5,
         expectedPublishedReleaseId: LIVE_RELEASE.id,
@@ -607,7 +607,7 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
     apiMock.mockResolvedValueOnce({ page: withdrawn });
     await user.click(screen.getByRole('button', { name: 'Rút yêu cầu' }));
     expect(await screen.findByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeInTheDocument();
-    expect(apiMock).toHaveBeenCalledWith(endpoints.withdrawApproval, [PAGE_ID]);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.withdrawApproval, [SITE_ID, PAGE_ID]);
     expect(props.onPageUpdated).toHaveBeenCalledWith(withdrawn);
   });
 
@@ -650,7 +650,7 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
     apiMock.mockResolvedValueOnce({ page: refused });
     await user.type(screen.getByLabelText(/Lý do/), 'Giá chưa đúng');
     await user.click(screen.getByRole('button', { name: 'Từ chối yêu cầu' }));
-    expect(apiMock).toHaveBeenCalledWith(endpoints.rejectApproval, [PAGE_ID], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.rejectApproval, [SITE_ID, PAGE_ID], {
       body: { approvalId: '64b0000000000000000000a1', revision: 5, reason: 'Giá chưa đúng' },
     });
     expect(props.onPageUpdated).toHaveBeenCalledWith(refused);

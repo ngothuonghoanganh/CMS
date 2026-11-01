@@ -16,6 +16,7 @@ import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-s
 import styles from './LeadInbox.module.css';
 
 export interface EditLeadContactDialogProps {
+  siteId: string;
   lead: LeadDetail;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -31,6 +32,7 @@ const FIELDS = ['name', 'phone', 'email'] as const;
  * they asked for it. The consent evidence stays as it was given.
  */
 export function EditLeadContactDialog({
+  siteId,
   lead,
   open,
   onOpenChange,
@@ -49,7 +51,7 @@ export function EditLeadContactDialog({
 
   const save = useMutation({
     mutationFn: (body: UpdateLeadContactRequest) =>
-      api(endpoints.updateLeadContact, [lead.id], { body }),
+      api(endpoints.updateLeadContact, [siteId, lead.id], { body }),
     onSuccess: (updated) => {
       onSaved(updated);
     },

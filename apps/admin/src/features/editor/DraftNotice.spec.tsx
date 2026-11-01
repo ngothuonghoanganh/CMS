@@ -13,6 +13,7 @@ import { currentSaveResponse } from './store';
 import {
   asset,
   makeStore,
+  PAGE_ID,
   pageDetail,
   RELEASE_ID,
   sampleComposition,
@@ -141,7 +142,7 @@ describe('DraftNotice', () => {
       expect(store.getState().baseRevision).toBe(5);
     });
     expect(ensureSaved).toHaveBeenCalledTimes(1);
-    expect(apiMock).toHaveBeenCalledWith(expect.anything(), ['64b000000000000000000002'], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.restoreDraft, [SITE_ID, PAGE_ID], {
       body: { baseRevision: 4, releaseId: RELEASE_ID },
     });
     expect(store.getState().draft.composition.sections).toHaveLength(5);

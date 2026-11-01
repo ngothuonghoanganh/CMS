@@ -178,7 +178,9 @@ function EditorShell({ store, userId, initialPages, renderPublishDialog }: Shell
     setPreviewPending(true);
     try {
       await ensureSaved();
-      const link = await api(endpoints.createPreviewLink, [pageId], { body: { kind: 'draft' } });
+      const link = await api(endpoints.createPreviewLink, [siteId, pageId], {
+        body: { kind: 'draft' },
+      });
       const opened = window.open(link.url, '_blank');
       if (opened) {
         opened.opener = null;

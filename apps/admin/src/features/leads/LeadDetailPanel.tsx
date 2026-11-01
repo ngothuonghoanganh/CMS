@@ -111,7 +111,7 @@ export function LeadDetailPanel({
   }, [queryClient, siteId, leadId, initialDetail, loadedAt]);
   const detail = useQuery({
     queryKey: detailKey,
-    queryFn: ({ signal }) => api(endpoints.getLead, [leadId], { signal }),
+    queryFn: ({ signal }) => api(endpoints.getLead, [siteId, leadId], { signal }),
     ...(initialDetail === undefined
       ? {}
       : { initialData: initialDetail, initialDataUpdatedAt: loadedAt }),
@@ -149,7 +149,7 @@ export function LeadDetailPanel({
   }
 
   const update = useMutation({
-    mutationFn: (body: UpdateLeadRequest) => api(endpoints.updateLead, [leadId], { body }),
+    mutationFn: (body: UpdateLeadRequest) => api(endpoints.updateLead, [siteId, leadId], { body }),
     onSuccess: (updated, body) => {
       queryClient.setQueryData(detailKey, updated);
       refreshLists();
@@ -183,7 +183,7 @@ export function LeadDetailPanel({
 
   const exportFile = useMutation({
     mutationFn: (format: PersonExportRequest['format']) =>
-      downloadFile(endpoints.exportLeadPerson, [leadId], { body: { format } }),
+      downloadFile(endpoints.exportLeadPerson, [siteId, leadId], { body: { format } }),
     onSuccess: (file) => {
       toast(
         file.truncated
@@ -206,7 +206,7 @@ export function LeadDetailPanel({
   });
 
   const retry = useMutation({
-    mutationFn: () => api(endpoints.retryLeadNotification, [leadId]),
+    mutationFn: () => api(endpoints.retryLeadNotification, [siteId, leadId]),
     onSuccess: (updated) => {
       focusDelivery.current = true;
       queryClient.setQueryData(detailKey, updated);
@@ -226,7 +226,7 @@ export function LeadDetailPanel({
   });
 
   const remove = useMutation({
-    mutationFn: () => api(endpoints.deleteLeadPerson, [leadId]),
+    mutationFn: () => api(endpoints.deleteLeadPerson, [siteId, leadId]),
     onSuccess: ({ deletedCount }) => {
       setDeleteOpen(false);
       toast({ tone: 'success', title: `Đã xóa ${deletedCount} lead của người này` });
@@ -570,6 +570,7 @@ export function LeadDetailPanel({
       {canManage && editKey > 0 ? (
         <EditLeadContactDialog
           key={editKey}
+          siteId={siteId}
           lead={lead}
           open={editOpen}
           onOpenChange={setEditOpen}

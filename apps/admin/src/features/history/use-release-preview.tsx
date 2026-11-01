@@ -10,14 +10,14 @@ import { problemMessage, reportUnexpected } from '../shell/problem-message';
  * "Xem bản này": a signed preview link of an old release (ARCHITECTURE §2.1.7), opened in a new
  * tab. When the browser blocks the window, a toast offers the link instead.
  */
-export function useReleasePreview(pageId: string) {
+export function useReleasePreview(siteId: string, pageId: string) {
   const { toast } = useToast();
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   async function openPreview(releaseId: string, version: number) {
     setPendingId(releaseId);
     try {
-      const link = await api(endpoints.createPreviewLink, [pageId], {
+      const link = await api(endpoints.createPreviewLink, [siteId, pageId], {
         body: { kind: 'release', releaseId },
       });
       const opened = window.open(link.url, '_blank');

@@ -1,6 +1,10 @@
 'use client';
 
-import { endpoints, recipientTokenSchema } from '@plp/contracts';
+import {
+  type ConfirmLeadRecipientRequest,
+  confirmLeadRecipientRequestSchema,
+  endpoints,
+} from '@plp/contracts';
 import { Button, Callout } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
@@ -15,19 +19,32 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-/** The link's secret from `#token=…`: the fragment never reaches a server or its logs. */
-function tokenFromHash(): string | null {
-  const token = new URLSearchParams(window.location.hash.slice(1)).get('token');
-  return token !== null && recipientTokenSchema.safeParse(token).success ? token : null;
+/** The fragment as it is: a string, so the snapshot stays the same while the link does. */
+function currentHash(): string {
+  return window.location.hash;
+}
+
+/**
+ * The link's site and secret from `#site=…&token=…`: the fragment never reaches a server or its
+ * logs. The site says which workspace database holds the address (ADR-025).
+ */
+function linkOf(hash: string): ConfirmLeadRecipientRequest | null {
+  const params = new URLSearchParams(hash.slice(1));
+  const link = confirmLeadRecipientRequestSchema.safeParse({
+    siteId: params.get('site'),
+    token: params.get('token'),
+  });
+  return link.success ? link.data : null;
 }
 
 /** Confirms a lead address with one click on the link it was emailed (ADR-018). */
 export function ConfirmRecipient() {
   // Undefined while rendering on the server, where there is no fragment; null for a bad link.
-  const token = useSyncExternalStore(subscribe, tokenFromHash, () => undefined);
+  const hash = useSyncExternalStore(subscribe, currentHash, () => undefined);
+  const link = hash === undefined ? undefined : linkOf(hash);
   const confirm = useMutation({
-    mutationFn: (secret: string) =>
-      api(endpoints.confirmLeadRecipient, [], { body: { token: secret } }),
+    mutationFn: (body: ConfirmLeadRecipientRequest) =>
+      api(endpoints.confirmLeadRecipient, [], { body }),
     onSuccess: () => {
       // The secret has done its job; keep it out of the history.
       window.history.replaceState(null, '', window.location.pathname);
@@ -39,7 +56,7 @@ export function ConfirmRecipient() {
 
   // Another link pasted into this tab gets its own button: an earlier outcome is not about it. After
   // a confirmation the fragment is cleared, so no token still means the link just confirmed.
-  const outcomeOfThisLink = token === null || token === confirm.variables;
+  const outcomeOfThisLink = link === null || link?.token === confirm.variables?.token;
 
   if (confirm.isSuccess && outcomeOfThisLink) {
     return (
@@ -48,10 +65,10 @@ export function ConfirmRecipient() {
       </Callout>
     );
   }
-  if (token === undefined) {
+  if (link === undefined) {
     return null;
   }
-  if (token === null) {
+  if (link === null) {
     return (
       <Callout tone="warning" title="Liên kết không đầy đủ">
         Mở lại liên kết trong email xác nhận, hoặc nhờ chủ site gửi lại thư.
@@ -76,7 +93,7 @@ export function ConfirmRecipient() {
       <Button
         loading={confirm.isPending}
         onClick={() => {
-          confirm.mutate(token);
+          confirm.mutate(link);
         }}
       >
         Xác nhận nhận lead

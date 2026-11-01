@@ -18,6 +18,7 @@ import { replaceWithServerDraft } from './server-draft';
 export function ConflictDialog() {
   const store = useEditorStoreApi();
   const open = useEditor((state) => state.saveState === 'conflict');
+  const siteId = useEditor((state) => state.page.siteId);
   const pageId = useEditor((state) => state.page.id);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function ConflictDialog() {
     setPending(true);
     setError(null);
     try {
-      const detail = await api(endpoints.getPage, [pageId]);
+      const detail = await api(endpoints.getPage, [siteId, pageId]);
       await replaceWithServerDraft(store, detail);
     } catch (caught) {
       reportUnexpected('Reloading the latest draft failed', caught);

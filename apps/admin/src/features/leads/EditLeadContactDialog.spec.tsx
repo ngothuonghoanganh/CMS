@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { EditLeadContactDialog } from './EditLeadContactDialog';
-import { LEAD_ID, leadDetail } from './test-fixtures';
+import { LEAD_ID, leadDetail, SITE_ID } from './test-fixtures';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -19,6 +19,7 @@ function renderDialog() {
   const onGone = vi.fn();
   renderWithProviders(
     <EditLeadContactDialog
+      siteId={SITE_ID}
       lead={leadDetail()}
       open
       onOpenChange={vi.fn()}
@@ -54,6 +55,7 @@ describe('EditLeadContactDialog', () => {
     const onOpenChange = vi.fn();
     renderWithProviders(
       <EditLeadContactDialog
+        siteId={SITE_ID}
         lead={leadDetail()}
         open
         onOpenChange={onOpenChange}
@@ -88,7 +90,7 @@ describe('EditLeadContactDialog', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Lưu thông tin' }));
 
     expect(lastCallTo(apiMock, endpoints.updateLeadContact)).toEqual({
-      args: [LEAD_ID],
+      args: [SITE_ID, LEAD_ID],
       options: { body: { name: 'Nguyễn Thu Hà', phone: '0901 234 568', email: '' } },
     });
     expect(onSaved).toHaveBeenCalledWith(saved);

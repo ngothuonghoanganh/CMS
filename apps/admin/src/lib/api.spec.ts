@@ -81,9 +81,13 @@ describe('downloadFile', () => {
       ),
     );
     await expect(
-      downloadFile(endpoints.exportLeadPerson, ['64b000000000000000000401'], {
-        body: { format: 'json' },
-      }),
+      downloadFile(
+        endpoints.exportLeadPerson,
+        ['64b000000000000000000001', '64b000000000000000000401'],
+        {
+          body: { format: 'json' },
+        },
+      ),
     ).rejects.toBeInstanceOf(ApiError);
   });
 });

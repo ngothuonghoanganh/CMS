@@ -19,9 +19,9 @@ export interface LeadInboxData {
 }
 
 /** A lead from the URL; one deleted since the link was made shows as gone in the panel. */
-async function loadLead(leadId: string): Promise<LeadDetail | null> {
+async function loadLead(siteId: string, leadId: string): Promise<LeadDetail | null> {
   try {
-    return await serverApi(endpoints.getLead, [leadId]);
+    return await serverApi(endpoints.getLead, [siteId, leadId]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return null;
@@ -44,7 +44,7 @@ export async function loadLeadInboxData(
         })
       : null,
     serverApi(endpoints.listPageRefs, [siteId]),
-    leadId === null ? null : loadLead(leadId),
+    leadId === null ? null : loadLead(siteId, leadId),
   ]);
   return { list, pageRefs, detail, loadedAt: Date.now() };
 }

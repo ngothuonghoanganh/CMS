@@ -210,7 +210,7 @@ function PublishSession({
     }
     try {
       const saved = await ensureSaved();
-      const detail = await api(endpoints.getPage, [pageId]);
+      const detail = await api(endpoints.getPage, [site.id, pageId]);
       const prepared: PreparedPublish = {
         revision: detail.draft.revision,
         page: detail.page,
@@ -256,7 +256,7 @@ function PublishSession({
   async function publish(prepared: PreparedPublish) {
     dispatch({ type: 'submit_started' });
     try {
-      const response = await api(endpoints.publish, [pageId], {
+      const response = await api(endpoints.publish, [site.id, pageId], {
         body: {
           expectedRevision: prepared.revision,
           expectedPublishedReleaseId: prepared.page.liveRelease?.id ?? null,
@@ -326,7 +326,7 @@ function PublishSession({
     dispatch({ type: 'submit_started' });
     try {
       const own = pendingApproval(prepared.page);
-      const { page } = await api(endpoints.requestApproval, [pageId], {
+      const { page } = await api(endpoints.requestApproval, [site.id, pageId], {
         body: {
           expectedRevision: prepared.revision,
           expectedPublishedReleaseId: prepared.page.liveRelease?.id ?? null,
@@ -363,7 +363,7 @@ function PublishSession({
   async function withdraw() {
     dispatch({ type: 'submit_started' });
     try {
-      const { page } = await api(endpoints.withdrawApproval, [pageId]);
+      const { page } = await api(endpoints.withdrawApproval, [site.id, pageId]);
       onPageUpdated(page);
       dispatch({ type: 'page_changed', page });
       toast({ tone: 'success', title: 'Đã rút yêu cầu xuất bản' });
@@ -386,7 +386,7 @@ function PublishSession({
     setRejectPending(true);
     setRejectError(null);
     try {
-      const { page } = await api(endpoints.rejectApproval, [pageId], {
+      const { page } = await api(endpoints.rejectApproval, [site.id, pageId], {
         body: { approvalId: approval.id, revision: approval.revision, reason: text },
       });
       onPageUpdated(page);
