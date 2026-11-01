@@ -66,8 +66,9 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
     await this.auth.logout(sessionTokensOf(request));
-    // Both scopes: a host-only cookie from before workspace addresses, or the other way round,
-    // would otherwise outlive the sign-out (ADR-025).
+    // With workspace addresses, both scopes: a host-only cookie from before them would otherwise
+    // outlive the sign-out. Without them the parent domain is unknown; its sessions are ended
+    // above and refused in this mode anyway (ADR-025).
     response.clearCookie(SESSION_COOKIE, this.cookieOptions());
     if (this.env.SESSION_COOKIE_DOMAIN !== undefined) {
       response.clearCookie(SESSION_COOKIE, this.hostOnlyOptions());

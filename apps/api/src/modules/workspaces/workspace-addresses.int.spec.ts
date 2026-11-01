@@ -228,6 +228,8 @@ describe('workspace addresses', () => {
     // A cookie of another scope first, as the browser sends the older one first.
     await me(`${SESSION_COOKIE}=not-a-session; ${newer}`).expect(200);
     await me(`${older}; ${newer}`).expect(200);
+    // Repeats of one value count once, so they cannot push the valid one past the limit.
+    await me(`${`${SESSION_COOKIE}=not-a-session; `.repeat(4)}${newer}`).expect(200);
     // However many a request carries, one query looks at four at most.
     const lookups = vi.spyOn(t.app.get(SessionsRepository), 'findActive');
     try {
