@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Vai trò và phân quyền — Mây Xanh Agency</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="roles" role="{{ sidebarRole }}" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <sc-if value="{{ isDenied }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width: 560px; margin: 120px auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+        <span aria-hidden="true" style="width: 52px; height: 52px; border-radius: 14px; background: #ECEEF2; color: #474E5C; display: flex; align-items: center; justify-content: center">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2"></path></svg>
+        </span>
+        <h1 style="margin: 0; font-size: 22px; font-weight: 700">Bạn chưa có quyền xem vai trò &amp; quyền</h1>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Vai trò của bạn là <strong>Biên tập</strong> trên 2 site. Chỉ Chủ sở hữu và Quản trị xem và đổi được phân quyền của workspace.</p>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding-top: 6px">
+          <button type="button" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Nhờ Ngọc Anh cấp quyền</button>
+          <a href="Main.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; font-size: 14px; font-weight: 600; color: #15171C; text-decoration: none; background: #FFFFFF">Về danh sách site</a>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isAllowed }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+        <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Vai trò &amp; quyền</h1>
+            <p style="margin: 0; font-size: 14px; color: #3C424E">Vai trò quyết định một người được làm gì. Phạm vi site được chọn khi mời hoặc đổi quyền ở <a href="Members.dc.html" style="font-weight: 600; text-decoration: none">Thành viên</a>.</p>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 12px; color: #3C424E">
+            <span style="display: inline-flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Được phép</span>
+            <span style="display: inline-flex; align-items: center; gap: 6px"><span style="padding: 1px 6px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-weight: 600">Yêu cầu</span>Phải được duyệt</span>
+            <span style="display: inline-flex; align-items: center; gap: 6px"><span style="padding: 1px 6px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-weight: 600">Theo gói</span>Cần gói phù hợp, không phải quyền</span>
+          </div>
+        </header>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+          <nav aria-label="Danh sách vai trò" style="flex: 1 1 230px; max-width: 280px; display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <sc-for list="{{ roleList }}" as="r" hint-placeholder-count="6">
+              <button type="button" aria-current="{{ r.cur }}" style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px; border: 0; border-radius: 8px; background: {{ r.bg }}; text-align: left; font: inherit; color: #15171C; cursor: pointer">
+                <span style="flex: 1; display: flex; flex-direction: column; gap: 1px">
+                  <span style="font-size: 14px; font-weight: {{ r.fw }}; color: {{ r.fg }}">{{ r.name }}</span>
+                  <span style="font-size: 12px; color: #5E6573">{{ r.kind }}</span>
+                </span>
+                <span style="font-size: 12px; color: #5E6573">{{ r.count }}</span>
+              </button>
+            </sc-for>
+            <div style="margin-top: 6px; padding-top: 10px; border-top: 1px solid #EEF0F3; display: flex; flex-direction: column; gap: 6px">
+              <button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px dashed #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">
+                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+                Vai trò tùy chỉnh
+              </button>
+              <span style="font-size: 11px; line-height: 1.45; color: #5E6573; text-align: center">Nhân bản từ vai trò có sẵn rồi bật/tắt quyền.</span>
+            </div>
+          </nav>
+
+          <section aria-labelledby="pane-title" style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #EEF0F3">
+              <h2 id="pane-title" style="margin: 0; font-size: 16px; font-weight: 700">{{ paneTitle }}</h2>
+              <span style="font-size: 12px; color: #5E6573">{{ paneHint }}</span>
+            </div>
+
+            <sc-if value="{{ isMatrix }}" hint-placeholder-val="{{ true }}">
+              <div style="overflow-x: auto">
+                <div role="table" aria-label="Ma trận quyền theo vai trò" style="min-width: 900px">
+                  <div role="row" style="display: grid; grid-template-columns: minmax(260px, 2.4fr) repeat(6, minmax(0, 1fr)); gap: 8px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+                    <span role="columnheader">QUYỀN</span>
+                    <sc-for list="{{ cols }}" as="c" hint-placeholder-count="6"><span role="columnheader" style="text-align: center; color: {{ c.fg }}">{{ c.name }}</span></sc-for>
+                  </div>
+                  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="8">
+                    <div role="rowgroup">
+                      <div role="row" style="padding: 12px 20px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #3C424E"><span role="rowheader">{{ g.name }}</span></div>
+                      <sc-for list="{{ g.rows }}" as="p" hint-placeholder-count="2">
+                        <div role="row" style="display: grid; grid-template-columns: minmax(260px, 2.4fr) repeat(6, minmax(0, 1fr)); gap: 8px; align-items: center; padding: 9px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                          <span role="rowheader" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">{{ p.name }}
+                            <sc-if value="{{ p.plan }}" hint-placeholder-val="{{ false }}"><span style="padding: 1px 6px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 11px; font-weight: 600">Theo gói</span></sc-if>
+                          </span>
+                          <sc-for list="{{ p.cells }}" as="v" hint-placeholder-count="6">
+                            <span role="cell" style="display: flex; justify-content: center; background: {{ v.bg }}; border-radius: 6px; min-height: 28px; align-items: center">
+                              <sc-if value="{{ v.yes }}" hint-placeholder-val="{{ true }}"><svg role="img" aria-label="Được phép" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if>
+                              <sc-if value="{{ v.no }}" hint-placeholder-val="{{ false }}"><span aria-label="Không" style="color: #8A91A0; font-size: 16px">–</span></sc-if>
+                              <sc-if value="{{ v.req }}" hint-placeholder-val="{{ false }}"><span style="padding: 1px 6px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-size: 11px; font-weight: 600">Yêu cầu</span></sc-if>
+                            </span>
+                          </sc-for>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isCustom }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 18px 20px 20px">
+                <div style="flex: 999 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+                  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+                    <div style="display: flex; flex-direction: column; gap: 6px">
+                      <label for="cr-name" style="font-size: 14px; font-weight: 600">Tên vai trò</label>
+                      <input id="cr-name" type="text" value="Trưởng nhóm nội dung" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px">
+                      <label for="cr-base" style="font-size: 14px; font-weight: 600">Bắt đầu từ</label>
+                      <select id="cr-base" style="min-height: 44px; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF"><option>Biên tập</option></select>
+                    </div>
+                  </div>
+                  <sc-for list="{{ editGroups }}" as="g" hint-placeholder-count="5">
+                    <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 2px">
+                      <legend style="padding: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #3C424E">{{ g.name }}</legend>
+                      <sc-for list="{{ g.rows }}" as="p" hint-placeholder-count="2">
+                        <label style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 8px; background: {{ p.rowBg }}; font-size: 14px; cursor: pointer">
+                          <span style="flex: 1">{{ p.name }}</span>
+                          <sc-if value="{{ p.changed }}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; font-weight: 600; color: {{ p.changeFg }}">{{ p.changeLabel }}</span></sc-if>
+                          <input type="checkbox" role="switch" checked="{{ p.on }}" aria-label="{{ p.name }}" style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">
+                        </label>
+                      </sc-for>
+                    </fieldset>
+                  </sc-for>
+                </div>
+                <aside aria-label="Tóm tắt trước khi lưu" style="flex: 1 1 240px; align-self: flex-start; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 12px; background: #FAFBFC; border: 1px solid #EEF0F3">
+                  <span style="font-size: 14px; font-weight: 700">Tóm tắt trước khi lưu</span>
+                  <ul style="margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.65; color: #3C424E">
+                    <li><strong style="color: #0B6B45">Thêm</strong>: mời thành viên với vai trò Biên tập hoặc thấp hơn.</li>
+                    <li><strong style="color: #0B6B45">Thêm</strong>: xem lead của site được giao.</li>
+                    <li><strong style="color: #B42318">Bỏ</strong>: gỡ trang khỏi live.</li>
+                  </ul>
+                  <div style="display: flex; flex-direction: column; gap: 6px">
+                    <span style="font-size: 13px; font-weight: 600">Phạm vi khi giao vai trò này</span>
+                    <label style="display: flex; gap: 8px; align-items: center; font-size: 13px"><input type="radio" name="cr-scope" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Toàn workspace</label>
+                    <label style="display: flex; gap: 8px; align-items: center; font-size: 13px"><input type="radio" name="cr-scope" checked style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Chọn site khi giao</label>
+                  </div>
+                  <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Chưa ai có vai trò này. Lưu không ảnh hưởng tới thành viên hiện tại.</span>
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                    <button type="button" style="flex: 1; min-height: 44px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+                    <button type="button" style="flex: 1; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Lưu vai trò</button>
+                  </div>
+                </aside>
+              </div>
+            </sc-if>
+          </section>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <sc-if value="{{ showChanged }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: absolute; right: 24px; bottom: 24px; width: 380px; max-width: calc(100% - 48px); display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 14px; background: #15171C; color: #FFFFFF; box-shadow: 0 24px 64px rgba(21,23,28,0.28)">
+      <span style="font-size: 14px; font-weight: 600">Quyền của bạn vừa thay đổi</span>
+      <span style="font-size: 13px; line-height: 1.55; color: #E2E5EA">Quốc Bảo đã gỡ quyền của bạn trên Bếp Nhà Mây. Bản nháp “Món mới tháng 11” đã được lưu lúc 10:42 và vẫn còn; bạn không sửa tiếp được.</span>
+      <div style="display: flex; gap: 8px; padding-top: 4px">
+        <a href="Main.dc.html" style="display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border-radius: 8px; background: #FFFFFF; color: #15171C; font-size: 13px; font-weight: 600; text-decoration: none">Về danh sách site</a>
+        <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #5E6573; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #FFFFFF; cursor: pointer">Xin lại quyền</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["matrix","customRole","noPermission","changedWhileWorking"],"default":"matrix"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'matrix';
+    var names = ['Chủ sở hữu', 'Quản trị', 'Biên tập', 'Cộng tác viên', 'CSKH', 'Chỉ xem'];
+    var G = [
+      ['NỘI DUNG', [
+        ['Xem trang, bản nháp và hiệu quả', 'yyyyyy'],
+        ['Sửa bản nháp, section, SEO', 'yyyynn'],
+        ['Dùng trợ lý AI', 'yyyynn', true],
+        ['Lưu và quản lý template của workspace', 'yyynnn']
+      ]],
+      ['XUẤT BẢN', [
+        ['Xuất bản, cập nhật trang live', 'yyyrnn'],
+        ['Rollback, gỡ trang khỏi live', 'yyynnn']
+      ]],
+      ['LEADS & KHÁCH HÀNG', [
+        ['Xem lead, khách hàng, pipeline', 'yynnyn'],
+        ['Đổi trạng thái, ghi chú, giao việc', 'yynnyn']
+      ]],
+      ['DỮ LIỆU CÁ NHÂN', [
+        ['Xuất lead ra CSV / Excel', 'yynnnn'],
+        ['Xử lý yêu cầu dữ liệu, xóa dữ liệu một người', 'yynnnn'],
+        ['Sửa nội dung đồng ý, thời gian lưu', 'yynnnn']
+      ]],
+      ['TÊN MIỀN', [
+        ['Kết nối, đổi địa chỉ chính, ngắt tên miền', 'yynnnn']
+      ]],
+      ['AUTOMATION', [
+        ['Xem automation và lịch sử chạy', 'yynnyn', true],
+        ['Tạo, bật, tạm dừng automation', 'yynnnn', true]
+      ]],
+      ['THÀNH VIÊN', [
+        ['Mời, đổi quyền, gỡ thành viên', 'yynnnn'],
+        ['Chuyển quyền sở hữu workspace', 'ynnnnn']
+      ]],
+      ['THANH TOÁN', [
+        ['Xem gói và mức sử dụng', 'yynnnn'],
+        ['Đổi gói, thanh toán, tải hóa đơn', 'ynnnnn']
+      ]]
+    ];
+    var focus = 2;
+    var groups = G.map(function (g) {
+      return {
+        name: g[0],
+        rows: g[1].map(function (p) {
+          return {
+            name: p[0], plan: !!p[2],
+            cells: p[1].split('').map(function (c, i) {
+              return { yes: c === 'y', no: c === 'n', req: c === 'r', bg: i === focus ? '#F5F5FF' : 'transparent' };
+            })
+          };
+        })
+      };
+    });
+    var cols = names.map(function (n, i) { return { name: n, fg: i === focus ? '#3730A3' : '#5E6573' }; });
+    var custom = s === 'customRole';
+    var counts = ['1', '1', '2', '1', '1', '1'];
+    var kinds = ['Hệ thống · không sửa được', 'Hệ thống', 'Hệ thống', 'Hệ thống', 'Hệ thống', 'Hệ thống'];
+    var fullNames = ['Chủ sở hữu', 'Quản trị', 'Biên tập', 'Cộng tác viên', 'Chăm sóc khách hàng', 'Chỉ xem'];
+    var roleList = fullNames.map(function (n, i) {
+      var on = !custom && i === focus;
+      return { name: n, kind: kinds[i], count: counts[i], cur: on ? 'page' : null, bg: on ? '#EEF0FF' : 'transparent', fg: on ? '#3730A3' : '#15171C', fw: on ? 600 : 500 };
+    });
+    if (custom) {
+      roleList.push({ name: 'Trưởng nhóm nội dung', kind: 'Tùy chỉnh · chưa lưu', count: '0', cur: 'page', bg: '#EEF0FF', fg: '#3730A3', fw: 600 });
+    }
+    var E = [
+      ['NỘI DUNG', [['Sửa bản nháp, section, SEO', true], ['Dùng trợ lý AI', true], ['Lưu và quản lý template của workspace', true]]],
+      ['XUẤT BẢN', [['Xuất bản, cập nhật trang live', true], ['Rollback, gỡ trang khỏi live', false, 'Bỏ']]],
+      ['LEADS & KHÁCH HÀNG', [['Xem lead, khách hàng, pipeline', true, 'Thêm'], ['Đổi trạng thái, ghi chú, giao việc', false]]],
+      ['DỮ LIỆU CÁ NHÂN', [['Xuất lead ra CSV / Excel', false], ['Xử lý yêu cầu dữ liệu', false]]],
+      ['THÀNH VIÊN', [['Mời thành viên (tới Biên tập)', true, 'Thêm']]]
+    ];
+    var editGroups = E.map(function (g) {
+      return { name: g[0], rows: g[1].map(function (p) {
+        var ch = !!p[2];
+        return { name: p[0], on: p[1], changed: ch, changeLabel: p[2] || '', changeFg: p[2] === 'Bỏ' ? '#B42318' : '#0B6B45', rowBg: ch ? '#F5F5FF' : 'transparent' };
+      }) };
+    });
+    var denied = s === 'noPermission' || s === 'changedWhileWorking';
+    return {
+      groups: groups, cols: cols, roleList: roleList, editGroups: editGroups,
+      isMatrix: !custom, isCustom: custom,
+      isDenied: denied, isAllowed: !denied,
+      sidebarRole: denied || s === 'changedWhileWorking' ? 'editor' : 'owner',
+      showChanged: s === 'changedWhileWorking',
+      paneTitle: custom ? 'Vai trò mới: Trưởng nhóm nội dung' : 'So sánh quyền của 6 vai trò',
+      paneHint: custom ? 'Các dòng tô màu khác với Biên tập' : 'Đang làm nổi Biên tập · vai trò hệ thống không sửa được'
+    };
+  }
+}
+</script>
+</body>
+</html>

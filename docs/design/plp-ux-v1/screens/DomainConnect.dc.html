@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Kết nối tên miền riêng</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 1080px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="domain" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 24px 40px 56px">
+    <div style="max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <a href="Domains.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 13px; font-weight: 600; text-decoration: none">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+        Tên miền
+      </a>
+      <header style="display: flex; flex-direction: column; gap: 6px">
+        <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Kết nối tên miền riêng</h1>
+        <p style="margin: 0; font-size: 14px; color: #3C424E">Trang vẫn chạy ở địa chỉ mặc định trong lúc kết nối. Bạn có thể rời màn này, hệ thống tự kiểm tra và gửi email khi xong.</p>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <section aria-labelledby="step-title" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 22px 24px 24px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <span style="font-size: 12px; font-weight: 600; color: #5E6573; letter-spacing: 0.04em">{{ stepEyebrow }}</span>
+            <h2 id="step-title" style="margin: 0; font-size: 20px; font-weight: 700">{{ stepTitle }}</h2>
+          </div>
+
+          <sc-if value="{{ isInput }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <label for="host" style="font-size: 14px; font-weight: 600">Tên miền</label>
+              <input id="host" type="text" value="{{ hostValue }}" aria-invalid="{{ invalid }}" aria-describedby="host-help" style="min-height: 48px; box-sizing: border-box; padding: 0 14px; border: 1px solid {{ inputBorder }}; border-radius: 10px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; color: #15171C; background: #FFFFFF">
+              <sc-if value="{{ invalid }}" hint-placeholder-val="{{ false }}">
+                <div id="host-help" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: #B42318">
+                  <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5M12 16.2v.1"></path></svg>
+                  <span>Chỉ nhập tên miền, không kèm https:// và dấu / ở cuối.</span>
+                  <button type="button" style="min-height: 32px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Dùng uudai.smilecare.vn</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ validHelp }}" hint-placeholder-val="{{ true }}">
+                <span id="host-help" style="font-size: 13px; color: #5E6573">Ví dụ <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">go.tenmien.vn</span>. Nên dùng tên miền phụ cho landing page để không ảnh hưởng website chính.</span>
+                <div style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #E2F4EA; color: #0B4F33; font-size: 13px; line-height: 1.55">
+                  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                  <span><strong>Tên miền phụ</strong> của smilecare.vn. Bạn chỉ cần thêm một bản ghi CNAME và một bản ghi TXT xác minh.</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ isTaken }}" hint-placeholder-val="{{ false }}">
+                <div role="alert" style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00">
+                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C27803" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+                  <div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.55">
+                    <span style="font-size: 14px; font-weight: 600">Tên miền này đang được một site khác dùng</span>
+                    <span>Vì lý do bảo mật, chúng tôi không cho biết site đó thuộc ai. Nếu bạn sở hữu tên miền, hãy thêm bản ghi TXT ở bước sau. Sau khi xác minh, tên miền chuyển về site này và site kia ngừng dùng nó.</span>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="display: flex; flex-wrap: wrap; gap: 10px; padding-top: 6px">
+                <button type="button" disabled="{{ invalid }}" style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: {{ ctaBg }}; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">{{ ctaLabel }}</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isDns }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 14px">
+              <div role="status" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 14px; border-radius: 12px; background: {{ box.bg }}; border: 1px solid {{ box.border }}; color: {{ box.fg }}">
+                <span style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; line-height: 1.55">
+                  <span style="font-size: 14px; font-weight: 600">{{ box.title }}</span>
+                  <span>{{ box.body }}</span>
+                </span>
+                <span style="font-size: 12px">{{ box.checked }}</span>
+                <button type="button" style="display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">
+                  <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4"></path></svg>
+                  Kiểm tra ngay
+                </button>
+              </div>
+
+              <div role="tablist" aria-label="Cách kết nối" style="display: flex; gap: 4px; border-bottom: 1px solid #E2E5EA">
+                <button type="button" role="tab" aria-selected="false" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; font: inherit; font-size: 14px; font-weight: 500; color: #3C424E; cursor: pointer">Đăng nhập nhà cung cấp</button>
+                <button type="button" role="tab" aria-selected="true" style="min-height: 42px; padding: 0 12px; border: 0; border-bottom: 2px solid #4338CA; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #3730A3; cursor: pointer">Tự thêm bản ghi DNS</button>
+              </div>
+              <ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.7; color: #3C424E">
+                <li>Mở trang quản lý DNS của <strong>smilecare.vn</strong> tại nhà cung cấp (Mắt Bão, PA Vietnam, Nhân Hòa, Cloudflare…).</li>
+                <li>Thêm đúng {{ recordCount }} bản ghi dưới đây. Bấm biểu tượng sao chép để tránh gõ sai.</li>
+                <li>Lưu lại, rồi quay về đây bấm “Kiểm tra ngay”.</li>
+              </ol>
+              <div style="border: 1px solid #E2E5EA; border-radius: 10px; overflow-x: auto">
+                <div style="min-width: 600px">
+                  <div style="display: grid; grid-template-columns: 90px minmax(0, 1.2fr) minmax(0, 2fr) 120px; gap: 12px; padding: 10px 14px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+                    <span>LOẠI</span><span>TÊN / HOST</span><span>GIÁ TRỊ</span><span>TÌNH TRẠNG</span>
+                  </div>
+                  <sc-for list="{{ records }}" as="rec" hint-placeholder-count="2">
+                    <div style="display: grid; grid-template-columns: 90px minmax(0, 1.2fr) minmax(0, 2fr) 120px; gap: 12px; align-items: center; padding: 12px 14px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500">{{ rec.type }}</span>
+                      <span style="display: flex; align-items: center; gap: 8px; min-width: 0">
+                        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; overflow-wrap: anywhere">{{ rec.host }}</span>
+                        <button type="button" aria-label="Sao chép tên host {{ rec.host }}" style="flex: none; width: 32px; height: 32px; border: 1px solid #E2E5EA; border-radius: 6px; background: #FFFFFF; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.5"></rect><path d="M5 15V5a1 1 0 0 1 1-1h10"></path></svg></button>
+                      </span>
+                      <span style="display: flex; align-items: center; gap: 8px; min-width: 0">
+                        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; overflow-wrap: anywhere">{{ rec.value }}</span>
+                        <button type="button" aria-label="Sao chép giá trị {{ rec.type }}" style="flex: none; width: 32px; height: 32px; border: 1px solid #E2E5EA; border-radius: 6px; background: #FFFFFF; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="1.5"></rect><path d="M5 15V5a1 1 0 0 1 1-1h10"></path></svg></button>
+                      </span>
+                      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: {{ rec.fg }}"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: {{ rec.dot }}"></span>{{ rec.state }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <sc-if value="{{ isMisconfigured }}" hint-placeholder-val="{{ false }}">
+                <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 13px">
+                  <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #FDEBE9; color: #7A1A12">
+                    <span style="font-weight: 600">Đang có</span>
+                    <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">A · uudai → 103.97.125.18</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #E2F4EA; color: #0B4F33">
+                    <span style="font-weight: 600">Cần có</span>
+                    <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">CNAME · uudai → cname.payload.site</span>
+                  </div>
+                </div>
+              </sc-if>
+              <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #5E6573">{{ hostTip }}</p>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isActive }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 14px">
+              <div role="status" style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #E2F4EA; border: 1px solid #BFE5CF; color: #0B4F33; font-size: 13px; line-height: 1.55">
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#12A06A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><rect x="5" y="11" width="14" height="9" rx="1.5"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+                <span><strong>uudai.smilecare.vn đã hoạt động với HTTPS.</strong> Mọi trang đang live đã mở được qua địa chỉ này. Chứng chỉ tự gia hạn trước khi hết hạn.</span>
+              </div>
+              <fieldset style="margin: 0; padding: 16px; border: 1px solid #E2E5EA; border-radius: 12px; display: flex; flex-direction: column; gap: 10px">
+                <legend style="padding: 0 6px; font-size: 14px; font-weight: 600">Dùng làm địa chỉ chính?</legend>
+                <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; cursor: pointer">
+                  <input type="radio" name="primary" checked style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">
+                  <span><strong>Giữ go.smilecare.vn làm địa chỉ chính.</strong> uudai.smilecare.vn chuyển hướng về địa chỉ chính.</span>
+                </label>
+                <label style="display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.5; cursor: pointer">
+                  <input type="radio" name="primary" style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">
+                  <span><strong>Đặt uudai.smilecare.vn làm địa chỉ chính.</strong> 6 trang đang live đổi địa chỉ ngay. Link cũ tự chuyển hướng 301, sitemap và canonical được cập nhật.</span>
+                </label>
+              </fieldset>
+              <div style="display: flex; flex-wrap: wrap; gap: 10px">
+                <a href="Domains.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">Xong</a>
+              </div>
+            </div>
+          </sc-if>
+        </section>
+
+        <aside aria-label="Tiến trình kết nối" style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500">{{ hostShown }}</span>
+          <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+            <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5">
+              <li aria-current="{{ s.cur }}" style="display: flex; gap: 12px; padding-bottom: 14px">
+                <span aria-hidden="true" style="flex: none; width: 24px; height: 24px; border-radius: 999px; background: {{ s.bg }}; color: {{ s.fg }}; border: 2px solid {{ s.ring }}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700">{{ s.mark }}</span>
+                <span style="display: flex; flex-direction: column; gap: 2px; padding-top: 2px">
+                  <span style="font-size: 14px; font-weight: {{ s.fw }}; color: {{ s.labelColor }}">{{ s.label }}</span>
+                  <span style="font-size: 12px; color: #5E6573">{{ s.sub }}</span>
+                </span>
+              </li>
+            </sc-for>
+          </ol>
+          <div style="padding-top: 12px; border-top: 1px solid #EEF0F3; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.55; color: #3C424E">
+            <span style="font-weight: 600; color: #15171C">Cần người khác làm giúp?</span>
+            <span>Gửi hướng dẫn này cho người quản lý tên miền của bạn. Họ không cần tài khoản Payload.</span>
+            <button type="button" style="align-self: flex-start; min-height: 40px; padding: 0 14px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Sao chép link hướng dẫn</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["input","inputError","taken","waitingDns","misconfigured","verifying","issuing","active"],"default":"waitingDns"},"kind":{"editor":"enum","options":["subdomain","apex"],"default":"subdomain"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'waitingDns';
+    var apex = (this.props.kind ?? 'subdomain') === 'apex';
+    var host = apex ? 'smilecare.vn' : 'uudai.smilecare.vn';
+    var stage = { input: 0, inputError: 0, taken: 0, waitingDns: 1, misconfigured: 1, verifying: 2, issuing: 3, active: 5 }[s];
+    var problem = s === 'misconfigured';
+    var labels = [
+      ['Nhập tên miền', host],
+      ['Thêm bản ghi DNS', apex ? 'A và TXT' : 'CNAME và TXT'],
+      ['Xác minh quyền sở hữu', 'Tự động qua bản ghi TXT'],
+      ['Cấp chứng chỉ HTTPS', 'Thường dưới 10 phút'],
+      ['Hoạt động', 'Chọn có đặt làm địa chỉ chính']
+    ];
+    var steps = labels.map(function (l, i) {
+      var done = i < stage;
+      var cur = i === stage;
+      var bad = cur && problem;
+      return {
+        label: l[0], sub: l[1], cur: cur ? 'step' : null,
+        mark: done ? '✓' : String(i + 1),
+        bg: done ? '#12A06A' : (cur ? (bad ? '#FFF1D6' : '#EEF0FF') : '#FFFFFF'),
+        fg: done ? '#FFFFFF' : (cur ? (bad ? '#8A5300' : '#3730A3') : '#5E6573'),
+        ring: done ? '#12A06A' : (cur ? (bad ? '#E39A12' : '#4338CA') : '#CDD2DA'),
+        fw: cur ? 600 : 500,
+        labelColor: done || cur ? '#15171C' : '#5E6573'
+      };
+    });
+    var pending = { fg: '#3730A3', dot: '#4338CA', state: 'Đang chờ' };
+    var ok = { fg: '#0B6B45', dot: '#12A06A', state: 'Đã thấy' };
+    var wrong = { fg: '#8A5300', dot: '#E39A12', state: 'Sai giá trị' };
+    var main = apex
+      ? { type: 'A', host: '@', value: '[IP CỦA PAYLOAD]' }
+      : { type: 'CNAME', host: 'uudai', value: 'cname.payload.site' };
+    var txt = { type: 'TXT', host: apex ? '_payload' : '_payload.uudai', value: 'payload-verify=8f3a2c91e07b' };
+    var mainState = s === 'waitingDns' ? pending : (problem ? wrong : ok);
+    var txtState = s === 'waitingDns' ? pending : ok;
+    function merge(a, b) { var o = {}; for (var k in a) o[k] = a[k]; for (var j in b) o[j] = b[j]; return o; }
+    var boxes = {
+      waitingDns: { bg: '#EEF0FF', border: '#E0E2FF', fg: '#26208A', title: 'Đang chờ bản ghi DNS có hiệu lực', body: 'Hệ thống tự kiểm tra mỗi phút. Thường mất vài phút, đôi khi tới 48 giờ tùy nhà cung cấp.', checked: 'Kiểm tra lần cuối 1 phút trước' },
+      misconfigured: { bg: '#FFF8EB', border: '#F3E2BD', fg: '#5C3D00', title: 'Bản ghi chính chưa đúng', body: 'Đã thấy bản ghi TXT. Bản ghi của uudai đang là A, cần xóa nó rồi thêm CNAME như bảng dưới.', checked: 'Kiểm tra lần cuối 3 phút trước' },
+      verifying: { bg: '#EEF0FF', border: '#E0E2FF', fg: '#26208A', title: 'DNS đã đúng, đang xác minh quyền sở hữu', body: 'Bạn không cần làm gì thêm. Bước này thường xong trong một phút.', checked: 'Vừa kiểm tra' },
+      issuing: { bg: '#EEF0FF', border: '#E0E2FF', fg: '#26208A', title: 'Đang cấp chứng chỉ HTTPS', body: 'Đã xác minh quyền sở hữu. Chưa thể xuất bản lên địa chỉ này cho tới khi có HTTPS. Chúng tôi sẽ gửi email khi xong.', checked: 'Bắt đầu 2 phút trước' }
+    };
+    var isInput = stage === 0;
+    var titles = {
+      input: 'Bạn muốn dùng tên miền nào?', inputError: 'Bạn muốn dùng tên miền nào?', taken: 'Bạn muốn dùng tên miền nào?',
+      waitingDns: 'Thêm bản ghi DNS', misconfigured: 'Sửa bản ghi DNS', verifying: 'Đang xác minh', issuing: 'Đang bật HTTPS', active: 'Đã kết nối'
+    };
+    return {
+      steps: steps,
+      hostShown: isInput && s !== 'taken' ? 'Tên miền mới' : host,
+      stepEyebrow: 'BƯỚC ' + Math.min(stage + 1, 5) + ' / 5',
+      stepTitle: titles[s],
+      isInput: isInput,
+      invalid: s === 'inputError',
+      validHelp: s === 'input',
+      isTaken: s === 'taken',
+      hostValue: s === 'inputError' ? 'https://uudai.smilecare.vn/' : 'uudai.smilecare.vn',
+      inputBorder: s === 'inputError' ? '#B42318' : '#828998',
+      ctaBg: s === 'inputError' ? '#A8AEB9' : '#4338CA',
+      ctaLabel: s === 'taken' ? 'Tiếp tục để xác minh quyền sở hữu' : 'Tiếp tục',
+      isDns: stage >= 1 && stage <= 3,
+      isMisconfigured: problem,
+      isActive: s === 'active',
+      box: boxes[s] || boxes.waitingDns,
+      records: [merge(main, mainState), merge(txt, txtState)],
+      recordCount: 2,
+      hostTip: apex
+        ? 'Tên miền gốc cần bản ghi A. Nếu nhà cung cấp hỗ trợ ALIAS hoặc CNAME flattening, nên dùng cách đó. Website chính đang chạy ở smilecare.vn sẽ ngừng hoạt động sau khi đổi.'
+        : 'Ở ô Tên/Host chỉ nhập uudai, không nhập cả uudai.smilecare.vn. Một tên không thể vừa có bản ghi A vừa có CNAME.'
+    };
+  }
+}
+</script>
+</body>
+</html>
