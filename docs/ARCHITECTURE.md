@@ -1276,6 +1276,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Integration test cho mọi endpoint mới với sáu vai trò, người ngoài workspace và trường hợp chạy song song (hai lần nhận cùng một link, hai lời mời cùng email).
   - E2E: mời qua Mailpit, đăng ký từ link, đổi quyền, yêu cầu và duyệt, chuyển quyền sở hữu, thu hồi.
+- **Amended 2026-11-01 (vòng test sau Phase 1):**
+  - Không ai tự đổi quyền hay tự gỡ mình (409), vì đó là "tự rời workspace", vẫn ngoài phạm vi. Màn 15 không có "Đổi quyền" trên dòng của chính mình.
+  - Lời mời không sống lâu hơn quyền mời. Gỡ một thành viên, hoặc đổi họ sang vai trò không có `members.manage`, thì thu hồi các lời mời họ gửi còn chờ, trong cùng transaction.
+  - Đổi một thành viên thành Quản trị, hoặc chuyển quyền sở hữu cho họ, thì đóng yêu cầu đổi quyền đang chờ của họ. Họ tự đổi được quyền, và Chủ sở hữu không duyệt yêu cầu của chính mình.
+  - Nhận lời mời khi đã là thành viên thì đóng lời mời và giữ vai trò cũ.
+    - Membership được đọc trong transaction.
+    - Không bắt lỗi khóa trùng bên trong transaction. MongoDB đã hủy transaction đó, nên lần commit sau sẽ được thử lại tới 120 giây.
+  - Việc đọc thông tin để gửi email (Chủ sở hữu, workspace) là một phần của việc gửi. Lỗi ở bước này chỉ được log; yêu cầu đã lưu thì không trả 500.
+  - `/workspaces/:id` chuyển tới "Thành viên", hoặc trang chủ với vai trò không quản lý thành viên. Đây là nơi người dùng quay về khi đăng nhập lại từ một màn workspace.
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1342,6 +1351,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Consequences:**
   - Integration test cho chuẩn hóa tên miền, giới hạn, chuyển chủ (kể cả hai lần xác minh song song), trạng thái, tự kiểm tra trên nhiều instance, `tls/allowed`, phân giải host và quyền.
   - E2E: kết nối một tên miền `*.e2e.test` (Chromium ánh xạ về máy, DNS từ zone file), đặt làm địa chỉ chính, trang mở ở tên miền riêng và địa chỉ mặc định chuyển hướng 301.
+- **Amended 2026-11-01 (vòng test sau Phase 1):**
+  - Email trạng thái tên miền gửi người đã thêm tên miền nếu họ còn `domains.manage` trên site. Nếu không còn, email gửi Chủ sở hữu: người đã bị gỡ không nhận gì, nhưng tin vẫn tới một người phụ trách.
+  - Giới hạn 5 tên miền mỗi site được kiểm tra trong transaction tăng `domainSeq` của site, như `pageSeq` (ADR-014). Hai lần thêm cùng lúc không vượt giới hạn.
 
 ### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
 
@@ -1409,6 +1421,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - từ chối, rút, và từ chối song song với xuất bản;
     - ma trận quyền.
   - E2E: Cộng tác viên được mời qua Mailpit và gửi yêu cầu. Chủ sở hữu nhận email, duyệt và xuất bản; Cộng tác viên nhận email. Thêm một lần từ chối kèm lý do.
+- **Amended 2026-11-01 (vòng test sau Phase 1):**
+  - Email kết quả chỉ gửi người gửi yêu cầu khi họ còn mở được site của trang.
+  - `PageSummary.approval` lấy yêu cầu đang chờ trước, rồi mới tới yêu cầu mới nhất theo `createdAt`, vì đồng hồ của các instance có thể lệch nhau.
 
 ### ADR-024 — Vai trò tùy chỉnh
 
@@ -1466,6 +1481,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - E2E: Chủ sở hữu tạo vai trò từ Biên tập (xuất bản đổi thành "Yêu cầu", thêm xem lead) rồi mời một người. Người đó thấy Leads và nút "Gửi duyệt".
 
 ---
+
+- **Amended 2026-11-01 (vòng test sau Phase 1):** giao diện hiện từng thao tác theo đúng quyền của nó, không theo vai trò hệ thống:
+  - Không có `leads.handle` thì lead chỉ để xem: có trạng thái và ghi chú, không có spam và "Gửi lại".
+  - Có `personalData.manage` thì thấy "Dữ liệu & đồng ý", nơi có yêu cầu dữ liệu.
+  - "Khôi phục v{n}" sau khi xuất bản cần `pages.manageLive`.
 
 ## 5. Lát cắt giao hàng
 
