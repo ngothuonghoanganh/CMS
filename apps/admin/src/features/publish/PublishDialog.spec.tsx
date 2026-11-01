@@ -277,7 +277,7 @@ describe('PublishDialog', () => {
     expect(props.onFixTarget).toHaveBeenCalledWith(blockingItem.target);
   });
 
-  describe('a form missing site settings only the Owner may change', () => {
+  describe('a form missing site settings only Chủ sở hữu and Quản trị may change', () => {
     const consentMissing: CheckItem = {
       code: 'consent_not_configured',
       severity: 'blocking',
@@ -295,7 +295,7 @@ describe('PublishDialog', () => {
       target: { kind: 'lead_recipients', sectionId: 'form00000001' },
     };
 
-    it('tells an Editor to ask the Owner instead of opening screens they cannot use', async () => {
+    it('tells a Biên tập whom to ask instead of opening screens they cannot use', async () => {
       const result = checks({ blocking: [consentMissing, destinationMissing, blockingItem] });
       const props = renderDialog({ result, role: 'editor' });
 
@@ -306,25 +306,25 @@ describe('PublishDialog', () => {
       }
       expect(within(consent).queryByRole('button')).toBeNull();
       expect(consent).toHaveTextContent(
-        'Chỉ Owner của workspace cài đặt được dữ liệu cá nhân và nội dung đồng ý. Hãy nhờ Owner làm bước này, rồi xuất bản lại.',
+        'Chỉ Chủ sở hữu và Quản trị cài đặt được dữ liệu cá nhân và nội dung đồng ý. Hãy nhờ họ làm bước này, rồi xuất bản lại.',
       );
       expect(within(destination).queryByRole('button')).toBeNull();
       expect(destination).toHaveTextContent(
-        'Chỉ Owner của workspace chọn được nơi nhận lead. Hãy nhờ Owner thêm và xác nhận một email, rồi xuất bản lại.',
+        'Chỉ Chủ sở hữu và Quản trị chọn được nơi nhận lead. Hãy nhờ họ thêm và xác nhận một email, rồi xuất bản lại.',
       );
-      // What the Editor can fix keeps its button.
+      // What the Biên tập can fix keeps its button.
       expect(screen.getAllByRole('button', { name: 'Sửa ngay' })).toHaveLength(1);
       expect(props.onFixTarget).not.toHaveBeenCalled();
     });
 
-    it('takes the Owner to the setting', async () => {
+    it('takes Chủ sở hữu to the setting', async () => {
       const user = userEvent.setup();
       const result = checks({ blocking: [consentMissing, destinationMissing] });
       const props = renderDialog({ result, role: 'owner' });
 
       const buttons = await screen.findAllByRole('button', { name: 'Sửa ngay' });
       expect(buttons).toHaveLength(2);
-      expect(screen.queryByText(/Hãy nhờ Owner/)).toBeNull();
+      expect(screen.queryByText(/Hãy nhờ họ/)).toBeNull();
       const [consentFix, destinationFix] = buttons;
       if (consentFix === undefined || destinationFix === undefined) {
         throw new Error('fix buttons missing');

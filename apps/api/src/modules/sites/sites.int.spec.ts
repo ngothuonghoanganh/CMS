@@ -334,7 +334,7 @@ describe('sites', () => {
         .expect(403);
       expect(problemSchema.parse(create.body)).toMatchObject({
         code: 'forbidden',
-        title: 'Chỉ Owner của workspace được thực hiện thao tác này',
+        title: 'Chỉ Chủ sở hữu và Quản trị được thực hiện thao tác này',
       });
 
       const update = await editor.client

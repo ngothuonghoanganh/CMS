@@ -174,7 +174,7 @@ describe('LeadRecipientsDialog', () => {
     expect(screen.queryByRole('textbox', { name: 'Thêm email nhận lead' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Bỏ / })).not.toBeInTheDocument();
     expect(
-      screen.getByText('Chỉ Owner của workspace được thay đổi nơi nhận lead.'),
+      screen.getByText('Chỉ Chủ sở hữu và Quản trị được thay đổi nơi nhận lead.'),
     ).toBeInTheDocument();
   });
 

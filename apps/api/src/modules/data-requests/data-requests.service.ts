@@ -23,7 +23,6 @@ import { type LeadPerson, LeadsRepository } from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
-import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   DATA_REQUEST_NOT_FOUND,
@@ -60,7 +59,6 @@ function stepConflict(title: string): AppError {
 export class DataRequestsService {
   constructor(
     private readonly sites: SitesService,
-    private readonly access: AccessService,
     private readonly requests: DataRequestsRepository,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -77,8 +75,7 @@ export class DataRequestsService {
     siteId: string,
     query: { cursor?: string | undefined; limit: number },
   ): Promise<DataRequestListResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sites.access(user, siteId, 'personalData.manage');
     const page = await this.requests.listForSite(scope, site._id, query.cursor, query.limit);
     const people = page.items.map(personOfRequest);
     // A deleted person has no keys left, hence no count.
@@ -102,8 +99,7 @@ export class DataRequestsService {
     siteId: string,
     values: CreateDataRequestValues,
   ): Promise<DataRequestDetail> {
-    const { scope, site } = await this.sites.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sites.access(user, siteId, 'personalData.manage');
     const now = new Date();
     const receivedAt = new Date(values.receivedAt);
     const problem = receivedAtProblem(receivedAt, now);
@@ -229,8 +225,12 @@ export class DataRequestsService {
     if (!ref) {
       throw notFound(DATA_REQUEST_NOT_FOUND);
     }
-    const { scope, site } = await this.sites.accessById(user, ref.siteId, DATA_REQUEST_NOT_FOUND);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sites.accessById(
+      user,
+      ref.siteId,
+      'personalData.manage',
+      DATA_REQUEST_NOT_FOUND,
+    );
     const request = await this.requests.findById(scope, id);
     if (!request || !request.siteId.equals(site._id)) {
       throw notFound(DATA_REQUEST_NOT_FOUND);

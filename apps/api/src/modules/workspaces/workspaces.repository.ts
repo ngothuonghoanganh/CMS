@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import type { Role } from '@plp/contracts';
+import { type Role, roleSchema } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
@@ -55,7 +55,9 @@ export class WorkspacesRepository {
   }
 
   /** Memberships of a user with their workspace names, oldest first. */
-  async listForUser(userId: ObjectId): Promise<{ workspace: WorkspaceRecord; role: Role }[]> {
+  async listForUser(
+    userId: ObjectId,
+  ): Promise<{ workspace: WorkspaceRecord; role: Role; siteIds: ObjectId[] | null }[]> {
     const memberships = await this.memberships
       .find({ userId })
       .sort({ createdAt: 1 })
@@ -71,7 +73,31 @@ export class WorkspacesRepository {
     const byId = new Map(workspaces.map((workspace) => [workspace._id.toHexString(), workspace]));
     return memberships.flatMap((membership) => {
       const workspace = byId.get(membership.workspaceId.toHexString());
-      return workspace ? [{ workspace, role: membership.role }] : [];
+      return workspace
+        ? [{ workspace, role: membership.role, siteIds: membership.siteIds ?? null }]
+        : [];
     });
+  }
+
+  /** Members of the workspace per role; one group per role, so the result is bounded. */
+  async countByRole(scope: WorkspaceScope): Promise<Record<Role, number>> {
+    const groups = await this.memberships
+      .aggregate<{ _id: unknown; count: number }>([
+        { $match: { workspaceId: scope.workspaceId } },
+        { $group: { _id: '$role', count: { $sum: 1 } } },
+      ])
+      .exec();
+    const counts = Object.fromEntries(roleSchema.options.map((role) => [role, 0])) as Record<
+      Role,
+      number
+    >;
+    for (const group of groups) {
+      const role = roleSchema.safeParse(group._id);
+      if (!role.success) {
+        throw new Error(`Membership role ${String(group._id)} is not a known role`);
+      }
+      counts[role.data] = group.count;
+    }
+    return counts;
   }
 }

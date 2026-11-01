@@ -1,9 +1,11 @@
-import { endpoints, type PageDetailResponse, seoFieldSchema, type Site } from '@plp/contracts';
+import { can, endpoints, type PageDetailResponse, seoFieldSchema, type Site } from '@plp/contracts';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { loadAssetsByIds } from '../../../../../../../features/assets';
 import { loadPageDetail } from '../../../../../../../features/page-header/load-page-detail';
 import type { SeoFocus } from '../../../../../../../features/seo/SeoForm';
 import { SeoScreen } from '../../../../../../../features/seo/SeoScreen';
+import { pageHref } from '../../../../../../../features/shell/navigation';
 import { loadSiteContext } from '../../../../../../../features/shell/site-context';
 import { serverApi } from '../../../../../../../lib/server-api';
 
@@ -43,6 +45,10 @@ export default async function SeoPage({ params, searchParams }: SeoPageProps) {
   const { siteId, pageId } = await params;
   const { site, membership } = await loadSiteContext(siteId);
   const detail = await loadPageDetail(siteId, pageId);
+  // SEO is part of the draft: roles that do not edit it read the page in its history (ADR-020).
+  if (!can(membership.role, 'pages.edit')) {
+    redirect(pageHref(siteId, pageId, 'history'));
+  }
   const { assets, loadedAt } = await loadShareImages(site, detail);
   const focus = focusOf((await searchParams).focus);
   return (

@@ -1,25 +1,69 @@
+import type { Permission } from '@plp/contracts';
+
 /** Site sections in the sidebar, in the order of the design. */
 export type SiteNavKey = 'pages' | 'leads' | 'analytics' | 'domain' | 'privacy' | 'settings';
 
-export interface SiteNavItem {
-  key: SiteNavKey;
+/** Workspace sections in the sidebar (Sidebar v2). */
+export type WorkspaceNavKey = 'roles';
+
+export interface NavItem<Key extends string> {
+  key: Key;
   label: string;
   href: string;
+  /** The sidebar shows the item only to roles that hold it (ADR-020). */
+  permission: Permission;
 }
+
+export type SiteNavItem = NavItem<SiteNavKey>;
+export type WorkspaceNavItem = NavItem<WorkspaceNavKey>;
 
 export function siteHref(siteId: string): string {
   return `/sites/${encodeURIComponent(siteId)}`;
 }
 
+/**
+ * Sections of a site. "Cài đặt site" is read-only for roles that edit pages but not the site, so
+ * it shows to them; "Dữ liệu & đồng ý" and "Tên miền" only to the roles that change them.
+ */
 export function siteNavItems(siteId: string): SiteNavItem[] {
   const base = siteHref(siteId);
   return [
-    { key: 'pages', label: 'Trang', href: base },
-    { key: 'leads', label: 'Leads', href: leadsHref(siteId) },
-    { key: 'analytics', label: 'Hiệu quả', href: analyticsHref(siteId) },
-    { key: 'domain', label: 'Tên miền', href: `${base}/domain` },
-    { key: 'privacy', label: 'Dữ liệu & đồng ý', href: privacyHref(siteId) },
-    { key: 'settings', label: 'Cài đặt site', href: `${base}/settings` },
+    { key: 'pages', label: 'Trang', href: base, permission: 'pages.view' },
+    { key: 'leads', label: 'Leads', href: leadsHref(siteId), permission: 'leads.view' },
+    {
+      key: 'analytics',
+      label: 'Hiệu quả',
+      href: analyticsHref(siteId),
+      permission: 'pages.view',
+    },
+    { key: 'domain', label: 'Tên miền', href: `${base}/domain`, permission: 'domains.manage' },
+    {
+      key: 'privacy',
+      label: 'Dữ liệu & đồng ý',
+      href: privacyHref(siteId),
+      permission: 'privacy.manage',
+    },
+    { key: 'settings', label: 'Cài đặt site', href: `${base}/settings`, permission: 'pages.edit' },
+  ];
+}
+
+export function workspaceHref(workspaceId: string): string {
+  return `/workspaces/${encodeURIComponent(workspaceId)}`;
+}
+
+/** "Vai trò & quyền" (board 16, ADR-020). */
+export function rolesHref(workspaceId: string): string {
+  return `${workspaceHref(workspaceId)}/roles`;
+}
+
+export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
+  return [
+    {
+      key: 'roles',
+      label: 'Vai trò & quyền',
+      href: rolesHref(workspaceId),
+      permission: 'members.manage',
+    },
   ];
 }
 
@@ -60,7 +104,7 @@ export function privacyHref(siteId: string): string {
  * `aria-current` of a sidebar link: "page" on the section's own page, "true" on a page inside the
  * section (the SEO and history pages of a page belong to "Trang").
  */
-export function navCurrent(pathname: string, item: SiteNavItem): 'page' | 'true' | undefined {
+export function navCurrent(pathname: string, item: NavItem<string>): 'page' | 'true' | undefined {
   if (pathname === item.href) {
     return 'page';
   }
@@ -71,6 +115,14 @@ export function navCurrent(pathname: string, item: SiteNavItem): 'page' | 'true'
 /** Routes of one page: the editor, "SEO & chia sẻ" and "Lịch sử phiên bản". */
 export function pageHref(siteId: string, pageId: string, view: 'edit' | 'seo' | 'history'): string {
   return `${siteHref(siteId)}/pages/${encodeURIComponent(pageId)}/${view}`;
+}
+
+/**
+ * Where a page opens: the editor for roles that edit pages, its history otherwise, where the
+ * versions and their previews are (ADR-020).
+ */
+export function openPageHref(siteId: string, pageId: string, canEdit: boolean): string {
+  return pageHref(siteId, pageId, canEdit ? 'edit' : 'history');
 }
 
 /** "Tạo trang" (goal-based page creation). */

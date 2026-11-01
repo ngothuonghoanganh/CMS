@@ -35,6 +35,10 @@ export interface PageDetailHeaderProps {
   current: PageView;
   /** The current time (epoch ms) for status lines such as "Gỡ ngày 24/10". */
   now: number;
+  /** The user edits pages: "Mở editor" and the tabs of the editor and SEO show (ADR-020). */
+  canEdit: boolean;
+  /** The user takes pages off the live site: "Gỡ xuất bản" shows. */
+  canManageLive: boolean;
   /**
    * Link component for the header's links. Defaults to `next/link`; the SEO page passes one that
    * asks before leaving with unsaved changes.
@@ -71,6 +75,8 @@ export function PageDetailHeader({
   page,
   current,
   now,
+  canEdit,
+  canManageLive,
   link = Link,
   onUnpublished,
   onUnpublishConflict,
@@ -145,10 +151,12 @@ export function PageDetailHeader({
           <span className={styles.subtext}>{presentation.subtext}</span>
         </div>
         <div className={styles.actions}>
-          <ButtonLink ref={editorLink} as={LinkAs} href={pageHref(siteId, page.id, 'edit')}>
-            Mở editor
-          </ButtonLink>
-          {live === null ? null : (
+          {canEdit ? (
+            <ButtonLink ref={editorLink} as={LinkAs} href={pageHref(siteId, page.id, 'edit')}>
+              Mở editor
+            </ButtonLink>
+          ) : null}
+          {live === null || (live.liveUrl === null && !canManageLive) ? null : (
             <DropdownMenu
               trigger={
                 <IconButton
@@ -174,23 +182,34 @@ export function PageDetailHeader({
                   Xem trang live
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                tone="danger"
-                icon={<EyeOffIcon size={18} />}
-                onSelect={() => {
-                  returnFocus.current = menuTrigger.current;
-                  setUnpublishTarget(live);
-                  setUnpublishOpen(true);
-                }}
-              >
-                Gỡ xuất bản
-              </DropdownMenuItem>
+              {canManageLive ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    tone="danger"
+                    icon={<EyeOffIcon size={18} />}
+                    onSelect={() => {
+                      returnFocus.current = menuTrigger.current;
+                      setUnpublishTarget(live);
+                      setUnpublishOpen(true);
+                    }}
+                  >
+                    Gỡ xuất bản
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenu>
           )}
         </div>
       </div>
-      <TabsNav aria-label="Mục của trang" as={LinkAs} items={pageTabs(siteId, page.id, current)} />
+      {/* Without the editor and SEO, the history is the page's only view: no tabs to switch. */}
+      {canEdit ? (
+        <TabsNav
+          aria-label="Mục của trang"
+          as={LinkAs}
+          items={pageTabs(siteId, page.id, current)}
+        />
+      ) : null}
       {unpublishTarget === null ? null : (
         <UnpublishDialog
           key={unpublishTarget.liveRelease.id}

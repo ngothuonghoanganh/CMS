@@ -1,4 +1,4 @@
-import type { Role } from '@plp/contracts';
+import { type Role, roleSchema } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
 
 export const WORKSPACE_MODEL = 'Workspace';
@@ -32,6 +32,11 @@ export interface MembershipRecord {
   workspaceId: Types.ObjectId;
   userId: Types.ObjectId;
   role: Role;
+  /**
+   * Sites the member may open; null (or absent, before ADR-020) is the whole workspace. Always
+   * null for Chủ sở hữu and Quản trị.
+   */
+  siteIds?: Types.ObjectId[] | null;
   createdAt: Date;
 }
 
@@ -39,7 +44,8 @@ export const membershipSchema = new Schema<MembershipRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     userId: { type: Schema.Types.ObjectId, required: true },
-    role: { type: String, enum: ['owner', 'editor'], required: true },
+    role: { type: String, enum: roleSchema.options, required: true },
+    siteIds: { type: [Schema.Types.ObjectId], default: null },
     createdAt: { type: Date, required: true },
   },
   { collection: 'memberships', versionKey: false },

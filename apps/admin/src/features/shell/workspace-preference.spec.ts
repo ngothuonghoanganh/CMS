@@ -5,10 +5,12 @@ import { pickMembership, workspacePreferenceCookie } from './workspace-preferenc
 const agency: Membership = {
   workspace: { id: '64b0000000000000000000a1', name: 'Mây Xanh Agency' },
   role: 'owner',
+  siteIds: null,
 };
 const client: Membership = {
   workspace: { id: '64b0000000000000000000a2', name: 'Smile Care' },
   role: 'editor',
+  siteIds: null,
 };
 
 describe('pickMembership', () => {

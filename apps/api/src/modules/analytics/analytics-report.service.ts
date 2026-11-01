@@ -43,7 +43,7 @@ export class AnalyticsReportService {
     siteId: string,
     query: AnalyticsReportQuery,
   ): Promise<AnalyticsReport> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     // A page of another site matches no row: its report is empty, never someone else's.
     const pageId = query.pageId === undefined ? null : toObjectId(query.pageId, PAGE_NOT_FOUND);
     const days = analyticsRangeDays[query.range];

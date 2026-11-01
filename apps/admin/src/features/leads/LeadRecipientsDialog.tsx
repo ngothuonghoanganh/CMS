@@ -2,6 +2,7 @@
 
 import {
   endpoints,
+  holdersOf,
   LEAD_RECIPIENTS_MAX,
   type LeadRecipient,
   RECIPIENT_CONFIRMATION_DAYS,
@@ -222,7 +223,9 @@ export function LeadRecipientsDialog({
             </Button>
           </form>
         ) : (
-          <Callout tone="info">Chỉ Owner của workspace được thay đổi nơi nhận lead.</Callout>
+          <Callout tone="info">
+            Chỉ {holdersOf('privacy.manage')} được thay đổi nơi nhận lead.
+          </Callout>
         )}
         <p className={styles.recipientsNote}>
           Mỗi địa chỉ mới nhận một thư xác nhận và chỉ nhận lead sau khi bấm xác nhận. Liên kết có

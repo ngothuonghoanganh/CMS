@@ -23,8 +23,10 @@ export interface HistoryTimelineProps {
   /** Release whose preview link is being created. */
   previewPendingId: string | null;
   onPreview: (release: ReleaseSummary) => void;
-  onCopyToDraft: (release: ReleaseSummary) => void;
-  onRestore: (release: ReleaseSummary) => void;
+  /** Null for roles that do not edit drafts (ADR-020). */
+  onCopyToDraft: ((release: ReleaseSummary) => void) | null;
+  /** Null for roles that do not move the live version. */
+  onRestore: ((release: ReleaseSummary) => void) | null;
 }
 
 function ReleaseCard({
@@ -72,17 +74,19 @@ function ReleaseCard({
           >
             Xem bản này
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            aria-describedby={headingId}
-            onClick={() => {
-              onCopyToDraft(release);
-            }}
-          >
-            Sao chép vào bản nháp
-          </Button>
-          {live ? null : (
+          {onCopyToDraft === null ? null : (
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-describedby={headingId}
+              onClick={() => {
+                onCopyToDraft(release);
+              }}
+            >
+              Sao chép vào bản nháp
+            </Button>
+          )}
+          {live || onRestore === null ? null : (
             <Button
               variant="secondary"
               size="sm"

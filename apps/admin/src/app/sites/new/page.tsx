@@ -1,4 +1,4 @@
-import { endpoints, type Membership } from '@plp/contracts';
+import { can, endpoints, holdersOf, type Membership } from '@plp/contracts';
 import { ButtonLink } from '@plp/ui';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
@@ -54,12 +54,12 @@ export default async function NewSitePage({
   const backHref = firstSite === undefined ? null : siteHref(firstSite.id);
   const workspaceName = membership.workspace.name;
 
-  if (membership.role !== 'owner') {
+  if (!can(membership.role, 'sites.manage')) {
     return (
       <CenteredPage width="md">
         <FormCard
           title="Tạo site khách hàng"
-          description={`Chỉ Owner của workspace ${workspaceName} được tạo site mới. Hãy nhờ Owner tạo site, bạn sẽ thấy site đó ở đây sau khi được tạo.`}
+          description={`Chỉ ${holdersOf('sites.manage')} của workspace ${workspaceName} được tạo site mới. Hãy nhờ họ tạo site, bạn sẽ thấy site đó ở đây sau khi được tạo.`}
         >
           {backHref === null ? null : (
             <ButtonLink as={Link} href={backHref} variant="secondary">

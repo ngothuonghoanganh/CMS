@@ -71,7 +71,7 @@ describe('downloadFile', () => {
           Response.json(
             {
               type: 'about:blank',
-              title: 'Chỉ Owner của workspace được thực hiện thao tác này',
+              title: 'Chỉ Chủ sở hữu và Quản trị được thực hiện thao tác này',
               status: 403,
               code: 'forbidden',
             },

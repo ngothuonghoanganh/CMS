@@ -1,4 +1,4 @@
-import { endpoints } from '@plp/contracts';
+import { can, endpoints } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { loadDataRequests } from '../../../../../features/data-requests/load-data-requests';
 import { PrivacyScreen } from '../../../../../features/privacy/PrivacyScreen';
@@ -17,11 +17,11 @@ export async function generateMetadata({ params }: PrivacyPageProps): Promise<Me
 
 export default async function PrivacyPage({ params }: PrivacyPageProps) {
   const { site, membership } = await loadSiteContext((await params).siteId);
-  const owner = membership.role === 'owner';
+  const canEdit = can(membership.role, 'privacy.manage');
   const [settings, dataRequests] = await Promise.all([
     serverApi(endpoints.getPrivacySettings, [site.id]),
-    // Only the owner handles requests from people who sent a form (ADR-017).
-    owner ? loadDataRequests(site.id) : null,
+    // Requests from people who sent a form are handled with `personalData.manage` (ADR-017).
+    can(membership.role, 'personalData.manage') ? loadDataRequests(site.id) : null,
   ]);
   return (
     <PageContainer>
@@ -32,7 +32,7 @@ export default async function PrivacyPage({ params }: PrivacyPageProps) {
       <PrivacyScreen
         siteId={site.id}
         settings={settings}
-        canEdit={owner}
+        canEdit={canEdit}
         dataRequests={dataRequests}
       />
     </PageContainer>

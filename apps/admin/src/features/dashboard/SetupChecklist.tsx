@@ -7,10 +7,12 @@ export interface SetupStep {
   label: string;
   done: boolean;
   /**
-   * The next step to take while not done: a link or a button styled as a link. Null when only
-   * the workspace Owner can take it: an Editor would find the setting read-only (ADR-004).
+   * The next step to take while not done: a link or a button styled as a link. Null when the
+   * user's role cannot take it: they would find the setting read-only (ADR-020).
    */
   action: { href: string } | { onClick: () => void } | null;
+  /** Who takes the step when the user cannot, e.g. "Chủ sở hữu và Quản trị". */
+  holders: string;
 }
 
 function StepLabel({ step }: { step: SetupStep }): ReactNode {
@@ -25,7 +27,7 @@ function StepLabel({ step }: { step: SetupStep }): ReactNode {
   if (step.action === null) {
     return (
       <span>
-        {step.label} <span className={styles.ownerNote}>· Owner của workspace làm bước này</span>
+        {step.label} <span className={styles.ownerNote}>· {step.holders} làm bước này</span>
       </span>
     );
   }

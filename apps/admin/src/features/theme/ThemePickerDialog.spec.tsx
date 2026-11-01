@@ -74,7 +74,9 @@ describe('ThemePickerDialog', () => {
       />,
       { wrapper },
     );
-    expect(screen.getByText('Chỉ Owner đổi được giao diện site')).toBeInTheDocument();
+    expect(
+      screen.getByText('Chỉ Chủ sở hữu và Quản trị đổi được giao diện site'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Hoàng hôn' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Áp dụng giao diện' })).toBeNull();
   });

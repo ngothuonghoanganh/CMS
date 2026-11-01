@@ -135,9 +135,10 @@ export class AuthService {
     const memberships = await this.workspaces.listForUser(user.id);
     return {
       user: { id: user.id.toHexString(), name: user.name, email: user.email },
-      memberships: memberships.map(({ workspace, role }) => ({
+      memberships: memberships.map(({ workspace, role, siteIds }) => ({
         workspace: { id: workspace._id.toHexString(), name: workspace.name },
         role,
+        siteIds: siteIds?.map((id) => id.toHexString()) ?? null,
       })),
     };
   }

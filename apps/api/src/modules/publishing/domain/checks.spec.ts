@@ -372,7 +372,7 @@ describe('evaluateChecks: lead form', () => {
     expect(item).toMatchObject({
       title: 'Form đăng ký chưa có nội dung đồng ý',
       description:
-        'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư, rồi lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.',
+        'Chủ sở hữu hoặc Quản trị của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư, rồi lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.',
       target: { kind: 'privacy', sectionId: 'form00000001' },
       fingerprint: 'consent_not_configured:privacy:form00000001',
     });
@@ -384,12 +384,14 @@ describe('evaluateChecks: lead form', () => {
       only(run([form], { leadCaptureGaps: ['privacy'] }).blocking, 'consent_not_configured')
         .description,
     ).toBe(
-      'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư ở mục “Dữ liệu & đồng ý”.',
+      'Chủ sở hữu hoặc Quản trị của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư ở mục “Dữ liệu & đồng ý”.',
     );
     expect(
       only(run([form], { leadCaptureGaps: ['consent'] }).blocking, 'consent_not_configured')
         .description,
-    ).toBe('Owner của workspace cần lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.');
+    ).toBe(
+      'Chủ sở hữu hoặc Quản trị của workspace cần lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.',
+    );
   });
 
   it('passes the policy check once the settings are complete', () => {

@@ -23,7 +23,7 @@ export default async function HomePage() {
       <CenteredPage>
         <FormCard
           title="Chưa có workspace"
-          description="Tài khoản của bạn chưa thuộc workspace nào. Hãy nhờ Owner của agency thêm bạn vào workspace."
+          description="Tài khoản của bạn chưa thuộc workspace nào. Hãy nhờ Chủ sở hữu hoặc Quản trị của agency thêm bạn vào workspace."
         >
           {null}
         </FormCard>

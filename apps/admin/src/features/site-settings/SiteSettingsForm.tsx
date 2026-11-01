@@ -1,6 +1,6 @@
 'use client';
 
-import { type Asset, endpoints, type Site, siteNameSchema } from '@plp/contracts';
+import { type Asset, endpoints, holdersOf, type Site, siteNameSchema } from '@plp/contracts';
 import { Button, Callout, Card, Field, Input, useToast } from '@plp/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -110,7 +110,7 @@ export function SiteSettingsForm({ site, assets, canEdit }: SiteSettingsFormProp
   return (
     <form className={styles.form} noValidate onSubmit={submit}>
       {canEdit ? null : (
-        <Callout tone="info">Chỉ Owner của workspace được thay đổi cài đặt site.</Callout>
+        <Callout tone="info">Chỉ {holdersOf('sites.manage')} được thay đổi cài đặt site.</Callout>
       )}
 
       <Card as="section" padding="lg" aria-labelledby="site-identity" className={styles.card}>

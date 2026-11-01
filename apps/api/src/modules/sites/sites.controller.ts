@@ -54,7 +54,7 @@ export class SitesController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('siteId') siteId: string,
   ): Promise<Site> {
-    const { site } = await this.sites.access(user, siteId);
+    const { site } = await this.sites.access(user, siteId, 'pages.view');
     return this.sites.toDto(site);
   }
 

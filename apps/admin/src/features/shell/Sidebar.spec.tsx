@@ -45,10 +45,12 @@ beforeAll(() => {
 const agency: Membership = {
   workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
   role: 'owner',
+  siteIds: null,
 };
 const otherWorkspace: Membership = {
   workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
   role: 'editor',
+  siteIds: null,
 };
 const site = siteFixture();
 const otherSite = siteFixture({
@@ -121,8 +123,50 @@ describe('Sidebar', () => {
       'href',
       `/sites/${SITE_ID}/analytics`,
     );
-    // Words of their own, not "Ngọc AnhOwner".
-    expect(screen.getByRole('button', { name: 'Ngọc Anh Owner' })).toBeInTheDocument();
+    // Words of their own, not "Ngọc AnhChủ sở hữu".
+    expect(screen.getByRole('button', { name: 'Ngọc Anh Chủ sở hữu' })).toBeInTheDocument();
+    // The workspace's own sections (Sidebar v2).
+    expect(screen.getByRole('link', { name: 'Vai trò & quyền' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WORKSPACE_ID}/roles`,
+    );
+  });
+
+  it('shows each role only the sections it may use (ADR-020)', () => {
+    const { unmount } = renderSidebar({
+      membership: { ...agency, role: 'editor', siteIds: [SITE_ID, '64b000000000000000000002'] },
+      leadCounts: null,
+    });
+    expect(
+      screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['Trang 6 trang', 'Hiệu quả', 'Cài đặt site']);
+    expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Biên tập · 2 site');
+    unmount();
+
+    renderSidebar({ membership: { ...agency, role: 'support', siteIds: [SITE_ID] } });
+    expect(
+      screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['Trang 6 trang', 'Leads', 'Hiệu quả']);
+  });
+
+  it('offers a first site on a workspace screen of a workspace without one', () => {
+    const { unmount } = renderSidebar({ site: null, sites: [], pageCount: 0 });
+    expect(screen.getByRole('link', { name: 'Tạo site mới' })).toHaveAttribute(
+      'href',
+      `/sites/new?workspace=${WORKSPACE_ID}`,
+    );
+    expect(screen.queryByRole('link', { name: /Trang/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderSidebar({
+      membership: { ...agency, role: 'viewer' },
+      site: null,
+      sites: [],
+      pageCount: 0,
+      leadCounts: null,
+    });
+    expect(screen.getByText('Bạn chưa được giao site nào.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Vai trò & quyền' })).not.toBeInTheDocument();
   });
 
   it('marks "Tên miền" on the domain page', () => {
@@ -188,7 +232,7 @@ describe('Sidebar', () => {
     const user = userEvent.setup();
     renderSidebar({ membership: { ...agency, role: 'editor' } });
 
-    expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Editor');
+    expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Biên tập');
     await user.click(screen.getByRole('button', { name: /đổi site$/ }));
     expect(screen.queryByRole('menuitem', { name: 'Tạo site mới' })).not.toBeInTheDocument();
   });

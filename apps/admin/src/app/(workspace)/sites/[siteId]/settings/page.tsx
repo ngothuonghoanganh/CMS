@@ -1,4 +1,4 @@
-import { type Asset, endpoints, type Site } from '@plp/contracts';
+import { type Asset, can, endpoints, type Site } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { loadAssetsByIds } from '../../../../../features/assets';
 import { PageContainer, PageHeader } from '../../../../../features/shell/PageHeader';
@@ -34,7 +34,11 @@ export default async function SiteSettingsPage({ params }: SettingsPageProps) {
         title="Cài đặt site"
         description={`Tên, giao diện, logo và ảnh chia sẻ mặc định dùng cho mọi trang của ${site.name}.`}
       />
-      <SiteSettingsForm site={site} assets={assets} canEdit={membership.role === 'owner'} />
+      <SiteSettingsForm
+        site={site}
+        assets={assets}
+        canEdit={can(membership.role, 'sites.manage')}
+      />
     </PageContainer>
   );
 }

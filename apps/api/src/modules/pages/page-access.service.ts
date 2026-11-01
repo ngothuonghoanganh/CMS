@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Permission } from '@plp/contracts';
 import { notFound } from '../../shared/errors.js';
 import { toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -26,15 +27,25 @@ export class PageAccessService {
 
   /**
    * Entry point of every page endpoint (pages, publishing, preview): checks membership in the
-   * page's workspace through its site. Unknown and foreign pages are both 404 (ADR-003).
+   * page's workspace, the member's sites and the permission through its site. Unknown and foreign
+   * pages are both 404 (ADR-003); a role without the permission is 403 (ADR-020).
    */
-  async access(user: AuthenticatedUser, pageId: string): Promise<PageAccess> {
+  async access(
+    user: AuthenticatedUser,
+    pageId: string,
+    permission: Permission,
+  ): Promise<PageAccess> {
     const id = toObjectId(pageId, PAGE_NOT_FOUND);
     const ref = await this.pages.findAccessRef(id);
     if (!ref) {
       throw notFound(PAGE_NOT_FOUND);
     }
-    const { scope, site } = await this.sites.accessById(user, ref.siteId, PAGE_NOT_FOUND);
+    const { scope, site } = await this.sites.accessById(
+      user,
+      ref.siteId,
+      permission,
+      PAGE_NOT_FOUND,
+    );
     const page = await this.pages.findById(scope, id);
     if (!page || !page.siteId.equals(site._id)) {
       throw notFound(PAGE_NOT_FOUND);

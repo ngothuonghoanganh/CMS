@@ -1,4 +1,4 @@
-import { endpoints, type HistoryResponse, idSchema } from '@plp/contracts';
+import { can, endpoints, type HistoryResponse, idSchema } from '@plp/contracts';
 import type { Metadata } from 'next';
 import { HistoryScreen } from '../../../../../../../features/history/HistoryScreen';
 import { HISTORY_PAGE_SIZE } from '../../../../../../../features/history/queries';
@@ -30,7 +30,8 @@ export async function generateMetadata({ params }: HistoryPageProps): Promise<Me
 /** Screen 06: published versions, rollback and undo. `?restore=` preselects a release. */
 export default async function HistoryPage({ params, searchParams }: HistoryPageProps) {
   const { siteId, pageId } = await params;
-  const { site } = await loadSiteContext(siteId);
+  const { site, membership } = await loadSiteContext(siteId);
+  const canManageLive = can(membership.role, 'pages.manageLive');
   // The page check comes first: a page of another site or workspace is a 404.
   const { page } = await loadPageDetail(siteId, pageId);
   const { history, loadedAt } = await loadHistory(pageId);
@@ -41,7 +42,9 @@ export default async function HistoryPage({ params, searchParams }: HistoryPageP
       initialPage={page}
       initialHistory={history}
       loadedAt={loadedAt}
-      restoreReleaseId={restore.success ? restore.data : null}
+      restoreReleaseId={restore.success && canManageLive ? restore.data : null}
+      canEdit={can(membership.role, 'pages.edit')}
+      canManageLive={canManageLive}
     />
   );
 }

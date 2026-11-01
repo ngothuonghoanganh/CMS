@@ -23,7 +23,6 @@ import {
 } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
-import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   confirmationExpiry,
@@ -62,7 +61,6 @@ export class LeadRecipientsService {
     @InjectEnv() private readonly env: Env,
     private readonly sitesService: SitesService,
     private readonly sites: SitesRepository,
-    private readonly access: AccessService,
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
@@ -70,7 +68,7 @@ export class LeadRecipientsService {
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<LeadRecipientListResponse> {
-    const { site } = await this.sitesService.access(user, siteId);
+    const { site } = await this.sitesService.access(user, siteId, 'leads.view');
     const now = new Date();
     return { items: leadRecipientsOf(site).map((item) => toLeadRecipientDto(item, now)) };
   }
@@ -80,8 +78,7 @@ export class LeadRecipientsService {
    * When that email fails the address stays, `unsent`, and "Gửi lại" tries again.
    */
   async add(user: AuthenticatedUser, siteId: string, email: string): Promise<LeadRecipient> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'privacy.manage');
     const now = new Date();
     const invite = await this.countInvite(scope, site._id, email, now);
     const { token, tokenHash } = newConfirmationToken();
@@ -130,8 +127,7 @@ export class LeadRecipientsService {
     siteId: string,
     recipientId: string,
   ): Promise<LeadRecipient> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'privacy.manage');
     const id = toObjectId(recipientId, RECIPIENT_NOT_FOUND);
     const recipient = leadRecipientsOf(site).find((item) => item._id.equals(id));
     if (!recipient) {
@@ -161,8 +157,7 @@ export class LeadRecipientsService {
   }
 
   async remove(user: AuthenticatedUser, siteId: string, recipientId: string): Promise<void> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'privacy.manage');
     const id = toObjectId(recipientId, RECIPIENT_NOT_FOUND);
     await this.transactions.run(async (tx) => {
       const left = await this.sites.removeLeadRecipient(scope, site._id, id, tx);

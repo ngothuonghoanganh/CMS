@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Permission } from '@plp/contracts';
 import { notFound } from '../../shared/errors.js';
 import { toObjectId } from '../../shared/persistence/object-id.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
@@ -31,16 +32,26 @@ export class LeadAccessService {
   ) {}
 
   /**
-   * Entry point of every lead endpoint: checks membership in the lead's workspace through its
-   * site. Unknown leads and leads of another workspace are both 404 (ADR-003).
+   * Entry point of every lead endpoint: checks membership in the lead's workspace, the member's
+   * sites and the permission through its site. Unknown leads and leads of another workspace are
+   * both 404 (ADR-003); a role without the permission is 403 (ADR-020).
    */
-  async access(user: AuthenticatedUser, leadId: string): Promise<LeadAccess> {
+  async access(
+    user: AuthenticatedUser,
+    leadId: string,
+    permission: Permission,
+  ): Promise<LeadAccess> {
     const id = toObjectId(leadId, LEAD_NOT_FOUND);
     const ref = await this.leads.findAccessRef(id);
     if (!ref) {
       throw notFound(LEAD_NOT_FOUND);
     }
-    const { scope, site } = await this.sites.accessById(user, ref.siteId, LEAD_NOT_FOUND);
+    const { scope, site } = await this.sites.accessById(
+      user,
+      ref.siteId,
+      permission,
+      LEAD_NOT_FOUND,
+    );
     const lead = await this.leads.findById(scope, id);
     if (!lead || !lead.siteId.equals(site._id)) {
       throw notFound(LEAD_NOT_FOUND);

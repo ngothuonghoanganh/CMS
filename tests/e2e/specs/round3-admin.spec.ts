@@ -24,7 +24,7 @@ test.describe('Third round · admin and renderer', () => {
     const detail = page.getByRole('complementary', { name });
     await expect(detail.getByText('0901 234 567')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Ngọc Anh Owner' }).click();
+    await page.getByRole('button', { name: 'Ngọc Anh Chủ sở hữu' }).click();
     await page.getByRole('menuitem', { name: 'Đăng xuất' }).click();
     await expect(page).toHaveURL(/\/login$/);
 

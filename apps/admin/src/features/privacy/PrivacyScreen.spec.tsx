@@ -215,7 +215,7 @@ describe('PrivacyScreen', () => {
     );
     expect(
       screen.getByText(
-        'Chỉ Owner của workspace được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu cầu từ người gửi form.',
+        'Chỉ Chủ sở hữu và Quản trị được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu cầu từ người gửi form.',
       ),
     ).toBeInTheDocument();
     // Requests from people who sent a form are the owner's to handle (ADR-017).

@@ -2,6 +2,7 @@
 
 import {
   type Asset,
+  can,
   type CheckTarget,
   type ChecksResult,
   endpoints,
@@ -249,7 +250,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
           setTheme((current) => ({ ...current, open }));
         }}
         site={site}
-        canEdit={role === 'owner'}
+        canEdit={can(role, 'sites.manage')}
         onSiteUpdated={(updated) => {
           store.getState().setSite(updated);
           markSiteScreensStale(queryClient, updated.id);

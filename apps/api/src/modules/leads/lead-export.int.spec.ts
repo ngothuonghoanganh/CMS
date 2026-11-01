@@ -30,7 +30,7 @@ import {
 } from '../../../test/pages.js';
 import { configurePrivacy, PRIVACY_SETTINGS } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
-import { addEditor, createSite } from '../../../test/resources.js';
+import { addMember, createSite } from '../../../test/resources.js';
 
 const BOM = '﻿';
 const HEADER =
@@ -40,7 +40,7 @@ const HEADER =
 describe('lead exports and a person’s data', () => {
   let t: TestApp;
   let owner: TestClient;
-  let editor: TestClient;
+  let support: TestClient;
   let workspaceId: string;
 
   beforeAll(async () => {
@@ -51,7 +51,7 @@ describe('lead exports and a person’s data', () => {
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
-    editor = (await addEditor(t, workspaceId)).client;
+    support = (await addMember(t, workspaceId, 'support')).client;
   });
 
   afterAll(async () => {
@@ -316,16 +316,16 @@ describe('lead exports and a person’s data', () => {
     expect(await leadActivity(site)).toEqual([{ type: 'lead.person_deleted', count: 3 }]);
   });
 
-  it('keeps exports and deletions to the owner; editors read and triage only', async () => {
+  it('keeps exports and deletions to the owner; Chăm sóc khách hàng reads and triages only', async () => {
     const { site, releaseId } = await formSite();
     await send(site, releaseId, { name: 'Nguyễn Thu Hà' });
     const leadId = await leadIdOf(site, 'Nguyễn Thu Hà');
 
-    await editor.get(`/sites/${site.id}/leads`).expect(200);
-    await editor.get(`/leads/${leadId}`).expect(200);
-    await editor.post(`/sites/${site.id}/leads/export`, {}).expect(403);
-    await editor.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(403);
-    await editor.delete(`/leads/${leadId}/person`).expect(403);
+    await support.get(`/sites/${site.id}/leads`).expect(200);
+    await support.get(`/leads/${leadId}`).expect(200);
+    await support.post(`/sites/${site.id}/leads/export`, {}).expect(403);
+    await support.post(`/leads/${leadId}/person/export`, { format: 'json' }).expect(403);
+    await support.delete(`/leads/${leadId}/person`).expect(403);
     await owner.get(`/leads/${leadId}`).expect(200);
     expect(await leadActivity(site)).toEqual([]);
   });

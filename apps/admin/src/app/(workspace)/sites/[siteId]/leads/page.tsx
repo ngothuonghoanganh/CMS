@@ -1,3 +1,4 @@
+import { holdersOf } from '@plp/contracts';
 import type { Metadata } from 'next';
 import {
   parseLeadFilters,
@@ -6,6 +7,8 @@ import {
 } from '../../../../../features/leads/filters';
 import { LeadInbox } from '../../../../../features/leads/LeadInbox';
 import { loadLeadInboxData } from '../../../../../features/leads/load-leads';
+import { siteHref } from '../../../../../features/shell/navigation';
+import { NoPermission } from '../../../../../features/shell/NoPermission';
 import { loadSiteContext } from '../../../../../features/shell/site-context';
 
 interface LeadsPageProps {
@@ -21,6 +24,17 @@ export async function generateMetadata({ params }: LeadsPageProps): Promise<Meta
 /** Screen 10: the lead inbox. The client keeps the filters and the open lead in the URL. */
 export default async function LeadsPage({ params, searchParams }: LeadsPageProps) {
   const { site, membership, leadCounts } = await loadSiteContext((await params).siteId);
+  // The site context loads no counts for roles without `leads.view` (ADR-020).
+  if (leadCounts === null) {
+    return (
+      <NoPermission
+        title="Bạn chưa có quyền xem lead"
+        membership={membership}
+        holders={`Chỉ ${holdersOf('leads.view')} xem được lead của site.`}
+        back={{ href: siteHref(site.id), label: 'Về danh sách trang' }}
+      />
+    );
+  }
   const query = await searchParams;
   const filters = parseLeadFilters(query);
   const leadId = parseSelectedLead(query);
@@ -30,7 +44,7 @@ export default async function LeadsPage({ params, searchParams }: LeadsPageProps
     <LeadInbox
       key={data.loadedAt}
       site={site}
-      canManage={membership.role === 'owner'}
+      role={membership.role}
       initialFilters={filters}
       initialLeadId={leadId}
       initialList={data.list}

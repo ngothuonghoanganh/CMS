@@ -33,7 +33,7 @@ import {
 } from '../../../test/pages.js';
 import { configurePrivacy, PRIVACY_SETTINGS, saveConsentVersion } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
-import { addEditor, createSite } from '../../../test/resources.js';
+import { addMember, createSite } from '../../../test/resources.js';
 import { addMonthsUtc } from './domain/lead-intake-rules.js';
 
 const DAY_MS = 86_400_000;
@@ -373,27 +373,27 @@ describe('lead inbox', () => {
     expect(response.headers['cache-control']).toBe('no-store');
   });
 
-  it('changes status, note and spam for owners and editors alike', async () => {
+  it('changes status, note and spam for owners and Chăm sóc khách hàng alike', async () => {
     const { site, releaseId } = await inboxSite();
     await send(site, releaseId, { name: 'Nguyễn Thu Hà' });
     const leadId = leadIdOf(await inbox(site), 'Nguyễn Thu Hà');
-    const editor = (await addEditor(t, workspaceId)).client;
+    const support = (await addMember(t, workspaceId, 'support')).client;
 
     const status = await owner.patch(`/leads/${leadId}`, { status: 'scheduled' }).expect(200);
     expect(status.headers['cache-control']).toBe('no-store');
     expect(leadDetailSchema.parse(status.body).status).toBe('scheduled');
-    const noted = await editor
+    const noted = await support
       .patch(`/leads/${leadId}`, { note: '  hẹn gọi lại sau 18h ' })
       .expect(200);
     expect(leadDetailSchema.parse(noted.body)).toMatchObject({
       status: 'scheduled',
       note: 'hẹn gọi lại sau 18h',
     });
-    expect((await detail(leadId, editor)).note).toBe('hẹn gọi lại sau 18h');
+    expect((await detail(leadId, support)).note).toBe('hẹn gọi lại sau 18h');
 
-    await editor.patch(`/leads/${leadId}`, { spam: true }).expect(200);
+    await support.patch(`/leads/${leadId}`, { spam: true }).expect(200);
     expect(names(await inbox(site))).toEqual([]);
-    expect(names(await inbox(site, '?folder=spam', editor))).toEqual(['Nguyễn Thu Hà']);
+    expect(names(await inbox(site, '?folder=spam', support))).toEqual(['Nguyễn Thu Hà']);
     await owner.patch(`/leads/${leadId}`, { spam: false }).expect(200);
     expect(names(await inbox(site))).toEqual(['Nguyễn Thu Hà']);
 

@@ -77,7 +77,7 @@ const undoneEntry: HistoryEntry = {
 const undone = { activityId: undoneEntry.activityId, page: historyPage(), revalidation: 'ok' };
 
 /** The screen as it opens on `history`, with the page summary that goes with it. */
-function renderAt(page: PageSummary, history: HistoryResponse) {
+function renderAt(page: PageSummary, history: HistoryResponse, can = { edit: true, live: true }) {
   return renderWithProviders(
     <HistoryScreen
       site={siteFixture()}
@@ -85,6 +85,8 @@ function renderAt(page: PageSummary, history: HistoryResponse) {
       initialHistory={history}
       loadedAt={LOADED_AT}
       restoreReleaseId={null}
+      canEdit={can.edit}
+      canManageLive={can.live}
     />,
   );
 }
@@ -125,6 +127,8 @@ function renderScreen(restoreReleaseId: string | null = null) {
       initialHistory={initialHistory}
       loadedAt={LOADED_AT}
       restoreReleaseId={restoreReleaseId}
+      canEdit
+      canManageLive
     />,
   );
 }
@@ -351,6 +355,8 @@ describe('HistoryScreen', () => {
         })}
         loadedAt={LOADED_AT}
         restoreReleaseId={null}
+        canEdit
+        canManageLive
       />,
     );
 
@@ -420,6 +426,8 @@ describe('HistoryScreen', () => {
         initialHistory={initialHistory}
         loadedAt={LOADED_AT}
         restoreReleaseId={null}
+        canEdit
+        canManageLive
       />,
     );
 
@@ -583,6 +591,16 @@ describe('HistoryScreen', () => {
     });
     expect(opened.opener).toBeNull();
     open.mockRestore();
+  });
+
+  it('lets a Chỉ xem read and preview the versions, with nothing that changes them (ADR-020)', () => {
+    serve({ page: rolledBackPage, history: rolledBackHistory });
+    renderAt(rolledBackPage, rolledBackHistory, { edit: false, live: false });
+    expect(screen.getAllByRole('button', { name: 'Xem bản này' }).length).toBeGreaterThan(0);
+    for (const name of ['Sao chép vào bản nháp', 'Khôi phục bản này', 'Hoàn tác khôi phục']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('link', { name: 'Mở editor' })).not.toBeInTheDocument();
   });
 
   it('continues from the list when "Hoàn tác khôi phục" takes the banner away', async () => {
@@ -840,6 +858,8 @@ describe('HistoryScreen', () => {
         })}
         loadedAt={LOADED_AT + 5_000}
         restoreReleaseId={null}
+        canEdit
+        canManageLive
       />,
       first.queryClient,
     );

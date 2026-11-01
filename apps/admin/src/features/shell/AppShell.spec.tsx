@@ -33,6 +33,7 @@ function renderShell() {
   const membership: Membership = {
     workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
     role: 'owner',
+    siteIds: null,
   };
   const site = siteFixture();
   // AppShell brings its own ToastProvider.

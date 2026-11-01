@@ -1,6 +1,6 @@
 'use client';
 
-import type { Asset, PageDetailResponse, Role, Site } from '@plp/contracts';
+import { type Asset, can, type PageDetailResponse, type Role, type Site } from '@plp/contracts';
 import { seoTitleOf } from '@plp/sections/schema';
 import { Callout, type LinkComponentProps, useToast } from '@plp/ui';
 import { useRouter } from 'next/navigation';
@@ -169,6 +169,7 @@ function SeoScreenBody({
   useBeforeUnloadGuard(store, slugPending);
   const page = useEditor((state) => state.page);
   const site = useEditor((state) => state.site);
+  const role = useEditor((state) => state.role);
   const seo = useEditor((state) => state.draft.seo);
   const slug = useEditor((state) => state.draft.slug);
   const composition = useEditor((state) => state.draft.composition);
@@ -296,6 +297,8 @@ function SeoScreenBody({
           page={page}
           current="seo"
           now={now}
+          canEdit
+          canManageLive={can(role, 'pages.manageLive')}
           link={SaveFirstLink}
           onUnpublished={(result) => {
             store.getState().setServerState({ page: result.page });

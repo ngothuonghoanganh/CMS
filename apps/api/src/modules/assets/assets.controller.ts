@@ -44,7 +44,7 @@ export class AssetsController {
     @Param('siteId') siteId: string,
     @Query(new ZodPipe(assetListQuerySchema)) query: AssetListQuery,
   ): Promise<AssetListResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     return this.assets.listForSite(scope, site._id, query);
   }
 

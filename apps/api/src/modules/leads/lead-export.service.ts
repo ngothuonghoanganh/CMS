@@ -14,7 +14,6 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
-import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
   CSV_BOM,
@@ -66,7 +65,6 @@ async function* leadCsvChunks(
 export class LeadExportService {
   constructor(
     private readonly sites: SitesService,
-    private readonly access: AccessService,
     private readonly leadAccess: LeadAccessService,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -84,8 +82,7 @@ export class LeadExportService {
     siteId: string,
     filters: LeadFilters,
   ): Promise<LeadFile> {
-    const { scope, site } = await this.sites.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sites.access(user, siteId, 'leads.export');
     const now = new Date();
     const criteria = leadCriteria(filters, now);
     const [matched, pages] = await Promise.all([
@@ -115,8 +112,7 @@ export class LeadExportService {
     leadId: string,
     request: PersonExportRequest,
   ): Promise<LeadFile> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
-    this.access.requireOwner(scope);
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'personalData.manage');
     return (await this.exportPersonFile(scope, site, personOfLead(lead), request)).file;
   }
 

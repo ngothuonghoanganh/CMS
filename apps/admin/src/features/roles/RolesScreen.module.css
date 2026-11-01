@@ -1,0 +1,186 @@
+.columns {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.roleList ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roleButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--target-min);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  color: var(--color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.roleButton:hover {
+  background: var(--color-hover);
+}
+
+.roleButton[aria-pressed='true'] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-ink);
+}
+
+.roleButton:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
+
+.roleText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.roleName {
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+
+.roleButton[aria-pressed='true'] .roleName {
+  font-weight: 600;
+}
+
+.roleKind {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.roleCount {
+  font-size: var(--text-body-sm);
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.pane {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.paneHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.paneTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.paneHint {
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+/* A wide matrix scrolls inside its box at phone width (ScrollRegion); the page itself does not. */
+.matrix {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+}
+
+.caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.permissionHead,
+.roleHead {
+  padding: 8px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.permissionHead {
+  text-align: left;
+}
+
+.roleHead {
+  width: 88px;
+  text-align: center;
+}
+
+.roleHead.focused {
+  color: var(--color-primary-ink);
+}
+
+.groupHead {
+  padding: 16px 8px 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+  text-align: left;
+}
+
+.permission {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-divider);
+  font-weight: 400;
+  color: var(--color-ink);
+  text-align: left;
+}
+
+.cell {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-divider);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.focused {
+  background: var(--color-primary-tint);
+}
+
+.yes {
+  color: var(--color-success-ink);
+  vertical-align: middle;
+}
+
+.no {
+  color: var(--color-muted);
+}

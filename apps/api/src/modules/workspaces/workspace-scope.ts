@@ -12,4 +12,6 @@ export interface WorkspaceScope {
   readonly workspaceId: ObjectId;
   readonly userId: ObjectId;
   readonly role: Role;
+  /** Sites the member may open; null is the whole workspace (ADR-020). */
+  readonly siteIds: readonly ObjectId[] | null;
 }
