@@ -21,6 +21,34 @@ describe('problemMessage', () => {
     expect(problemMessage(detailed)).toBe('Trang vừa được xuất bản bởi Minh');
   });
 
+  it('says what is wrong with a refused field before the generic title', () => {
+    const refused = new ApiError(422, {
+      type: 'about:blank',
+      title: 'Dữ liệu không hợp lệ',
+      status: 422,
+      code: 'validation_failed',
+      issues: [
+        { path: ['siteIds'], code: 'invalid', message: 'Biên tập toàn bộ làm việc trên mọi site' },
+      ],
+    });
+    expect(problemMessage(refused)).toBe('Biên tập toàn bộ làm việc trên mọi site');
+    // A rule of zod may carry its English default: the title stands instead.
+    const tooLong = new ApiError(422, {
+      type: 'about:blank',
+      title: 'Dữ liệu không hợp lệ',
+      status: 422,
+      code: 'validation_failed',
+      issues: [
+        {
+          path: ['phone'],
+          code: 'too_big',
+          message: 'Too big: expected string to have <=20 characters',
+        },
+      ],
+    });
+    expect(problemMessage(tooLong)).toBe('Dữ liệu không hợp lệ');
+  });
+
   it('explains network and unexpected failures', () => {
     expect(problemMessage(new TypeError('Failed to fetch'))).toBe(
       'Không kết nối được máy chủ. Kiểm tra kết nối mạng rồi thử lại.',

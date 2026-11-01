@@ -8,6 +8,8 @@ import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { hashInvitationToken, invitationState } from '../workspaces/domain/member-rules.js';
 import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-join.service.js';
+import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
+import { accessOf } from '../workspaces/domain/member-access.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
 import {
@@ -34,6 +36,7 @@ export class AuthService {
     private readonly sessions: SessionsRepository,
     private readonly loginAttempts: LoginAttemptsRepository,
     private readonly workspaces: WorkspacesRepository,
+    private readonly customRoles: CustomRolesRepository,
     private readonly invitations: InvitationsRepository,
     private readonly join: WorkspaceJoin,
     private readonly transactions: TransactionRunner,
@@ -174,12 +177,18 @@ export class AuthService {
 
   async me(user: AuthenticatedUser): Promise<MeResponse> {
     const memberships = await this.workspaces.listForUser(user.id);
+    // The custom roles of the user's own memberships, with what they allow now (ADR-024).
+    const roles = await this.customRoles.findByIds(
+      memberships.flatMap(({ membership }) =>
+        membership.customRoleId ? [membership.customRoleId] : [],
+      ),
+    );
     return {
       user: { id: user.id.toHexString(), name: user.name, email: user.email },
-      memberships: memberships.map(({ workspace, role, siteIds }) => ({
+      memberships: memberships.map(({ workspace, membership }) => ({
         workspace: { id: workspace._id.toHexString(), name: workspace.name },
-        role,
-        siteIds: siteIds?.map((id) => id.toHexString()) ?? null,
+        role: accessOf(membership, roles),
+        siteIds: membership.siteIds?.map((id) => id.toHexString()) ?? null,
       })),
     };
   }

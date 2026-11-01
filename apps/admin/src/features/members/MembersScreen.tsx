@@ -9,10 +9,13 @@ import {
   type Member,
   type MemberListResponse,
   MEMBERS_MAX,
-  type Role,
   roleLabels,
   roleSchema,
   type Site,
+  type Access,
+  accessLabel,
+  type CustomRole,
+  customRoleRef,
 } from '@plp/contracts';
 import {
   Avatar,
@@ -50,11 +53,18 @@ import styles from './Members.module.css';
 
 type Tab = 'members' | 'invitations' | 'requests';
 
+/** The filter value of a member's role: the system role, or `custom:{id}`. */
+function roleKey(access: Access): string {
+  return typeof access === 'string' ? access : customRoleRef(access.customRoleId);
+}
+
 export interface MembersScreenProps {
   workspace: { id: string; name: string };
   /** The signed-in user and their role in the workspace. */
-  viewer: { userId: string; role: Role };
+  viewer: { userId: string; role: Access };
   sites: readonly Site[];
+  /** The workspace's custom roles, to give and to filter by (ADR-024). */
+  initialCustomRoles: CustomRole[];
   initialMembers: MemberListResponse;
   initialInvitations: InvitationListResponse;
   /** Null for a Quản trị: only Chủ sở hữu decides requests (ADR-021). */
@@ -75,6 +85,7 @@ export function MembersScreen({
   workspace,
   viewer,
   sites,
+  initialCustomRoles,
   initialMembers,
   initialInvitations,
   initialRequests,
@@ -106,9 +117,17 @@ export function MembersScreen({
     enabled: initialRequests !== null,
   }).data.items;
 
+  const customRoles = useQuery({
+    queryKey: memberQueryKeys.customRoles(workspace.id),
+    queryFn: ({ signal }) => api(endpoints.listCustomRoles, [workspace.id], { signal }),
+    initialData: { items: initialCustomRoles },
+    initialDataUpdatedAt: loadedAt,
+  }).data.items;
+
   const requested = requests.find((request) => request.id === openRequestId) ?? null;
   const [tab, setTab] = useState<Tab>(requested === null ? 'members' : 'requests');
-  const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
+  // A system role, or `custom:{id}` for a custom role (ADR-024).
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -178,7 +197,7 @@ export function MembersScreen({
   const query = search.trim().toLowerCase();
   const shown = members.filter(
     (member) =>
-      (roleFilter === 'all' || member.role === roleFilter) &&
+      (roleFilter === 'all' || roleKey(member.role) === roleFilter) &&
       (siteFilter === 'all' || member.siteIds === null || member.siteIds.includes(siteFilter)) &&
       (query === '' ||
         member.name.toLowerCase().includes(query) ||
@@ -239,14 +258,18 @@ export function MembersScreen({
               <Select
                 value={roleFilter}
                 onChange={(event) => {
-                  const value = roleSchema.safeParse(event.target.value);
-                  setRoleFilter(value.success ? value.data : 'all');
+                  setRoleFilter(event.target.value);
                 }}
               >
                 <option value="all">Mọi vai trò</option>
                 {roleSchema.options.map((role) => (
                   <option key={role} value={role}>
                     {roleLabels[role]}
+                  </option>
+                ))}
+                {customRoles.map((role) => (
+                  <option key={role.id} value={customRoleRef(role.id)}>
+                    {role.name}
                   </option>
                 ))}
               </Select>
@@ -321,7 +344,7 @@ export function MembersScreen({
                         </th>
                         <td>
                           <Badge tone={member.role === 'owner' ? 'primary' : 'neutral'}>
-                            {roleLabels[member.role]}
+                            {accessLabel(member.role)}
                           </Badge>
                         </td>
                         <td>{scopeLabel(member.siteIds, sites)}</td>
@@ -397,7 +420,7 @@ export function MembersScreen({
                             </span>
                           </th>
                           <td>
-                            <Badge tone="neutral">{roleLabels[invitation.role]}</Badge>
+                            <Badge tone="neutral">{accessLabel(invitation.role)}</Badge>
                           </td>
                           <td>{scopeLabel(invitation.siteIds, sites)}</td>
                           <td>
@@ -475,7 +498,7 @@ export function MembersScreen({
                           </span>
                         </th>
                         <td>
-                          {roleLabels[request.current.role]} ·{' '}
+                          {accessLabel(request.current.role)} ·{' '}
                           {scopeLabel(request.current.siteIds, sites)}
                         </td>
                         <td>
@@ -515,6 +538,7 @@ export function MembersScreen({
           key={inviteKey}
           workspaceId={workspace.id}
           sites={sites}
+          customRoles={customRoles}
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           onInvited={invited}
@@ -526,6 +550,7 @@ export function MembersScreen({
           workspaceId={workspace.id}
           member={editing.member}
           sites={sites}
+          customRoles={customRoles}
           request={editing.kind === 'request' ? editing.request : null}
           open={editOpen}
           onOpenChange={setEditOpen}

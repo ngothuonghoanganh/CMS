@@ -16,14 +16,15 @@ export async function generateMetadata({ params }: MembersPageProps): Promise<Me
   return { title: `Thành viên — ${membership.workspace.name}` };
 }
 
-/** The three lists of the screen, and when they were read. */
+/** The lists of the screen with the custom roles (ADR-024), and when they were read. */
 async function loadMembers(workspaceId: string, decides: boolean) {
-  const [members, invitations, requests] = await Promise.all([
+  const [members, invitations, requests, customRoles] = await Promise.all([
     serverApi(endpoints.listMembers, [workspaceId]),
     serverApi(endpoints.listInvitations, [workspaceId]),
     decides ? serverApi(endpoints.listAccessRequests, [workspaceId]) : null,
+    serverApi(endpoints.listCustomRoles, [workspaceId]),
   ]);
-  return { members, invitations, requests, loadedAt: Date.now() };
+  return { members, invitations, requests, customRoles, loadedAt: Date.now() };
 }
 
 /** Board 15: members, pending invitations and, for Chủ sở hữu, access requests (ADR-021). */
@@ -45,7 +46,7 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
       />
     );
   }
-  const { members, invitations, requests, loadedAt } = await loadMembers(
+  const { members, invitations, requests, customRoles, loadedAt } = await loadMembers(
     workspaceId,
     can(membership.role, 'accessRequests.decide'),
   );
@@ -55,6 +56,7 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
       workspace={membership.workspace}
       viewer={{ userId: me.user.id, role: membership.role }}
       sites={sites}
+      initialCustomRoles={customRoles.items}
       initialMembers={members}
       initialInvitations={invitations}
       initialRequests={requests}

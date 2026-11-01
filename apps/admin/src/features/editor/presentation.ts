@@ -3,7 +3,7 @@ import {
   type ChecksResult,
   type PageStatusKind,
   type PageSummary,
-  type Role,
+  type Access,
 } from '@plp/contracts';
 import type { CSSProperties } from 'react';
 import { formatRelativeTime } from '../../lib/format';
@@ -240,7 +240,7 @@ export function checksSummaryView(checks: ChecksResult): ChecksSummaryView {
  * The top bar's publish button. A role that cannot publish sends the draft for approval instead
  * (ADR-023) and sees when its request waits.
  */
-export function publishButtonLabel(page: PageSummary, role: Role): string {
+export function publishButtonLabel(page: PageSummary, role: Access): string {
   if (!can(role, 'pages.publish') && can(role, 'pages.requestPublish')) {
     return page.approval?.status === 'pending' ? 'Đang chờ duyệt' : 'Gửi duyệt';
   }

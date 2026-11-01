@@ -1,5 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { INVITATION_VALID_DAYS, type InvitationState, type Role, roleSchema } from '@plp/contracts';
+import {
+  type Access,
+  INVITATION_VALID_DAYS,
+  type InvitationState,
+  roleSchema,
+} from '@plp/contracts';
 
 const DAY_MS = 86_400_000;
 
@@ -83,11 +88,18 @@ export function foreignSites(
   return siteIds.filter((id) => !own.has(id));
 }
 
+/** Where a role sorts: the system roles most powerful first, custom roles after them. */
+function rankOf(access: Access): number {
+  return typeof access === 'string'
+    ? roleSchema.options.indexOf(access)
+    : roleSchema.options.length;
+}
+
 /** Members in the order of the list: most powerful role first, then by name. */
 export function compareMembers(
-  a: { role: Role; name: string },
-  b: { role: Role; name: string },
+  a: { role: Access; name: string },
+  b: { role: Access; name: string },
 ): number {
-  const rank = roleSchema.options.indexOf(a.role) - roleSchema.options.indexOf(b.role);
+  const rank = rankOf(a.role) - rankOf(b.role);
   return rank !== 0 ? rank : a.name.localeCompare(b.name, 'vi');
 }

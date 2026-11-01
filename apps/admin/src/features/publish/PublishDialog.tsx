@@ -7,8 +7,8 @@ import {
   endpoints,
   holdersOf,
   IDEMPOTENCY_KEY_HEADER,
-  type Role,
   type Site,
+  type Access,
 } from '@plp/contracts';
 import {
   AlertCircleIcon,
@@ -107,7 +107,7 @@ function targetAddress(origin: string, slug: string): string {
 
 interface CheckRowProps {
   item: CheckItem;
-  role: Role;
+  role: Access;
   ignored?: boolean;
   onFix: () => void;
   onToggle?: () => void;

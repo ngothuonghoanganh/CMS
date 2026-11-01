@@ -31,7 +31,11 @@ export class WorkspaceJoin {
     await this.workspaces.joinByInvitation(
       invitation.workspaceId,
       userId,
-      { role: invitation.role, siteIds: invitation.siteIds },
+      {
+        role: invitation.role,
+        customRoleId: invitation.customRoleId ?? null,
+        siteIds: invitation.siteIds,
+      },
       now,
       tx,
     );

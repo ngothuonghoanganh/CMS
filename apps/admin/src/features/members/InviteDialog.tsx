@@ -1,13 +1,13 @@
 'use client';
 
 import {
-  type AssignableRole,
   type CreateInvitationsResponse,
+  type CustomRole,
   emailSchema,
   endpoints,
   INVITATION_VALID_DAYS,
   INVITE_EMAILS_MAX,
-  roleLabels,
+  type RoleChoice,
   type Site,
 } from '@plp/contracts';
 import { Button, Callout, Dialog, Field, Input, RadioCardGroup } from '@plp/ui';
@@ -16,12 +16,14 @@ import { type SubmitEvent, useState } from 'react';
 import { api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { PermissionSummary, SiteScopeFields } from './ChangeAccessDialog';
-import { assignableRoles, parseEmails, permissionSummary } from './member-presentation';
+import { parseEmails, permissionSummary, roleOptions } from './member-presentation';
 import styles from './Members.module.css';
 
 export interface InviteDialogProps {
   workspaceId: string;
   sites: readonly Site[];
+  /** The workspace's custom roles, offered after the system ones (ADR-024). */
+  customRoles: readonly CustomRole[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInvited: (result: CreateInvitationsResponse) => void;
@@ -34,20 +36,24 @@ export interface InviteDialogProps {
 export function InviteDialog({
   workspaceId,
   sites,
+  customRoles,
   open,
   onOpenChange,
   onInvited,
 }: InviteDialogProps) {
   const [emailsText, setEmailsText] = useState('');
   const [emailsError, setEmailsError] = useState<string | null>(null);
-  const [role, setRole] = useState<AssignableRole>('editor');
+  const [role, setRole] = useState<RoleChoice>('editor');
+  const options = roleOptions(customRoles);
+  // A custom role removed while the dialog was open is not replaced by another one.
+  const option = options.find((item) => item.value === role) ?? null;
   const [scope, setScope] = useState<'all' | 'sites'>(sites.length > 1 ? 'sites' : 'all');
   const [chosen, setChosen] = useState<string[]>([]);
   const [sitesError, setSitesError] = useState<string | null>(null);
   const emails = parseEmails(emailsText);
 
   const send = useMutation({
-    mutationFn: (body: { emails: string[]; role: AssignableRole; siteIds: string[] | null }) =>
+    mutationFn: (body: { emails: string[]; role: RoleChoice; siteIds: string[] | null }) =>
       api(endpoints.createInvitations, [workspaceId], { body }),
     onSuccess: onInvited,
     onError: (error) => {
@@ -66,11 +72,11 @@ export function InviteDialog({
           : emails.length > INVITE_EMAILS_MAX
             ? `Mỗi lần mời tối đa ${INVITE_EMAILS_MAX} email`
             : null;
-    const wholeWorkspace = role === 'admin' || scope === 'all';
+    const wholeWorkspace = option?.wholeWorkspace === true || scope === 'all';
     const sitesProblem = !wholeWorkspace && chosen.length === 0 ? 'Chọn ít nhất một site' : null;
     setEmailsError(emailProblem);
     setSitesError(sitesProblem);
-    if (emailProblem !== null || sitesProblem !== null || send.isPending) {
+    if (option === null || emailProblem !== null || sitesProblem !== null || send.isPending) {
       return;
     }
     send.mutate({ emails, role, siteIds: wholeWorkspace ? null : chosen });
@@ -96,7 +102,12 @@ export function InviteDialog({
           >
             Hủy
           </Button>
-          <Button type="submit" form="invite-members" loading={send.isPending}>
+          <Button
+            type="submit"
+            form="invite-members"
+            loading={send.isPending}
+            disabled={option === null}
+          >
             Gửi {count} lời mời
           </Button>
         </>
@@ -120,16 +131,21 @@ export function InviteDialog({
             }}
           />
         </Field>
-        <RadioCardGroup<AssignableRole>
+        <RadioCardGroup<RoleChoice>
           legend="Vai trò"
           showLegend
-          options={assignableRoles}
+          options={options}
           value={role}
           onChange={setRole}
           minColumnWidth={200}
         />
-        {role === 'admin' ? (
-          <p className={styles.hint}>Quản trị làm việc trên mọi site của workspace.</p>
+        {option === null ? (
+          <Callout tone="warning" role="status">
+            Vai trò đã chọn không còn trong workspace. Chọn một vai trò khác.
+          </Callout>
+        ) : null}
+        {option?.wholeWorkspace === true ? (
+          <p className={styles.hint}>{option.label} làm việc trên mọi site của workspace.</p>
         ) : (
           <SiteScopeFields
             name="invite-scope"
@@ -141,7 +157,9 @@ export function InviteDialog({
             onChosen={setChosen}
           />
         )}
-        <PermissionSummary roleLabel={roleLabels[role]} summary={permissionSummary(role)} />
+        {option === null ? null : (
+          <PermissionSummary roleLabel={option.label} summary={permissionSummary(option.access)} />
+        )}
         {send.isError ? (
           <Callout tone="danger" role="alert">
             {problemMessage(send.error)}

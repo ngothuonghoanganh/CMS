@@ -1,6 +1,6 @@
 'use client';
 
-import { type Asset, can, type PageDetailResponse, type Role, type Site } from '@plp/contracts';
+import { type Asset, can, type PageDetailResponse, type Site, type Access } from '@plp/contracts';
 import { seoTitleOf } from '@plp/sections/schema';
 import { Callout, type LinkComponentProps, useToast } from '@plp/ui';
 import { useRouter } from 'next/navigation';
@@ -44,7 +44,7 @@ export interface SeoInitialData {
   site: Site;
   /** The page's share image and the site's default share image, when they exist. */
   assets: Asset[];
-  role: Role;
+  role: Access;
 }
 
 export interface SeoScreenProps {

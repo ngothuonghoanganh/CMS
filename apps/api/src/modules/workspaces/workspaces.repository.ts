@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { type AccessGrant, MEMBERS_MAX, type Role, roleSchema } from '@plp/contracts';
+import {
+  type AccessGrant,
+  assignableRoleSchema,
+  customRoleIdOf,
+  MEMBERS_MAX,
+  type Role,
+  roleSchema,
+} from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -9,9 +16,10 @@ import type { Tx } from '../../shared/persistence/transaction.js';
 /** The default name of the unique (workspaceId, userId) index, built since MVP A. */
 export const MEMBERSHIP_UNIQUE_INDEX = 'workspaceId_1_userId_1';
 
-/** A grant as stored: site ids parsed. */
+/** A grant as stored: site ids parsed, a custom role as `custom` with its id (ADR-024). */
 export interface StoredGrant {
-  role: Exclude<Role, 'owner'>;
+  role: Exclude<Role, 'owner'> | 'custom';
+  customRoleId: ObjectId | null;
   siteIds: ObjectId[] | null;
 }
 
@@ -19,9 +27,16 @@ function storedSiteIds(grant: AccessGrant): ObjectId[] | null {
   return grant.siteIds === null ? null : grant.siteIds.map((id) => toObjectId(id));
 }
 
-/** The grant of a request, with its site ids parsed (already validated by the schema). */
+/** The grant of a request, with its ids parsed (already validated by the schema). */
 export function storedGrant(grant: AccessGrant): StoredGrant {
-  return { role: grant.role, siteIds: storedSiteIds(grant) };
+  const customRoleId = customRoleIdOf(grant.role);
+  return customRoleId === null
+    ? {
+        role: assignableRoleSchema.parse(grant.role),
+        customRoleId: null,
+        siteIds: storedSiteIds(grant),
+      }
+    : { role: 'custom', customRoleId: toObjectId(customRoleId), siteIds: storedSiteIds(grant) };
 }
 import type { WorkspaceScope } from './workspace-scope.js';
 import {
@@ -83,6 +98,36 @@ export class WorkspacesRepository {
     }
   }
 
+  /** Increments `customRoleSeq` in the transaction that creates a custom role (ADR-024). */
+  async recordCustomRole(scope: WorkspaceScope, tx: Tx): Promise<void> {
+    const result = await this.workspaces
+      .updateOne({ _id: scope.workspaceId }, { $inc: { customRoleSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Workspace ${scope.workspaceId.toHexString()} of the scope does not exist`);
+    }
+  }
+
+  /** Members holding a custom role; `withSites` only those kept to some sites. */
+  countCustomRoleHolders(
+    scope: WorkspaceScope,
+    roleId: ObjectId,
+    options: { withSites?: boolean } = {},
+    tx?: Tx,
+  ): Promise<number> {
+    return this.memberships
+      .countDocuments(
+        {
+          workspaceId: scope.workspaceId,
+          role: 'custom',
+          customRoleId: roleId,
+          ...(options.withSites === true ? { siteIds: { $type: 'array' } } : {}),
+        },
+        tx ? { session: tx } : {},
+      )
+      .exec();
+  }
+
   findWorkspace(scope: WorkspaceScope): Promise<WorkspaceRecord | null> {
     return this.workspaces.findById(scope.workspaceId).lean<WorkspaceRecord>().exec();
   }
@@ -138,7 +183,7 @@ export class WorkspacesRepository {
     return this.memberships
       .findOneAndUpdate(
         { workspaceId: scope.workspaceId, userId, role: { $ne: 'owner' } },
-        { $set: { role: grant.role, siteIds: grant.siteIds } },
+        { $set: { role: grant.role, customRoleId: grant.customRoleId, siteIds: grant.siteIds } },
         { new: true, ...(tx ? { session: tx } : {}) },
       )
       .lean<MembershipRecord>()
@@ -169,14 +214,14 @@ export class WorkspacesRepository {
     const demoted = await this.memberships
       .updateOne(
         { workspaceId: scope.workspaceId, userId: fromUserId, role: 'owner' },
-        { $set: { role: 'admin', siteIds: null } },
+        { $set: { role: 'admin', customRoleId: null, siteIds: null } },
         { session: tx },
       )
       .exec();
     const promoted = await this.memberships
       .updateOne(
         { workspaceId: scope.workspaceId, userId: toUserId, role: 'admin' },
-        { $set: { role: 'owner', siteIds: null } },
+        { $set: { role: 'owner', customRoleId: null, siteIds: null } },
         { session: tx },
       )
       .exec();
@@ -196,7 +241,16 @@ export class WorkspacesRepository {
   ): Promise<boolean> {
     try {
       await this.memberships.create(
-        [{ workspaceId, userId, role: grant.role, siteIds: grant.siteIds, createdAt: now }],
+        [
+          {
+            workspaceId,
+            userId,
+            role: grant.role,
+            customRoleId: grant.customRoleId,
+            siteIds: grant.siteIds,
+            createdAt: now,
+          },
+        ],
         { session: tx },
       );
       return true;
@@ -215,7 +269,7 @@ export class WorkspacesRepository {
   /** Memberships of a user with their workspace names, oldest first. */
   async listForUser(
     userId: ObjectId,
-  ): Promise<{ workspace: WorkspaceRecord; role: Role; siteIds: ObjectId[] | null }[]> {
+  ): Promise<{ workspace: WorkspaceRecord; membership: MembershipRecord }[]> {
     const memberships = await this.memberships
       .find({ userId })
       .sort({ createdAt: 1 })
@@ -231,9 +285,7 @@ export class WorkspacesRepository {
     const byId = new Map(workspaces.map((workspace) => [workspace._id.toHexString(), workspace]));
     return memberships.flatMap((membership) => {
       const workspace = byId.get(membership.workspaceId.toHexString());
-      return workspace
-        ? [{ workspace, role: membership.role, siteIds: membership.siteIds ?? null }]
-        : [];
+      return workspace ? [{ workspace, membership }] : [];
     });
   }
 
@@ -250,6 +302,10 @@ export class WorkspacesRepository {
       number
     >;
     for (const group of groups) {
+      // Holders of custom roles are counted with their roles (ADR-024).
+      if (group._id === 'custom') {
+        continue;
+      }
       const role = roleSchema.safeParse(group._id);
       if (!role.success) {
         throw new Error(`Membership role ${String(group._id)} is not a known role`);
@@ -257,5 +313,25 @@ export class WorkspacesRepository {
       counts[role.data] = group.count;
     }
     return counts;
+  }
+
+  /** Members holding each custom role of the workspace, keyed by role id hex (at most 10). */
+  async countByCustomRole(scope: WorkspaceScope, tx?: Tx): Promise<Map<string, number>> {
+    const groups = await this.memberships
+      .aggregate<{ _id: ObjectId; count: number }>(
+        [
+          {
+            $match: {
+              workspaceId: scope.workspaceId,
+              role: 'custom',
+              customRoleId: { $type: 'objectId' },
+            },
+          },
+          { $group: { _id: '$customRoleId', count: { $sum: 1 } } },
+        ],
+        tx ? { session: tx } : {},
+      )
+      .exec();
+    return new Map(groups.map((group) => [group._id.toHexString(), group.count]));
   }
 }

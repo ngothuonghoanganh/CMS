@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   type AccessGrant,
+  accessLabel,
   type AccessRequest,
   type AccessRequestListResponse,
   can,
@@ -25,7 +26,10 @@ import { AccessService } from '../workspaces/access.service.js';
 import { ACCESS_REQUESTS_PER_DAY } from '../workspaces/domain/member-rules.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { MembershipRecord } from '../workspaces/workspace.schema.js';
-import { storedGrant, WorkspacesRepository } from '../workspaces/workspaces.repository.js';
+import type { CustomRoleRecord } from '../workspaces/custom-role.schema.js';
+import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
+import { accessOf } from '../workspaces/domain/member-access.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MEMBER_NOT_FOUND, MemberGrants, toMemberDto } from './member-grants.js';
 
 export const ACCESS_REQUEST_NOT_FOUND = 'Không tìm thấy yêu cầu đổi quyền';
@@ -42,12 +46,13 @@ function toAccessRequestDto(
   request: AccessRequestRecord,
   contact: UserContact,
   membership: MembershipRecord,
+  roles: ReadonlyMap<string, CustomRoleRecord>,
 ): AccessRequest {
   return {
     id: request._id.toHexString(),
     user: { id: contact._id.toHexString(), name: contact.name, email: contact.email },
     current: {
-      role: membership.role,
+      role: accessOf(membership, roles),
       siteIds: membership.siteIds?.map((id) => id.toHexString()) ?? null,
     },
     role: request.role,
@@ -73,6 +78,7 @@ export class AccessRequestsService {
     private readonly workspaces: WorkspacesRepository,
     private readonly users: UsersRepository,
     private readonly grants: MemberGrants,
+    private readonly customRoles: CustomRolesRepository,
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
     private readonly quota: EmailQuota,
@@ -90,7 +96,7 @@ export class AccessRequestsService {
     input: CreateAccessRequest,
   ): Promise<MyAccessRequestResponse> {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
-    if (can(scope.role, 'members.manage')) {
+    if (can(scope.access, 'members.manage')) {
       throw new AppError(403, 'forbidden', 'Bạn tự đổi được quyền ở màn Thành viên');
     }
     const now = new Date();
@@ -132,9 +138,10 @@ export class AccessRequestsService {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'accessRequests.decide');
     const requests = await this.requests.listPending(scope);
-    const [contacts, members] = await Promise.all([
+    const [contacts, members, roles] = await Promise.all([
       this.users.findContacts(requests.map((request) => request.userId)),
       this.workspaces.listMembers(scope),
+      this.customRoles.mapForWorkspace(scope),
     ]);
     const contactOf = new Map(contacts.map((contact) => [contact._id.toHexString(), contact]));
     const memberOf = new Map(members.map((member) => [member.userId.toHexString(), member]));
@@ -142,7 +149,9 @@ export class AccessRequestsService {
       items: requests.flatMap((request) => {
         const contact = contactOf.get(request.userId.toHexString());
         const membership = memberOf.get(request.userId.toHexString());
-        return contact && membership ? [toAccessRequestDto(request, contact, membership)] : [];
+        return contact && membership
+          ? [toAccessRequestDto(request, contact, membership, roles)]
+          : [];
       }),
     };
   }
@@ -160,34 +169,34 @@ export class AccessRequestsService {
     const scope = await this.access.scopeForWorkspace(user, workspaceId);
     this.access.require(scope, 'accessRequests.decide');
     const request = await this.findPending(scope, requestId);
-    await this.grants.assertOwnSites(scope, grant);
+    const resolved = await this.grants.resolveGrant(scope, grant);
     const now = new Date();
     const updated = await this.transactions.run(async (tx) => {
       if (!(await this.requests.decide(scope, request._id, 'accepted', now, tx))) {
         throw notFound(ACCESS_REQUEST_NOT_FOUND);
       }
-      const membership = await this.workspaces.updateGrant(
-        scope,
-        request.userId,
-        storedGrant(grant),
-        tx,
-      );
+      await this.grants.holdGrant(scope, resolved, tx);
+      const membership = await this.workspaces.updateGrant(scope, request.userId, resolved, tx);
       if (!membership) {
         // The requester left, or became Chủ sở hữu, meanwhile.
         throw notFound(MEMBER_NOT_FOUND);
       }
       return membership;
     });
-    const [contact] = await this.users.findContacts([request.userId]);
+    const [[contact], roles] = await Promise.all([
+      this.users.findContacts([request.userId]),
+      this.customRoles.mapForWorkspace(scope),
+    ]);
     if (!contact) {
       throw new Error(`Member ${request.userId.toHexString()} has no account`);
     }
+    const access = accessOf(updated, roles);
     await this.notifyRequester(scope, contact, {
       accepted: true,
-      roleLabel: roleLabels[grant.role],
+      roleLabel: accessLabel(access),
       scope: await this.grants.scopeLine(scope, grant.siteIds),
     });
-    return toMemberDto(updated, contact);
+    return toMemberDto(updated, contact, access);
   }
 
   async decline(user: AuthenticatedUser, workspaceId: string, requestId: string): Promise<void> {
@@ -215,13 +224,14 @@ export class AccessRequestsService {
   }
 
   private async pendingOf(scope: WorkspaceScope): Promise<AccessRequest | null> {
-    const [request, membership, [contact]] = await Promise.all([
+    const [request, membership, [contact], roles] = await Promise.all([
       this.requests.findPendingOf(scope, scope.userId),
       this.workspaces.findMember(scope, scope.userId),
       this.users.findContacts([scope.userId]),
+      this.customRoles.mapForWorkspace(scope),
     ]);
     return request && membership && contact
-      ? toAccessRequestDto(request, contact, membership)
+      ? toAccessRequestDto(request, contact, membership, roles)
       : null;
   }
 
@@ -246,7 +256,7 @@ export class AccessRequestsService {
         workspaceName: workspace.name,
         requesterName: requester.name,
         requesterEmail: requester.email,
-        currentRole: roleLabels[scope.role],
+        currentRole: accessLabel(scope.access),
         requestedRole: roleLabels[request.role],
         scope: request.wholeWorkspace ? 'toàn workspace' : 'các site hiện tại',
         note: request.note,

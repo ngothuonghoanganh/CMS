@@ -7,8 +7,8 @@ import {
   holdersOf,
   type LeadCounts,
   type PageListResponse,
-  type Role,
   type Site,
+  type Access,
 } from '@plp/contracts';
 import { themePresets } from '@plp/sections/schema';
 import {
@@ -76,7 +76,7 @@ export interface DashboardProps {
   /** When the server loaded the data (epoch ms); hydration uses it for identical relative times. */
   loadedAt: number;
   /** The user's role: what they may do on the site follows it (ADR-020). */
-  role: Role;
+  role: Access;
 }
 
 function sameFilters(a: DashboardFilters, b: DashboardFilters): boolean {

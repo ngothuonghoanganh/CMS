@@ -8,7 +8,7 @@ import {
   type PageApproval,
   type PageSummary,
   type PublishResponse,
-  type Role,
+  type Access,
 } from '@plp/contracts';
 import { formatRelativeTime } from '../../lib/format';
 import { pendingChangeCount } from '../editor/presentation';
@@ -191,7 +191,7 @@ export function publishReducer(state: PublishState, action: PublishAction): Publ
 /** Whether the dialog publishes, or asks Chủ sở hữu and Quản trị to (ADR-023). */
 export type PublishMode = 'publish' | 'request';
 
-export function publishModeOf(role: Role): PublishMode {
+export function publishModeOf(role: Access): PublishMode {
   return !can(role, 'pages.publish') && can(role, 'pages.requestPublish') ? 'request' : 'publish';
 }
 
@@ -320,7 +320,7 @@ export function checksSummaryLine(tally: ChecksTally): string {
  * is allowed. The role must hold `pages.publish` (ADR-020); blocking errors must be fixed; each
  * warning must be fixed or skipped (ADR-006).
  */
-export function publishDisabledReason(tally: ChecksTally, role: Role): string | null {
+export function publishDisabledReason(tally: ChecksTally, role: Access): string | null {
   if (!can(role, 'pages.publish')) {
     return `Chỉ ${holdersOf('pages.publish')} được xuất bản trang`;
   }
@@ -338,7 +338,7 @@ export function publishDisabledReason(tally: ChecksTally, role: Role): string | 
  * it may not change (ADR-017, ADR-018, ADR-020): those screens would only show it read-only. Null
  * when the user can fix the item themselves.
  */
-export function ownerOnlyFixNote(target: CheckTarget, role: Role): string | null {
+export function ownerOnlyFixNote(target: CheckTarget, role: Access): string | null {
   if (can(role, 'privacy.manage')) {
     return null;
   }

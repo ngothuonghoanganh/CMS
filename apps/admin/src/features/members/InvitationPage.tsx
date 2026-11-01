@@ -6,8 +6,7 @@ import {
   type InvitationLookupResponse,
   type InvitedSignupRequest,
   invitedSignupRequestSchema,
-  roleDescriptions,
-  roleLabels,
+  accessLabel,
 } from '@plp/contracts';
 import { Button, ButtonLink, Callout, Field, Input, Spinner } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +17,7 @@ import { loadPage } from '../../lib/page-load';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { useSchemaForm } from '../shell/use-schema-form';
 import { workspacePreferenceCookie } from '../shell/workspace-preference';
+import { accessDescription } from './member-presentation';
 import styles from './InvitationPage.module.css';
 
 /** Keeps the link's secret across signing in, which leaves this page (session storage only). */
@@ -270,12 +270,12 @@ export function InvitationPage() {
   const grant = (
     <div className={styles.grant}>
       <span>
-        <strong>{roleLabels[invitation.role]}</strong>{' '}
+        <strong>{accessLabel(invitation.role)}</strong>{' '}
         {invitation.siteNames === null
           ? 'trên toàn workspace'
           : `trên site ${invitation.siteNames.join(', ')}`}
       </span>
-      <span className={styles.muted}>{roleDescriptions[invitation.role]}</span>
+      <span className={styles.muted}>{accessDescription(invitation.role)}</span>
     </div>
   );
 

@@ -12,7 +12,9 @@ export interface InvitationRecord {
   _id: Types.ObjectId;
   workspaceId: Types.ObjectId;
   email: string;
-  role: AssignableRole;
+  /** A system role, or `custom` with `customRoleId` (ADR-024). */
+  role: AssignableRole | 'custom';
+  customRoleId?: Types.ObjectId | null;
   siteIds: Types.ObjectId[] | null;
   tokenHash: string;
   /** The link stops working at this time; "Gửi lại" moves it. */
@@ -31,7 +33,8 @@ export const invitationSchema = new Schema<InvitationRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     email: { type: String, required: true },
-    role: { type: String, enum: assignableRoleSchema.options, required: true },
+    role: { type: String, enum: [...assignableRoleSchema.options, 'custom'], required: true },
+    customRoleId: { type: Schema.Types.ObjectId, default: null },
     siteIds: { type: [Schema.Types.ObjectId], default: null },
     tokenHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },

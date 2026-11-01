@@ -9,9 +9,9 @@ import {
   type PageDetailResponse,
   type PageSummary,
   type PublicLeadCapture,
-  type Role,
   type SaveDraftResponse,
   type Site,
+  type Access,
 } from '@plp/contracts';
 import { useToast } from '@plp/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -54,7 +54,7 @@ export interface EditorInitialData {
   /** Pages of the site, for page-link pickers. */
   pages: PageSummary[];
   /** The user's role in the site's workspace. */
-  role: Role;
+  role: Access;
   /** The signed-in user, to tell their own request to publish from someone else's (ADR-023). */
   userId: string;
   /** Consent texts of the site's current settings, for a lead form on the canvas (ADR-017). */
@@ -73,7 +73,7 @@ export interface PublishDialogRenderProps {
   /** After publishing: the new page summary (status, live release) and, if fetched, checks. */
   onPageUpdated: (page: PageSummary, checks?: ChecksResult) => void;
   /** The user's role: an Editor is told which fixes only the Owner can make. */
-  role: Role;
+  role: Access;
   userId: string;
 }
 

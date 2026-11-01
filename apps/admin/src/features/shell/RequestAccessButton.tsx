@@ -1,6 +1,6 @@
 'use client';
 
-import type { Role } from '@plp/contracts';
+import type { Access } from '@plp/contracts';
 import { Button } from '@plp/ui';
 import { useState } from 'react';
 import { AccessRequestDialog } from '../members/AccessRequestDialog';
@@ -12,7 +12,7 @@ export function RequestAccessButton({
   siteLimited,
 }: {
   workspaceId: string;
-  role: Role;
+  role: Access;
   siteLimited: boolean;
 }) {
   const [open, setOpen] = useState(false);

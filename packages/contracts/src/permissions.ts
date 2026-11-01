@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type Role, roleLabels, roleSchema } from './auth.js';
+import { idSchema } from './common.js';
 
 /**
  * What a member may do, one value per row of board 16 (ADR-020). Every site-scoped endpoint names
@@ -46,8 +47,30 @@ const grants: Record<Role, readonly Permission[]> = {
   viewer: ['pages.view'],
 };
 
-export function can(role: Role, permission: Permission): boolean {
-  return grants[role].includes(permission);
+/**
+ * A custom role as its holder has it (ADR-024): its name and permissions, read again on every
+ * request, so a change to the role applies at once.
+ */
+export const customAccessSchema = z.object({
+  customRoleId: idSchema,
+  name: z.string(),
+  permissions: z.array(permissionSchema),
+});
+export type CustomAccess = z.infer<typeof customAccessSchema>;
+
+/** What a member may do: one of the six roles of board 16, or a custom role (ADR-024). */
+export const accessSchema = z.union([roleSchema, customAccessSchema]);
+export type Access = z.infer<typeof accessSchema>;
+
+export function can(access: Access, permission: Permission): boolean {
+  return typeof access === 'string'
+    ? grants[access].includes(permission)
+    : access.permissions.includes(permission);
+}
+
+/** "Biên tập", or the name of the custom role. */
+export function accessLabel(access: Access): string {
+  return typeof access === 'string' ? roleLabels[access] : access.name;
 }
 
 /** Roles that hold the permission, most powerful first. */

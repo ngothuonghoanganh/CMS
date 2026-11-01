@@ -69,6 +69,45 @@ export class InvitationsRepository {
     }
   }
 
+  /** Pending invitations offering each custom role, keyed by role id hex (ADR-024). */
+  async countPendingByCustomRole(scope: WorkspaceScope): Promise<Map<string, number>> {
+    const groups = await this.invitations
+      .aggregate<{ _id: ObjectId; count: number }>([
+        {
+          $match: {
+            workspaceId: scope.workspaceId,
+            status: 'pending',
+            role: 'custom',
+            customRoleId: { $type: 'objectId' },
+          },
+        },
+        { $group: { _id: '$customRoleId', count: { $sum: 1 } } },
+      ])
+      .exec();
+    return new Map(groups.map((group) => [group._id.toHexString(), group.count]));
+  }
+
+  /** Pending invitations offering a custom role; `withSites` only those for some sites. */
+  countPendingWithCustomRole(
+    scope: WorkspaceScope,
+    roleId: ObjectId,
+    options: { withSites?: boolean } = {},
+    tx?: Tx,
+  ): Promise<number> {
+    return this.invitations
+      .countDocuments(
+        {
+          workspaceId: scope.workspaceId,
+          status: 'pending',
+          role: 'custom',
+          customRoleId: roleId,
+          ...(options.withSites === true ? { siteIds: { $type: 'array' } } : {}),
+        },
+        tx ? { session: tx } : {},
+      )
+      .exec();
+  }
+
   /** Which of `emails` have a pending invitation. */
   async pendingEmails(
     scope: WorkspaceScope,

@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import {
+  assignableRoleSchema,
   emailSchema,
   passwordSchema,
   personNameSchema,
   type Role,
-  roleCoversAllSites,
-  roleSchema,
 } from './auth.js';
 import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
+import { roleChoiceSchema } from './custom-roles.js';
+import { accessSchema } from './permissions.js';
 
 /*
  * Members, invitations, access requests and the ownership of a workspace (boards 15, 15b,
@@ -29,10 +30,6 @@ export const INVITATION_PATH = '/invite';
 /** Sites a member is given; at most this many when not the whole workspace. */
 export const MEMBER_SITES_MAX = 100;
 
-/** The roles one can give or ask for: Chủ sở hữu changes hands only by a transfer. */
-export const assignableRoleSchema = roleSchema.exclude(['owner']);
-export type AssignableRole = z.infer<typeof assignableRoleSchema>;
-
 /** The member's sites; null is the whole workspace, sites created later included. */
 export const memberSiteIdsSchema = z
   .array(idSchema)
@@ -41,10 +38,13 @@ export const memberSiteIdsSchema = z
   .refine((ids) => new Set(ids).size === ids.length, 'Mỗi site chỉ chọn một lần')
   .nullable();
 
-/** A role with its sites, as it is given; Quản trị always has the whole workspace. */
+/**
+ * A role with its sites, as it is given: a system role or `custom:{id}` (ADR-024). Quản trị always
+ * has the whole workspace; so does a custom role set to "Toàn workspace" (checked by the API).
+ */
 export const accessGrantSchema = z
-  .object({ role: assignableRoleSchema, siteIds: memberSiteIdsSchema })
-  .refine((grant) => !roleCoversAllSites(grant.role) || grant.siteIds === null, {
+  .object({ role: roleChoiceSchema, siteIds: memberSiteIdsSchema })
+  .refine((grant) => grant.role !== 'admin' || grant.siteIds === null, {
     message: 'Quản trị làm việc trên mọi site của workspace',
     path: ['siteIds'],
   });
@@ -54,7 +54,7 @@ export const memberSchema = z.object({
   userId: idSchema,
   name: z.string(),
   email: z.string(),
-  role: roleSchema,
+  role: accessSchema,
   siteIds: z.array(idSchema).nullable(),
   joinedAt: isoDateTimeSchema,
 });
@@ -78,10 +78,10 @@ export const createInvitationsRequestSchema = z
       .array(emailSchema)
       .min(1, 'Nhập ít nhất một email')
       .max(INVITE_EMAILS_MAX, `Mỗi lần mời tối đa ${INVITE_EMAILS_MAX} email`),
-    role: assignableRoleSchema,
+    role: roleChoiceSchema,
     siteIds: memberSiteIdsSchema,
   })
-  .refine((invite) => !roleCoversAllSites(invite.role) || invite.siteIds === null, {
+  .refine((invite) => invite.role !== 'admin' || invite.siteIds === null, {
     message: 'Quản trị làm việc trên mọi site của workspace',
     path: ['siteIds'],
   });
@@ -107,7 +107,7 @@ export type CreateInvitationsResponse = z.infer<typeof createInvitationsResponse
 export const invitationSchema = z.object({
   id: idSchema,
   email: z.string(),
-  role: assignableRoleSchema,
+  role: accessSchema,
   siteIds: z.array(idSchema).nullable(),
   invitedBy: userRefSchema,
   createdAt: isoDateTimeSchema,
@@ -139,7 +139,7 @@ export const invitationLookupResponseSchema = z.object({
   workspaceName: z.string(),
   invitedByName: z.string(),
   email: z.string(),
-  role: assignableRoleSchema,
+  role: accessSchema,
   /** Names of the sites; null is the whole workspace. */
   siteNames: z.array(z.string()).nullable(),
   expiresAt: isoDateTimeSchema,
@@ -173,7 +173,7 @@ export type CreateAccessRequest = z.infer<typeof createAccessRequestSchema>;
 export const accessRequestSchema = z.object({
   id: idSchema,
   user: z.object({ id: idSchema, name: z.string(), email: z.string() }),
-  current: z.object({ role: roleSchema, siteIds: z.array(idSchema).nullable() }),
+  current: z.object({ role: accessSchema, siteIds: z.array(idSchema).nullable() }),
   role: assignableRoleSchema,
   wholeWorkspace: z.boolean(),
   note: z.string(),

@@ -15,7 +15,9 @@ import { AccessRequestsRepository } from '../workspaces/access-requests.reposito
 import { AccessService, WORKSPACE_NOT_FOUND } from '../workspaces/access.service.js';
 import { compareMembers } from '../workspaces/domain/member-rules.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { storedGrant, WorkspacesRepository } from '../workspaces/workspaces.repository.js';
+import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
+import { accessOf } from '../workspaces/domain/member-access.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MEMBER_NOT_FOUND, MemberGrants, toMemberDto } from './member-grants.js';
 
 const OWNER_PROTECTED = 'Không đổi được quyền của Chủ sở hữu';
@@ -29,6 +31,7 @@ export class MembersService {
     private readonly requests: AccessRequestsRepository,
     private readonly users: UsersRepository,
     private readonly grants: MemberGrants,
+    private readonly customRoles: CustomRolesRepository,
     private readonly transactions: TransactionRunner,
   ) {}
 
@@ -64,12 +67,15 @@ export class MembersService {
         detail: 'Chủ sở hữu chỉ đổi khi chuyển quyền sở hữu cho một Quản trị.',
       });
     }
-    await this.grants.assertOwnSites(scope, grant);
-    const updated = await this.workspaces.updateGrant(scope, id, storedGrant(grant));
+    const resolved = await this.grants.resolveGrant(scope, grant);
+    const updated = await this.transactions.run(async (tx) => {
+      await this.grants.holdGrant(scope, resolved, tx);
+      return this.workspaces.updateGrant(scope, id, resolved, tx);
+    });
     if (!updated) {
       throw notFound(MEMBER_NOT_FOUND);
     }
-    return this.dto(updated);
+    return this.dto(scope, updated);
   }
 
   /** Removes a member and their pending access request; never Chủ sở hữu. */
@@ -135,7 +141,10 @@ export class MembersService {
   }
 
   private async members(scope: WorkspaceScope): Promise<MemberListResponse> {
-    const memberships = await this.workspaces.listMembers(scope);
+    const [memberships, roles] = await Promise.all([
+      this.workspaces.listMembers(scope),
+      this.customRoles.mapForWorkspace(scope),
+    ]);
     const contacts = new Map(
       (await this.users.findContacts(memberships.map((membership) => membership.userId))).map(
         (contact) => [contact._id.toHexString(), contact],
@@ -143,16 +152,22 @@ export class MembersService {
     );
     const items = memberships.flatMap((membership) => {
       const contact = contacts.get(membership.userId.toHexString());
-      return contact ? [toMemberDto(membership, contact)] : [];
+      return contact ? [toMemberDto(membership, contact, accessOf(membership, roles))] : [];
     });
     return { items: items.sort(compareMembers) };
   }
 
-  private async dto(membership: Parameters<typeof toMemberDto>[0]): Promise<Member> {
-    const [contact] = await this.users.findContacts([membership.userId]);
+  private async dto(
+    scope: WorkspaceScope,
+    membership: Parameters<typeof toMemberDto>[0],
+  ): Promise<Member> {
+    const [[contact], roles] = await Promise.all([
+      this.users.findContacts([membership.userId]),
+      this.customRoles.mapForWorkspace(scope),
+    ]);
     if (!contact) {
       throw new Error(`Member ${membership.userId.toHexString()} has no account`);
     }
-    return toMemberDto(membership, contact);
+    return toMemberDto(membership, contact, accessOf(membership, roles));
   }
 }

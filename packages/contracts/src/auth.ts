@@ -57,26 +57,16 @@ export function roleCoversAllSites(role: Role): boolean {
   return role === 'owner' || role === 'admin';
 }
 
+/** The roles one can give or ask for: Chủ sở hữu changes hands only by a transfer. */
+export const assignableRoleSchema = roleSchema.exclude(['owner']);
+export type AssignableRole = z.infer<typeof assignableRoleSchema>;
+
 export const sessionUserSchema = z.object({
   id: idSchema,
   name: z.string(),
   email: z.string(),
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
-
-export const membershipSchema = z.object({
-  workspace: z.object({ id: idSchema, name: z.string() }),
-  role: roleSchema,
-  /** Sites the member may open; `null` is the whole workspace, sites created later included. */
-  siteIds: z.array(idSchema).nullable(),
-});
-export type Membership = z.infer<typeof membershipSchema>;
-
-export const meResponseSchema = z.object({
-  user: sessionUserSchema,
-  memberships: z.array(membershipSchema),
-});
-export type MeResponse = z.infer<typeof meResponseSchema>;
 
 /** Name of the httpOnly session cookie set by the API on the admin origin. */
 export const SESSION_COOKIE = 'plp_session';

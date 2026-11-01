@@ -4,8 +4,9 @@ import {
   ACCESS_REQUEST_NOTE_MAX,
   type AssignableRole,
   endpoints,
-  type Role,
   roleLabels,
+  type Access,
+  accessLabel,
 } from '@plp/contracts';
 import {
   Button,
@@ -30,7 +31,7 @@ import styles from './Members.module.css';
 export interface AccessRequestDialogProps {
   workspaceId: string;
   /** The member's role now; they ask for another, or for it on every site. */
-  role: Role;
+  role: Access;
   /** Kept to some sites: asking for the same role on the whole workspace makes sense. */
   siteLimited: boolean;
   open: boolean;
@@ -104,7 +105,7 @@ export function AccessRequestDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Yêu cầu đổi quyền"
-      description={`Bạn đang là ${roleLabels[role]}. Yêu cầu được gửi tới Chủ sở hữu qua email; quyền chỉ đổi khi họ chấp nhận.`}
+      description={`Bạn đang là ${accessLabel(role)}. Yêu cầu được gửi tới Chủ sở hữu qua email; quyền chỉ đổi khi họ chấp nhận.`}
       footer={
         pending === null ? (
           <>
