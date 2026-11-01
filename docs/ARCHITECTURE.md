@@ -1209,7 +1209,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Trong C1, Quản trị làm được mọi việc của Chủ sở hữu. Khác biệt (chuyển quyền sở hữu, thanh toán) đến ở C2 và Phase 4.
   - `domains.manage` chỉ ẩn/hiện mục "Tên miền" cho tới C3.
 - **Amended 2026-11-01 (chủ sản phẩm chốt sau C1):**
-  - Luồng "Yêu cầu xuất bản" của Cộng tác viên được làm, là một luồng duyệt: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt (lát C4).
+  - Luồng "Yêu cầu xuất bản" của Cộng tác viên được làm, là một luồng duyệt: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt (lát C4, ADR-023). Nút "Xuất bản" bị khóa của Cộng tác viên đổi thành "Gửi duyệt".
   - Vai trò tùy chỉnh được làm (lát C5).
   - Quản trị vẫn làm được mọi việc của Chủ sở hữu, trừ những gì ADR-021 giữ cho Chủ sở hữu.
   - Nhãn "Theo gói", "Nâng cấp" và các dòng AI, template, automation, thanh toán của màn 16 vẫn đến cùng tính năng của chúng (Phase 2–4): chưa có gói hay tính năng nào để gắn nhãn.
@@ -1334,6 +1334,69 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Integration test cho chuẩn hóa tên miền, giới hạn, chuyển chủ (kể cả hai lần xác minh song song), trạng thái, tự kiểm tra trên nhiều instance, `tls/allowed`, phân giải host và quyền.
   - E2E: kết nối một tên miền `*.e2e.test` (Chromium ánh xạ về máy, DNS từ zone file), đặt làm địa chỉ chính, trang mở ở tên miền riêng và địa chỉ mặc định chuyển hướng 301.
 
+### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
+
+- **Date:** 2026-11-01 · **Status:** Accepted
+- **Context:**
+  - Lát C4 của Phase 1 (màn 05, 16). Trên màn 16, Cộng tác viên có ô "Yêu cầu · Phải được duyệt" ở dòng "Xuất bản, cập nhật trang live".
+  - Chủ sản phẩm chốt ngày 2026-11-01 (ADR-020, phần sửa đổi): Cộng tác viên gửi yêu cầu; Chủ sở hữu và Quản trị duyệt.
+- **Decision:**
+  - **Quyền mới** (ADR-020):
+    - `pages.requestPublish`: Cộng tác viên. Quyền này chỉ dành cho vai trò không tự xuất bản được, nên Chủ sở hữu, Quản trị và Biên tập không có. Màn 16 hiện nó thành ô "Yêu cầu" trên dòng `pages.publish`, như board, không thành một dòng riêng.
+    - `publishApprovals.decide`: Chủ sở hữu và Quản trị, ở dòng "Duyệt hoặc từ chối yêu cầu xuất bản". Người có quyền này nhận email yêu cầu và thấy nút "Từ chối".
+  - **Duyệt chính là xuất bản:**
+    - Người duyệt mở hộp thoại xuất bản như thường. Mọi bước giữ nguyên như ADR-006: kiểm tra, bỏ qua cảnh báo, xác nhận cài đặt site, idempotency key. Chỉ có nút đổi thành "Duyệt và xuất bản v{n}".
+    - Yêu cầu không có bản chụp riêng. Người duyệt xuất bản đúng bản nháp họ đang xem; nếu bản nháp đã đổi sau khi gửi yêu cầu, hộp thoại báo điều đó.
+    - Mọi lần xuất bản trang đều đóng yêu cầu đang chờ của trang, dù người xuất bản là người duyệt hay Biên tập. Yêu cầu chuyển thành `published`, ghi `decidedBy` và `releaseId`, trong cùng transaction tạo release (bước 4 của ADR-006).
+  - **Yêu cầu** (collection `publish_approvals`):
+    - `{ workspaceId, siteId, pageId, requestedBy, revision, note, status: pending|published|rejected|withdrawn, createdAt, updatedAt, decidedAt|null, decidedBy|null, reason|null, releaseId|null, purgeAt|null }`.
+    - Mỗi trang có tối đa một yêu cầu đang chờ (unique partial index `pageId`).
+    - Gửi: `POST /pages/:pageId/approval { expectedRevision, note }`.
+      - Revision lệch với bản nháp thì 409. Có lỗi chặn thì 422 `publish_blocked` kèm kết quả kiểm tra.
+      - Cảnh báo không chặn việc gửi, vì người duyệt mới là người quyết định về cảnh báo.
+    - Gửi lại khi chính mình đang có yêu cầu chờ: cập nhật revision và ghi chú, rồi gửi email lại. Nếu trang đang có yêu cầu của người khác thì 409 `approval_pending`.
+    - Rút: `DELETE /pages/:pageId/approval`, chỉ người gửi.
+    - Từ chối: `POST /pages/:pageId/approval/reject { approvalId, reason }`, lý do 1–500 ký tự, cần quyền `publishApprovals.decide`.
+    - Từ chối và xuất bản cùng lúc: chỉ một bên đổi được yêu cầu đang chờ. Nếu xuất bản thắng, lời từ chối nhận 404. Nếu từ chối thắng, trang vẫn được xuất bản như thường.
+    - Mỗi thành viên gửi tối đa 20 lần mỗi 24 giờ trong một workspace, kể cả gửi lại, đếm bằng `EmailQuota` như ADR-021.
+    - Yêu cầu đã đóng tự xóa sau 30 ngày (TTL `purgeAt`).
+  - **Email:**
+    - Khi gửi hoặc gửi lại: một email tới mọi Chủ sở hữu và Quản trị của workspace. Email có tên trang, tên site, người gửi, ghi chú và link mở editor của trang. Link chỉ mở trang; quyền vẫn được kiểm tra như thường.
+    - Khi trang được xuất bản: người gửi nhận email kèm địa chỉ live. Khi bị từ chối: người gửi nhận email kèm lý do.
+    - Email gửi lỗi thì chỉ ghi log, thao tác vẫn thành công (như ADR-021).
+  - **Trên trang:** `PageSummary.approval` được suy ra, không lưu trên trang.
+    - Đó là yêu cầu mới nhất của trang, nếu nó đang chờ, hoặc bị từ chối mà bản live không mới hơn revision của nó.
+    - Một truy vấn lấy cho mọi trang của danh sách.
+  - **Admin:**
+    - Editor:
+      - Cộng tác viên thấy nút "Gửi duyệt" thay cho "Xuất bản", và "Đang chờ duyệt" khi đang có yêu cầu.
+      - Mọi vai trò thấy nhãn "Chờ duyệt" cạnh trạng thái của trang.
+    - Hộp thoại của Cộng tác viên:
+      - Phần kiểm tra giống người xuất bản, nhưng cảnh báo chỉ hiện, không bỏ qua được.
+      - Có ô "Ghi chú cho người duyệt" và các nút "Gửi yêu cầu duyệt", "Gửi lại yêu cầu", "Rút yêu cầu".
+      - Yêu cầu bị từ chối hiện lý do.
+    - Hộp thoại của người xuất bản:
+      - Một khung cho biết ai gửi yêu cầu, lúc nào, kèm ghi chú. Khung báo khi bản nháp đã đổi sau khi gửi.
+      - Ghi chú phiên bản được điền sẵn bằng ghi chú của yêu cầu.
+      - Người có `publishApprovals.decide` thấy "Duyệt và xuất bản v{n}" và "Từ chối"; từ chối bắt nhập lý do.
+    - Danh sách trang (màn 01): nhãn "Chờ duyệt" ở cột trạng thái.
+    - Màn 16: ô "Yêu cầu" kèm chú thích "Yêu cầu · Phải được duyệt", và dòng "Duyệt hoặc từ chối yêu cầu xuất bản".
+- **Ngoài phạm vi:**
+  - Bộ lọc "Chờ duyệt" trên danh sách trang, và hộp thư yêu cầu chung cho cả workspace.
+  - Ghi tên người yêu cầu vào release và Lịch sử phiên bản.
+  - Duyệt theo từng thay đổi, duyệt nhiều cấp, hẹn giờ xuất bản.
+  - Gỡ một thành viên không đóng yêu cầu của người đó; người duyệt vẫn xuất bản hoặc từ chối được.
+- **Reason:**
+  - Chỉ có một đường xuất bản, nên mọi bất biến của ADR-006 vẫn giữ: revision, con trỏ, idempotency, kiểm tra.
+  - Yêu cầu chỉ là một tín hiệu có trạng thái. Nó đóng trong cùng transaction với release, nên hai bên không lệch nhau.
+- **Consequences:**
+  - Integration test:
+    - gửi yêu cầu: quyền, phạm vi site, lỗi chặn, revision, một yêu cầu mỗi trang, gửi lại, giới hạn;
+    - email tới người duyệt; xuất bản đóng yêu cầu và gửi email cho người gửi;
+    - từ chối, rút, và từ chối song song với xuất bản;
+    - ma trận quyền.
+  - E2E: Cộng tác viên được mời qua Mailpit và gửi yêu cầu. Chủ sở hữu nhận email, duyệt và xuất bản; Cộng tác viên nhận email. Thêm một lần từ chối kèm lý do.
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -1394,10 +1457,10 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | C1  | Sáu vai trò, phạm vi site, kiểm tra quyền ở mọi endpoint, Sidebar v2, màn Vai trò & quyền (ADR-020)                                | 16, Sidebar v2 | Xong       |
 | C2  | Thành viên, lời mời qua email, nhận lời mời, đổi quyền, gỡ, yêu cầu đổi quyền và duyệt, chuyển quyền sở hữu (ADR-021)              | 15, 15b        | Xong       |
 | C3  | Tên miền riêng: on-demand TLS, không trùng tên miền (ADR-022), bản ghi DNS và TXT, xác minh, địa chỉ chính, 301, renderer, sitemap | 13, 14, 08     | Xong       |
-| C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt                                                            | 05, 16         | Chưa làm   |
+| C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt (ADR-023)                                                  | 05, 16         | Xong       |
 | C5  | Vai trò tùy chỉnh                                                                                                                  | 16             | Chưa làm   |
 
-C4 và C5 cần ADR riêng trước khi làm.
+C5 cần ADR riêng trước khi làm.
 
 ## 6. Trước khi phát hành
 
