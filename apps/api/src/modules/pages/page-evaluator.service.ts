@@ -110,10 +110,10 @@ export class PageEvaluator {
     ]);
     const approvals = new Map(
       pages.flatMap((page) => {
-        const latest = latestApprovals.get(page._id.toHexString()) ?? null;
-        const live = this.liveReleaseOf(page, liveReleases);
-        return latest !== null && visibleApproval(latest, live?.sourceRevision ?? null)
-          ? [[page._id.toHexString(), latest] as const]
+        const pageId = page._id.toHexString();
+        const latest = latestApprovals.get(pageId) ?? null;
+        return latest !== null && visibleApproval(latest, page.releaseSeq)
+          ? [[pageId, latest] as const]
           : [];
       }),
     );

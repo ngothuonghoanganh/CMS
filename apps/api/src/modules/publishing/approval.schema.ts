@@ -23,6 +23,12 @@ export interface ApprovalRecord {
   decidedBy: Types.ObjectId | null;
   /** Why it was refused. */
   reason: string | null;
+  /**
+   * The page's release count when it was refused: any later publish raises it, and that publish
+   * answers the refusal (a later draft has a revision at least as high). Absent on refusals stored
+   * before it existed, which then show until the next request.
+   */
+  releaseSeq?: number | null;
   /** The release that published it. */
   releaseId: Types.ObjectId | null;
   /** MongoDB deletes a closed request 30 days later (TTL); a pending one stays. */
@@ -47,6 +53,7 @@ export const approvalSchema = new Schema<ApprovalRecord>(
     decidedAt: { type: Date, default: null },
     decidedBy: { type: Schema.Types.ObjectId, default: null },
     reason: { type: String, default: null },
+    releaseSeq: { type: Number, default: null },
     releaseId: { type: Schema.Types.ObjectId, default: null },
     purgeAt: { type: Date, default: null },
   },

@@ -24,6 +24,7 @@ export const errorCodes = [
   'invitation_email_mismatch',
   'access_request_pending',
   'approval_pending',
+  'approval_changed',
   'domain_exists',
   'domain_limit_reached',
   'rate_limited',

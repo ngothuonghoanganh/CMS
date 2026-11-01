@@ -7,7 +7,7 @@ import {
   type Site,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { formDraft, publishableDraft } from '../../../test/compositions.js';
@@ -25,6 +25,8 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { addMember, createSite } from '../../../test/resources.js';
+import { EmailQuota } from '../notifications/email-quota.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { APPROVALS_PER_DAY } from './domain/approval-rules.js';
 
 interface Member {
@@ -59,6 +61,9 @@ describe('requests to publish', () => {
     contributor = await addMember(t, workspaceId, 'contributor');
     otherContributor = await addMember(t, workspaceId, 'contributor');
     site = await createSite(owner.client, workspaceId);
+    // Members kept to the site who may not decide: they hear nothing of requests.
+    await addMember(t, workspaceId, 'viewer', [site.id]);
+    await addMember(t, workspaceId, 'support', [site.id]);
   });
 
   afterAll(async () => {
@@ -76,15 +81,49 @@ describe('requests to publish', () => {
     return page.page.id;
   }
 
-  function ask(member: Member, pageId: string, expectedRevision: number, note = '') {
-    return member.client.post(`/pages/${pageId}/approval`, { expectedRevision, note });
+  function ask(
+    member: Member,
+    pageId: string,
+    expectedRevision: number,
+    note = '',
+    approvalId: string | null = null,
+    expectedPublishedReleaseId: string | null = null,
+  ) {
+    return member.client.post(`/pages/${pageId}/approval`, {
+      expectedRevision,
+      expectedPublishedReleaseId,
+      approvalId,
+      note,
+    });
   }
 
-  /** Sends the page's saved draft for approval as `member` and returns what the page shows. */
+  /**
+   * Sends the page's saved draft for approval as `member`, again when their own request waits,
+   * and returns what the page shows.
+   */
   async function askNow(member: Member, pageId: string, note = ''): Promise<PageApproval | null> {
-    const revision = (await getPage(member.client, pageId)).draft.revision;
-    const response = await ask(member, pageId, revision, note).expect(200);
+    const { draft, page } = await getPage(member.client, pageId);
+    const own =
+      page.approval?.status === 'pending' && page.approval.requestedBy.id === member.me.user.id
+        ? page.approval.id
+        : null;
+    const response = await ask(
+      member,
+      pageId,
+      draft.revision,
+      note,
+      own,
+      page.liveRelease?.id ?? null,
+    ).expect(200);
     return approvalResponseSchema.parse(response.body).page.approval;
+  }
+
+  function refuse(member: Member, pageId: string, approval: PageApproval | null, reason: string) {
+    return member.client.post(`/pages/${pageId}/approval/reject`, {
+      approvalId: approval?.id,
+      revision: approval?.revision,
+      reason,
+    });
   }
 
   function stored(pageId: string) {
@@ -227,22 +266,18 @@ describe('requests to publish', () => {
     const approvalId = approval?.id ?? '';
     t.emails.sent.length = 0;
 
-    await editor.client
-      .post(`/pages/${pageId}/approval/reject`, { approvalId, reason: 'Giá sai' })
-      .expect(403);
-    await owner.client
-      .post(`/pages/${pageId}/approval/reject`, { approvalId, reason: '' })
-      .expect(422);
-    await owner.client
-      .post(`/pages/${pageId}/approval/reject`, {
-        approvalId: new Types.ObjectId().toHexString(),
-        reason: 'Giá sai',
-      })
-      .expect(404);
+    await refuse(editor, pageId, approval, 'Giá sai').expect(403);
+    await refuse(owner, pageId, approval, '').expect(422);
+    await refuse(
+      owner,
+      pageId,
+      approval && { ...approval, id: new Types.ObjectId().toHexString() },
+      'Giá sai',
+    ).expect(404);
+    // A refusal answers the revision the approver reviewed, not one sent again since.
+    await refuse(owner, pageId, approval && { ...approval, revision: 0 }, 'Giá sai').expect(404);
 
-    const response = await owner.client
-      .post(`/pages/${pageId}/approval/reject`, { approvalId, reason: 'Giá ưu đãi chưa đúng' })
-      .expect(200);
+    const response = await refuse(owner, pageId, approval, 'Giá ưu đãi chưa đúng').expect(200);
     expect(approvalResponseSchema.parse(response.body).page.approval).toMatchObject({
       status: 'rejected',
       id: approvalId,
@@ -256,14 +291,111 @@ describe('requests to publish', () => {
       }),
     ]);
     expect(t.emails.sent[0]?.text).toContain('Lý do: Giá ưu đãi chưa đúng');
-    await owner.client
-      .post(`/pages/${pageId}/approval/reject`, { approvalId, reason: 'Lần nữa' })
-      .expect(404);
+    await refuse(owner, pageId, approval, 'Lần nữa').expect(404);
 
     // The refusal stays on the page until that draft, or a newer one, goes live.
     expect((await getPage(contributor.client, pageId)).page.approval?.status).toBe('rejected');
     await publish(owner.client, pageId);
     expect((await getPage(contributor.client, pageId)).page.approval).toBeNull();
+    // Unpublishing that version later does not bring the answered refusal back.
+    const live = (await getPage(owner.client, pageId)).page.liveRelease;
+    await owner.client
+      .post(`/pages/${pageId}/pointer`, {
+        targetReleaseId: null,
+        expectedCurrentReleaseId: live?.id ?? null,
+        reason: 'Hết chương trình',
+      })
+      .expect(200);
+    expect((await getPage(contributor.client, pageId)).page.approval).toBeNull();
+  });
+
+  it('is sent again only as its sender saw it, never reopened for a page that went live', async () => {
+    const pageId = await draftPage();
+    const first = await askNow(contributor, pageId);
+    const revision = (await getPage(contributor.client, pageId)).draft.revision;
+    t.emails.sent.length = 0;
+
+    // Their own waiting request, which this dialog did not show: nothing is sent.
+    const unseen = await ask(contributor, pageId, revision).expect(409);
+    expect(problemSchema.parse(unseen.body).code).toBe('approval_changed');
+
+    // Refused meanwhile: "Gửi lại yêu cầu" from a dialog opened before does not ask again.
+    await refuse(owner, pageId, first, 'Chưa đúng giá').expect(200);
+    t.emails.sent.length = 0;
+    const answered = await ask(contributor, pageId, revision, '', first?.id ?? null).expect(409);
+    expect(problemSchema.parse(answered.body).code).toBe('approval_changed');
+
+    // Published meanwhile: a dialog opened before asks to publish what is live now.
+    await publish(owner.client, pageId);
+    t.emails.sent.length = 0;
+    const live = await ask(contributor, pageId, revision).expect(409);
+    expect(problemSchema.parse(live.body).code).toBe('pointer_conflict');
+    expect(await stored(pageId)).toEqual([expect.objectContaining({ status: 'rejected' })]);
+    expect(t.emails.sent).toEqual([]);
+  });
+
+  it('never leaves a request waiting for a draft published at the same moment', async () => {
+    const pageId = await draftPage();
+    const { draft, page } = await getPage(contributor.client, pageId);
+    const body = await currentPublishBody(owner.client, pageId);
+    // The request passed its first checks; the page goes live before the request is stored.
+    const quota = t.app.get(EmailQuota);
+    const take = quota.take.bind(quota);
+    const paused = vi
+      .spyOn(quota, 'take')
+      .mockImplementationOnce(async (...args: Parameters<EmailQuota['take']>) => {
+        await publishRequest(owner.client, pageId, body).expect(201);
+        return take(...args);
+      });
+    try {
+      const asked = await ask(
+        contributor,
+        pageId,
+        draft.revision,
+        '',
+        null,
+        page.liveRelease?.id ?? null,
+      ).expect(409);
+      expect(problemSchema.parse(asked.body).code).toBe('pointer_conflict');
+    } finally {
+      paused.mockRestore();
+    }
+    expect(await stored(pageId)).toEqual([]);
+  });
+
+  it('keeps a refusal of a page rolled back and asked for again at the same draft', async () => {
+    const pageId = await draftPage();
+    const v1 = await publish(owner.client, pageId);
+    await editHeroHeading(owner.client, pageId, 'Ưu đãi tháng 12');
+    const v2 = await publish(owner.client, pageId);
+    await owner.client
+      .post(`/pages/${pageId}/pointer`, {
+        targetReleaseId: v1.release.id,
+        expectedCurrentReleaseId: v2.release.id,
+        reason: 'Giá tháng 12 chưa chốt',
+      })
+      .expect(200);
+    // The draft is still the one of v2: the request asks to publish it again.
+    const approval = await askNow(contributor, pageId);
+    const response = await refuse(owner, pageId, approval, 'Chờ chốt giá').expect(200);
+    expect(approvalResponseSchema.parse(response.body).page.approval).toMatchObject({
+      status: 'rejected',
+      reason: 'Chờ chốt giá',
+    });
+  });
+
+  it('keeps the request when its approvers cannot be read for the email', async () => {
+    const pageId = await draftPage();
+    const listMembers = vi
+      .spyOn(t.app.get(WorkspacesRepository), 'listMembers')
+      .mockRejectedValueOnce(new Error('database unavailable'));
+    try {
+      expect((await askNow(contributor, pageId))?.status).toBe('pending');
+    } finally {
+      listMembers.mockRestore();
+    }
+    expect(t.emails.sent).toEqual([]);
+    expect(await stored(pageId)).toEqual([expect.objectContaining({ status: 'pending' })]);
   });
 
   it('is withdrawn only by its sender', async () => {
@@ -286,10 +418,7 @@ describe('requests to publish', () => {
 
     const [published, refused] = await Promise.all([
       publishRequest(admin.client, pageId, body),
-      owner.client.post(`/pages/${pageId}/approval/reject`, {
-        approvalId: approval?.id,
-        reason: 'Chưa duyệt',
-      }),
+      refuse(owner, pageId, approval, 'Chưa duyệt'),
     ]);
     expect(published.status).toBe(201);
     const [record] = await stored(pageId);

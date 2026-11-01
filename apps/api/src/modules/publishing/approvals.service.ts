@@ -1,22 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import type { ApprovalResponse, RejectApproval, RequestApproval } from '@plp/contracts';
 import { AppError, notFound } from '../../shared/errors.js';
+import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { UsersRepository } from '../auth/users.repository.js';
 import { EmailQuota, type QuotaUse } from '../notifications/email-quota.js';
-import { PageAccessService } from '../pages/page-access.service.js';
+import { PAGE_NOT_FOUND, PageAccessService } from '../pages/page-access.service.js';
 import { revisionConflict } from '../pages/page-errors.js';
 import { PageEvaluator } from '../pages/page-evaluator.service.js';
 import type { PageRecord } from '../pages/page.schema.js';
+import { PagesRepository } from '../pages/pages.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { ApprovalNotifier } from './approval-notifier.service.js';
-import type { ApprovalRecord } from './approval.schema.js';
+import { APPROVAL_PENDING_INDEX, type ApprovalRecord } from './approval.schema.js';
 import { ApprovalsRepository } from './approvals.repository.js';
 import { APPROVALS_PER_DAY } from './domain/approval-rules.js';
+import { pointerConflict } from './pointer.service.js';
 
 export const APPROVAL_NOT_FOUND = 'Không tìm thấy yêu cầu xuất bản đang chờ';
+
+function approvalChanged(options?: { cause: unknown }): AppError {
+  return new AppError(409, 'approval_changed', 'Yêu cầu xuất bản vừa thay đổi', {
+    detail: 'Yêu cầu vừa được trả lời, hoặc được gửi từ nơi khác. Xem lại trang rồi gửi.',
+    ...options,
+  });
+}
 
 const REQUESTS: QuotaUse = {
   what: 'Approval request email',
@@ -37,9 +48,11 @@ export class ApprovalsService {
     private readonly pageAccess: PageAccessService,
     private readonly evaluator: PageEvaluator,
     private readonly approvals: ApprovalsRepository,
+    private readonly pages: PagesRepository,
     private readonly users: UsersRepository,
     private readonly quota: EmailQuota,
     private readonly notifier: ApprovalNotifier,
+    private readonly transactions: TransactionRunner,
   ) {}
 
   /**
@@ -59,6 +72,10 @@ export class ApprovalsService {
     );
     if (page.draft.revision !== input.expectedRevision) {
       throw revisionConflict(page.draft.revision);
+    }
+    // Published since the sender looked: nobody asks to publish what just went live.
+    if ((page.publishedReleaseId?.toHexString() ?? null) !== input.expectedPublishedReleaseId) {
+      throw pointerConflict();
     }
     const { checks } = await this.evaluator.evaluate(scope, site, page);
     if (checks.blocking.length > 0) {
@@ -123,9 +140,15 @@ export class ApprovalsService {
       scope,
       page._id,
       toObjectId(input.approvalId, APPROVAL_NOT_FOUND),
-      { status: 'rejected', at: new Date(), reason: input.reason },
+      {
+        status: 'rejected',
+        at: new Date(),
+        reason: input.reason,
+        revision: input.revision,
+        releaseSeq: page.releaseSeq,
+      },
     );
-    // Published, withdrawn or refused meanwhile, or not this page's.
+    // Published, withdrawn, refused or sent again meanwhile, or not this page's.
     if (!rejected) {
       throw notFound(APPROVAL_NOT_FOUND);
     }
@@ -134,8 +157,13 @@ export class ApprovalsService {
   }
 
   /**
-   * One pending request per page: the sender's own is sent again for this revision; someone
-   * else's is a 409. A request closed or created between the reads is read again, once.
+   * One pending request per page (ADR-023). The sender's own is sent again only when it is the
+   * one they saw (`approvalId`); someone else's is a 409 naming them. A request answered, or sent
+   * from elsewhere, since the sender looked is a 409 too: their dialog reloads and shows it,
+   * rather than asking again for a page that went live under them. All in one transaction that
+   * first marks the page, guarded by the draft and the pointer the sender saw: a publish or a
+   * save at the same moment conflicts with it, so a request is never stored for a draft that is
+   * live already.
    */
   private async store(
     scope: WorkspaceScope,
@@ -143,44 +171,74 @@ export class ApprovalsService {
     input: RequestApproval,
     now: Date,
   ): Promise<{ approval: ApprovalRecord; resent: boolean }> {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const pending = await this.approvals.findPending(scope, page._id);
-      if (pending !== null) {
-        if (!pending.requestedBy.equals(scope.userId)) {
+    try {
+      return await this.transactions.run(async (tx) => {
+        const held = await this.pages.holdForApproval(
+          scope,
+          {
+            id: page._id,
+            revision: input.expectedRevision,
+            publishedReleaseId:
+              input.expectedPublishedReleaseId === null
+                ? null
+                : toObjectId(input.expectedPublishedReleaseId, PAGE_NOT_FOUND),
+          },
+          now,
+          tx,
+        );
+        if (!held) {
+          const current = await this.pages.findById(scope, page._id, tx);
+          throw current !== null && current.draft.revision !== input.expectedRevision
+            ? revisionConflict(current.draft.revision)
+            : pointerConflict();
+        }
+        const pending = await this.approvals.findPending(scope, page._id, tx);
+        if (pending !== null && !pending.requestedBy.equals(scope.userId)) {
           throw await this.pendingConflict(pending);
         }
-        const resent = await this.approvals.resend(scope, pending._id, {
-          revision: page.draft.revision,
-          note: input.note,
-          at: now,
-        });
-        if (resent !== null) {
+        if ((pending?._id.toHexString() ?? null) !== input.approvalId) {
+          throw approvalChanged();
+        }
+        if (pending !== null) {
+          const resent = await this.approvals.resend(
+            scope,
+            pending._id,
+            { revision: input.expectedRevision, note: input.note, at: now },
+            tx,
+          );
+          if (resent === null) {
+            throw approvalChanged();
+          }
           return { approval: resent, resent: true };
         }
-        continue;
-      }
-      const approval: ApprovalRecord = {
-        _id: newObjectId(),
-        workspaceId: scope.workspaceId,
-        siteId: page.siteId,
-        pageId: page._id,
-        requestedBy: scope.userId,
-        revision: page.draft.revision,
-        note: input.note,
-        status: 'pending',
-        createdAt: now,
-        sentAt: now,
-        decidedAt: null,
-        decidedBy: null,
-        reason: null,
-        releaseId: null,
-        purgeAt: null,
-      };
-      if (await this.approvals.create(scope, approval)) {
+        const approval: ApprovalRecord = {
+          _id: newObjectId(),
+          workspaceId: scope.workspaceId,
+          siteId: page.siteId,
+          pageId: page._id,
+          requestedBy: scope.userId,
+          revision: input.expectedRevision,
+          note: input.note,
+          status: 'pending',
+          createdAt: now,
+          sentAt: now,
+          decidedAt: null,
+          decidedBy: null,
+          reason: null,
+          releaseId: null,
+          releaseSeq: null,
+          purgeAt: null,
+        };
+        await this.approvals.create(scope, approval, tx);
         return { approval, resent: false };
+      });
+    } catch (error) {
+      // Another request was stored at the same moment: the dialog reloads and shows it.
+      if (isDuplicateKeyError(error, APPROVAL_PENDING_INDEX)) {
+        throw approvalChanged({ cause: error });
       }
+      throw error;
     }
-    throw new Error(`The pending request to publish page ${page._id.toHexString()} kept changing`);
   }
 
   private async pendingConflict(pending: ApprovalRecord): Promise<AppError> {

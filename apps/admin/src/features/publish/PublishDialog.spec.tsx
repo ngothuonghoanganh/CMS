@@ -12,7 +12,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '../../lib/api';
-import { pageSummary, site, SITE_ID, PAGE_ID } from '../editor/test-fixtures';
+import { pageDetail, pageSummary, site, SITE_ID, PAGE_ID } from '../editor/test-fixtures';
 import { lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { PublishDialog } from './PublishDialog';
 
@@ -128,6 +128,8 @@ function publishResponse(overrides: Partial<PublishResponse> = {}): PublishRespo
 
 interface Setup {
   page?: PageSummary;
+  /** The page as the server has it, when the editor holds an older summary. */
+  serverPage?: PageSummary;
   result?: ChecksResult;
   role?: Role;
   userId?: string;
@@ -135,6 +137,7 @@ interface Setup {
 
 function renderDialog({
   page = livePage(),
+  serverPage = page,
   result = checks(),
   role = 'owner',
   userId = OWNER_ID,
@@ -147,9 +150,14 @@ function renderDialog({
     role,
     userId,
   };
+  // The dialog reads the page as the server has it now (ADR-023).
   apiMock.mockImplementation((endpoint) =>
-    endpoint === endpoints.getChecks
-      ? Promise.resolve(result)
+    endpoint === endpoints.getPage
+      ? Promise.resolve({
+          page: serverPage,
+          draft: { ...pageDetail().draft, revision: 5 },
+          checks: result,
+        })
       : Promise.reject(new Error('unexpected call')),
   );
   renderWithProviders(<PublishDialog open pageId={PAGE_ID} site={site} {...props} />);
@@ -170,7 +178,7 @@ describe('PublishDialog', () => {
 
     expect(await screen.findByRole('heading', { name: 'Xuất bản 2 thay đổi' })).toBeInTheDocument();
     expect(props.ensureSaved).toHaveBeenCalledTimes(1);
-    expect(apiMock).toHaveBeenCalledWith(endpoints.getChecks, [PAGE_ID]);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.getPage, [PAGE_ID]);
     expect(screen.getByText('smilecare.payload.site/uu-dai-thang-11')).toBeInTheDocument();
     expect(screen.getByText('Đang live')).toBeInTheDocument();
     expect(screen.getByText('v13 · bản nháp hiện tại')).toBeInTheDocument();
@@ -543,7 +551,12 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
       await screen.findByRole('heading', { name: 'Đã gửi yêu cầu duyệt' }),
     ).toBeInTheDocument();
     expect(apiMock).toHaveBeenCalledWith(endpoints.requestApproval, [PAGE_ID], {
-      body: { expectedRevision: 5, note: 'Đổi giá' },
+      body: {
+        expectedRevision: 5,
+        expectedPublishedReleaseId: LIVE_RELEASE.id,
+        approvalId: null,
+        note: 'Đổi giá',
+      },
     });
     expect(props.onPageUpdated).toHaveBeenCalledWith(sent, expect.anything());
   });
@@ -567,6 +580,7 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
     });
 
     expect(await screen.findByRole('button', { name: 'Gửi lại yêu cầu' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Rút yêu cầu' })).toBeEnabled();
     expect(screen.getByLabelText(/Ghi chú cho người duyệt/)).toHaveValue('Đổi giá ưu đãi');
     expect(
       screen.getByText('Bản nháp có thay đổi sau khi gửi. Gửi lại để người duyệt biết có bản mới.'),
@@ -620,7 +634,7 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
     await user.type(screen.getByLabelText(/Lý do/), 'Giá chưa đúng');
     await user.click(screen.getByRole('button', { name: 'Từ chối yêu cầu' }));
     expect(apiMock).toHaveBeenCalledWith(endpoints.rejectApproval, [PAGE_ID], {
-      body: { approvalId: '64b0000000000000000000a1', reason: 'Giá chưa đúng' },
+      body: { approvalId: '64b0000000000000000000a1', revision: 5, reason: 'Giá chưa đúng' },
     });
     expect(props.onPageUpdated).toHaveBeenCalledWith(refused);
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
@@ -653,5 +667,51 @@ describe('PublishDialog · requests to publish (ADR-023)', () => {
     expect(await screen.findByText(/^Ngọc Anh chưa duyệt yêu cầu · /)).toBeInTheDocument();
     expect(screen.getByText('Lý do: Giá chưa đúng')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeEnabled();
+  });
+});
+
+describe('PublishDialog · a request answered under the dialog (ADR-023)', () => {
+  it('shows the request the server has now, not the one the editor loaded', async () => {
+    // The editor still holds a waiting request; the server says it was published since.
+    renderDialog({
+      role: 'contributor',
+      userId: CONTRIBUTOR.id,
+      page: livePage({ approval: waiting() }),
+      serverPage: livePage({ approval: null }),
+    });
+    expect(await screen.findByRole('button', { name: 'Gửi yêu cầu duyệt' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Rút yêu cầu' })).not.toBeInTheDocument();
+  });
+
+  it('sends the request it shows again, and reloads when it was answered meanwhile', async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      role: 'contributor',
+      userId: CONTRIBUTOR.id,
+      page: livePage({ approval: waiting() }),
+    });
+    await screen.findByRole('button', { name: 'Gửi lại yêu cầu' });
+    apiMock.mockRejectedValueOnce(
+      new ApiError(409, {
+        type: 'about:blank',
+        title: 'Yêu cầu xuất bản vừa thay đổi',
+        status: 409,
+        code: 'approval_changed',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Gửi lại yêu cầu' }));
+    expect(lastCallTo(apiMock, endpoints.requestApproval).options).toMatchObject({
+      body: { approvalId: '64b0000000000000000000a1' },
+    });
+    expect(await screen.findByText('Yêu cầu xuất bản vừa thay đổi')).toBeInTheDocument();
+  });
+
+  it('announces a missing reason for a refusal', async () => {
+    const user = userEvent.setup();
+    renderDialog({ page: livePage({ approval: waiting() }) });
+    await user.click(await screen.findByRole('button', { name: 'Từ chối' }));
+    await user.click(screen.getByRole('button', { name: 'Từ chối yêu cầu' }));
+    const error = screen.getByText('Nhập lý do để người gửi biết cần sửa gì');
+    expect(error.closest('[aria-live]')).not.toBeNull();
   });
 });

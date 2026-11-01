@@ -169,7 +169,7 @@ function CheckRow({ item, role, ignored = false, onFix, onToggle }: CheckRowProp
 
 /**
  * One opening of the publish dialog. It mounts when the dialog opens, so each opening saves the
- * draft, loads fresh checks and uses a new idempotency key.
+ * draft, loads the page and its checks and uses a new idempotency key.
  */
 function PublishSession({
   onOpenChange,
@@ -197,12 +197,11 @@ function PublishSession({
   const noteId = useId();
 
   /**
-   * Saves pending changes, then loads the checks for the saved revision. After a conflict the
-   * whole page is reloaded (`fresh`), since the live pointer may have moved too.
+   * Saves pending changes, then loads the page as the server has it now: the checks of the saved
+   * revision, the live pointer, and the request to publish, which others may have sent, answered
+   * or refused since the editor loaded the page (ADR-023).
    */
-  async function prepare(
-    options: { notice?: PublishNotice | undefined; fresh?: boolean; initial?: boolean } = {},
-  ) {
+  async function prepare(options: { notice?: PublishNotice | undefined; initial?: boolean } = {}) {
     run.current += 1;
     const current = run.current;
     // The session starts in the preparing state; later runs show it again.
@@ -211,19 +210,13 @@ function PublishSession({
     }
     try {
       const saved = await ensureSaved();
-      let prepared: PreparedPublish;
-      if (options.fresh === true) {
-        const detail = await api(endpoints.getPage, [pageId]);
-        prepared = {
-          revision: detail.draft.revision,
-          page: detail.page,
-          checks: detail.checks,
-          loadedAt: Date.now(),
-        };
-      } else {
-        const checks = await api(endpoints.getChecks, [pageId]);
-        prepared = { revision: checks.revision, page: saved.page, checks, loadedAt: Date.now() };
-      }
+      const detail = await api(endpoints.getPage, [pageId]);
+      const prepared: PreparedPublish = {
+        revision: detail.draft.revision,
+        page: detail.page,
+        checks: detail.checks,
+        loadedAt: Date.now(),
+      };
       if (current !== run.current) {
         return;
       }
@@ -284,7 +277,6 @@ function PublishSession({
     } catch (error) {
       if (isStaleConflict(error)) {
         await prepare({
-          fresh: true,
           notice: {
             title: 'Trang vừa thay đổi trong lúc xuất bản',
             message: `${error.problem.title}. Bản nháp và kiểm tra đã được tải lại, hãy xem lại rồi xuất bản.`,
@@ -322,11 +314,10 @@ function PublishSession({
   /** The request was answered or withdrawn under the dialog: reload the page and say so. */
   async function requestAnswered() {
     await prepare({
-      fresh: true,
       notice: {
-        title: 'Yêu cầu vừa được trả lời',
+        title: 'Yêu cầu xuất bản vừa thay đổi',
         message:
-          'Trang vừa được xuất bản, hoặc yêu cầu đã được rút hay từ chối. Trang đã được tải lại.',
+          'Trang vừa được xuất bản, hoặc yêu cầu đã được gửi lại, rút hay từ chối. Trang đã được tải lại.',
       },
     });
   }
@@ -334,8 +325,15 @@ function PublishSession({
   async function sendRequest(prepared: PreparedPublish) {
     dispatch({ type: 'submit_started' });
     try {
+      const own = pendingApproval(prepared.page);
       const { page } = await api(endpoints.requestApproval, [pageId], {
-        body: { expectedRevision: prepared.revision, note: state.note.trim() },
+        body: {
+          expectedRevision: prepared.revision,
+          expectedPublishedReleaseId: prepared.page.liveRelease?.id ?? null,
+          // The request this dialog shows: sent again only if it still waits (ADR-023).
+          approvalId: own !== null && own.requestedBy.id === userId ? own.id : null,
+          note: state.note.trim(),
+        },
       });
       onPageUpdated(page, prepared.checks);
       dispatch({ type: 'requested', page });
@@ -343,7 +341,6 @@ function PublishSession({
       if (error instanceof ApiError && error.status === 409) {
         // The draft was saved elsewhere, or someone else's request waits now.
         await prepare({
-          fresh: true,
           notice: {
             title: error.problem.title,
             message: 'Bản nháp và yêu cầu đã được tải lại, hãy xem lại.',
@@ -380,7 +377,7 @@ function PublishSession({
     }
   }
 
-  async function reject(approvalId: string, senderName: string) {
+  async function reject(approval: { id: string; revision: number }, senderName: string) {
     const text = reason.trim();
     if (text === '') {
       setRejectError('Nhập lý do để người gửi biết cần sửa gì');
@@ -390,7 +387,7 @@ function PublishSession({
     setRejectError(null);
     try {
       const { page } = await api(endpoints.rejectApproval, [pageId], {
-        body: { approvalId, reason: text },
+        body: { approvalId: approval.id, revision: approval.revision, reason: text },
       });
       onPageUpdated(page);
       toast({
@@ -547,7 +544,7 @@ function PublishSession({
               variant="danger"
               loading={rejectPending}
               onClick={() => {
-                void reject(waiting.id, waiting.requestedBy.name);
+                void reject(waiting, waiting.requestedBy.name);
               }}
             >
               Từ chối yêu cầu
@@ -555,7 +552,7 @@ function PublishSession({
           </>
         }
       >
-        <Field label="Lý do" required error={rejectError ?? undefined}>
+        <Field label="Lý do" required error={rejectError ?? undefined} announceMessages>
           <Textarea
             value={reason}
             maxLength={REASON_MAX}

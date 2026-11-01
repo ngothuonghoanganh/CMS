@@ -2,22 +2,34 @@ import { describe, expect, it } from 'vitest';
 import { approvalPurgeAt, visibleApproval } from './approval-rules.js';
 
 describe('visibleApproval', () => {
-  it('shows a pending request whatever is live', () => {
-    expect(visibleApproval({ status: 'pending', revision: 4 }, null)).toBe(true);
-    expect(visibleApproval({ status: 'pending', revision: 4 }, 9)).toBe(true);
+  // Refused while the page had 3 releases.
+  const refused = { status: 'rejected' as const, releaseSeq: 3 };
+
+  it('shows a pending request whatever was published', () => {
+    const pending = { status: 'pending' as const, releaseSeq: null };
+    expect(visibleApproval(pending, 0)).toBe(true);
+    expect(visibleApproval(pending, 9)).toBe(true);
   });
 
-  it('shows a refusal until a draft at least as new goes live', () => {
-    expect(visibleApproval({ status: 'rejected', revision: 4 }, null)).toBe(true);
-    expect(visibleApproval({ status: 'rejected', revision: 4 }, 3)).toBe(true);
-    expect(visibleApproval({ status: 'rejected', revision: 4 }, 4)).toBe(false);
-    expect(visibleApproval({ status: 'rejected', revision: 4 }, 7)).toBe(false);
+  it('shows a refusal until the page is published again after it', () => {
+    expect(visibleApproval(refused, 3)).toBe(true);
+    expect(visibleApproval(refused, 4)).toBe(false);
+    expect(visibleApproval(refused, 7)).toBe(false);
+  });
+
+  it('keeps a refusal of a page never published, or rolled back from that same draft', () => {
+    expect(visibleApproval({ status: 'rejected', releaseSeq: 0 }, 0)).toBe(true);
+  });
+
+  it('shows a refusal stored before release counts were kept', () => {
+    expect(visibleApproval({ status: 'rejected' }, 5)).toBe(true);
+    expect(visibleApproval({ status: 'rejected', releaseSeq: null }, 5)).toBe(true);
   });
 
   it('shows nothing for a published or withdrawn request, or none', () => {
-    expect(visibleApproval({ status: 'published', revision: 4 }, 4)).toBe(false);
-    expect(visibleApproval({ status: 'withdrawn', revision: 4 }, null)).toBe(false);
-    expect(visibleApproval(null, null)).toBe(false);
+    expect(visibleApproval({ status: 'published', releaseSeq: null }, 4)).toBe(false);
+    expect(visibleApproval({ status: 'withdrawn', releaseSeq: null }, 0)).toBe(false);
+    expect(visibleApproval(null, 0)).toBe(false);
   });
 });
 

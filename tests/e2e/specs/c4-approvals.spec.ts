@@ -81,6 +81,8 @@ async function askViaApi(member: APIRequestContext, pageId: string, note: string
   );
   await call(member, 'POST', endpoints.requestApproval.path(pageId), approvalResponseSchema, {
     expectedRevision: detail.draft.revision,
+    expectedPublishedReleaseId: detail.page.liveRelease?.id ?? null,
+    approvalId: null,
     note,
   });
 }

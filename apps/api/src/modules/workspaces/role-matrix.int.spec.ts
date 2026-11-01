@@ -311,9 +311,12 @@ const ROWS: Row[] = [
     permission: 'pages.requestPublish',
     scope: 'site',
     status: 200,
-    call: async (client, { owner, pageId }) =>
+    // The Cộng tác viên sends their waiting request again.
+    call: async (client, { owner, pageId, approvalId }) =>
       client.post(`/pages/${pageId}/approval`, {
         expectedRevision: (await getPage(owner, pageId)).draft.revision,
+        expectedPublishedReleaseId: (await getPage(owner, pageId)).page.liveRelease?.id ?? null,
+        approvalId,
         note: 'Đổi giá ưu đãi',
       }),
   },
@@ -329,8 +332,12 @@ const ROWS: Row[] = [
     permission: 'publishApprovals.decide',
     scope: 'site',
     status: 200,
-    call: (client, { pageId, approvalId }) =>
-      client.post(`/pages/${pageId}/approval/reject`, { approvalId, reason: 'Giá chưa đúng' }),
+    call: async (client, { owner, pageId, approvalId }) =>
+      client.post(`/pages/${pageId}/approval/reject`, {
+        approvalId,
+        revision: (await getPage(owner, pageId)).draft.revision,
+        reason: 'Giá chưa đúng',
+      }),
   },
   {
     action: 'Lịch sử phiên bản',
@@ -697,6 +704,8 @@ describe('the six roles on every endpoint', () => {
         await memberOf('contributor')
           .client.post(`/pages/${pageId}/approval`, {
             expectedRevision: (await getPage(owner, pageId)).draft.revision,
+            expectedPublishedReleaseId: (await getPage(owner, pageId)).page.liveRelease?.id ?? null,
+            approvalId: null,
             note: '',
           })
           .expect(200)
