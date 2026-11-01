@@ -13,6 +13,7 @@ const noVersions = {
   fromVersion: null,
   toVersion: null,
   count: null,
+  slug: null,
   revalidationFailed: false,
 };
 
@@ -29,12 +30,13 @@ describe('activitySentence', () => {
       sentence({
         type: 'page.rolled_back',
         actor: minh,
-        page: { id: '64b000000000000000000102', title: 'Cấy ghép Implant' },
+        page: { id: '64b000000000000000000102', title: 'Cấy ghép Implant', deleted: false },
         data: {
           version: null,
           fromVersion: 6,
           toVersion: 5,
           count: null,
+          slug: null,
           revalidationFailed: false,
         },
       }),
@@ -54,7 +56,7 @@ describe('activitySentence', () => {
     expect(
       sentence({
         type: 'page.unpublished',
-        page: { id: '64b000000000000000000103', title: 'Tri ân khách hàng 2025' },
+        page: { id: '64b000000000000000000103', title: 'Tri ân khách hàng 2025', deleted: false },
       }),
     ).toBe('Ngọc Anh gỡ xuất bản “Tri ân khách hàng 2025” [muted]');
   });
@@ -111,6 +113,7 @@ describe('activitySentence', () => {
           fromVersion: null,
           toVersion: null,
           count: null,
+          slug: null,
           revalidationFailed: false,
         },
       }),
@@ -126,6 +129,7 @@ describe('activitySentence', () => {
           fromVersion: null,
           toVersion: null,
           count: null,
+          slug: null,
           revalidationFailed: false,
         },
       }),
@@ -133,6 +137,16 @@ describe('activitySentence', () => {
     expect(sentence({ type: 'page.draft_restored', data: noVersions })).toBe(
       'Ngọc Anh sao chép vào bản nháp của “Ưu đãi niềng răng tháng 11” [primary]',
     );
+  });
+
+  it('describes the deletion of a page (ADR-027)', () => {
+    expect(
+      sentence({
+        type: 'page.deleted',
+        page: { id: '64b000000000000000000104', title: 'Webinar tháng 9', deleted: true },
+        data: { ...noVersions, slug: 'webinar-thang-9' },
+      }),
+    ).toBe('Ngọc Anh xóa trang “Webinar tháng 9” [muted]');
   });
 
   it('names a page event without a page reference generically', () => {

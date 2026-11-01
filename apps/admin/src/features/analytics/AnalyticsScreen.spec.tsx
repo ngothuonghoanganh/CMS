@@ -280,6 +280,18 @@ describe('AnalyticsScreen', () => {
     ).toEqual(['Điện thoại · 78%', 'Máy tính · 22%']);
   });
 
+  it('keeps the numbers of a deleted page under "Trang đã xóa" (ADR-027)', () => {
+    renderScreen(
+      report({
+        pages: [{ page: { id: '64b000000000000000000109', title: null }, visitors: 200, leads: 4 }],
+      }),
+    );
+    const pages = screen.getByRole('region', { name: 'Theo trang' });
+    expect(within(pages).getAllByRole('listitem')[0]).toHaveTextContent(
+      'Trang đã xóa4 lead · 2,0%, 200 khách',
+    );
+  });
+
   it('loads another range or one page, keeps them in the URL, and dims the old numbers meanwhile', async () => {
     const user = userEvent.setup();
     let resolve: (value: AnalyticsReport) => void = () => undefined;

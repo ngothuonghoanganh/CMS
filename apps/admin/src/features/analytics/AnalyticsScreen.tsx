@@ -4,7 +4,7 @@ import {
   type AnalyticsRange,
   analyticsRanges,
   endpoints,
-  type LeadPageRef,
+  type PageRef,
   type AnalyticsReport,
   type Site,
 } from '@plp/contracts';
@@ -42,7 +42,7 @@ interface ShownReport {
 export interface AnalyticsScreenProps {
   site: Site;
   /** Every page of the site, for "Tất cả trang" and its pages. */
-  pageRefs: readonly LeadPageRef[];
+  pageRefs: readonly PageRef[];
   initialFilters: AnalyticsFilters;
   initialReport: AnalyticsReport;
   loadedAt: number;

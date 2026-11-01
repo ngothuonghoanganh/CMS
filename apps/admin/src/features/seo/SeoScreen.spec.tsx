@@ -113,8 +113,8 @@ describe('SeoScreen', () => {
         'Thiết lập SEO thuộc bản nháp: chỉ có hiệu lực trên trang live sau khi bạn xuất bản.',
       ),
     ).toBeInTheDocument();
-    // A draft page has nothing to unpublish.
-    expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).not.toBeInTheDocument();
+    // A draft page has nothing to unpublish; its menu only deletes it (ADR-027).
+    expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toBeInTheDocument();
   });
 
   it('previews the search result from the draft as it is typed', async () => {
@@ -1122,10 +1122,9 @@ describe('SeoScreen', () => {
       );
 
       await unpublish(user);
-      // The header's links ask before leaving here: "Mở editor" must still take the focus.
-      expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+      // "Tùy chọn khác" stays, to delete the page now (ADR-027), and gets the focus back.
       await waitFor(() => {
-        expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+        expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
       });
     });
 
@@ -1210,12 +1209,18 @@ describe('SeoScreen', () => {
       });
 
       await unpublish(user);
-      // The header no longer offers to unpublish a page that is not live, and keeps the focus.
       await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
+        expect(reads).toBe(2);
       });
-      expect(reads).toBe(2);
-      expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+      // The header no longer offers to unpublish a page that is not live, and keeps the focus.
+      await user.keyboard('{Enter}');
+      expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'Xóa trang',
+      ]);
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   type LeadListItem,
   leadSourceLabel,
   leadStatusLabels,
+  pageTitleLabel,
 } from '@plp/contracts';
 import { AlertCircleIcon, Badge } from '@plp/ui';
 import type { MouseEvent } from 'react';
@@ -65,7 +66,7 @@ export function LeadTable({ leads, selectedId, now, hrefOf, onSelect }: LeadTabl
                       </span>
                     ) : null}
                   </span>
-                  <span className={styles.sub}>{lead.page.title}</span>
+                  <span className={styles.sub}>{pageTitleLabel(lead.page.title)}</span>
                 </div>
               </td>
               <td className={styles.phone}>{formatLeadPhone(lead.phone)}</td>

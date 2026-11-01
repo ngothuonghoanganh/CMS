@@ -7,8 +7,14 @@ import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { draftPageFixture, pageFixture, SITE_ID } from '../dashboard/test-fixtures';
-import { renderWithProviders } from '../shell/test-utils';
+import { apiError, renderWithProviders } from '../shell/test-utils';
 import { PageDetailHeader, pageTabs } from './PageDetailHeader';
+
+const { router } = vi.hoisted(() => ({
+  router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() },
+}));
+
+vi.mock('next/navigation', () => ({ useRouter: () => router }));
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
   ...(await importOriginal()),
@@ -32,6 +38,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   apiMock.mockReset();
+  router.push.mockReset();
 });
 
 /** A page screen around the header, like "SEO & chia sẻ": its page follows an unpublish at once. */
@@ -69,7 +76,7 @@ describe('pageTabs', () => {
 });
 
 describe('PageDetailHeader', () => {
-  it('has no extra menu for a page that is not live', () => {
+  it('has no extra menu for a page that is not live, for a role that does not manage live pages', () => {
     renderWithProviders(
       <PageDetailHeader
         siteId={SITE_ID}
@@ -77,7 +84,7 @@ describe('PageDetailHeader', () => {
         current="seo"
         now={NOW}
         canEdit
-        canManageLive
+        canManageLive={false}
       />,
     );
     expect(screen.getByRole('navigation', { name: 'Đường dẫn' })).toHaveTextContent(
@@ -86,6 +93,88 @@ describe('PageDetailHeader', () => {
     expect(screen.getByText('Bản nháp')).toBeInTheDocument();
     expect(screen.getByText('Chưa từng xuất bản')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).not.toBeInTheDocument();
+  });
+
+  it('deletes a page that is not live, then opens the page list (ADR-027)', async () => {
+    const user = userEvent.setup();
+    const page = draftPageFixture();
+    apiMock.mockResolvedValueOnce(undefined);
+    renderWithProviders(
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={page}
+        current="history"
+        now={NOW}
+        canEdit
+        canManageLive
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Xóa trang']);
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    const dialog = screen.getByRole('alertdialog', { name: `Xóa trang “${page.title}”?` });
+    expect(within(dialog).getByRole('region', { name: 'Bị xóa' })).toHaveTextContent(
+      'Lịch sử phiên bản',
+    );
+    expect(within(dialog).getByRole('region', { name: 'Vẫn giữ' })).toHaveTextContent(
+      'Lead đã nhận',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Xóa trang' }));
+
+    await vi.waitFor(() => {
+      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}`);
+    });
+    expect(apiMock).toHaveBeenCalledWith(endpoints.deletePage, [page.siteId, page.id]);
+    expect(await screen.findByText(`Đã xóa trang “${page.title}”`)).toBeInTheDocument();
+  });
+
+  it('keeps the page and says why when it went live meanwhile', async () => {
+    const user = userEvent.setup();
+    const onPageConflict = vi.fn();
+    apiMock.mockRejectedValueOnce(apiError(409, 'page_live', 'Gỡ trang khỏi live trước khi xóa'));
+    renderWithProviders(
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={draftPageFixture()}
+        current="history"
+        now={NOW}
+        canEdit
+        canManageLive
+        onPageConflict={onPageConflict}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Xóa trang' }),
+    );
+
+    expect(await screen.findByText('Trang vừa được xuất bản')).toBeInTheDocument();
+    expect(onPageConflict).toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('offers "Xóa trang" for a live page disabled, saying to unpublish first', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={pageFixture()}
+        current="history"
+        now={NOW}
+        canEdit
+        canManageLive
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    const item = screen.getByRole('menuitem', { name: 'Xóa trang' });
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAccessibleDescription('Gỡ xuất bản trước khi xóa');
+    await user.click(item);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('opens the live page from "Tùy chọn khác" as a member’s visit, not counted', async () => {
@@ -129,6 +218,7 @@ describe('PageDetailHeader', () => {
     await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
     expect(screen.getByRole('menuitem', { name: 'Xem trang live' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Gỡ xuất bản' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Xóa trang' })).not.toBeInTheDocument();
   });
 
   it('unpublishes a live page with a reason from "Tùy chọn khác"', async () => {
@@ -171,7 +261,7 @@ describe('PageDetailHeader', () => {
     });
   });
 
-  it('keeps the focus in the header when unpublishing takes "Tùy chọn khác" away', async () => {
+  it('keeps "Tùy chọn khác", now offering "Xóa trang", with the focus after unpublishing', async () => {
     const user = userEvent.setup();
     const page = pageFixture();
     const unpublished: PageSummary = {
@@ -197,10 +287,14 @@ describe('PageDetailHeader', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alertdialog')).toBeNull();
     });
-    expect(screen.queryByRole('button', { name: 'Tùy chọn khác' })).toBeNull();
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'Mở editor' })).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
     });
+    await user.keyboard('{Enter}');
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Xóa trang']);
+    expect(screen.getByRole('menuitem', { name: 'Xóa trang' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
   });
 
   it('returns the focus to "Tùy chọn khác" when unpublishing is cancelled', async () => {
@@ -217,7 +311,9 @@ describe('PageDetailHeader', () => {
     expect(apiMock).not.toHaveBeenCalled();
   });
 
-  describe('when a read brings the page as no longer live', () => {
+  // A Cộng tác viên edits the page and opens the live one, but neither unpublishes nor deletes it:
+  // its menu holds only "Xem trang live".
+  describe('when a read brings the page as no longer live to a role that only views it', () => {
     const live = pageFixture();
     const unpublished: PageSummary = {
       ...live,
@@ -235,7 +331,7 @@ describe('PageDetailHeader', () => {
           current="history"
           now={NOW}
           canEdit
-          canManageLive
+          canManageLive={false}
         />
       );
       const { rerender, queryClient } = renderWithProviders(header(live));

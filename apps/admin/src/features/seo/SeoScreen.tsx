@@ -303,7 +303,7 @@ function SeoScreenBody({
           onUnpublished={(result) => {
             store.getState().setServerState({ page: result.page });
           }}
-          onUnpublishConflict={() => {
+          onPageConflict={() => {
             // The header shows the page from the store, which the site's queries do not refresh.
             refreshPageSummary(store).catch((error: unknown) => {
               reportUnexpected('Reading the page again after an unpublish conflict failed', error);
