@@ -1,8 +1,14 @@
 'use client';
 
-import { endpoints, type LoginRequest, loginRequestSchema } from '@plp/contracts';
+import {
+  endpoints,
+  FORGOT_PASSWORD_PATH,
+  type LoginRequest,
+  loginRequestSchema,
+} from '@plp/contracts';
 import { Button, Callout, Field, Input } from '@plp/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
@@ -89,6 +95,9 @@ export function LoginForm({ next }: LoginFormProps) {
           }}
         />
       </Field>
+      <Link href={FORGOT_PASSWORD_PATH} className={styles.forgot}>
+        Quên mật khẩu?
+      </Link>
       {formError === null ? null : (
         <Callout tone="danger" role="alert">
           {formError}

@@ -410,6 +410,14 @@ export function Sidebar({
           }
         >
           <DropdownMenuLabel>Tài khoản</DropdownMenuLabel>
+          <DropdownMenuItem
+            icon={<SettingsIcon size={18} />}
+            onSelect={() => {
+              go('/account');
+            }}
+          >
+            Cài đặt tài khoản
+          </DropdownMenuItem>
           {canAskForAccess ? (
             <DropdownMenuItem
               icon={<LockIcon size={18} />}
