@@ -15,7 +15,7 @@ vi.mock(import('../../lib/api'), async (importOriginal) => ({
 
 const apiMock = vi.mocked(api);
 
-function renderPanel() {
+function renderPanel(release = releaseFixture(11)) {
   const props = {
     onCancel: vi.fn(),
     onRolledBack: vi.fn(() => Promise.resolve()),
@@ -25,7 +25,7 @@ function renderPanel() {
     <RollbackPanel
       site={siteFixture()}
       page={historyPage()}
-      release={releaseFixture(11)}
+      release={release}
       liveReleaseId={releaseId(12)}
       {...props}
     />,
@@ -52,6 +52,15 @@ describe('RollbackPanel', () => {
     expect(screen.getByText('Bản nháp hiện tại (4 thay đổi) được giữ nguyên.')).toBeInTheDocument();
     expect(
       screen.getByText('v12 vẫn nằm trong lịch sử, bạn có thể hoàn tác ngay sau đó.'),
+    ).toBeInTheDocument();
+    // v11 has no form: nothing to say about leads.
+    expect(screen.queryByText(/gửi lead/)).not.toBeInTheDocument();
+  });
+
+  it('tells that a form keeps sending leads where the site sends them now (ADR-006)', () => {
+    renderPanel(releaseFixture(11, { capturesLeads: true }));
+    expect(
+      screen.getByText('Form trong v11 gửi lead về cùng nơi nhận như hiện tại.'),
     ).toBeInTheDocument();
   });
 
