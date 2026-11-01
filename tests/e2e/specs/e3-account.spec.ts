@@ -43,7 +43,9 @@ test.describe('E3 · account (ADR-026)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Xác nhận email' })).toBeVisible();
     await expectAccessible(page, 'Xác nhận email');
     await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
-    await expect(page.getByRole('alert')).toContainText('Link xác nhận không còn dùng được');
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Link xác nhận không còn dùng được' }),
+    ).toBeVisible();
     await expect(page.getByRole('link', { name: 'Đăng ký lại' })).toBeVisible();
 
     await page.goto(accountLink(second, SIGNUP_VERIFY_PATH));
@@ -56,7 +58,9 @@ test.describe('E3 · account (ADR-026)', () => {
     // The link works once.
     await page.goto(accountLink(second, SIGNUP_VERIFY_PATH));
     await page.getByRole('button', { name: 'Xác nhận và tạo workspace' }).click();
-    await expect(page.getByRole('alert')).toContainText('Link xác nhận không còn dùng được');
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Link xác nhận không còn dùng được' }),
+    ).toBeVisible();
   });
 
   test('"Đổi email" goes back to the form with what was typed', async ({ page }) => {
@@ -112,15 +116,17 @@ test.describe('E3 · account (ADR-026)', () => {
       await page.getByLabel('Mật khẩu mới', { exact: true }).fill('MatKhau-thu-ba-2027');
       await page.getByLabel('Nhập lại mật khẩu mới').fill('MatKhau-thu-ba-2027');
       await page.getByRole('button', { name: 'Đặt mật khẩu mới' }).click();
-      await expect(page.getByRole('alert')).toContainText(
-        'Link đặt lại mật khẩu không còn dùng được',
-      );
+      await expect(
+        page.getByRole('alert').filter({ hasText: 'Link đặt lại mật khẩu không còn dùng được' }),
+      ).toBeVisible();
       const fresh = await browser.newContext();
       try {
         const signIn = await fresh.newPage();
         await signIn.goto('/login');
         await logInThroughForm(signIn, account);
-        await expect(signIn.getByRole('alert')).toContainText('Email hoặc mật khẩu không đúng');
+        await expect(
+          signIn.getByRole('alert').filter({ hasText: 'Email hoặc mật khẩu không đúng' }),
+        ).toBeVisible();
         await logInThroughForm(signIn, { ...account, password: NEW_PASSWORD });
         await expect(signIn).toHaveURL(new RegExp(`/sites/${site.id}$`));
       } finally {
@@ -153,7 +159,7 @@ test.describe('E3 · account (ADR-026)', () => {
 
       await page.getByLabel('Tên hiển thị').fill('Ngọc Anh Trần');
       await page.getByRole('button', { name: 'Lưu tên hiển thị' }).click();
-      await expect(page.getByText('Đã lưu tên hiển thị')).toBeVisible();
+      await expect(page.getByText('Đã lưu tên hiển thị', { exact: true })).toBeVisible();
 
       const passwords = page.getByRole('region', { name: 'Đổi mật khẩu' });
       await passwords.getByLabel('Mật khẩu hiện tại').fill('doan-sai-mat-khau');
@@ -167,7 +173,9 @@ test.describe('E3 · account (ADR-026)', () => {
       await passwords.getByLabel('Mật khẩu mới', { exact: true }).fill(NEW_PASSWORD);
       await passwords.getByLabel('Nhập lại mật khẩu mới').fill(NEW_PASSWORD);
       await passwords.getByRole('button', { name: 'Đổi mật khẩu' }).click();
-      await expect(page.getByText('Các thiết bị khác đã được đăng xuất.')).toBeVisible();
+      await expect(
+        page.getByText('Các thiết bị khác đã được đăng xuất.', { exact: true }),
+      ).toBeVisible();
 
       // The other device is signed out; this one stays, with its new name in the sidebar.
       const me = await phone.request.get(`${urls.admin}/api${endpoints.me.path()}`);
