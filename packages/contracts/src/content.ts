@@ -31,6 +31,11 @@ export const phoneSchema = z
   .max(20)
   .regex(/^[0-9+ ]*$/, 'Số điện thoại chỉ gồm chữ số, dấu + và khoảng trắng');
 
+/** A button that only calls (the quick contact's call button). */
+export const phoneLinkSchema = z.object({ kind: z.literal('phone'), phone: phoneSchema });
+/** A button that only opens a Zalo chat (the quick contact's Zalo button). */
+export const zaloLinkSchema = z.object({ kind: z.literal('zalo'), phone: phoneSchema });
+
 export const linkSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('none') }),
   z.object({ kind: z.literal('section'), sectionId: z.string().max(40) }),
@@ -46,8 +51,8 @@ export const linkSchema = z.discriminatedUnion('kind', [
         'Đường dẫn phải bắt đầu bằng http:// hoặc https://',
       ),
   }),
-  z.object({ kind: z.literal('phone'), phone: phoneSchema }),
-  z.object({ kind: z.literal('zalo'), phone: phoneSchema }),
+  phoneLinkSchema,
+  zaloLinkSchema,
 ]);
 export type Link = z.infer<typeof linkSchema>;
 export type LinkKind = Link['kind'];

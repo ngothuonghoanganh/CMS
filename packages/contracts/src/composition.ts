@@ -6,8 +6,11 @@ export const sectionTypes = [
   'hero',
   'benefits',
   'testimonials',
+  'logos',
+  'before_after',
   'faq',
   'lead_form',
+  'quick_contact',
   'cta_band',
   'footer',
 ] as const;

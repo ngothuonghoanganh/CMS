@@ -128,6 +128,46 @@
   object-fit: cover;
 }
 
+/* Steps: numbered circles, stacked on phones and joined by a line in a row from 768 px. */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.stepNumber {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--plp-accent);
+  color: var(--plp-accent-text);
+  font-family: var(--plp-font-heading);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 6px;
+}
+
 @container plp-page (width < 768px) {
   .mediaFirst .media {
     order: -1;
@@ -188,6 +228,39 @@
 
   .rowText .title {
     font-size: 22px;
+  }
+
+  .steps {
+    flex-direction: row;
+    gap: 24px;
+  }
+
+  .step {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    text-align: center;
+  }
+
+  /* A line from one 40 px circle to the next, 8 px clear of both, across the 24 px gap. */
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 19px;
+    left: calc(50% + 28px);
+    width: calc(100% - 32px);
+    border-top: 2px solid var(--plp-border);
+  }
+
+  .stepNumber {
+    width: 40px;
+    height: 40px;
+    font-size: 17px;
+  }
+
+  .stepText {
+    padding-top: 0;
   }
 }
 

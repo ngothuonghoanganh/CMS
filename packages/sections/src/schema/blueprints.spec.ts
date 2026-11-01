@@ -303,6 +303,22 @@ describe('goal outline and recommendations', () => {
     ]);
   });
 
+  it('shows the process of a "product" page as numbered steps, like its board', () => {
+    const outline = goalOutline('product');
+    expect(outline.find((item) => item.label === 'Quy trình 3 bước')).toEqual({
+      type: 'benefits',
+      variant: 'steps',
+      label: 'Quy trình 3 bước',
+    });
+    expect(isRecommendedFor('product', 'benefits', 'steps')).toBe(true);
+    expect(isRecommendedFor('lead', 'benefits', 'steps')).toBe(false);
+    // The variant numbers the steps, so their titles do not.
+    const steps = build('product', EMPTY_BRIEF).sections.find(
+      (section) => section.variant === 'steps',
+    );
+    expect(getAtPath(steps?.content, 'items.0.title')).toBe('Liên hệ');
+  });
+
   it.each(pageGoalIds)('recommends exactly the sections in the outline of "%s"', (goal) => {
     const outline = goalOutline(goal);
     for (const type of sectionTypes) {
