@@ -75,4 +75,16 @@ export class RecordingEmailSender extends EmailSender {
   to(address: string): EmailMessage[] {
     return this.sent.filter((message) => message.to.includes(address));
   }
+
+  /**
+   * Takes out the newest email to `address` whose subject is `subject`, as its reader opens it: a
+   * helper that signs up through the confirmation email (ADR-026) leaves only the emails a test is
+   * about in `sent`. Null when there is none.
+   */
+  take(address: string, subject: string): EmailMessage | null {
+    const index = this.sent.findLastIndex(
+      (message) => message.to.includes(address) && message.subject === subject,
+    );
+    return index === -1 ? null : (this.sent.splice(index, 1)[0] ?? null);
+  }
 }

@@ -50,6 +50,8 @@ export const sessionSchema = new Schema<SessionRecord>(
 );
 sessionSchema.index({ tokenHash: 1 }, { unique: true });
 sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// A reset or changed password ends the user's (other) sessions (ADR-026).
+sessionSchema.index({ userId: 1 }, { name: 'sessions_user' });
 
 /** Unfinished login attempts of one account in the current window (ADR-004). */
 export interface LoginAttemptRecord {

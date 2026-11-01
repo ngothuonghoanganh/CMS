@@ -55,6 +55,18 @@ export class UsersRepository {
     return this.users.findById(id).lean<UserRecord>().exec();
   }
 
+  /** False when the user no longer exists. */
+  async setPasswordHash(id: ObjectId, passwordHash: string, tx: Tx): Promise<boolean> {
+    const result = await this.users
+      .updateOne({ _id: id }, { $set: { passwordHash } }, { session: tx })
+      .exec();
+    return result.matchedCount === 1;
+  }
+
+  async setName(id: ObjectId, name: string): Promise<void> {
+    await this.users.updateOne({ _id: id }, { $set: { name } }).exec();
+  }
+
   /** Display references (id + name) for authors shown in lists; unknown ids are omitted. */
   async findRefs(ids: readonly ObjectId[]): Promise<Map<string, UserRef>> {
     const unique = [...new Map(ids.map((id) => [id.toHexString(), id])).values()];

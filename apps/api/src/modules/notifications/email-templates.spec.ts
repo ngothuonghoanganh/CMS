@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accountExistsEmail,
   approvalPublishedEmail,
   approvalRejectedEmail,
   approvalRequestEmail,
   escapeHtml,
   leadNotificationEmail,
+  passwordResetEmail,
   recipientConfirmationEmail,
+  signupConfirmationEmail,
 } from './email-templates.js';
 
 const lead = {
@@ -159,5 +162,48 @@ describe('approval emails (ADR-023)', () => {
     });
     expect(rejected.subject).toBe('Yêu cầu xuất bản "Ưu đãi" chưa được duyệt');
     expect(rejected.text).toContain('Lý do: Giá chưa đúng');
+  });
+});
+
+describe('account emails (ADR-026)', () => {
+  it('asks to confirm a sign-up, naming its workspace, escaped', () => {
+    const email = signupConfirmationEmail({
+      workspaceName: 'Mây Xanh <b>Agency</b>',
+      confirmUrl: 'http://localhost:3100/signup/verify#token=abc',
+      validHours: 24,
+    });
+    expect(email.subject).toBe('Xác nhận email để tạo workspace');
+    expect(email.text).toContain('tạo workspace "Mây Xanh <b>Agency</b>"');
+    expect(email.text).toContain('Xác nhận tại: http://localhost:3100/signup/verify#token=abc');
+    expect(email.text).toContain('Link có hiệu lực 24 giờ và chỉ dùng được một lần.');
+    expect(email.html).toContain('Mây Xanh &lt;b&gt;Agency&lt;/b&gt;');
+    expect(email.html).toContain('href="http://localhost:3100/signup/verify#token=abc"');
+    expect(email.html).toContain('Xác nhận và tạo workspace');
+  });
+
+  it('tells an email with an account how to sign in or reset, with no link that acts', () => {
+    const email = accountExistsEmail({
+      loginUrl: 'http://localhost:3100/login',
+      forgotUrl: 'http://localhost:3100/forgot-password',
+    });
+    expect(email.subject).toBe('Email này đã có tài khoản');
+    expect(email.text).toContain('Đăng nhập: http://localhost:3100/login');
+    expect(email.text).toContain('Quên mật khẩu: http://localhost:3100/forgot-password');
+    expect(email.text).not.toContain('#token=');
+    expect(email.html).toContain('href="http://localhost:3100/forgot-password"');
+  });
+
+  it('sends a reset link that says how long it works and that devices sign out', () => {
+    const email = passwordResetEmail({
+      resetUrl: 'http://localhost:3100/reset-password#token=abc',
+      validMinutes: 60,
+    });
+    expect(email.subject).toBe('Đặt lại mật khẩu');
+    expect(email.text).toContain('mọi thiết bị đang đăng nhập sẽ bị đăng xuất');
+    expect(email.text).toContain(
+      'Đặt lại mật khẩu tại: http://localhost:3100/reset-password#token=abc',
+    );
+    expect(email.text).toContain('Link có hiệu lực 60 phút');
+    expect(email.html).toContain('href="http://localhost:3100/reset-password#token=abc"');
   });
 });
