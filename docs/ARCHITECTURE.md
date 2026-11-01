@@ -127,7 +127,7 @@ Visitor ──> apps/renderer (Next.js :3101) ──public endpoints──┘
               ▲ POST /api/revalidate (HMAC) ◄── apps/api
 ```
 
-Chỉ API được truy cập MongoDB. Renderer không import code admin và vẫn chạy khi admin tắt.
+Chỉ API được truy cập MongoDB: một master DB và một database cho mỗi workspace, trên cùng một cluster (ADR-025). Renderer không import code admin và vẫn chạy khi admin tắt.
 
 ```text
 apps/admin            Next.js App Router: quản trị và editor
@@ -220,7 +220,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
-- **Date:** 2026-10-24 · **Status:** Accepted
+- **Date:** 2026-10-24 · **Status:** Superseded by ADR-025 (2026-11-01): master DB và một database cho mỗi workspace. `WorkspaceScope`, `workspaceId` trên mọi document và 404 khi truy cập chéo vẫn giữ.
 - **Decision:**
   - Một database MongoDB. Mọi document thuộc tenant có `workspaceId`. Workspace không bao giờ lấy từ input của client.
   - API nạp tài nguyên theo id, rồi kiểm tra membership của user trong `resource.workspaceId`.
@@ -1491,6 +1491,74 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Nhật ký hoạt động của site chỉ trả sự kiện `lead.*` cho vai trò có `leads.view`, và `data_request.*` cho vai trò có `personalData.manage`: chúng mang số lead và việc xử lý dữ liệu cá nhân.
   - Thông báo từ chối (`holdersOf`) vẫn chỉ nêu vai trò hệ thống, kể cả với quyền chọn được cho vai trò tùy chỉnh.
 
+### ADR-025 — Master DB và một database cho mỗi workspace
+
+- **Date:** 2026-11-01 · **Status:** Accepted · **Thay thế:** ADR-003
+- **Context:**
+  - Chủ sản phẩm chốt ngày 2026-11-01: mỗi chủ sở hữu có một database riêng. Người được mời vào workspace nào thì được gắn với database đó. Đăng nhập ở địa chỉ của workspace nào thì vào workspace đó; không thì chọn.
+  - Chốt thêm cùng ngày:
+    - Database gắn với **workspace**, không gắn với người. Chuyển quyền sở hữu (ADR-021) không phải dời dữ liệu.
+    - Mỗi workspace có một **địa chỉ admin riêng**, cộng một địa chỉ chung để chọn workspace.
+    - Dưới 500 workspace trong 1–2 năm tới, nên mọi database nằm trong **một cluster**.
+    - Chưa có dữ liệu production, nên không có bước chuyển dữ liệu.
+- **Decision:**
+  - **Master DB** (database của `MONGODB_URI`): tài khoản, quyền và bảng định tuyến.
+    - `users`, `sessions`, `login_attempts`, `workspaces`, `memberships`, `custom_roles`, `invitations`, `access_requests`.
+    - `domains` (ADR-022): hostname là duy nhất trên mọi site, một lần xác minh có thể chuyển tên miền giữa hai workspace, vòng tự kiểm tra lấy tên miền tới hạn của mọi workspace, và renderer phân giải host trước khi biết workspace.
+    - `site_addresses { _id: siteId, workspaceId, subdomain }` (mới): `subdomain` duy nhất trên mọi workspace; định tuyến `siteId` và `subdomain` tới workspace.
+    - Bộ đếm dùng chung: `lead_limits`, `analytics_salts`.
+  - **Workspace DB** `{tên master}_ws_{workspaceId}`: mọi dữ liệu của khách.
+    - `sites`, `pages`, `releases`, `redirects`, `assets`, `leads`, `activity`, `consent_versions`, `data_requests`, `publish_approvals`, `analytics_daily`, `analytics_seen`.
+    - Tên master tối đa 35 ký tự, để tên workspace DB dưới 64 byte như MongoDB yêu cầu; API không khởi động nếu dài hơn.
+  - **Gắn người với workspace** là membership ở master, như trước. Không thêm danh sách workspace trên `users`: hai nguồn sẽ lệch nhau khi gỡ thành viên hay chuyển quyền sở hữu.
+  - **Một cluster, một client:**
+    - Workspace DB mở bằng `connection.useDb(name, { useCache: true })`, dùng chung pool kết nối của master.
+    - Một transaction ghi được cả master và workspace DB (MongoDB cho phép trên một replica set). Tạo site (`site_addresses` + `sites`), thêm và xác minh tên miền (`domains` + `domainSeq`, `primaryDomainId` của site) vẫn là một transaction.
+  - **Cách ly** (giữ nguyên tinh thần ADR-003):
+    - Workspace DB chỉ được chọn từ một `WorkspaceScope` (do `AccessService` tạo sau khi đọc membership ở master), hoặc từ bản ghi định tuyến ở master. Không bao giờ từ input của client.
+    - Repository của dữ liệu khách lấy model theo scope, và vẫn gắn `workspaceId` vào mọi filter. Document vẫn mang `workspaceId`: một lỗi định tuyến không đọc được dữ liệu workspace khác.
+    - Truy cập chéo workspace vẫn trả 404.
+  - **Endpoint mang `siteId`:**
+    - Mọi tài nguyên trong workspace DB được gọi qua site hoặc workspace của nó: `/sites/:siteId/pages/:pageId/…`, `/sites/:siteId/leads/:leadId/…`, `/sites/:siteId/data-requests/:requestId/…`, `/sites/:siteId/activity/:activityId/undo`, `/sites/:siteId/assets/:assetId`.
+    - API đọc `site_addresses` để biết workspace, kiểm tra membership và phạm vi site, rồi tìm tài nguyên trong workspace DB với cả `siteId` lẫn `workspaceId`.
+    - Trước đây API nạp tài nguyên theo id trần rồi mới kiểm tra membership. Với nhiều database, id trần không cho biết phải tìm ở đâu.
+  - **Đường công khai:**
+    - `/public/sites/:subdomain/…` đọc `site_addresses`; `/public/hosts/:host` và `/public/tls/allowed` đọc `domains`.
+    - Link xem trước đã mang `workspaceId` trong token (ADR-010).
+    - Link xác nhận nơi nhận lead mang thêm `siteId` cạnh token (ADR-018).
+  - **Tạo workspace DB:**
+    - Lúc đăng ký, API sinh id workspace, tạo collection và index của workspace DB, rồi mới chạy transaction ghi user, workspace và membership (ADR-004).
+    - Transaction lỗi thì xóa database vừa tạo; xóa cũng lỗi thì log cả hai lỗi. Một database rỗng còn sót không chứa dữ liệu và không được định tuyến tới.
+  - **Index** (ADR-013): lúc khởi động, API dựng index của master và của từng workspace DB (theo danh sách `workspaces`, tối đa 8 database cùng lúc). Không dựng được một index thì không khởi động.
+  - **Việc chạy nền:** vòng tự kiểm tra tên miền đọc `domains` ở master. Lượt nhận lại thông báo lead lúc khởi động (ADR-018) đi qua từng workspace DB.
+  - **Địa chỉ admin** (lát D2):
+    - `workspaces.slug`: duy nhất, `[a-z0-9-]` 3–40 ký tự, tạo từ tên workspace lúc đăng ký (bỏ dấu, chữ thường), thêm hậu tố số khi trùng. Một danh sách tên dành riêng (`app`, `www`, `api`, `admin`, …) không được dùng.
+    - Workspace mở ở `ADMIN_WORKSPACE_ORIGIN_TEMPLATE` (ví dụ `https://{slug}.app.example.vn`). Địa chỉ chung là `ADMIN_ORIGIN`.
+    - Cookie session đặt `Domain` là miền cha của các địa chỉ đó, nên một lần đăng nhập dùng được cho mọi workspace của người đó. Miền admin khác `BASE_DOMAIN` của trang công khai.
+    - Kiểm tra `Origin` (ADR-004) chấp nhận địa chỉ chung và mọi địa chỉ khớp mẫu.
+    - Ở địa chỉ của một workspace: thành viên vào thẳng workspace đó; người khác thấy "Tài khoản này không thuộc workspace ở địa chỉ này" và link về địa chỉ chung. Không lộ tên workspace cho người ngoài.
+    - Ở địa chỉ chung: thuộc một workspace thì chuyển tới địa chỉ của nó; nhiều thì chọn; không thuộc workspace nào thì báo như vậy.
+    - Chuyển workspace ở Sidebar mở địa chỉ của workspace kia. Mở một site của workspace khác thì chuyển sang đúng địa chỉ.
+    - Email (lời mời, lead, duyệt xuất bản, yêu cầu đổi quyền, tên miền) dẫn tới địa chỉ của workspace.
+- **Ngoài phạm vi:**
+  - Đổi địa chỉ admin sau khi tạo; tên miền riêng cho admin.
+  - Xóa workspace và database của nó.
+  - Nhiều cluster, hay credential riêng cho từng database.
+  - Công cụ backup và khôi phục theo workspace (dùng `mongodump --db`, việc vận hành).
+- **Reason:**
+  - Dữ liệu của mỗi khách nằm trong database của họ: backup, khôi phục, xuất hay xóa theo khách mà không chạm khách khác.
+  - Master giữ một tài khoản cho mỗi người dù họ thuộc nhiều workspace.
+  - Một cluster giữ được transaction như cũ; định tuyến chỉ qua scope và bảng ở master nên vẫn kiểm thử được ở một lối vào.
+- **Consequences:**
+  - Integration test:
+    - dữ liệu của workspace nằm đúng trong database của nó, master không có collection của khách;
+    - người của workspace A không đọc hay ghi được tài nguyên của B qua bất kỳ endpoint nào, kể cả khi đưa `siteId` của B;
+    - đăng ký tạo workspace DB với đủ index, và dọn database khi transaction lỗi;
+    - API khởi động dựng index cho mọi workspace DB;
+    - đường công khai, xem trước, xác nhận nơi nhận lead và vòng kiểm tra tên miền tìm đúng database.
+  - Mỗi workspace thêm 12 collection và khoảng 45 index (kể cả `_id`). Trên khoảng 1.000 workspace trong một cluster phải xem lại (ADR mới), vì MongoDB chậm dần khi số collection và index lên hàng chục nghìn.
+  - Dữ liệu local từ trước D1 nằm hết trong một database, nên API không còn thấy site và trang của nó. Xóa database phát triển rồi đăng ký lại: `docker compose exec mongo mongosh --port 27117 --quiet --eval 'db.getSiblingDB("plp").dropDatabase()'`.
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -1554,6 +1622,13 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt (ADR-023)                                                  | 05, 16         | Xong       |
 | C5  | Vai trò tùy chỉnh (ADR-024)                                                                                                        | 16, 15         | Xong       |
 
+**Tách database (ADR-025):**
+
+| Lát | Nội dung                                                                                                        | Màn                         | Trạng thái |
+| --- | --------------------------------------------------------------------------------------------------------------- | --------------------------- | ---------- |
+| D1  | Master DB và workspace DB, endpoint mang `siteId`, tạo DB lúc đăng ký, index mọi DB, đường công khai qua master | —                           | Đang làm   |
+| D2  | Địa chỉ admin riêng mỗi workspace, cookie dùng chung, chọn workspace ở địa chỉ chung, link email theo workspace | 01, Sidebar, chọn workspace | Chưa làm   |
+
 ## 6. Trước khi phát hành
 
 Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR quy định nó. Chưa đủ hết thì không đưa dữ liệu thật của khách vào.
@@ -1562,6 +1637,10 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 
 - Edge proxy (TLS, load balancer) đứng trước admin và renderer, nối địa chỉ socket vào `X-Forwarded-For`. Đặt `TRUST_PROXY_HOPS=1` cho API (ADR-004) và `TRUST_PROXY=true` cho renderer (ADR-016). Thiếu edge này thì mọi người dùng chung một bucket rate limit.
 - MongoDB chạy replica set (ADR-006). Storage tương thích S3 chỉ cho đọc công khai prefix `public/` (ADR-012).
+- Mỗi workspace có database riêng `{master}_ws_{workspaceId}` (ADR-025):
+  - User MongoDB của API cần quyền đọc, ghi và tạo index trên mọi database đó (`readWriteAnyDatabase` và `dbAdminAnyDatabase`, hoặc vai trò tương đương), vì MongoDB không cấp quyền theo tiền tố tên database.
+  - Backup và khôi phục theo từng workspace bằng `mongodump`/`mongorestore --db`, cùng với master. Khôi phục một workspace không đụng tới workspace khác.
+  - Lúc khởi động, API dựng index cho mọi workspace DB; số workspace tăng thì thời gian khởi động tăng theo.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
 - Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.

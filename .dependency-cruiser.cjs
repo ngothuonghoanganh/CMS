@@ -78,7 +78,8 @@ module.exports = {
     },
     {
       name: 'mongoose-only-in-persistence',
-      comment: 'ADR-003: data access goes through repositories that apply the workspace scope.',
+      comment:
+        'ADR-003, ADR-025: data access goes through repositories that apply the workspace scope.',
       severity: 'error',
       from: {
         path: '^apps/api/src/',
