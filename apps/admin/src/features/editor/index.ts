@@ -36,6 +36,8 @@ export {
   useDraftSaver,
 } from './use-draft-saver';
 export {
+  isSameDocument,
+  isSameScreen,
   type LeaveGuard,
   leavingLoses,
   type PendingInput,

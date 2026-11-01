@@ -513,10 +513,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Saver không lưu lúc dừng (màn unmount) khi cờ có hiệu lực.
   - **Hẹn giờ của saver:**
     - `discardFor` hủy hẹn giờ debounce và hẹn giờ thử lại khi bắt đầu, và saver không hẹn lần thử lại nào khi cờ có hiệu lực: lần thử lại không ghi các thay đổi đã bỏ vào bản nháp trong lúc đăng xuất chậm.
-    - Lần rời trang báo `'stayed'` hoặc ném lỗi thì saver hẹn lại một lần lưu nếu còn thay đổi chưa lưu, với đủ số lần thử lại, nên autosave chạy tiếp mà không cần sửa gì thêm. Bản nháp server đã từ chối (422) hay request bị từ chối (401, 403) thì không gửi lại, vì sẽ lỗi y như vậy; lần sửa kế tiếp mới gửi.
+    - Lần rời trang báo `'stayed'` hoặc ném lỗi thì saver hẹn lại một lần lưu nếu còn thay đổi chưa lưu, với đủ số lần thử lại, nên autosave chạy tiếp mà không cần sửa gì thêm. Chính bản nháp server đã từ chối hẳn (422, 401, 403, 404…) thì không gửi lại, vì sẽ lỗi y như vậy; bản nháp đã đổi kể từ lần từ chối đó thì được gửi. Lỗi 408 và 429 được thử lại như lỗi server.
   - **Lần lưu đang chạy lúc bấm thì chạy tới hết,** kể cả phần thay đổi đến trong lúc nó chạy, và bản nháp giữ các thay đổi đó. Chấp nhận được: đó là bản nháp, trang live không đổi (quy tắc 1), và không mất dữ liệu.
   - `ensureSaved`, "Thử lại", xuất bản, xem trước và "Quay về bản live" không xét cờ: chúng luôn lưu.
-  - Link tới chính trang đang mở (tab "SEO & chia sẻ" khi đang ở màn SEO) không phải là rời trang: không lưu trước, không có lối thoát bỏ thay đổi, không điều hướng.
+  - Link tới chính màn đang mở (tab "SEO & chia sẻ" khi đang ở màn SEO, kể cả khi URL có `?focus=`) không phải là rời trang: không lưu trước, không có lối thoát bỏ thay đổi, không điều hướng. Lần rời trang khác đang chờ lưu bị hủy, vì nơi người dùng chọn sau cùng là màn này.
   - Màn SEO vẫn giữ một lần rời trang đang chờ lưu. Nút bỏ thay đổi trên toast xóa lần đang chờ đó rồi mới rời đi, nên người dùng rời đi một lần, tới đích của nút vừa bấm.
   - **Kết quả của "Đăng xuất"** (`useLogout`):
     - Chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".

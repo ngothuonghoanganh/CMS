@@ -12,6 +12,8 @@ import {
   DraftConflictError,
   type EditorStore,
   EditorStoreProvider,
+  isSameDocument,
+  isSameScreen,
   leavingLoses,
   refreshPageSummary,
   useBeforeUnloadGuard,
@@ -98,11 +100,7 @@ function useSaveFirstLinks(hasPending: () => boolean, navigate: (href: string) =
         return;
       }
       const url = new URL(link.href);
-      const here = window.location;
-      if (
-        url.origin !== here.origin ||
-        (url.pathname === here.pathname && url.search === here.search)
-      ) {
+      if (url.origin !== window.location.origin || isSameDocument(window.location.href, url.href)) {
         return;
       }
       event.preventDefault();
@@ -232,12 +230,10 @@ function SeoScreenBody({
   );
   const navigate = useCallback(
     (href: string) => {
-      // This very page (its own tab): nothing is left, so nothing is saved first or given up.
-      const target = new URL(href, window.location.href);
-      if (
-        target.pathname === window.location.pathname &&
-        target.search === window.location.search
-      ) {
+      // This very screen (its own tab, with or without `?focus=`): nothing is left, so nothing is
+      // saved first or given up, and a leave still waiting for its save is called off.
+      if (isSameScreen(window.location.href, new URL(href, window.location.href).href)) {
+        pendingLeave.current = null;
         return;
       }
       leaveSafely(() => {

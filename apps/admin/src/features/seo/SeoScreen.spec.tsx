@@ -428,10 +428,11 @@ describe('SeoScreen', () => {
       const user = userEvent.setup();
       renderScreen();
       answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
+      // Opened from a publish check: the tab has no query, the screen is the same.
       window.history.replaceState(
         window.history.state,
         '',
-        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo?focus=description`,
       );
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       const saves = savesSent();
@@ -441,6 +442,30 @@ describe('SeoScreen', () => {
       expect(savesSent()).toBe(saves);
       expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Rời trang, bỏ thay đổi' })).toBeNull();
+    });
+
+    it('calls off a leave still waiting for its save when the tab of this very page is clicked', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+      );
+      const answerSave = heldSave(detail);
+      const link = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+      await waitFor(() => {
+        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      });
+
+      // The user changes their mind and stays: the last place asked for is this screen.
+      await user.click(screen.getByRole('link', { name: 'SEO & chia sẻ' }));
+      answerSave();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(router.push).not.toHaveBeenCalled();
+      link.remove();
     });
 
     it('opens the reload dialog, not an error, when the draft changed elsewhere', async () => {

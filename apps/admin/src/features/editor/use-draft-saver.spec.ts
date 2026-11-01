@@ -12,6 +12,7 @@ import { createTestQueryClient } from '../shell/test-utils';
 import { emptyChecks, makeStore, PAGE_ID, pageSummary, SITE_ID } from './test-fixtures';
 import {
   createDraftSaver,
+  describeSaveFailure,
   DraftConflictError,
   RETRY_DELAYS_MS,
   runningSavesSettled,
@@ -385,6 +386,33 @@ describe('draft saver', () => {
     stop();
   });
 
+  it('sends a draft changed since the refusal again when the user stays after all', async () => {
+    const { store, saver, stop } = setup();
+    const signingOut = deferred<LeaveOutcome>();
+    const refused = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(refused.promise);
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    // An edit while the save runs, then the way out, then the server refuses the earlier body.
+    store.getState().setSpacing(HERO, 'spacious');
+    const left = saver.discardFor(() => signingOut.promise);
+    refused.reject(
+      problem(422, 'validation_failed', {
+        issues: [{ path: ['slug'], code: 'invalid', message: 'Đường dẫn không hợp lệ' }],
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().saveError?.kind).toBe('invalid');
+
+    saveMock.mockResolvedValue(response(4));
+    signingOut.resolve('stayed');
+    await expect(left).resolves.toBe('stayed');
+    await vi.advanceTimersByTimeAsync(1500);
+    // The body the server refused is not the draft any more: it is sent.
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
   it('gives a save resumed after a leave that stayed its whole retry budget', async () => {
     const { store, saver, stop } = setup();
     saveMock.mockRejectedValue(new TypeError('Failed to fetch'));
@@ -590,5 +618,21 @@ describe('useDraftSaver', () => {
     await act(() => vi.advanceTimersByTimeAsync(0));
     expect(readList).toHaveBeenCalledTimes(2);
     shown.unmount();
+  });
+});
+
+describe('describeSaveFailure', () => {
+  it('tries again after a server error, a timeout or too many requests', () => {
+    for (const status of [500, 503, 408, 429]) {
+      expect(describeSaveFailure(problem(status, 'internal'))).toMatchObject({
+        kind: 'retryable',
+      });
+    }
+  });
+
+  it('does not try again a request refused for good', () => {
+    for (const status of [401, 403, 404]) {
+      expect(describeSaveFailure(problem(status, 'forbidden'))).toMatchObject({ kind: 'other' });
+    }
   });
 });

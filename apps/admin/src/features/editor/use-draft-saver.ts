@@ -38,7 +38,8 @@ export interface DraftSaver {
    * timers are dropped and no retry is scheduled for it; a change made meanwhile ends it, and is
    * saved and asked about as usual. A save already running ends as usual: what it saves stays in
    * the draft, which the live page does not show. When the user stays (`'stayed'`, or `leave`
-   * throws), leaving asks and saves again, and autosave resumes. Resolves with the leave's outcome.
+   * throws), leaving asks and saves again, and autosave resumes, except for the very draft the
+   * server refused for good. Resolves with the leave's outcome.
    */
   discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
@@ -70,7 +71,8 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
     if (error.status === 422) {
       return { kind: 'invalid', message: firstIssueMessage(error) };
     }
-    if (error.status >= 500) {
+    // Server errors, a timeout (408) and "too many requests" (429) pass; trying again can succeed.
+    if (error.status >= 500 || error.status === 408 || error.status === 429) {
       return { kind: 'retryable', message: error.problem.title };
     }
     return { kind: 'other', message: error.problem.detail ?? error.problem.title };
@@ -120,6 +122,8 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
+  /** Draft version of the last save that failed; null once a save succeeds. */
+  let failedVersion: number | null = null;
   let running: Promise<SaveDraftResponse> | null = null;
   let stopped = true;
 
@@ -164,6 +168,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         store.getState().markConflict();
         throw new DraftConflictError();
       }
+      failedVersion = version;
       store.getState().markSaveFailed(failure);
       if (failure.kind === 'retryable') {
         scheduleRetry();
@@ -171,6 +176,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       throw error;
     }
     retryAttempt = 0;
+    failedVersion = null;
     store.getState().applySaved(response, version);
     options.onSaved?.();
   }
@@ -221,14 +227,17 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 
   /**
    * A leave without saving did not happen: leaving asks and saves again, and autosave resumes with
-   * its full retry budget. Only a save that can still succeed is tried again: a draft the server
-   * rejected (422) or a request it refused (401, 403) would fail the same way.
+   * its full retry budget. The very draft the server refused for good (422, 401, 403, 404…) is not
+   * sent again, since it would fail the same way; a draft changed since that refusal is.
    */
   function stay() {
     store.getState().setLeavingWithoutSaving(null);
     retryAttempt = 0;
     const state = store.getState();
-    const worthTrying = state.saveState !== 'error' || state.saveError?.kind === 'retryable';
+    const worthTrying =
+      state.saveState !== 'error' ||
+      state.saveError?.kind === 'retryable' ||
+      failedVersion !== state.draftVersion;
     if (!stopped && hasUnsavedChanges(state) && state.saveState !== 'conflict' && worthTrying) {
       scheduleSave();
     }
@@ -242,9 +251,10 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     },
     async discardFor(leave) {
       clearTimers();
-      // Leaves under way at once share the flag: one that stays clears it for the others, so the
-      // browser may ask once before a page load another one starts, or the screen save once on its
-      // way out (after signing out, a 401). Nothing is lost either way.
+      // Leaves under way at once share the flag: one that stays clears it for the others. The
+      // browser may then ask once before a page load another one starts, the draft may keep the
+      // changes another leave meant to drop, or a save on the way out may meet a 401 after signing
+      // out (ADR-008, accepted).
       const { draftVersion, setLeavingWithoutSaving } = store.getState();
       setLeavingWithoutSaving(draftVersion);
       let outcome: LeaveOutcome;

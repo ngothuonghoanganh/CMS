@@ -63,6 +63,13 @@ function currentEntry(): HistoryEntry {
   return { state: window.history.state as unknown, url: window.location.href };
 }
 
+/** Same origin and path, whatever the query or fragment: the same screen stays mounted. */
+export function isSameScreen(a: string, b: string): boolean {
+  const first = new URL(a);
+  const second = new URL(b);
+  return first.origin === second.origin && first.pathname === second.pathname;
+}
+
 /**
  * Whether `url` is still the document of the screen's entry: same path and query, whatever the
  * fragment. Browsers fire `popstate` for a move within the document too (a skip link to
