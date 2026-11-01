@@ -1182,6 +1182,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     | `sites.manage`: tạo site, tên, logo, giao diện                   | ✓          | ✓        |          |               |      |         |
     | `domains.manage`: tên miền                                       | ✓          | ✓        |          |               |      |         |
     | `members.manage`: vai trò & quyền, thành viên                    | ✓          | ✓        |          |               |      |         |
+    | `accessRequests.decide`: duyệt yêu cầu đổi quyền (ADR-021)       | ✓          |          |          |               |      |         |
+    | `workspace.transferOwnership`: chuyển quyền sở hữu (ADR-021)     | ✓          |          |          |               |      |         |
     - "Xem lead" và "Xuất / xóa dữ liệu cá nhân" là hai quyền riêng, như ghi chú Phase 1.
     - Cài đặt dữ liệu cá nhân và phiên bản đồng ý vẫn đọc được với `pages.view`, vì chúng hiện trên trang live và Biên tập cần biết form sẽ hiện gì.
     - `sites.manage` không có trên màn 16. Nó thay quy tắc "chỉ Owner tạo site và sửa cài đặt site" của ADR-004, và màn 16 có thêm dòng "Site".
@@ -1206,11 +1208,70 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Nhãn "Theo gói" và "Nâng cấp" (Phase 4); các dòng AI, template, automation, thanh toán, "Chuyển quyền sở hữu" của màn 16 có cùng tính năng của chúng.
   - Trong C1, Quản trị làm được mọi việc của Chủ sở hữu. Khác biệt (chuyển quyền sở hữu, thanh toán) đến ở C2 và Phase 4.
   - `domains.manage` chỉ ẩn/hiện mục "Tên miền" cho tới C3.
+- **Amended 2026-11-01 (chủ sản phẩm chốt sau C1):**
+  - Luồng "Yêu cầu xuất bản" của Cộng tác viên được làm, là một luồng duyệt: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt (lát C4).
+  - Vai trò tùy chỉnh được làm (lát C5).
+  - Quản trị vẫn làm được mọi việc của Chủ sở hữu, trừ những gì ADR-021 giữ cho Chủ sở hữu.
+  - Nhãn "Theo gói", "Nâng cấp" và các dòng AI, template, automation, thanh toán của màn 16 vẫn đến cùng tính năng của chúng (Phase 2–4): chưa có gói hay tính năng nào để gắn nhãn.
 - **Reason:** Một bảng quyền dùng chung, kiểm tra ở một lối vào duy nhất mà trình biên dịch buộc phải dùng; giao diện không thể cho phép điều API từ chối.
 - **Consequences:**
   - `role-matrix.int.spec.ts` gọi mọi endpoint có session với sáu vai trò, một thành viên chỉ được vào site khác và người ngoài workspace. Lời gọi bị từ chối không đổi dữ liệu.
   - Thêm một endpoint theo site mà không chọn quyền thì không biên dịch được. Thêm một quyền thì phải thêm dòng của nó trên màn 16 (`permissionGroups`) và vào ma trận test.
   - E2E của các vai trò khác Chủ sở hữu chờ lời mời (C2); C1 có E2E của màn 16 và test giao diện theo từng vai trò.
+
+### ADR-021 — Thành viên, lời mời, yêu cầu đổi quyền và chuyển quyền sở hữu
+
+- **Date:** 2026-11-01 · **Status:** Accepted
+- **Context:** Lát C2 của Phase 1 (màn 15, 15b). Chủ sản phẩm chốt ngày 2026-11-01:
+  - Chỉ Chủ sở hữu và Quản trị đổi quyền của thành viên.
+  - Thành viên cấp dưới muốn đổi quyền thì gửi yêu cầu; email về Chủ sở hữu để duyệt.
+  - Chuyển quyền sở hữu chỉ do Chủ sở hữu làm, có hiệu lực ngay, không cần người nhận đồng ý qua email.
+  - Màn "Thành viên" chỉ dành cho Chủ sở hữu và Quản trị.
+- **Decision:**
+  - **Quyền mới** (ADR-020): `accessRequests.decide` (duyệt yêu cầu đổi quyền) và `workspace.transferOwnership`, chỉ Chủ sở hữu. `members.manage` (Chủ sở hữu, Quản trị) mời, đổi quyền, gỡ thành viên.
+  - **Đổi quyền:** `PATCH /workspaces/:id/members/:userId { role, siteIds }`.
+    - Không giao vai trò Chủ sở hữu, không đổi hay gỡ Chủ sở hữu. Quản trị đổi được Quản trị khác.
+    - Quản trị luôn có `siteIds = null`. Vai trò khác có `null` (toàn workspace) hoặc 1–100 site của chính workspace đó.
+    - Quyền mới có hiệu lực ở request kế tiếp, vì mọi request đều đọc lại membership (ADR-020).
+  - **Gỡ thành viên:** `DELETE /workspaces/:id/members/:userId`. Gỡ luôn yêu cầu đổi quyền đang chờ của người đó. Chủ sở hữu không bị gỡ (409); muốn rời workspace thì chuyển quyền sở hữu trước.
+  - **Chuyển quyền sở hữu:** `POST /workspaces/:id/ownership { toUserId, confirmName }`.
+    - Chỉ Chủ sở hữu; người nhận phải đang là Quản trị; `confirmName` phải đúng tên workspace.
+    - Một transaction: người nhận thành Chủ sở hữu, người chuyển thành Quản trị. Mỗi workspace luôn có đúng một Chủ sở hữu.
+  - **Lời mời** (collection `invitations`):
+    - `{ workspaceId, email, role, siteIds, tokenHash, expiresAt, invitedBy, createdAt, sentAt|null, status: pending|accepted|revoked|declined, closedAt|null, purgeAt }`.
+    - Mỗi lần mời tối đa 10 email; vai trò không là Chủ sở hữu. Mỗi workspace tối đa 100 người, tính cả thành viên và lời mời đang chờ.
+    - Link `{ADMIN_ORIGIN}/invite#token=…`: token 32 byte, DB chỉ giữ sha256, như link xác nhận nơi nhận lead (ADR-018).
+    - Link có hạn 7 ngày, chỉ dùng một lần, chỉ cho đúng email được mời. "Gửi lại" tạo token mới và tính lại 7 ngày; link cũ hết tác dụng.
+    - Email đã là thành viên thì không mời. Mỗi email chỉ có một lời mời đang chờ trong một workspace (unique partial index).
+    - Giới hạn email mỗi 24 giờ, đếm trước khi gửi và trả lại khi không gửi được, như ADR-018 (cùng một `EmailQuota` với thư xác nhận nơi nhận lead): 50 lời mời mỗi workspace, 5 lời mời cho một địa chỉ từ mọi workspace. Vượt giới hạn thì cả request bị từ chối (429), không tạo lời mời nào.
+    - Email gửi lỗi thì lời mời vẫn còn, `sentAt = null`, và "Gửi lại" thử lại.
+    - Lời mời đã đóng (nhận, thu hồi, từ chối) và lời mời hết hạn tự xóa sau 30 ngày (TTL `purgeAt`).
+  - **Nhận lời mời** (màn 15b):
+    - Trang `/invite` của admin mở được khi chưa đăng nhập, như trang xác nhận nơi nhận lead.
+    - `POST /public/invitations/lookup { token }` (không cần session, có rate limit như `/auth/*`): trả trạng thái, tên workspace, người mời, email, vai trò, tên các site và `accountExists`. Token nằm trong body, không nằm trong URL của API.
+    - Chưa có tài khoản: `POST /auth/signup/invited { token, name, password }`. Một transaction tạo user với email của lời mời, membership và đóng lời mời, rồi đăng nhập. Không tạo workspace riêng.
+    - Đã đăng nhập đúng email: `POST /invitations/accept` hoặc `/decline { token }`. Sai email thì 403, admin mời đăng xuất rồi dùng email được mời.
+    - Nhận lời mời và tạo membership nằm trong một transaction, có điều kiện lời mời còn `pending` và chưa hết hạn, nên một link không dùng được hai lần.
+  - **Yêu cầu đổi quyền** (collection `access_requests`):
+    - Thành viên không có `members.manage` gửi `{ role, wholeWorkspace, note }` từ menu tài khoản hoặc từ trạng thái thiếu quyền.
+    - Mỗi người có tối đa một yêu cầu đang chờ trong một workspace; gửi tối đa 5 yêu cầu mỗi 24 giờ.
+    - Email tới Chủ sở hữu có link mở yêu cầu trên màn Thành viên. Link chỉ mở màn, không tự duyệt: chuyển tiếp email không cấp được quyền.
+    - Chủ sở hữu duyệt bằng chính hộp thoại "Đổi quyền", điền sẵn theo yêu cầu và sửa được vai trò, site trước khi lưu. Hoặc từ chối.
+    - Người yêu cầu nhận email kết quả. Yêu cầu đã quyết tự xóa sau 30 ngày.
+  - **Admin:**
+    - Màn 15 ở `/workspaces/:id/members`: tab "Đang hoạt động", "Lời mời đang chờ" và, với Chủ sở hữu, "Yêu cầu đổi quyền".
+    - Lọc theo vai trò, site, tìm theo tên hoặc email, trên danh sách đã nạp (tối đa 100 người).
+    - Hộp thoại mời thành viên, đổi quyền, gỡ, chuyển quyền sở hữu.
+    - Cột "Hoạt động" của board đổi thành "Tham gia" (ngày vào workspace): hệ thống không lưu lần hoạt động cuối.
+    - Sidebar v2 thêm "Thành viên" trước "Vai trò & quyền".
+- **Ngoài phạm vi:**
+  - Thông báo "Quyền của bạn vừa thay đổi" khi đang sửa trang (màn 16). Lần lưu kế tiếp nhận 403/404 như hiện nay.
+  - Nhật ký thay đổi thành viên: activity hiện gắn với site (ADR-005), còn thay đổi thành viên thuộc workspace.
+  - Thành viên tự rời workspace.
+- **Reason:** Quyền chỉ đổi qua người có `members.manage` hoặc qua duyệt của Chủ sở hữu. Lời mời là một bí mật dùng một lần, có hạn và gắn với email. Mọi giới hạn và trạng thái nằm trong MongoDB, nên đúng với nhiều instance API.
+- **Consequences:**
+  - Integration test cho mọi endpoint mới với sáu vai trò, người ngoài workspace và trường hợp chạy song song (hai lần nhận cùng một link, hai lời mời cùng email).
+  - E2E: mời qua Mailpit, đăng ký từ link, đổi quyền, yêu cầu và duyệt, chuyển quyền sở hữu, thu hồi.
 
 ---
 
@@ -1267,13 +1328,15 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 
 **Phase 1 — Vận hành & đội nhóm:**
 
-| Lát | Nội dung                                                                                                      | Màn            | Trạng thái |
-| --- | ------------------------------------------------------------------------------------------------------------- | -------------- | ---------- |
-| C1  | Sáu vai trò, phạm vi site, kiểm tra quyền ở mọi endpoint, Sidebar v2, màn Vai trò & quyền (ADR-020)           | 16, Sidebar v2 | Xong       |
-| C2  | Thành viên, lời mời qua email (7 ngày, một lần, đúng email), nhận lời mời, đổi quyền, gỡ, chuyển quyền sở hữu | 15, 15b        | Chưa làm   |
-| C3  | Tên miền riêng: thêm, bản ghi DNS và TXT, xác minh, trạng thái, địa chỉ chính, 301, renderer, sitemap         | 13, 14, 08     | Chưa làm   |
+| Lát | Nội dung                                                                                                                 | Màn            | Trạng thái |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | -------------- | ---------- |
+| C1  | Sáu vai trò, phạm vi site, kiểm tra quyền ở mọi endpoint, Sidebar v2, màn Vai trò & quyền (ADR-020)                      | 16, Sidebar v2 | Xong       |
+| C2  | Thành viên, lời mời qua email, nhận lời mời, đổi quyền, gỡ, yêu cầu đổi quyền và duyệt, chuyển quyền sở hữu (ADR-021)    | 15, 15b        | Xong       |
+| C3  | Tên miền riêng: on-demand TLS, không trùng tên miền, bản ghi DNS và TXT, xác minh, địa chỉ chính, 301, renderer, sitemap | 13, 14, 08     | Chưa làm   |
+| C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt                                                  | 05, 16         | Chưa làm   |
+| C5  | Vai trò tùy chỉnh                                                                                                        | 16             | Chưa làm   |
 
-C2 và C3 cần quyết định riêng (ADR) trước khi làm; câu hỏi mở nằm trong báo cáo của C1.
+C3, C4 và C5 cần ADR riêng trước khi làm.
 
 ## 6. Trước khi phát hành
 
