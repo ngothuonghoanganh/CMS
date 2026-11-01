@@ -35,7 +35,11 @@
 /* "Quên mật khẩu?" under the password of the login form (ADR-026). */
 .forgot {
   align-self: flex-end;
-  margin-top: -8px;
+  display: inline-flex;
+  align-items: center;
+  /* A target of 24px on its own line (WCAG 2.5.8). */
+  min-height: 24px;
+  margin-top: -10px;
   font-size: var(--text-body-sm);
   font-weight: 600;
   color: var(--color-primary-ink);
