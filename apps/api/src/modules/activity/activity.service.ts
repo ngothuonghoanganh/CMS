@@ -53,7 +53,8 @@ export class ActivityService {
 
   /**
    * Maps records of one workspace to contract items with a constant number of queries: one for
-   * the actor names and, when rollbacks are present, one aggregation for `undoable`.
+   * the actor names, one for the deleted pages among theirs (ADR-027) and, when rollbacks are
+   * present, one aggregation for `undoable`.
    */
   async toItems(
     scope: WorkspaceScope,
@@ -62,9 +63,13 @@ export class ActivityService {
     const rolledBackPageIds = records.flatMap((record) =>
       record.type === 'page.rolled_back' && record.pageId !== null ? [record.pageId] : [],
     );
-    const [actors, latestByPage] = await Promise.all([
+    const [actors, latestByPage, deletedPages] = await Promise.all([
       this.users.findRefs(records.map((record) => record.actorId)),
       this.activity.latestPointerEvents(scope, rolledBackPageIds),
+      this.activity.deletedPages(
+        scope,
+        records.flatMap((record) => (record.pageId === null ? [] : [record.pageId])),
+      ),
     ]);
     return records.map((record) => {
       const actor = actors.get(record.actorId.toHexString());
@@ -75,7 +80,7 @@ export class ActivityService {
       }
       const latest =
         record.pageId === null ? undefined : latestByPage.get(record.pageId.toHexString());
-      return toActivityItem(record, actor, isUndoable(record, latest));
+      return toActivityItem(record, actor, isUndoable(record, latest), deletedPages);
     });
   }
 }

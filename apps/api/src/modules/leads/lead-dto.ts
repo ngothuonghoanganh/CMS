@@ -25,15 +25,11 @@ export function toCappedCount(counted: number): CappedCount {
 }
 
 /**
- * The title of a lead's page. Pages cannot be deleted, so a missing one means the data was edited
- * by hand.
+ * The title of a lead's page; null when the page was deleted, which keeps its leads (ADR-027).
+ * The admin then writes `DELETED_PAGE_LABEL`, as files and emails do.
  */
-export function pageTitleOf(titles: ReadonlyMap<string, string>, pageId: ObjectId): string {
-  const title = titles.get(pageId.toHexString());
-  if (title === undefined) {
-    throw new Error(`Lead refers to missing page ${pageId.toHexString()}`);
-  }
-  return title;
+export function pageTitleOf(titles: ReadonlyMap<string, string>, pageId: ObjectId): string | null {
+  return titles.get(pageId.toHexString()) ?? null;
 }
 
 /**
@@ -53,7 +49,7 @@ export function consentOf(
   return capture;
 }
 
-export function toLeadListItem(row: LeadListRow, pageTitle: string): LeadListItem {
+export function toLeadListItem(row: LeadListRow, pageTitle: string | null): LeadListItem {
   return {
     id: row._id.toHexString(),
     name: row.fields.name,
@@ -82,7 +78,8 @@ function toNotification(notification: LeadRecord['notification']): LeadDetail['n
 }
 
 export interface LeadDetailInput {
-  pageTitle: string;
+  /** Null when the page was deleted (ADR-027). */
+  pageTitle: string | null;
   capture: LeadCapture;
   personLeads: CappedCount;
 }

@@ -1,4 +1,9 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { Injectable, type OnModuleDestroy } from '@nestjs/common';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
@@ -7,6 +12,8 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 /** Object storage for uploaded images. Only keys under `public/` are anonymously readable. */
 export interface AssetStorage {
   put(key: string, body: Buffer, contentType: string): Promise<void>;
+  /** Deletes every object whose key starts with `prefix`; returns how many went. */
+  deletePrefix(prefix: string): Promise<number>;
   /** URL a browser or the renderer can load the object from. */
   publicUrl(key: string): string;
 }
@@ -23,6 +30,14 @@ export function assetStorageKey(input: {
 }): string {
   return `public/${input.workspaceId.toHexString()}/${input.siteId.toHexString()}/${input.assetId.toHexString()}.${input.extension}`;
 }
+
+/** The prefix of every object of a site's assets: what deleting the site removes (ADR-027). */
+export function siteStoragePrefix(site: { workspaceId: ObjectId; siteId: ObjectId }): string {
+  return `public/${site.workspaceId.toHexString()}/${site.siteId.toHexString()}/`;
+}
+
+/** S3 deletes at most 1,000 keys per request, the size of a listing page. */
+const DELETE_BATCH = 1_000;
 
 /** S3-compatible storage (RustFS locally, any S3 provider in production; ADR-002, ADR-012). */
 @Injectable()
@@ -64,6 +79,55 @@ export class S3AssetStorage implements AssetStorage, OnModuleDestroy {
         cause: error,
       });
     }
+  }
+
+  /**
+   * Lists the keys under `prefix` a page at a time and deletes each page in one request. A key S3
+   * could not delete fails the whole call, named in the error; what went stays gone, so calling
+   * it again finishes the work.
+   */
+  async deletePrefix(prefix: string): Promise<number> {
+    if (prefix === '' || !prefix.endsWith('/')) {
+      throw new Error(`Refusing to delete objects under "${prefix}": not a folder prefix`);
+    }
+    let deleted = 0;
+    let token: string | undefined;
+    try {
+      do {
+        const page = await this.client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket,
+            Prefix: prefix,
+            MaxKeys: DELETE_BATCH,
+            ...(token === undefined ? {} : { ContinuationToken: token }),
+          }),
+        );
+        const keys = (page.Contents ?? []).flatMap((object) =>
+          object.Key === undefined ? [] : [{ Key: object.Key }],
+        );
+        if (keys.length > 0) {
+          const result = await this.client.send(
+            new DeleteObjectsCommand({
+              Bucket: this.bucket,
+              Delete: { Objects: keys, Quiet: true },
+            }),
+          );
+          const failed = result.Errors ?? [];
+          if (failed.length > 0) {
+            throw new Error(
+              `${failed.length} object(s) were not deleted, first "${failed[0]?.Key ?? '?'}": ${failed[0]?.Code ?? 'unknown'}`,
+            );
+          }
+          deleted += keys.length;
+        }
+        token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+      } while (token !== undefined);
+    } catch (error) {
+      throw new Error(`Could not delete the objects under "${prefix}" in bucket "${this.bucket}"`, {
+        cause: error,
+      });
+    }
+    return deleted;
   }
 
   publicUrl(key: string): string {

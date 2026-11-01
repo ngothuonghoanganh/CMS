@@ -24,6 +24,7 @@ import { newEmail } from '../../../test/members.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
 import {
+  createPage,
   currentPublishBody,
   editHeroHeading,
   getPage,
@@ -57,6 +58,8 @@ interface Fixture {
   site: Site;
   /** A live form page: v1 live again after a rollback from v2, the draft that of v2. */
   pageId: string;
+  /** A page never published, which may be deleted (ADR-027). */
+  draftPageId: string;
   v1ReleaseId: string;
   v2ReleaseId: string;
   rollbackActivityId: string;
@@ -121,6 +124,21 @@ const ROWS: Row[] = [
     scope: 'site',
     status: 200,
     call: (client, { site }) => client.patch(`/sites/${site.id}`, { name: 'Smile Care Q1' }),
+  },
+  {
+    action: 'Số liệu trước khi xóa site',
+    permission: 'sites.manage',
+    scope: 'site',
+    status: 200,
+    call: (client, { site }) => client.get(`/sites/${site.id}/deletion-summary`),
+  },
+  {
+    action: 'Xóa site',
+    // And `personalData.manage`, which the same roles hold (ADR-027).
+    permission: 'sites.manage',
+    scope: 'site',
+    status: 204,
+    call: (client, { site }) => client.delete(`/sites/${site.id}`).send({ confirmName: site.name }),
   },
   {
     action: 'Tạo site',
@@ -429,6 +447,14 @@ const ROWS: Row[] = [
         expectedCurrentReleaseId: v1ReleaseId,
         reason: 'Hết chương trình',
       }),
+  },
+  {
+    action: 'Xóa trang',
+    permission: 'pages.manageLive',
+    scope: 'site',
+    status: 204,
+    call: (client, { site, draftPageId }) =>
+      client.delete(`/sites/${site.id}/pages/${draftPageId}`),
   },
   {
     action: 'Hoàn tác khôi phục',
@@ -774,6 +800,7 @@ describe('the six roles on every endpoint', () => {
       ).body,
     );
     const asset = await uploadImage(owner, site.id);
+    const draft = await createPage(owner, site.id, { title: 'Bản nháp', slug: uniqueSlug('nhap') });
     const held = customRoleSchema.parse(
       (await owner.post(`/workspaces/${workspaceId}/custom-roles`, CUSTOM_ROLE).expect(201)).body,
     );
@@ -844,6 +871,7 @@ describe('the six roles on every endpoint', () => {
       elsewhereUserId: elsewhere.me.user.id,
       site,
       pageId,
+      draftPageId: draft.page.id,
       v1ReleaseId: v1.release.id,
       v2ReleaseId: v2.release.id,
       rollbackActivityId: rollback.activityId,

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import {
   createPageRequestSchema,
   type PageCountResponse,
@@ -17,6 +17,7 @@ import {
 import { ZodPipe } from '../../shared/zod.pipe.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
+import { PageDeletionService } from './page-deletion.service.js';
 import {
   type CreatePageValues,
   type PageListQueryValues,
@@ -26,7 +27,10 @@ import {
 
 @Controller()
 export class PagesController {
-  constructor(private readonly pages: PagesService) {}
+  constructor(
+    private readonly pages: PagesService,
+    private readonly deletion: PageDeletionService,
+  ) {}
 
   @Get('sites/:siteId/pages')
   list(
@@ -78,6 +82,17 @@ export class PagesController {
     @Param('pageId') pageId: string,
   ): Promise<PageDetailResponse> {
     return this.pages.get(user, siteId, pageId);
+  }
+
+  /** "Xóa trang" (ADR-027): only a page that is not live. */
+  @Delete('sites/:siteId/pages/:pageId')
+  @HttpCode(204)
+  delete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
+    @Param('pageId') pageId: string,
+  ): Promise<void> {
+    return this.deletion.delete(user, siteId, pageId);
   }
 
   @Put('sites/:siteId/pages/:pageId/draft')

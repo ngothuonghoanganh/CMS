@@ -8,6 +8,7 @@ import {
 import { Schema, type Types } from 'mongoose';
 import type { LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
+import { isErasure } from '../../shared/persistence/erasure.js';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 const RELEASE_MODEL = 'Release';
@@ -16,7 +17,8 @@ export const RELEASES_IDEMPOTENCY_INDEX = 'releases_page_idempotency_unique';
 
 /**
  * A published snapshot of a page. Immutable (ADR-005): inserted once, then only read. Rollback and
- * undo move the page's pointer between releases and never edit one.
+ * undo move the page's pointer between releases and never edit one. Deleting the page removes
+ * those no lead refers to; a lead's release stays as its consent evidence (ADR-027).
  */
 export interface ReleaseRecord {
   _id: Types.ObjectId;
@@ -115,23 +117,25 @@ releaseSchema.index(
 );
 // History: releases of a page, newest first.
 releaseSchema.index({ pageId: 1, createdAt: -1, _id: -1 });
+// Deleting a site removes its releases, those kept by leads after their page was deleted included,
+// whose page ids nothing lists any more (ADR-027).
+releaseSchema.index({ siteId: 1 });
 
-// Defence in depth for immutability: no query may update, replace or delete a release.
+// Defence in depth for immutability: no query may update or replace a release, and only the
+// deletion of its page or site removes one (ADR-027).
 releaseSchema.pre(
-  [
-    'updateOne',
-    'updateMany',
-    'findOneAndUpdate',
-    'findOneAndReplace',
-    'replaceOne',
-    'deleteOne',
-    'deleteMany',
-    'findOneAndDelete',
-  ],
+  ['updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndReplace', 'replaceOne'],
   function () {
     throw new Error('Releases are immutable (ADR-005)');
   },
 );
+releaseSchema.pre(['deleteOne', 'deleteMany', 'findOneAndDelete'], function () {
+  if (!isErasure(this)) {
+    throw new Error(
+      'Releases are immutable (ADR-005): only deleting their page or site removes them',
+    );
+  }
+});
 
 /** In the workspace's own database (ADR-025). */
 export const RELEASE_COLLECTION = workspaceCollection(RELEASE_MODEL, releaseSchema);

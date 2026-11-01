@@ -171,6 +171,17 @@ export class SitesRepository {
     return site.toObject();
   }
 
+  /**
+   * Removes the site's address from the master DB, in the transaction that deletes the site
+   * (ADR-027): its subdomain is free again, and nothing routes to the site. False when it was gone.
+   */
+  async deleteAddress(scope: WorkspaceScope, siteId: ObjectId, tx: Tx): Promise<boolean> {
+    const result = await this.addresses
+      .deleteOne({ _id: siteId, workspaceId: scope.workspaceId }, { session: tx })
+      .exec();
+    return result.deletedCount === 1;
+  }
+
   /** Applies a settings patch and returns the updated site, or null when it is not in scope. */
   update(scope: WorkspaceScope, siteId: ObjectId, patch: SitePatch): Promise<SiteRecord | null> {
     return this.sites(scope)
@@ -376,14 +387,18 @@ export class SitesRepository {
 
   /**
    * The privacy settings of a site as they are now, for the public lead intake: it reads them
-   * again after storing a lead, in case the owner changed the retention period meanwhile.
+   * again after storing a lead, in case the owner changed the retention period meanwhile. Null
+   * when the site was deleted meanwhile (ADR-027).
    */
-  async findPublicPrivacy(ref: WorkspaceRef, siteId: ObjectId): Promise<SitePrivacyRecord | null> {
+  async findPublicPrivacy(
+    ref: WorkspaceRef,
+    siteId: ObjectId,
+  ): Promise<{ privacy: SitePrivacyRecord | null } | null> {
     const site = await this.sites(ref)
       .findOne({ _id: siteId, workspaceId: ref.workspaceId }, { privacy: 1 })
       .lean<Pick<SiteRecord, 'privacy'>>()
       .exec();
-    return site === null ? null : sitePrivacyOf(site);
+    return site === null ? null : { privacy: sitePrivacyOf(site) };
   }
 
   /** Sets or clears the primary custom domain (ADR-022); null when the site is gone. */

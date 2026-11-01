@@ -420,7 +420,8 @@ export class PublishingService {
     }
     const page = await this.pages.findById(scope, pageId);
     if (!page) {
-      throw new Error(`Rollback ${activityId} refers to missing page ${pageId.toHexString()}`);
+      // Unpublished and deleted since the check above (ADR-027): there is nothing to undo.
+      throw undoNotAvailable();
     }
     const [from, target] = await Promise.all([
       this.requiredRelease(scope, rollback.data.toReleaseId),

@@ -24,6 +24,7 @@ import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-d
     AssetUploadService,
     { provide: ASSET_STORAGE, useClass: S3AssetStorage },
   ],
-  exports: [AssetsRepository, AssetsService],
+  // The storage too: deleting a site deletes its objects (ADR-027).
+  exports: [AssetsRepository, AssetsService, ASSET_STORAGE],
 })
 export class AssetsModule {}

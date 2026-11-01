@@ -162,6 +162,23 @@ describe('buildAnalyticsReport', () => {
     ]);
   });
 
+  it('keeps the numbers of a deleted page, without a title (ADR-027)', () => {
+    const deleted = '64b0000000000000000000c3';
+    const pages = buildAnalyticsReport(
+      input({
+        pageVisitors: [
+          { pageId: deleted, visitors: 320 },
+          { pageId: PAGE_A, visitors: 320 },
+        ],
+        leads: { daily: [], sources: [], pages: [{ pageId: deleted, leads: 4 }] },
+      }),
+    ).pages;
+    expect(pages).toEqual([
+      { page: { id: deleted, title: null }, visitors: 320, leads: 4 },
+      { page: { id: PAGE_A, title: 'Ưu đãi niềng răng tháng 11' }, visitors: 320, leads: 0 },
+    ]);
+  });
+
   it('counts visitors by device', () => {
     const report = buildAnalyticsReport(
       input({
