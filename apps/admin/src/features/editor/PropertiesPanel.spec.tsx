@@ -298,9 +298,10 @@ describe('PropertiesPanel', () => {
     await user.tab();
     expect(call.getByText('Cần ít nhất một nút trước khi xuất bản.')).toBeInTheDocument();
     expect(zalo.getByText('Cần ít nhất một nút trước khi xuất bản.')).toBeInTheDocument();
+    // An unused button needs no number; in use again, it does.
+    expect(zalo.queryByText('Nhập số trước khi xuất bản.')).toBeNull();
     await user.type(zalo.getByLabelText(/^Chữ trên nút/), 'Nhắn Zalo');
     expect(call.queryByText('Cần ít nhất một nút trước khi xuất bản.')).toBeNull();
-    // An unused button needs no number.
     expect(zalo.getByText('Nhập số trước khi xuất bản.')).toBeInTheDocument();
   });
 

@@ -54,6 +54,31 @@ describe('section registry', () => {
     }
   });
 
+  it.each(sectionTypes)('keeps the rules of "%s" consistent with its fields', (type) => {
+    const definition = getSectionDefinition(type);
+    for (const key of definition.oneButtonRequired ?? []) {
+      expect(definition.fields.find((field) => field.key === key)?.kind, key).toBe('cta');
+    }
+    for (const variant of definition.variants) {
+      const section = createSectionInstance(type, variant.id, id(1));
+      for (const field of definition.fields) {
+        if (field.kind !== 'list') {
+          continue;
+        }
+        const minimum = listMinimum(type, variant.id, field.key);
+        const maximum = listMaximum(type, variant.id, field.key);
+        expect(minimum, `${variant.id} · ${field.key}`).toBeLessThanOrEqual(maximum);
+        expect(maximum).toBeLessThanOrEqual(field.max);
+      }
+      // A button limited to some kinds of link starts with one of them.
+      for (const leaf of collectLeaves(section, { includeHidden: true })) {
+        if (leaf.field.kind === 'cta' && leaf.field.linkKinds !== undefined) {
+          expect(leaf.field.linkKinds).toContain(getAtPath(leaf.value, 'link.kind'));
+        }
+      }
+    }
+  });
+
   it('validates a full page in the fixed order', () => {
     expect(
       validateComposition(
