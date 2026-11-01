@@ -14,7 +14,7 @@ import { AppError, notFound } from '../../shared/errors.js';
 import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import { ActivityRepository } from '../activity/activity.repository.js';
-import { type CountedHit, LeadLimitsRepository } from '../leads/lead-limits.repository.js';
+import type { CountedHit } from '../leads/lead-limits.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import {
   type LeadRecipientRecord,
@@ -29,15 +29,23 @@ import {
   INVITE_LIMITS_PER_DAY,
   type InviteLimit,
   inviteLimitKeys,
-  loggableLimitKey,
 } from './domain/notification-rules.js';
+import { EmailQuota, type QuotaUse } from './email-quota.js';
 import { EmailSender, EmailSendError } from './email-sender.js';
 import { recipientConfirmationEmail } from './email-templates.js';
 import { toLeadRecipientDto } from './recipient-dto.js';
 
 export const RECIPIENT_NOT_FOUND = 'Không tìm thấy địa chỉ nhận lead';
 const LINK_EXPIRED = 'Liên kết xác nhận không còn hiệu lực';
-const DAY_MS = 86_400_000;
+
+/** Confirmation emails on the daily limits (`INVITE_LIMITS_PER_DAY`); over a limit is a 429. */
+const CONFIRMATIONS: QuotaUse = {
+  what: 'Confirmation email',
+  tooMany: () =>
+    new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
+      detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
+    }),
+};
 
 /** A confirmation link's secret and what the database keeps of it. */
 function newConfirmationToken(): { token: string; tokenHash: string } {
@@ -64,7 +72,7 @@ export class LeadRecipientsService {
     private readonly activity: ActivityRepository,
     private readonly transactions: TransactionRunner,
     private readonly sender: EmailSender,
-    private readonly limits: LeadLimitsRepository,
+    private readonly quota: EmailQuota,
   ) {}
 
   async list(user: AuthenticatedUser, siteId: string): Promise<LeadRecipientListResponse> {
@@ -184,80 +192,33 @@ export class LeadRecipientsService {
   }
 
   /**
-   * Counts one confirmation email against the daily limits (`INVITE_LIMITS_PER_DAY`) before
-   * anything is stored or sent, so requests at the same time cannot pass a limit together; over a
-   * limit answers 429 (ADR-018). Returns what was counted: the caller takes the email back with
-   * `uncount` when it does not go out after all. The limits count emails sent, so a request
-   * refused here counts nowhere either: clicking "Gửi lại" past the cap of one address must not
-   * use up the workspace's other emails. When one counter fails, the others take the email back
-   * before the error goes on.
+   * Counts one confirmation email against the daily limits before anything is stored or sent;
+   * over a limit answers 429 (ADR-018). The caller takes the email back with `uncount` when it
+   * does not go out after all: clicking "Gửi lại" past the cap of one address must not use up the
+   * workspace's other emails.
    */
-  private async countInvite(
+  private countInvite(
     scope: WorkspaceScope,
     siteId: ObjectId,
     email: string,
     now: Date,
   ): Promise<CountedHit[]> {
     const keys = inviteLimitKeys(email, { workspaceId: scope.workspaceId, siteId });
-    const windowEnd = new Date(now.getTime() + DAY_MS);
-    const settled = await Promise.allSettled(
-      (Object.keys(INVITE_LIMITS_PER_DAY) as InviteLimit[]).map(async (limit) => {
-        const window = await this.limits.hit(keys[limit], now, windowEnd);
-        return { limit, key: keys[limit], ...window };
-      }),
-    );
-    const counted = settled.flatMap((result) =>
-      result.status === 'fulfilled' ? [result.value] : [],
-    );
-    const hits = counted.map(({ key, expiresAt }) => ({ key, expiresAt }));
-    const failures = settled.flatMap((result): unknown[] =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
-    if (failures.length > 0) {
-      await this.uncount(hits);
-      throw new Error('Confirmation email could not be counted against the daily limits', {
-        cause: failures.length === 1 ? failures[0] : new AggregateError(failures),
-      });
-    }
-    if (counted.some(({ limit, count }) => count > INVITE_LIMITS_PER_DAY[limit])) {
-      await this.uncount(hits);
-      throw new AppError(429, 'rate_limited', 'Đã gửi quá nhiều thư xác nhận', {
-        detail: `Một địa chỉ nhận tối đa ${INVITE_LIMITS_PER_DAY.siteAddress} thư xác nhận của một site và ${INVITE_LIMITS_PER_DAY.address} thư từ mọi site, một workspace gửi tối đa ${INVITE_LIMITS_PER_DAY.workspace} thư trong 24 giờ. Hãy thử lại sau.`,
-      });
-    }
-    return hits;
+    const limits = (Object.keys(INVITE_LIMITS_PER_DAY) as InviteLimit[]).map((limit) => ({
+      key: keys[limit],
+      max: INVITE_LIMITS_PER_DAY[limit],
+    }));
+    return this.quota.take(limits, CONFIRMATIONS, now);
   }
 
   /** Runs `task`; when it fails, the email counted for it is taken back before the error goes on. */
-  private async uncountedOnError<T>(
-    hits: readonly CountedHit[],
-    task: () => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await task();
-    } catch (error) {
-      await this.uncount(hits);
-      throw error;
-    }
+  private uncountedOnError<T>(hits: readonly CountedHit[], task: () => Promise<T>): Promise<T> {
+    return this.quota.giveBackOnError(hits, CONFIRMATIONS, task);
   }
 
-  /**
-   * Takes back the email `countInvite` counted when it does not go out after all: the request was
-   * refused, or the email could not be sent. The request keeps its own outcome either way, since
-   * cleaning up the counters must not change what the owner is told: a 429 or 409 they can act
-   * on, or an address added and `unsent`. When taking back fails, the email stays counted, which
-   * is the safe side (the window ends within a day), and the failure is logged with the counters
-   * it left, named without the hash of the address (`loggableLimitKey`).
-   */
-  private async uncount(hits: readonly CountedHit[]): Promise<void> {
-    try {
-      await this.limits.release(hits, new Date());
-    } catch (error) {
-      this.logger.error(
-        { err: error, limits: hits.map(({ key }) => loggableLimitKey(key)) },
-        'Confirmation email still counted: taking it back from the daily limits failed',
-      );
-    }
+  /** Takes back the email `countInvite` counted when it does not go out after all. */
+  private uncount(hits: readonly CountedHit[]): Promise<void> {
+    return this.quota.giveBack(hits, CONFIRMATIONS);
   }
 
   /** Emails the confirmation link; returns when it went out, or null when it could not be sent. */
