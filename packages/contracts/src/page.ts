@@ -176,8 +176,11 @@ export type PageSummary = z.infer<typeof pageSummarySchema>;
 
 /** A row of the page list (screen 01): the summary and its column "LEAD 7 NGÀY". */
 export const pageListItemSchema = pageSummarySchema.extend({
-  /** Leads of the last 7 days in Vietnam, spam excluded (ADR-018). */
-  leadsLast7Days: z.number().int().nonnegative(),
+  /**
+   * Leads of the last 7 days in Vietnam, spam excluded (ADR-018); null for roles without
+   * `leads.view`, which covers lead counts (ADR-020).
+   */
+  leadsLast7Days: z.number().int().nonnegative().nullable(),
 });
 export type PageListItem = z.infer<typeof pageListItemSchema>;
 

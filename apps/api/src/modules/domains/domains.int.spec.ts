@@ -24,6 +24,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { addMember, createSite } from '../../../test/resources.js';
+import { UsersRepository } from '../auth/users.repository.js';
 import { DomainChecker } from './domain-checker.service.js';
 import { DOMAINS_PER_ROUND, DomainMonitor, ROUND_BUDGET_MS } from './domain-monitor.service.js';
 import { DomainsRepository } from './domains.repository.js';
@@ -226,6 +227,22 @@ describe('custom domains (ADR-022)', () => {
       expect((await check(owner, site.id, added.id)).status).toBe('active');
       expect(t.emails.to(admin.me.user.email)).toEqual([]);
       expect(t.emails.to(me.user.email).at(-1)?.subject).toBe(`${hostname} đã hoạt động`);
+    });
+
+    it('stays active when who to tell cannot be read for the email', async () => {
+      const { client, me, site } = await siteOf();
+      const hostname = newDomain();
+      const added = await add(client, site.id, hostname);
+      pointHere(t.dns, hostname, tokenOf(added));
+      const contacts = vi
+        .spyOn(t.app.get(UsersRepository), 'findContacts')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        expect((await check(client, site.id, added.id)).status).toBe('active');
+      } finally {
+        contacts.mockRestore();
+      }
+      expect(t.emails.to(me.user.email)).toEqual([]);
     });
 
     it('waits for HTTPS for an hour, then needs attention', async () => {

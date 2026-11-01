@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   type AccessGrant,
-  can,
   type Member,
   type MemberListResponse,
   type RoleCounts,
@@ -19,7 +18,7 @@ import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
-import { type StoredGrant, WorkspacesRepository } from '../workspaces/workspaces.repository.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MEMBER_NOT_FOUND, MemberGrants, toMemberDto } from './member-grants.js';
 
 const OWNER_PROTECTED = 'Không đổi được quyền của Chủ sở hữu';
@@ -31,11 +30,6 @@ function refuseSelf(scope: WorkspaceScope, userId: ObjectId): void {
       detail: 'Nhờ Chủ sở hữu hoặc một Quản trị khác đổi quyền hoặc gỡ bạn khỏi workspace.',
     });
   }
-}
-
-/** Quản trị changes roles and invites; a custom role never does (ADR-024). */
-function managesMembers(grant: StoredGrant): boolean {
-  return grant.role !== 'custom' && can(grant.role, 'members.manage');
 }
 
 /** The people of a workspace and their roles (boards 15, 16; ADR-020, ADR-021). */
@@ -90,10 +84,7 @@ export class MembersService {
       await this.grants.holdGrant(scope, resolved, tx);
       const membership = await this.workspaces.updateGrant(scope, id, resolved, tx);
       if (membership) {
-        // Quản trị changes roles without asking; anyone else no longer invites.
-        await (managesMembers(resolved)
-          ? this.requests.deletePendingOf(scope, id, tx)
-          : this.invitations.revokeSentBy(scope, id, new Date(), tx));
+        await this.grants.settle(scope, id, resolved, tx);
       }
       return membership;
     });

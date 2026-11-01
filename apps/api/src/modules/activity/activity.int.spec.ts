@@ -66,6 +66,25 @@ describe('GET /sites/:siteId/activity', () => {
     expect(await list(editor.client, siteId)).toEqual(items);
   });
 
+  it('shows lead and data request events only to the roles that see those (ADR-020)', async () => {
+    const { client, scope, siteId, siteObjectId, workspaceId } = await setup();
+    const editor = await addEditor(t, workspaceId);
+    await activity.record(scope, {
+      siteId: siteObjectId,
+      type: 'lead.exported',
+      data: { count: 1240 },
+    });
+    await activity.record(scope, { siteId: siteObjectId, type: 'data_request.created' });
+
+    expect((await list(client, siteId)).map((item) => item.type)).toEqual([
+      'data_request.created',
+      'lead.exported',
+      'site.created',
+    ]);
+    expect((await list(editor.client, siteId)).map((item) => item.type)).toEqual(['site.created']);
+    expect(await list(editor.client, siteId, '?types=lead.exported')).toEqual([]);
+  });
+
   it('paginates with a cursor into disjoint pages that cover every event', async () => {
     const { client, scope, siteId, siteObjectId } = await setup();
     for (let version = 1; version <= 4; version += 1) {

@@ -201,28 +201,31 @@ export class DomainChecker {
     return (await this.workspaces.findOwnerOf(domain.workspaceId))?.userId ?? null;
   }
 
-  /** Emails the domain's contact; a failure is logged, the check stands. */
+  /**
+   * Emails the domain's contact. Reading who and where is part of it: any failure is logged, never
+   * raised, since the check is stored already and is not repeated for an email.
+   */
   private async notify(domain: DomainRecord, event: 'active' | 'lost' | 'moved'): Promise<void> {
-    const [site, contactId] = await Promise.all([
-      this.sites.findSubdomain(domain.siteId),
-      this.contactOf(domain),
-    ]);
-    const [contact] = contactId === null ? [] : await this.users.findContacts([contactId]);
-    if (site === null || contact === undefined) {
-      return;
-    }
-    const input = {
-      hostname: domain.hostname,
-      siteName: site.name,
-      domainsUrl: `${this.env.ADMIN_ORIGIN}/sites/${site._id.toHexString()}/domain`,
-    };
-    const content =
-      event === 'active'
-        ? domainActiveEmail(input)
-        : event === 'lost'
-          ? domainLostEmail(input)
-          : domainMovedEmail(input);
     try {
+      const [site, contactId] = await Promise.all([
+        this.sites.findSubdomain(domain.siteId),
+        this.contactOf(domain),
+      ]);
+      const [contact] = contactId === null ? [] : await this.users.findContacts([contactId]);
+      if (site === null || contact === undefined) {
+        return;
+      }
+      const input = {
+        hostname: domain.hostname,
+        siteName: site.name,
+        domainsUrl: `${this.env.ADMIN_ORIGIN}/sites/${site._id.toHexString()}/domain`,
+      };
+      const content =
+        event === 'active'
+          ? domainActiveEmail(input)
+          : event === 'lost'
+            ? domainLostEmail(input)
+            : domainMovedEmail(input);
       await this.sender.send({ to: [contact.email], ...content });
     } catch (error) {
       this.logger.warn(
@@ -230,6 +233,7 @@ export class DomainChecker {
           domainId: domain._id.toHexString(),
           event,
           code: error instanceof EmailSendError ? error.code : 'unknown',
+          err: error instanceof EmailSendError ? undefined : error,
         },
         'Domain email not sent',
       );

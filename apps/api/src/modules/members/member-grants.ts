@@ -1,17 +1,24 @@
 import { Injectable } from '@nestjs/common';
-import { type Access, type AccessGrant, customRoleIdOf, type Member } from '@plp/contracts';
+import { type Access, type AccessGrant, can, customRoleIdOf, type Member } from '@plp/contracts';
 import { validationFailed } from '../../shared/errors.js';
-import { isObjectIdString, toObjectId } from '../../shared/persistence/object-id.js';
+import { isObjectIdString, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { UserContact } from '../auth/users.repository.js';
 import { SitesRepository } from '../sites/sites.repository.js';
+import { AccessRequestsRepository } from '../workspaces/access-requests.repository.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { foreignSites } from '../workspaces/domain/member-rules.js';
+import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { MembershipRecord } from '../workspaces/workspace.schema.js';
 import { type StoredGrant, storedGrant } from '../workspaces/workspaces.repository.js';
 
 export const MEMBER_NOT_FOUND = 'Không tìm thấy thành viên';
+
+/** Quản trị changes roles and invites; a custom role never does (ADR-024). */
+function managesMembers(grant: StoredGrant): boolean {
+  return grant.role !== 'custom' && can(grant.role, 'members.manage');
+}
 
 export function toMemberDto(
   membership: MembershipRecord,
@@ -34,7 +41,20 @@ export class MemberGrants {
   constructor(
     private readonly sites: SitesRepository,
     private readonly customRoles: CustomRolesRepository,
+    private readonly requests: AccessRequestsRepository,
+    private readonly invitations: InvitationsRepository,
   ) {}
+
+  /**
+   * What a member's new grant ends, in its transaction (ADR-021). A Quản trị changes roles without
+   * asking, so their pending request closes; anyone else no longer invites, so the invitations
+   * they sent are revoked.
+   */
+  async settle(scope: WorkspaceScope, userId: ObjectId, grant: StoredGrant, tx: Tx): Promise<void> {
+    await (managesMembers(grant)
+      ? this.requests.deletePendingOf(scope, userId, tx)
+      : this.invitations.revokeSentBy(scope, userId, new Date(), tx));
+  }
 
   /**
    * The grant as stored, once checked: its sites are the workspace's, and a custom role is one of

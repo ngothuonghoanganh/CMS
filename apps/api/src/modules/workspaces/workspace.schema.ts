@@ -55,6 +55,11 @@ export interface MembershipRecord {
    * null for Chủ sở hữu and Quản trị.
    */
   siteIds?: Types.ObjectId[] | null;
+  /**
+   * Invitation batches this member sent. Inviting writes it, so a change of their role at the same
+   * moment conflicts with the batch, which then sees the new role (ADR-021).
+   */
+  inviteSeq?: number;
   createdAt: Date;
 }
 
@@ -65,6 +70,7 @@ export const membershipSchema = new Schema<MembershipRecord>(
     role: { type: String, enum: [...roleSchema.options, 'custom'], required: true },
     customRoleId: { type: Schema.Types.ObjectId, default: null },
     siteIds: { type: [Schema.Types.ObjectId], default: null },
+    inviteSeq: { type: Number, default: 0 },
     createdAt: { type: Date, required: true },
   },
   { collection: 'memberships', versionKey: false },

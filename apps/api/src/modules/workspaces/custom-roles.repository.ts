@@ -2,14 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { CUSTOM_ROLES_MAX } from '@plp/contracts';
 import type { Model } from 'mongoose';
-import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
-import {
-  CUSTOM_ROLE_MODEL,
-  CUSTOM_ROLE_NAME_INDEX,
-  type CustomRoleRecord,
-} from './custom-role.schema.js';
+import { CUSTOM_ROLE_MODEL, type CustomRoleRecord } from './custom-role.schema.js';
 import type { WorkspaceScope } from './workspace-scope.js';
 
 export type CustomRoleChange = Pick<
@@ -83,44 +78,33 @@ export class CustomRolesRepository {
     return this.roles.countDocuments({ workspaceId: scope.workspaceId }, { session: tx }).exec();
   }
 
-  /** Stores a new role in the caller's transaction; false when the workspace has the name. */
-  async insert(scope: WorkspaceScope, role: CustomRoleRecord, tx: Tx): Promise<boolean> {
+  /**
+   * Stores a new role in the caller's transaction. A name the workspace has fails with
+   * `CUSTOM_ROLE_NAME_INDEX`, raised: a write error aborts the transaction, so the caller answers
+   * it once the transaction has ended.
+   */
+  async insert(scope: WorkspaceScope, role: CustomRoleRecord, tx: Tx): Promise<void> {
     if (!role.workspaceId.equals(scope.workspaceId)) {
       throw new Error('A custom role must belong to the workspace of its scope');
     }
-    try {
-      await this.roles.create([role], { session: tx });
-      return true;
-    } catch (error) {
-      if (isDuplicateKeyError(error, CUSTOM_ROLE_NAME_INDEX)) {
-        return false;
-      }
-      throw error;
-    }
+    await this.roles.create([role], { session: tx });
   }
 
-  /** The role after the change; null when there is no such role, 'name_taken' for a duplicate. */
-  async update(
+  /** The role after the change; null when there is no such role. A taken name raises, as above. */
+  update(
     scope: WorkspaceScope,
     id: ObjectId,
     change: CustomRoleChange,
     tx: Tx,
-  ): Promise<CustomRoleRecord | null | 'name_taken'> {
-    try {
-      return await this.roles
-        .findOneAndUpdate(
-          { _id: id, workspaceId: scope.workspaceId },
-          { $set: change },
-          { new: true, session: tx },
-        )
-        .lean<CustomRoleRecord>()
-        .exec();
-    } catch (error) {
-      if (isDuplicateKeyError(error, CUSTOM_ROLE_NAME_INDEX)) {
-        return 'name_taken';
-      }
-      throw error;
-    }
+  ): Promise<CustomRoleRecord | null> {
+    return this.roles
+      .findOneAndUpdate(
+        { _id: id, workspaceId: scope.workspaceId },
+        { $set: change },
+        { new: true, session: tx },
+      )
+      .lean<CustomRoleRecord>()
+      .exec();
   }
 
   async remove(scope: WorkspaceScope, id: ObjectId, tx: Tx): Promise<boolean> {

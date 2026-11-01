@@ -18,7 +18,10 @@ import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { invitationToken, invite, newEmail } from '../../../test/members.js';
 import { addMember, createSite, insertMembership } from '../../../test/resources.js';
+import { UsersRepository } from '../auth/users.repository.js';
+import { EmailQuota } from '../notifications/email-quota.js';
 import { InvitationsRepository } from '../workspaces/invitations.repository.js';
+import { MemberGrants } from './member-grants.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 
 const PASSWORD = 'mat-khau-an-toan-123';
@@ -196,6 +199,127 @@ describe('members, invitations and access requests (ADR-021)', () => {
         ),
       );
       expect(states).toEqual(['revoked', 'revoked', 'pending']);
+    });
+
+    it('invites nobody for a Quản trị demoted while their batch was being counted', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const admin = await addMember(t, workspaceId, 'admin');
+      const email = newEmail('cham');
+      const quota = t.app.get(EmailQuota);
+      const take = quota.take.bind(quota);
+      const counted = vi.spyOn(quota, 'take').mockImplementationOnce(async (...args) => {
+        // Chủ sở hữu demotes them between their permission check and the stored batch.
+        await owner
+          .patch(`/workspaces/${workspaceId}/members/${admin.me.user.id}`, {
+            role: 'editor',
+            siteIds: null,
+          })
+          .expect(200);
+        return take(...args);
+      });
+      try {
+        await admin.client
+          .post(`/workspaces/${workspaceId}/invitations`, {
+            emails: [email],
+            role: 'admin',
+            siteIds: null,
+          })
+          .expect(403);
+      } finally {
+        counted.mockRestore();
+      }
+      expect(await t.connection.collection('invitations').countDocuments({ email })).toBe(0);
+      // Inviting writes the inviter's membership: a role change at that moment conflicts with it.
+      await invite(t, owner, workspaceId, newEmail('giu'));
+      const ownerMembership = await t.connection
+        .collection('memberships')
+        .findOne({ workspaceId: new Types.ObjectId(workspaceId), role: 'owner' });
+      expect(ownerMembership?.inviteSeq).toBe(1);
+    });
+
+    it('sends nothing again for a Quản trị demoted while it was being counted', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const admin = await addMember(t, workspaceId, 'admin');
+      const email = newEmail('gui-lai-cham');
+      const token = await invite(t, owner, workspaceId, email);
+      const [sent] = invitationListResponseSchema.parse(
+        (await owner.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body,
+      ).items;
+      const quota = t.app.get(EmailQuota);
+      const take = quota.take.bind(quota);
+      const counted = vi.spyOn(quota, 'take').mockImplementationOnce(async (...args) => {
+        await owner
+          .patch(`/workspaces/${workspaceId}/members/${admin.me.user.id}`, {
+            role: 'editor',
+            siteIds: null,
+          })
+          .expect(200);
+        return take(...args);
+      });
+      try {
+        await admin.client
+          .post(`/workspaces/${workspaceId}/invitations/${sent?.id ?? ''}/resend`)
+          .expect(403);
+      } finally {
+        counted.mockRestore();
+      }
+      // The refused resend changed nothing: the link Chủ sở hữu sent still works.
+      expect(
+        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body).state,
+      ).toBe('pending');
+      const [kept] = invitationListResponseSchema.parse(
+        (await owner.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body,
+      ).items;
+      expect(kept?.invitedBy.id).toBe(sent?.invitedBy.id);
+    });
+
+    it('keeps an invitation another Quản trị sent again once its first sender leaves', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const first = await addMember(t, workspaceId, 'admin');
+      const second = await addMember(t, workspaceId, 'admin');
+      const email = newEmail('gui-lai');
+      await invite(t, first.client, workspaceId, email);
+      const [sent] = invitationListResponseSchema.parse(
+        (await owner.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body,
+      ).items;
+      await second.client
+        .post(`/workspaces/${workspaceId}/invitations/${sent?.id ?? ''}/resend`)
+        .expect(200);
+
+      await owner.delete(`/workspaces/${workspaceId}/members/${first.me.user.id}`).expect(204);
+      const [kept] = invitationListResponseSchema.parse(
+        (await owner.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body,
+      ).items;
+      expect(kept).toMatchObject({ email, invitedBy: { id: second.me.user.id } });
+    });
+
+    it('ends the invitations of a Quản trị lowered by accepting their old request', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const admin = await addMember(t, workspaceId, 'admin');
+      const token = await invite(t, admin.client, workspaceId, newEmail('ha-quyen'));
+      // Asked for as Biên tập at the moment they were made Quản trị.
+      const { insertedId } = await t.connection.collection('access_requests').insertOne({
+        workspaceId: new Types.ObjectId(workspaceId),
+        userId: new Types.ObjectId(admin.me.user.id),
+        role: 'support',
+        wholeWorkspace: true,
+        note: '',
+        status: 'pending',
+        createdAt: new Date(),
+        decidedAt: null,
+        decidedBy: null,
+        purgeAt: null,
+      });
+
+      await owner
+        .post(`/workspaces/${workspaceId}/access-requests/${insertedId.toHexString()}/accept`, {
+          role: 'support',
+          siteIds: null,
+        })
+        .expect(200);
+      expect(
+        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body).state,
+      ).toBe('revoked');
     });
 
     it('closes a pending request once its sender changes roles without asking', async () => {
@@ -787,6 +911,45 @@ describe('members, invitations and access requests (ADR-021)', () => {
         findOwner.mockRestore();
       }
       expect(t.emails.sent).toEqual([]);
+    });
+
+    it('decides a request even when its email cannot be read', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const accepted = await addMember(t, workspaceId, 'viewer');
+      const declined = await addMember(t, workspaceId, 'viewer');
+      const url = `/workspaces/${workspaceId}/access-requests`;
+      const body = { role: 'editor', wholeWorkspace: true, note: '' };
+      await accepted.client.post(url, body).expect(201);
+      await declined.client.post(url, body).expect(201);
+      const requests = accessRequestListResponseSchema.parse(
+        (await owner.get(url).expect(200)).body,
+      ).items;
+      const idOf = (member: { me: { user: { id: string } } }) =>
+        requests.find((request) => request.user.id === member.me.user.id)?.id ?? '';
+      t.emails.sent.length = 0;
+
+      const scopeLine = vi
+        .spyOn(t.app.get(MemberGrants), 'scopeLine')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        await owner
+          .post(`${url}/${idOf(accepted)}/accept`, { role: 'editor', siteIds: null })
+          .expect(200);
+      } finally {
+        scopeLine.mockRestore();
+      }
+      const contacts = vi
+        .spyOn(t.app.get(UsersRepository), 'findContacts')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        await owner.post(`${url}/${idOf(declined)}/decline`).expect(204);
+      } finally {
+        contacts.mockRestore();
+      }
+      expect(t.emails.sent).toEqual([]);
+      expect(
+        accessRequestListResponseSchema.parse((await owner.get(url).expect(200)).body).items,
+      ).toEqual([]);
     });
 
     it('declines, keeping the role, and tells the member', async () => {

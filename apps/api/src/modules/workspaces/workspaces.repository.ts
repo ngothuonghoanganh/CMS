@@ -7,6 +7,7 @@ import {
   MEMBERS_MAX,
   type Role,
   roleSchema,
+  rolesWith,
 } from '@plp/contracts';
 import type { Model } from 'mongoose';
 import { type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
@@ -102,6 +103,25 @@ export class WorkspacesRepository {
     if (result.matchedCount === 0) {
       throw new Error(`Workspace ${scope.workspaceId.toHexString()} of the scope does not exist`);
     }
+  }
+
+  /**
+   * Holds the inviter's membership in an invitation transaction, while their role may still
+   * invite: a role change or removal at the same moment conflicts with it. False when it may not.
+   */
+  async holdInviter(scope: WorkspaceScope, tx: Tx): Promise<boolean> {
+    const result = await this.memberships
+      .updateOne(
+        {
+          workspaceId: scope.workspaceId,
+          userId: scope.userId,
+          role: { $in: rolesWith('members.manage') },
+        },
+        { $inc: { inviteSeq: 1 } },
+        { session: tx },
+      )
+      .exec();
+    return result.matchedCount === 1;
   }
 
   /** Members holding a custom role; `withSites` only those kept to some sites. */

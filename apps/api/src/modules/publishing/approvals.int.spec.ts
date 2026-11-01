@@ -249,11 +249,13 @@ describe('requests to publish', () => {
       `${admin.me.user.name} đã duyệt và xuất bản phiên bản v1.`,
     );
 
-    // A Biên tập publishing answers it the same way.
+    // A Biên tập publishing answers it the same way, without saying they approved it.
     await editHeroHeading(contributor.client, pageId, 'Ưu đãi tháng 12');
     await askNow(contributor, pageId);
+    t.emails.sent.length = 0;
     const byEditor = await publish(editor.client, pageId);
     expect(byEditor.page.approval).toBeNull();
+    expect(t.emails.sent[0]?.text).toContain(`${editor.me.user.name} đã xuất bản phiên bản v2.`);
     expect(await stored(pageId)).toEqual([
       expect.objectContaining({ status: 'published' }),
       expect.objectContaining({ status: 'published' }),

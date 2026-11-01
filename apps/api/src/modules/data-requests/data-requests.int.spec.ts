@@ -13,7 +13,7 @@ import {
   type Site,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
 import { createLiveFormPage, insertLeads, storedLead } from '../../../test/leads.js';
@@ -25,6 +25,7 @@ import {
 import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient } from '../../../test/recipients.js';
 import { addEditor, createSite } from '../../../test/resources.js';
+import { PagesRepository } from '../pages/pages.repository.js';
 
 const DAY_MS = 86_400_000;
 const PHONE = '+84987106223';
@@ -177,6 +178,25 @@ describe('data requests', () => {
     expect(list.items).toEqual([
       expect.objectContaining({ id: created.id, leads: { count: 3, capped: false } }),
     ]);
+  });
+
+  it('stores nothing when the leads it covers cannot be read, so pressing again records it once', async () => {
+    const form = await formSite();
+    await seedPerson(form);
+    const titles = vi
+      .spyOn(t.app.get(PagesRepository), 'findTitles')
+      .mockRejectedValueOnce(new Error('database unavailable'));
+    try {
+      await owner.post(`/sites/${form.site.id}/data-requests`, requestBody()).expect(500);
+    } finally {
+      titles.mockRestore();
+    }
+    expect(await activity(form.site)).toEqual([]);
+    await record(form.site);
+    const list = dataRequestListResponseSchema.parse(
+      (await owner.get(`/sites/${form.site.id}/data-requests`).expect(200)).body,
+    );
+    expect(list.items).toHaveLength(1);
   });
 
   it('counts the leads of each request of a page in one go', async () => {

@@ -5,6 +5,7 @@ import {
   customRoleListResponseSchema,
   customRoleRef,
   customRoleSchema,
+  invitationListResponseSchema,
   memberListResponseSchema,
   meResponseSchema,
   problemSchema,
@@ -199,9 +200,34 @@ describe('custom roles (ADR-024)', () => {
         wholeWorkspace: true,
       })
       .expect(409);
-    expect(problemSchema.parse(widened.body).title).toBe(
-      '1 người đang giữ vai trò này trên một số site',
+    expect(problemSchema.parse(widened.body)).toMatchObject({
+      title: 'Vai trò đang được giao trên một số site',
+      detail: 'Ở màn Thành viên, đổi phạm vi của 1 người đang giữ thành toàn workspace trước.',
+    });
+    // An invitation kept to some sites is revoked and sent again instead.
+    const invitation = await owner
+      .post(`/workspaces/${workspaceId}/invitations`, {
+        emails: [newEmail()],
+        role: customRoleRef(kept.id),
+        siteIds: [site.id],
+      })
+      .expect(200);
+    expect(invitation.body).toMatchObject({ results: [{ outcome: 'sent' }] });
+    const both = await owner
+      .patch(`/workspaces/${workspaceId}/custom-roles/${kept.id}`, {
+        ...LEAD,
+        wholeWorkspace: true,
+      })
+      .expect(409);
+    expect(problemSchema.parse(both.body).detail).toBe(
+      'Ở màn Thành viên, đổi phạm vi của 1 người đang giữ thành toàn workspace và thu hồi 1 lời mời đang chờ rồi mời lại trước.',
     );
+    const pending = invitationListResponseSchema.parse(
+      (await owner.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body,
+    ).items;
+    for (const item of pending) {
+      await owner.delete(`/workspaces/${workspaceId}/invitations/${item.id}`).expect(204);
+    }
     await owner
       .patch(`/workspaces/${workspaceId}/members/${member.me.user.id}`, {
         role: customRoleRef(kept.id),

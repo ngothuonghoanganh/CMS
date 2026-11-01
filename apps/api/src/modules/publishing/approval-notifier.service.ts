@@ -88,6 +88,7 @@ export class ApprovalNotifier {
             ...approvalPublishedEmail({
               pageTitle: page.title,
               publisherName: release.publisherName,
+              approved: can(scope.access, 'publishApprovals.decide'),
               version: release.version,
               liveUrl: release.liveUrl,
             }),

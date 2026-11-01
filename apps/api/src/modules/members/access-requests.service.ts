@@ -13,7 +13,7 @@ import {
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { AppError, notFound } from '../../shared/errors.js';
-import { newObjectId, toObjectId } from '../../shared/persistence/object-id.js';
+import { newObjectId, type ObjectId, toObjectId } from '../../shared/persistence/object-id.js';
 import { TransactionRunner } from '../../shared/persistence/transaction.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { type UserContact, UsersRepository } from '../auth/users.repository.js';
@@ -170,6 +170,15 @@ export class AccessRequestsService {
     this.access.require(scope, 'accessRequests.decide');
     const request = await this.findPending(scope, requestId);
     const resolved = await this.grants.resolveGrant(scope, grant);
+    // Read before the decision is stored: a failure afterwards would answer 500 for a request
+    // already decided, which a retry then cannot find.
+    const [[contact], roles] = await Promise.all([
+      this.users.findContacts([request.userId]),
+      this.customRoles.mapForWorkspace(scope),
+    ]);
+    if (!contact) {
+      throw new Error(`Member ${request.userId.toHexString()} has no account`);
+    }
     const now = new Date();
     const updated = await this.transactions.run(async (tx) => {
       if (!(await this.requests.decide(scope, request._id, 'accepted', now, tx))) {
@@ -181,20 +190,14 @@ export class AccessRequestsService {
         // The requester left, or became Chủ sở hữu, meanwhile.
         throw notFound(MEMBER_NOT_FOUND);
       }
+      await this.grants.settle(scope, request.userId, resolved, tx);
       return membership;
     });
-    const [[contact], roles] = await Promise.all([
-      this.users.findContacts([request.userId]),
-      this.customRoles.mapForWorkspace(scope),
-    ]);
-    if (!contact) {
-      throw new Error(`Member ${request.userId.toHexString()} has no account`);
-    }
     const access = accessOf(updated, roles);
-    await this.notifyRequester(scope, contact, {
+    await this.notifyRequester(scope, request.userId, {
       accepted: true,
       roleLabel: accessLabel(access),
-      scope: await this.grants.scopeLine(scope, grant.siteIds),
+      siteIds: grant.siteIds,
     });
     return toMemberDto(updated, contact, access);
   }
@@ -206,10 +209,7 @@ export class AccessRequestsService {
     if (!(await this.requests.decide(scope, request._id, 'declined', new Date()))) {
       throw notFound(ACCESS_REQUEST_NOT_FOUND);
     }
-    const [contact] = await this.users.findContacts([request.userId]);
-    if (contact) {
-      await this.notifyRequester(scope, contact, { accepted: false, roleLabel: '', scope: '' });
-    }
+    await this.notifyRequester(scope, request.userId, { accepted: false });
   }
 
   private async findPending(scope: WorkspaceScope, requestId: string) {
@@ -269,16 +269,27 @@ export class AccessRequestsService {
 
   private async notifyRequester(
     scope: WorkspaceScope,
-    requester: UserContact,
-    decision: { accepted: boolean; roleLabel: string; scope: string },
+    requesterId: ObjectId,
+    decision:
+      | { accepted: true; roleLabel: string; siteIds: readonly string[] | null }
+      | { accepted: false },
   ): Promise<void> {
     await this.sendTo(scope, async () => {
-      const workspace = await this.workspaces.findWorkspace(scope);
+      const [[requester], workspace, scopeLine] = await Promise.all([
+        this.users.findContacts([requesterId]),
+        this.workspaces.findWorkspace(scope),
+        decision.accepted ? this.grants.scopeLine(scope, decision.siteIds) : '',
+      ]);
+      if (!requester) {
+        throw new Error(`Member ${requesterId.toHexString()} has no account`);
+      }
       return {
         to: [requester.email],
         ...accessDecisionEmail({
           workspaceName: workspace?.name ?? '',
-          ...decision,
+          accepted: decision.accepted,
+          roleLabel: decision.accepted ? decision.roleLabel : '',
+          scope: scopeLine,
           openUrl: `${this.env.ADMIN_ORIGIN}/`,
         }),
       };
