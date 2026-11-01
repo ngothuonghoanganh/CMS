@@ -235,7 +235,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-31 (vòng test thứ ba, E2E):** `@axe-core/playwright` 4.14.0 (kèm `axe-core` 4.14.0), dev dependency của `tests/e2e`, để E2E quét WCAG 2.2 AA (ADR-013). Đây là bộ quét của Deque dùng trực tiếp với Playwright đang có; không thêm trình chạy test nào khác.
 - **Amended 2026-11-01 (ADR-023):**
   - `@aws-sdk/client-sqs` 3.1161.0 (API) gửi email vào hàng đợi của plp-mailer khi `MAIL_TRANSPORT=sqs`. Cùng họ SDK v3 với `@aws-sdk/client-s3`.
-  - `ajv` 8.20.0 (dev dependency của API) kiểm `data` của email theo `schema.json` của plp-mail-templates. Đó là JSON Schema 2020-12 có `if`/`then`, và plp-mail-templates kiểm bằng chính Ajv; Zod không đọc JSON Schema.
+  - `ajv` 8.20.0 (dev dependency của API) kiểm `data` của email theo `schema.json` của các template trong plp-mailer. Đó là JSON Schema 2020-12 có `if`/`then`, và plp-mailer kiểm bằng chính Ajv; Zod không đọc JSON Schema.
 
 ### ADR-003 — Tenancy: một database, scope theo workspace
 
@@ -2103,9 +2103,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Date:** 2026-11-01 · **Status:** Accepted
 - **Context:**
   - ADR-018 gửi email bằng SMTP (`nodemailer`), và ADR-021 dùng cùng đường gửi cho lời mời và yêu cầu đổi quyền. API tự dựng chủ đề, phần chữ và phần HTML.
-  - Ngày 2026-11-01, chủ sản phẩm yêu cầu một dịch vụ gửi thư riêng, gồm hai repo:
-    - `plp-mailer`: AWS Lambda và Amazon SES, dựng và test bằng SAM. Nhận `{ template, to[], replyTo?, data, idempotencyKey }` qua hàng đợi SQS, có dead-letter queue, và chống trùng bằng idempotency trên DynamoDB trong 14 ngày.
-    - `plp-mail-templates`: template Handlebars, mỗi template có một `schema.json` cho `data`.
+  - Ngày 2026-11-01, chủ sản phẩm yêu cầu một dịch vụ gửi thư riêng: repo `plp-mailer`, gồm AWS Lambda và Amazon SES, dựng và test bằng SAM.
+    - Nhận `{ template, to[], replyTo?, data, idempotencyKey }` qua hàng đợi SQS, có dead-letter queue, và chống trùng bằng idempotency trên DynamoDB trong 14 ngày.
+    - Template Handlebars nằm trong `templates/emails/<template>/` của chính repo đó, mỗi template có một `schema.json` cho `data`. Repo `plp-mail-templates` riêng lúc đầu đã được gộp vào đây.
   - Chưa deploy được: tài khoản AWS đang bị tạm khóa và domain gửi chưa được chọn. Vì vậy SMTP vẫn là mặc định.
 - **Decision:**
   - **Công tắc `MAIL_TRANSPORT`:** `smtp` (mặc định) hoặc `sqs`, validate bằng Zod lúc khởi động.
@@ -2113,7 +2113,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `sqs` cần `MAIL_QUEUE_URL` (http hoặc https) và `MAIL_QUEUE_REGION`, và không đọc `SMTP_URL`, `LEAD_EMAIL_FROM`. Địa chỉ gửi do plp-mailer quyết (`SenderDomain`).
     - Credentials lấy theo chuỗi mặc định của AWS SDK, tức role của máy chạy API, được gắn `MailProducerPolicy`. Không có biến môi trường riêng cho key.
   - **Một dạng thư cho cả hai đường:** mọi nơi gửi email dựng `{ to, template, data, idempotencyKey }`.
-    - `template` là tên template trong plp-mail-templates.
+    - `template` là tên một thư mục trong `templates/emails/` của plp-mailer.
     - `data` khớp `schema.json` của template đó. Mọi giá trị đã được định dạng để hiển thị: số điện thoại dạng Việt Nam, giờ Việt Nam, nhãn nguồn, và `note: null` khi không có lời nhắn.
     - Với `smtp`, API dựng chủ đề, phần chữ và phần HTML từ `data` rồi gửi qua SMTP. Nội dung thư giữ nguyên như trước.
     - Với `sqs`, API gửi một message SQS cho mỗi email. Body là request của plp-mailer, được kiểm bằng một schema Zod chép từ `plp-mailer/src/contracts.ts` trước khi gửi.
@@ -2142,10 +2142,10 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - plp-mailer từ chối một key được dùng lại cho payload khác (`IdempotencyValidationError`), và message đó vào dead-letter queue.
     - Việc này chỉ xảy ra khi một lần thử tưởng là lỗi thực ra đã vào hàng đợi, rồi nơi nhận lead đổi trước lần thử sau.
     - Thư đầu đã đi, nên người nhận không bị trùng thư.
-  - Template trong API (cho `smtp`) và template trong plp-mail-templates là hai bản phải giữ khớp nhau.
-    - `apps/api/test/mail-templates/*.schema.json` được chép nguyên từ plp-mail-templates 0.1.0 (commit `6d1878d`).
+  - Template trong API (cho `smtp`) và template trong plp-mailer là hai bản phải giữ khớp nhau.
+    - `apps/api/test/mail-templates/*.schema.json` được chép nguyên từ `plp-mailer/templates/emails/*/schema.json` (commit `9866baa`). Prettier bỏ qua thư mục này để bản chép giữ đúng từng byte.
     - Unit test kiểm `data` của từng email theo các schema đó, và bộ ghi thư của integration test kiểm mọi thư mà test gửi.
-    - Đổi một schema ở plp-mail-templates thì chép lại file và sửa mapping trong cùng một PR.
+    - Đổi một schema ở plp-mailer thì chép lại file và sửa mapping trong cùng một PR.
   - Ví dụ giờ trong `lead-notification/schema.json` ("09:15 01/11/2026") khác định dạng giờ Việt Nam của ADR-018 ("2026-10-24 16:42:07"). Schema chỉ yêu cầu một chuỗi không rỗng, nên API giữ định dạng của ADR-018.
   - Bật `sqs` ở production cần tài khoản AWS hoạt động và plp-mailer đã deploy (domain gửi, DKIM, quyền gửi production của SES), rồi gắn `MailProducerPolicy` cho role của API (§6).
 
