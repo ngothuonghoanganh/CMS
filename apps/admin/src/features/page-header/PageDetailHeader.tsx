@@ -101,10 +101,11 @@ export function PageDetailHeader({
   const [unpublishOpen, setUnpublishOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
+  const dialogOpen = unpublishOpen || deleteOpen;
 
   useEffect(() => {
     const target = returnFocus.current;
-    if (unpublishOpen || target === null) {
+    if (dialogOpen || target === null) {
       return;
     }
     // The dialog opened from a menu item that no longer exists; focus its menu button instead.
@@ -117,7 +118,7 @@ export function PageDetailHeader({
     return () => {
       clearTimeout(timer);
     };
-  }, [unpublishOpen]);
+  }, [dialogOpen]);
 
   useEffect(() => {
     // Focus that moves anywhere fires `focusin` there; the removal of the focused button does not.
@@ -213,6 +214,7 @@ export function PageDetailHeader({
                   disabled={!deletable(page)}
                   description={deletable(page) ? undefined : UNPUBLISH_BEFORE_DELETE}
                   onSelect={() => {
+                    returnFocus.current = menuTrigger.current;
                     setDeleteOpen(true);
                   }}
                 >

@@ -156,6 +156,30 @@ describe('PageDetailHeader', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
+  it('returns the focus to "Tùy chọn khác" when deleting is cancelled', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={draftPageFixture()}
+        current="seo"
+        now={NOW}
+        canEdit
+        canManageLive
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Xóa trang' }));
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Tùy chọn khác' })).toHaveFocus();
+    });
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
   it('offers "Xóa trang" for a live page disabled, saying to unpublish first', async () => {
     const user = userEvent.setup();
     renderWithProviders(
