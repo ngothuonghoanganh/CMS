@@ -6,7 +6,15 @@ import { useState } from 'react';
 import { AccessRequestDialog } from '../members/AccessRequestDialog';
 
 /** "Yêu cầu đổi quyền" from a screen the role may not open (ADR-021). */
-export function RequestAccessButton({ workspaceId, role }: { workspaceId: string; role: Role }) {
+export function RequestAccessButton({
+  workspaceId,
+  role,
+  siteLimited,
+}: {
+  workspaceId: string;
+  role: Role;
+  siteLimited: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -20,6 +28,7 @@ export function RequestAccessButton({ workspaceId, role }: { workspaceId: string
       <AccessRequestDialog
         workspaceId={workspaceId}
         role={role}
+        siteLimited={siteLimited}
         open={open}
         onOpenChange={setOpen}
       />

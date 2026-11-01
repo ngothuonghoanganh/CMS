@@ -43,12 +43,28 @@ export function invitationState(
   return invitation.status;
 }
 
-/** Rate-limit keys of an invitation email; the address is hashed so none is stored. */
+const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
+
+/**
+ * The mailbox an address reaches, for its daily limit: "an+moi1@x" and "An@x" are one mailbox,
+ * and Gmail ignores dots in the local part, so variants of one address share its limit.
+ */
+export function mailboxOf(email: string): string {
+  const lower = email.trim().toLowerCase();
+  const at = lower.lastIndexOf('@');
+  const domain = lower.slice(at + 1);
+  const local = lower.slice(0, at).split('+')[0] ?? '';
+  return GMAIL_DOMAINS.has(domain)
+    ? `${local.replaceAll('.', '')}@gmail.com`
+    : `${local}@${domain}`;
+}
+
+/** Rate-limit keys of an invitation email; the mailbox is hashed so no address is stored. */
 export function invitationLimitKeys(
   email: string,
   workspaceId: { toHexString(): string },
 ): { workspace: string; address: string } {
-  const address = createHash('sha256').update(email.toLowerCase()).digest('hex');
+  const address = createHash('sha256').update(mailboxOf(email)).digest('hex');
   return {
     workspace: `member-invite:workspace:${workspaceId.toHexString()}`,
     address: `member-invite:address:${address}`,

@@ -69,6 +69,20 @@ export class WorkspacesRepository {
     }
   }
 
+  /**
+   * Increments `inviteSeq` inside the transaction that creates invitations. The write makes two
+   * batches at once conflict, so the count of people read afterwards in the same transaction is
+   * exact and the member limit holds.
+   */
+  async recordInvitations(scope: WorkspaceScope, tx: Tx): Promise<void> {
+    const result = await this.workspaces
+      .updateOne({ _id: scope.workspaceId }, { $inc: { inviteSeq: 1 } }, { session: tx })
+      .exec();
+    if (result.matchedCount === 0) {
+      throw new Error(`Workspace ${scope.workspaceId.toHexString()} of the scope does not exist`);
+    }
+  }
+
   findWorkspace(scope: WorkspaceScope): Promise<WorkspaceRecord | null> {
     return this.workspaces.findById(scope.workspaceId).lean<WorkspaceRecord>().exec();
   }

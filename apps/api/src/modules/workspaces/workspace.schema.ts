@@ -13,6 +13,12 @@ export interface WorkspaceRecord {
    * then counts the other's site against the limit (ADR-014).
    */
   siteSeq: number;
+  /**
+   * Batches of invitations created so far. Each batch increments it in its transaction, so two at
+   * once write the same document and the later one counts the other's invitations against the
+   * member limit (ADR-021). Absent on workspaces that never invited anyone.
+   */
+  inviteSeq?: number;
   createdBy: Types.ObjectId;
   createdAt: Date;
 }
@@ -21,6 +27,7 @@ export const workspaceSchema = new Schema<WorkspaceRecord>(
   {
     name: { type: String, required: true },
     siteSeq: { type: Number, default: 0 },
+    inviteSeq: { type: Number, default: 0 },
     createdBy: { type: Schema.Types.ObjectId, required: true },
     createdAt: { type: Date, required: true },
   },

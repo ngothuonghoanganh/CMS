@@ -130,17 +130,9 @@ export class InvitationsService {
       outcomes.set(email, 'already_invited');
     }
     const fresh = emails.filter((email) => !outcomes.has(email));
-    const taken = members.size + (await this.invitations.countPending(scope));
-    if (taken + fresh.length > MEMBERS_MAX) {
-      throw new AppError(
-        409,
-        'member_limit_reached',
-        `Mỗi workspace có tối đa ${MEMBERS_MAX} người`,
-        {
-          detail: `Đang có ${taken} người, tính cả lời mời đang chờ. Thu hồi lời mời cũ hoặc gỡ bớt thành viên.`,
-        },
-      );
-    }
+    // Read before anything is counted or stored: the emails need them once the batch is saved.
+    const workspaceName = (await this.workspaces.findWorkspace(scope))?.name ?? '';
+    const scopeLine = await this.grants.scopeLine(scope, input.siteIds);
     const now = new Date();
     const counted = new Map<string, CountedHit[]>();
     try {
@@ -151,44 +143,73 @@ export class InvitationsService {
       await this.quota.giveBack([...counted.values()].flat(), INVITATIONS);
       throw error;
     }
-    const workspaceName = (await this.workspaces.findWorkspace(scope))?.name ?? '';
-    const scopeLine = await this.grants.scopeLine(scope, input.siteIds);
-    for (const email of fresh) {
-      const hits = counted.get(email) ?? [];
-      const { token, tokenHash } = newInvitationToken();
-      const expiresAt = invitationExpiry(now);
-      const invitation: InvitationRecord = {
-        _id: newObjectId(),
-        workspaceId: scope.workspaceId,
-        email,
-        ...storedGrant(input),
-        tokenHash,
-        expiresAt,
-        invitedBy: scope.userId,
-        createdAt: now,
-        sentAt: null,
-        status: 'pending',
-        closedAt: null,
-        purgeAt: purgeAfter(expiresAt),
-      };
-      const created = await this.quota.giveBackOnError(hits, INVITATIONS, () =>
-        this.invitations.create(scope, invitation),
-      );
-      if (!created) {
-        // Invited by someone else meanwhile.
-        await this.quota.giveBack(hits, INVITATIONS);
-        outcomes.set(email, 'already_invited');
-        continue;
-      }
-      const sent = await this.send(scope, invitation, token, {
+    let created: Array<{ invitation: InvitationRecord; token: string }>;
+    try {
+      // The member limit and the new invitations in one transaction that writes the workspace:
+      // two batches at once cannot both fit under the limit (ADR-021).
+      created = await this.transactions.run(async (tx) => {
+        await this.workspaces.recordInvitations(scope, tx);
+        const pending = await this.invitations.pendingEmails(scope, fresh, tx);
+        const toInvite = fresh.filter((email) => !pending.has(email));
+        const taken =
+          (await this.workspaces.countMembers(scope, tx)) +
+          (await this.invitations.countPending(scope, tx));
+        if (taken + toInvite.length > MEMBERS_MAX) {
+          throw new AppError(
+            409,
+            'member_limit_reached',
+            `Mỗi workspace có tối đa ${MEMBERS_MAX} người`,
+            {
+              detail: `Đang có ${taken} người, tính cả lời mời đang chờ. Thu hồi lời mời cũ hoặc gỡ bớt thành viên.`,
+            },
+          );
+        }
+        const batch = toInvite.map((email) => {
+          const { token, tokenHash } = newInvitationToken();
+          const expiresAt = invitationExpiry(now);
+          const invitation: InvitationRecord = {
+            _id: newObjectId(),
+            workspaceId: scope.workspaceId,
+            email,
+            ...storedGrant(input),
+            tokenHash,
+            expiresAt,
+            invitedBy: scope.userId,
+            createdAt: now,
+            sentAt: null,
+            status: 'pending',
+            closedAt: null,
+            purgeAt: purgeAfter(expiresAt),
+          };
+          return { invitation, token };
+        });
+        await this.invitations.insertMany(
+          scope,
+          batch.map((item) => item.invitation),
+          tx,
+        );
+        return batch;
+      });
+    } catch (error) {
+      await this.quota.giveBack([...counted.values()].flat(), INVITATIONS);
+      throw error;
+    }
+    const invited = new Set(created.map((item) => item.invitation.email));
+    for (const email of fresh.filter((item) => !invited.has(item))) {
+      // Invited by someone else meanwhile.
+      await this.quota.giveBack(counted.get(email) ?? [], INVITATIONS);
+      outcomes.set(email, 'already_invited');
+    }
+    for (const { invitation, token } of created) {
+      const { sent } = await this.send(scope, invitation, token, {
         workspaceName,
         invitedBy: user.name,
         scope: scopeLine,
       });
       if (!sent) {
-        await this.quota.giveBack(hits, INVITATIONS);
+        await this.quota.giveBack(counted.get(invitation.email) ?? [], INVITATIONS);
       }
-      outcomes.set(email, sent ? 'sent' : 'unsent');
+      outcomes.set(invitation.email, sent ? 'sent' : 'unsent');
     }
     return { results: emails.map((email) => ({ email, outcome: outcomes.get(email) ?? 'sent' })) };
   }
@@ -217,7 +238,7 @@ export class InvitationsService {
       await this.quota.giveBack(hits, INVITATIONS);
       throw notFound(INVITATION_NOT_FOUND);
     }
-    const sent = await this.send(scope, renewed, token, {
+    const { sent, sentAt } = await this.send(scope, renewed, token, {
       workspaceName: (await this.workspaces.findWorkspace(scope))?.name ?? '',
       invitedBy: user.name,
       scope: await this.grants.scopeLine(
@@ -231,7 +252,7 @@ export class InvitationsService {
     const inviter = (await this.users.findRefs([renewed.invitedBy])).get(
       renewed.invitedBy.toHexString(),
     );
-    return toInvitationDto({ ...renewed, sentAt: sent ? new Date() : null }, inviter?.name ?? '');
+    return toInvitationDto({ ...renewed, sentAt }, inviter?.name ?? '');
   }
 
   async revoke(user: AuthenticatedUser, workspaceId: string, invitationId: string): Promise<void> {
@@ -278,7 +299,7 @@ export class InvitationsService {
 
   async decline(user: AuthenticatedUser, token: string): Promise<void> {
     const invitation = await this.forUser(user, token);
-    if (!(await this.invitations.claim(invitation._id, 'declined', new Date()))) {
+    if (!(await this.invitations.claim(invitation, 'declined', new Date()))) {
       throw new AppError(409, 'invitation_unavailable', INVITATION_UNAVAILABLE);
     }
   }
@@ -309,13 +330,13 @@ export class InvitationsService {
     ];
   }
 
-  /** Emails the link; true when it went out. A failure keeps the invitation, unsent. */
+  /** Emails the link; `sent` when it went out. A failure keeps the invitation, unsent. */
   private async send(
     scope: WorkspaceScope,
     invitation: Pick<InvitationRecord, '_id' | 'email' | 'role' | 'tokenHash'>,
     token: string,
     context: { workspaceName: string; invitedBy: string; scope: string },
-  ): Promise<boolean> {
+  ): Promise<{ sent: boolean; sentAt: Date | null }> {
     const email = memberInvitationEmail({
       ...context,
       roleLabel: roleLabels[invitation.role],
@@ -333,9 +354,20 @@ export class InvitationsService {
         },
         'Invitation email not sent',
       );
-      return false;
+      return { sent: false, sentAt: null };
     }
-    await this.invitations.markSent(scope, invitation._id, invitation.tokenHash, new Date());
-    return true;
+    const sentAt = new Date();
+    try {
+      await this.invitations.markSent(scope, invitation._id, invitation.tokenHash, sentAt);
+      return { sent: true, sentAt };
+    } catch (error) {
+      // The email went out: the link works. Only "Đã gửi" stays unset, here and on the list; the
+      // other invitations of the batch are still sent.
+      this.logger.warn(
+        { err: error, invitationId: invitation._id.toHexString() },
+        'Invitation sent but not marked as sent',
+      );
+      return { sent: true, sentAt: null };
+    }
   }
 }

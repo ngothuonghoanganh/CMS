@@ -46,19 +46,41 @@ export class InvitationsRepository {
       .exec();
   }
 
-  countPending(scope: WorkspaceScope): Promise<number> {
+  countPending(scope: WorkspaceScope, tx?: Tx): Promise<number> {
     return this.invitations
-      .countDocuments({ workspaceId: scope.workspaceId, status: 'pending' })
+      .countDocuments(
+        { workspaceId: scope.workspaceId, status: 'pending' },
+        tx ? { session: tx } : {},
+      )
       .exec();
   }
 
+  /** Stores a batch of invitations in the transaction that checked the member limit. */
+  async insertMany(
+    scope: WorkspaceScope,
+    invitations: readonly InvitationRecord[],
+    tx: Tx,
+  ): Promise<void> {
+    if (invitations.some((invitation) => !invitation.workspaceId.equals(scope.workspaceId))) {
+      throw new Error('An invitation must belong to the workspace of its scope');
+    }
+    if (invitations.length > 0) {
+      await this.invitations.insertMany([...invitations], { session: tx });
+    }
+  }
+
   /** Which of `emails` have a pending invitation. */
-  async pendingEmails(scope: WorkspaceScope, emails: readonly string[]): Promise<Set<string>> {
+  async pendingEmails(
+    scope: WorkspaceScope,
+    emails: readonly string[],
+    tx?: Tx,
+  ): Promise<Set<string>> {
     const found = await this.invitations
       .find(
         { workspaceId: scope.workspaceId, status: 'pending', email: { $in: [...emails] } },
         { email: 1 },
       )
+      .session(tx ?? null)
       .lean<Pick<InvitationRecord, 'email'>[]>()
       .exec();
     return new Set(found.map((invitation) => invitation.email));
@@ -107,16 +129,18 @@ export class InvitationsRepository {
   }
 
   /**
-   * Closes the invitation of a link as accepted or declined, once: only while it is pending and,
-   * for an acceptance, not expired. False when it was not.
+   * Closes the invitation of a link as accepted or declined, once: only while it is pending, still
+   * has that link (`tokenHash`: "Gửi lại" at the same moment ends the old one) and, for an
+   * acceptance, is not expired. False when it was not.
    */
   claim(
-    id: ObjectId,
+    invitation: Pick<InvitationRecord, '_id' | 'tokenHash'>,
     status: Extract<InvitationStatus, 'accepted' | 'declined'>,
     now: Date,
     tx?: Tx,
   ): Promise<boolean> {
-    const filter = status === 'accepted' ? { _id: id, expiresAt: { $gt: now } } : { _id: id };
+    const link = { _id: invitation._id, tokenHash: invitation.tokenHash };
+    const filter = status === 'accepted' ? { ...link, expiresAt: { $gt: now } } : link;
     return this.close(filter, status, now, tx);
   }
 

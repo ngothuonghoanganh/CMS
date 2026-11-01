@@ -37,7 +37,13 @@ describe('AccessRequestDialog', () => {
       ),
     );
     renderWithProviders(
-      <AccessRequestDialog workspaceId={WORKSPACE_ID} role="viewer" open onOpenChange={vi.fn()} />,
+      <AccessRequestDialog
+        workspaceId={WORKSPACE_ID}
+        role="viewer"
+        siteLimited={false}
+        open
+        onOpenChange={vi.fn()}
+      />,
     );
     // The role the member has is not offered.
     expect(await screen.findByRole('radio', { name: /Biên tập/ })).toBeInTheDocument();
@@ -52,10 +58,40 @@ describe('AccessRequestDialog', () => {
     });
   });
 
+  it('lets a member kept to some sites ask for their role on the whole workspace', async () => {
+    const user = userEvent.setup();
+    apiMock.mockImplementation((endpoint) =>
+      Promise.resolve(
+        endpoint === endpoints.myAccessRequest ? { request: null } : { request: pending },
+      ),
+    );
+    renderWithProviders(
+      <AccessRequestDialog
+        workspaceId={WORKSPACE_ID}
+        role="editor"
+        siteLimited
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+    await user.click(await screen.findByRole('radio', { name: /Biên tập/ }));
+    expect(screen.queryByRole('checkbox', { name: /Trên toàn workspace/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Gửi yêu cầu' }));
+    expect(lastCallTo(apiMock, endpoints.createAccessRequest).options).toEqual({
+      body: { role: 'editor', wholeWorkspace: true, note: '' },
+    });
+  });
+
   it('shows the request still waiting instead of a new one', async () => {
     apiMock.mockResolvedValue({ request: pending });
     renderWithProviders(
-      <AccessRequestDialog workspaceId={WORKSPACE_ID} role="viewer" open onOpenChange={vi.fn()} />,
+      <AccessRequestDialog
+        workspaceId={WORKSPACE_ID}
+        role="viewer"
+        siteLimited={false}
+        open
+        onOpenChange={vi.fn()}
+      />,
     );
     expect(await screen.findByText('Bạn đang có một yêu cầu chờ duyệt')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Gửi yêu cầu' })).toBeNull();

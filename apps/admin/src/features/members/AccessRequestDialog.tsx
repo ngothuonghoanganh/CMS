@@ -29,8 +29,10 @@ import styles from './Members.module.css';
 
 export interface AccessRequestDialogProps {
   workspaceId: string;
-  /** The member's role now; they ask for another. */
+  /** The member's role now; they ask for another, or for it on every site. */
   role: Role;
+  /** Kept to some sites: asking for the same role on the whole workspace makes sense. */
+  siteLimited: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -42,6 +44,7 @@ export interface AccessRequestDialogProps {
 export function AccessRequestDialog({
   workspaceId,
   role,
+  siteLimited,
   open,
   onOpenChange,
 }: AccessRequestDialogProps) {
@@ -80,11 +83,21 @@ export function AccessRequestDialog({
     if (wanted === null || send.isPending) {
       return;
     }
-    // Quản trị always works on every site.
-    send.mutate({ role: wanted, wholeWorkspace: wanted === 'admin' || wholeWorkspace, note });
+    // Quản trị always works on every site; the same role is only worth asking for on every site.
+    send.mutate({
+      role: wanted,
+      wholeWorkspace: wanted === 'admin' || wanted === role || wholeWorkspace,
+      note,
+    });
   }
 
-  const options = assignableRoles.filter((option) => option.value !== role);
+  const options = assignableRoles.flatMap((option) =>
+    option.value !== role
+      ? [option]
+      : siteLimited
+        ? [{ ...option, description: 'Giữ vai trò này, trên toàn workspace.' }]
+        : [],
+  );
 
   return (
     <Dialog
@@ -137,7 +150,7 @@ export function AccessRequestDialog({
             onChange={setWanted}
             minColumnWidth={200}
           />
-          {wanted === null || wanted === 'admin' ? null : (
+          {wanted === null || wanted === 'admin' || wanted === role ? null : (
             <Checkbox
               label="Trên toàn workspace"
               description="Bỏ chọn để giữ các site bạn đang được vào."

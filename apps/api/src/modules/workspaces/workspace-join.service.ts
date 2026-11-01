@@ -22,7 +22,7 @@ export class WorkspaceJoin {
   ) {}
 
   async join(invitation: InvitationRecord, userId: ObjectId, now: Date, tx: Tx): Promise<void> {
-    if (!(await this.invitations.claim(invitation._id, 'accepted', now, tx))) {
+    if (!(await this.invitations.claim(invitation, 'accepted', now, tx))) {
       throw new AppError(409, 'invitation_unavailable', INVITATION_UNAVAILABLE, {
         detail: 'Lời mời đã được dùng, bị thu hồi hoặc đã hết hạn. Hãy nhờ người mời gửi lại.',
       });

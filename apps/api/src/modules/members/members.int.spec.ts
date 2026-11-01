@@ -13,11 +13,13 @@ import {
   siteListResponseSchema,
 } from '@plp/contracts';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, TestClient } from '../../../test/client.js';
 import { invitationToken, invite, newEmail } from '../../../test/members.js';
 import { addMember, createSite } from '../../../test/resources.js';
+import { InvitationsRepository } from '../workspaces/invitations.repository.js';
+import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 
 const PASSWORD = 'mat-khau-an-toan-123';
 
@@ -393,6 +395,134 @@ describe('members, invitations and access requests (ADR-021)', () => {
         })
         .expect(409);
       expect(problemSchema.parse(full.body).code).toBe('member_limit_reached');
+    });
+
+    it('keeps the limit when two batches are invited at the same moment', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      // With Chủ sở hữu, 95 people: room for one batch of 5, not two.
+      await t.connection.collection('memberships').insertMany(
+        Array.from({ length: MEMBERS_MAX - 6 }, () => ({
+          workspaceId: new Types.ObjectId(workspaceId),
+          userId: new Types.ObjectId(),
+          role: 'viewer',
+          siteIds: null,
+          createdAt: new Date(),
+        })),
+      );
+      const batch = () =>
+        owner.post(`/workspaces/${workspaceId}/invitations`, {
+          emails: Array.from({ length: 5 }, () => newEmail()),
+          role: 'viewer',
+          siteIds: null,
+        });
+      const [first, second] = await Promise.all([batch(), batch()]);
+      expect([first.status, second.status].sort()).toEqual([200, 409]);
+      const pending = await t.connection
+        .collection('invitations')
+        .countDocuments({ workspaceId: new Types.ObjectId(workspaceId), status: 'pending' });
+      expect(pending).toBe(5);
+      // The workspace stays readable: more than 100 people would break the member list.
+      await owner.get(`/workspaces/${workspaceId}/members`).expect(200);
+    });
+
+    it('counts variants of one mailbox together, and gives back all of a refused batch', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const [local, domain] = newEmail('hop-thu').split('@');
+      const variants = Array.from(
+        { length: 6 },
+        (_, index) => `${local ?? ''}+${index}@${domain ?? ''}`,
+      );
+      const refused = await owner
+        .post(`/workspaces/${workspaceId}/invitations`, {
+          emails: [newEmail(), ...variants],
+          role: 'viewer',
+          siteIds: null,
+        })
+        .expect(429);
+      expect(problemSchema.parse(refused.body).title).toBe('Đã gửi quá nhiều lời mời');
+      expect(
+        await t.connection
+          .collection('invitations')
+          .countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
+      ).toBe(0);
+      // Nobody was invited, so nothing stays counted against the workspace's day.
+      const counter = await t.connection
+        .collection('lead_limits')
+        .findOne({ key: `member-invite:workspace:${workspaceId}` });
+      expect(counter?.['count'] ?? 0).toBe(0);
+    });
+
+    it('stores and counts nothing when what the emails need cannot be read', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const findWorkspace = vi
+        .spyOn(t.app.get(WorkspacesRepository), 'findWorkspace')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        await owner
+          .post(`/workspaces/${workspaceId}/invitations`, {
+            emails: [newEmail()],
+            role: 'viewer',
+            siteIds: null,
+          })
+          .expect(500);
+      } finally {
+        findWorkspace.mockRestore();
+      }
+      expect(
+        await t.connection
+          .collection('invitations')
+          .countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
+      ).toBe(0);
+      const counter = await t.connection
+        .collection('lead_limits')
+        .findOne({ key: `member-invite:workspace:${workspaceId}` });
+      expect(counter?.['count'] ?? 0).toBe(0);
+    });
+
+    it('sends every email of a batch even when one cannot be marked as sent', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const emails = [newEmail(), newEmail()];
+      const markSent = vi
+        .spyOn(t.app.get(InvitationsRepository), 'markSent')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        const response = await owner
+          .post(`/workspaces/${workspaceId}/invitations`, {
+            emails,
+            role: 'viewer',
+            siteIds: null,
+          })
+          .expect(200);
+        expect(createInvitationsResponseSchema.parse(response.body).results).toEqual(
+          emails.map((email) => ({ email, outcome: 'sent' })),
+        );
+      } finally {
+        markSent.mockRestore();
+      }
+      for (const email of emails) {
+        expect(t.emails.to(email)).toHaveLength(1);
+      }
+    });
+
+    it('ends the old link even when it was read just before "Gửi lại"', async () => {
+      const { client: owner, workspaceId } = await workspace();
+      const email = newEmail();
+      await invite(t, owner, workspaceId, email);
+      const stored = await t.connection
+        .collection<{ email: string; tokenHash: string }>('invitations')
+        .findOne({ email });
+      const before = await t.app
+        .get(InvitationsRepository)
+        .findByTokenHash(stored?.tokenHash ?? '');
+      if (before === null) {
+        throw new Error('The invitation was not stored');
+      }
+      await owner
+        .post(`/workspaces/${workspaceId}/invitations/${before._id.toHexString()}/resend`)
+        .expect(200);
+      expect(await t.app.get(InvitationsRepository).claim(before, 'accepted', new Date())).toBe(
+        false,
+      );
     });
 
     it('sends one address 5 invitations a day, and gives back an email that failed', async () => {
