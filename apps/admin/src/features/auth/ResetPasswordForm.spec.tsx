@@ -1,5 +1,5 @@
 import { endpoints } from '@plp/contracts';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -96,6 +96,23 @@ describe('ResetPasswordForm (ADR-026)', () => {
       '/forgot-password',
     );
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('takes another link opened in the same tab', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValueOnce(
+      apiError(410, 'reset_link_invalid', 'Link đặt lại mật khẩu không còn dùng được'),
+    );
+    renderWithProviders(<ResetPasswordForm />);
+    await typePasswords(user, 'mat-khau-moi-123', 'mat-khau-moi-123');
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    act(() => {
+      window.history.replaceState(null, '', `/reset-password#token=${'s'.repeat(43)}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByLabelText('Mật khẩu mới')).toBeInTheDocument();
   });
 
   it('explains a link without its secret', () => {

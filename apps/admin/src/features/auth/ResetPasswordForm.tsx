@@ -60,7 +60,9 @@ export function ResetPasswordForm() {
   if (token === undefined) {
     return null;
   }
-  const problem = reset.error instanceof ApiError ? reset.error.problem : null;
+  // Another link opened in this tab changes only the fragment: an earlier outcome is not about it.
+  const thisLink = token !== null && reset.variables?.token === token;
+  const problem = thisLink && reset.error instanceof ApiError ? reset.error.problem : null;
   if (token === null || problem?.code === 'reset_link_invalid') {
     return (
       <div className={styles.form}>
@@ -136,7 +138,7 @@ export function ResetPasswordForm() {
           }}
         />
       </Field>
-      {formError === null ? null : (
+      {formError === null || !thisLink ? null : (
         <Callout tone="danger" role="alert">
           {formError}
         </Callout>

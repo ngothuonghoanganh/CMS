@@ -97,6 +97,33 @@ describe('VerifySignup (ADR-026)', () => {
     expect(screen.getByRole('button', { name: 'Xác nhận và tạo workspace' })).toBeEnabled();
   });
 
+  it('asks again for another link opened in the same tab', async () => {
+    const user = userEvent.setup();
+    apiMock.mockRejectedValueOnce(
+      apiError(410, 'signup_link_invalid', 'Link xác nhận không còn dùng được'),
+    );
+    renderWithProviders(<VerifySignup />);
+    await user.click(screen.getByRole('button', { name: 'Xác nhận và tạo workspace' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    // Only the fragment changes, so the page is not loaded again.
+    const other = 'b'.repeat(43);
+    act(() => {
+      openLink(`#token=${other}`);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
+    apiMock.mockResolvedValueOnce({
+      user: { id: '64b0000000000000000000c1', name: 'Ngọc Anh', email: 'ngocanh@mayxanh.vn' },
+      memberships: [],
+    });
+    await user.click(screen.getByRole('button', { name: 'Xác nhận và tạo workspace' }));
+    expect(lastCallTo(apiMock, endpoints.verifySignup).options).toEqual({ body: { token: other } });
+    await vi.waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/');
+    });
+  });
+
   it('explains a link without its secret', () => {
     openLink('');
     renderWithProviders(<VerifySignup />);

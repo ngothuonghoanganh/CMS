@@ -46,7 +46,9 @@ export function VerifySignup() {
     );
   }
 
-  const problem = verify.error instanceof ApiError ? verify.error.problem : null;
+  // Another link opened in this tab changes only the fragment: an earlier outcome is not about it.
+  const thisLink = verify.variables?.token === token;
+  const problem = thisLink && verify.error instanceof ApiError ? verify.error.problem : null;
   if (problem?.code === 'signup_link_invalid') {
     return (
       <div className={styles.form}>
@@ -76,14 +78,14 @@ export function VerifySignup() {
   }
   return (
     <div className={styles.form}>
-      {verify.isError ? (
+      {thisLink && verify.isError ? (
         <Callout tone="danger" role="alert">
           {problemMessage(verify.error)}
         </Callout>
       ) : null}
       <Button
         fullWidth
-        loading={verify.isPending || verify.isSuccess}
+        loading={thisLink && (verify.isPending || verify.isSuccess)}
         onClick={() => {
           verify.mutate({ token });
         }}
