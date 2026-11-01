@@ -219,11 +219,17 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }, debounceMs);
   }
 
-  /** A leave without saving did not happen: leaving asks and saves again, and autosave resumes. */
+  /**
+   * A leave without saving did not happen: leaving asks and saves again, and autosave resumes with
+   * its full retry budget. Only a save that can still succeed is tried again: a draft the server
+   * rejected (422) or a request it refused (401, 403) would fail the same way.
+   */
   function stay() {
     store.getState().setLeavingWithoutSaving(null);
+    retryAttempt = 0;
     const state = store.getState();
-    if (!stopped && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
+    const worthTrying = state.saveState !== 'error' || state.saveError?.kind === 'retryable';
+    if (!stopped && hasUnsavedChanges(state) && state.saveState !== 'conflict' && worthTrying) {
       scheduleSave();
     }
   }

@@ -424,44 +424,23 @@ describe('SeoScreen', () => {
       link.remove();
     });
 
-    it('saves and asks again for a change made after a way out that kept the screen', async () => {
+    it('does nothing for the tab of this very page: no save first, no way out offered', async () => {
       const user = userEvent.setup();
-      const detail = renderScreen();
+      renderScreen();
       answerApi(() => Promise.reject(apiError(503, 'internal', 'Máy chủ đang bận')));
-      const description = screen.getByRole('textbox', { name: 'Mô tả ngắn' });
-      await user.type(description, 'Tư vấn miễn phí');
-      // The tab of this very screen: the way out the failed save offers goes nowhere else.
-      await user.click(screen.getByRole('link', { name: 'SEO & chia sẻ' }));
-      await user.click(await screen.findByRole('button', { name: 'Rời trang, bỏ thay đổi' }));
-      expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/seo`);
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+      );
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       const saves = savesSent();
 
-      // The user edits on: that change was never given up.
-      answerApi(() =>
-        Promise.resolve({
-          revision: 4,
-          updatedAt: '2026-10-24T08:05:00.000Z',
-          page: detail.page,
-          checks: detail.checks,
-        }),
-      );
-      await user.type(description, ' cho khách mới');
-      const event = new Event('beforeunload', { cancelable: true });
-      window.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
-
-      await user.click(screen.getByRole('link', { name: 'Lịch sử phiên bản' }));
-      await waitFor(() => {
-        expect(router.push).toHaveBeenLastCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/history`);
-      });
-      expect(savesSent()).toBe(saves + 1);
-      expect(apiMock).toHaveBeenLastCalledWith(endpoints.saveDraft, [PAGE_ID], {
-        body: expect.objectContaining({
-          seo: expect.objectContaining({
-            description: 'Tư vấn miễn phí cho khách mới',
-          }) as unknown,
-        }) as unknown,
-      });
+      await user.click(screen.getByRole('link', { name: 'SEO & chia sẻ' }));
+      expect(router.push).not.toHaveBeenCalled();
+      expect(savesSent()).toBe(saves);
+      expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Rời trang, bỏ thay đổi' })).toBeNull();
     });
 
     it('opens the reload dialog, not an error, when the draft changed elsewhere', async () => {

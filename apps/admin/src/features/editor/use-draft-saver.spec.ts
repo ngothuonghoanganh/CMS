@@ -13,6 +13,7 @@ import { emptyChecks, makeStore, PAGE_ID, pageSummary, SITE_ID } from './test-fi
 import {
   createDraftSaver,
   DraftConflictError,
+  RETRY_DELAYS_MS,
   runningSavesSettled,
   useDraftSaver,
 } from './use-draft-saver';
@@ -363,6 +364,41 @@ describe('draft saver', () => {
     await vi.advanceTimersByTimeAsync(1500);
     expect(saveMock).toHaveBeenCalledTimes(1);
     expect(store.getState().saveState).toBe('saved');
+    stop();
+  });
+
+  it('does not try again a draft the server rejected when the user stays after all', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockRejectedValueOnce(
+      problem(422, 'validation_failed', {
+        issues: [{ path: ['slug'], code: 'invalid', message: 'Đường dẫn không hợp lệ' }],
+      }),
+    );
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getState().saveError?.kind).toBe('invalid');
+
+    await expect(saver.discardFor(() => Promise.resolve('stayed'))).resolves.toBe('stayed');
+    await vi.advanceTimersByTimeAsync(60_000);
+    // The same body would be rejected the same way: nothing is sent until the user edits.
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('gives a save resumed after a leave that stayed its whole retry budget', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    store.getState().setSpacing(HERO, 'compact');
+    // The first save and two retries fail: one retry of three is left.
+    await vi.advanceTimersByTimeAsync(1500);
+    await vi.runOnlyPendingTimersAsync();
+    await vi.runOnlyPendingTimersAsync();
+    const before = saveMock.mock.calls.length;
+
+    await expect(saver.discardFor(() => Promise.resolve('stayed'))).resolves.toBe('stayed');
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    // The resumed save, then every retry again.
+    expect(saveMock.mock.calls.length - before).toBe(1 + RETRY_DELAYS_MS.length);
     stop();
   });
 

@@ -232,6 +232,14 @@ function SeoScreenBody({
   );
   const navigate = useCallback(
     (href: string) => {
+      // This very page (its own tab): nothing is left, so nothing is saved first or given up.
+      const target = new URL(href, window.location.href);
+      if (
+        target.pathname === window.location.pathname &&
+        target.search === window.location.search
+      ) {
+        return;
+      }
       leaveSafely(() => {
         router.push(href);
         return 'leaving';
