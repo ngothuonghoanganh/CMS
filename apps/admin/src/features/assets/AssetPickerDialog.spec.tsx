@@ -117,6 +117,33 @@ describe('AssetPickerDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('stays open while uploading, then chooses the image', async () => {
+    const { user, onSelect, onOpenChange } = setup();
+    let finish: (value: Asset) => void = () => undefined;
+    uploadMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await user.upload(screen.getByLabelText('Tệp ảnh'), imageFile('hoa-van.png', 'image/png'));
+    await user.click(screen.getByLabelText('Ảnh chỉ để trang trí'));
+    await user.click(screen.getByRole('button', { name: 'Tải lên và chọn' }));
+
+    // Closing, or choosing another image, would be undone once the upload is in.
+    expect(screen.getByRole('button', { name: 'Hủy' })).toBeDisabled();
+    const library = within(await screen.findByRole('list'));
+    await user.click(library.getByRole('button', { name: /Bác sĩ tư vấn cho khách hàng/ }));
+    expect(screen.getByRole('button', { name: 'Chọn ảnh' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    finish({ ...asset, alt: null, decorative: true });
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it('uploads a decorative image without a description', async () => {
     const { user } = setup();
     uploadMock.mockResolvedValue({ ...asset, alt: null, decorative: true });

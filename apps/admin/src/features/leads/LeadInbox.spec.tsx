@@ -413,9 +413,10 @@ describe('LeadInbox', () => {
     expect(
       within(panel).queryByRole('combobox', { name: 'Trạng thái lead' }),
     ).not.toBeInTheDocument();
-    expect(within(panel).getByRole('region', { name: 'Ghi chú nội bộ' })).toHaveTextContent(
-      'Hẹn gọi lại sau 18h',
-    );
+    const note = within(panel).getByRole('region', { name: 'Ghi chú nội bộ' });
+    expect(note).toHaveTextContent('Hẹn gọi lại sau 18h');
+    // Its lines stay as they were typed.
+    expect(within(note).getByText('Hẹn gọi lại sau 18h')).toHaveClass(/message/);
     expect(within(panel).queryByRole('textbox')).not.toBeInTheDocument();
     expect(within(panel).queryByRole('button', { name: 'Gửi lại' })).not.toBeInTheDocument();
     expect(

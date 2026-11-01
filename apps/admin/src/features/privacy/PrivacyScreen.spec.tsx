@@ -209,13 +209,28 @@ describe('PrivacyScreen', () => {
     expect(required).toHaveFocus();
   });
 
+  it('does not tell who handles data requests that they are someone else’s (ADR-024)', () => {
+    renderWithProviders(
+      <PrivacyScreen
+        siteId={SITE_ID}
+        settings={configured}
+        canEdit={false}
+        dataRequests={{ list: { items: [], nextCursor: null }, loadedAt: Date.now() }}
+      />,
+    );
+    expect(
+      screen.getByText('Chỉ Chủ sở hữu và Quản trị được thay đổi dữ liệu cá nhân và đồng ý.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Yêu cầu từ người gửi form' })).toBeInTheDocument();
+  });
+
   it('shows editors the settings read-only', () => {
     renderWithProviders(
       <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit={false} dataRequests={null} />,
     );
     expect(
       screen.getByText(
-        'Chỉ Chủ sở hữu và Quản trị được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu cầu từ người gửi form.',
+        'Chỉ Chủ sở hữu và Quản trị được thay đổi dữ liệu cá nhân và đồng ý. Yêu cầu từ người gửi form do Chủ sở hữu và Quản trị xử lý.',
       ),
     ).toBeInTheDocument();
     // Requests from people who sent a form are the owner's to handle (ADR-017).

@@ -30,6 +30,14 @@ beforeEach(() => {
 });
 
 describe('LoginForm', () => {
+  it('posts, so a submit before the page is interactive keeps the password out of the URL', () => {
+    renderWithProviders(<LoginForm next="/" />);
+    expect(screen.getByRole('button', { name: 'Đăng nhập' }).closest('form')).toHaveAttribute(
+      'method',
+      'post',
+    );
+  });
+
   it('shows the contract messages on submit, moves focus to the first problem and sends nothing', async () => {
     const user = userEvent.setup();
     renderWithProviders(<LoginForm next="/" />);

@@ -361,6 +361,7 @@ export function Dashboard({
               thumbnailColor={thumbnailColor}
               canEdit={canEditPages}
               canManageLive={can(role, 'pages.manageLive')}
+              canViewLeads={can(role, 'leads.view')}
               onUnpublish={(page) => {
                 setUnpublishTarget(page);
                 setUnpublishOpen(true);

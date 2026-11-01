@@ -42,6 +42,36 @@ describe('EditLeadContactDialog', () => {
     );
   });
 
+  it('stays open while saving, so a refusal is seen', async () => {
+    const user = userEvent.setup();
+    let refuse: (error: unknown) => void = () => undefined;
+    apiMock.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          refuse = reject;
+        }),
+    );
+    const onOpenChange = vi.fn();
+    renderWithProviders(
+      <EditLeadContactDialog
+        lead={leadDetail()}
+        open
+        onOpenChange={onOpenChange}
+        onSaved={vi.fn()}
+        onGone={vi.fn()}
+      />,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Sửa thông tin' });
+    await user.type(within(dialog).getByRole('textbox', { name: /Họ và tên/ }), ' Nguyễn');
+    await user.click(within(dialog).getByRole('button', { name: 'Lưu thông tin' }));
+
+    expect(within(dialog).getByRole('button', { name: 'Hủy' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    refuse(apiError(503, 'internal', 'Máy chủ đang bận'));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Máy chủ đang bận');
+  });
+
   it('starts from the lead as it is and saves the corrected contact', async () => {
     const user = userEvent.setup();
     const saved = leadDetail({ phone: '+84901234568', email: null });

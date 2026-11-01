@@ -3,7 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { lastCallTo, renderWithProviders } from '../shell/test-utils';
+import { apiError, lastCallTo, renderWithProviders } from '../shell/test-utils';
 import { RolesScreen } from './RolesScreen';
 
 vi.mock(import('../../lib/api'), async (importOriginal) => ({
@@ -155,6 +155,22 @@ describe('RolesScreen · custom roles (ADR-024)', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xóa vai trò' })).toBeDisabled();
+  });
+
+  it('opens "Xóa vai trò" again without the error of the last try', async () => {
+    const user = userEvent.setup();
+    renderRoles([{ ...contentLead, memberCount: 0 }]);
+    apiMock.mockRejectedValueOnce(apiError(409, 'custom_role_in_use', 'Vai trò đang được dùng'));
+    await user.click(screen.getByRole('button', { name: /^Trưởng nhóm nội dung/ }));
+    await user.click(screen.getByRole('button', { name: 'Xóa vai trò' }));
+    let dialog = screen.getByRole('alertdialog', { name: 'Xóa vai trò Trưởng nhóm nội dung?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Xóa vai trò' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Vai trò đang được dùng');
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+
+    await user.click(screen.getByRole('button', { name: 'Xóa vai trò' }));
+    dialog = screen.getByRole('alertdialog', { name: 'Xóa vai trò Trưởng nhóm nội dung?' });
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('creates a role from Biên tập, marking and summing up what differs, then saves it', async () => {

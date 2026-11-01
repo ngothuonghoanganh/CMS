@@ -491,7 +491,7 @@ export function LeadDetailPanel({
             <h3 id={`${headingId}-note`} className={styles.deliveryTitle}>
               Ghi chú nội bộ
             </h3>
-            <p>{lead.note}</p>
+            <p className={styles.message}>{lead.note}</p>
           </section>
         )}
       </div>

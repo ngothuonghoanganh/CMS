@@ -540,7 +540,7 @@ export function MembersScreen({
 
       {inviteKey === 0 ? null : (
         <InviteDialog
-          key={inviteKey}
+          key={`invite-${inviteKey}`}
           workspaceId={workspace.id}
           sites={sites}
           customRoles={customRoles}
@@ -551,7 +551,7 @@ export function MembersScreen({
       )}
       {editing === null ? null : (
         <ChangeAccessDialog
-          key={editKey}
+          key={`edit-${editKey}`}
           workspaceId={workspace.id}
           member={editing.member}
           sites={sites}

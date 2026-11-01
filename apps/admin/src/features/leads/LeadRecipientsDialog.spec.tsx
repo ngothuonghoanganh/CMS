@@ -125,6 +125,31 @@ describe('LeadRecipientsDialog', () => {
     expect(field).toHaveAccessibleDescription(/Địa chỉ này đã có trong nơi nhận lead/);
   });
 
+  it('stays open while an address is being added, so its refusal is seen', async () => {
+    const user = userEvent.setup();
+    let refuse: (error: unknown) => void = () => undefined;
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.addLeadRecipient
+        ? new Promise((_, reject) => {
+            refuse = reject;
+          })
+        : Promise.resolve({ items: [confirmed] }),
+    );
+    const onOpenChange = vi.fn();
+    renderWithProviders(
+      <LeadRecipientsDialog siteId={SITE_ID} open onOpenChange={onOpenChange} canManage />,
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Thêm email nhận lead' }),
+      'sales@smilecare.vn',
+    );
+    await user.click(screen.getByRole('button', { name: 'Thêm' }));
+    await user.keyboard('{Escape}');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    refuse(apiError(409, 'recipient_exists', 'Địa chỉ này đã có trong nơi nhận lead'));
+    expect(await screen.findByText('Địa chỉ này đã có trong nơi nhận lead')).toBeInTheDocument();
+  });
+
   it('asks for an address when "Thêm" is pressed with an empty field', async () => {
     const user = userEvent.setup();
     serve([]);

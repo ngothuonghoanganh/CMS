@@ -2,7 +2,7 @@
 
 import { createPageRequestSchema, endpoints, type Site } from '@plp/contracts';
 import { Button, Callout, Dialog, Field, Input } from '@plp/ui';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type SubmitEvent, useState } from 'react';
 import { api, ApiError } from '../../lib/api';
@@ -29,6 +29,11 @@ function withoutError(errors: BlankErrors, field: BlankField): BlankErrors {
   return errors.title === undefined ? {} : { title: errors.title };
 }
 
+/** The page being created from this dialog, which keeps it open meanwhile. */
+function creatingKey(siteId: string) {
+  return ['blank-page', siteId] as const;
+}
+
 export interface BlankPageDialogProps {
   site: Site;
   host: string;
@@ -46,6 +51,7 @@ function BlankPageForm({ site, host, onOpenChange }: Omit<BlankPageDialogProps, 
   const check = useSlugAvailability(site.id, slug);
 
   const create = useMutation({
+    mutationKey: creatingKey(site.id),
     mutationFn: () =>
       api(endpoints.createPage, [site.id], {
         body: { title, slug: finalizeSlug(slug), start: { kind: 'blank' } },
@@ -160,10 +166,17 @@ function BlankPageForm({ site, host, onOpenChange }: Omit<BlankPageDialogProps, 
 
 /** "Bắt đầu trống": a page without sections, named and placed before the editor opens. */
 export function BlankPageDialog({ site, host, open, onOpenChange }: BlankPageDialogProps) {
+  const creating = useIsMutating({ mutationKey: creatingKey(site.id) }) > 0;
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A page being created cannot be dismissed half-way: its answer shows here.
+        if (!next && creating) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       title="Bắt đầu trống"
       description="Trang mới chưa có section nào. Bạn tự thêm section trong editor."
     >

@@ -90,13 +90,20 @@ export function EditLeadContactDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A running save cannot be dismissed half-way: its answer shows here.
+        if (!next && save.isPending) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       title="Sửa thông tin"
       description="Ví dụ khi người gửi form nhờ sửa họ tên, số điện thoại hoặc email."
       footer={
         <>
           <Button
             variant="secondary"
+            disabled={save.isPending}
             onClick={() => {
               onOpenChange(false);
             }}

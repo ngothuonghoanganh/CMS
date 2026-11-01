@@ -128,7 +128,13 @@ export function LeadRecipientsDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // An address being added cannot be dismissed half-way: its refusal shows on the field.
+        if (!next && add.isPending) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       title="Nơi nhận lead"
       description={`Mỗi lead mới được gửi qua email tới các địa chỉ đã xác nhận, tối đa ${LEAD_RECIPIENTS_MAX} địa chỉ.`}
     >

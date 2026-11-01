@@ -154,7 +154,13 @@ export function RecordDataRequestDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A running save cannot be dismissed half-way: its answer shows here.
+        if (!next && record.isPending) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       size="lg"
       title="Ghi nhận yêu cầu"
       description="Yêu cầu của người đã gửi form, nhận qua email hoặc điện thoại."
@@ -162,6 +168,7 @@ export function RecordDataRequestDialog({
         <>
           <Button
             variant="secondary"
+            disabled={record.isPending}
             onClick={() => {
               onOpenChange(false);
             }}
