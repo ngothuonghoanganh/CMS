@@ -362,12 +362,13 @@ export class SitesRepository {
     scope: WorkspaceScope,
     siteId: ObjectId,
     primary: SitePrimaryDomain | null,
+    tx: Tx,
   ): Promise<SiteRecord | null> {
     return this.sites
       .findOneAndUpdate(
         { _id: siteId, workspaceId: scope.workspaceId },
         { $set: { primaryDomain: primary, updatedAt: new Date() } },
-        { new: true },
+        { new: true, session: tx },
       )
       .lean<SiteRecord>()
       .exec();

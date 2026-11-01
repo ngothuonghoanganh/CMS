@@ -25,7 +25,8 @@ import type { DomainCheck, DomainRecord } from './domain.schema.js';
 import { DOMAINS_OWNER_INDEX } from './domain.schema.js';
 import { DomainsRepository } from './domains.repository.js';
 
-const MINUTE_MS = 60_000;
+/** Aborts the transaction of a verification that did not happen. */
+class NotVerified extends Error {}
 
 /**
  * Checks one domain (ADR-022): asks DNS, proves ownership by the TXT record (moving the domain from
@@ -59,7 +60,8 @@ export class DomainChecker {
       if (!(error instanceof DnsUnavailableError)) {
         throw error;
       }
-      // The last check stands; DNS is asked again in a minute.
+      // The last check stands; DNS is asked again on the usual schedule, which ends after 7
+      // days for a domain never verified (names behind dead nameservers are not asked forever).
       this.logger.warn(
         { err: error, domainId: domain._id.toHexString() },
         'Domain check skipped: DNS did not answer',
@@ -67,35 +69,44 @@ export class DomainChecker {
       return (
         (await this.domains.saveCheck(domain._id, {
           check: domain.check,
-          activeSince: domain.activeSince,
-          lostSince: domain.lostSince,
-          nextCheckAt: new Date(now.getTime() + MINUTE_MS),
+          lost: domain.lostSince !== null,
+          nextCheckAt: nextCheckAt(domain, now),
         })) ?? domain
       );
     }
     const seen = evaluateDns(domain.token, answers, this.targets);
     let verifiedAt = domain.verifiedAt;
-    if (verifiedAt === null && seen.txt === 'ok' && (await this.verify(domain, now))) {
-      verifiedAt = now;
+    if (verifiedAt === null && seen.txt === 'ok') {
+      // Not verified here: another check of this domain may just have verified it.
+      verifiedAt = (await this.verify(domain, now))
+        ? now
+        : ((await this.domains.findById(domain._id))?.verifiedAt ?? null);
+    }
+    if (
+      verifiedAt !== null &&
+      seen.routing === 'ok' &&
+      (domain.verifiedAt === null || domain.check.routing !== 'ok')
+    ) {
+      await this.domains.saveDns(domain._id, seen);
     }
     const check = await this.httpsOf(domain, { ...seen, verifiedAt }, now);
     const before = domainStatus(domain, false, now);
     const after = domainStatus({ verifiedAt, check, activeSince: domain.activeSince }, false, now);
-    const activeSince = after === 'active' ? (domain.activeSince ?? now) : domain.activeSince;
-    const lostSince = after === 'lost' ? (domain.lostSince ?? now) : null;
-    const saved =
+    let saved =
       (await this.domains.saveCheck(domain._id, {
         check,
-        activeSince,
-        lostSince,
-        nextCheckAt: nextCheckAt({ verifiedAt, watchSince: domain.watchSince }, now),
+        lost: after === 'lost',
+        nextCheckAt: nextCheckAt({ verifiedAt, watchSince: domain.watchSince }, now, after),
       })) ?? domain;
     if (before !== after || verifiedAt !== domain.verifiedAt) {
       await this.revalidate(domain.siteId);
     }
-    if (domain.activeSince === null && activeSince !== null) {
+    // Only the check that marks it tells: two checks of one domain at once send one email.
+    if (after === 'active' && (await this.domains.markSince(domain._id, 'activeSince', now))) {
+      saved = { ...saved, activeSince: now };
       await this.notify(saved, 'active');
-    } else if (domain.lostSince === null && lostSince !== null) {
+    } else if (after === 'lost' && (await this.domains.markSince(domain._id, 'lostSince', now))) {
+      saved = { ...saved, lostSince: now };
       await this.notify(saved, 'lost');
     }
     return saved;
@@ -108,21 +119,28 @@ export class DomainChecker {
    */
   private async verify(domain: DomainRecord, now: Date): Promise<boolean> {
     try {
-      const { verified, previous } = await this.transactions.run(async (tx) => {
+      const previous = await this.transactions.run(async (tx) => {
         const owner = await this.domains.findOwner(domain.hostname, tx);
         const moving = owner !== null && !owner._id.equals(domain._id) ? owner : null;
         if (moving !== null) {
           await this.domains.removeInTx(moving._id, tx);
           await this.sites.clearPrimaryDomain(moving.siteId, moving._id, tx);
         }
-        return { verified: await this.domains.verify(domain._id, now, tx), previous: moving };
+        if (!(await this.domains.verify(domain._id, now, tx))) {
+          // Removed, or verified by another check, meanwhile: the previous owner keeps it.
+          throw new NotVerified();
+        }
+        return moving;
       });
-      if (verified && previous !== null) {
+      if (previous !== null) {
         await this.revalidate(previous.siteId);
         await this.notify(previous, 'moved');
       }
-      return verified;
+      return true;
     } catch (error) {
+      if (error instanceof NotVerified) {
+        return false;
+      }
       if (isDuplicateKeyError(error, DOMAINS_OWNER_INDEX)) {
         // Another site proved ownership at the same moment; the next check sees it as taken.
         return false;

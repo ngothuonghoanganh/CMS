@@ -131,6 +131,11 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
       'Invalid API environment:\nDOMAIN_DNS_ZONE_FILE answers DNS from a file; production asks real DNS',
     );
   }
+  if (tlsCheckEnabled(result.data) && result.data.CUSTOM_DOMAIN_IPV4.length === 0) {
+    throw new Error(
+      'Invalid API environment:\nCUSTOM_DOMAIN_IPV4 is required while HTTPS is checked: the check connects to the edge',
+    );
+  }
   return result.data;
 }
 

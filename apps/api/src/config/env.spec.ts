@@ -85,8 +85,12 @@ describe('parseEnv', () => {
     expect(customDomainOrigin(env, 'go.smilecare.vn')).toBe('https://go.smilecare.vn');
     expect(baseDomainOf(env)).toBe('localhost:3101'.split(':')[0]);
     expect(tlsCheckEnabled(env)).toBe(false);
-    expect(tlsCheckEnabled(parseEnv({ ...valid, NODE_ENV: 'production' }))).toBe(true);
-    expect(tlsCheckEnabled(parseEnv({ ...valid, DOMAIN_TLS_CHECK: 'on' }))).toBe(true);
+    const edge = { CUSTOM_DOMAIN_IPV4: '203.0.113.10' };
+    expect(tlsCheckEnabled(parseEnv({ ...valid, ...edge, NODE_ENV: 'production' }))).toBe(true);
+    expect(tlsCheckEnabled(parseEnv({ ...valid, ...edge, DOMAIN_TLS_CHECK: 'on' }))).toBe(true);
+    // The HTTPS check connects to the edge, never to where a customer's DNS points.
+    expect(() => parseEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/CUSTOM_DOMAIN_IPV4/);
+    expect(() => parseEnv({ ...valid, DOMAIN_TLS_CHECK: 'on' })).toThrow(/CUSTOM_DOMAIN_IPV4/);
     expect(() => parseEnv({ ...valid, CUSTOM_DOMAIN_IPV4: 'not-an-ip' })).toThrow(
       /CUSTOM_DOMAIN_IPV4/,
     );

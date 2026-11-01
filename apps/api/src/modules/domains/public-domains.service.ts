@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import type { HostSiteResponse, SiteAddressResponse } from '@plp/contracts';
-import { baseDomainOf, type Env } from '../../config/env.js';
-import { InjectEnv } from '../../shared/env.js';
 import { notFound } from '../../shared/errors.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { DomainsRepository } from './domains.repository.js';
@@ -19,32 +17,19 @@ function bareHost(value: string): string {
  */
 @Injectable()
 export class PublicDomainsService {
-  private readonly baseDomain: string;
-
   constructor(
-    @InjectEnv() env: Env,
     private readonly domains: DomainsRepository,
     private readonly sites: SitesRepository,
     private readonly siteHosts: SiteHosts,
-  ) {
-    this.baseDomain = baseDomainOf(env);
-  }
+  ) {}
 
   /**
-   * Caddy's on-demand TLS asks before getting a certificate: yes for a site's default address and
-   * for a custom domain that is verified and points here, no for anything else.
+   * Caddy's on-demand TLS asks before getting a certificate: yes only for a custom domain that is
+   * verified and points here. The default addresses share one wildcard certificate, so creating
+   * sites never asks the CA for anything and cannot use up its limits for the base domain.
    */
   async tlsAllowed(domain: string): Promise<void> {
-    const host = bareHost(domain);
-    const suffix = `.${this.baseDomain}`;
-    if (host.endsWith(suffix)) {
-      const label = host.slice(0, -suffix.length);
-      if (!label.includes('.') && (await this.sites.subdomainExists(label))) {
-        return;
-      }
-      throw notFound(HOST_NOT_SERVED);
-    }
-    if ((await this.domains.findServing(host)) === null) {
+    if ((await this.domains.findServing(bareHost(domain))) === null) {
       throw notFound(HOST_NOT_SERVED);
     }
   }

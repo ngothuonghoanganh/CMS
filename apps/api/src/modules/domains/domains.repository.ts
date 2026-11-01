@@ -14,10 +14,13 @@ import {
 } from './domain.schema.js';
 
 /** What a check writes back. */
+/**
+ * What a check stores. `activeSince` and `lostSince` are set by `markSince` only, so two checks of
+ * one domain at once never both announce it; `lost: false` clears `lostSince`.
+ */
 export interface CheckOutcome {
   check: DomainCheck;
-  activeSince: Date | null;
-  lostSince: Date | null;
+  lost: boolean;
   nextCheckAt: Date | null;
 }
 
@@ -62,11 +65,33 @@ export class DomainsRepository {
     }
   }
 
-  async remove(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId): Promise<boolean> {
+  async remove(scope: WorkspaceScope, siteId: ObjectId, id: ObjectId, tx: Tx): Promise<boolean> {
     const result = await this.domains
-      .deleteOne({ _id: id, workspaceId: scope.workspaceId, siteId })
+      .deleteOne({ _id: id, workspaceId: scope.workspaceId, siteId }, { session: tx })
       .exec();
     return result.deletedCount === 1;
+  }
+
+  /**
+   * The site's verified domain about to become its primary address, written in that transaction
+   * (`primarySetAt`) so a move or removal at the same moment conflicts; null when it is not the
+   * site's verified domain any more.
+   */
+  holdForPrimary(
+    scope: WorkspaceScope,
+    siteId: ObjectId,
+    id: ObjectId,
+    now: Date,
+    tx: Tx,
+  ): Promise<DomainRecord | null> {
+    return this.domains
+      .findOneAndUpdate(
+        { _id: id, workspaceId: scope.workspaceId, siteId, verifiedAt: { $type: 'date' } },
+        { $set: { primarySetAt: now } },
+        { new: true, session: tx },
+      )
+      .lean<DomainRecord>()
+      .exec();
   }
 
   /** Restarts the quick automatic checks, e.g. after "Kiểm tra ngay". */
@@ -118,10 +143,38 @@ export class DomainsRepository {
   }
 
   async saveCheck(id: ObjectId, outcome: CheckOutcome): Promise<DomainRecord | null> {
+    const { lost, ...fields } = outcome;
     return this.domains
-      .findOneAndUpdate({ _id: id }, { $set: outcome }, { new: true })
+      .findOneAndUpdate(
+        { _id: id },
+        { $set: lost ? fields : { ...fields, lostSince: null } },
+        { new: true },
+      )
       .lean<DomainRecord>()
       .exec();
+  }
+
+  /**
+   * What a check saw of DNS, stored before its HTTPS probe: the edge's `ask` reads it, so the
+   * certificate of a domain that just started pointing here can be issued during that probe.
+   */
+  async saveDns(id: ObjectId, seen: Pick<DomainCheck, 'txt' | 'routing' | 'found'>): Promise<void> {
+    await this.domains
+      .updateOne(
+        { _id: id },
+        {
+          $set: { 'check.txt': seen.txt, 'check.routing': seen.routing, 'check.found': seen.found },
+        },
+      )
+      .exec();
+  }
+
+  /** Sets `activeSince` or `lostSince` once; true only for the check that set it. */
+  async markSince(id: ObjectId, field: 'activeSince' | 'lostSince', at: Date): Promise<boolean> {
+    const result = await this.domains
+      .updateOne({ _id: id, [field]: null }, { $set: { [field]: at } })
+      .exec();
+    return result.modifiedCount === 1;
   }
 
   /** The verified owner of a hostname, if any. */

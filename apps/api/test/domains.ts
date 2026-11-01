@@ -44,9 +44,12 @@ export class FakeDomainDns extends DomainDns {
 /** HTTPS a test decides; valid by default once asked. */
 export class FakeDomainTls extends DomainTls {
   result: TlsProbeResult = { ok: true, validUntil: new Date('2027-01-12T00:00:00.000Z') };
+  /** Runs inside each probe, as the edge asking whether it may get a certificate would. */
+  during: ((hostname: string) => Promise<void>) | null = null;
 
-  probe(): Promise<TlsProbeResult> {
-    return Promise.resolve(this.result);
+  async probe(hostname: string): Promise<TlsProbeResult> {
+    await this.during?.(hostname);
+    return this.result;
   }
 }
 

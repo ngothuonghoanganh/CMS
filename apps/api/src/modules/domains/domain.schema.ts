@@ -52,6 +52,12 @@ export interface DomainRecord {
   watchSince: Date;
   /** When an instance checks the domain next; null once automatic checks stopped. */
   nextCheckAt: Date | null;
+  /**
+   * When it was last made the site's primary address. Written in that transaction, so a move or a
+   * removal of the domain at the same moment conflicts with it instead of leaving the site's
+   * primary address on a domain that is gone.
+   */
+  primarySetAt?: Date | null;
 }
 
 export const domainSchema = new Schema<DomainRecord>(
@@ -79,6 +85,7 @@ export const domainSchema = new Schema<DomainRecord>(
     lostSince: { type: Date, default: null },
     watchSince: { type: Date, required: true },
     nextCheckAt: { type: Date, default: null },
+    primarySetAt: { type: Date, default: null },
   },
   { collection: 'domains', versionKey: false },
 );
