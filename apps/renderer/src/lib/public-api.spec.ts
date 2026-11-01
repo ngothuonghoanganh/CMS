@@ -140,7 +140,7 @@ describe('timeouts', () => {
 });
 
 describe('getSitemap', () => {
-  it('is tagged by site and returns null for an unknown site', async () => {
+  it('is read live, never cached, and returns null for an unknown site', async () => {
     const sitemap: SitemapResponse = {
       origin: 'http://smilecare.localhost:3101',
       entries: [{ path: '/', lastModified: '2026-10-24T08:00:00.000Z' }],
@@ -148,19 +148,20 @@ describe('getSitemap', () => {
     const fetchMock = stubFetch(200, sitemap);
     await expect(getSitemap('smilecare')).resolves.toEqual(sitemap);
     expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/public/sites/smilecare/sitemap');
-    expect(cacheTag).toHaveBeenCalledWith('site:smilecare');
-    expect(cacheLife).toHaveBeenCalledWith(SITE_CACHE_LIFE);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
+    // A publish shows at once: no entry for a lost or late revalidation to leave behind.
+    expect(cacheTag).not.toHaveBeenCalled();
+    expect(cacheLife).not.toHaveBeenCalled();
 
     stubFetch(404, { code: 'not_found' });
     await expect(getSitemap('khong-co')).resolves.toBeNull();
   });
 
-  it('keeps an API error out of the cache and throws it outside', async () => {
+  it('throws an API error', async () => {
     stubFetch(500, { code: 'internal' });
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await expect(getSitemap('smilecare')).rejects.toThrow('Public API lookup publicSitemap failed');
-    expect(cacheLife).toHaveBeenCalledOnce();
-    expect(cacheLife).toHaveBeenCalledWith({ stale: 0, revalidate: 0, expire: 0 });
+    await expect(getSitemap('smilecare')).rejects.toThrow(
+      'Public API request publicSitemap answered HTTP 500',
+    );
   });
 });
 

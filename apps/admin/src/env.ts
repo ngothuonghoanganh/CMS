@@ -6,6 +6,21 @@ import { z } from 'zod';
  */
 export const SLUG_PLACEHOLDER = '{slug}';
 
+/** Whether a template puts the slug in its host, with nothing after the origin. */
+function isOriginTemplate(template: string): boolean {
+  try {
+    const url = new URL(template.replace(SLUG_PLACEHOLDER, 'slug-probe'));
+    return (
+      url.host.includes('slug-probe') &&
+      url.pathname === '/' &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
 const adminEnvSchema = z
   .object({
     API_INTERNAL_URL: z.url({ protocol: /^https?$/ }),
@@ -30,7 +45,7 @@ const adminEnvSchema = z
     ADMIN_WORKSPACE_ORIGIN_TEMPLATE: z
       .string()
       .refine((value) => value.includes(SLUG_PLACEHOLDER), 'must contain {slug}')
-      .refine((value) => URL.canParse(value.replace(SLUG_PLACEHOLDER, 'example')), 'must be a URL')
+      .refine(isOriginTemplate, 'must be an origin with {slug} in its host and no path')
       .optional(),
   })
   .refine(

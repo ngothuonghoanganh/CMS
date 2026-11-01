@@ -16,6 +16,7 @@ import { NEST_APP_OPTIONS } from '../../configure-app.js';
 import { LEAD_MODEL, LEADS_SUBMISSION_INDEX } from '../../modules/leads/lead.schema.js';
 import { LeadNotifier } from '../../modules/notifications/lead-notifier.service.js';
 import { EmailSender } from '../../modules/notifications/email-sender.js';
+import { LeadsRepository } from '../../modules/leads/leads.repository.js';
 import { WorkspacesRepository } from '../../modules/workspaces/workspaces.repository.js';
 import { WorkspaceDatabases } from './workspace-databases.js';
 
@@ -108,9 +109,16 @@ describe('workspace databases', () => {
   it('drops the database again when the sign-up does not complete', async () => {
     const before = await workspaceDatabases();
     const input = signupInput();
+    let builtFirst = false;
     const create = vi
       .spyOn(WorkspacesRepository.prototype, 'createWithOwner')
-      .mockRejectedValueOnce(new Error('MongoDB went away'));
+      .mockImplementationOnce(async (workspace) => {
+        // The database exists before the workspace does (ADR-025).
+        builtFirst = (await workspaceDatabases()).includes(
+          t.app.get(WorkspaceDatabases).nameOf(workspace.id),
+        );
+        throw new Error('MongoDB went away');
+      });
     try {
       const response = await new TestClient(t.app).post('/auth/signup', input).expect(500);
       expect(problemSchema.parse(response.body).code).toBe('internal');
@@ -118,8 +126,29 @@ describe('workspace databases', () => {
       create.mockRestore();
     }
 
+    expect(builtFirst).toBe(true);
     expect(await workspaceDatabases()).toEqual(before);
     expect(await t.connection.collection('users').countDocuments({ email: input.email })).toBe(0);
+  });
+
+  it('never shows a document of another workspace that ended up in a workspace’s database', async () => {
+    const a = await signedUpClient(t.app);
+    const site = await createSite(a.client, a.workspaceId);
+    const own = await createPage(a.client, site.id);
+    // A copy of the page, said to belong to another workspace, in A's database: a routing slip.
+    const strayId = new Types.ObjectId();
+    const pages = t.workspaceDb(a.workspaceId).collection('pages');
+    const original = await pages.findOne({ _id: new Types.ObjectId(own.page.id) });
+    await pages.insertOne({
+      ...original,
+      _id: strayId,
+      workspaceId: new Types.ObjectId(),
+      draft: { ...(original?.['draft'] as object), slug: `lac-${strayId.toHexString()}` },
+    });
+
+    await a.client.get(`/sites/${site.id}/pages/${strayId.toHexString()}`).expect(404);
+    const list = await a.client.get(`/sites/${site.id}/pages`).expect(200);
+    expect(JSON.stringify(list.body)).not.toContain(strayId.toHexString());
   });
 
   it('answers 404 for another workspace’s page, lead and image named under a site of one’s own', async () => {
@@ -217,6 +246,71 @@ describe('workspace databases', () => {
     );
   });
 
+  it('takes on the oldest lead emails across workspaces, and skips a workspace that fails', async () => {
+    const pendingIn = async (count: number, minutesAgo: number) => {
+      const { client, workspaceId } = await signedUpClient(t.app);
+      const site = await createSite(client, workspaceId);
+      const leads = Array.from({ length: count }, () => ({
+        ...storedLead({
+          workspaceId,
+          siteId: site.id,
+          pageId: new Types.ObjectId().toHexString(),
+          releaseId: new Types.ObjectId().toHexString(),
+          notification: {
+            status: 'pending',
+            updatedAt: new Date(Date.now() - minutesAgo * 60_000),
+          },
+        }),
+        _id: new Types.ObjectId(),
+      }));
+      await insertLeads(t, leads);
+      return { workspaceId, leads };
+    };
+    const statusOf = async (workspaceId: string, id: Types.ObjectId | undefined) =>
+      (
+        await t
+          .workspaceDb(workspaceId)
+          .collection('leads')
+          .findOne({ _id: id ?? new Types.ObjectId() })
+      )?.['notification'] as { status: string } | undefined;
+    // A crowded workspace first, then one whose only lead waits longest, then one that fails.
+    const crowded = await pendingIn(501, 1);
+    const older = await pendingIn(1, 60);
+    const failing = await pendingIn(1, 120);
+    const leadsRepository = t.app.get(LeadsRepository);
+    const sweep = leadsRepository.findNotificationBacklog.bind(leadsRepository);
+    const broken = vi
+      .spyOn(leadsRepository, 'findNotificationBacklog')
+      .mockImplementation((ref, staleBefore, limit) =>
+        ref.workspaceId.equals(failing.workspaceId)
+          ? Promise.reject(new Error('MongoDB went away'))
+          : sweep(ref, staleBefore, limit),
+      );
+    try {
+      await t.app.get(LeadNotifier).onApplicationBootstrap();
+    } finally {
+      broken.mockRestore();
+    }
+
+    // The oldest lead is taken although 501 newer ones came before it, as with one database.
+    await vi.waitFor(
+      async () => {
+        expect(await statusOf(older.workspaceId, older.leads[0]?._id)).toMatchObject({
+          status: 'failed',
+        });
+      },
+      { timeout: 10_000, interval: 50 },
+    );
+    expect(await statusOf(failing.workspaceId, failing.leads[0]?._id)).toMatchObject({
+      status: 'pending',
+    });
+    const waiting = await t
+      .workspaceDb(crowded.workspaceId)
+      .collection('leads')
+      .countDocuments({ 'notification.status': 'pending', 'notification.attempts': 0 });
+    expect(waiting).toBeGreaterThanOrEqual(2);
+  });
+
   describe('at startup', () => {
     async function startAnother(): Promise<NestExpressApplication> {
       const moduleRef = await Test.createTestingModule({ imports: [AppModule.forRoot(t.env)] })
@@ -228,6 +322,24 @@ describe('workspace databases', () => {
         ...NEST_APP_OPTIONS,
       });
     }
+
+    it('builds every workspace database, more than it builds at once', async () => {
+      const ids = [];
+      for (let index = 0; index < 10; index += 1) {
+        ids.push((await signedUpClient(t.app)).workspaceId);
+      }
+      const first = t.workspaceDb(ids[0] ?? '').collection('leads');
+      const last = t.workspaceDb(ids[9] ?? '').collection('leads');
+      await first.dropIndex(LEADS_SUBMISSION_INDEX);
+      await last.dropIndex(LEADS_SUBMISSION_INDEX);
+
+      const second = await createSecondInstance(t);
+      await second.close();
+
+      for (const leads of [first, last]) {
+        expect((await leads.indexes()).map(({ name }) => name)).toContain(LEADS_SUBMISSION_INDEX);
+      }
+    });
 
     it('builds again an index missing from a workspace database', async () => {
       const { workspaceId } = await signedUpClient(t.app);

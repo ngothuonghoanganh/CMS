@@ -1,9 +1,9 @@
 import { type CanActivate, type ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { SESSION_COOKIE } from '@plp/contracts';
 import { AppError } from '../../shared/errors.js';
 import type { RequestWithUser } from './current-user.decorator.js';
 import { IS_PUBLIC } from './public.decorator.js';
+import { sessionTokensOf } from './session-cookie.js';
 import { hashSessionToken } from './session-token.js';
 import { SessionsRepository } from './sessions.repository.js';
 import { UsersRepository } from './users.repository.js';
@@ -30,15 +30,15 @@ export class SessionGuard implements CanActivate {
       return true;
     }
     const request = context.switchToHttp().getRequest<RequestWithUser>();
-    const cookies: unknown = request.cookies;
-    const token =
-      typeof cookies === 'object' && cookies !== null && SESSION_COOKIE in cookies
-        ? (cookies as Record<string, unknown>)[SESSION_COOKIE]
-        : undefined;
-    if (typeof token !== 'string' || token === '') {
-      throw unauthenticated();
+    // The first token that is still a session: a stale cookie of another scope may come first.
+    const now = new Date();
+    let session = null;
+    for (const token of sessionTokensOf(request)) {
+      session = await this.sessions.findActive(hashSessionToken(token), now);
+      if (session) {
+        break;
+      }
     }
-    const session = await this.sessions.findActive(hashSessionToken(token), new Date());
     if (!session) {
       throw unauthenticated();
     }

@@ -588,6 +588,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **sitemap.xml và robots.txt:** API lỗi thì trả 503 kèm `Retry-After` (trước đây 500, body rỗng).
   - **User-Agent:** proxy đặt `User-Agent: unknown` cho request không có header này, nên Next luôn render chế độ blocking: status lỗi là thật, không còn shell 200.
   - **404 của proxy** render với cùng header như trang. Trước đây request không có User-Agent nhận bản tĩnh `Cache-Control: s-maxage=31536000`, nên cache dùng chung sẽ giữ 404 cả năm sau khi trang được publish.
+- **Amended 2026-11-02 (vòng test sau D2):** `sitemap.xml` đọc thẳng API, không cache.
+  - Không có gì khóa sitemap theo nội dung đang live như trang (amendment 2026-10-25), nên entry gắn tag có thể sống qua một lần publish khi webhook revalidate bị mất hoặc một lần đọc cũ còn dang dở. E2E bắt được: sau khi publish bản `noindex`, sitemap vẫn còn trang đó trong khoảng 2/10 lượt chạy toàn bộ.
+  - Crawler ít hỏi sitemap, và API trả nó bằng truy vấn có giới hạn. Robots vẫn cache theo tag: nó chỉ đổi khi địa chỉ chính đổi.
 - **Amended 2026-10-31 (vòng test thứ ba, E2E):** trang live gọi `await connection()` trước khi sinh `submissionId` của form (ADR-016).
   - Với `cacheComponents`, Next render trang thêm một lần dưới dạng prerender và gặp `crypto.randomUUID()` ở đó, nên mỗi lượt xem trang có form ghi một dòng lỗi "unstable value … while prerendering" vào log. Trang preview đã làm như vậy từ trước.
   - Mỗi lần phục vụ trang vẫn có id riêng.
@@ -1565,6 +1568,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - đường công khai, xem trước, xác nhận nơi nhận lead và vòng kiểm tra tên miền tìm đúng database.
   - Mỗi workspace thêm 12 collection và khoảng 45 index (kể cả `_id`). Trên khoảng 1.000 workspace trong một cluster phải xem lại (ADR mới), vì MongoDB chậm dần khi số collection và index lên hàng chục nghìn.
   - Dữ liệu local từ trước D1 nằm hết trong một database, nên API không còn thấy site và trang của nó. Xóa database phát triển rồi đăng ký lại: `docker compose exec mongo mongosh --port 27117 --quiet --eval 'db.getSiblingDB("plp").dropDatabase()'`.
+- **Amended 2026-11-02 (vòng test sau D2):**
+  - **Địa chỉ trống:** tìm theo lô 20 dạng (`base`, `base-2`, … đã cắt cho vừa 40 ký tự) bằng truy vấn khớp đúng, không đọc mọi workspace cùng tiền tố. Trước đây dạng đã cắt không được thấy, nên tên dài trùng nhau từ lần thứ ba trở đi luôn lỗi 500. Đăng ký cùng lúc giành một địa chỉ thử tối đa 10 lần.
+  - **Tên dành riêng** nằm ở `@plp/contracts`. Host mang tên dành riêng không bao giờ là địa chỉ workspace: không cho kiểm tra `Origin`, không cho admin. Địa chỉ chung vì vậy được dùng tên dành riêng ngang hàng với workspace (`app.example.vn` cạnh `{slug}.example.vn`), và admin không bao giờ coi địa chỉ chung là của workspace.
+  - **API không khởi động** khi mẫu địa chỉ có `{slug}` ngoài host hay có đường dẫn, khi địa chỉ chung đọc ra một workspace, khi `SESSION_COOKIE_DOMAIN` đặt mà không có mẫu, hoặc khi miền cookie và `BASE_DOMAIN` chứa nhau.
+  - **Cookie hai phạm vi** (host-only và miền cha, khi đổi chế độ): API thử mọi cookie phiên trình duyệt gửi; đăng xuất kết thúc tất cả và xóa cả hai phạm vi; đăng nhập có miền cookie thì xóa cookie host-only cùng tên.
+  - **Đăng ký lỗi** chỉ xóa database khi workspace không có ở master: một commit mất câu trả lời vẫn giữ dữ liệu. Log lỗi không mang thông báo của lỗi gốc (có thể chứa email).
+  - **Nhận lại email lead lúc khởi động** lấy 500 cái cũ nhất trên mọi workspace, như khi có một database; workspace nào lỗi thì log và bỏ qua, không chặn khởi động.
+  - **Nhận lời mời** trả thêm `slug`; admin mở workspace vừa tham gia ở địa chỉ của nó, kể cả khi link được mở ở địa chỉ chung.
+  - **Admin:** thành viên không tạo được site, ở một workspace chưa có site, có "Xem tất cả workspace" và "Đăng xuất". Màn 35 và 36 có tiêu đề trang; màn 35 ghi "· toàn workspace" như board.
 
 ---
 
@@ -1645,9 +1657,16 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - Edge proxy (TLS, load balancer) đứng trước admin và renderer, nối địa chỉ socket vào `X-Forwarded-For`. Đặt `TRUST_PROXY_HOPS=1` cho API (ADR-004) và `TRUST_PROXY=true` cho renderer (ADR-016). Thiếu edge này thì mọi người dùng chung một bucket rate limit.
 - MongoDB chạy replica set (ADR-006). Storage tương thích S3 chỉ cho đọc công khai prefix `public/` (ADR-012).
 - Mỗi workspace có database riêng `{master}_ws_{workspaceId}` (ADR-025):
-  - User MongoDB của API cần quyền đọc, ghi và tạo index trên mọi database đó (`readWriteAnyDatabase` và `dbAdminAnyDatabase`, hoặc vai trò tương đương), vì MongoDB không cấp quyền theo tiền tố tên database.
-  - Backup và khôi phục theo từng workspace bằng `mongodump`/`mongorestore --db`, cùng với master. Khôi phục một workspace không đụng tới workspace khác.
-  - Lúc khởi động, API dựng index cho mọi workspace DB; số workspace tăng thì thời gian khởi động tăng theo.
+  - User MongoDB của API cần quyền đọc, ghi và tạo index trên mọi database đó (`readWriteAnyDatabase` và `dbAdminAnyDatabase`, hoặc vai trò tương đương), vì MongoDB không cấp quyền theo tiền tố tên database. Quyền này xóa được mọi database của cluster, nên cluster chỉ dành cho hệ thống này.
+  - **Backup** chụp cùng một thời điểm cho master và mọi workspace DB (snapshot của cluster). `mongodump --db` từng database không nhất quán với master, vì tạo site và xác minh tên miền ghi cả hai trong một transaction.
+  - **Khôi phục một workspace** từ snapshot thì khôi phục cả các dòng của nó ở master cùng thời điểm: `site_addresses`, `domains`, `memberships`, `custom_roles`, `invitations`, `access_requests`. Khôi phục master mà thiếu workspace DB thì API tạo database rỗng cho workspace đó lúc khởi động.
+  - Lúc khởi động, API dựng index cho mọi workspace DB (8 database cùng lúc); số workspace tăng thì thời gian khởi động tăng theo. Một workspace DB không dựng được index thì API không khởi động, như ADR-013.
+  - **Index mới hay đổi của collection trong workspace DB:** sau khi mọi instance cũ đã dừng, khởi động lại instance mới một lần, để workspace nào đăng ký trên instance cũ trong lúc chuyển cũng có index đó. Đổi option của index đã có vẫn là bước migration chạy trước khi deploy, trên mọi workspace DB.
+  - **Đăng ký mở** tạo một database mỗi lần. Trước khi mở cho khách thật cần xác minh email hoặc giới hạn số workspace, vì ADR-025 tính cho dưới 500 workspace trên một cluster.
+- Địa chỉ admin của workspace (ADR-025):
+  - Bản ghi DNS wildcard và chứng chỉ wildcard `*.{miền admin}` qua DNS-01, cùng lý do với `*.{BASE_DOMAIN}` (giới hạn chứng chỉ của CA). Tên dành riêng (`api`, `cdn`, `www`, …) dưới miền admin không trỏ về admin.
+  - API và admin cùng đặt `ADMIN_ORIGIN` (địa chỉ chung, nên dùng tên dành riêng `app`) và `ADMIN_WORKSPACE_ORIGIN_TEMPLATE`; API đặt thêm `SESSION_COOKIE_DOMAIN`. Miền cookie và `BASE_DOMAIN` không chứa nhau; API kiểm tra lúc khởi động.
+  - Biên chuyển nguyên header `Host` cho admin: admin đọc nó để biết đang mở workspace nào. Host bị viết lại thì mọi màn của workspace chuyển hướng không dứt.
 - API có ít nhất 1 GB RAM, đủ để giải mã ảnh lớn (ADR-012).
 - Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.

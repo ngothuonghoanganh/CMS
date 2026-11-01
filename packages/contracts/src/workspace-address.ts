@@ -8,6 +8,25 @@ export const workspaceSlugSchema = z
   .string()
   .regex(/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/, 'Địa chỉ workspace không hợp lệ');
 
+/**
+ * Host names the admin keeps for itself (ADR-025): never a workspace's address, and never trusted
+ * as one, so the common address and services such as `api.` or `cdn.` can share the template's
+ * domain.
+ */
+export const RESERVED_WORKSPACE_SLUGS: ReadonlySet<string> = new Set([
+  'admin',
+  'api',
+  'app',
+  'assets',
+  'cdn',
+  'docs',
+  'help',
+  'mail',
+  'static',
+  'status',
+  'www',
+]);
+
 /** Where the slug goes in `ADMIN_WORKSPACE_ORIGIN_TEMPLATE`, e.g. "https://{slug}.app.example.vn". */
 export const WORKSPACE_SLUG_PLACEHOLDER = '{slug}';
 
@@ -34,7 +53,28 @@ function hostPattern(template: string): { protocol: string; prefix: string; suff
   };
 }
 
-/** The slug a host (with its port, as in the `Host` header) addresses; null for any other host. */
+/** Whether a template puts the slug in its host, with nothing after the origin. */
+export function isWorkspaceOriginTemplate(template: string): boolean {
+  if (!template.includes(WORKSPACE_SLUG_PLACEHOLDER)) {
+    return false;
+  }
+  try {
+    const url = new URL(template.replace(WORKSPACE_SLUG_PLACEHOLDER, 'slug-probe'));
+    return (
+      url.host.includes('slug-probe') &&
+      url.pathname === '/' &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The slug a host (with its port, as in the `Host` header) addresses; null for any other host,
+ * a reserved name included.
+ */
 export function slugOfHost(template: string, host: string): string | null {
   const { prefix, suffix } = hostPattern(template);
   const lower = host.toLowerCase();
@@ -42,7 +82,9 @@ export function slugOfHost(template: string, host: string): string | null {
     return null;
   }
   const slug = lower.slice(prefix.length, lower.length - suffix.length);
-  return workspaceSlugSchema.safeParse(slug).success ? slug : null;
+  return workspaceSlugSchema.safeParse(slug).success && !RESERVED_WORKSPACE_SLUGS.has(slug)
+    ? slug
+    : null;
 }
 
 /** The slug an origin addresses, protocol included; null for any other origin. */

@@ -22,6 +22,19 @@ describe('admin addresses (ADR-025)', () => {
     expect(addressOf(addresses, 'evil.test').kind).toBe('common');
   });
 
+  it('never reads the common address as a workspace, whatever the template', () => {
+    const sameLevel = {
+      template: 'https://{slug}.example.vn',
+      commonOrigin: 'https://portal.example.vn',
+    };
+    expect(addressOf(sameLevel, 'portal.example.vn').kind).toBe('common');
+    expect(addressOf(sameLevel, 'PORTAL.example.vn').kind).toBe('common');
+    expect(addressOf(sameLevel, 'smile.example.vn').kind).toBe('workspace');
+    // Reserved names are never workspaces either (ADR-025).
+    expect(addressOf(sameLevel, 'app.example.vn').kind).toBe('common');
+    expect(addressOf(sameLevel, 'api.example.vn').kind).toBe('common');
+  });
+
   it('opens a workspace screen at its own address, with the same path', () => {
     const common = addressOf(addresses, 'app.example.vn');
     const other = addressOf(addresses, 'smile.app.example.vn');

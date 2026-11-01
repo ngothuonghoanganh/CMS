@@ -1,7 +1,9 @@
 import { can, endpoints, type MeResponse } from '@plp/contracts';
 import { ToastProvider } from '@plp/ui';
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 import { workspaceHome } from '../features/shell/admin-address';
 import { currentAddress } from '../features/shell/current-address';
 import { siteHref } from '../features/shell/navigation';
@@ -22,8 +24,26 @@ import { requireMe, serverApi } from '../lib/server-api';
  * workspace, or says the account does not belong to it (screen 36). At the single address of a
  * deployment without them, see `singleAddressHome`.
  */
+/** Screens 35 and 36 are named for what they say (WCAG 2.4.2); the others redirect. */
+export async function generateMetadata(): Promise<Metadata> {
+  const address = await currentAddress();
+  if (address.kind === 'common') {
+    return { title: 'Chọn workspace' };
+  }
+  if (address.kind === 'workspace') {
+    const me = await loadMe();
+    return me.memberships.some((item) => item.workspace.slug === address.slug)
+      ? {}
+      : { title: 'Không thuộc workspace ở địa chỉ này' };
+  }
+  return {};
+}
+
+/** The signed-in user, read once for the page and its title. */
+const loadMe = cache(() => requireMe());
+
 export default async function HomePage() {
-  const me = await requireMe();
+  const me = await loadMe();
   const address = await currentAddress();
   if (address.kind === 'common') {
     const [only, ...others] = me.memberships;

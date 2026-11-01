@@ -19,6 +19,7 @@ import { useSchemaForm } from '../shell/use-schema-form';
 import { workspacePreferenceCookie } from '../shell/workspace-preference';
 import { accessDescription } from './member-presentation';
 import styles from './InvitationPage.module.css';
+import { type WorkspaceAddresses, workspaceHome } from '../shell/admin-address';
 
 /** Keeps the link's secret across signing in, which leaves this page (session storage only). */
 export const PENDING_INVITATION_KEY = 'plp_invitation';
@@ -60,10 +61,20 @@ function forgetToken(): void {
   }
 }
 
-/** Opens the workspace the user just joined, with a page load so no other cache stays. */
-function openWorkspace(workspaceId: string): void {
+/**
+ * Opens the workspace the user just joined, with a page load so no other cache stays: at its own
+ * address when workspaces have one (ADR-025), else at the one address, remembered as chosen.
+ */
+function openWorkspace(
+  workspace: { id: string; slug: string },
+  addresses: WorkspaceAddresses | null,
+): void {
   forgetToken();
-  document.cookie = workspacePreferenceCookie(workspaceId);
+  if (addresses !== null) {
+    loadPage(`${workspaceHome(addresses, workspace.slug)}/`);
+    return;
+  }
+  document.cookie = workspacePreferenceCookie(workspace.id);
   loadPage('/');
 }
 
@@ -72,9 +83,11 @@ const fieldIds = { name: 'invite-name', password: 'invite-password' } as const;
 function SignupForm({
   token,
   invitation,
+  addresses,
 }: {
   token: string;
   invitation: InvitationLookupResponse;
+  addresses: WorkspaceAddresses | null;
 }) {
   const form = useSchemaForm(invitedSignupRequestSchema.omit({ token: true }), {
     name: '',
@@ -86,7 +99,7 @@ function SignupForm({
     onSuccess: (me) => {
       const joined = me.memberships[0];
       if (joined !== undefined) {
-        openWorkspace(joined.workspace.id);
+        openWorkspace(joined.workspace, addresses);
       }
     },
     onError: (error) => {
@@ -155,7 +168,12 @@ function SignupForm({
 }
 
 /** Board 15b: whoever opens an invitation link joins, signs up, or learns why they cannot. */
-export function InvitationPage() {
+export interface InvitationPageProps {
+  /** How workspace addresses are made (ADR-025); null when every workspace opens at one address. */
+  addresses: WorkspaceAddresses | null;
+}
+
+export function InvitationPage({ addresses }: InvitationPageProps) {
   const queryClient = useQueryClient();
   // Undefined while rendering on the server, where there is no fragment.
   const token = useSyncExternalStore(subscribe, currentToken, () => undefined);
@@ -184,7 +202,7 @@ export function InvitationPage() {
     mutationFn: (secret: string) =>
       api(endpoints.acceptInvitation, [], { body: { token: secret } }),
     onSuccess: (result) => {
-      openWorkspace(result.workspaceId);
+      openWorkspace({ id: result.workspaceId, slug: result.slug }, addresses);
     },
     onError: (error) => {
       reportUnexpected('Accepting an invitation failed', error);
@@ -372,7 +390,7 @@ export function InvitationPage() {
     <div className={styles.card}>
       {header}
       {grant}
-      <SignupForm token={token} invitation={invitation} />
+      <SignupForm token={token} invitation={invitation} addresses={addresses} />
     </div>
   );
 }

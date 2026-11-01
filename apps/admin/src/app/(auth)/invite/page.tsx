@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { InvitationPage } from '../../../features/members/InvitationPage';
+import { workspaceAddresses } from '../../../features/shell/current-address';
 
 export const metadata: Metadata = {
   title: 'Nhận lời mời vào workspace',
@@ -12,5 +13,5 @@ export const metadata: Metadata = {
  * joining needs the invited email's account, made here or signed in.
  */
 export default function InvitePage() {
-  return <InvitationPage />;
+  return <InvitationPage addresses={workspaceAddresses()} />;
 }

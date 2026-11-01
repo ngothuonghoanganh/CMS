@@ -12,7 +12,7 @@ import { InvitationsRepository } from '../workspaces/invitations.repository.js';
 import { INVITATION_UNAVAILABLE, WorkspaceJoin } from '../workspaces/workspace-join.service.js';
 import { CustomRolesRepository } from '../workspaces/custom-roles.repository.js';
 import { accessOf } from '../workspaces/domain/member-access.js';
-import { freeSlug, slugBaseOf } from '../workspaces/domain/workspace-slug.js';
+import { slugBaseOf, slugCandidates } from '../workspaces/domain/workspace-slug.js';
 import { WORKSPACES_SLUG_INDEX } from '../workspaces/workspace.schema.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import type { AuthenticatedUser } from './authenticated-user.js';
@@ -32,8 +32,14 @@ export interface IssuedSession {
   me: MeResponse;
 }
 
-/** Sign-ups racing for one address: each loser tries the next free one, this many times at most. */
-const SLUG_ATTEMPTS = 3;
+/**
+ * Sign-ups racing for one address: each loser tries the next free one. Every round has a winner,
+ * so this many racers at once all get through.
+ */
+const SLUG_ATTEMPTS = 10;
+
+/** Addresses asked about in one query while looking for a free one. */
+const SLUG_BATCH = 20;
 
 function emailTaken(cause?: unknown): AppError {
   return new AppError(409, 'email_taken', 'Email này đã được đăng ký', {
@@ -93,7 +99,7 @@ export class AuthService {
   ): Promise<ObjectId> {
     const base = slugBaseOf(input.workspaceName);
     for (let attempt = 1; ; attempt += 1) {
-      const slug = freeSlug(base, await this.workspaces.takenSlugs(base));
+      const slug = await this.freeSlug(base);
       try {
         return await this.transactions.run(async (tx) => {
           const user = await this.users.create(
@@ -115,13 +121,34 @@ export class AuthService {
     }
   }
 
+  /** The first form of `base` no workspace has: `base`, `base-2`, … asked a batch at a time. */
+  private async freeSlug(base: string): Promise<string> {
+    for (let from = 1; ; from += SLUG_BATCH) {
+      const candidates = slugCandidates(base, from, SLUG_BATCH);
+      const taken = await this.workspaces.takenSlugs(candidates);
+      const free = candidates.find((slug) => !taken.has(slug));
+      if (free !== undefined) {
+        return free;
+      }
+    }
+  }
+
   /** The database of a workspace that was not created holds nothing and nothing routes to it. */
   private async dropDatabase(workspaceId: ObjectId, cause: unknown): Promise<void> {
     try {
+      // A commit whose answer was lost may have created the workspace after all: keep its data.
+      if ((await this.workspaces.findSlug(workspaceId)) !== null) {
+        return;
+      }
       await this.databases.drop(workspaceId);
     } catch (error) {
+      // Only the kind of the first error: a duplicate key's message carries the email.
       this.logger.error(
-        { err: error, cause, workspaceId: workspaceId.toHexString() },
+        {
+          err: error,
+          cause: cause instanceof Error ? cause.name : typeof cause,
+          workspaceId: workspaceId.toHexString(),
+        },
         'Database of a workspace not created was not dropped',
       );
     }
@@ -229,8 +256,9 @@ export class AuthService {
     throw error;
   }
 
-  async logout(token: string | undefined): Promise<void> {
-    if (token) {
+  /** Ends every session the browser presented (ADR-025: up to one per cookie scope). */
+  async logout(tokens: readonly string[]): Promise<void> {
+    for (const token of tokens) {
       await this.sessions.delete(hashSessionToken(token));
     }
   }

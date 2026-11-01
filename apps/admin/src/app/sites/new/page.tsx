@@ -1,5 +1,5 @@
 import { can, endpoints, holdersOf, type Membership } from '@plp/contracts';
-import { ButtonLink } from '@plp/ui';
+import { ButtonLink, ToastProvider } from '@plp/ui';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import Link from 'next/link';
@@ -14,6 +14,8 @@ import {
   WORKSPACE_PREFERENCE_COOKIE,
 } from '../../../features/shell/workspace-preference';
 import { CreateSiteForm } from '../../../features/sites/CreateSiteForm';
+import { SignOutButton } from '../../../features/workspaces/SignOutButton';
+import styles from '../../../features/workspaces/WorkspacePicker.module.css';
 import { requireMe, serverApi } from '../../../lib/server-api';
 
 export const metadata: Metadata = { title: 'Tạo site khách hàng' };
@@ -70,19 +72,32 @@ export default async function NewSitePage({
   const workspaceName = membership.workspace.name;
 
   if (!can(membership.role, 'sites.manage')) {
+    // Without a site to go back to, the page still leads somewhere: the other workspaces at the
+    // common address (ADR-025), or signing out.
+    const address = await currentAddress();
     return (
-      <CenteredPage width="md">
-        <FormCard
-          title="Tạo site khách hàng"
-          description={`Chỉ ${holdersOf('sites.manage')} của workspace ${workspaceName} được tạo site mới. Hãy nhờ họ tạo site, bạn sẽ thấy site đó ở đây sau khi được tạo.`}
-        >
-          {backHref === null ? null : (
-            <ButtonLink as={Link} href={backHref} variant="secondary">
-              Quay lại danh sách trang
-            </ButtonLink>
-          )}
-        </FormCard>
-      </CenteredPage>
+      <ToastProvider>
+        <CenteredPage width="md">
+          <FormCard
+            title="Tạo site khách hàng"
+            description={`Chỉ ${holdersOf('sites.manage')} của workspace ${workspaceName} được tạo site mới. Hãy nhờ họ tạo site, bạn sẽ thấy site đó ở đây sau khi được tạo.`}
+          >
+            <div className={styles.actions}>
+              {backHref === null ? null : (
+                <ButtonLink as={Link} href={backHref} variant="secondary">
+                  Quay lại danh sách trang
+                </ButtonLink>
+              )}
+              {address.kind === 'single' ? null : (
+                <ButtonLink href={`${address.addresses.commonOrigin}/`} variant="secondary">
+                  Xem tất cả workspace
+                </ButtonLink>
+              )}
+              {backHref === null ? <SignOutButton variant="ghost" /> : null}
+            </div>
+          </FormCard>
+        </CenteredPage>
+      </ToastProvider>
     );
   }
 

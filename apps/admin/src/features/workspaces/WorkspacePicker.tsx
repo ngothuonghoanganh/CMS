@@ -1,9 +1,8 @@
 'use client';
 
-import { type Membership, type SessionUser, workspaceOrigin } from '@plp/contracts';
+import { accessLabel, type Membership, type SessionUser, workspaceOrigin } from '@plp/contracts';
 import { ArrowRightIcon, Avatar, BoxIcon, ButtonLink } from '@plp/ui';
 import { Brand } from '../shell/Brand';
-import { membershipLabel } from '../shell/Sidebar';
 import { SignOutButton } from './SignOutButton';
 import styles from './WorkspacePicker.module.css';
 
@@ -14,6 +13,14 @@ export interface WorkspacePickerProps {
   template: string;
   /** The common address's origin, shown in the header. */
   commonOrigin: string;
+}
+
+/** "Chủ sở hữu · toàn workspace", or "Biên tập · 2 site" for a member kept to some sites. */
+function accessLine(membership: Membership): string {
+  const role = accessLabel(membership.role);
+  return membership.siteIds === null
+    ? `${role} · toàn workspace`
+    : `${role} · ${membership.siteIds.length.toString()} site`;
 }
 
 /**
@@ -57,6 +64,9 @@ export function WorkspacePicker({
                 nhờ người quản lý mời lại.
               </p>
             </div>
+            <div>
+              <SignOutButton />
+            </div>
           </section>
         ) : (
           <>
@@ -76,7 +86,7 @@ export function WorkspacePicker({
                     <Avatar name={workspace.name} shape="square" size={44} />
                     <span className={styles.text}>
                       <span className={styles.name}>{workspace.name}</span>
-                      <span className={styles.access}>{membershipLabel(membership)}</span>
+                      <span className={styles.access}>{accessLine(membership)}</span>
                       <span className={styles.address}>{new URL(origin).host}</span>
                     </span>
                     <ButtonLink href={`${origin}/`} aria-label={`Mở ${workspace.name}`}>

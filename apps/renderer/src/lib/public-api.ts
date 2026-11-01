@@ -113,26 +113,22 @@ export async function getPathStatus(
   });
 }
 
-/** Live, indexable pages of a site; null when the site does not exist. */
+/**
+ * Live, indexable pages of a site; null when the site does not exist. Never cached: unlike a
+ * page, nothing keys the sitemap by what is live, so a tagged entry could outlive a publish when a
+ * revalidation is lost or joins an older read (ADR-009). Crawlers ask for it rarely and the API
+ * answers it with bounded queries.
+ */
 export async function getSitemap(subdomain: string): Promise<SitemapResponse | null> {
-  return answerOf('publicSitemap', await cachedSitemap(subdomain));
-}
-
-async function cachedSitemap(subdomain: string): Promise<CachedLookup<SitemapResponse | null>> {
-  'use cache';
-  cacheTag(siteCacheTag(subdomain));
   const endpoint = endpoints.publicSitemap;
-  const lookup = await lookupForCache('publicSitemap', () =>
-    fetchPublicJson({
-      baseUrl: rendererEnv().API_PUBLIC_URL,
-      path: endpoint.path(subdomain),
-      schema: endpoint.response,
-      label: 'publicSitemap',
-      timeoutMs: LOOKUP_TIMEOUT_MS,
-    }),
-  );
-  cacheLife(lookup.kind === 'answer' ? SITE_CACHE_LIFE : UNAVAILABLE_CACHE_LIFE);
-  return lookup;
+  return fetchPublicJson({
+    baseUrl: rendererEnv().API_PUBLIC_URL,
+    path: endpoint.path(subdomain),
+    schema: endpoint.response,
+    label: 'publicSitemap',
+    timeoutMs: LOOKUP_TIMEOUT_MS,
+    cache: 'no-store',
+  });
 }
 
 /**

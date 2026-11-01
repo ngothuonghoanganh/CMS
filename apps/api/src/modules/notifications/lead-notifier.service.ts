@@ -8,7 +8,11 @@ import {
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import type { LeadRecord } from '../leads/lead.schema.js';
-import { type LeadRef, LeadsRepository } from '../leads/leads.repository.js';
+import {
+  type LeadRef,
+  LeadsRepository,
+  type NotificationBacklogRow,
+} from '../leads/leads.repository.js';
 import { PagesRepository } from '../pages/pages.repository.js';
 import { confirmedRecipientsOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
@@ -32,6 +36,11 @@ export const NOTIFICATION_RETRY_DELAYS = Symbol('NOTIFICATION_RETRY_DELAYS');
  * this instance's memory; a restart picks up what is left (`onApplicationBootstrap`). Logs carry
  * the lead id and an error code, never the email.
  */
+/** When a backlogged notification last moved, for taking on the oldest first. */
+function waitingSince(row: NotificationBacklogRow): number {
+  return row.notification?.updatedAt.getTime() ?? 0;
+}
+
 @Injectable()
 export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(LeadNotifier.name);
@@ -57,32 +66,51 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
 
   /**
    * Takes on the notifications a stopped instance left: pending ones, and those stuck in
-   * `sending` for ten minutes. At most `NOTIFICATION_SWEEP_LIMIT`, oldest first in each workspace.
+   * `sending` for ten minutes. At most `NOTIFICATION_SWEEP_LIMIT`, the oldest across every
+   * workspace database (ADR-025), as one query found them when there was one database. A
+   * workspace whose database fails is logged and skipped: it does not keep the API from starting.
    */
   async onApplicationBootstrap(): Promise<void> {
     const staleBefore = new Date(Date.now() - STALE_SENDING_MS);
-    let taken = 0;
-    // Each workspace database holds its own leads (ADR-025).
+    let oldest: Array<{ ref: LeadRef; row: NotificationBacklogRow }> = [];
     for await (const workspaceId of this.workspaces.allIds()) {
-      if (taken >= NOTIFICATION_SWEEP_LIMIT) {
-        break;
+      try {
+        const backlog = await this.leads.findNotificationBacklog(
+          { workspaceId },
+          staleBefore,
+          NOTIFICATION_SWEEP_LIMIT,
+        );
+        oldest = [
+          ...oldest,
+          ...backlog.map((row) => ({ ref: { workspaceId, leadId: row._id }, row })),
+        ]
+          .sort((a, b) => waitingSince(a.row) - waitingSince(b.row))
+          .slice(0, NOTIFICATION_SWEEP_LIMIT);
+      } catch (error) {
+        this.logger.error(
+          { err: error, workspaceId: workspaceId.toHexString() },
+          'Lead notifications of a workspace not taken on at startup',
+        );
       }
-      const backlog = await this.leads.findNotificationBacklog(
-        { workspaceId },
-        staleBefore,
-        NOTIFICATION_SWEEP_LIMIT - taken,
-      );
-      for (const lead of backlog) {
-        const ref: LeadRef = { workspaceId, leadId: lead._id };
+    }
+    let taken = 0;
+    for (const { ref, row } of oldest) {
+      try {
         if (
-          lead.notification?.status === 'sending' &&
+          row.notification?.status === 'sending' &&
           !(await this.leads.requeueStaleNotification(ref, staleBefore))
         ) {
           continue;
         }
-        this.enqueue(ref);
-        taken += 1;
+      } catch (error) {
+        this.logger.error(
+          { err: error, leadId: ref.leadId.toHexString() },
+          'Lead notification not taken on at startup',
+        );
+        continue;
       }
+      this.enqueue(ref);
+      taken += 1;
     }
     if (taken > 0) {
       this.logger.log({ count: taken }, 'Lead notifications taken on at startup');

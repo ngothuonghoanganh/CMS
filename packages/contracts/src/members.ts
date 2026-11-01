@@ -9,6 +9,7 @@ import {
 import { idSchema, isoDateTimeSchema, userRefSchema } from './common.js';
 import { roleChoiceSchema } from './custom-roles.js';
 import { accessSchema } from './permissions.js';
+import { workspaceSlugSchema } from './workspace-address.js';
 
 /*
  * Members, invitations, access requests and the ownership of a workspace (boards 15, 15b,
@@ -155,7 +156,11 @@ export const invitedSignupRequestSchema = z.object({
 });
 export type InvitedSignupRequest = z.infer<typeof invitedSignupRequestSchema>;
 
-export const acceptInvitationResponseSchema = z.object({ workspaceId: idSchema });
+/** The workspace joined, with its admin address (ADR-025). */
+export const acceptInvitationResponseSchema = z.object({
+  workspaceId: idSchema,
+  slug: workspaceSlugSchema,
+});
 export type AcceptInvitationResponse = z.infer<typeof acceptInvitationResponseSchema>;
 
 // Access requests

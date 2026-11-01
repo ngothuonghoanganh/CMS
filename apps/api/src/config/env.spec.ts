@@ -133,7 +133,7 @@ describe('parseEnv', () => {
       ).toThrow('must contain {slug}');
       expect(() =>
         parseEnv({ ...valid, ...addresses, ADMIN_WORKSPACE_ORIGIN_TEMPLATE: '{slug}' }),
-      ).toThrow('must be a URL');
+      ).toThrow('must be an origin with {slug} in its host and no path');
     });
 
     it('needs the cookie domain with a template, holding both the common and the workspace addresses', () => {
@@ -155,6 +155,64 @@ describe('parseEnv', () => {
       expect(() =>
         parseEnv({ ...valid, ...addresses, ADMIN_ORIGIN: 'https://evilapp.example.vn' }),
       ).toThrow('must be under SESSION_COOKIE_DOMAIN');
+    });
+
+    it('keeps the cookie host-only without workspace addresses', () => {
+      expect(() => parseEnv({ ...valid, SESSION_COOKIE_DOMAIN: 'example.vn' })).toThrow(
+        'SESSION_COOKIE_DOMAIN applies only with ADMIN_WORKSPACE_ORIGIN_TEMPLATE',
+      );
+    });
+
+    it('refuses a common address that reads as a workspace address, unless its name is reserved', () => {
+      const sameLevel = {
+        ...valid,
+        ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.example.vn',
+        SESSION_COOKIE_DOMAIN: 'example.vn',
+      };
+      expect(() => parseEnv({ ...sameLevel, ADMIN_ORIGIN: 'https://portal.example.vn' })).toThrow(
+        'ADMIN_ORIGIN would be read as a workspace address',
+      );
+      expect(parseEnv({ ...sameLevel, ADMIN_ORIGIN: 'https://app.example.vn' }).ADMIN_ORIGIN).toBe(
+        'https://app.example.vn',
+      );
+    });
+
+    it('refuses a template with the slug outside the host, or anything after the origin', () => {
+      for (const template of [
+        'https://app.example.vn/{slug}',
+        'https://{slug}.app.example.vn/admin',
+        'https://{slug}.app.example.vn?x=1',
+      ]) {
+        expect(() =>
+          parseEnv({ ...valid, ...addresses, ADMIN_WORKSPACE_ORIGIN_TEMPLATE: template }),
+        ).toThrow('must be an origin with {slug} in its host and no path');
+      }
+    });
+
+    it('never lets the session reach a public site', () => {
+      const publicSites = {
+        ...valid,
+        PUBLIC_SITE_ORIGIN_TEMPLATE: 'https://{subdomain}.payload.site',
+      };
+      expect(() =>
+        parseEnv({
+          ...publicSites,
+          ADMIN_ORIGIN: 'https://app.payload.site',
+          ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.app.payload.site',
+          SESSION_COOKIE_DOMAIN: 'payload.site',
+        }),
+      ).toThrow('must not contain one another');
+      expect(() =>
+        parseEnv({
+          ...publicSites,
+          ADMIN_ORIGIN: 'https://app.payload.site',
+          ADMIN_WORKSPACE_ORIGIN_TEMPLATE: 'https://{slug}.app.payload.site',
+          SESSION_COOKIE_DOMAIN: 'app.payload.site',
+        }),
+      ).toThrow('must not contain one another');
+      expect(parseEnv({ ...publicSites, ...addresses }).SESSION_COOKIE_DOMAIN).toBe(
+        'app.example.vn',
+      );
     });
   });
 });
