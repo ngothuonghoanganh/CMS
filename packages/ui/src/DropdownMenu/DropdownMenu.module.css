@@ -68,6 +68,31 @@
   white-space: nowrap;
 }
 
+.twoLines {
+  align-items: flex-start;
+  padding-block: 8px;
+}
+
+.twoLines .icon {
+  padding-top: 1px;
+}
+
+.lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Readable while the item is disabled: it often says why. */
+.description {
+  font-size: var(--text-body-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+
 .indicator {
   display: inline-flex;
   flex: none;

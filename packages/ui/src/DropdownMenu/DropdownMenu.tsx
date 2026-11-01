@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu as RadixMenu } from 'radix-ui';
-import type { ReactElement, ReactNode } from 'react';
+import { type ReactElement, type ReactNode, useId } from 'react';
 import { CheckIcon } from '../icons';
 import { cx } from '../internal/cx';
 import styles from './DropdownMenu.module.css';
@@ -67,6 +67,11 @@ export interface DropdownMenuItemProps {
   /** `danger` for destructive actions such as "Gỡ xuất bản". */
   tone?: 'default' | 'danger' | undefined;
   disabled?: boolean | undefined;
+  /**
+   * A second line under the label, e.g. why the item is disabled ("Gỡ xuất bản trước khi xóa").
+   * It is the item's accessible description; the name stays the label.
+   */
+  description?: ReactNode;
 }
 
 export function DropdownMenuItem({
@@ -75,20 +80,37 @@ export function DropdownMenuItem({
   icon,
   tone = 'default',
   disabled = false,
+  description,
 }: DropdownMenuItemProps) {
+  const id = useId();
+  const described = description !== undefined && description !== null;
   return (
     <RadixMenu.Item
       {...(onSelect === undefined ? {} : { onSelect })}
       disabled={disabled}
-      className={cx(styles.item, tone === 'danger' && styles.danger)}
+      className={cx(styles.item, tone === 'danger' && styles.danger, described && styles.twoLines)}
       data-tone={tone}
+      {...(described
+        ? { 'aria-labelledby': `${id}-label`, 'aria-describedby': `${id}-description` }
+        : {})}
     >
       {icon ? (
         <span className={styles.icon} aria-hidden="true">
           {icon}
         </span>
       ) : null}
-      <span className={styles.text}>{children}</span>
+      {described ? (
+        <span className={styles.lines}>
+          <span id={`${id}-label`} className={styles.text}>
+            {children}
+          </span>
+          <span id={`${id}-description`} className={styles.description}>
+            {description}
+          </span>
+        </span>
+      ) : (
+        <span className={styles.text}>{children}</span>
+      )}
     </RadixMenu.Item>
   );
 }
