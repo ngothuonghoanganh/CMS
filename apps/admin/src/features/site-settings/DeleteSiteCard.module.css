@@ -1,0 +1,45 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-color: var(--color-danger-border);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-danger-ink);
+}
+
+.description {
+  margin: 0;
+  font-size: var(--text-body-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.summary {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--text-body-sm);
+  line-height: 1.6;
+  color: var(--color-ink-2);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
