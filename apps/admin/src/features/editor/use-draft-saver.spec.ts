@@ -265,16 +265,60 @@ describe('draft saver', () => {
     expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('keeps saving as usual while a leave without saving is under way', async () => {
+  it('saves a change made while a leave without saving is under way as usual', async () => {
     const { store, saver, stop } = setup();
-    saveMock.mockResolvedValueOnce(response(4)).mockResolvedValueOnce(response(5));
+    saveMock.mockResolvedValue(response(4));
     store.getState().setSpacing(HERO, 'compact');
     void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
     await vi.advanceTimersByTimeAsync(1500);
-    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock).not.toHaveBeenCalled();
 
+    // The leave takes its time and the user edits on: that change was never given up.
     store.getState().setSpacing(HERO, 'spacious');
-    await expect(saver.ensureSaved()).resolves.toMatchObject({ revision: 5 });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('spacious');
+    expect(store.getState().saveState).toBe('saved');
+    stop();
+  });
+
+  it('still saves when asked to during a leave without saving (publish, preview)', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
+    await expect(saver.ensureSaved()).resolves.toMatchObject({ revision: 4 });
+    stop();
+  });
+
+  it('drops the autosave and the retry waiting when a leave without saving starts', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getState().saveState).toBe('error');
+    // A retry is due in 2 s, and a later change waits for its autosave.
+    store.getState().setSpacing(HERO, 'spacious');
+
+    // Signing out without the changes takes longer: nothing writes them into the draft meanwhile.
+    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it('schedules no retry for a save of the given-up changes that fails during the leave', async () => {
+    const { store, saver, stop } = setup();
+    const sent = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(sent.promise).mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    void saver.discardFor(() => new Promise<LeaveOutcome>(() => undefined));
+
+    sent.reject(new TypeError('Failed to fetch'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.getState().saveState).toBe('error');
+    expect(saveMock).toHaveBeenCalledTimes(1);
     stop();
   });
 
@@ -302,6 +346,37 @@ describe('draft saver', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(saveMock).toHaveBeenCalledTimes(1);
     expect(saveMock.mock.calls[0]?.[2].body.composition.sections[1]?.spacing).toBe('spacious');
+  });
+
+  it('resumes autosave once the user stays after all, with no other change', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    const signingOut = deferred<LeaveOutcome>();
+    const left = saver.discardFor(() => signingOut.promise);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(saveMock).not.toHaveBeenCalled();
+
+    // Signing out failed: the user is still here with the change.
+    signingOut.resolve('stayed');
+    await expect(left).resolves.toBe('stayed');
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(store.getState().saveState).toBe('saved');
+    stop();
+  });
+
+  it('resumes autosave when the leave fails, with no other change', async () => {
+    const { store, saver, stop } = setup();
+    saveMock.mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    const failure = new Error('leave failed');
+
+    await expect(saver.discardFor(() => Promise.reject(failure))).rejects.toBe(failure);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(store.getState().saveState).toBe('saved');
+    stop();
   });
 
   it('saves on stopping again once the user stays after all', async () => {

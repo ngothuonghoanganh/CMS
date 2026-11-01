@@ -34,11 +34,11 @@ export interface DraftSaver {
   retry: () => void;
   /**
    * "Rời trang, bỏ thay đổi": runs `leave` without waiting for a save, asking, or saving on the way
-   * out. That holds for the draft as it is now (`leavingWithoutSaving`); a change made meanwhile
-   * ends it, and is saved and asked about as usual. Autosave goes on meanwhile: a save that lands
-   * before the screen is gone keeps those changes in the draft, which the live page does not show.
-   * When the user stays (`'stayed'`, or `leave` throws), leaving asks and saves again. Resolves
-   * with the leave's outcome.
+   * out. That holds for the draft as it is now (`leavingWithoutSaving`): its debounce and retry
+   * timers are dropped and no retry is scheduled for it; a change made meanwhile ends it, and is
+   * saved and asked about as usual. A save already running ends as usual: what it saves stays in
+   * the draft, which the live page does not show. When the user stays (`'stayed'`, or `leave`
+   * throws), leaving asks and saves again, and autosave resumes. Resolves with the leave's outcome.
    */
   discardFor: (leave: Leave) => Promise<LeaveOutcome>;
   /**
@@ -136,7 +136,9 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 
   function scheduleRetry() {
     const delay = retryDelays[retryAttempt];
-    if (delay === undefined || stopped) {
+    // Changes given up for a leave under way are not tried again: a retry during a slow sign-out
+    // would write them into the draft.
+    if (delay === undefined || stopped || isLeavingWithoutSaving(store.getState())) {
       return;
     }
     retryAttempt += 1;
@@ -217,6 +219,15 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }, debounceMs);
   }
 
+  /** A leave without saving did not happen: leaving asks and saves again, and autosave resumes. */
+  function stay() {
+    store.getState().setLeavingWithoutSaving(null);
+    const state = store.getState();
+    if (!stopped && hasUnsavedChanges(state) && state.saveState !== 'conflict') {
+      scheduleSave();
+    }
+  }
+
   return {
     ensureSaved: flush,
     retry() {
@@ -224,6 +235,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       flushInBackground();
     },
     async discardFor(leave) {
+      clearTimers();
       // Leaves under way at once share the flag: one that stays clears it for the others, so the
       // browser may ask once before a page load another one starts, or the screen save once on its
       // way out (after signing out, a 401). Nothing is lost either way.
@@ -233,11 +245,11 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
       try {
         outcome = await leave();
       } catch (error) {
-        setLeavingWithoutSaving(null);
+        stay();
         throw error;
       }
       if (outcome === 'stayed') {
-        setLeavingWithoutSaving(null);
+        stay();
       }
       return outcome;
     },
