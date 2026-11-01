@@ -5,7 +5,8 @@ import { signedUpClient } from '../../../test/client.js';
 
 /**
  * Collections whose documents MongoDB deletes at their own `expiresAt`: sessions and login attempts
- * (ADR-004), lead rate-limit windows (ADR-016), leads past the site's retention (rule 10), and the
+ * (ADR-004), sign-ups waiting for their email, password reset links and the hourly count of
+ * account emails (ADR-026), lead rate-limit windows (ADR-016), leads past the site's retention (rule 10), and the
  * day salts, "seen today" hashes and daily totals of page views (ADR-019). Invitations and access
  * requests go at their `purgeAt` (ADR-021), since their `expiresAt` is when a link stops working,
  * and closed requests to publish at theirs (ADR-023).
@@ -15,6 +16,9 @@ import { signedUpClient } from '../../../test/client.js';
 const EXPIRING_IN_MASTER: Record<string, string> = {
   sessions: 'expiresAt',
   login_attempts: 'expiresAt',
+  pending_signups: 'expiresAt',
+  password_resets: 'expiresAt',
+  auth_email_limits: 'expiresAt',
   lead_limits: 'expiresAt',
   analytics_salts: 'expiresAt',
   invitations: 'purgeAt',

@@ -5,7 +5,14 @@ import { Types } from 'mongoose';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
-import { signedUpClient, signupInput, TestClient } from '../../../test/client.js';
+import {
+  requestSignup,
+  signedUpClient,
+  signUp,
+  signupInput,
+  signupLinkToken,
+  TestClient,
+} from '../../../test/client.js';
 import { TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
 import { createSite } from '../../../test/resources.js';
 import { LoginAttemptsRepository } from './login-attempts.repository.js';
@@ -27,7 +34,8 @@ describe('auth', () => {
   it('signs up a user as owner of a new workspace and sets an httpOnly session cookie', async () => {
     const client = new TestClient(t.app);
     const input = signupInput({ workspaceName: 'Mây Xanh Agency' });
-    const response = await client.post('/auth/signup', input).expect(201);
+    const token = await requestSignup(t.app, input, client);
+    const response = await client.post('/auth/signup/verify', { token }).expect(201);
 
     const me = meResponseSchema.parse(response.body);
     expect(me.user.email).toBe(input.email);
@@ -46,20 +54,24 @@ describe('auth', () => {
 
   it('never stores the session token itself', async () => {
     const client = new TestClient(t.app);
-    const response = await client.post('/auth/signup', signupInput()).expect(201);
+    const linkToken = await requestSignup(t.app, signupInput(), client);
+    const response = await client.post('/auth/signup/verify', { token: linkToken }).expect(201);
     const token = /plp_session=([^;]+)/.exec(String(response.headers['set-cookie']))?.[1];
     expect(token).toBeDefined();
     const stored = await t.connection.collection('sessions').findOne({ tokenHash: token });
     expect(stored).toBeNull();
   });
 
-  it('normalizes the email and rejects a second signup with the same address', async () => {
+  it('normalizes the email', async () => {
     const input = signupInput();
-    await new TestClient(t.app)
-      .post('/auth/signup', { ...input, email: input.email.toUpperCase() })
-      .expect(201);
-    const response = await new TestClient(t.app).post('/auth/signup', input).expect(409);
-    expect(problemSchema.parse(response.body).code).toBe('email_taken');
+    const client = new TestClient(t.app);
+    const response = await client
+      .post('/auth/signup', { ...input, email: `  ${input.email.toUpperCase()} ` })
+      .expect(202);
+    expect(response.body).toEqual({ email: input.email });
+    const token = await signupLinkToken(t.app, input.email);
+    const verified = await client.post('/auth/signup/verify', { token }).expect(201);
+    expect(meResponseSchema.parse(verified.body).user.email).toBe(input.email);
   });
 
   it('validates the signup body with the contract schema', async () => {
@@ -73,7 +85,7 @@ describe('auth', () => {
 
   it('logs in with the right password and rejects a wrong one with a generic message', async () => {
     const input = signupInput();
-    await new TestClient(t.app).post('/auth/signup', input).expect(201);
+    await signUp(t.app, input);
 
     const ok = new TestClient(t.app);
     await ok.post('/auth/login', { email: input.email, password: input.password }).expect(200);
@@ -234,10 +246,10 @@ describe('auth rate limit behind a trusted edge proxy', () => {
       password: 'whatever-123',
     }).expect(401);
 
-    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(201);
-    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(201);
+    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(202);
+    await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(202);
     await fromClient('203.0.113.30', '/auth/signup', signupInput()).expect(429);
-    await fromClient('198.51.100.40', '/auth/signup', signupInput()).expect(201);
+    await fromClient('198.51.100.40', '/auth/signup', signupInput()).expect(202);
   });
 
   it('counts an IPv6 client per /64, however its address is written', async () => {
@@ -305,9 +317,9 @@ describe('per-account login limit', () => {
     await t.close();
   });
 
-  async function signUp() {
+  async function signUpNew() {
     const input = signupInput();
-    await new TestClient(t.app).post('/auth/signup', input).expect(201);
+    await signUp(t.app, input);
     return input;
   }
 
@@ -315,8 +327,8 @@ describe('per-account login limit', () => {
     new TestClient(t.app).post('/auth/login', { email, password });
 
   it('refuses an account after too many failed logins, even with the right password', async () => {
-    const victim = await signUp();
-    const other = await signUp();
+    const victim = await signUpNew();
+    const other = await signUpNew();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await login(victim.email, 'wrong-password').expect(401);
     }
@@ -329,7 +341,7 @@ describe('per-account login limit', () => {
   });
 
   it('clears the count after a successful login', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     await login(user.email, 'wrong-password').expect(401);
     await login(user.email, 'wrong-password').expect(401);
     await login(user.email, user.password).expect(200);
@@ -347,7 +359,7 @@ describe('per-account login limit', () => {
   });
 
   it('lets no more than the limit of parallel attempts reach the password check', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     const responses = await Promise.all(
       Array.from({ length: 10 }, () => login(user.email, 'wrong-password')),
     );
@@ -387,7 +399,7 @@ describe('per-account login limit', () => {
   });
 
   it('gives the attempt back when looking the account up fails', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     await login(user.email, 'wrong-password').expect(401);
     await login(user.email, 'wrong-password').expect(401);
     const lookup = vi
@@ -405,7 +417,7 @@ describe('per-account login limit', () => {
   });
 
   it('gives the attempt back when checking the password fails', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     await login(user.email, 'wrong-password').expect(401);
     const users = t.connection.collection('users');
     const stored = await users.findOne({ email: user.email });
@@ -425,7 +437,7 @@ describe('per-account login limit', () => {
   });
 
   it('burns no attempt when the session cannot be created or the counter cleared', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     await login(user.email, 'wrong-password').expect(401);
     await login(user.email, 'wrong-password').expect(401);
     const clear = vi
@@ -450,7 +462,7 @@ describe('per-account login limit', () => {
   });
 
   it('rethrows both errors when the attempt cannot be given back either', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     const repository = t.app.get(LoginAttemptsRepository);
     const lookup = vi
       .spyOn(t.app.get(UsersRepository), 'findByEmail')
@@ -516,7 +528,7 @@ describe('per-account login limit', () => {
   });
 
   it('starts a new window once the previous one has ended', async () => {
-    const user = await signUp();
+    const user = await signUpNew();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await login(user.email, 'wrong-password').expect(401);
     }

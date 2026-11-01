@@ -74,6 +74,7 @@ function adminScreens(): Array<{
       ready: heading('Dữ liệu cá nhân & đồng ý'),
     },
     { name: 'Hiệu quả', path: `${site}/analytics`, ready: heading('Hiệu quả') },
+    { name: 'Tài khoản', path: '/account', ready: heading('Tài khoản') },
   ];
 }
 
@@ -133,7 +134,13 @@ test.describe('Accessibility · reflow at 320 px and focus not obscured', () => 
       await expectNoSidewaysScroll(page, `${screen.name} at 320 px`);
     }
     await page.context().clearCookies();
-    for (const path of ['/login', '/signup']) {
+    for (const path of [
+      '/login',
+      '/signup',
+      '/forgot-password',
+      `/reset-password#token=${'a'.repeat(43)}`,
+      `/signup/verify#token=${'a'.repeat(43)}`,
+    ]) {
       await page.goto(path);
       await expectNoSidewaysScroll(page, `${path} at 320 px`);
     }

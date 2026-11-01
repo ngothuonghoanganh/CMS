@@ -38,6 +38,14 @@ describe('LoginForm', () => {
     );
   });
 
+  it('links to "Quên mật khẩu" (ADR-026)', () => {
+    renderWithProviders(<LoginForm next="/" />);
+    expect(screen.getByRole('link', { name: 'Quên mật khẩu?' })).toHaveAttribute(
+      'href',
+      '/forgot-password',
+    );
+  });
+
   it('shows the contract messages on submit, moves focus to the first problem and sends nothing', async () => {
     const user = userEvent.setup();
     renderWithProviders(<LoginForm next="/" />);
