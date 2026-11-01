@@ -66,14 +66,14 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
       ) : null}
       <div data-field-path={altPath}>
         <Field
-          label="Mô tả ảnh cho người dùng trình đọc màn hình"
+          label={field.altLabel ?? 'Mô tả ảnh cho người dùng trình đọc màn hình'}
           warning={missingAlt ? 'Cảnh báo: chưa có mô tả ảnh' : undefined}
           counter={{ length: image.alt.length, max: ALT_MAX_LENGTH }}
         >
           <Input
             value={image.alt}
             maxLength={ALT_MAX_LENGTH}
-            placeholder="Ví dụ: Bác sĩ tư vấn cho khách hàng"
+            placeholder={field.altPlaceholder ?? 'Ví dụ: Bác sĩ tư vấn cho khách hàng'}
             data-field-focus={chosen ? '' : undefined}
             onChange={(event) => {
               store.getState().updateContent(section.id, altPath, event.target.value, {

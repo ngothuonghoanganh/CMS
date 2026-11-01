@@ -268,6 +268,97 @@ describe('PropertiesPanel', () => {
     expect(item.getByLabelText(/^Trả lời/)).toBeInTheDocument();
   });
 
+  it('asks the call and Zalo buttons for a number only, and for at least one of them', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().addSection('quick_contact', 'buttons', 2);
+    const id = store.getState().draft.composition.sections[2]?.id ?? '';
+    renderEditor(<PropertiesPanel />, { store });
+
+    const call = within(fieldBox('call'));
+    expect(screen.getByRole('group', { name: 'Nút gọi điện' })).toBe(fieldBox('call'));
+    // A call button calls: nothing else to choose, the number is what it still needs.
+    expect(call.queryByLabelText(/^Khi bấm, đưa tới/)).toBeNull();
+    const phone = call.getByLabelText(/^Số điện thoại/);
+    expect(call.getByText('Nhập số trước khi xuất bản.')).toBeInTheDocument();
+    await user.type(phone, '0901 234 567');
+    await user.tab();
+    expect(getAtPath(sectionById(store, id).content, 'call.link')).toEqual({
+      kind: 'phone',
+      phone: '0901 234 567',
+    });
+    expect(call.queryByText('Nhập số trước khi xuất bản.')).toBeNull();
+    const zalo = within(fieldBox('zalo'));
+    expect(zalo.queryByLabelText(/^Khi bấm, đưa tới/)).toBeNull();
+    expect(zalo.getByLabelText(/^Số Zalo/)).toHaveValue('');
+
+    // Without any label, neither button shows: both ask for one.
+    await user.clear(call.getByLabelText(/^Chữ trên nút/));
+    await user.clear(zalo.getByLabelText(/^Chữ trên nút/));
+    await user.tab();
+    expect(call.getByText('Cần ít nhất một nút trước khi xuất bản.')).toBeInTheDocument();
+    expect(zalo.getByText('Cần ít nhất một nút trước khi xuất bản.')).toBeInTheDocument();
+    await user.type(zalo.getByLabelText(/^Chữ trên nút/), 'Nhắn Zalo');
+    expect(call.queryByText('Cần ít nhất một nút trước khi xuất bản.')).toBeNull();
+    // An unused button needs no number.
+    expect(zalo.getByText('Nhập số trước khi xuất bản.')).toBeInTheDocument();
+  });
+
+  it('names a partner logo by its description, the partner name', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().addSection('logos', 'row', 2);
+    const id = store.getState().draft.composition.sections[2]?.id ?? '';
+    store
+      .getState()
+      .updateContent(id, 'items.0.image', { assetId: ASSET_ID, alt: '', decorative: false });
+    renderEditor(<PropertiesPanel />, { store });
+    const list = within(fieldBox('items'));
+    expect(list.getByText('4 / 12')).toBeInTheDocument();
+    await user.click(list.getByRole('button', { name: /^Đối tác 1/ }));
+    const name = list.getByLabelText(/^Tên đối tác/);
+    expect(name).toHaveAttribute('placeholder', 'Ví dụ: Bệnh viện Hòa Bình');
+    await user.type(name, 'Bệnh viện Hòa Bình');
+    expect(getAtPath(sectionById(store, id).content, 'items.0.image.alt')).toBe(
+      'Bệnh viện Hòa Bình',
+    );
+    expect(list.getByRole('button', { name: /^Bệnh viện Hòa Bình/ })).toBeInTheDocument();
+  });
+
+  it('keeps a process to 5 steps, and says why it cannot be chosen with more', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store.getState().select(BENEFITS);
+    renderEditor(<PropertiesPanel />, { store });
+    const variants = screen.getByRole('group', { name: 'Kiểu bố cục' });
+    await user.click(within(variants).getByRole('button', { name: /^Quy trình 3 bước/ }));
+    expect(sectionById(store, BENEFITS).variant).toBe('steps');
+    let list = within(fieldBox('items'));
+    expect(list.getByText('3 / 5')).toBeInTheDocument();
+    // The step number takes the place of the icon; there is no image either.
+    await user.click(list.getByRole('button', { name: /Lợi ích thứ nhất/ }));
+    expect(list.queryByLabelText('Biểu tượng')).toBeNull();
+    expect(document.querySelector('[data-field-path="items.0.image"]')).toBeNull();
+    const add = list.getByRole('button', { name: 'Thêm lợi ích' });
+    await user.click(add);
+    await user.click(add);
+    expect(add).toBeDisabled();
+    expect(add).toHaveAccessibleDescription('Tối đa 5 lợi ích');
+
+    // Six benefits in the grid: the process cannot take them all, and nothing is dropped.
+    await user.click(within(variants).getByRole('button', { name: /^Lưới 3–6 lợi ích/ }));
+    list = within(fieldBox('items'));
+    await user.click(list.getByRole('button', { name: 'Thêm lợi ích' }));
+    const steps = within(variants).getByRole('button', { name: /^Quy trình 3 bước/ });
+    expect(steps).toHaveAttribute('aria-disabled', 'true');
+    expect(steps).toHaveAccessibleDescription(
+      '“Quy trình 3 bước” có tối đa 5 lợi ích. Xóa bớt lợi ích để chọn bố cục này.',
+    );
+    await user.click(steps);
+    expect(sectionById(store, BENEFITS).variant).toBe('grid');
+    expect(getAtPath(sectionById(store, BENEFITS).content, 'items')).toHaveLength(6);
+  });
+
   it('closes with the close button', async () => {
     const user = userEvent.setup();
     const store = makeStore();

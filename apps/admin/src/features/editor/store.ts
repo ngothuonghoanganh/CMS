@@ -29,6 +29,7 @@ import {
   getVariant,
   insertionIndex,
   isPathWithin,
+  listMaximum,
   listMinimum,
   setAtPath,
   validateComposition,
@@ -452,7 +453,7 @@ export function createEditorStore(init: EditorInit): EditorStore {
           return false;
         }
         const items = listItemsOf(section.content, listKey);
-        if (items.length >= list.max) {
+        if (items.length >= listMaximum(section.type, section.variant, listKey)) {
           return false;
         }
         const item = list.newItem(section.variant);
