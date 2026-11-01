@@ -38,32 +38,29 @@ export class SiteErasure {
   constructor(private readonly databases: WorkspaceDatabases) {}
 
   /**
-   * Deletes the site and its data, in the transaction of the deletion; returns how many documents
-   * went. Run again without one after the commit, it removes what requests that read the site
-   * before the commit (a lead, a view, an upload) wrote meanwhile.
+   * Deletes the site and its data, in the transaction of the deletion. Run again without one after
+   * the commit, it removes what requests that read the site before the commit (a lead, a view, an
+   * upload) wrote while the transaction ran, which it did not see.
    */
-  async erase(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<number> {
-    const options = erasureOptions(tx);
-    const site = await this.databases
+  async erase(scope: WorkspaceScope, siteId: ObjectId, tx?: Tx): Promise<void> {
+    await this.databases
       .model(scope, SITE_COLLECTION)
-      .deleteOne({ _id: siteId, workspaceId: scope.workspaceId }, options)
+      .deleteOne({ _id: siteId, workspaceId: scope.workspaceId }, erasureOptions(tx))
       .exec();
     const owned = { siteId, workspaceId: scope.workspaceId };
     // One after the other: a session runs one operation at a time.
-    let deleted = site.deletedCount;
-    deleted += await this.deleteAll(scope, PAGE_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, RELEASE_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, REDIRECT_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, ASSET_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, LEAD_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, ACTIVITY_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, CONSENT_VERSION_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, DATA_REQUEST_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, APPROVAL_COLLECTION, owned, tx);
-    deleted += await this.deleteAll(scope, ANALYTICS_DAILY_COLLECTION, owned, tx);
+    await this.deleteAll(scope, PAGE_COLLECTION, owned, tx);
+    await this.deleteAll(scope, RELEASE_COLLECTION, owned, tx);
+    await this.deleteAll(scope, REDIRECT_COLLECTION, owned, tx);
+    await this.deleteAll(scope, ASSET_COLLECTION, owned, tx);
+    await this.deleteAll(scope, LEAD_COLLECTION, owned, tx);
+    await this.deleteAll(scope, ACTIVITY_COLLECTION, owned, tx);
+    await this.deleteAll(scope, CONSENT_VERSION_COLLECTION, owned, tx);
+    await this.deleteAll(scope, DATA_REQUEST_COLLECTION, owned, tx);
+    await this.deleteAll(scope, APPROVAL_COLLECTION, owned, tx);
+    await this.deleteAll(scope, ANALYTICS_DAILY_COLLECTION, owned, tx);
     // No `workspaceId` in this one; in the workspace's own database `siteId` alone is the site.
-    deleted += await this.deleteAll(scope, ANALYTICS_SEEN_COLLECTION, { siteId }, tx);
-    return deleted;
+    await this.deleteAll(scope, ANALYTICS_SEEN_COLLECTION, { siteId }, tx);
   }
 
   private async deleteAll<T extends SiteDocument>(
@@ -71,11 +68,7 @@ export class SiteErasure {
     collection: WorkspaceCollection<T>,
     filter: { siteId: ObjectId; workspaceId?: ObjectId },
     tx: Tx | undefined,
-  ): Promise<number> {
-    const result = await this.databases
-      .model(scope, collection)
-      .deleteMany(filter, erasureOptions(tx))
-      .exec();
-    return result.deletedCount;
+  ): Promise<void> {
+    await this.databases.model(scope, collection).deleteMany(filter, erasureOptions(tx)).exec();
   }
 }

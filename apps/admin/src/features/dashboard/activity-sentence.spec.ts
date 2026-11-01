@@ -139,14 +139,18 @@ describe('activitySentence', () => {
     );
   });
 
-  it('describes the deletion of a page (ADR-027)', () => {
+  it('describes the deletion of a page, and says an earlier event is of a deleted page (ADR-027)', () => {
+    const gone = { id: '64b000000000000000000104', title: 'Webinar tháng 9', deleted: true };
     expect(
       sentence({
         type: 'page.deleted',
-        page: { id: '64b000000000000000000104', title: 'Webinar tháng 9', deleted: true },
+        page: gone,
         data: { ...noVersions, slug: 'webinar-thang-9' },
       }),
     ).toBe('Ngọc Anh xóa trang “Webinar tháng 9” [muted]');
+    expect(sentence({ type: 'page.unpublished', page: gone })).toBe(
+      'Ngọc Anh gỡ xuất bản “Webinar tháng 9” (trang đã xóa) [muted]',
+    );
   });
 
   it('names a page event without a page reference generically', () => {

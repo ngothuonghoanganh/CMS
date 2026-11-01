@@ -11,8 +11,15 @@ export interface ActivitySentence {
   tone: ActivityTone;
 }
 
+/**
+ * The page's title as it was then. An earlier event of a page deleted since says so (ADR-027);
+ * the deletion itself does already.
+ */
 function quoted(item: ActivityItem): string {
-  return `“${item.page?.title ?? 'một trang'}”`;
+  const title = `“${item.page?.title ?? 'một trang'}”`;
+  return item.page?.deleted === true && item.type !== 'page.deleted'
+    ? `${title} (trang đã xóa)`
+    : title;
 }
 
 function versionLabel(version: number | null): string {

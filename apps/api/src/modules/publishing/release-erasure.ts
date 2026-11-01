@@ -17,16 +17,15 @@ export class ReleaseErasure {
 
   /**
    * Deletes the releases of a page being deleted, except `keep`: those leads refer to as the text
-   * their visitor agreed to (rule 10). In the transaction that deletes the page; returns how many
-   * went.
+   * their visitor agreed to (rule 10). In the transaction that deletes the page.
    */
   async deleteForPage(
     scope: WorkspaceScope,
     page: { siteId: ObjectId; pageId: ObjectId },
     keep: readonly ObjectId[],
     tx: Tx,
-  ): Promise<number> {
-    const result = await this.releases(scope)
+  ): Promise<void> {
+    await this.releases(scope)
       .deleteMany(
         {
           workspaceId: scope.workspaceId,
@@ -37,7 +36,6 @@ export class ReleaseErasure {
         erasureOptions(tx),
       )
       .exec();
-    return result.deletedCount;
   }
 
   private releases(scope: WorkspaceScope): Model<ReleaseRecord> {

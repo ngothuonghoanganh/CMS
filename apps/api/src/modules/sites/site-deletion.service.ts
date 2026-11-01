@@ -94,7 +94,7 @@ export class SiteDeletionService {
     const ids = { siteId: site._id.toHexString() };
     try {
       // A lead, a view or an upload that read the site before the commit may have been written
-      // since; the site is gone, so nothing writes for it any more.
+      // while the transaction ran, which did not see it. Lead intake removes one stored later.
       await this.erasure.erase(scope, site._id);
     } catch (error) {
       this.logger.error({ ...ids, err: error }, 'Data written during a site deletion not removed');
