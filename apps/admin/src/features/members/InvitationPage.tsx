@@ -3,14 +3,15 @@
 import {
   endpoints,
   INVITATION_PATH,
+  INVITATION_VALID_DAYS,
   type InvitationLookupResponse,
   type InvitedSignupRequest,
   invitedSignupRequestSchema,
   accessLabel,
 } from '@plp/contracts';
-import { Button, ButtonLink, Callout, Field, Input, Spinner } from '@plp/ui';
+import { Avatar, Button, ButtonLink, Callout, Field, Input, Spinner } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type SubmitEvent, useState, useSyncExternalStore } from 'react';
+import { type ReactNode, type SubmitEvent, useState, useSyncExternalStore } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { formatDate } from '../../lib/format';
 import { loadPage } from '../../lib/page-load';
@@ -167,6 +168,37 @@ function SignupForm({
   );
 }
 
+/**
+ * The invitation's card, opened by who invites to which workspace, and the line under it for
+ * someone who does not know them (board 15b).
+ */
+function InvitationCard({
+  invitation,
+  children,
+}: {
+  invitation: InvitationLookupResponse;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <div className={styles.card}>
+        <div className={styles.header}>
+          <Avatar name={invitation.workspaceName} shape="square" size={44} />
+          <div className={styles.headerText}>
+            <span className={styles.invitedBy}>{invitation.invitedByName} mời bạn vào</span>
+            <span className={styles.workspace}>{invitation.workspaceName}</span>
+          </div>
+        </div>
+        {children}
+      </div>
+      <p className={styles.footer}>
+        Không biết người mời? Bạn có thể bỏ qua email này. Lời mời tự hết hạn sau{' '}
+        {INVITATION_VALID_DAYS} ngày.
+      </p>
+    </>
+  );
+}
+
 /** Board 15b: whoever opens an invitation link joins, signs up, or learns why they cannot. */
 export interface InvitationPageProps {
   /** How workspace addresses are made (ADR-025); null when every workspace opens at one address. */
@@ -251,13 +283,6 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
     return null;
   }
 
-  const header = (
-    <div className={styles.header}>
-      <span className={styles.invitedBy}>{invitation.invitedByName} mời bạn vào</span>
-      <span className={styles.workspace}>{invitation.workspaceName}</span>
-    </div>
-  );
-
   if (invitation.state !== 'pending') {
     const title =
       invitation.state === 'expired'
@@ -272,8 +297,7 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
           ? `Lời mời này đã được chấp nhận. Nếu đó là bạn, hãy đăng nhập để vào ${invitation.workspaceName}.`
           : `Lời mời đã bị thu hồi hoặc từ chối. Hãy nhờ ${invitation.invitedByName} gửi lời mời mới.`;
     return (
-      <div className={styles.card}>
-        {header}
+      <InvitationCard invitation={invitation}>
         <h1 className={styles.title}>{title}</h1>
         <p className={styles.text}>{body}</p>
         {invitation.state === 'accepted' ? (
@@ -281,7 +305,13 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
             Đăng nhập
           </ButtonLink>
         ) : null}
-      </div>
+        {/* The API gives the inviter's email for an expired invitation only (ADR-021). */}
+        {invitation.state === 'expired' && invitation.inviterEmail !== null ? (
+          <ButtonLink href={`mailto:${invitation.inviterEmail}`} variant="secondary" fullWidth>
+            Nhờ {invitation.invitedByName} gửi lại
+          </ButtonLink>
+        ) : null}
+      </InvitationCard>
     );
   }
 
@@ -299,8 +329,7 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
 
   if (user !== null && user.user.email !== invitation.email) {
     return (
-      <div className={styles.card}>
-        {header}
+      <InvitationCard invitation={invitation}>
         <Callout tone="warning" role="alert" title="Lời mời này dành cho email khác">
           Bạn đang đăng nhập bằng <strong>{user.user.email}</strong>. Lời mời được gửi tới{' '}
           <strong>{invitation.email}</strong>.
@@ -318,15 +347,14 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
           Muốn dùng email hiện tại? Nhờ {invitation.invitedByName} gửi lời mời mới tới{' '}
           {user.user.email}.
         </p>
-      </div>
+      </InvitationCard>
     );
   }
 
   if (user !== null) {
     const failure = accept.error ?? decline.error;
     return (
-      <div className={styles.card}>
-        {header}
+      <InvitationCard invitation={invitation}>
         {grant}
         <h1 className={styles.title}>Tham gia {invitation.workspaceName}?</h1>
         <p className={styles.text}>
@@ -359,14 +387,13 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
         >
           Từ chối lời mời
         </Button>
-      </div>
+      </InvitationCard>
     );
   }
 
   if (invitation.accountExists) {
     return (
-      <div className={styles.card}>
-        {header}
+      <InvitationCard invitation={invitation}>
         {grant}
         <h1 className={styles.title}>Đăng nhập để tham gia</h1>
         <p className={styles.text}>
@@ -382,15 +409,14 @@ export function InvitationPage({ addresses }: InvitationPageProps) {
         >
           Đăng nhập
         </Button>
-      </div>
+      </InvitationCard>
     );
   }
 
   return (
-    <div className={styles.card}>
-      {header}
+    <InvitationCard invitation={invitation}>
       {grant}
       <SignupForm token={token} invitation={invitation} addresses={addresses} />
-    </div>
+    </InvitationCard>
   );
 }

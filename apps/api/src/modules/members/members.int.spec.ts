@@ -460,6 +460,8 @@ describe('members, invitations and access requests (ADR-021)', () => {
       expect(shown).toMatchObject({
         state: 'pending',
         workspaceName: 'Mây Xanh Agency',
+        // Only an expired link shows whom to ask for another.
+        inviterEmail: null,
         email,
         role: 'support',
         siteNames: ['Nha khoa Smile Care'],
@@ -585,15 +587,16 @@ describe('members, invitations and access requests (ADR-021)', () => {
     });
 
     it('expires after 7 days; "Gửi lại" gives a new link and the old one stops working', async () => {
-      const { client: owner, workspaceId } = await workspace();
+      const { client: owner, workspaceId, me } = await workspace();
       const email = newEmail();
       const token = await invite(t, owner, workspaceId, email);
       await t.connection
         .collection('invitations')
         .updateOne({ email }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+      // The invited person may ask the inviter for another link, by email (ADR-021).
       expect(
-        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body).state,
-      ).toBe('expired');
+        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body),
+      ).toMatchObject({ state: 'expired', inviterEmail: me.user.email });
       await new TestClient(t.app)
         .post('/auth/signup/invited', { token, name: 'Trễ', password: PASSWORD })
         .expect(409);
@@ -608,8 +611,8 @@ describe('members, invitations and access requests (ADR-021)', () => {
       expect(renewed).not.toBe(token);
       await lookup(token).expect(404);
       expect(
-        invitationLookupResponseSchema.parse((await lookup(renewed).expect(200)).body).state,
-      ).toBe('pending');
+        invitationLookupResponseSchema.parse((await lookup(renewed).expect(200)).body),
+      ).toMatchObject({ state: 'pending', inviterEmail: null });
     });
 
     it('revokes a pending invitation', async () => {
@@ -620,9 +623,10 @@ describe('members, invitations and access requests (ADR-021)', () => {
         (await owner.get(`/workspaces/${workspaceId}/invitations`).expect(200)).body,
       ).items;
       await owner.delete(`/workspaces/${workspaceId}/invitations/${listed?.id ?? ''}`).expect(204);
+      // Only an expired invitation gives its inviter's email.
       expect(
-        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body).state,
-      ).toBe('revoked');
+        invitationLookupResponseSchema.parse((await lookup(token).expect(200)).body),
+      ).toMatchObject({ state: 'revoked', inviterEmail: null });
       await owner.delete(`/workspaces/${workspaceId}/invitations/${listed?.id ?? ''}`).expect(404);
       await lookup('khong-phai-token').expect(404);
     });

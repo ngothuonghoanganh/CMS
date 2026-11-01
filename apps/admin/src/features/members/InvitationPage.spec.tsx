@@ -21,6 +21,7 @@ const invitation: InvitationLookupResponse = {
   state: 'pending',
   workspaceName: 'Mây Xanh Agency',
   invitedByName: 'Ngọc Anh',
+  inviterEmail: null,
   email: 'thuy.mkt@smilecare.vn',
   role: 'editor',
   siteNames: ['Nha khoa Smile Care'],
@@ -154,18 +155,45 @@ describe('InvitationPage', () => {
   });
 
   it('says when the invitation expired or was used', async () => {
-    serve({ ...invitation, state: 'expired' }, null);
+    serve({ ...invitation, state: 'expired', inviterEmail: 'ngocanh@mayxanh.vn' }, null);
     const { unmount } = renderWithProviders(<InvitationPage addresses={null} />);
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Lời mời đã hết hạn' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Hãy nhờ Ngọc Anh gửi lại/)).toBeInTheDocument();
+    // The inviter is asked by email for another link (ADR-021).
+    expect(screen.getByRole('link', { name: 'Nhờ Ngọc Anh gửi lại' })).toHaveAttribute(
+      'href',
+      'mailto:ngocanh@mayxanh.vn',
+    );
     unmount();
 
     serve({ ...invitation, state: 'accepted' }, null);
     renderWithProviders(<InvitationPage addresses={null} />);
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Lời mời đã được dùng' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /gửi lại/ })).not.toBeInTheDocument();
+  });
+
+  it('asks nobody by email when the inviter’s address is not given', async () => {
+    serve({ ...invitation, state: 'expired', inviterEmail: null }, null);
+    renderWithProviders(<InvitationPage addresses={null} />);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Lời mời đã hết hạn' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /gửi lại/ })).not.toBeInTheDocument();
+  });
+
+  it('shows the workspace’s initials and what to do with an unknown invitation', async () => {
+    serve(invitation, null);
+    renderWithProviders(<InvitationPage addresses={null} />);
+    await screen.findByRole('heading', { level: 1, name: 'Tạo tài khoản để tham gia' });
+    expect(screen.getByText('MX')).toHaveAttribute('aria-hidden', 'true');
+    expect(
+      screen.getByText(
+        'Không biết người mời? Bạn có thể bỏ qua email này. Lời mời tự hết hạn sau 7 ngày.',
+      ),
     ).toBeInTheDocument();
   });
 });
