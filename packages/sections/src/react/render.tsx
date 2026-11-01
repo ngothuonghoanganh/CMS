@@ -1,23 +1,29 @@
 import type { SectionInstance } from '@plp/contracts';
 import type { ComponentType, ReactNode } from 'react';
 import type { z } from 'zod';
+import { beforeAfterContentSchema } from '../schema/sections/before-after.js';
 import { benefitsContentSchema } from '../schema/sections/benefits.js';
 import { ctaBandContentSchema } from '../schema/sections/cta-band.js';
 import { faqContentSchema } from '../schema/sections/faq.js';
 import { footerContentSchema } from '../schema/sections/footer.js';
 import { heroContentSchema } from '../schema/sections/hero.js';
 import { leadFormContentSchema } from '../schema/sections/lead-form.js';
+import { logosContentSchema } from '../schema/sections/logos.js';
 import { navbarContentSchema } from '../schema/sections/navbar.js';
+import { quickContactContentSchema } from '../schema/sections/quick-contact.js';
 import { testimonialsContentSchema } from '../schema/sections/testimonials.js';
 import type { RenderContext } from './context.js';
 import frame from './frame.module.css';
+import { BeforeAfterSection } from './sections/BeforeAfter.js';
 import { BenefitsSection } from './sections/Benefits.js';
 import { CtaBandSection } from './sections/CtaBand.js';
 import { FaqSection } from './sections/Faq.js';
 import { FooterSection } from './sections/Footer.js';
 import { HeroSection } from './sections/Hero.js';
 import { LeadFormSection } from './sections/LeadForm.js';
+import { LogosSection } from './sections/Logos.js';
 import { NavbarSection } from './sections/Navbar.js';
+import { QuickContactSection } from './sections/QuickContact.js';
 import { TestimonialsSection } from './sections/Testimonials.js';
 import type { SectionProps } from './types.js';
 
@@ -58,10 +64,16 @@ export function renderSectionContent(
       return renderWith(benefitsContentSchema, BenefitsSection, section, ctx, leading);
     case 'testimonials':
       return renderWith(testimonialsContentSchema, TestimonialsSection, section, ctx, leading);
+    case 'logos':
+      return renderWith(logosContentSchema, LogosSection, section, ctx, leading);
+    case 'before_after':
+      return renderWith(beforeAfterContentSchema, BeforeAfterSection, section, ctx, leading);
     case 'faq':
       return renderWith(faqContentSchema, FaqSection, section, ctx, leading);
     case 'lead_form':
       return renderWith(leadFormContentSchema, LeadFormSection, section, ctx, leading);
+    case 'quick_contact':
+      return renderWith(quickContactContentSchema, QuickContactSection, section, ctx, leading);
     case 'cta_band':
       return renderWith(ctaBandContentSchema, CtaBandSection, section, ctx, leading);
     case 'footer':

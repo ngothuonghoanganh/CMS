@@ -1,0 +1,77 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-muted);
+  font-family: var(--plp-font-heading);
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* One row that wraps on narrow screens: no horizontal scrolling, nothing cut off. */
+.logos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 20px 32px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+/*
+ * Monochrome by CSS, so the uploaded file stays as it is (ADR-007). Two classes win over the
+ * shared image and placeholder styles. A logo is not text: its contrast is not an AA matter.
+ */
+.logo .image {
+  width: auto;
+  max-width: 140px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 0;
+  filter: grayscale(1);
+}
+
+/* The canvas slot of a logo still to choose. */
+.logo div.image {
+  width: 120px;
+  max-width: none;
+  min-height: 0;
+  height: 56px;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  filter: none;
+}
+
+@container plp-page (width >= 768px) {
+  .root {
+    gap: 24px;
+  }
+
+  .logos {
+    gap: 24px 48px;
+  }
+
+  .logo .image {
+    max-width: 160px;
+    height: 40px;
+  }
+}

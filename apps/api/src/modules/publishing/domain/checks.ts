@@ -5,6 +5,7 @@ import {
   compositionSchema,
   ctaSchema,
   imageRefSchema,
+  type LinkKind,
   type PassedCheck,
   type ProblemIssue,
   SEO_DESCRIPTION_RECOMMENDED_MAX,
@@ -87,6 +88,18 @@ const REQUIRED_DESCRIPTION = 'Đây là nội dung bắt buộc. Điền vào tr
 const LINK_DESCRIPTION =
   'Chọn nơi khách được đưa tới khi bấm: một section, một trang khác, đường dẫn, số điện thoại hoặc Zalo.';
 
+/** What a button that can only call or only open Zalo is missing: its number, nothing to choose. */
+const NUMBER_ONLY: Partial<Record<LinkKind, { missing: string; description: string }>> = {
+  phone: {
+    missing: 'chưa có số điện thoại',
+    description: 'Nhập số điện thoại mà khách gọi tới khi bấm nút.',
+  },
+  zalo: {
+    missing: 'chưa có số Zalo',
+    description: 'Nhập số điện thoại Zalo mà khách nhắn tới khi bấm nút.',
+  },
+};
+
 /** Stable identity of a finding's place, the second half of its fingerprint. */
 function targetKey(target: CheckTarget): string {
   switch (target.kind) {
@@ -113,6 +126,11 @@ function capitalize(text: string): string {
 
 function lower(text: string): string {
   return text.toLocaleLowerCase('vi');
+}
+
+/** "Nút Zalo" → "nút Zalo": a name inside a sentence keeps its own capitals. */
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLocaleLowerCase('vi') + text.slice(1);
 }
 
 /** Where a field sits, for titles: "section “Hero”" or "Câu hỏi 2 trong section “Câu hỏi thường gặp”". */
@@ -210,12 +228,15 @@ function checkCtaLeaf(findings: Findings, context: SectionContext, leaf: LeafOcc
     );
   }
   if ((required || used) && !isLinkComplete(cta.link)) {
+    const [onlyKind, ...otherKinds] = leaf.field.kind === 'cta' ? (leaf.field.linkKinds ?? []) : [];
+    const numberOnly =
+      onlyKind !== undefined && otherKinds.length === 0 ? NUMBER_ONLY[onlyKind] : undefined;
     findings.add(
       'blocking',
       'required_field_empty',
       linkTarget,
-      `${name} ở ${place} chưa có nơi đưa tới`,
-      LINK_DESCRIPTION,
+      `${name} ở ${place} ${numberOnly?.missing ?? 'chưa có nơi đưa tới'}`,
+      numberOnly?.description ?? LINK_DESCRIPTION,
     );
     return;
   }
@@ -305,6 +326,39 @@ function visibleSamplePaths(section: SectionInstance, leaves: readonly LeafOccur
   return section.samplePaths.filter((path) => visible.has(path));
 }
 
+/**
+ * A section whose buttons are its point (the quick contact) needs at least one of them in use;
+ * which one is up to the owner, so the finding points at the first.
+ */
+function checkOneButton(
+  findings: Findings,
+  context: SectionContext,
+  leaves: readonly LeafOccurrence[],
+): void {
+  const { section, definition } = context;
+  const group = definition.oneButtonRequired ?? [];
+  const buttons = leaves.filter((leaf) => leaf.field.kind === 'cta' && group.includes(leaf.path));
+  const first = buttons[0];
+  if (first === undefined) {
+    return;
+  }
+  const used = buttons.some((leaf) => {
+    const parsed = ctaSchema.safeParse(leaf.value);
+    return parsed.success && isCtaUsed(parsed.data);
+  });
+  if (used) {
+    return;
+  }
+  const names = buttons.map((leaf) => lowerFirst(leaf.field.label)).join(' hoặc ');
+  findings.add(
+    'blocking',
+    'required_field_empty',
+    sectionTarget(section, `${first.path}.label`),
+    `Section “${definition.label}” chưa có nút nào`,
+    `Điền chữ trên nút cho ${names} trước khi xuất bản.`,
+  );
+}
+
 function checkSection(findings: Findings, context: SectionContext): void {
   const { section, definition } = context;
   const leaves = collectLeaves(section);
@@ -324,6 +378,7 @@ function checkSection(findings: Findings, context: SectionContext): void {
         break;
     }
   }
+  checkOneButton(findings, context, leaves);
   const samples = visibleSamplePaths(section, leaves);
   const firstSample = samples[0];
   if (firstSample !== undefined) {

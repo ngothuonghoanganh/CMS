@@ -464,6 +464,14 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Ảnh của Trước & sau và Logo đối tác đi qua kiểm tra như mọi ảnh: thiếu ảnh bắt buộc là lỗi chặn, thiếu mô tả là cảnh báo (ADR-006).
   - Vẫn ẩn (§2.1, quy tắc 9): nhóm Bảng giá, "Form + bản đồ", "Section đã lưu".
   - **Chân trang có link chính sách:** release có `leadCapture` (trang có form, ADR-017) thì chân trang luôn hiện "Chính sách quyền riêng tư" trỏ tới `leadCapture.policyUrl`, sau các link người dùng tự thêm và không lặp nếu trùng URL. Canvas dùng cài đặt hiện tại của site, như form. Trang không có form không có link tự động.
+  - **Chi tiết khi làm (lát E5):**
+    - Variant có `listMax`, cưỡng chế như `listMin` (`too_big`). Variant không chứa nổi số mục hiện có thì bị vô hiệu kèm lý do; không bao giờ bỏ mục.
+    - `sampleContent` và `newItem` nhận id variant, nên quy trình mới có chữ mẫu của bước. Mục tiêu "Sản phẩm" dùng variant `steps` như board 02; trang đã tạo không đổi.
+    - Nút chỉ gọi, chỉ Zalo: `CtaField.linkKinds` cùng `phoneLinkSchema`, `zaloLinkSchema` trong contracts. `oneButtonRequired` dùng lại mã `required_field_empty`. Một nút "đang dùng" khi nhãn không trống, như mọi nút không bắt buộc.
+    - Trước & sau: tiêu đề và hai chú thích bắt buộc, lưu ý không bắt buộc. Logo đối tác: tiêu đề không bắt buộc, ô mô tả ảnh ghi "Tên đối tác" (`ImageField.altLabel`). Logo vẫn đánh dấu "trang trí" được như mọi ảnh.
+    - Logo và Trước & sau có `hasMedia: false`, nên không có thứ tự trên điện thoại.
+    - Link chính sách ở chân trang mở tab mới, như link của form, và được suy ra từ `leadCapture` lúc render: trang có form đang live hiện nó mà không phải xuất bản lại, không release nào bị viết lại. Chỉ so trùng với link tuyệt đối người dùng thêm.
+    - `styles.spec` thêm quy tắc: màu chữ của section chỉ lấy từ vai trò màu đã kiểm AA.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -1856,7 +1864,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Đang làm   |
 | E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Đang làm   |
 | E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Đang làm   |
-| E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Đang làm   |
+| E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Xong       |
 | E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Đang làm   |
 
 ## 6. Trước khi phát hành

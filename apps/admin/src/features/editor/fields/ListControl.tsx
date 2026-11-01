@@ -1,6 +1,12 @@
 'use client';
 
-import { getAtPath, isPathWithin, listMinimum, type ListField } from '@plp/sections/schema';
+import {
+  getAtPath,
+  isPathWithin,
+  listMaximum,
+  listMinimum,
+  type ListField,
+} from '@plp/sections/schema';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -18,11 +24,12 @@ import type { ControlProps } from './field-shared';
 import styles from './fields.module.css';
 import { LeafControl } from './LeafControl';
 
+/** The text naming a field value: a text, a button's label or an image's description. */
 function textOf(value: unknown): string {
   if (typeof value === 'string') {
     return value;
   }
-  const label = getAtPath(value, 'label');
+  const label = getAtPath(value, 'label') ?? getAtPath(value, 'alt');
   return typeof label === 'string' ? label : '';
 }
 
@@ -57,8 +64,9 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const itemLabel = lowerFirst(field.itemLabel);
   const minimum = listMinimum(section.type, section.variant, path);
+  const maximum = listMaximum(section.type, section.variant, path);
   const atMin = items.length <= minimum;
-  const atMax = items.length >= field.max;
+  const atMax = items.length >= maximum;
   const minId = `${baseId}-min`;
   const maxId = `${baseId}-max`;
   const listRef = useRef<HTMLFieldSetElement>(null);
@@ -155,7 +163,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
       <legend className={styles.listLegend}>
         {field.label}
         <span className={styles.listCount}>
-          {items.length} / {field.max}
+          {items.length} / {maximum}
         </span>
       </legend>
       <ol className={styles.items}>
@@ -182,7 +190,8 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
                   </span>
                   <span className={styles.itemText}>
                     <span className={styles.itemTitle}>
-                      {title === '' ? field.itemLabel : title}
+                      {/* Numbered while untitled: four new logos are not four "Đối tác". */}
+                      {title === '' ? `${field.itemLabel} ${index + 1}` : title}
                     </span>
                     {summary === '' ? null : <span className={styles.itemSummary}>{summary}</span>}
                   </span>
@@ -256,7 +265,7 @@ export function ListControl({ section, field, path }: ControlProps<ListField>) {
         </Button>
         {atMax ? (
           <span id={maxId} className={styles.note}>
-            Tối đa {field.max} {itemLabel}
+            Tối đa {maximum} {itemLabel}
           </span>
         ) : null}
       </div>

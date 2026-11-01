@@ -10,13 +10,16 @@ import {
 } from '@plp/contracts';
 import { setAtPath } from './paths.js';
 import { createSectionInstance, getSectionDefinition, samplePathsOf } from './registry.js';
+import type { BeforeAfterContent } from './sections/before-after.js';
 import type { BenefitsContent, benefitIcons } from './sections/benefits.js';
 import type { CtaBandContent } from './sections/cta-band.js';
 import type { FaqContent } from './sections/faq.js';
 import type { FooterContent } from './sections/footer.js';
 import type { HeroContent } from './sections/hero.js';
 import type { LeadFormContent } from './sections/lead-form.js';
+import type { LogosContent } from './sections/logos.js';
 import type { NavbarContent } from './sections/navbar.js';
+import type { QuickContactContent } from './sections/quick-contact.js';
 import type { TestimonialsContent } from './sections/testimonials.js';
 
 /* -------------------------------------------------------------------------------------------- */
@@ -127,8 +130,11 @@ interface ContentByType {
   hero: HeroContent;
   benefits: BenefitsContent;
   testimonials: TestimonialsContent;
+  logos: LogosContent;
+  before_after: BeforeAfterContent;
   faq: FaqContent;
   lead_form: LeadFormContent;
+  quick_contact: QuickContactContent;
   cta_band: CtaBandContent;
   footer: FooterContent;
 }
@@ -428,19 +434,16 @@ function blueprint(goal: PageGoal, siteName: string): readonly BlueprintSection[
           },
         },
         {
+          // The steps variant numbers each step itself.
           type: 'benefits',
-          variant: 'grid',
+          variant: 'steps',
           label: 'Quy trình 3 bước',
           sample: {
             heading: 'Quy trình 3 bước',
             items: [
-              benefit('check', 'Bước 1: Liên hệ', 'Gọi hoặc nhắn tin để được tư vấn.'),
-              benefit('clock', 'Bước 2: Lên kế hoạch', 'Đề xuất giải pháp và thời gian thực hiện.'),
-              benefit(
-                'star',
-                'Bước 3: Thực hiện',
-                'Triển khai và theo dõi kết quả cùng khách hàng.',
-              ),
+              benefit('check', 'Liên hệ', 'Gọi hoặc nhắn tin để được tư vấn.'),
+              benefit('check', 'Lên kế hoạch', 'Đề xuất giải pháp và thời gian thực hiện.'),
+              benefit('check', 'Thực hiện', 'Triển khai và theo dõi kết quả cùng khách hàng.'),
             ],
           },
         },

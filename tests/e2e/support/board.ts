@@ -665,7 +665,10 @@ export async function createSchemePageViaApi(
   return lead.page.id;
 }
 
-/** The variants a "Thu lead" page does not use, made from its own sections. */
+/**
+ * The variants a "Thu lead" page does not use, made from its own sections, and the sections it
+ * has none of (steps, partner logos, before and after, quick contact), filled in by hand.
+ */
 function variantsOf(
   composition: Composition,
   picture: { assetId: string; alt: string; decorative: boolean },
@@ -701,5 +704,45 @@ function variantsOf(
       },
     },
     { ...testimonials, id: sectionId(), variant: 'quote' },
+    { ...benefits, id: sectionId(), variant: 'steps' },
+    {
+      ...benefits,
+      id: sectionId(),
+      type: 'logos',
+      variant: 'row',
+      content: {
+        heading: 'Đối tác đã tin dùng chúng tôi',
+        items: [picture, picture, picture].map((image) => ({ image })),
+      },
+      samplePaths: [],
+    },
+    {
+      ...benefits,
+      id: sectionId(),
+      type: 'before_after',
+      variant: 'side_by_side',
+      content: {
+        heading: 'Kết quả sau liệu trình',
+        beforeImage: picture,
+        beforeCaption: 'Trước khi niềng',
+        afterImage: picture,
+        afterCaption: 'Sau 12 tháng',
+        note: 'Kết quả có thể khác nhau tùy từng người.',
+      },
+      samplePaths: [],
+    },
+    {
+      ...benefits,
+      id: sectionId(),
+      type: 'quick_contact',
+      variant: 'buttons',
+      content: {
+        heading: 'Cần tư vấn ngay?',
+        text: 'Gọi điện hoặc nhắn Zalo, chúng tôi trả lời trong giờ làm việc.',
+        call: { label: 'Gọi ngay', link: { kind: 'phone', phone: '0901 234 567' } },
+        zalo: { label: 'Nhắn Zalo', link: { kind: 'zalo', phone: '0901 234 567' } },
+      },
+      samplePaths: [],
+    },
   ];
 }

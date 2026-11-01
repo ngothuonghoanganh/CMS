@@ -1,0 +1,52 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 640px;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.heading {
+  margin: 0;
+  color: var(--plp-heading);
+  font-family: var(--plp-font-heading);
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@container plp-page (width < 768px) {
+  /* Phones: one full-width button per row, within reach of the thumb. */
+  .actions {
+    flex-direction: column;
+    align-self: stretch;
+  }
+}
+
+@container plp-page (width >= 768px) {
+  .heading {
+    font-size: 28px;
+    line-height: 1.25;
+  }
+
+  .root .button {
+    min-width: 180px;
+  }
+}

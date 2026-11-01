@@ -24,6 +24,8 @@ import { renderSectionContent } from './render.js';
 import { SectionFrame } from './SectionFrame.js';
 import benefitsStyles from './sections/Benefits.module.css';
 import heroStyles from './sections/Hero.module.css';
+import logosStyles from './sections/Logos.module.css';
+import quickContactStyles from './sections/QuickContact.module.css';
 
 const ASSET_ID = 'a1'.repeat(12);
 const PAGE_ID = 'b2'.repeat(12);
@@ -400,6 +402,13 @@ describe('image loading', () => {
     expect(images).toEqual([EAGER, LAZY, LAZY, LAZY]);
   });
 
+  it('loads the photo after at once when it opens the page and the photo before is missing', () => {
+    const pair = withContent(section('before_after'), 'afterImage', PHOTO);
+    expect(imagesOf(withImages(section('navbar'), pair), liveCtx())).toEqual([EAGER]);
+    const both = withContent(pair, 'beforeImage', PHOTO);
+    expect(imagesOf(withImages(section('navbar'), both), liveCtx())).toEqual([EAGER, LAZY]);
+  });
+
   it('keeps every image lazy when the first section draws none', () => {
     const images = imagesOf(
       withImages(
@@ -486,6 +495,110 @@ describe('section specifics', () => {
     expect(markup).toContain('<h2');
   });
 
+  it('numbers the steps of a process in an ordered list, without icons or images', () => {
+    const steps = section('benefits', 'steps');
+    const markup = render(steps, liveCtx());
+    expect(count(markup, '<ol')).toBe(1);
+    expect(count(markup, '<li')).toBe(3);
+    expect(count(markup, '<h3')).toBe(3);
+    expect(markup).toContain('<h2');
+    // The list is ordered already: the drawn number is not read out a second time.
+    for (const number of [1, 2, 3]) {
+      expect(markup).toContain(
+        `<span class="${cls(benefitsStyles.stepNumber)}" aria-hidden="true">${number}</span>`,
+      );
+    }
+    expect(markup).not.toContain('<svg');
+    expect(markup).not.toContain('<img');
+    expect(markup).toContain('>Để lại thông tin</h3>');
+    const five = withContent(steps, 'items', [
+      ...(steps.content['items'] as unknown[]),
+      ...(steps.content['items'] as unknown[]).slice(0, 2),
+    ]);
+    expect(count(render(five, liveCtx()), '<li')).toBe(5);
+  });
+
+  it('lists partner logos named by their description, and drops the ones without an image', () => {
+    let logos = section('logos');
+    logos = withContent(logos, 'items.0.image', {
+      assetId: ASSET_ID,
+      alt: 'Bệnh viện Hòa Bình',
+      decorative: false,
+    });
+    logos = withContent(logos, 'items.2.image', {
+      assetId: ASSET_ID,
+      alt: 'Trường Đại học Y',
+      decorative: false,
+    });
+    const live = render(logos, liveCtx());
+    expect(live).toContain('<ul');
+    expect(count(live, '<li')).toBe(2);
+    expect(count(live, cls(logosStyles.image))).toBe(2);
+    expect(live).toContain('alt="Bệnh viện Hòa Bình"');
+    expect(live).toContain('alt="Trường Đại học Y"');
+    expect(live).not.toContain('Chưa chọn logo');
+    expect(live).toContain('>Đối tác đã tin dùng chúng tôi</h2>');
+
+    // The canvas keeps a slot for every logo, the missing ones as placeholders.
+    const edit = render(logos, editCtx());
+    expect(count(edit, '<li')).toBe(4);
+    expect(count(edit, 'Chưa chọn logo')).toBe(2);
+
+    // Without any image and heading, a live page draws no empty list.
+    const bare = render(withContent(section('logos'), 'heading', ''), liveCtx());
+    expect(bare).not.toContain('<ul');
+  });
+
+  it('shows the photo before first and the one after second, each with its caption', () => {
+    let pair = section('before_after');
+    pair = withContent(pair, 'beforeImage', {
+      assetId: ASSET_ID,
+      alt: 'Răng trước khi niềng',
+      decorative: false,
+    });
+    pair = withContent(pair, 'afterImage', {
+      assetId: ASSET_ID,
+      alt: 'Răng sau 12 tháng',
+      decorative: false,
+    });
+    const markup = render(pair, liveCtx());
+    expect(count(markup, '<figure')).toBe(2);
+    expect(count(markup, '<figcaption')).toBe(2);
+    expect(markup.indexOf('Răng trước khi niềng')).toBeLessThan(
+      markup.indexOf('Răng sau 12 tháng'),
+    );
+    expect(markup.indexOf('Trước khi bắt đầu')).toBeLessThan(markup.indexOf('Sau khi hoàn thành'));
+    expect(markup).toContain('Kết quả có thể khác nhau tùy từng người.');
+
+    const edit = render(section('before_after'), editCtx());
+    expect(edit).toContain('Chưa chọn ảnh trước');
+    expect(edit).toContain('Chưa chọn ảnh sau');
+  });
+
+  it('calls and opens Zalo from the quick contact, leaving out an unused button', () => {
+    let quick = section('quick_contact');
+    quick = withContent(quick, 'call.link', { kind: 'phone', phone: '0901 234 567' });
+    quick = withContent(quick, 'zalo.link', { kind: 'zalo', phone: '0901 234 567' });
+    const markup = render(quick, liveCtx());
+    expect(markup).toMatch(
+      new RegExp(
+        `<a class="[^"]*${cls(frame.buttonPrimary)}[^"]*" href="tel:0901234567">Gọi ngay</a>`,
+      ),
+    );
+    expect(markup).toMatch(
+      new RegExp(
+        `<a class="[^"]*${cls(frame.buttonSecondary)}[^"]*" href="https://zalo.me/0901234567" target="_blank" rel="noopener noreferrer">Nhắn Zalo</a>`,
+      ),
+    );
+
+    const callOnly = render(withContent(quick, 'zalo.label', ''), liveCtx());
+    expect(callOnly).toContain('tel:0901234567');
+    expect(callOnly).not.toContain('zalo.me');
+
+    const none = withContent(withContent(quick, 'zalo.label', ''), 'call.label', '');
+    expect(render(none, liveCtx())).not.toContain(cls(quickContactStyles.actions));
+  });
+
   it('marks testimonials up as quotes with their author', () => {
     const cards = render(section('testimonials', 'cards'), liveCtx());
     expect(count(cards, '<blockquote')).toBe(3);
@@ -534,6 +647,70 @@ describe('section specifics', () => {
     expect(sample).not.toContain('tel:');
     expect(sample).toContain('Số điện thoại');
     expect(render(footer, editCtx())).not.toContain('tel:');
+  });
+});
+
+describe('privacy policy link of the footer', () => {
+  const CAPTURE = {
+    requiredText: 'Tôi đồng ý để Smile Care xử lý họ tên và số điện thoại của tôi.',
+    marketingText: null,
+    policyUrl: 'https://smilecare.vn/chinh-sach',
+  };
+  const POLICY_LINK =
+    '<a class="' +
+    cls(frame.textLink) +
+    '" href="https://smilecare.vn/chinh-sach" target="_blank" rel="noopener noreferrer">Chính sách quyền riêng tư</a>';
+
+  function footerWith(links: { label: string; link: Link }[]): SectionInstance {
+    return withContent(
+      section('footer'),
+      'links',
+      links.map((link) => ({ link })),
+    );
+  }
+
+  it('follows the owner’s links on a page with a form', () => {
+    const footer = footerWith([
+      { label: 'Bảng giá', link: { kind: 'url', url: 'https://smilecare.vn/bang-gia' } },
+    ]);
+    const markup = render(footer, liveCtx({ leadCapture: CAPTURE }));
+    expect(count(markup, '<li')).toBe(2);
+    expect(markup).toContain(POLICY_LINK);
+    expect(markup.indexOf('Bảng giá')).toBeLessThan(markup.indexOf(POLICY_LINK));
+    // A footer without links of its own still gets the list, with the policy alone.
+    const alone = render(section('footer'), liveCtx({ leadCapture: CAPTURE }));
+    expect(count(alone, '<li')).toBe(1);
+    expect(alone).toContain(POLICY_LINK);
+  });
+
+  it('is left out on a page without a form', () => {
+    expect(render(section('footer'), liveCtx())).not.toContain('Chính sách quyền riêng tư');
+    expect(render(section('footer'), liveCtx())).not.toContain('<ul');
+  });
+
+  it('is not repeated when the owner already links the same address', () => {
+    for (const url of ['https://smilecare.vn/chinh-sach', 'https://SmileCare.vn/chinh-sach']) {
+      const footer = footerWith([{ label: 'Quyền riêng tư', link: { kind: 'url', url } }]);
+      const markup = render(footer, liveCtx({ leadCapture: CAPTURE }));
+      expect(count(markup, '<li')).toBe(1);
+      expect(markup).not.toContain('Chính sách quyền riêng tư');
+      expect(markup).toContain('>Quyền riêng tư</a>');
+    }
+    const other = footerWith([
+      {
+        label: 'Điều khoản',
+        link: { kind: 'url', url: 'https://smilecare.vn/chinh-sach/dieu-khoan' },
+      },
+    ]);
+    expect(count(render(other, liveCtx({ leadCapture: CAPTURE })), '<li')).toBe(2);
+  });
+
+  it('shows on the canvas without leading anywhere', () => {
+    const markup = render(section('footer'), editCtx({ leadCapture: CAPTURE }));
+    expect(markup).toContain(
+      `<span class="${cls(frame.textLink)}">Chính sách quyền riêng tư</span>`,
+    );
+    expect(markup).not.toContain('href=');
   });
 });
 
