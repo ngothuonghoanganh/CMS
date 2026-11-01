@@ -1,8 +1,9 @@
 import { createHash, createHmac } from 'node:crypto';
+import { Logger } from '@nestjs/common';
 import { meResponseSchema, problemSchema, SESSION_COOKIE } from '@plp/contracts';
 import { Types } from 'mongoose';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import {
   linkTokenIn,
@@ -13,6 +14,7 @@ import {
 } from '../../../test/client.js';
 import { TEST_ADMIN_ORIGIN, TEST_LOGIN_ATTEMPT_SECRET } from '../../../test/env.js';
 import { newLinkToken } from './account-links.js';
+import { SessionsRepository } from './sessions.repository.js';
 
 const RESET_SUBJECT = 'Đặt lại mật khẩu';
 const NEW_PASSWORD = 'mat-khau-moi-an-toan-456';
@@ -155,6 +157,36 @@ describe('passwords', () => {
         .post('/auth/password/reset', { token, password: NEW_PASSWORD })
         .expect(200);
       expect(await storedAttempts(input.email)).toBeNull();
+      await login(input.email, NEW_PASSWORD).expect(200);
+    });
+
+    it('changes nothing when a part of the reset fails, and the link still works', async () => {
+      const input = signupInput();
+      const { client } = await signedUpClient(t.app, input);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await login(input.email, 'wrong-password').expect(401);
+      }
+      const token = await resetToken(input.email);
+      const muted = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const failing = vi
+        .spyOn(t.app.get(SessionsRepository), 'deleteForUser')
+        .mockRejectedValueOnce(new Error('connection reset'));
+      try {
+        await new TestClient(t.app)
+          .post('/auth/password/reset', { token, password: NEW_PASSWORD })
+          .expect(500);
+      } finally {
+        failing.mockRestore();
+        muted.mockRestore();
+      }
+      // One transaction: the password, the link, the sessions and the failed logins are as before.
+      await client.get('/auth/me').expect(200);
+      expect(await storedAttempts(input.email)).toBe(3);
+
+      await new TestClient(t.app)
+        .post('/auth/password/reset', { token, password: NEW_PASSWORD })
+        .expect(200);
+      await client.get('/auth/me').expect(401);
       await login(input.email, NEW_PASSWORD).expect(200);
     });
 

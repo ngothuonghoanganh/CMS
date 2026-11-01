@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import type { AppError } from '../../shared/errors.js';
+import type { Tx } from '../../shared/persistence/transaction.js';
 import {
   type AttemptWindow,
   LoginAttemptsRepository,
@@ -60,9 +61,9 @@ export class PasswordAttempts {
     }
   }
 
-  /** A new password, or the right one, ends the window: nobody is held back by the old one. */
-  clear(email: string): Promise<void> {
-    return this.attempts.clear(loginAccountKey(this.env.LOGIN_ATTEMPT_SECRET, email));
+  /** A new password ends the window: nobody is held back by guesses at the old one. */
+  clear(email: string, tx: Tx): Promise<void> {
+    return this.attempts.clear(loginAccountKey(this.env.LOGIN_ATTEMPT_SECRET, email), tx);
   }
 
   /** Rethrows `error` once the attempt it counted is given back. */

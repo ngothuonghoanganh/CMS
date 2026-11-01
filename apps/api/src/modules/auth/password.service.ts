@@ -79,12 +79,14 @@ export class PasswordService {
   /**
    * Sets the new password, uses up the link and ends every session of the user in one
    * transaction: whoever forgot their password may have lost a device too. The account's failed
-   * logins no longer count, and the user is signed in as by a login.
+   * logins stop counting in the same transaction, so a reset never leaves the account held back.
+   * Then the user is signed in as by a login.
    */
   async reset(input: ResetPasswordRequest): Promise<IssuedSession> {
     const tokenHash = hashLinkToken(input.token);
     const reset = await this.resets.findActiveByTokenHash(tokenHash, new Date());
-    if (reset === null) {
+    const user = reset === null ? null : await this.users.findById(reset.userId);
+    if (reset === null || user === null) {
       throw resetLinkInvalid();
     }
     const passwordHash = await hashPassword(input.password);
@@ -93,16 +95,12 @@ export class PasswordService {
       if (!(await this.resets.claim(reset._id, tokenHash, tx))) {
         throw resetLinkInvalid();
       }
-      if (!(await this.users.setPasswordHash(reset.userId, passwordHash, tx))) {
+      if (!(await this.users.setPasswordHash(user._id, passwordHash, tx))) {
         throw resetLinkInvalid();
       }
-      await this.sessions.deleteForUser(reset.userId, tx);
+      await this.sessions.deleteForUser(user._id, tx);
+      await this.passwordAttempts.clear(user.email, tx);
     });
-    const user = await this.users.findById(reset.userId);
-    if (user === null) {
-      throw resetLinkInvalid();
-    }
-    await this.passwordAttempts.clear(user.email);
     return this.auth.issueSession({ id: user._id, name: user.name, email: user.email });
   }
 
