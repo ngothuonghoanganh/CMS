@@ -4,7 +4,15 @@ import type { Asset, PageDetailResponse, Role, Site } from '@plp/contracts';
 import { seoTitleOf } from '@plp/sections/schema';
 import { Callout, type LinkComponentProps, useToast } from '@plp/ui';
 import { useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { hostOf } from '../../lib/site-url';
 import {
   ConflictDialog,
@@ -13,7 +21,6 @@ import {
   type EditorStore,
   EditorStoreProvider,
   isSameDocument,
-  isSameScreen,
   leavingLoses,
   refreshPageSummary,
   useBeforeUnloadGuard,
@@ -48,14 +55,21 @@ export interface SeoScreenProps {
   focus: SeoFocus | null;
 }
 
-const NavigateContext = createContext<((href: string) => void) | null>(null);
+interface Leaving {
+  /** Leaves for `href`, saving first; a link to this very document stays. */
+  navigate: (href: string) => void;
+  /** The user chose this screen after all: a leave still waiting for its save is called off. */
+  stay: () => void;
+}
+
+const NavigateContext = createContext<Leaving | null>(null);
 
 /**
  * A header link of the SEO page: pending changes are saved before leaving. Modified clicks (new
  * tab, new window) work as usual.
  */
 function SaveFirstLink({ href, className, children, ref, ...aria }: LinkComponentProps) {
-  const navigate = useContext(NavigateContext);
+  const leaving = useContext(NavigateContext);
   return (
     <a
       ref={ref}
@@ -65,11 +79,16 @@ function SaveFirstLink({ href, className, children, ref, ...aria }: LinkComponen
       onClick={(event) => {
         const modified =
           event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-        if (navigate === null || event.defaultPrevented || modified) {
+        if (leaving === null || event.defaultPrevented || modified) {
           return;
         }
         event.preventDefault();
-        navigate(href);
+        // The tab of this very screen (`?focus=` may differ): there is nowhere to go.
+        if (aria['aria-current'] === 'page') {
+          leaving.stay();
+          return;
+        }
+        leaving.navigate(href);
       }}
     >
       {children}
@@ -83,7 +102,7 @@ function SaveFirstLink({ href, className, children, ref, ...aria }: LinkComponen
  * its default is prevented, so those handlers still run (the phone drawer closes) while Next's
  * Link and `SaveFirstLink` see `defaultPrevented` and do not navigate themselves.
  */
-function useSaveFirstLinks(hasPending: () => boolean, navigate: (href: string) => void): void {
+function useSaveFirstLinks(hasPending: () => boolean, { navigate, stay }: Leaving): void {
   useEffect(() => {
     function onClick(event: MouseEvent) {
       const modified =
@@ -100,7 +119,18 @@ function useSaveFirstLinks(hasPending: () => boolean, navigate: (href: string) =
         return;
       }
       const url = new URL(link.href);
-      if (url.origin !== window.location.origin || isSameDocument(window.location.href, url.href)) {
+      if (url.origin !== window.location.origin) {
+        return;
+      }
+      // The tab of this very screen (`?focus=` may differ): there is nowhere to go.
+      if (link.getAttribute('aria-current') === 'page') {
+        event.preventDefault();
+        stay();
+        return;
+      }
+      // A link to this very document leaves nothing; the router or the browser handles it.
+      if (isSameDocument(window.location.href, url.href)) {
+        stay();
         return;
       }
       event.preventDefault();
@@ -110,7 +140,7 @@ function useSaveFirstLinks(hasPending: () => boolean, navigate: (href: string) =
     return () => {
       document.removeEventListener('click', onClick, true);
     };
-  }, [hasPending, navigate]);
+  }, [hasPending, navigate, stay]);
 }
 
 interface PendingLeave {
@@ -228,12 +258,15 @@ function SeoScreenBody({
     },
     [hasPending, leaveAfterSave],
   );
+  const stay = useCallback(() => {
+    pendingLeave.current = null;
+  }, []);
   const navigate = useCallback(
     (href: string) => {
-      // This very screen (its own tab, with or without `?focus=`): nothing is left, so nothing is
-      // saved first or given up, and a leave still waiting for its save is called off.
-      if (isSameScreen(window.location.href, new URL(href, window.location.href).href)) {
-        pendingLeave.current = null;
+      // This very document: nothing is left, so nothing is saved first or given up, and a leave
+      // still waiting for its save is called off.
+      if (isSameDocument(window.location.href, new URL(href, window.location.href).href)) {
+        stay();
         return;
       }
       leaveSafely(() => {
@@ -241,10 +274,11 @@ function SeoScreenBody({
         return 'leaving';
       });
     },
-    [router, leaveSafely],
+    [router, leaveSafely, stay],
   );
+  const leaving = useMemo(() => ({ navigate, stay }), [navigate, stay]);
   useHistoryLeaveGuard(store, leaveAfterSave, slugPending);
-  useSaveFirstLinks(hasPending, navigate);
+  useSaveFirstLinks(hasPending, leaving);
   // The sidebar's menus and "Đăng xuất" navigate in code, outside this screen.
   useEffect(
     () =>
@@ -255,7 +289,7 @@ function SeoScreenBody({
   );
 
   return (
-    <NavigateContext.Provider value={navigate}>
+    <NavigateContext.Provider value={leaving}>
       <PageContainer width="wide">
         <PageDetailHeader
           siteId={site.id}

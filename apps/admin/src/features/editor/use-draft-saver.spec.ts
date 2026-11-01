@@ -386,6 +386,27 @@ describe('draft saver', () => {
     stop();
   });
 
+  it('sends an edit made while a save ran, once the server refused that save for good', async () => {
+    const { store, stop } = setup();
+    const refused = deferred<SaveDraftResponse>();
+    saveMock.mockReturnValueOnce(refused.promise).mockResolvedValue(response(4));
+    store.getState().setSpacing(HERO, 'compact');
+    await vi.advanceTimersByTimeAsync(1500);
+    store.getState().setSpacing(HERO, 'spacious');
+    // The edit's own debounce ends while the first save still runs.
+    await vi.advanceTimersByTimeAsync(1500);
+    refused.reject(
+      problem(422, 'validation_failed', {
+        issues: [{ path: ['slug'], code: 'invalid', message: 'Đường dẫn không hợp lệ' }],
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    // The newer draft, which the server has not seen, is sent without another edit.
+    expect(saveMock).toHaveBeenCalledTimes(2);
+    expect(store.getState().saveState).toBe('saved');
+    stop();
+  });
+
   it('sends a draft changed since the refusal again when the user stays after all', async () => {
     const { store, saver, stop } = setup();
     const signingOut = deferred<LeaveOutcome>();
@@ -622,8 +643,8 @@ describe('useDraftSaver', () => {
 });
 
 describe('describeSaveFailure', () => {
-  it('tries again after a server error, a timeout or too many requests', () => {
-    for (const status of [500, 503, 408, 429]) {
+  it('tries again after a server error or a timeout', () => {
+    for (const status of [500, 503, 408]) {
       expect(describeSaveFailure(problem(status, 'internal'))).toMatchObject({
         kind: 'retryable',
       });
@@ -631,7 +652,8 @@ describe('describeSaveFailure', () => {
   });
 
   it('does not try again a request refused for good', () => {
-    for (const status of [401, 403, 404]) {
+    // 429 too: the retries do not wait for Retry-After, so they would only spend their budget.
+    for (const status of [401, 403, 404, 429]) {
       expect(describeSaveFailure(problem(status, 'forbidden'))).toMatchObject({ kind: 'other' });
     }
   });

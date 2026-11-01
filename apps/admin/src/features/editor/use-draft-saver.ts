@@ -71,8 +71,8 @@ export function describeSaveFailure(error: unknown): SaveFailure | 'conflict' {
     if (error.status === 422) {
       return { kind: 'invalid', message: firstIssueMessage(error) };
     }
-    // Server errors, a timeout (408) and "too many requests" (429) pass; trying again can succeed.
-    if (error.status >= 500 || error.status === 408 || error.status === 429) {
+    // Server errors and a timeout (408) pass; trying again can succeed.
+    if (error.status >= 500 || error.status === 408) {
       return { kind: 'retryable', message: error.problem.title };
     }
     return { kind: 'other', message: error.problem.detail ?? error.problem.title };
@@ -122,8 +122,8 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
-  /** Draft version of the last save that failed; null once a save succeeds. */
-  let failedVersion: number | null = null;
+  /** Draft version the server refused for good (not retryable); null once a save succeeds. */
+  let refusedVersion: number | null = null;
   let running: Promise<SaveDraftResponse> | null = null;
   let stopped = true;
 
@@ -168,15 +168,20 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
         store.getState().markConflict();
         throw new DraftConflictError();
       }
-      failedVersion = version;
       store.getState().markSaveFailed(failure);
       if (failure.kind === 'retryable') {
         scheduleRetry();
+      } else {
+        refusedVersion = version;
+        // An edit made while this save ran is a draft the server has not seen: send it.
+        if (!stopped && store.getState().draftVersion !== version) {
+          scheduleSave();
+        }
       }
       throw error;
     }
     retryAttempt = 0;
-    failedVersion = null;
+    refusedVersion = null;
     store.getState().applySaved(response, version);
     options.onSaved?.();
   }
@@ -234,10 +239,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     store.getState().setLeavingWithoutSaving(null);
     retryAttempt = 0;
     const state = store.getState();
-    const worthTrying =
-      state.saveState !== 'error' ||
-      state.saveError?.kind === 'retryable' ||
-      failedVersion !== state.draftVersion;
+    const worthTrying = state.saveState !== 'error' || refusedVersion !== state.draftVersion;
     if (!stopped && hasUnsavedChanges(state) && state.saveState !== 'conflict' && worthTrying) {
       scheduleSave();
     }

@@ -444,6 +444,60 @@ describe('SeoScreen', () => {
       expect(screen.queryByRole('button', { name: 'Rời trang, bỏ thay đổi' })).toBeNull();
     });
 
+    it('follows a link to this screen with another query, after saving', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`,
+      );
+      answerApi(() =>
+        Promise.resolve({
+          revision: 4,
+          updatedAt: '2026-10-24T08:05:00.000Z',
+          page: detail.page,
+          checks: detail.checks,
+        }),
+      );
+      const link = outsideLink();
+      link.href = `/sites/${SITE_ID}/pages/${PAGE_ID}/seo?focus=title`;
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(link);
+
+      // Another query is another place on the screen (a field to focus): it is not swallowed.
+      await waitFor(() => {
+        expect(router.push).toHaveBeenCalledWith(
+          `/sites/${SITE_ID}/pages/${PAGE_ID}/seo?focus=title`,
+        );
+      });
+      link.remove();
+    });
+
+    it('calls off a leave still waiting for its save when a link to this very URL is clicked', async () => {
+      const user = userEvent.setup();
+      const detail = renderScreen();
+      const here = `/sites/${SITE_ID}/pages/${PAGE_ID}/seo`;
+      window.history.replaceState(window.history.state, '', here);
+      const answerSave = heldSave(detail);
+      const away = outsideLink();
+      await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
+      await user.click(away);
+      await waitFor(() => {
+        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      });
+
+      // A plain link (breadcrumb, sidebar) to the URL already open: the router handles it.
+      const toHere = outsideLink();
+      toHere.href = here;
+      expect(clickAndSee(toHere)).toBe(false);
+      answerSave();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(router.push).not.toHaveBeenCalled();
+      away.remove();
+      toHere.remove();
+    });
+
     it('calls off a leave still waiting for its save when the tab of this very page is clicked', async () => {
       const user = userEvent.setup();
       const detail = renderScreen();
