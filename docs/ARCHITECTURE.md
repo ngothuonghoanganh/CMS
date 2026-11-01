@@ -1273,6 +1273,67 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Integration test cho mọi endpoint mới với sáu vai trò, người ngoài workspace và trường hợp chạy song song (hai lần nhận cùng một link, hai lời mời cùng email).
   - E2E: mời qua Mailpit, đăng ký từ link, đổi quyền, yêu cầu và duyệt, chuyển quyền sở hữu, thu hồi.
 
+### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
+
+- **Date:** 2026-11-01 · **Status:** Accepted
+- **Context:**
+  - Lát C3 của Phase 1 (màn 13, 14, cập nhật màn 08).
+  - Chủ sản phẩm chốt ngày 2026-11-01: khách gắn được tên miền tùy ý, nhưng không bao giờ có hai site cùng một tên miền.
+- **Decision:**
+  - **HTTPS: on-demand TLS ở biên (Caddy).**
+    - Caddy xin chứng chỉ Let's Encrypt ở lần bắt tay TLS đầu tiên của một host. Trước đó nó hỏi `GET /public/tls/allowed?domain=…` của API.
+    - API trả 200 cho host của site (`{subdomain}.{BASE_DOMAIN}` của site có thật) và tên miền riêng đã xác minh, đang trỏ đúng; mọi host khác là 404. Người lạ trỏ DNS về hệ thống không làm Caddy xin chứng chỉ.
+    - Không mất phí theo tên miền, không phụ thuộc nhà cung cấp, nên khách gắn tên miền tự do.
+    - Cấu hình Caddy và IP tĩnh nằm ở §6.
+  - **Tên miền** (collection `domains`):
+    - `{ workspaceId, siteId, hostname, token, addedBy, createdAt, verifiedAt|null, check, activeSince|null, lostSince|null, nextCheckAt|null }`.
+    - `hostname` được chuẩn hóa: chữ thường, IDN thành punycode, không cổng, không dấu chấm cuối, tối đa 253 ký tự.
+    - Bị từ chối: tên miền dưới `BASE_DOMAIN`, địa chỉ IP, `localhost`, tên chỉ một nhãn.
+    - Mỗi site tối đa 5 tên miền riêng, mỗi tên miền một lần (unique `siteId, hostname`).
+  - **Không trùng tên miền:**
+    - Một tên miền chỉ có một chủ: unique partial index `hostname` trên các bản ghi đã xác minh (`verifiedAt` khác null).
+    - Site khác thêm cùng tên miền thì thấy "đang được một site khác dùng", không biết là site nào. Tên miền chỉ chuyển sang site mới khi bản ghi TXT chứa đúng token của site mới.
+    - Việc chuyển chạy trong một transaction: bản ghi cũ bị gỡ (nếu đang là địa chỉ chính thì site cũ quay về địa chỉ mặc định), bản ghi mới thành chủ. Người đã thêm tên miền ở site cũ nhận email.
+    - Index bảo đảm hai lần xác minh chạy song song không tạo ra hai chủ.
+  - **Bản ghi DNS:**
+    - Tên miền phụ: CNAME tới `CUSTOM_DOMAIN_CNAME_TARGET`. Tên miền gốc: A tới `CUSTOM_DOMAIN_IPV4` (một hoặc nhiều IP).
+    - Xác minh quyền sở hữu: TXT `_payload.{hostname}` = `payload-verify={token}`. Token 16 byte ngẫu nhiên, riêng cho từng bản ghi.
+    - Phân biệt tên miền phụ hay gốc chỉ để hướng dẫn (hai nhãn, hoặc ba nhãn với hậu tố như `com.vn`). Khi kiểm tra, CNAME đúng hoặc mọi bản ghi A thuộc IP của hệ thống đều được chấp nhận.
+  - **Kiểm tra DNS và HTTPS:**
+    - Interface `DomainDns`: production dùng `node:dns/promises` (timeout 5 giây). `DOMAIN_DNS_ZONE_FILE` đọc câu trả lời từ một file JSON, chỉ cho phát triển và E2E; production từ chối biến này.
+    - `DOMAIN_TLS_CHECK=on` (production): mở kết nối 443 với SNI, chứng chỉ phải hợp lệ, đọc hạn dùng. `off` khi phát triển và E2E, vì không có biên TLS.
+  - **Trạng thái** (hàm thuần, từ lần kiểm tra gần nhất), khớp chú thích màn 13:
+    - `taken`: chưa xác minh, site khác đang là chủ.
+    - `pending_dns` "Chờ DNS": chưa thấy bản ghi.
+    - `misconfigured` "Cấu hình sai": thấy bản ghi nhưng sai giá trị.
+    - `issuing` "Đang cấp chứng chỉ": đã xác minh, DNS đúng, chưa có HTTPS hợp lệ.
+    - `active` "Hoạt động".
+    - `lost` "Mất kết nối": từng hoạt động, nay DNS không còn trỏ đúng.
+    - `needs_attention` "Cần can thiệp": DNS đúng mà HTTPS không hợp lệ quá 1 giờ.
+  - **Tự kiểm tra:**
+    - Mỗi instance API mỗi phút lấy tối đa 50 tên miền tới hạn (`nextCheckAt`). Mỗi tên miền được giữ bằng một update có điều kiện, nên hai instance không kiểm tra cùng lúc.
+    - Chưa xác minh: mỗi phút trong giờ đầu, rồi mỗi 10 phút, dừng sau 7 ngày ("Kiểm tra ngay" chạy lại). Đã xác minh: mỗi 10 phút.
+    - Email cho người thêm tên miền khi tên miền bắt đầu hoạt động và khi mất kết nối.
+    - `DOMAIN_MONITOR_INTERVAL_MS=0` tắt vòng tự kiểm tra (integration test gọi trực tiếp).
+  - **Địa chỉ chính:**
+    - `sites.primaryDomainId` (null là địa chỉ mặc định). Chỉ tên miền `active` mới được đặt làm chính; không ngắt được địa chỉ chính.
+    - Renderer chuyển hướng 301 mọi host khác của site (mặc định và tên miền riêng khác) về địa chỉ chính, giữ đường dẫn và query, chỉ khi địa chỉ chính đang `active`. Khi nó mất kết nối, mọi host phục vụ như thường, và admin báo "Tạm dùng địa chỉ mặc định".
+    - Canonical, sitemap, robots, `liveUrl` dùng địa chỉ công khai của site: địa chỉ chính (`CUSTOM_DOMAIN_ORIGIN_TEMPLATE`, mặc định `https://{host}`), nếu không thì địa chỉ mặc định. Link xem trước vẫn ở địa chỉ mặc định.
+    - Đổi địa chỉ chính, thêm, gỡ, hay một tên miền đổi trạng thái đều revalidate site.
+  - **Renderer:**
+    - Host dưới `BASE_DOMAIN` là subdomain như trước. Host khác hỏi `GET /public/hosts/:host` để biết subdomain (chỉ tên miền đã xác minh và đang trỏ đúng).
+    - `GET /public/sites/:subdomain/address` trả host chính đang hoạt động. Cả hai được cache dưới tag của site; host lạ cache 60 giây.
+    - Form và đếm lượt xem trên tên miền riêng đi qua cùng phân giải. Nguồn truy cập coi mọi host của site là nội bộ.
+  - **Quyền:** `domains.manage` (Chủ sở hữu, Quản trị) cho mọi endpoint tên miền.
+- **Ngoài phạm vi:**
+  - Tab "Đăng nhập nhà cung cấp" (Domain Connect).
+  - "Sao chép link hướng dẫn" cho người không có tài khoản.
+  - Tên miền wildcard, bản ghi AAAA cho tên miền gốc.
+- **Reason:** Chi phí bằng 0 theo tên miền và không khóa nhà cung cấp. Không trùng tên miền nhờ index của MongoDB và bằng chứng TXT, chứ không nhờ thứ tự request. Renderer không đổi cách phục vụ trang; nó chỉ phân giải host thành site.
+- **Consequences:**
+  - Integration test cho chuẩn hóa tên miền, giới hạn, chuyển chủ (kể cả hai lần xác minh song song), trạng thái, tự kiểm tra trên nhiều instance, `tls/allowed`, phân giải host và quyền.
+  - E2E: kết nối một tên miền `*.e2e.test` (Chromium ánh xạ về máy, DNS từ zone file), đặt làm địa chỉ chính, trang mở ở tên miền riêng và địa chỉ mặc định chuyển hướng 301.
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -1328,15 +1389,15 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 
 **Phase 1 — Vận hành & đội nhóm:**
 
-| Lát | Nội dung                                                                                                                 | Màn            | Trạng thái |
-| --- | ------------------------------------------------------------------------------------------------------------------------ | -------------- | ---------- |
-| C1  | Sáu vai trò, phạm vi site, kiểm tra quyền ở mọi endpoint, Sidebar v2, màn Vai trò & quyền (ADR-020)                      | 16, Sidebar v2 | Xong       |
-| C2  | Thành viên, lời mời qua email, nhận lời mời, đổi quyền, gỡ, yêu cầu đổi quyền và duyệt, chuyển quyền sở hữu (ADR-021)    | 15, 15b        | Xong       |
-| C3  | Tên miền riêng: on-demand TLS, không trùng tên miền, bản ghi DNS và TXT, xác minh, địa chỉ chính, 301, renderer, sitemap | 13, 14, 08     | Chưa làm   |
-| C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt                                                  | 05, 16         | Chưa làm   |
-| C5  | Vai trò tùy chỉnh                                                                                                        | 16             | Chưa làm   |
+| Lát | Nội dung                                                                                                                           | Màn            | Trạng thái |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------- | ---------- |
+| C1  | Sáu vai trò, phạm vi site, kiểm tra quyền ở mọi endpoint, Sidebar v2, màn Vai trò & quyền (ADR-020)                                | 16, Sidebar v2 | Xong       |
+| C2  | Thành viên, lời mời qua email, nhận lời mời, đổi quyền, gỡ, yêu cầu đổi quyền và duyệt, chuyển quyền sở hữu (ADR-021)              | 15, 15b        | Xong       |
+| C3  | Tên miền riêng: on-demand TLS, không trùng tên miền (ADR-022), bản ghi DNS và TXT, xác minh, địa chỉ chính, 301, renderer, sitemap | 13, 14, 08     | Xong       |
+| C4  | Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt                                                            | 05, 16         | Chưa làm   |
+| C5  | Vai trò tùy chỉnh                                                                                                                  | 16             | Chưa làm   |
 
-C3, C4 và C5 cần ADR riêng trước khi làm.
+C4 và C5 cần ADR riêng trước khi làm.
 
 ## 6. Trước khi phát hành
 
@@ -1350,6 +1411,11 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - Nhà cung cấp SMTP có SPF và DKIM cho domain gửi của `LEAD_EMAIL_FROM`, cấu hình qua `SMTP_URL` (ADR-018).
 - Mọi secret trong `.env.example` được sinh mới cho production, và `COOKIE_SECURE=true`.
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
+- Tên miền riêng (ADR-022):
+  - Caddy ở biên bật on-demand TLS, với `ask` trỏ tới `GET /public/tls/allowed` của API, và chuyển mọi host về renderer.
+  - Biên có IPv4 tĩnh, đặt vào `CUSTOM_DOMAIN_IPV4`; tên miền gốc của khách trỏ bản ghi A về đó.
+  - Bản ghi DNS của `CUSTOM_DOMAIN_CNAME_TARGET` trỏ về biên.
+  - `CUSTOM_DOMAIN_ORIGIN_TEMPLATE=https://{host}`, `DOMAIN_TLS_CHECK=on` và không đặt `DOMAIN_DNS_ZONE_FILE`.
 - API dựng index lúc khởi động và không khởi động khi một index không dựng được (ADR-013). Vì vậy:
   - đổi option của index đã có (`expireAfterSeconds` của TTL, `partialFilterExpression`, unique) là bước migration chạy trước khi deploy (xóa rồi tạo lại, hoặc `collMod` với TTL); thiếu bước này thì bản mới dừng ở `IndexOptionsConflict`;
   - index mới trên collection lớn được dựng trước khi deploy;
