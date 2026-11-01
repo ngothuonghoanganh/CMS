@@ -23,7 +23,7 @@ import { UsersRepository } from '../auth/users.repository.js';
 import type { CountedHit } from '../leads/lead-limits.repository.js';
 import { EmailQuota, type QuotaUse } from '../notifications/email-quota.js';
 import { EmailSender, EmailSendError } from '../notifications/email-sender.js';
-import { memberInvitationEmail } from '../notifications/email-templates.js';
+import { memberInvitationEmail } from '../notifications/emails.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { AccessService } from '../workspaces/access.service.js';
 import {
@@ -312,11 +312,13 @@ export class InvitationsService {
   /** Emails the link; true when it went out. A failure keeps the invitation, unsent. */
   private async send(
     scope: WorkspaceScope,
-    invitation: Pick<InvitationRecord, '_id' | 'email' | 'role' | 'tokenHash'>,
+    invitation: Pick<InvitationRecord, '_id' | 'email' | 'role' | 'tokenHash' | 'expiresAt'>,
     token: string,
     context: { workspaceName: string; invitedBy: string; scope: string },
   ): Promise<boolean> {
     const email = memberInvitationEmail({
+      invitationId: invitation._id.toHexString(),
+      linkExpiresAt: invitation.expiresAt,
       ...context,
       roleLabel: roleLabels[invitation.role],
       acceptUrl: `${this.env.ADMIN_ORIGIN}${INVITATION_PATH}#token=${token}`,

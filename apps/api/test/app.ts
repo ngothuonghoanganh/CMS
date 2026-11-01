@@ -76,6 +76,11 @@ export async function createTestApp(
     async close() {
       await app.close();
       await dropDatabase(mongoUri);
+      if (emails.contractViolations.length > 0) {
+        throw new Error(
+          `Emails plp-mailer would refuse (ADR-023):\n${emails.contractViolations.join('\n')}`,
+        );
+      }
     },
   };
 }

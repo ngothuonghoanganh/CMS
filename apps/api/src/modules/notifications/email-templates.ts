@@ -1,5 +1,11 @@
-import { formatLeadPhone, leadSourceLabel, vnDateTimeOf } from '@plp/contracts';
-import type { EmailMessage } from './email-sender.js';
+import type {
+  AccessDecisionData,
+  AccessRequestData,
+  Email,
+  LeadNotificationData,
+  MemberInvitationData,
+  RecipientConfirmationData,
+} from './emails.js';
 
 /** Text for HTML: every character with a meaning in markup is escaped. */
 export function escapeHtml(text: string): string {
@@ -11,7 +17,12 @@ export function escapeHtml(text: string): string {
     .replaceAll("'", '&#39;');
 }
 
-type EmailContent = Omit<EmailMessage, 'to'>;
+/** An email as an SMTP server takes it. */
+export interface RenderedEmail {
+  subject: string;
+  text: string;
+  html: string;
+}
 
 /** A simple layout every client renders: one column, inline styles, no images. */
 function layout(title: string, body: string): string {
@@ -22,75 +33,50 @@ function row(label: string, value: string): string {
   return `<tr><td style="padding:6px 12px 6px 0;color:#5e6573;vertical-align:top;white-space:nowrap">${escapeHtml(label)}</td><td style="padding:6px 0;white-space:pre-wrap">${escapeHtml(value)}</td></tr>`;
 }
 
-export interface LeadEmailInput {
-  siteName: string;
-  pageTitle: string;
-  releaseVersion: number;
-  lead: {
-    name: string;
-    phone: string;
-    email: string | null;
-    message: string | null;
-    source: { source: string; medium: string; campaign: string | null };
-    createdAt: Date;
-  };
-  /** The lead in the admin inbox. */
-  leadUrl: string;
-}
-
 /** The email confirmed addresses get for a new lead (ADR-018). */
-export function leadNotificationEmail(input: LeadEmailInput): EmailContent {
-  const { lead } = input;
-  const source = leadSourceLabel(lead.source);
+function leadNotification(data: LeadNotificationData): RenderedEmail {
+  const { lead } = data;
   const rows: Array<[string, string]> = [
     ['Họ và tên', lead.name],
-    ['Số điện thoại', formatLeadPhone(lead.phone)],
+    ['Số điện thoại', lead.phone],
     ...(lead.email === null ? [] : ([['Email', lead.email]] as Array<[string, string]>)),
     ...(lead.message === null ? [] : ([['Lời nhắn', lead.message]] as Array<[string, string]>)),
-    ['Trang', `${input.pageTitle} (v${input.releaseVersion})`],
-    ['Nguồn', lead.source.campaign === null ? source : `${source} / ${lead.source.campaign}`],
-    ['Lúc', `${vnDateTimeOf(lead.createdAt)} (giờ Việt Nam)`],
+    ['Trang', `${data.pageTitle} (v${data.releaseVersion})`],
+    ['Nguồn', lead.source],
+    ['Lúc', `${lead.createdAt} (giờ Việt Nam)`],
   ];
-  const footer = `Bạn nhận email này vì địa chỉ này đã được thêm vào "Nơi nhận lead" của ${input.siteName} và đã xác nhận.`;
-  const subject = `[${input.siteName}] Lead mới: ${lead.name}`;
+  const footer = `Bạn nhận email này vì địa chỉ này đã được thêm vào "Nơi nhận lead" của ${data.siteName} và đã xác nhận.`;
+  const subject = `[${data.siteName}] Lead mới: ${lead.name}`;
   const text = [
-    `${input.siteName} vừa nhận một đăng ký mới.`,
+    `${data.siteName} vừa nhận một đăng ký mới.`,
     '',
     ...rows.map(([label, value]) => `${label}: ${value}`),
     '',
-    `Mở lead trong hộp thư: ${input.leadUrl}`,
+    `Mở lead trong hộp thư: ${data.leadUrl}`,
     '',
     footer,
   ].join('\n');
   const html = layout(
-    `Lead mới cho ${input.siteName}`,
+    `Lead mới cho ${data.siteName}`,
     `<table style="border-collapse:collapse;font-size:14px;line-height:1.5">${rows
       .map(([label, value]) => row(label, value))
       .join(
         '',
-      )}</table><p style="margin:20px 0"><a href="${escapeHtml(input.leadUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Mở lead trong hộp thư</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(footer)}</p>`,
+      )}</table><p style="margin:20px 0"><a href="${escapeHtml(data.leadUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Mở lead trong hộp thư</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(footer)}</p>`,
   );
   return { subject, text, html };
 }
 
-export interface ConfirmationEmailInput {
-  siteName: string;
-  /** Who added the address, as the admin shows their name. */
-  invitedBy: string;
-  confirmUrl: string;
-  validDays: number;
-}
-
 /** The email that asks an address to confirm before it receives any lead (ADR-018). */
-export function recipientConfirmationEmail(input: ConfirmationEmailInput): EmailContent {
-  const intro = `${input.invitedBy} đã thêm địa chỉ này vào "Nơi nhận lead" của ${input.siteName}. Sau khi bạn xác nhận, mỗi khi có khách gửi form trên các trang của ${input.siteName}, bạn sẽ nhận một email kèm thông tin của khách.`;
-  const validity = `Liên kết có hiệu lực ${input.validDays} ngày. Nếu bạn không biết việc này, hãy bỏ qua email: địa chỉ sẽ không nhận thông tin nào.`;
+function recipientConfirmation(data: RecipientConfirmationData): RenderedEmail {
+  const intro = `${data.invitedBy} đã thêm địa chỉ này vào "Nơi nhận lead" của ${data.siteName}. Sau khi bạn xác nhận, mỗi khi có khách gửi form trên các trang của ${data.siteName}, bạn sẽ nhận một email kèm thông tin của khách.`;
+  const validity = `Liên kết có hiệu lực ${data.validDays} ngày. Nếu bạn không biết việc này, hãy bỏ qua email: địa chỉ sẽ không nhận thông tin nào.`;
   return {
-    subject: `Xác nhận nhận lead của ${input.siteName}`,
-    text: [intro, '', `Xác nhận tại: ${input.confirmUrl}`, '', validity].join('\n'),
+    subject: `Xác nhận nhận lead của ${data.siteName}`,
+    text: [intro, '', `Xác nhận tại: ${data.confirmUrl}`, '', validity].join('\n'),
     html: layout(
-      `Xác nhận nhận lead của ${input.siteName}`,
-      `<p style="margin:0 0 16px;line-height:1.55">${escapeHtml(intro)}</p><p style="margin:0 0 16px"><a href="${escapeHtml(input.confirmUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Xác nhận nhận lead</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(validity)}</p>`,
+      `Xác nhận nhận lead của ${data.siteName}`,
+      `<p style="margin:0 0 16px;line-height:1.55">${escapeHtml(intro)}</p><p style="margin:0 0 16px"><a href="${escapeHtml(data.confirmUrl)}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#4338ca;color:#ffffff;text-decoration:none;font-weight:600">Xác nhận nhận lead</a></p><p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(validity)}</p>`,
     ),
   };
 }
@@ -108,80 +94,65 @@ function smallPrint(text: string): string {
   return `<p style="margin:0;font-size:12px;color:#5e6573">${escapeHtml(text)}</p>`;
 }
 
-export interface MemberInvitationEmailInput {
-  workspaceName: string;
-  invitedBy: string;
-  roleLabel: string;
-  /** "toàn workspace" or the sites, e.g. "site Nha khoa Smile Care". */
-  scope: string;
-  acceptUrl: string;
-  validDays: number;
-}
-
 /** The invitation to join a workspace (board 15b, ADR-021). */
-export function memberInvitationEmail(input: MemberInvitationEmailInput): EmailContent {
-  const title = `${input.invitedBy} mời bạn vào ${input.workspaceName}`;
-  const intro = `Bạn được mời làm ${input.roleLabel} trên ${input.scope} của ${input.workspaceName}.`;
-  const validity = `Lời mời dùng được một lần, cho đúng địa chỉ email này, trong ${input.validDays} ngày. Không biết người mời? Bạn có thể bỏ qua email này, tài khoản sẽ không được tạo.`;
+function memberInvitation(data: MemberInvitationData): RenderedEmail {
+  const title = `${data.invitedBy} mời bạn vào ${data.workspaceName}`;
+  const intro = `Bạn được mời làm ${data.roleLabel} trên ${data.scope} của ${data.workspaceName}.`;
+  const validity = `Lời mời dùng được một lần, cho đúng địa chỉ email này, trong ${data.validDays} ngày. Không biết người mời? Bạn có thể bỏ qua email này, tài khoản sẽ không được tạo.`;
   return {
     subject: title,
-    text: [intro, '', `Nhận lời mời tại: ${input.acceptUrl}`, '', validity].join('\n'),
+    text: [intro, '', `Nhận lời mời tại: ${data.acceptUrl}`, '', validity].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${button(input.acceptUrl, 'Nhận lời mời')}${smallPrint(validity)}`,
+      `${paragraph(intro)}${button(data.acceptUrl, 'Nhận lời mời')}${smallPrint(validity)}`,
     ),
   };
 }
 
-export interface AccessRequestEmailInput {
-  workspaceName: string;
-  requesterName: string;
-  requesterEmail: string;
-  currentRole: string;
-  requestedRole: string;
-  /** "toàn workspace" or "các site hiện tại". */
-  scope: string;
-  note: string;
-  reviewUrl: string;
-}
-
 /** Tells Chủ sở hữu a member asks for another role; the link only opens the request (ADR-021). */
-export function accessRequestEmail(input: AccessRequestEmailInput): EmailContent {
-  const title = `${input.requesterName} xin đổi quyền trong ${input.workspaceName}`;
-  const intro = `${input.requesterName} (${input.requesterEmail}) đang là ${input.currentRole} và xin làm ${input.requestedRole} trên ${input.scope}.`;
-  const note = input.note === '' ? null : `Lời nhắn: ${input.note}`;
+function accessRequest(data: AccessRequestData): RenderedEmail {
+  const title = `${data.requesterName} xin đổi quyền trong ${data.workspaceName}`;
+  const intro = `${data.requesterName} (${data.requesterEmail}) đang là ${data.currentRole} và xin làm ${data.requestedRole} trên ${data.scope}.`;
+  const note = data.note === null ? null : `Lời nhắn: ${data.note}`;
   const action =
     'Mở yêu cầu để chấp nhận, chỉnh vai trò và site trước khi lưu, hoặc từ chối. Quyền chỉ đổi khi bạn lưu trên màn Thành viên.';
   return {
     subject: title,
-    text: [intro, ...(note === null ? [] : ['', note]), '', action, input.reviewUrl].join('\n'),
+    text: [intro, ...(note === null ? [] : ['', note]), '', action, data.reviewUrl].join('\n'),
     html: layout(
       title,
-      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(input.reviewUrl, 'Xem yêu cầu')}${smallPrint(action)}`,
+      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(data.reviewUrl, 'Xem yêu cầu')}${smallPrint(action)}`,
     ),
   };
 }
 
-export interface AccessDecisionEmailInput {
-  workspaceName: string;
-  accepted: boolean;
-  /** The role and sites decided, for an accepted request. */
-  roleLabel: string;
-  scope: string;
-  openUrl: string;
-}
-
 /** Tells the member how Chủ sở hữu decided their request (ADR-021). */
-export function accessDecisionEmail(input: AccessDecisionEmailInput): EmailContent {
-  const title = input.accepted
-    ? `Yêu cầu đổi quyền trong ${input.workspaceName} đã được chấp nhận`
-    : `Yêu cầu đổi quyền trong ${input.workspaceName} chưa được chấp nhận`;
-  const body = input.accepted
-    ? `Bạn là ${input.roleLabel} trên ${input.scope}. Quyền mới có hiệu lực ngay.`
+function accessDecision(data: AccessDecisionData): RenderedEmail {
+  const title = data.accepted
+    ? `Yêu cầu đổi quyền trong ${data.workspaceName} đã được chấp nhận`
+    : `Yêu cầu đổi quyền trong ${data.workspaceName} chưa được chấp nhận`;
+  const body = data.accepted
+    ? `Bạn là ${data.roleLabel} trên ${data.scope}. Quyền mới có hiệu lực ngay.`
     : 'Chủ sở hữu đã từ chối yêu cầu. Quyền của bạn giữ nguyên; bạn có thể gửi yêu cầu khác.';
   return {
     subject: title,
-    text: [body, '', input.openUrl].join('\n'),
-    html: layout(title, `${paragraph(body)}${button(input.openUrl, `Mở ${input.workspaceName}`)}`),
+    text: [body, '', data.openUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(data.openUrl, `Mở ${data.workspaceName}`)}`),
   };
+}
+
+/** The subject and both parts of an email, as SMTP sends it (ADR-018, ADR-023). */
+export function renderEmail(email: Email): RenderedEmail {
+  switch (email.template) {
+    case 'lead-notification':
+      return leadNotification(email.data);
+    case 'recipient-confirmation':
+      return recipientConfirmation(email.data);
+    case 'member-invitation':
+      return memberInvitation(email.data);
+    case 'access-request':
+      return accessRequest(email.data);
+    case 'access-decision':
+      return accessDecision(email.data);
+  }
 }

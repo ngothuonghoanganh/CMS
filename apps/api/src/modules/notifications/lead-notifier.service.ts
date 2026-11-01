@@ -19,7 +19,7 @@ import {
   STALE_SENDING_MS,
 } from './domain/notification-rules.js';
 import { type EmailDelivery, EmailSender, EmailSendError } from './email-sender.js';
-import { leadNotificationEmail } from './email-templates.js';
+import { leadNotificationEmail } from './emails.js';
 
 /** Injection token of the waits between attempts; tests shorten them. */
 export const NOTIFICATION_RETRY_DELAYS = Symbol('NOTIFICATION_RETRY_DELAYS');
@@ -214,6 +214,7 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
     // Pages cannot be deleted; an email still goes out if the data was edited by hand.
     const pageTitle = (await this.pages.findPublicTitle(lead.pageId)) ?? '(trang không còn)';
     const email = leadNotificationEmail({
+      leadId: lead._id.toHexString(),
       siteName: site.name,
       pageTitle,
       releaseVersion: lead.releaseVersion,

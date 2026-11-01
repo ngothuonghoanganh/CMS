@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "access-request",
+  "description": "Báo Chủ sở hữu rằng một thành viên xin vai trò khác; liên kết chỉ mở yêu cầu (ADR-021).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "requesterName", "requesterEmail", "currentRole", "requestedRole", "scope", "note", "reviewUrl"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "requesterName": { "type": "string", "minLength": 1 },
+    "requesterEmail": { "type": "string", "format": "email" },
+    "currentRole": { "type": "string", "minLength": 1 },
+    "requestedRole": { "type": "string", "minLength": 1 },
+    "scope": { "type": "string", "minLength": 1, "description": "\"toàn workspace\" hoặc \"các site hiện tại\"." },
+    "note": { "type": ["string", "null"], "description": "Lời nhắn của người xin; null khi không có." },
+    "reviewUrl": { "type": "string", "format": "http-url" }
+  }
+}

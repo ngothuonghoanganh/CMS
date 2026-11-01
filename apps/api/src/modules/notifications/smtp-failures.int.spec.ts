@@ -11,7 +11,7 @@ import {
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient, type TestClient } from '../../../test/client.js';
-import { testEnvInput } from '../../../test/env.js';
+import { testSmtpEnv } from '../../../test/env.js';
 import { createLiveFormPage, leadBody, submitLead } from '../../../test/leads.js';
 import {
   RecordingRevalidationClient,
@@ -27,13 +27,24 @@ import {
   type StubMessage,
   stubConfirmationToken,
 } from '../../../test/smtp-stub.js';
-import { parseEnv } from '../../config/env.js';
-import { EmailSendError } from './email-sender.js';
+import { type EmailMessage, EmailSendError } from './email-sender.js';
+import { recipientConfirmationEmail } from './emails.js';
 import { SmtpEmailSender } from './smtp-email-sender.js';
 
 /** Short enough for tests, long enough that a healthy local exchange never meets them. */
 const TIMEOUTS = { connectionTimeout: 500, greetingTimeout: 500, socketTimeout: 500 };
-const MESSAGE = { subject: 'Kiểm tra', text: 'Xin chào', html: '<p>Xin chào</p>' };
+const EMAIL = recipientConfirmationEmail({
+  recipientId: '6724f0c2a1b2c3d4e5f60789',
+  linkExpiresAt: new Date('2026-11-08T00:00:00.000Z'),
+  siteName: 'Kiểm tra',
+  invitedBy: 'Ngọc Anh',
+  confirmUrl: 'http://localhost:3100/lead-recipients/confirm#token=abc',
+  validDays: 7,
+});
+
+function message(...to: string[]): EmailMessage {
+  return { to, ...EMAIL };
+}
 
 function failureOf(promise: Promise<unknown>): Promise<unknown> {
   return promise.then(
@@ -49,14 +60,7 @@ describe('SmtpEmailSender against a failing server', () => {
 
   beforeAll(async () => {
     stub = await SmtpStub.start();
-    sender = new SmtpEmailSender(
-      parseEnv(
-        testEnvInput({
-          MONGODB_URI: 'mongodb://localhost:27117/unused',
-          SMTP_URL: stub.url(TIMEOUTS),
-        }),
-      ),
-    );
+    sender = new SmtpEmailSender(testSmtpEnv({ SMTP_URL: stub.url(TIMEOUTS) }));
   });
 
   afterEach(async () => {
@@ -72,7 +76,7 @@ describe('SmtpEmailSender against a failing server', () => {
 
   it('reports a refused connection as smtp_unavailable', async () => {
     await stub.stop();
-    const failure = await failureOf(sender.send({ to: ['a@example.com'], ...MESSAGE }));
+    const failure = await failureOf(sender.send(message('a@example.com')));
     expect(failure).toBeInstanceOf(EmailSendError);
     expect(failure).toMatchObject({
       code: 'smtp_unavailable',
@@ -82,12 +86,12 @@ describe('SmtpEmailSender against a failing server', () => {
 
   it('reports a server that never greets, or stops answering, as timeout', async () => {
     stub.mode = 'silent';
-    expect(await failureOf(sender.send({ to: ['a@example.com'], ...MESSAGE }))).toMatchObject({
+    expect(await failureOf(sender.send(message('a@example.com')))).toMatchObject({
       code: 'timeout',
       cause: { code: 'ETIMEDOUT' },
     });
     stub.mode = 'stall';
-    expect(await failureOf(sender.send({ to: ['a@example.com'], ...MESSAGE }))).toMatchObject({
+    expect(await failureOf(sender.send(message('a@example.com')))).toMatchObject({
       code: 'timeout',
       cause: { code: 'ETIMEDOUT' },
     });
@@ -96,14 +100,11 @@ describe('SmtpEmailSender against a failing server', () => {
 
   it('delivers to the addresses the server takes and reports a 550 for the others', async () => {
     stub.refuse('da-nghi@example.com');
-    const delivery = await sender.send({
-      to: ['nhan@example.com', 'da-nghi@example.com'],
-      ...MESSAGE,
-    });
+    const delivery = await sender.send(message('nhan@example.com', 'da-nghi@example.com'));
     expect(delivery).toEqual({ accepted: 1, rejected: 1, rejectionCode: 'smtp_rejected' });
     expect(stub.messages.map((message) => message.to)).toEqual([['nhan@example.com']]);
 
-    const failure = await failureOf(sender.send({ to: ['da-nghi@example.com'], ...MESSAGE }));
+    const failure = await failureOf(sender.send(message('da-nghi@example.com')));
     expect(failure).toMatchObject({
       code: 'smtp_rejected',
       cause: { code: 'EENVELOPE', responseCode: 550 },

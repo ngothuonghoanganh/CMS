@@ -1,17 +1,13 @@
 import type { LeadNotificationErrorCode } from '@plp/contracts';
+import type { KeyedEmail } from './emails.js';
 
-/** One email, in plain text and in HTML. */
-export interface EmailMessage {
-  to: readonly string[];
-  subject: string;
-  text: string;
-  html: string;
-}
+/** One email: who gets it, its template and data, and the key it is sent once by (ADR-023). */
+export type EmailMessage = KeyedEmail & { to: readonly string[] };
 
 /** Why an email was not sent, as a code logs and the inbox can show (ADR-018). */
 export type EmailErrorCode = Exclude<LeadNotificationErrorCode, 'no_recipients'>;
 
-/** What the SMTP server did with the addresses of a message it took. */
+/** What the server did with the addresses of a message it took. */
 export interface EmailDelivery {
   accepted: number;
   /** Refused one by one while the others were accepted, e.g. a mailbox that no longer exists. */
@@ -31,13 +27,13 @@ export class EmailSendError extends Error {
 }
 
 /**
- * Sends emails. An abstract class so it can be the injection token: SMTP in the app, a recording
- * sender in integration tests.
+ * Sends emails. An abstract class so it can be the injection token: SMTP or the plp-mailer queue in
+ * the app (`MAIL_TRANSPORT`), a recording sender in integration tests.
  */
 export abstract class EmailSender {
   /**
-   * Resolves once the server took the message for at least one address; rejects with
-   * `EmailSendError` when it took none.
+   * Resolves once the SMTP server took the message for at least one address, or the queue took
+   * it; rejects with `EmailSendError` when it took none.
    */
   abstract send(message: EmailMessage): Promise<EmailDelivery>;
 }

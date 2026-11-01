@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "access-decision",
+  "description": "Báo thành viên kết quả yêu cầu đổi quyền (ADR-021). roleLabel và scope là vai trò và site đã quyết, chỉ cần khi accepted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "accepted", "openUrl"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "accepted": { "type": "boolean" },
+    "roleLabel": { "type": "string", "minLength": 1 },
+    "scope": { "type": "string", "minLength": 1 },
+    "openUrl": { "type": "string", "format": "http-url" }
+  },
+  "if": { "properties": { "accepted": { "const": true } } },
+  "then": { "required": ["roleLabel", "scope"] }
+}

@@ -1,7 +1,6 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import { createTransport } from 'nodemailer';
-import type { Env } from '../../config/env.js';
-import { InjectEnv } from '../../shared/env.js';
+import type { SmtpMailEnv } from '../../config/env.js';
 import { smtpErrorCode } from './domain/notification-rules.js';
 import {
   type EmailDelivery,
@@ -9,16 +8,19 @@ import {
   EmailSender,
   EmailSendError,
 } from './email-sender.js';
+import { renderEmail } from './email-templates.js';
 
 /** A slow or silent server fails the attempt instead of holding it for minutes. */
 const TIMEOUTS = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 30_000 };
 
-/** Sends through the SMTP server of `SMTP_URL` (Mailpit in development and tests, ADR-018). */
-@Injectable()
+/**
+ * Renders each email here and sends it through the SMTP server of `SMTP_URL` (Mailpit in
+ * development and tests, ADR-018).
+ */
 export class SmtpEmailSender extends EmailSender implements OnModuleDestroy {
   private readonly transport;
 
-  constructor(@InjectEnv() env: Env) {
+  constructor(env: Pick<SmtpMailEnv, 'SMTP_URL' | 'LEAD_EMAIL_FROM'>) {
     super();
     this.transport = createTransport(
       { url: env.SMTP_URL, ...TIMEOUTS },
@@ -27,14 +29,10 @@ export class SmtpEmailSender extends EmailSender implements OnModuleDestroy {
   }
 
   async send(message: EmailMessage): Promise<EmailDelivery> {
+    const { subject, text, html } = renderEmail(message);
     let info;
     try {
-      info = await this.transport.sendMail({
-        to: [...message.to],
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-      });
+      info = await this.transport.sendMail({ to: [...message.to], subject, text, html });
     } catch (error) {
       throw new EmailSendError(smtpErrorCode(error), { cause: error });
     }

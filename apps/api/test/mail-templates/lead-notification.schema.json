@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lead-notification",
+  "description": "Báo lead mới cho các địa chỉ nhận lead đã xác nhận (ADR-018). Mọi giá trị đã được định dạng để hiển thị.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["siteName", "pageTitle", "releaseVersion", "lead", "leadUrl"],
+  "properties": {
+    "siteName": { "type": "string", "minLength": 1 },
+    "pageTitle": { "type": "string", "minLength": 1 },
+    "releaseVersion": { "type": "integer", "minimum": 1 },
+    "lead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "phone", "email", "message", "source", "createdAt"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "phone": { "type": "string", "minLength": 1, "description": "Đã định dạng, ví dụ \"0901 234 567\"." },
+        "email": { "type": ["string", "null"], "format": "email" },
+        "message": { "type": ["string", "null"] },
+        "source": { "type": "string", "minLength": 1, "description": "Nhãn nguồn, kèm chiến dịch nếu có: \"Facebook / ads-thang-11\"." },
+        "createdAt": { "type": "string", "minLength": 1, "description": "Giờ Việt Nam đã định dạng, ví dụ \"09:15 01/11/2026\"." }
+      }
+    },
+    "leadUrl": { "type": "string", "format": "http-url" }
+  }
+}

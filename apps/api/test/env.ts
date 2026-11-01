@@ -1,4 +1,4 @@
-import type { EnvInput } from '../src/config/env.js';
+import { type EnvInput, parseEnv, type SmtpMailEnv } from '../src/config/env.js';
 
 export const TEST_ADMIN_ORIGIN = 'http://localhost:3100';
 export const TEST_RENDERER_API_SECRET = 'test-renderer-api-secret-0123456789abcdef';
@@ -39,4 +39,15 @@ export function testEnvInput(
         : undefined;
   }
   return merged;
+}
+
+/** The SMTP settings of the test environment, for tests that build `SmtpEmailSender` themselves. */
+export function testSmtpEnv(overrides: Partial<EnvInput> = {}): SmtpMailEnv {
+  const env = parseEnv(
+    testEnvInput({ MONGODB_URI: 'mongodb://localhost:27117/unused', ...overrides }),
+  );
+  if (env.MAIL_TRANSPORT !== 'smtp') {
+    throw new Error(`The test environment sends through SMTP, not ${env.MAIL_TRANSPORT}`);
+  }
+  return env;
 }

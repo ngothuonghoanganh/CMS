@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "member-invitation",
+  "description": "Lời mời tham gia một workspace (ADR-021, board 15b).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceName", "invitedBy", "roleLabel", "scope", "acceptUrl", "validDays"],
+  "properties": {
+    "workspaceName": { "type": "string", "minLength": 1 },
+    "invitedBy": { "type": "string", "minLength": 1, "description": "Tên người mời, như admin hiển thị." },
+    "roleLabel": { "type": "string", "minLength": 1, "description": "Tên vai trò, ví dụ \"Biên tập viên\"." },
+    "scope": { "type": "string", "minLength": 1, "description": "\"toàn workspace\" hoặc các site, ví dụ \"site Nha khoa Smile Care\"." },
+    "acceptUrl": { "type": "string", "format": "http-url" },
+    "validDays": { "type": "integer", "minimum": 1 }
+  }
+}

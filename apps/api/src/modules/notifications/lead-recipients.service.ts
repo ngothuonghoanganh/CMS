@@ -32,7 +32,7 @@ import {
 } from './domain/notification-rules.js';
 import { EmailQuota, type QuotaUse } from './email-quota.js';
 import { EmailSender, EmailSendError } from './email-sender.js';
-import { recipientConfirmationEmail } from './email-templates.js';
+import { recipientConfirmationEmail } from './emails.js';
 import { toLeadRecipientDto } from './recipient-dto.js';
 
 export const RECIPIENT_NOT_FOUND = 'Không tìm thấy địa chỉ nhận lead';
@@ -90,6 +90,7 @@ export class LeadRecipientsService {
     const now = new Date();
     const invite = await this.countInvite(scope, site._id, email, now);
     const { token, tokenHash } = newConfirmationToken();
+    const link = { token, expiresAt: confirmationExpiry(now) };
     const recipient: LeadRecipientRecord = {
       _id: newObjectId(),
       email,
@@ -97,7 +98,7 @@ export class LeadRecipientsService {
       invitedAt: null,
       confirmedAt: null,
       tokenHash,
-      tokenExpiresAt: confirmationExpiry(now),
+      tokenExpiresAt: link.expiresAt,
     };
     await this.uncountedOnError(invite, () =>
       this.transactions.run(async (tx) => {
@@ -122,7 +123,7 @@ export class LeadRecipientsService {
         }
       }),
     );
-    const invitedAt = await this.sendConfirmation(scope, site, recipient, token, user.name);
+    const invitedAt = await this.sendConfirmation(scope, site, recipient, link, user.name);
     if (invitedAt === null) {
       await this.uncount(invite);
     }
@@ -157,7 +158,13 @@ export class LeadRecipientsService {
       throw notFound(RECIPIENT_NOT_FOUND);
     }
     const sent = { ...recipient, ...invite, invitedAt: null };
-    const invitedAt = await this.sendConfirmation(scope, site, sent, token, user.name);
+    const invitedAt = await this.sendConfirmation(
+      scope,
+      site,
+      sent,
+      { token, expiresAt: invite.tokenExpiresAt },
+      user.name,
+    );
     if (invitedAt === null) {
       await this.uncount(counted);
     }
@@ -226,13 +233,15 @@ export class LeadRecipientsService {
     scope: WorkspaceScope,
     site: SiteRecord,
     recipient: Pick<LeadRecipientRecord, '_id' | 'email'>,
-    token: string,
+    link: { token: string; expiresAt: Date },
     invitedBy: string,
   ): Promise<Date | null> {
     const email = recipientConfirmationEmail({
+      recipientId: recipient._id.toHexString(),
+      linkExpiresAt: link.expiresAt,
       siteName: site.name,
       invitedBy,
-      confirmUrl: `${this.env.ADMIN_ORIGIN}${RECIPIENT_CONFIRM_PATH}#token=${token}`,
+      confirmUrl: `${this.env.ADMIN_ORIGIN}${RECIPIENT_CONFIRM_PATH}#token=${link.token}`,
       validDays: RECIPIENT_CONFIRMATION_DAYS,
     });
     try {

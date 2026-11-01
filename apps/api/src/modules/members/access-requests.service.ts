@@ -18,7 +18,11 @@ import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { type UserContact, UsersRepository } from '../auth/users.repository.js';
 import { EmailQuota, type QuotaUse } from '../notifications/email-quota.js';
 import { EmailSender, EmailSendError, type EmailMessage } from '../notifications/email-sender.js';
-import { accessDecisionEmail, accessRequestEmail } from '../notifications/email-templates.js';
+import {
+  type AccessDecision,
+  accessDecisionEmail,
+  accessRequestEmail,
+} from '../notifications/emails.js';
 import type { AccessRequestRecord } from '../workspaces/access-request.schema.js';
 import { AccessRequestsRepository } from '../workspaces/access-requests.repository.js';
 import { AccessService } from '../workspaces/access.service.js';
@@ -182,7 +186,7 @@ export class AccessRequestsService {
     if (!contact) {
       throw new Error(`Member ${request.userId.toHexString()} has no account`);
     }
-    await this.notifyRequester(scope, contact, {
+    await this.notifyRequester(scope, request._id.toHexString(), contact, {
       accepted: true,
       roleLabel: roleLabels[grant.role],
       scope: await this.grants.scopeLine(scope, grant.siteIds),
@@ -199,7 +203,7 @@ export class AccessRequestsService {
     }
     const [contact] = await this.users.findContacts([request.userId]);
     if (contact) {
-      await this.notifyRequester(scope, contact, { accepted: false, roleLabel: '', scope: '' });
+      await this.notifyRequester(scope, request._id.toHexString(), contact, { accepted: false });
     }
   }
 
@@ -243,6 +247,7 @@ export class AccessRequestsService {
     return this.sendTo(scope, {
       to: [ownerContact.email],
       ...accessRequestEmail({
+        requestId: request._id.toHexString(),
         workspaceName: workspace.name,
         requesterName: requester.name,
         requesterEmail: requester.email,
@@ -257,13 +262,15 @@ export class AccessRequestsService {
 
   private async notifyRequester(
     scope: WorkspaceScope,
+    requestId: string,
     requester: UserContact,
-    decision: { accepted: boolean; roleLabel: string; scope: string },
+    decision: AccessDecision,
   ): Promise<void> {
     const workspace = await this.workspaces.findWorkspace(scope);
     await this.sendTo(scope, {
       to: [requester.email],
       ...accessDecisionEmail({
+        requestId,
         workspaceName: workspace?.name ?? '',
         ...decision,
         openUrl: `${this.env.ADMIN_ORIGIN}/`,
