@@ -50,6 +50,24 @@ test.describe('C2 · members and invitations', () => {
     await expect(page.getByRole('row', { name: new RegExp(invited) })).toContainText(
       'Hết hạn sau 7 ngày',
     );
+    // The filters of the members apply to the invitations too.
+    await page.getByLabel('Lọc theo vai trò').selectOption('viewer');
+    await expect(page.getByText('Không có lời mời nào khớp')).toBeVisible();
+    await page.getByLabel('Lọc theo vai trò').selectOption('support');
+    await expect(page.getByRole('row', { name: new RegExp(invited) })).toBeVisible();
+    await page.getByLabel('Lọc theo vai trò').selectOption('all');
+
+    // Invited again, that email and Chủ sở hữu's own are flagged at once: nothing to send.
+    await page.getByRole('button', { name: 'Mời thành viên' }).click();
+    const again = page.getByRole('dialog', { name: 'Mời thành viên' });
+    await again.getByLabel('Email').fill(`${invited.toUpperCase()}, ${account.email} `);
+    await expect(
+      again.getByRole('list', { name: 'Địa chỉ đã nhập' }).getByRole('listitem'),
+    ).toHaveText([`${invited} · Đang có lời mời`, `${account.email} · Đã là thành viên`]);
+    await expect(again.getByRole('button', { name: 'Gửi lời mời', exact: true })).toBeVisible();
+    await again.getByLabel('Email').press('Backspace');
+    await expect(again.getByRole('status')).toHaveText(`Đã bỏ ${account.email}.`);
+    await again.getByRole('button', { name: 'Hủy' }).click();
 
     // The invited person signs up from the email, straight into the workspace.
     const email = await waitForEmail(request, invited, 'mời bạn vào Mây Xanh Agency');
@@ -61,6 +79,11 @@ test.describe('C2 · members and invitations', () => {
         memberPage.getByRole('heading', { level: 1, name: 'Tạo tài khoản để tham gia' }),
       ).toBeVisible();
       await expect(memberPage.getByLabel('Email')).toHaveValue(invited);
+      await expect(
+        memberPage.getByText(
+          'Không biết người mời? Bạn có thể bỏ qua email này. Lời mời tự hết hạn sau 7 ngày.',
+        ),
+      ).toBeVisible();
       await memberPage.getByLabel('Họ và tên').fill('Thu Hà');
       await memberPage.getByLabel('Mật khẩu').fill('MatKhau-e2e-an-toan-2026');
       await memberPage.getByRole('button', { name: 'Tạo tài khoản và tham gia' }).click();
@@ -105,6 +128,10 @@ test.describe('C2 · members and invitations', () => {
       await page.getByRole('button', { name: 'Đổi quyền của Thu Hà' }).click();
       const change = page.getByRole('dialog', { name: 'Quyền của Thu Hà' });
       await change.getByLabel('Vai trò').selectOption('admin');
+      await expect(change.getByText('Tóm tắt thay đổi')).toBeVisible();
+      await expect(change).toContainText(
+        'Đổi vai trò Biên tập → Quản trị. Thêm quyền Quản trị trên toàn workspace, gồm site tạo sau này.',
+      );
       await change.getByRole('button', { name: 'Lưu quyền' }).click();
       await expect(page.getByRole('row', { name: /Thu Hà/ })).toContainText('Quản trị');
       await page.getByRole('button', { name: 'Chuyển quyền sở hữu' }).click();

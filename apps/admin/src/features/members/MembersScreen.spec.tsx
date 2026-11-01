@@ -291,6 +291,65 @@ describe('MembersScreen', () => {
     ).toEqual([expect.stringContaining('Quốc Bảo')]);
   });
 
+  it('filters the pending invitations by role, site and email too (ADR-021)', async () => {
+    const user = userEvent.setup();
+    const other: Invitation = {
+      ...invitation,
+      id: '64b0000000000000000000d2',
+      email: 'binh@smilecare.vn',
+      role: 'editor',
+      siteIds: [smile.id],
+    };
+    const served = apiMock.getMockImplementation();
+    apiMock.mockImplementation((endpoint, ...rest) =>
+      endpoint === endpoints.listInvitations
+        ? Promise.resolve({ items: [invitation, other] })
+        : (served?.(endpoint, ...rest) ?? Promise.reject(new Error('unexpected call'))),
+    );
+    renderScreen({ initialInvitations: { items: [invitation, other] } });
+    await user.click(screen.getByRole('button', { name: /Lời mời đang chờ · 2/ }));
+    const shown = () =>
+      screen
+        .getAllByRole('row')
+        .slice(1)
+        .map((row) => within(row).getByRole('rowheader').textContent);
+
+    await user.selectOptions(screen.getByLabelText('Lọc theo vai trò'), 'editor');
+    expect(shown()).toEqual([expect.stringContaining('binh@smilecare.vn')]);
+    await user.selectOptions(screen.getByLabelText('Lọc theo vai trò'), 'all');
+    await user.selectOptions(screen.getByLabelText('Lọc theo site'), kitchen.id);
+    expect(shown()).toEqual([expect.stringContaining('an.tran@bepnhamay.vn')]);
+    await user.selectOptions(screen.getByLabelText('Lọc theo site'), 'all');
+    await user.type(screen.getByLabelText('Tìm thành viên'), 'BINH');
+    expect(shown()).toEqual([expect.stringContaining('binh@smilecare.vn')]);
+    await user.type(screen.getByLabelText('Tìm thành viên'), '-khong-co');
+    expect(screen.getByText('Không có lời mời nào khớp')).toBeInTheDocument();
+    // The tab still counts every pending invitation.
+    expect(screen.getByRole('button', { name: /Lời mời đang chờ · 2/ })).toBeInTheDocument();
+  });
+
+  it('sums up the change of role and sites before saving (ADR-021)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Đổi quyền của Minh Khoa' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Quyền của Minh Khoa' });
+    const summary = (): HTMLElement => {
+      const text = within(dialog).getByText('Tóm tắt thay đổi').nextElementSibling;
+      if (!(text instanceof HTMLElement)) {
+        throw new Error('missing summary');
+      }
+      return text;
+    };
+    expect(summary()).toHaveTextContent('Chưa có thay đổi.');
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Bếp Nhà Mây' }));
+    expect(summary()).toHaveTextContent('Gỡ quyền trên Bếp Nhà Mây.');
+    await user.selectOptions(within(dialog).getByLabelText('Vai trò'), 'viewer');
+    expect(summary()).toHaveTextContent(
+      'Đổi vai trò Biên tập → Chỉ xem. Gỡ quyền trên Bếp Nhà Mây.',
+    );
+    expect(within(summary()).getByText('Bếp Nhà Mây').tagName).toBe('STRONG');
+  });
+
   it('opens the request of the email, and accepts it with the sites decided', async () => {
     const user = userEvent.setup();
     renderScreen({ openRequestId: request.id });
@@ -312,11 +371,14 @@ describe('MembersScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
     const dialog = await screen.findByRole('dialog', { name: 'Mời thành viên' });
     await user.type(within(dialog).getByLabelText('Email'), 'Thuy@smilecare.vn, khong-hop-le');
-    await user.click(within(dialog).getByRole('button', { name: 'Gửi 2 lời mời' }));
+    // The invalid email is not counted, and nothing is sent until it is fixed or removed.
+    await user.click(within(dialog).getByRole('button', { name: 'Gửi 1 lời mời' }));
     expect(within(dialog).getByText('Email không hợp lệ: khong-hop-le')).toBeInTheDocument();
+    expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).not.toContain(
+      endpoints.createInvitations,
+    );
 
-    await user.clear(within(dialog).getByLabelText('Email'));
-    await user.type(within(dialog).getByLabelText('Email'), 'thuy@smilecare.vn');
+    await user.click(within(dialog).getByRole('button', { name: 'Bỏ khong-hop-le' }));
     await user.click(within(dialog).getByRole('radio', { name: /Chăm sóc khách hàng/ }));
     expect(dialog).toHaveTextContent('Chăm sóc khách hàng được');
     await user.click(within(dialog).getByRole('checkbox', { name: 'Nha khoa Smile Care' }));
@@ -331,6 +393,76 @@ describe('MembersScreen', () => {
       options: { body: { emails: ['thuy@smilecare.vn'], role: 'support', siteIds: [smile.id] } },
     });
     expect(await screen.findByText('Đã gửi 1 lời mời')).toBeInTheDocument();
+  });
+
+  it('makes chips of the emails, telling at once who needs no invitation (ADR-021)', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mời thành viên' });
+    const input = within(dialog).getByLabelText('Email');
+    const chips = () =>
+      within(within(dialog).getByRole('list', { name: 'Địa chỉ đã nhập' }))
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent);
+
+    // A space, Enter and a comma each end an email; case does not hide a member.
+    await user.type(input, 'Khoa@MayXanh.vn an.tran@bepnhamay.vn{Enter}thuy@smilecare.vn,');
+    expect(chips()).toEqual([
+      'khoa@mayxanh.vn · Đã là thành viên',
+      'an.tran@bepnhamay.vn · Đang có lời mời',
+      'thuy@smilecare.vn',
+    ]);
+    expect(input).toHaveValue('');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Đã thêm thuy@smilecare.vn.');
+    expect(within(dialog).getByRole('button', { name: 'Gửi 1 lời mời' })).toBeInTheDocument();
+
+    // Backspace in the empty input removes the last chip; its button removes any.
+    await user.keyboard('{Backspace}');
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Đã bỏ thuy@smilecare.vn.');
+    expect(within(dialog).getByRole('button', { name: 'Gửi lời mời' })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Bỏ khoa@mayxanh.vn' }));
+    expect(input).toHaveFocus();
+    expect(chips()).toEqual(['an.tran@bepnhamay.vn · Đang có lời mời']);
+
+    // A pasted list is made into chips at once, the last email included.
+    await user.paste('le@spalaxanh.vn; khong-hop-le');
+    expect(chips()).toEqual([
+      'an.tran@bepnhamay.vn · Đang có lời mời',
+      'le@spalaxanh.vn',
+      'khong-hop-le · Email không hợp lệ',
+    ]);
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Đã thêm le@spalaxanh.vn, khong-hop-le (Email không hợp lệ).',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Bỏ khong-hop-le' }));
+
+    // Only the email that may be invited is sent; the API still decides.
+    await user.click(within(dialog).getByRole('radio', { name: /Toàn workspace/ }));
+    apiMock.mockImplementation((endpoint) =>
+      endpoint === endpoints.createInvitations
+        ? Promise.resolve({ results: [{ email: 'le@spalaxanh.vn', outcome: 'sent' }] })
+        : Promise.resolve(endpoint === endpoints.listMembers ? members : { items: [] }),
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Gửi 1 lời mời' }));
+    expect(lastCallTo(apiMock, endpoints.createInvitations).options).toEqual({
+      body: { emails: ['le@spalaxanh.vn'], role: 'editor', siteIds: null },
+    });
+  });
+
+  it('sends nothing when every email is a member or invited already', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(screen.getByRole('button', { name: 'Mời thành viên' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mời thành viên' });
+    await user.type(within(dialog).getByLabelText('Email'), 'bao@mayxanh.vn');
+    await user.click(within(dialog).getByRole('button', { name: 'Gửi lời mời' }));
+    expect(
+      within(dialog).getByText('Các email này đã là thành viên hoặc đang có lời mời'),
+    ).toBeInTheDocument();
+    expect(apiMock.mock.calls.map(([endpoint]) => endpoint)).not.toContain(
+      endpoints.createInvitations,
+    );
   });
 
   it('invites with a custom role, given on every site when set to it (ADR-024)', async () => {
@@ -406,7 +538,7 @@ describe('MembersScreen', () => {
         'Vai trò đã chọn không còn trong workspace. Chọn một vai trò khác.',
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole('button', { name: /^Gửi \d+ lời mời$/ })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Gửi lời mời' })).toBeDisabled();
   });
 
   it('shows the invitations with how long they still work, and no requests to a Quản trị', async () => {
