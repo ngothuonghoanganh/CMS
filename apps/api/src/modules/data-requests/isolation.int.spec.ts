@@ -26,6 +26,7 @@ describe('workspace isolation of data requests', () => {
   let requestId: string;
   let leadId: string;
   let ownerB: TestClient;
+  let siteB: Site;
 
   beforeAll(async () => {
     t = await createTestApp(
@@ -58,7 +59,9 @@ describe('workspace isolation of data requests', () => {
       })
       .expect(201);
     requestId = dataRequestDetailSchema.parse(created.body).id;
-    ownerB = (await signedUpClient(t.app)).client;
+    const b = await signedUpClient(t.app);
+    ownerB = b.client;
+    siteB = await createSite(ownerB, b.workspaceId);
   });
 
   afterAll(async () => {
@@ -83,29 +86,38 @@ describe('workspace isolation of data requests', () => {
     );
   });
 
+  // Through site A, whose workspace B is not a member of, and through B's own site, whose
+  // workspace database does not hold them (ADR-025).
   it('refuses to read or handle a request of site A', async () => {
-    await expectNotFound(ownerB.get(`/data-requests/${requestId}`));
-    await expectNotFound(ownerB.post(`/data-requests/${requestId}/respond`));
-    await expectNotFound(ownerB.post(`/data-requests/${requestId}/export`, { format: 'json' }));
-    await expectNotFound(ownerB.post(`/data-requests/${requestId}/complete`));
+    for (const siteId of [siteA.id, siteB.id]) {
+      const request = `/sites/${siteId}/data-requests/${requestId}`;
+      await expectNotFound(ownerB.get(request));
+      await expectNotFound(ownerB.post(`${request}/respond`));
+      await expectNotFound(ownerB.post(`${request}/export`, { format: 'json' }));
+      await expectNotFound(ownerB.post(`${request}/complete`));
+    }
   });
 
   it('refuses to correct a lead of site A', async () => {
-    await expectNotFound(
-      ownerB.patch(`/leads/${leadId}/contact`, {
-        name: 'Chen Ngang',
-        phone: '0909 000 111',
-        email: '',
-      }),
-    );
+    for (const siteId of [siteA.id, siteB.id]) {
+      await expectNotFound(
+        ownerB.patch(`/sites/${siteId}/leads/${leadId}/contact`, {
+          name: 'Chen Ngang',
+          phone: '0909 000 111',
+          email: '',
+        }),
+      );
+    }
   });
 
   it('leaves the request and the lead of site A untouched', async () => {
     const request = dataRequestDetailSchema.parse(
-      (await ownerA.get(`/data-requests/${requestId}`).expect(200)).body,
+      (await ownerA.get(`/sites/${siteA.id}/data-requests/${requestId}`).expect(200)).body,
     );
     expect(request).toMatchObject({ status: 'open', leads: { count: 1, capped: false } });
-    const lead = leadDetailSchema.parse((await ownerA.get(`/leads/${leadId}`).expect(200)).body);
+    const lead = leadDetailSchema.parse(
+      (await ownerA.get(`/sites/${siteA.id}/leads/${leadId}`).expect(200)).body,
+    );
     expect(lead).toMatchObject({ name: 'Lê Mai Anh', phone: '+84987106223' });
   });
 });

@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import type {
   InstantWindow,
   LeadNotificationErrorCode,
@@ -21,11 +20,15 @@ import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { LeadCriteria } from './domain/lead-filters.js';
 import { type LeadQuery, type LeadSearchKeys, leadSearchKeys } from './domain/lead-search.js';
 import {
-  LEAD_MODEL,
+  LEAD_COLLECTION,
   type LeadNotificationRecord,
   type LeadRecord,
   LEADS_SUBMISSION_INDEX,
 } from './lead.schema.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 export type NewLead = Omit<
   LeadRecord,
@@ -142,9 +145,14 @@ function personFilter(person: LeadPerson): QueryFilter<LeadRecord> {
   return clauses.length === 0 ? { _id: { $in: [] } } : { $or: clauses };
 }
 
+/** A lead the background sender works on, with the workspace whose database holds it (ADR-025). */
+export interface LeadRef extends WorkspaceRef {
+  readonly leadId: ObjectId;
+}
+
 @Injectable()
 export class LeadsRepository {
-  constructor(@InjectModel(LEAD_MODEL) private readonly leads: Model<LeadRecord>) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   /**
    * Stores a visitor's lead. Public intake has no member scope: the workspace comes from the site
@@ -155,7 +163,7 @@ export class LeadsRepository {
     lead: NewLead,
   ): Promise<LeadRecord> {
     try {
-      const created = await this.leads.create({
+      const created = await this.leads(site).create({
         ...lead,
         workspaceId: site.workspaceId,
         siteId: site._id,
@@ -173,8 +181,10 @@ export class LeadsRepository {
   }
 
   /** Corrects the expiry of a lead the public intake just stored (see `LeadIntakeService`). */
-  async setPublicExpiry(id: ObjectId, expiresAt: Date | null): Promise<void> {
-    await this.leads.updateOne({ _id: id }, { $set: { expiresAt } }).exec();
+  async setPublicExpiry(ref: WorkspaceRef, id: ObjectId, expiresAt: Date | null): Promise<void> {
+    await this.leads(ref)
+      .updateOne({ _id: id, workspaceId: ref.workspaceId }, { $set: { expiresAt } })
+      .exec();
   }
 
   /**
@@ -184,9 +194,17 @@ export class LeadsRepository {
    * plan: the planner's trial can tie this index with `siteId, createdAt`, and a plan cached from
    * that reads every lead of the site. The index exists before the API serves (`IndexBuilder`).
    */
-  async existsPublicSubmission(siteId: ObjectId, submissionId: string): Promise<boolean> {
-    const found = await this.leads
-      .exists({ siteId, submissionId: { $eq: submissionId, $type: 'string' } })
+  async existsPublicSubmission(
+    ref: WorkspaceRef,
+    siteId: ObjectId,
+    submissionId: string,
+  ): Promise<boolean> {
+    const found = await this.leads(ref)
+      .exists({
+        workspaceId: ref.workspaceId,
+        siteId,
+        submissionId: { $eq: submissionId, $type: 'string' },
+      })
       .hint(LEADS_SUBMISSION_INDEX)
       .exec();
     return found !== null;
@@ -205,24 +223,15 @@ export class LeadsRepository {
       months === null
         ? null
         : { $dateAdd: { startDate: '$createdAt', unit: 'month', amount: months } };
-    await this.leads
+    await this.leads(scope)
       .updateMany({ siteId, workspaceId: scope.workspaceId }, [{ $set: { expiresAt } }], {
         updatePipeline: true,
       })
       .exec();
   }
 
-  /** Unscoped lookup by id that only returns where the lead lives, for access checks. */
-  async findAccessRef(id: ObjectId): Promise<LeadAccessRef | null> {
-    const lead = await this.leads
-      .findById(id, { workspaceId: 1, siteId: 1 })
-      .lean<Pick<LeadRecord, '_id' | 'workspaceId' | 'siteId'>>()
-      .exec();
-    return lead ? { id: lead._id, workspaceId: lead.workspaceId, siteId: lead.siteId } : null;
-  }
-
   findById(scope: WorkspaceScope, id: ObjectId): Promise<LeadRecord | null> {
-    return this.leads
+    return this.leads(scope)
       .findOne({ _id: id, workspaceId: scope.workspaceId })
       .lean<LeadRecord>()
       .exec();
@@ -236,7 +245,7 @@ export class LeadsRepository {
     cursor: string | undefined,
     limit: number,
   ): Promise<KeysetPage<LeadListRow>> {
-    const records = await this.leads
+    const records = await this.leads(scope)
       .find({ $and: [this.criteriaFilter(scope, siteId, criteria), afterCursor(cursor)] })
       .select(LIST_PROJECTION)
       .sort(NEWEST_FIRST)
@@ -257,7 +266,7 @@ export class LeadsRepository {
     limit: number,
     until?: Date,
   ): Promise<number> {
-    return this.leads
+    return this.leads(scope)
       .countDocuments(this.criteriaFilter(scope, siteId, criteria, until), { limit })
       .exec();
   }
@@ -273,7 +282,7 @@ export class LeadsRepository {
     until: Date,
     limit: number,
   ): AsyncGenerator<LeadRecord> {
-    const cursor = this.leads
+    const cursor = this.leads(scope)
       .find(this.criteriaFilter(scope, siteId, criteria, until))
       .sort(NEWEST_FIRST)
       .limit(limit)
@@ -299,7 +308,7 @@ export class LeadsRepository {
     siteId: ObjectId,
     since: Date,
   ): Promise<Map<string, number>> {
-    const groups = await this.leads
+    const groups = await this.leads(scope)
       .aggregate<{ _id: ObjectId; count: number }>([
         {
           $match: {
@@ -327,7 +336,7 @@ export class LeadsRepository {
     window: InstantWindow,
     currentFrom: Date,
   ): Promise<LeadAnalyticsRows> {
-    const [result] = await this.leads
+    const [result] = await this.leads(scope)
       .aggregate<{
         daily: Array<{ _id: VnDay; leads: number }>;
         sources: Array<{ _id: { source: string; medium: string }; leads: number }>;
@@ -384,7 +393,7 @@ export class LeadsRepository {
 
   /** Applies inbox changes and returns the lead as it is now; null when it no longer exists. */
   update(scope: WorkspaceScope, id: ObjectId, changes: LeadChanges): Promise<LeadRecord | null> {
-    return this.leads
+    return this.leads(scope)
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId },
         {
@@ -402,13 +411,13 @@ export class LeadsRepository {
 
   /**
    * Takes a pending notification for one attempt and counts it. Unscoped: the sender runs in the
-   * background. Null when the notification is not pending: already sent or failed, or another
-   * instance of the API took it first (ADR-018).
+   * background, with the workspace of the lead it was given. Null when the notification is not
+   * pending: already sent or failed, or another instance of the API took it first (ADR-018).
    */
-  claimNotification(leadId: ObjectId, now: Date): Promise<LeadRecord | null> {
-    return this.leads
+  claimNotification(lead: LeadRef, now: Date): Promise<LeadRecord | null> {
+    return this.leads(lead)
       .findOneAndUpdate(
-        { _id: leadId, 'notification.status': 'pending' },
+        { _id: lead.leadId, workspaceId: lead.workspaceId, 'notification.status': 'pending' },
         {
           $set: { 'notification.status': 'sending', 'notification.updatedAt': now },
           $inc: { 'notification.attempts': 1 },
@@ -424,13 +433,18 @@ export class LeadsRepository {
    * so an attempt the startup sweep gave to someone else cannot overwrite theirs.
    */
   async finishNotification(
-    leadId: ObjectId,
+    lead: LeadRef,
     attempts: number,
     outcome: NotificationOutcome,
   ): Promise<void> {
-    await this.leads
+    await this.leads(lead)
       .updateOne(
-        { _id: leadId, 'notification.status': 'sending', 'notification.attempts': attempts },
+        {
+          _id: lead.leadId,
+          workspaceId: lead.workspaceId,
+          'notification.status': 'sending',
+          'notification.attempts': attempts,
+        },
         {
           $set: {
             'notification.status': outcome.status,
@@ -446,13 +460,19 @@ export class LeadsRepository {
   }
 
   /**
-   * Notifications waiting for an attempt, and those whose sender stopped mid-way (`sending`
-   * since before `staleBefore`), oldest first: the backlog an API instance takes on at startup.
+   * Notifications of one workspace waiting for an attempt, and those whose sender stopped mid-way
+   * (`sending` since before `staleBefore`), oldest first: the backlog an API instance takes on at
+   * startup.
    */
-  findNotificationBacklog(staleBefore: Date, limit: number): Promise<NotificationBacklogRow[]> {
-    return this.leads
+  findNotificationBacklog(
+    ref: WorkspaceRef,
+    staleBefore: Date,
+    limit: number,
+  ): Promise<NotificationBacklogRow[]> {
+    return this.leads(ref)
       .find(
         {
+          workspaceId: ref.workspaceId,
           $or: [
             { 'notification.status': 'pending' },
             { 'notification.status': 'sending', 'notification.updatedAt': { $lt: staleBefore } },
@@ -467,11 +487,12 @@ export class LeadsRepository {
   }
 
   /** Puts a notification whose sender stopped back in the queue; false when it moved on. */
-  async requeueStaleNotification(leadId: ObjectId, staleBefore: Date): Promise<boolean> {
-    const result = await this.leads
+  async requeueStaleNotification(lead: LeadRef, staleBefore: Date): Promise<boolean> {
+    const result = await this.leads(lead)
       .updateOne(
         {
-          _id: leadId,
+          _id: lead.leadId,
+          workspaceId: lead.workspaceId,
           'notification.status': 'sending',
           'notification.updatedAt': { $lt: staleBefore },
         },
@@ -490,7 +511,7 @@ export class LeadsRepository {
     leadId: ObjectId,
     now: Date,
   ): Promise<LeadRecord | null> {
-    return this.leads
+    return this.leads(scope)
       .findOneAndUpdate(
         {
           _id: leadId,
@@ -527,13 +548,13 @@ export class LeadsRepository {
     if (people.length === 0) {
       return [];
     }
-    const counted = await this.leads
+    const counted = await this.leads(scope)
       .aggregate<{ person: number; count: number }>([
         // Starts from nothing; each person's count is unioned in.
         { $match: { _id: { $in: [] } } },
         ...people.map((person, index) => ({
           $unionWith: {
-            coll: this.leads.collection.collectionName,
+            coll: this.leads(scope).collection.collectionName,
             pipeline: [
               { $match: { workspaceId: scope.workspaceId, siteId, ...personFilter(person) } },
               { $limit: limit },
@@ -556,7 +577,7 @@ export class LeadsRepository {
     person: LeadPerson,
     limit: number,
   ): Promise<number> {
-    return this.leads
+    return this.leads(scope)
       .countDocuments(
         { workspaceId: scope.workspaceId, siteId, ...personFilter(person) },
         { limit },
@@ -571,7 +592,7 @@ export class LeadsRepository {
     person: LeadPerson,
     limit: number,
   ): Promise<LeadRecord[]> {
-    return this.leads
+    return this.leads(scope)
       .find({ workspaceId: scope.workspaceId, siteId, ...personFilter(person) })
       .sort(NEWEST_FIRST)
       .limit(limit)
@@ -590,7 +611,7 @@ export class LeadsRepository {
     at: Date,
     tx: Tx,
   ): Promise<number> {
-    const result = await this.leads
+    const result = await this.leads(scope)
       .updateMany(
         {
           workspaceId: scope.workspaceId,
@@ -615,7 +636,7 @@ export class LeadsRepository {
     id: ObjectId,
     contact: LeadContact,
   ): Promise<LeadRecord | null> {
-    return this.leads
+    return this.leads(scope)
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId },
         {
@@ -639,7 +660,7 @@ export class LeadsRepository {
     person: LeadPerson,
     tx: Tx,
   ): Promise<number> {
-    const result = await this.leads
+    const result = await this.leads(scope)
       .deleteMany({ workspaceId: scope.workspaceId, siteId, ...personFilter(person) })
       .session(tx)
       .exec();
@@ -667,5 +688,9 @@ export class LeadsRepository {
       ...(Object.keys(createdAt).length === 0 ? {} : { createdAt }),
       ...(criteria.search === null ? {} : searchFilter(criteria.search)),
     };
+  }
+
+  private leads(ref: WorkspaceRef): Model<LeadRecord> {
+    return this.databases.model(ref, LEAD_COLLECTION);
   }
 }

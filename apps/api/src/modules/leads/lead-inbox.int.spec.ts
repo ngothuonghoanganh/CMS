@@ -69,10 +69,11 @@ describe('lead inbox', () => {
     const page = await createPage(owner, site.id, { title, slug });
     await replaceDraft(
       owner,
+      site.id,
       page.page.id,
       formDraft(slug, leadFormSection({ showEmail: true, showMessage: true })),
     );
-    const published = await publish(owner, page.page.id);
+    const published = await publish(owner, site.id, page.page.id);
     return { pageId: page.page.id, releaseId: published.release.id };
   }
 
@@ -113,8 +114,8 @@ describe('lead inbox', () => {
     return leadListResponseSchema.parse(response.body);
   }
 
-  async function detail(leadId: string, client = owner): Promise<LeadDetail> {
-    const response = await client.get(`/leads/${leadId}`).expect(200);
+  async function detail(site: Site, leadId: string, client = owner): Promise<LeadDetail> {
+    const response = await client.get(`/sites/${site.id}/leads/${leadId}`).expect(200);
     return leadDetailSchema.parse(response.body);
   }
 
@@ -186,7 +187,9 @@ describe('lead inbox', () => {
     await send(site, other.releaseId, { name: 'Trần Quốc Bảo', phone: '0938 512 840' });
     await send(site, releaseId, { name: 'Lê Mai Anh', phone: '+84 987 106 223' });
     const all = await inbox(site);
-    await owner.patch(`/leads/${leadIdOf(all, 'Lê Mai Anh')}`, { status: 'contacted' }).expect(200);
+    await owner
+      .patch(`/sites/${site.id}/leads/${leadIdOf(all, 'Lê Mai Anh')}`, { status: 'contacted' })
+      .expect(200);
 
     expect(names(await inbox(site, `?pageId=${other.pageId}`))).toEqual(['Trần Quốc Bảo']);
     expect(names(await inbox(site, '?status=contacted'))).toEqual(['Lê Mai Anh']);
@@ -283,7 +286,9 @@ describe('lead inbox', () => {
       storedLead({ ...old, name: 'Cũ', createdAt: new Date(Date.now() - 20 * DAY_MS) }),
     ]);
     await owner
-      .patch(`/leads/${leadIdOf(await inbox(site), 'Trần Quốc Bảo')}`, { status: 'scheduled' })
+      .patch(`/sites/${site.id}/leads/${leadIdOf(await inbox(site), 'Trần Quốc Bảo')}`, {
+        status: 'scheduled',
+      })
       .expect(200);
 
     const response = await owner.get(`/sites/${site.id}/lead-counts`).expect(200);
@@ -311,7 +316,7 @@ describe('lead inbox', () => {
     const { site, pageId } = await inboxSite();
     // Release v2 still carries consent text v1: the evidence must name the consent version, not
     // the release.
-    const releaseId = (await publish(owner, pageId)).release.id;
+    const releaseId = (await publish(owner, site.id, pageId)).release.id;
     await send(site, releaseId, {
       name: 'Nguyễn Thu Hà',
       email: 'thuha@example.com',
@@ -326,7 +331,7 @@ describe('lead inbox', () => {
     await send(site, releaseId, { name: 'Trần Quốc Bảo', phone: '0938 512 840' });
     const first = leadIdOf(await inbox(site), 'Nguyễn Thu Hà');
 
-    const lead = await detail(first);
+    const lead = await detail(site, first);
     expect(lead).toMatchObject({
       name: 'Nguyễn Thu Hà',
       phone: '+84901234567',
@@ -354,22 +359,22 @@ describe('lead inbox', () => {
 
     // A new consent text, published again: older leads keep the text their visitor agreed to.
     await saveConsentVersion(owner, site.id, 1, { requiredText: 'Bản 2 của {Tên doanh nghiệp}.' });
-    const republished = await publish(owner, pageId);
+    const republished = await publish(owner, site.id, pageId);
     await send(site, republished.release.id, { name: 'Võ Ngọc Trâm', phone: '0703 285 664' });
-    const newer = await detail(leadIdOf(await inbox(site), 'Võ Ngọc Trâm'));
+    const newer = await detail(site, leadIdOf(await inbox(site), 'Võ Ngọc Trâm'));
     expect(newer.consent).toMatchObject({
       version: 2,
       requiredText: `Bản 2 của ${PRIVACY_SETTINGS.controllerName}.`,
     });
     expect(newer.releaseVersion).toBe(3);
-    expect(await detail(first)).toMatchObject({ releaseVersion: 2, consent: { version: 1 } });
+    expect(await detail(site, first)).toMatchObject({ releaseVersion: 2, consent: { version: 1 } });
   });
 
   it('answers a lead with no-store, as every response holding personal data', async () => {
     const { site, releaseId } = await inboxSite();
     await send(site, releaseId, { name: 'Nguyễn Thu Hà' });
     const leadId = leadIdOf(await inbox(site), 'Nguyễn Thu Hà');
-    const response = await owner.get(`/leads/${leadId}`).expect(200);
+    const response = await owner.get(`/sites/${site.id}/leads/${leadId}`).expect(200);
     expect(response.headers['cache-control']).toBe('no-store');
   });
 
@@ -379,29 +384,33 @@ describe('lead inbox', () => {
     const leadId = leadIdOf(await inbox(site), 'Nguyễn Thu Hà');
     const support = (await addMember(t, workspaceId, 'support')).client;
 
-    const status = await owner.patch(`/leads/${leadId}`, { status: 'scheduled' }).expect(200);
+    const status = await owner
+      .patch(`/sites/${site.id}/leads/${leadId}`, { status: 'scheduled' })
+      .expect(200);
     expect(status.headers['cache-control']).toBe('no-store');
     expect(leadDetailSchema.parse(status.body).status).toBe('scheduled');
     const noted = await support
-      .patch(`/leads/${leadId}`, { note: '  hẹn gọi lại sau 18h ' })
+      .patch(`/sites/${site.id}/leads/${leadId}`, { note: '  hẹn gọi lại sau 18h ' })
       .expect(200);
     expect(leadDetailSchema.parse(noted.body)).toMatchObject({
       status: 'scheduled',
       note: 'hẹn gọi lại sau 18h',
     });
-    expect((await detail(leadId, support)).note).toBe('hẹn gọi lại sau 18h');
+    expect((await detail(site, leadId, support)).note).toBe('hẹn gọi lại sau 18h');
 
-    await support.patch(`/leads/${leadId}`, { spam: true }).expect(200);
+    await support.patch(`/sites/${site.id}/leads/${leadId}`, { spam: true }).expect(200);
     expect(names(await inbox(site))).toEqual([]);
     expect(names(await inbox(site, '?folder=spam', support))).toEqual(['Nguyễn Thu Hà']);
-    await owner.patch(`/leads/${leadId}`, { spam: false }).expect(200);
+    await owner.patch(`/sites/${site.id}/leads/${leadId}`, { spam: false }).expect(200);
     expect(names(await inbox(site))).toEqual(['Nguyễn Thu Hà']);
 
     for (const body of [{}, { status: 'lost' }, { note: 'a'.repeat(1001) }, { spam: 'yes' }]) {
-      await owner.patch(`/leads/${leadId}`, body).expect(422);
+      await owner.patch(`/sites/${site.id}/leads/${leadId}`, body).expect(422);
     }
-    await owner.patch('/leads/64b0000000000000000000a1', { status: 'won' }).expect(404);
-    await owner.patch('/leads/not-an-id', { status: 'won' }).expect(404);
+    await owner
+      .patch(`/sites/${site.id}/leads/64b0000000000000000000a1`, { status: 'won' })
+      .expect(404);
+    await owner.patch(`/sites/${site.id}/leads/not-an-id`, { status: 'won' }).expect(404);
   });
 
   it('counts leads of the last 7 days on each row of the page list, spam excluded', async () => {

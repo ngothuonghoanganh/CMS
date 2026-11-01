@@ -1,4 +1,5 @@
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const REDIRECT_MODEL = 'Redirect';
 export const REDIRECTS_FROM_SLUG_INDEX = 'redirects_site_from_slug_unique';
@@ -32,3 +33,6 @@ export const redirectSchema = new Schema<RedirectRecord>(
   { collection: 'redirects', versionKey: false },
 );
 redirectSchema.index({ siteId: 1, fromSlug: 1 }, { unique: true, name: REDIRECTS_FROM_SLUG_INDEX });
+
+/** In the workspace's own database (ADR-025). */
+export const REDIRECT_COLLECTION = workspaceCollection(REDIRECT_MODEL, redirectSchema);

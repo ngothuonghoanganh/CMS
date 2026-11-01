@@ -10,25 +10,21 @@ import { AnalyticsController } from './analytics.controller.js';
 import { AnalyticsReportService } from './analytics-report.service.js';
 import { AnalyticsRepository } from './analytics.repository.js';
 import {
-  ANALYTICS_DAILY_MODEL,
+  ANALYTICS_DAILY_COLLECTION,
   ANALYTICS_SALT_MODEL,
-  ANALYTICS_SEEN_MODEL,
-  analyticsDailySchema,
+  ANALYTICS_SEEN_COLLECTION,
   analyticsSaltSchema,
-  analyticsSeenSchema,
 } from './analytics.schema.js';
 import { SourceCapRegistry } from './domain/source-cap.js';
 import { PageViewCollector } from './page-view-collector.service.js';
 import { PublicEventsController } from './public-events.controller.js';
+import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-databases.js';
 
 /** Page views without cookies and the "Hiệu quả" report (ADR-019). */
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: ANALYTICS_SALT_MODEL, schema: analyticsSaltSchema },
-      { name: ANALYTICS_SEEN_MODEL, schema: analyticsSeenSchema },
-      { name: ANALYTICS_DAILY_MODEL, schema: analyticsDailySchema },
-    ]),
+    MongooseModule.forFeature([{ name: ANALYTICS_SALT_MODEL, schema: analyticsSaltSchema }]),
+    WorkspaceCollectionsModule.forFeature([ANALYTICS_SEEN_COLLECTION, ANALYTICS_DAILY_COLLECTION]),
     DomainsCoreModule,
     LeadsCoreModule,
     PagesModule,

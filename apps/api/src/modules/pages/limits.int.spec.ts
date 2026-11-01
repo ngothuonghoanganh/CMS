@@ -61,18 +61,18 @@ describe('limits at the edges', () => {
           heroSection({ heading: `Phần ${String(index + 1)}` }),
         ),
       );
-      const saved = await saveDraft(client, page.page.id, {
+      const saved = await saveDraft(client, site.id, page.page.id, {
         baseRevision: 0,
         slug,
         composition: full,
         seo: cleanSeo(),
       });
       expect(saved.checks.blocking).toEqual([]);
-      expect((await getPage(client, page.page.id)).draft.composition.sections).toHaveLength(
-        MAX_SECTIONS,
-      );
+      expect(
+        (await getPage(client, site.id, page.page.id)).draft.composition.sections,
+      ).toHaveLength(MAX_SECTIONS);
 
-      const published = await publish(client, page.page.id);
+      const published = await publish(client, site.id, page.page.id);
       const resolved = resolveResponseSchema.parse(
         (
           await new TestClient(t.app)
@@ -86,7 +86,7 @@ describe('limits at the edges', () => {
       expect(resolved.kind === 'page' && resolved.data.releaseId).toBe(published.release.id);
 
       const response = await client
-        .put(`/pages/${page.page.id}/draft`, {
+        .put(`/sites/${site.id}/pages/${page.page.id}/draft`, {
           baseRevision: saved.revision,
           slug,
           composition: composition([...full.sections, heroSection({ heading: 'Một phần nữa' })]),
@@ -99,7 +99,7 @@ describe('limits at the edges', () => {
           message: `Một trang có tối đa ${MAX_SECTIONS} section`,
         }),
       ]);
-      expect((await getPage(client, page.page.id)).draft.revision).toBe(saved.revision);
+      expect((await getPage(client, site.id, page.page.id)).draft.revision).toBe(saved.revision);
     });
   });
 
@@ -107,28 +107,31 @@ describe('limits at the edges', () => {
     it('creates the last page allowed, lists every page and refuses the next', async () => {
       const full = await createSite(client, workspaceId);
       const now = new Date();
-      await t.connection.collection('pages').insertMany(
-        Array.from({ length: MAX_PAGES_PER_SITE - 1 }, (_unused, index) => ({
-          workspaceId: new Types.ObjectId(workspaceId),
-          siteId: new Types.ObjectId(full.id),
-          title: `Trang ${String(index)}`,
-          goal: null,
-          draft: {
-            slug: `trang-${String(index)}`,
-            composition: { version: 1, sections: [] },
-            seo: cleanSeo(),
-            revision: 0,
+      await t
+        .workspaceDb(workspaceId)
+        .collection('pages')
+        .insertMany(
+          Array.from({ length: MAX_PAGES_PER_SITE - 1 }, (_unused, index) => ({
+            workspaceId: new Types.ObjectId(workspaceId),
+            siteId: new Types.ObjectId(full.id),
+            title: `Trang ${String(index)}`,
+            goal: null,
+            draft: {
+              slug: `trang-${String(index)}`,
+              composition: { version: 1, sections: [] },
+              seo: cleanSeo(),
+              revision: 0,
+              updatedAt: now,
+              updatedBy: new Types.ObjectId(userId),
+            },
+            publishedReleaseId: null,
+            publishedSlug: null,
+            releaseSeq: 0,
+            createdBy: new Types.ObjectId(userId),
+            createdAt: now,
             updatedAt: now,
-            updatedBy: new Types.ObjectId(userId),
-          },
-          publishedReleaseId: null,
-          publishedSlug: null,
-          releaseSeq: 0,
-          createdBy: new Types.ObjectId(userId),
-          createdAt: now,
-          updatedAt: now,
-        })),
-      );
+          })),
+        );
 
       await createPage(client, full.id, { title: 'Trang cuối cùng', slug: 'trang-cuoi' });
       const refused = await client
@@ -161,20 +164,26 @@ describe('limits at the edges', () => {
     it('creates the last site allowed, lists every site and refuses the next', async () => {
       const owner = await signedUpClient(t.app);
       const now = new Date();
-      await t.connection.collection('sites').insertMany(
-        Array.from({ length: MAX_SITES_PER_WORKSPACE - 1 }, (_unused, index) => ({
-          workspaceId: new Types.ObjectId(owner.workspaceId),
-          name: `Site ${String(index)}`,
-          subdomain: uniqueSubdomain('gioi-han'),
-          themePresetId: 'mint',
-          logoAssetId: null,
-          defaultShareImageAssetId: null,
-          pageSeq: 0,
-          createdBy: new Types.ObjectId(owner.me.user.id),
-          createdAt: now,
-          updatedAt: now,
-        })),
-      );
+      const sites = Array.from({ length: MAX_SITES_PER_WORKSPACE - 1 }, (_unused, index) => ({
+        _id: new Types.ObjectId(),
+        workspaceId: new Types.ObjectId(owner.workspaceId),
+        name: `Site ${String(index)}`,
+        subdomain: uniqueSubdomain('gioi-han'),
+        themePresetId: 'mint',
+        logoAssetId: null,
+        defaultShareImageAssetId: null,
+        pageSeq: 0,
+        createdBy: new Types.ObjectId(owner.me.user.id),
+        createdAt: now,
+        updatedAt: now,
+      }));
+      // A site lives in its workspace's database, its address in the master (ADR-025).
+      await t.workspaceDb(owner.workspaceId).collection('sites').insertMany(sites);
+      await t.connection
+        .collection('site_addresses')
+        .insertMany(
+          sites.map(({ _id, workspaceId, subdomain }) => ({ _id, workspaceId, subdomain })),
+        );
 
       const last = await createSite(owner.client, owner.workspaceId, { name: 'Site cuối cùng' });
       const refused = await owner.client
@@ -214,7 +223,11 @@ describe('limits at the edges', () => {
           params.set('cursor', cursor);
         }
         const history = historyResponseSchema.parse(
-          (await client.get(`/pages/${pageId}/history?${params.toString()}`).expect(200)).body,
+          (
+            await client
+              .get(`/sites/${site.id}/pages/${pageId}/history?${params.toString()}`)
+              .expect(200)
+          ).body,
         );
         pages.push(history.items.map(entryId));
         cursor = history.nextCursor;
@@ -226,8 +239,9 @@ describe('limits at the edges', () => {
     async function expectedOrder(pageId: string): Promise<string[]> {
       const id = new Types.ObjectId(pageId);
       const [releases, events] = await Promise.all([
-        t.connection.collection('releases').find({ pageId: id }).toArray(),
-        t.connection
+        t.workspaceDb(workspaceId).collection('releases').find({ pageId: id }).toArray(),
+        t
+          .workspaceDb(workspaceId)
           .collection('activity')
           .find({
             pageId: id,
@@ -244,25 +258,26 @@ describe('limits at the edges', () => {
     it('lists every entry once across pages, even when entries share a time', async () => {
       const { pageId, published: v1 } = await createLivePage(client, site.id, uniqueSlug('ls'));
       for (let version = 2; version <= 12; version += 1) {
-        await editHeroHeading(client, pageId, `Bản ${String(version)}`);
-        await publish(client, pageId);
+        await editHeroHeading(client, site.id, pageId, `Bản ${String(version)}`);
+        await publish(client, site.id, pageId);
       }
       for (let round = 0; round < 5; round += 1) {
-        const live = (await getPage(client, pageId)).page.liveRelease?.id ?? null;
+        const live = (await getPage(client, site.id, pageId)).page.liveRelease?.id ?? null;
         const rollback = await client
-          .post(`/pages/${pageId}/pointer`, {
+          .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
             targetReleaseId: v1.release.id,
             expectedCurrentReleaseId: live,
             reason: `Lần ${String(round)}`,
           })
           .expect(200);
         const { activityId } = rollback.body as { activityId: string };
-        await client.post(`/activity/${activityId}/undo`).expect(200);
+        await client.post(`/sites/${site.id}/activity/${activityId}/undo`).expect(200);
       }
       await client
-        .post(`/pages/${pageId}/pointer`, {
+        .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
           targetReleaseId: null,
-          expectedCurrentReleaseId: (await getPage(client, pageId)).page.liveRelease?.id ?? null,
+          expectedCurrentReleaseId:
+            (await getPage(client, site.id, pageId)).page.liveRelease?.id ?? null,
           reason: 'Tạm gỡ',
         })
         .expect(200);
@@ -276,10 +291,12 @@ describe('limits at the edges', () => {
       // A publish and its pointer move, or a burst of moves, can land in the same millisecond.
       // Ties are the hard case for a cursor; make every entry of both lists share one time.
       const sameTime = new Date('2026-10-30T09:00:00.000Z');
-      await t.connection
+      await t
+        .workspaceDb(workspaceId)
         .collection('releases')
         .updateMany({ pageId: id }, { $set: { createdAt: sameTime } });
-      await t.connection
+      await t
+        .workspaceDb(workspaceId)
         .collection('activity')
         .updateMany({ pageId: id }, { $set: { createdAt: sameTime } });
       const tied = await expectedOrder(pageId);

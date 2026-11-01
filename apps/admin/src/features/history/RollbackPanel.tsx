@@ -86,7 +86,7 @@ export function RollbackPanel({
 
   const rollback = useMutation({
     mutationFn: (text: string) =>
-      api(endpoints.movePointer, [page.id], {
+      api(endpoints.movePointer, [page.siteId, page.id], {
         body: {
           targetReleaseId: release.id,
           expectedCurrentReleaseId: liveReleaseId,

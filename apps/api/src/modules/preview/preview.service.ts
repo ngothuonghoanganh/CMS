@@ -24,10 +24,11 @@ export class PreviewService {
    */
   async createLink(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     input: CreatePreviewLinkRequest,
   ): Promise<PreviewLinkResponse> {
-    const { site, page, scope } = await this.pageAccess.access(user, pageId, 'pages.view');
+    const { site, page, scope } = await this.pageAccess.access(user, siteId, pageId, 'pages.view');
     const siteClaims = {
       siteId: site._id.toHexString(),
       workspaceId: site.workspaceId.toHexString(),

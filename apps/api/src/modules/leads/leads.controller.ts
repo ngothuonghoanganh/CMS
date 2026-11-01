@@ -98,65 +98,71 @@ export class LeadsController {
     );
   }
 
-  @Get('leads/:leadId')
+  @Get('sites/:siteId/leads/:leadId')
   @Header('Cache-Control', NO_STORE)
   get(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('leadId') leadId: string,
   ): Promise<LeadDetail> {
-    return this.inbox.get(user, leadId);
+    return this.inbox.get(user, siteId, leadId);
   }
 
-  @Patch('leads/:leadId')
+  @Patch('sites/:siteId/leads/:leadId')
   @Header('Cache-Control', NO_STORE)
   update(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('leadId') leadId: string,
     @Body(new ZodPipe(updateLeadRequestSchema)) body: UpdateLeadValues,
   ): Promise<LeadDetail> {
-    return this.inbox.update(user, leadId, body);
+    return this.inbox.update(user, siteId, leadId, body);
   }
 
-  @Patch('leads/:leadId/contact')
+  @Patch('sites/:siteId/leads/:leadId/contact')
   @Header('Cache-Control', NO_STORE)
   updateContact(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('leadId') leadId: string,
     @Body(new ZodPipe(updateLeadContactRequestSchema)) body: UpdateLeadContactValues,
   ): Promise<LeadDetail> {
-    return this.inbox.updateContact(user, leadId, body);
+    return this.inbox.updateContact(user, siteId, leadId, body);
   }
 
-  @Post('leads/:leadId/notification/retry')
+  @Post('sites/:siteId/leads/:leadId/notification/retry')
   @HttpCode(200)
   @Header('Cache-Control', NO_STORE)
   retryNotification(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('leadId') leadId: string,
   ): Promise<LeadDetail> {
-    return this.inbox.retryNotification(user, leadId);
+    return this.inbox.retryNotification(user, siteId, leadId);
   }
 
-  @Post('leads/:leadId/person/export')
+  @Post('sites/:siteId/leads/:leadId/person/export')
   @HttpCode(200)
   async exportPerson(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('leadId') leadId: string,
     @Body(new ZodPipe(personExportRequestSchema)) body: PersonExportRequest,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile> {
     return leadFileResponse(
       response,
-      await this.exports.exportPerson(user, leadId, body),
+      await this.exports.exportPerson(user, siteId, leadId, body),
       this.logger,
     );
   }
 
-  @Delete('leads/:leadId/person')
+  @Delete('sites/:siteId/leads/:leadId/person')
   deletePerson(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('leadId') leadId: string,
   ): Promise<PersonDeleteResponse> {
-    return this.people.deleteFromLead(user, leadId);
+    return this.people.deleteFromLead(user, siteId, leadId);
   }
 }

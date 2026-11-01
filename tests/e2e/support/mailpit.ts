@@ -45,9 +45,10 @@ export async function waitForEmail(
 
 /** The confirmation link of an address's email (ADR-018). */
 export function confirmationLink(message: MailpitMessage): string {
-  const link = /http:\/\/localhost:3100\/lead-recipients\/confirm#token=[A-Za-z0-9_-]{43}/.exec(
-    message.Text,
-  )?.[0];
+  const link =
+    /http:\/\/localhost:3100\/lead-recipients\/confirm#site=[a-f0-9]{24}&token=[A-Za-z0-9_-]{43}/.exec(
+      message.Text,
+    )?.[0];
   if (link === undefined) {
     throw new Error(`No confirmation link in "${message.Subject}"`);
   }

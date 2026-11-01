@@ -17,7 +17,8 @@ Before any code task:
 
 The pre-rebuild code lives at tag `legacy-v0` and branch `legacy/v0`. It is reference only: never
 copy code from it, and never revive its modules (billing, workflows, extensions, collections,
-GrapesJS, Ant Design, database-per-tenant).
+GrapesJS, Ant Design, its database-per-tenant code). The database per workspace of ADR-025 is
+built anew, not taken from it.
 
 ## Scope
 
@@ -45,8 +46,10 @@ GrapesJS, Ant Design, database-per-tenant).
 
 - Dependency direction: `contracts ← sections/schema ← api`, `contracts ← sections/react ← admin,
 renderer`, `ui ← admin`. Apps never import each other. `pnpm governance` enforces this.
-- Tenancy: one database. Every tenant document carries `workspaceId`. Never trust a workspace id
-  from the client. Data access goes through repositories that require a `WorkspaceScope`.
+- Tenancy (ADR-025): a master DB for accounts, memberships and routing, and one database per
+  workspace for its data. Every tenant document still carries `workspaceId`. Never trust a
+  workspace id from the client: a workspace database is opened only from a `WorkspaceScope` or a
+  master record. Data access goes through repositories that require a `WorkspaceScope`.
   Cross-workspace access returns 404.
 - Validate every boundary (body, query, params, env, public responses) with Zod schemas from
   `@plp/contracts` or the section registry.

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  type ConfirmLeadRecipientRequest,
   type ConfirmLeadRecipientResponse,
   LEAD_RECIPIENTS_MAX,
   type LeadRecipient,
@@ -181,8 +182,13 @@ export class LeadRecipientsService {
   }
 
   /** The person who received the link confirms it; no session. A link works once, for 7 days. */
-  async confirm(token: string): Promise<ConfirmLeadRecipientResponse> {
-    const confirmed = await this.sites.confirmLeadRecipient(hashToken(token), new Date());
+  async confirm(link: ConfirmLeadRecipientRequest): Promise<ConfirmLeadRecipientResponse> {
+    // The link names its site, whose workspace database holds the address (ADR-025).
+    const site = await this.sites.findAccessRef(toObjectId(link.siteId, LINK_EXPIRED));
+    const confirmed =
+      site === null
+        ? null
+        : await this.sites.confirmLeadRecipient(site, hashToken(link.token), new Date());
     if (confirmed === null) {
       throw new AppError(404, 'not_found', LINK_EXPIRED, {
         detail: `Liên kết đã được dùng hoặc đã quá ${RECIPIENT_CONFIRMATION_DAYS} ngày. Nhờ chủ site gửi lại thư xác nhận.`,
@@ -232,7 +238,7 @@ export class LeadRecipientsService {
     const email = recipientConfirmationEmail({
       siteName: site.name,
       invitedBy,
-      confirmUrl: `${this.env.ADMIN_ORIGIN}${RECIPIENT_CONFIRM_PATH}#token=${token}`,
+      confirmUrl: `${this.env.ADMIN_ORIGIN}${RECIPIENT_CONFIRM_PATH}#site=${site._id.toHexString()}&token=${token}`,
       validDays: RECIPIENT_CONFIRMATION_DAYS,
     });
     try {

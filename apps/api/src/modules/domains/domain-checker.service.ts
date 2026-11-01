@@ -104,7 +104,7 @@ export class DomainChecker {
         nextCheckAt: nextCheckAt({ verifiedAt, watchSince: domain.watchSince }, now, after),
       })) ?? domain;
     if (before !== after || verifiedAt !== domain.verifiedAt) {
-      await this.revalidate(domain.siteId);
+      await this.revalidate(domain);
     }
     // Only the check that marks it tells: two checks of one domain at once send one email.
     if (after === 'active' && (await this.domains.markSince(domain._id, 'activeSince', now))) {
@@ -129,7 +129,7 @@ export class DomainChecker {
         const moving = owner !== null && !owner._id.equals(domain._id) ? owner : null;
         if (moving !== null) {
           await this.domains.removeInTx(moving._id, tx);
-          await this.sites.clearPrimaryDomain(moving.siteId, moving._id, tx);
+          await this.sites.clearPrimaryDomain(moving, moving.siteId, moving._id, tx);
         }
         if (!(await this.domains.verify(domain._id, now, tx))) {
           // Removed, or verified by another check, meanwhile: the previous owner keeps it.
@@ -138,7 +138,7 @@ export class DomainChecker {
         return moving;
       });
       if (previous !== null) {
-        await this.revalidate(previous.siteId);
+        await this.revalidate(previous);
         await this.notify(previous, 'moved');
       }
       return true;
@@ -178,8 +178,8 @@ export class DomainChecker {
         };
   }
 
-  private async revalidate(siteId: ObjectId): Promise<void> {
-    const site = await this.sites.findSubdomain(siteId);
+  private async revalidate(domain: Pick<DomainRecord, 'workspaceId' | 'siteId'>): Promise<void> {
+    const site = await this.sites.findSubdomain(domain, domain.siteId);
     if (site !== null) {
       await this.revalidation.revalidateSite(site.subdomain);
     }
@@ -208,7 +208,7 @@ export class DomainChecker {
   private async notify(domain: DomainRecord, event: 'active' | 'lost' | 'moved'): Promise<void> {
     try {
       const [site, contactId] = await Promise.all([
-        this.sites.findSubdomain(domain.siteId),
+        this.sites.findSubdomain(domain, domain.siteId),
         this.contactOf(domain),
       ]);
       const [contact] = contactId === null ? [] : await this.users.findContacts([contactId]);

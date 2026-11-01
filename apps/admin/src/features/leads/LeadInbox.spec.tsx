@@ -74,8 +74,11 @@ interface Setup {
 }
 
 /** The first path argument of a call, e.g. the lead id of `getLead`. */
+/** The lead id of `[siteId, leadId]`; a lead of another site is not found, like on the server. */
 function idArgument(args: unknown): string | undefined {
-  return Array.isArray(args) && typeof args[0] === 'string' ? args[0] : undefined;
+  return Array.isArray(args) && args[0] === SITE_ID && typeof args[1] === 'string'
+    ? args[1]
+    : undefined;
 }
 
 /**
@@ -437,7 +440,7 @@ describe('LeadInbox', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Xóa dữ liệu' }));
 
     await vi.waitFor(() => {
-      expect(lastCallTo(apiMock, endpoints.deleteLeadPerson).args).toEqual([LEAD_ID]);
+      expect(lastCallTo(apiMock, endpoints.deleteLeadPerson).args).toEqual([SITE_ID, LEAD_ID]);
     });
     expect(await screen.findByText('Đã xóa 2 lead của người này')).toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Nguyễn Thu Hà' })).not.toBeInTheDocument();
@@ -456,7 +459,7 @@ describe('LeadInbox', () => {
     await user.click(within(panel).getByRole('button', { name: 'Xuất dữ liệu người này' }));
     await user.click(await screen.findByRole('menuitem', { name: 'File CSV (Excel)' }));
     await vi.waitFor(() => {
-      expect(downloadMock).toHaveBeenCalledWith(endpoints.exportLeadPerson, [LEAD_ID], {
+      expect(downloadMock).toHaveBeenCalledWith(endpoints.exportLeadPerson, [SITE_ID, LEAD_ID], {
         body: { format: 'csv' },
       });
     });
@@ -699,7 +702,7 @@ describe('LeadInbox', () => {
     expect(delivery).toHaveTextContent('Lỗi đồng bộ · không kết nối được máy chủ gửi thư');
     await user.click(within(delivery).getByRole('button', { name: 'Gửi lại' }));
     await vi.waitFor(() => {
-      expect(lastCallTo(apiMock, endpoints.retryLeadNotification).args).toEqual([LEAD_ID]);
+      expect(lastCallTo(apiMock, endpoints.retryLeadNotification).args).toEqual([SITE_ID, LEAD_ID]);
     });
     expect(await screen.findByText('Đang gửi lại email thông báo')).toBeInTheDocument();
     const after = within(panel).getByRole('region', { name: 'Đã gửi tới' });

@@ -89,7 +89,7 @@ export function DataRequestDialog({
   const detailKey = dataRequestQueryKeys.detail(siteId, requestId);
   const detail = useQuery({
     queryKey: detailKey,
-    queryFn: ({ signal }) => api(endpoints.getDataRequest, [requestId], { signal }),
+    queryFn: ({ signal }) => api(endpoints.getDataRequest, [siteId, requestId], { signal }),
     enabled: open,
   });
   const request = detail.data;
@@ -118,7 +118,7 @@ export function DataRequestDialog({
   }
 
   const respond = useMutation({
-    mutationFn: () => api(endpoints.respondDataRequest, [requestId]),
+    mutationFn: () => api(endpoints.respondDataRequest, [siteId, requestId]),
     onSuccess: (next) => {
       focusNext.current = 'steps';
       updated(next);
@@ -131,7 +131,7 @@ export function DataRequestDialog({
   });
 
   const complete = useMutation({
-    mutationFn: () => api(endpoints.completeDataRequest, [requestId]),
+    mutationFn: () => api(endpoints.completeDataRequest, [siteId, requestId]),
     onSuccess: (next) => {
       focusNext.current = 'log';
       setConfirming(false);
@@ -151,7 +151,7 @@ export function DataRequestDialog({
 
   const exportFile = useMutation({
     mutationFn: (format: PersonExportRequest['format']) =>
-      downloadFile(endpoints.exportDataRequest, [requestId], { body: { format } }),
+      downloadFile(endpoints.exportDataRequest, [siteId, requestId], { body: { format } }),
     onSuccess: (file) => {
       void queryClient.invalidateQueries({ queryKey: detailKey });
       toast(

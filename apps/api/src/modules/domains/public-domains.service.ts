@@ -36,7 +36,7 @@ export class PublicDomainsService {
 
   async hostSite(host: string): Promise<HostSiteResponse> {
     const domain = await this.domains.findServing(bareHost(host));
-    const site = domain === null ? null : await this.sites.findSubdomain(domain.siteId);
+    const site = domain === null ? null : await this.sites.findSubdomain(domain, domain.siteId);
     if (site === null) {
       throw notFound(HOST_NOT_SERVED);
     }

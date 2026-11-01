@@ -46,7 +46,7 @@ test.describe('Cross-browser · a visitor on a live page', () => {
       },
     });
     // Customer reviews only on wide screens, benefits only on phones (ADR-007, rule 8).
-    await saveDraftViaApi(request, created.page.id, (draft) => ({
+    await saveDraftViaApi(request, created.page, (draft) => ({
       composition: {
         ...draft.composition,
         sections: draft.composition.sections.map((section) =>
@@ -58,7 +58,7 @@ test.describe('Cross-browser · a visitor on a live page', () => {
         ),
       },
     }));
-    await publishViaApi(request, created.page.id, 'Bản đầu tiên');
+    await publishViaApi(request, created.page, 'Bản đầu tiên');
     pageUrl = `${siteOrigin(site.subdomain)}/${slug}`;
   });
 
@@ -239,7 +239,7 @@ test.describe('Cross-browser · editing text on the canvas', () => {
     );
     await editor.expectSaved();
 
-    const saved = await getPageViaApi(page.request, created.page.id);
+    const saved = await getPageViaApi(page.request, created.page);
     const hero = saved.draft.composition.sections.find((section) => section.type === 'hero');
     expect(hero?.content['heading']).toBe('Tư vấn miễn phí Trả góp 0%');
   });

@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import {
@@ -12,10 +11,14 @@ import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
-  CONSENT_VERSION_MODEL,
+  CONSENT_VERSION_COLLECTION,
   type ConsentVersionRecord,
   CONSENT_VERSIONS_SITE_VERSION_INDEX,
 } from './consent-version.schema.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 export interface InsertConsentVersionInput {
   siteId: ObjectId;
@@ -35,9 +38,7 @@ export class ConsentVersionTakenError extends Error {
 /** Consent versions are immutable (ADR-017): this repository only inserts and reads. */
 @Injectable()
 export class ConsentVersionsRepository {
-  constructor(
-    @InjectModel(CONSENT_VERSION_MODEL) private readonly versions: Model<ConsentVersionRecord>,
-  ) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   async insert(
     scope: WorkspaceScope,
@@ -51,7 +52,7 @@ export class ConsentVersionsRepository {
       createdAt: new Date(),
     };
     try {
-      const [created] = await this.versions.create([document], { session: tx });
+      const [created] = await this.versions(scope).create([document], { session: tx });
       if (!created) {
         throw new Error('Consent version insert returned no document');
       }
@@ -70,7 +71,7 @@ export class ConsentVersionsRepository {
     siteId: ObjectId,
     tx?: Tx,
   ): Promise<ConsentVersionRecord | null> {
-    return this.versions
+    return this.versions(scope)
       .findOne({ siteId, workspaceId: scope.workspaceId })
       .sort({ version: -1 })
       .session(tx ?? null)
@@ -82,9 +83,9 @@ export class ConsentVersionsRepository {
    * The latest version for a public read (a draft preview, ADR-017): no member scope, bound to the
    * site the preview token names.
    */
-  findPublicCurrent(siteId: ObjectId): Promise<ConsentVersionRecord | null> {
-    return this.versions
-      .findOne({ siteId })
+  findPublicCurrent(ref: WorkspaceRef, siteId: ObjectId): Promise<ConsentVersionRecord | null> {
+    return this.versions(ref)
+      .findOne({ workspaceId: ref.workspaceId, siteId })
       .sort({ version: -1 })
       .lean<ConsentVersionRecord>()
       .exec();
@@ -97,7 +98,7 @@ export class ConsentVersionsRepository {
     cursor: string | undefined,
     limit: number,
   ): Promise<KeysetPage<ConsentVersionRecord>> {
-    const records = await this.versions
+    const records = await this.versions(scope)
       .find({ siteId, workspaceId: scope.workspaceId, ...afterCursor(cursor) })
       .sort(NEWEST_FIRST)
       .limit(limit + 1)
@@ -105,4 +106,8 @@ export class ConsentVersionsRepository {
       .exec();
     return toKeysetPage(records, limit);
   }
+
+  // A property, not a method: the prototype holds only inserts and reads (ADR-017).
+  private readonly versions = (ref: WorkspaceRef): Model<ConsentVersionRecord> =>
+    this.databases.model(ref, CONSENT_VERSION_COLLECTION);
 }

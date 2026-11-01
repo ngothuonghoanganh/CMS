@@ -85,7 +85,7 @@ describe('draft saver', () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(saveMock).toHaveBeenCalledTimes(1);
     const [, args, options] = saveMock.mock.calls[0] ?? [];
-    expect(args).toEqual(['64b000000000000000000002']);
+    expect(args).toEqual(['64b000000000000000000001', '64b000000000000000000002']);
     expect(options?.body.baseRevision).toBe(3);
     expect(options?.body.composition.sections[1]?.spacing).toBe('spacious');
     expect(store.getState()).toMatchObject({ saveState: 'saved', baseRevision: 4 });

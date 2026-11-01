@@ -76,9 +76,9 @@ describe('an editor on the owner’s pages', () => {
     targetReleaseId: string | null,
     reason: string,
   ) {
-    const detail = await getPage(client, pageId);
+    const detail = await getPage(client, site.id, pageId);
     const response = await client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId,
         expectedCurrentReleaseId: detail.page.liveRelease?.id ?? null,
         reason,
@@ -104,8 +104,8 @@ describe('an editor on the owner’s pages', () => {
     const slug = uniqueSlug('chu-tao');
     const { pageId, published: v1 } = await createLivePage(owner, site.id, slug, 'Bản của Owner');
 
-    await editHeroHeading(editor, pageId, 'Bản của Editor');
-    const v2 = await publish(editor, pageId, 'Editor publish');
+    await editHeroHeading(editor, site.id, pageId, 'Bản của Editor');
+    const v2 = await publish(editor, site.id, pageId, 'Editor publish');
     expect(v2.release).toMatchObject({ version: 2, createdBy: { id: editorMe.user.id } });
     expect(await liveRelease(slug)).toBe(v2.release.id);
 
@@ -114,19 +114,20 @@ describe('an editor on the owner’s pages', () => {
     expect(await liveRelease(slug)).toBe(v1.release.id);
 
     const undone = pointerMoveResponseSchema.parse(
-      (await editor.post(`/activity/${rollback.activityId}/undo`).expect(200)).body,
+      (await editor.post(`/sites/${site.id}/activity/${rollback.activityId}/undo`).expect(200))
+        .body,
     );
     expect(undone.page.liveRelease?.id).toBe(v2.release.id);
     expect(await liveRelease(slug)).toBe(v2.release.id);
 
     // A rollback the owner made, the editor undoes.
     const ownerRollback = await moveAs(owner, pageId, v1.release.id, 'Owner thử lại bản 1');
-    await editor.post(`/activity/${ownerRollback.activityId}/undo`).expect(200);
+    await editor.post(`/sites/${site.id}/activity/${ownerRollback.activityId}/undo`).expect(200);
     expect(await liveRelease(slug)).toBe(v2.release.id);
 
     await moveAs(editor, pageId, null, 'Hết chương trình');
     expect(await liveRelease(slug)).toBeNull();
-    expect((await getPage(owner, pageId)).page.status.kind).toBe('unpublished');
+    expect((await getPage(owner, site.id, pageId)).page.status.kind).toBe('unpublished');
 
     expect(await pointerActivity(pageId)).toEqual([
       { type: 'page.published', by: ownerMe.user.id, reason: null },
@@ -170,17 +171,17 @@ describe('an editor on the owner’s pages', () => {
     await saveConsentVersion(owner, formSite.id, 1, {
       requiredText: 'Tôi đồng ý cho {Tên doanh nghiệp} liên hệ.',
     });
-    await editHeroHeading(editor, pageId, 'Ưu đãi mới');
-    const detail = await getPage(editor, pageId);
+    await editHeroHeading(editor, formSite.id, pageId, 'Ưu đãi mới');
+    const detail = await getPage(editor, formSite.id, pageId);
     expect(detail.page.siteChanges.map((change) => change.label)).toEqual([
       'Dữ liệu cá nhân: nội dung đồng ý',
     ]);
-    const stale = await publishRequest(editor, pageId, {
-      ...(await currentPublishBody(editor, pageId)),
+    const stale = await publishRequest(editor, formSite.id, pageId, {
+      ...(await currentPublishBody(editor, formSite.id, pageId)),
       acknowledgedSiteChanges: [],
     }).expect(409);
     expect(problemSchema.parse(stale.body).code).toBe('site_changed');
-    const v2 = await publish(editor, pageId);
+    const v2 = await publish(editor, formSite.id, pageId);
     expect(v2.release.version).toBe(2);
   });
 });

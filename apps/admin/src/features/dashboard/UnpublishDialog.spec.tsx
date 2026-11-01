@@ -118,7 +118,7 @@ describe('UnpublishDialog', () => {
     );
     await user.click(confirmButton());
 
-    expect(apiMock).toHaveBeenCalledWith(endpoints.movePointer, [page.id], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.movePointer, [page.siteId, page.id], {
       body: {
         targetReleaseId: null,
         expectedCurrentReleaseId: page.liveRelease.id,

@@ -71,7 +71,12 @@ describe('ActivityRepository', () => {
           throw new Error('abort');
         }),
       ).rejects.toThrow('abort');
-      expect(await t.connection.collection('activity').countDocuments({ reason: marker })).toBe(0);
+      expect(
+        await t
+          .workspaceDb(scope.workspaceId)
+          .collection('activity')
+          .countDocuments({ reason: marker }),
+      ).toBe(0);
     });
   });
 
@@ -149,26 +154,37 @@ describe('ActivityRepository', () => {
   });
 
   describe('lookups', () => {
-    it('finds by id only in the owning workspace and exposes an access ref', async () => {
+    it('finds by id only in the owning workspace, whose database holds the event', async () => {
+      // There is no lookup by id alone any more: access goes through the event's site (ADR-025).
       const id = await repository.record(scope, { siteId, type: 'site.created' });
+      expect(await repository.findById(scope, id)).toMatchObject({ _id: id, siteId });
       expect(await repository.findById(otherScope, id)).toBeNull();
-      expect(await repository.findAccessRef(id)).toEqual({
-        id,
-        workspaceId: scope.workspaceId,
-        siteId,
-      });
-      expect(await repository.findAccessRef(new Types.ObjectId())).toBeNull();
+      expect(
+        await t.workspaceDb(scope.workspaceId).collection('activity').countDocuments({ _id: id }),
+      ).toBe(1);
+      expect(
+        await t
+          .workspaceDb(otherScope.workspaceId)
+          .collection('activity')
+          .countDocuments({ _id: id }),
+      ).toBe(0);
+      expect(await t.connection.collection('activity').countDocuments({ _id: id })).toBe(0);
     });
   });
 
   describe('markRevalidationFailed', () => {
-    it('flags the event and fails loudly for an unknown id', async () => {
+    it('flags the event and fails loudly for an unknown id or another workspace', async () => {
       const id = await recordFor(new Types.ObjectId(), 'page.published');
-      await repository.markRevalidationFailed(id);
+      await repository.markRevalidationFailed(scope, id);
       expect((await repository.findById(scope, id))?.data.revalidationFailed).toBe(true);
-      await expect(repository.markRevalidationFailed(new Types.ObjectId())).rejects.toThrow(
+      await expect(repository.markRevalidationFailed(scope, new Types.ObjectId())).rejects.toThrow(
         /does not exist/,
       );
+      const other = await recordFor(new Types.ObjectId(), 'page.published');
+      await expect(repository.markRevalidationFailed(otherScope, other)).rejects.toThrow(
+        /does not exist/,
+      );
+      expect((await repository.findById(scope, other))?.data.revalidationFailed).toBe(false);
     });
   });
 

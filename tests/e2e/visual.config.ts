@@ -31,7 +31,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'pnpm --filter @plp/api start',
+      // Each run starts from an empty database: one per workspace accumulates otherwise (ADR-025).
+      command: 'pnpm --filter @plp/api db:drop-test && pnpm --filter @plp/api start',
       cwd: repoRoot,
       env: {
         MONGODB_URI: 'mongodb://localhost:27117/plp_visual?replicaSet=rs0',

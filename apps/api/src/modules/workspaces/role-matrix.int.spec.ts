@@ -311,16 +311,16 @@ const ROWS: Row[] = [
     permission: 'pages.view',
     scope: 'site',
     status: 200,
-    call: (client, { pageId }) => client.get(`/pages/${pageId}`),
+    call: (client, { site, pageId }) => client.get(`/sites/${site.id}/pages/${pageId}`),
   },
   {
     action: 'Lưu bản nháp',
     permission: 'pages.edit',
     scope: 'site',
     status: 200,
-    call: async (client, { owner, pageId }) => {
-      const { draft } = await getPage(owner, pageId);
-      return client.put(`/pages/${pageId}/draft`, {
+    call: async (client, { site, owner, pageId }) => {
+      const { draft } = await getPage(owner, site.id, pageId);
+      return client.put(`/sites/${site.id}/pages/${pageId}/draft`, {
         baseRevision: draft.revision,
         slug: draft.slug,
         composition: draft.composition,
@@ -333,9 +333,9 @@ const ROWS: Row[] = [
     permission: 'pages.edit',
     scope: 'site',
     status: 200,
-    call: async (client, { owner, pageId, v1ReleaseId }) => {
-      const { draft } = await getPage(owner, pageId);
-      return client.post(`/pages/${pageId}/draft/restore`, {
+    call: async (client, { site, owner, pageId, v1ReleaseId }) => {
+      const { draft } = await getPage(owner, site.id, pageId);
+      return client.post(`/sites/${site.id}/pages/${pageId}/draft/restore`, {
         baseRevision: draft.revision,
         releaseId: v1ReleaseId,
       });
@@ -346,14 +346,15 @@ const ROWS: Row[] = [
     permission: 'pages.view',
     scope: 'site',
     status: 200,
-    call: (client, { pageId }) => client.get(`/pages/${pageId}/checks`),
+    call: (client, { site, pageId }) => client.get(`/sites/${site.id}/pages/${pageId}/checks`),
   },
   {
     action: 'Xem trước',
     permission: 'pages.view',
     scope: 'site',
     status: 201,
-    call: (client, { pageId }) => client.post(`/pages/${pageId}/preview-links`, { kind: 'draft' }),
+    call: (client, { site, pageId }) =>
+      client.post(`/sites/${site.id}/pages/${pageId}/preview-links`, { kind: 'draft' }),
   },
   // Publishing
   {
@@ -361,8 +362,8 @@ const ROWS: Row[] = [
     permission: 'pages.publish',
     scope: 'site',
     status: 201,
-    call: async (client, { owner, pageId }) =>
-      publishRequest(client, pageId, await currentPublishBody(owner, pageId)),
+    call: async (client, { site, owner, pageId }) =>
+      publishRequest(client, site.id, pageId, await currentPublishBody(owner, site.id, pageId)),
   },
   {
     action: 'Gửi yêu cầu xuất bản',
@@ -370,10 +371,11 @@ const ROWS: Row[] = [
     scope: 'site',
     status: 200,
     // The Cộng tác viên sends their waiting request again.
-    call: async (client, { owner, pageId, approvalId }) =>
-      client.post(`/pages/${pageId}/approval`, {
-        expectedRevision: (await getPage(owner, pageId)).draft.revision,
-        expectedPublishedReleaseId: (await getPage(owner, pageId)).page.liveRelease?.id ?? null,
+    call: async (client, { site, owner, pageId, approvalId }) =>
+      client.post(`/sites/${site.id}/pages/${pageId}/approval`, {
+        expectedRevision: (await getPage(owner, site.id, pageId)).draft.revision,
+        expectedPublishedReleaseId:
+          (await getPage(owner, site.id, pageId)).page.liveRelease?.id ?? null,
         approvalId,
         note: 'Đổi giá ưu đãi',
       }),
@@ -383,17 +385,17 @@ const ROWS: Row[] = [
     permission: 'pages.requestPublish',
     scope: 'site',
     status: 200,
-    call: (client, { pageId }) => client.delete(`/pages/${pageId}/approval`),
+    call: (client, { site, pageId }) => client.delete(`/sites/${site.id}/pages/${pageId}/approval`),
   },
   {
     action: 'Từ chối yêu cầu xuất bản',
     permission: 'publishApprovals.decide',
     scope: 'site',
     status: 200,
-    call: async (client, { owner, pageId, approvalId }) =>
-      client.post(`/pages/${pageId}/approval/reject`, {
+    call: async (client, { site, owner, pageId, approvalId }) =>
+      client.post(`/sites/${site.id}/pages/${pageId}/approval/reject`, {
         approvalId,
-        revision: (await getPage(owner, pageId)).draft.revision,
+        revision: (await getPage(owner, site.id, pageId)).draft.revision,
         reason: 'Giá chưa đúng',
       }),
   },
@@ -402,15 +404,15 @@ const ROWS: Row[] = [
     permission: 'pages.view',
     scope: 'site',
     status: 200,
-    call: (client, { pageId }) => client.get(`/pages/${pageId}/history`),
+    call: (client, { site, pageId }) => client.get(`/sites/${site.id}/pages/${pageId}/history`),
   },
   {
     action: 'Khôi phục một phiên bản',
     permission: 'pages.manageLive',
     scope: 'site',
     status: 200,
-    call: (client, { pageId, v1ReleaseId, v2ReleaseId }) =>
-      client.post(`/pages/${pageId}/pointer`, {
+    call: (client, { site, pageId, v1ReleaseId, v2ReleaseId }) =>
+      client.post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: v2ReleaseId,
         expectedCurrentReleaseId: v1ReleaseId,
         reason: 'Bản 2 đã sửa giá',
@@ -421,8 +423,8 @@ const ROWS: Row[] = [
     permission: 'pages.manageLive',
     scope: 'site',
     status: 200,
-    call: (client, { pageId, v1ReleaseId }) =>
-      client.post(`/pages/${pageId}/pointer`, {
+    call: (client, { site, pageId, v1ReleaseId }) =>
+      client.post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: null,
         expectedCurrentReleaseId: v1ReleaseId,
         reason: 'Hết chương trình',
@@ -433,7 +435,8 @@ const ROWS: Row[] = [
     permission: 'pages.manageLive',
     scope: 'site',
     status: 200,
-    call: (client, { rollbackActivityId }) => client.post(`/activity/${rollbackActivityId}/undo`),
+    call: (client, { site, rollbackActivityId }) =>
+      client.post(`/sites/${site.id}/activity/${rollbackActivityId}/undo`),
   },
   {
     action: 'Nhật ký hoạt động',
@@ -462,8 +465,11 @@ const ROWS: Row[] = [
     permission: 'pages.edit',
     scope: 'site',
     status: 200,
-    call: (client, { assetId }) =>
-      client.patch(`/assets/${assetId}`, { alt: 'Ghế nha khoa', decorative: false }),
+    call: (client, { site, assetId }) =>
+      client.patch(`/sites/${site.id}/assets/${assetId}`, {
+        alt: 'Ghế nha khoa',
+        decorative: false,
+      }),
   },
   // Leads (board 10)
   {
@@ -493,35 +499,39 @@ const ROWS: Row[] = [
     permission: 'leads.view',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) => client.get(`/leads/${leadId}`),
+    call: (client, { site, leadId }) => client.get(`/sites/${site.id}/leads/${leadId}`),
   },
   {
     action: 'Đổi trạng thái lead',
     permission: 'leads.handle',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) => client.patch(`/leads/${leadId}`, { status: 'contacted' }),
+    call: (client, { site, leadId }) =>
+      client.patch(`/sites/${site.id}/leads/${leadId}`, { status: 'contacted' }),
   },
   {
     action: 'Ghi chú nội bộ',
     permission: 'leads.handle',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) => client.patch(`/leads/${leadId}`, { note: 'Gọi lại sau 18h' }),
+    call: (client, { site, leadId }) =>
+      client.patch(`/sites/${site.id}/leads/${leadId}`, { note: 'Gọi lại sau 18h' }),
   },
   {
     action: 'Chuyển vào Nghi ngờ spam',
     permission: 'leads.handle',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) => client.patch(`/leads/${leadId}`, { spam: true }),
+    call: (client, { site, leadId }) =>
+      client.patch(`/sites/${site.id}/leads/${leadId}`, { spam: true }),
   },
   {
     action: 'Gửi lại email thông báo',
     permission: 'leads.handle',
     scope: 'site',
     status: 200,
-    call: (client, { failedLeadId }) => client.post(`/leads/${failedLeadId}/notification/retry`),
+    call: (client, { site, failedLeadId }) =>
+      client.post(`/sites/${site.id}/leads/${failedLeadId}/notification/retry`),
   },
   {
     action: 'Xem nơi nhận lead',
@@ -550,8 +560,8 @@ const ROWS: Row[] = [
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) =>
-      client.patch(`/leads/${leadId}/contact`, {
+    call: (client, { site, leadId }) =>
+      client.patch(`/sites/${site.id}/leads/${leadId}/contact`, {
         name: 'Lê Mai Anh',
         phone: '0987 106 224',
         email: '',
@@ -562,14 +572,15 @@ const ROWS: Row[] = [
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) => client.post(`/leads/${leadId}/person/export`, { format: 'json' }),
+    call: (client, { site, leadId }) =>
+      client.post(`/sites/${site.id}/leads/${leadId}/person/export`, { format: 'json' }),
   },
   {
     action: 'Xóa dữ liệu người này',
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { leadId }) => client.delete(`/leads/${leadId}/person`),
+    call: (client, { site, leadId }) => client.delete(`/sites/${site.id}/leads/${leadId}/person`),
   },
   {
     action: 'Thêm nơi nhận lead',
@@ -653,29 +664,32 @@ const ROWS: Row[] = [
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { requestId }) => client.get(`/data-requests/${requestId}`),
+    call: (client, { site, requestId }) =>
+      client.get(`/sites/${site.id}/data-requests/${requestId}`),
   },
   {
     action: 'Đã phản hồi người yêu cầu',
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { requestId }) => client.post(`/data-requests/${requestId}/respond`),
+    call: (client, { site, requestId }) =>
+      client.post(`/sites/${site.id}/data-requests/${requestId}/respond`),
   },
   {
     action: 'Xuất dữ liệu cho yêu cầu',
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { requestId }) =>
-      client.post(`/data-requests/${requestId}/export`, { format: 'csv' }),
+    call: (client, { site, requestId }) =>
+      client.post(`/sites/${site.id}/data-requests/${requestId}/export`, { format: 'csv' }),
   },
   {
     action: 'Hoàn tất yêu cầu',
     permission: 'personalData.manage',
     scope: 'site',
     status: 200,
-    call: (client, { requestId }) => client.post(`/data-requests/${requestId}/complete`),
+    call: (client, { site, requestId }) =>
+      client.post(`/sites/${site.id}/data-requests/${requestId}/complete`),
   },
 ];
 
@@ -746,12 +760,12 @@ describe('the six roles on every endpoint', () => {
     const pending = recipients.find((item) => item.status === 'pending');
 
     const { pageId, published: v1 } = await createLiveFormPage(owner, site.id, uniqueSlug('quyen'));
-    await editHeroHeading(owner, pageId, 'Ưu đãi tháng sau');
-    const v2 = await publish(owner, pageId);
+    await editHeroHeading(owner, site.id, pageId, 'Ưu đãi tháng sau');
+    const v2 = await publish(owner, site.id, pageId);
     const rollback = pointerMoveResponseSchema.parse(
       (
         await owner
-          .post(`/pages/${pageId}/pointer`, {
+          .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
             targetReleaseId: v1.release.id,
             expectedCurrentReleaseId: v2.release.id,
             reason: 'Bản 2 sai giá',
@@ -781,9 +795,10 @@ describe('the six roles on every endpoint', () => {
     const asked = approvalResponseSchema.parse(
       (
         await memberOf('contributor')
-          .client.post(`/pages/${pageId}/approval`, {
-            expectedRevision: (await getPage(owner, pageId)).draft.revision,
-            expectedPublishedReleaseId: (await getPage(owner, pageId)).page.liveRelease?.id ?? null,
+          .client.post(`/sites/${site.id}/pages/${pageId}/approval`, {
+            expectedRevision: (await getPage(owner, site.id, pageId)).draft.revision,
+            expectedPublishedReleaseId:
+              (await getPage(owner, site.id, pageId)).page.liveRelease?.id ?? null,
             approvalId: null,
             note: '',
           })
@@ -846,8 +861,10 @@ describe('the six roles on every endpoint', () => {
   /** Everything the endpoints can change about the fixture's workspace and site. */
   async function stateOf({ workspaceId, site }: Fixture): Promise<string> {
     const siteId = new Types.ObjectId(site.id);
+    // The site's data lives in its workspace's database; accounts and routing in the master.
+    const db = t.workspaceDb(workspaceId);
     const collection = (name: string) =>
-      t.connection.collection(name).find({ siteId }).sort({ _id: 1 }).toArray();
+      db.collection(name).find({ siteId }).sort({ _id: 1 }).toArray();
     const [
       siteRecord,
       sites,
@@ -860,10 +877,8 @@ describe('the six roles on every endpoint', () => {
       versions,
       approvals,
     ] = await Promise.all([
-      t.connection.collection('sites').findOne({ _id: siteId }),
-      t.connection
-        .collection('sites')
-        .countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
+      db.collection('sites').findOne({ _id: siteId }),
+      db.collection('sites').countDocuments({ workspaceId: new Types.ObjectId(workspaceId) }),
       collection('pages'),
       collection('releases'),
       collection('redirects'),
@@ -879,16 +894,25 @@ describe('the six roles on every endpoint', () => {
         .find({ workspaceId: new Types.ObjectId(workspaceId) })
         .sort({ _id: 1 })
         .toArray();
-    const [activity, limits, memberships, invitations, accessRequests, domains, customRoles] =
-      await Promise.all([
-        t.connection.collection('activity').countDocuments({ siteId }),
-        t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
-        ofWorkspace('memberships'),
-        ofWorkspace('invitations'),
-        ofWorkspace('access_requests'),
-        collection('domains'),
-        ofWorkspace('custom_roles'),
-      ]);
+    const [
+      activity,
+      limits,
+      memberships,
+      invitations,
+      accessRequests,
+      domains,
+      customRoles,
+      addresses,
+    ] = await Promise.all([
+      db.collection('activity').countDocuments({ siteId }),
+      t.connection.collection('lead_limits').find().sort({ key: 1 }).toArray(),
+      ofWorkspace('memberships'),
+      ofWorkspace('invitations'),
+      ofWorkspace('access_requests'),
+      t.connection.collection('domains').find({ siteId }).sort({ _id: 1 }).toArray(),
+      ofWorkspace('custom_roles'),
+      ofWorkspace('site_addresses'),
+    ]);
     return JSON.stringify({
       siteRecord,
       sites,
@@ -907,6 +931,7 @@ describe('the six roles on every endpoint', () => {
       accessRequests,
       domains,
       customRoles,
+      addresses,
     });
   }
 
@@ -989,6 +1014,158 @@ describe('a member kept to some sites', () => {
         siteIds: [smile.id, spa.id],
       },
     ]);
+  });
+
+  it("finds a page, lead, request, event or image only through its own site's route", async () => {
+    // Ids of one site resolve in the workspace's database whatever site the route names, so each
+    // endpoint must check the resource belongs to that site (ADR-025): even Chủ sở hữu, who opens
+    // both sites, gets 404 for a resource of Bếp Nhà Mây through Nha khoa Smile Care.
+    const { client: owner, workspaceId } = await signedUpClient(t.app);
+    const smile = await createSite(owner, workspaceId, { name: 'Nha khoa Smile Care' });
+    const kitchen = await createSite(owner, workspaceId, { name: 'Bếp Nhà Mây' });
+    await configurePrivacy(owner, kitchen.id);
+    await addConfirmedRecipient(t, owner, kitchen.id);
+    const { pageId, published: v1 } = await createLiveFormPage(
+      owner,
+      kitchen.id,
+      uniqueSlug('bep'),
+    );
+    await editHeroHeading(owner, kitchen.id, pageId, 'Thực đơn mới');
+    const v2 = await publish(owner, kitchen.id, pageId);
+    const rollback = pointerMoveResponseSchema.parse(
+      (
+        await owner
+          .post(`/sites/${kitchen.id}/pages/${pageId}/pointer`, {
+            targetReleaseId: v1.release.id,
+            expectedCurrentReleaseId: v2.release.id,
+            reason: 'Sai giá',
+          })
+          .expect(200)
+      ).body,
+    );
+    const asset = await uploadImage(owner, kitchen.id);
+    const lead = storedLead({
+      workspaceId,
+      siteId: kitchen.id,
+      pageId,
+      releaseId: v1.release.id,
+      name: 'Lê Mai Anh',
+      phone: '+84987106223',
+      notification: { status: 'failed', attempts: 3 },
+    });
+    await insertLeads(t, [lead]);
+    const leadId = String(lead['_id']);
+    const requestId = (
+      (
+        await owner
+          .post(`/sites/${kitchen.id}/data-requests`, {
+            name: 'Lê Mai Anh',
+            phone: '0987 106 223',
+            email: '',
+            type: 'access',
+            receivedAt: new Date(Date.now() - DAY_MS).toISOString(),
+          })
+          .expect(201)
+      ).body as { id: string }
+    ).id;
+
+    const db = t.workspaceDb(workspaceId);
+    const kitchenId = new Types.ObjectId(kitchen.id);
+    const state = async () =>
+      JSON.stringify(
+        await Promise.all(
+          [
+            'pages',
+            'releases',
+            'activity',
+            'assets',
+            'leads',
+            'data_requests',
+            'publish_approvals',
+          ].map((name) =>
+            db.collection(name).find({ siteId: kitchenId }).sort({ _id: 1 }).toArray(),
+          ),
+        ),
+      );
+    const before = await state();
+    const { draft } = await getPage(owner, kitchen.id, pageId);
+    const page = `/sites/${smile.id}/pages/${pageId}`;
+    const calls: Array<[string, () => PromiseLike<Response>]> = [
+      ['page', () => owner.get(page)],
+      [
+        'draft',
+        () =>
+          owner.put(`${page}/draft`, {
+            baseRevision: draft.revision,
+            slug: draft.slug,
+            composition: draft.composition,
+            seo: draft.seo,
+          }),
+      ],
+      [
+        'restore',
+        () =>
+          owner.post(`${page}/draft/restore`, {
+            baseRevision: draft.revision,
+            releaseId: v2.release.id,
+          }),
+      ],
+      ['checks', () => owner.get(`${page}/checks`)],
+      ['preview', () => owner.post(`${page}/preview-links`, { kind: 'draft' })],
+      [
+        'publish',
+        async () =>
+          publishRequest(
+            owner,
+            smile.id,
+            pageId,
+            await currentPublishBody(owner, kitchen.id, pageId),
+          ),
+      ],
+      ['history', () => owner.get(`${page}/history`)],
+      [
+        'pointer',
+        () =>
+          owner.post(`${page}/pointer`, {
+            targetReleaseId: null,
+            expectedCurrentReleaseId: v1.release.id,
+            reason: 'Gỡ nhầm site',
+          }),
+      ],
+      ['undo', () => owner.post(`/sites/${smile.id}/activity/${rollback.activityId}/undo`)],
+      [
+        'image',
+        () =>
+          owner.patch(`/sites/${smile.id}/assets/${asset.id}`, { alt: 'Sửa', decorative: false }),
+      ],
+      ['lead', () => owner.get(`/sites/${smile.id}/leads/${leadId}`)],
+      ['lead update', () => owner.patch(`/sites/${smile.id}/leads/${leadId}`, { spam: true })],
+      ['lead retry', () => owner.post(`/sites/${smile.id}/leads/${leadId}/notification/retry`)],
+      [
+        'lead export',
+        () => owner.post(`/sites/${smile.id}/leads/${leadId}/person/export`, { format: 'json' }),
+      ],
+      ['lead delete', () => owner.delete(`/sites/${smile.id}/leads/${leadId}/person`)],
+      ['request', () => owner.get(`/sites/${smile.id}/data-requests/${requestId}`)],
+      [
+        'request respond',
+        () => owner.post(`/sites/${smile.id}/data-requests/${requestId}/respond`),
+      ],
+      [
+        'request export',
+        () => owner.post(`/sites/${smile.id}/data-requests/${requestId}/export`, { format: 'csv' }),
+      ],
+      [
+        'request complete',
+        () => owner.post(`/sites/${smile.id}/data-requests/${requestId}/complete`),
+      ],
+    ];
+    for (const [name, call] of calls) {
+      const response = await call();
+      expect(response.status, name).toBe(404);
+      expect(problemSchema.parse(response.body).code, name).toBe('not_found');
+    }
+    expect(await state()).toBe(before);
   });
 
   it('counts the members of each role for Chủ sở hữu and Quản trị', async () => {

@@ -77,7 +77,7 @@ describe('requests to publish', () => {
   /** A page with a publishable draft, made by the owner, not yet live. */
   async function draftPage(): Promise<string> {
     const page = await createPage(owner.client, site.id, { title: 'Ưu đãi tháng 11' });
-    await replaceDraft(owner.client, page.page.id, publishableDraft(page.page.slug));
+    await replaceDraft(owner.client, site.id, page.page.id, publishableDraft(page.page.slug));
     return page.page.id;
   }
 
@@ -88,8 +88,9 @@ describe('requests to publish', () => {
     note = '',
     approvalId: string | null = null,
     expectedPublishedReleaseId: string | null = null,
+    siteId = site.id,
   ) {
-    return member.client.post(`/pages/${pageId}/approval`, {
+    return member.client.post(`/sites/${siteId}/pages/${pageId}/approval`, {
       expectedRevision,
       expectedPublishedReleaseId,
       approvalId,
@@ -101,8 +102,13 @@ describe('requests to publish', () => {
    * Sends the page's saved draft for approval as `member`, again when their own request waits,
    * and returns what the page shows.
    */
-  async function askNow(member: Member, pageId: string, note = ''): Promise<PageApproval | null> {
-    const { draft, page } = await getPage(member.client, pageId);
+  async function askNow(
+    member: Member,
+    pageId: string,
+    note = '',
+    siteId = site.id,
+  ): Promise<PageApproval | null> {
+    const { draft, page } = await getPage(member.client, siteId, pageId);
     const own =
       page.approval?.status === 'pending' && page.approval.requestedBy.id === member.me.user.id
         ? page.approval.id
@@ -114,12 +120,13 @@ describe('requests to publish', () => {
       note,
       own,
       page.liveRelease?.id ?? null,
+      siteId,
     ).expect(200);
     return approvalResponseSchema.parse(response.body).page.approval;
   }
 
   function refuse(member: Member, pageId: string, approval: PageApproval | null, reason: string) {
-    return member.client.post(`/pages/${pageId}/approval/reject`, {
+    return member.client.post(`/sites/${site.id}/pages/${pageId}/approval/reject`, {
       approvalId: approval?.id,
       revision: approval?.revision,
       reason,
@@ -127,7 +134,8 @@ describe('requests to publish', () => {
   }
 
   function stored(pageId: string) {
-    return t.connection
+    return t
+      .workspaceDb(workspaceId)
       .collection('publish_approvals')
       .find({ pageId: new Types.ObjectId(pageId) })
       .sort({ createdAt: 1 })
@@ -136,8 +144,8 @@ describe('requests to publish', () => {
 
   it('sends the saved draft; Chủ sở hữu and Quản trị get one email, the page says it waits', async () => {
     const pageId = await draftPage();
-    await editHeroHeading(contributor.client, pageId, 'Giảm 30% niềng răng');
-    const revision = (await getPage(contributor.client, pageId)).draft.revision;
+    await editHeroHeading(contributor.client, site.id, pageId, 'Giảm 30% niềng răng');
+    const revision = (await getPage(contributor.client, site.id, pageId)).draft.revision;
 
     const approval = await askNow(contributor, pageId, 'Đổi giá ưu đãi');
     expect(approval).toEqual({
@@ -166,19 +174,20 @@ describe('requests to publish', () => {
       status: 'pending',
       id: approval?.id,
     });
-    expect((await getPage(editor.client, pageId)).page.approval?.status).toBe('pending');
+    expect((await getPage(editor.client, site.id, pageId)).page.approval?.status).toBe('pending');
   });
 
   it('refuses a draft changed since, a blocking error, and roles that publish themselves', async () => {
     const pageId = await draftPage();
-    const revision = (await getPage(contributor.client, pageId)).draft.revision;
+    const revision = (await getPage(contributor.client, site.id, pageId)).draft.revision;
     const stale = await ask(contributor, pageId, revision - 1).expect(409);
     expect(problemSchema.parse(stale.body).code).toBe('revision_conflict');
 
     // A form without consent settings blocks publishing, so it blocks asking too.
     const formPage = await createPage(owner.client, site.id);
-    await replaceDraft(owner.client, formPage.page.id, formDraft(formPage.page.slug));
-    const formRevision = (await getPage(contributor.client, formPage.page.id)).draft.revision;
+    await replaceDraft(owner.client, site.id, formPage.page.id, formDraft(formPage.page.slug));
+    const formRevision = (await getPage(contributor.client, site.id, formPage.page.id)).draft
+      .revision;
     const blocked = problemSchema.parse(
       (await ask(contributor, formPage.page.id, formRevision).expect(422)).body,
     );
@@ -206,16 +215,16 @@ describe('requests to publish', () => {
   it('keeps one request per page: its sender sends it again, someone else is told who waits', async () => {
     const pageId = await draftPage();
     const first = await askNow(contributor, pageId, 'Bản đầu');
-    await editHeroHeading(contributor.client, pageId, 'Giảm 40%');
+    await editHeroHeading(contributor.client, site.id, pageId, 'Giảm 40%');
     const again = await askNow(contributor, pageId, 'Đã sửa giá');
     expect(again).toMatchObject({ id: first?.id, note: 'Đã sửa giá' });
-    expect(again?.revision).toBe((await getPage(owner.client, pageId)).draft.revision);
+    expect(again?.revision).toBe((await getPage(owner.client, site.id, pageId)).draft.revision);
     expect(t.emails.sent.map((email) => email.subject)).toEqual([
       `${contributor.me.user.name} gửi yêu cầu xuất bản "Ưu đãi tháng 11"`,
       `${contributor.me.user.name} gửi lại yêu cầu xuất bản "Ưu đãi tháng 11"`,
     ]);
 
-    const revision = (await getPage(otherContributor.client, pageId)).draft.revision;
+    const revision = (await getPage(otherContributor.client, site.id, pageId)).draft.revision;
     const taken = await ask(otherContributor, pageId, revision).expect(409);
     expect(problemSchema.parse(taken.body)).toMatchObject({
       code: 'approval_pending',
@@ -229,7 +238,7 @@ describe('requests to publish', () => {
     const approval = await askNow(contributor, pageId);
     t.emails.sent.length = 0;
 
-    const published = await publish(admin.client, pageId, 'Duyệt giá mới');
+    const published = await publish(admin.client, site.id, pageId, 'Duyệt giá mới');
     expect(published.page.approval).toBeNull();
     expect(await stored(pageId)).toEqual([
       expect.objectContaining({
@@ -250,10 +259,10 @@ describe('requests to publish', () => {
     );
 
     // A Biên tập publishing answers it the same way, without saying they approved it.
-    await editHeroHeading(contributor.client, pageId, 'Ưu đãi tháng 12');
+    await editHeroHeading(contributor.client, site.id, pageId, 'Ưu đãi tháng 12');
     await askNow(contributor, pageId);
     t.emails.sent.length = 0;
-    const byEditor = await publish(editor.client, pageId);
+    const byEditor = await publish(editor.client, site.id, pageId);
     expect(byEditor.page.approval).toBeNull();
     expect(t.emails.sent[0]?.text).toContain(`${editor.me.user.name} đã xuất bản phiên bản v2.`);
     expect(await stored(pageId)).toEqual([
@@ -296,19 +305,21 @@ describe('requests to publish', () => {
     await refuse(owner, pageId, approval, 'Lần nữa').expect(404);
 
     // The refusal stays on the page until that draft, or a newer one, goes live.
-    expect((await getPage(contributor.client, pageId)).page.approval?.status).toBe('rejected');
-    await publish(owner.client, pageId);
-    expect((await getPage(contributor.client, pageId)).page.approval).toBeNull();
+    expect((await getPage(contributor.client, site.id, pageId)).page.approval?.status).toBe(
+      'rejected',
+    );
+    await publish(owner.client, site.id, pageId);
+    expect((await getPage(contributor.client, site.id, pageId)).page.approval).toBeNull();
     // Unpublishing that version later does not bring the answered refusal back.
-    const live = (await getPage(owner.client, pageId)).page.liveRelease;
+    const live = (await getPage(owner.client, site.id, pageId)).page.liveRelease;
     await owner.client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: null,
         expectedCurrentReleaseId: live?.id ?? null,
         reason: 'Hết chương trình',
       })
       .expect(200);
-    expect((await getPage(contributor.client, pageId)).page.approval).toBeNull();
+    expect((await getPage(contributor.client, site.id, pageId)).page.approval).toBeNull();
   });
 
   it('shows the waiting request even when an answered one has a later clock', async () => {
@@ -317,14 +328,15 @@ describe('requests to publish', () => {
     await refuse(owner, pageId, first, 'Giá sai').expect(200);
     await askNow(contributor, pageId);
     // The refused request was stored by an instance whose clock ran a minute ahead.
-    await t.connection
+    await t
+      .workspaceDb(workspaceId)
       .collection('publish_approvals')
       .updateOne(
         { _id: new Types.ObjectId(first?.id) },
         { $set: { createdAt: new Date(Date.now() + 60_000) } },
       );
 
-    expect((await getPage(owner.client, pageId)).page.approval?.status).toBe('pending');
+    expect((await getPage(owner.client, site.id, pageId)).page.approval?.status).toBe('pending');
   });
 
   it('tells its sender the answer only while they still open the site', async () => {
@@ -348,7 +360,7 @@ describe('requests to publish', () => {
   it('is sent again only as its sender saw it, never reopened for a page that went live', async () => {
     const pageId = await draftPage();
     const first = await askNow(contributor, pageId);
-    const revision = (await getPage(contributor.client, pageId)).draft.revision;
+    const revision = (await getPage(contributor.client, site.id, pageId)).draft.revision;
     t.emails.sent.length = 0;
 
     // Their own waiting request, which this dialog did not show: nothing is sent.
@@ -362,7 +374,7 @@ describe('requests to publish', () => {
     expect(problemSchema.parse(answered.body).code).toBe('approval_changed');
 
     // Published meanwhile: a dialog opened before asks to publish what is live now.
-    await publish(owner.client, pageId);
+    await publish(owner.client, site.id, pageId);
     t.emails.sent.length = 0;
     const live = await ask(contributor, pageId, revision).expect(409);
     expect(problemSchema.parse(live.body).code).toBe('pointer_conflict');
@@ -372,15 +384,15 @@ describe('requests to publish', () => {
 
   it('never leaves a request waiting for a draft published at the same moment', async () => {
     const pageId = await draftPage();
-    const { draft, page } = await getPage(contributor.client, pageId);
-    const body = await currentPublishBody(owner.client, pageId);
+    const { draft, page } = await getPage(contributor.client, site.id, pageId);
+    const body = await currentPublishBody(owner.client, site.id, pageId);
     // The request passed its first checks; the page goes live before the request is stored.
     const quota = t.app.get(EmailQuota);
     const take = quota.take.bind(quota);
     const paused = vi
       .spyOn(quota, 'take')
       .mockImplementationOnce(async (...args: Parameters<EmailQuota['take']>) => {
-        await publishRequest(owner.client, pageId, body).expect(201);
+        await publishRequest(owner.client, site.id, pageId, body).expect(201);
         return take(...args);
       });
     try {
@@ -401,11 +413,11 @@ describe('requests to publish', () => {
 
   it('keeps a refusal of a page rolled back and asked for again at the same draft', async () => {
     const pageId = await draftPage();
-    const v1 = await publish(owner.client, pageId);
-    await editHeroHeading(owner.client, pageId, 'Ưu đãi tháng 12');
-    const v2 = await publish(owner.client, pageId);
+    const v1 = await publish(owner.client, site.id, pageId);
+    await editHeroHeading(owner.client, site.id, pageId, 'Ưu đãi tháng 12');
+    const v2 = await publish(owner.client, site.id, pageId);
     await owner.client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: v1.release.id,
         expectedCurrentReleaseId: v2.release.id,
         reason: 'Giá tháng 12 chưa chốt',
@@ -437,23 +449,25 @@ describe('requests to publish', () => {
   it('is withdrawn only by its sender', async () => {
     const pageId = await draftPage();
     await askNow(contributor, pageId);
-    await otherContributor.client.delete(`/pages/${pageId}/approval`).expect(404);
-    await owner.client.delete(`/pages/${pageId}/approval`).expect(403);
+    await otherContributor.client.delete(`/sites/${site.id}/pages/${pageId}/approval`).expect(404);
+    await owner.client.delete(`/sites/${site.id}/pages/${pageId}/approval`).expect(403);
 
-    const response = await contributor.client.delete(`/pages/${pageId}/approval`).expect(200);
+    const response = await contributor.client
+      .delete(`/sites/${site.id}/pages/${pageId}/approval`)
+      .expect(200);
     expect(approvalResponseSchema.parse(response.body).page.approval).toBeNull();
     expect((await stored(pageId))[0]).toMatchObject({ status: 'withdrawn' });
-    await contributor.client.delete(`/pages/${pageId}/approval`).expect(404);
+    await contributor.client.delete(`/sites/${site.id}/pages/${pageId}/approval`).expect(404);
   });
 
   it('answers a refusal and a publish at the same time once', async () => {
     const pageId = await draftPage();
     const approval = await askNow(contributor, pageId);
-    const body = await currentPublishBody(owner.client, pageId);
+    const body = await currentPublishBody(owner.client, site.id, pageId);
     t.emails.sent.length = 0;
 
     const [published, refused] = await Promise.all([
-      publishRequest(admin.client, pageId, body),
+      publishRequest(admin.client, site.id, pageId, body),
       refuse(owner, pageId, approval, 'Chưa duyệt'),
     ]);
     expect(published.status).toBe(201);
@@ -479,7 +493,7 @@ describe('requests to publish', () => {
     for (let sent = 0; sent < APPROVALS_PER_DAY; sent += 1) {
       await askNow(sender, pageId);
     }
-    const revision = (await getPage(sender.client, pageId)).draft.revision;
+    const revision = (await getPage(sender.client, site.id, pageId)).draft.revision;
     const limited = await ask(sender, pageId, revision).expect(429);
     expect(problemSchema.parse(limited.body).title).toBe('Đã gửi quá nhiều yêu cầu xuất bản');
 
@@ -494,7 +508,12 @@ describe('requests to publish', () => {
       createdAt: new Date(),
     });
     const page = await createPage(elsewhere.client, otherSite.id, { slug: uniqueSlug('khac') });
-    await replaceDraft(elsewhere.client, page.page.id, publishableDraft(page.page.slug));
-    expect((await askNow(sender, page.page.id))?.status).toBe('pending');
+    await replaceDraft(
+      elsewhere.client,
+      otherSite.id,
+      page.page.id,
+      publishableDraft(page.page.slug),
+    );
+    expect((await askNow(sender, page.page.id, '', otherSite.id))?.status).toBe('pending');
   });
 });

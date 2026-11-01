@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-databases.js';
 import { WorkspacesModule } from '../workspaces/workspaces.module.js';
-import { SITE_MODEL, siteSchema } from './site.schema.js';
+import { SITE_ADDRESS_MODEL, SITE_COLLECTION, siteAddressSchema } from './site.schema.js';
 import { SitesRepository } from './sites.repository.js';
 import { SitesService } from './sites.service.js';
 
@@ -14,7 +15,8 @@ import { SitesService } from './sites.service.js';
  */
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: SITE_MODEL, schema: siteSchema }]),
+    MongooseModule.forFeature([{ name: SITE_ADDRESS_MODEL, schema: siteAddressSchema }]),
+    WorkspaceCollectionsModule.forFeature([SITE_COLLECTION]),
     WorkspacesModule,
   ],
   providers: [SitesRepository, SitesService],

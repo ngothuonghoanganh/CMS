@@ -11,12 +11,16 @@ import {
 import type { Model } from 'mongoose';
 import { isDuplicateKeyError } from '../../shared/persistence/duplicate-key.js';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import {
-  ANALYTICS_DAILY_MODEL,
+  ANALYTICS_DAILY_COLLECTION,
   ANALYTICS_SALT_DAY_INDEX,
   ANALYTICS_SALT_MODEL,
-  ANALYTICS_SEEN_MODEL,
+  ANALYTICS_SEEN_COLLECTION,
   type AnalyticsDailyRecord,
   type AnalyticsSaltRecord,
   type AnalyticsSeenRecord,
@@ -50,8 +54,7 @@ const SEEN_KEPT_DAYS = 2;
 export class AnalyticsRepository {
   constructor(
     @InjectModel(ANALYTICS_SALT_MODEL) private readonly salts: Model<AnalyticsSaltRecord>,
-    @InjectModel(ANALYTICS_SEEN_MODEL) private readonly seen: Model<AnalyticsSeenRecord>,
-    @InjectModel(ANALYTICS_DAILY_MODEL) private readonly daily: Model<AnalyticsDailyRecord>,
+    private readonly databases: WorkspaceDatabases,
   ) {}
 
   /** The salt of a Vietnamese day; the first view of the day creates it. */
@@ -83,6 +86,7 @@ export class AnalyticsRepository {
 
   /** Marks the visitor as seen today on the site and on the page. */
   async markSeen(
+    ref: WorkspaceRef,
     siteId: ObjectId,
     pageId: ObjectId,
     day: VnDay,
@@ -90,7 +94,7 @@ export class AnalyticsRepository {
   ): Promise<FirstSightings> {
     const expiresAt = vnDayStart(addVnDays(day, SEEN_KEPT_DAYS));
     const sight = async (at: ObjectId | null) => {
-      const result = await this.seen
+      const result = await this.seen(ref)
         .updateOne(
           { siteId, pageId: at, day, hash },
           { $setOnInsert: { expiresAt } },
@@ -123,15 +127,15 @@ export class AnalyticsRepository {
         upsert: true,
       },
     });
-    await this.daily.bulkWrite(
+    await this.daily(view).bulkWrite(
       [row(null, firstSightings.site), row(view.pageId, firstSightings.page)],
       { ordered: false },
     );
   }
 
   /** The source/medium pairs the site counted on a day. */
-  async pairsOf(siteId: ObjectId, day: VnDay): Promise<SourcePair[]> {
-    const rows = await this.daily
+  async pairsOf(ref: WorkspaceRef, siteId: ObjectId, day: VnDay): Promise<SourcePair[]> {
+    const rows = await this.daily(ref)
       .aggregate<{ _id: SourcePair }>([
         { $match: { siteId, pageId: null, day } },
         { $group: { _id: { source: '$source', medium: '$medium' } } },
@@ -150,7 +154,7 @@ export class AnalyticsRepository {
     pageId: ObjectId | null,
     days: { from: VnDay; to: VnDay; currentFrom: VnDay },
   ): Promise<ViewRows> {
-    const [result] = await this.daily
+    const [result] = await this.daily(scope)
       .aggregate<{
         daily: Array<{ _id: VnDay; views: number; visitors: number }>;
         sources: Array<{ _id: SourcePair; visitors: number }>;
@@ -210,7 +214,7 @@ export class AnalyticsRepository {
     from: VnDay,
     to: VnDay,
   ): Promise<Array<{ pageId: string; visitors: number }>> {
-    const rows = await this.daily
+    const rows = await this.daily(scope)
       .aggregate<{ _id: ObjectId; visitors: number }>([
         {
           $match: {
@@ -224,5 +228,13 @@ export class AnalyticsRepository {
       ])
       .exec();
     return rows.map((row) => ({ pageId: row._id.toHexString(), visitors: row.visitors }));
+  }
+
+  private seen(ref: WorkspaceRef): Model<AnalyticsSeenRecord> {
+    return this.databases.model(ref, ANALYTICS_SEEN_COLLECTION);
+  }
+
+  private daily(ref: WorkspaceRef): Model<AnalyticsDailyRecord> {
+    return this.databases.model(ref, ANALYTICS_DAILY_COLLECTION);
   }
 }

@@ -1,5 +1,6 @@
 import { type ActivityType, activityTypes } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const ACTIVITY_MODEL = 'Activity';
 
@@ -77,3 +78,6 @@ activitySchema.pre('validate', function () {
     this.invalidate('pageTitle', 'An activity about a page needs the page title snapshot');
   }
 });
+
+/** In the workspace's own database (ADR-025). */
+export const ACTIVITY_COLLECTION = workspaceCollection(ACTIVITY_MODEL, activitySchema);

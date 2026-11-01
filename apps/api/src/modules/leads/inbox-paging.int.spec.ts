@@ -41,6 +41,7 @@ interface Seeded {
 describe('inbox paging past 50 leads', () => {
   let t: TestApp;
   let owner: TestClient;
+  let workspaceId: string;
   let site: Site;
   let pageIds: { a: string; b: string };
   const seeded: Seeded[] = [];
@@ -51,6 +52,7 @@ describe('inbox paging past 50 leads', () => {
     });
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
+    workspaceId = signedUp.workspaceId;
     site = await createSite(owner, signedUp.workspaceId);
     await configurePrivacy(owner, site.id);
     await addConfirmedRecipient(t, owner, site.id);
@@ -217,7 +219,9 @@ describe('inbox paging past 50 leads', () => {
   });
 
   it('reads a page + status filter through an inbox index, in index order', async () => {
-    const sent = await recordCalls(t.connection, 'leads', async () => {
+    // The site's leads are in its workspace's database (ADR-025).
+    const db = t.workspaceDb(workspaceId);
+    const sent = await recordCalls(db, 'leads', async () => {
       await owner
         .get(`/sites/${site.id}/leads?range=30d&pageId=${pageIds.a}&status=new`)
         .expect(200);
@@ -227,7 +231,7 @@ describe('inbox paging past 50 leads', () => {
       throw new Error('The inbox sent no find');
     }
     const [filter, options] = find.params;
-    const explained: unknown = await t.connection
+    const explained: unknown = await db
       .collection('leads')
       .find(filter, options)
       .explain('executionStats');

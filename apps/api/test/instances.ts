@@ -37,6 +37,7 @@ export async function createSecondInstance(first: TestApp): Promise<TestApp> {
     app,
     env: first.env,
     connection: app.get<Connection>(getConnectionToken()),
+    workspaceDb: first.workspaceDb,
     emails,
     dns: first.dns,
     tls: first.tls,

@@ -133,13 +133,14 @@ export async function confirmRecipientViaApi(
     email,
   });
   const link = confirmationLink(await waitForEmail(request, email, 'Xác nhận nhận lead'));
-  const token = new URL(link).hash.replace('#token=', '');
+  // The link names its site and carries its secret: `#site=…&token=…` (ADR-025).
+  const fragment = new URLSearchParams(new URL(link).hash.slice(1));
   await call(
     request,
     'POST',
     endpoints.confirmLeadRecipient.path(),
     confirmLeadRecipientResponseSchema,
-    { token },
+    { siteId: fragment.get('site'), token: fragment.get('token') },
   );
   return email;
 }

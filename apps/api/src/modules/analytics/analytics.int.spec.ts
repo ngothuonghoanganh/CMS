@@ -103,8 +103,8 @@ describe('analytics', () => {
     // Neither the address nor the browser is stored anywhere, not even as a plain hash that
     // hashing every IPv4 address would undo: the rate limits key addresses with a secret.
     const stored = JSON.stringify([
-      await t.connection.collection('analytics_seen').find().toArray(),
-      await t.connection.collection('analytics_daily').find().toArray(),
+      await t.workspaceDb(workspaceId).collection('analytics_seen').find().toArray(),
+      await t.workspaceDb(workspaceId).collection('analytics_daily').find().toArray(),
       await t.connection.collection('lead_limits').find().toArray(),
     ]);
     expect(stored).not.toContain('203.0.113');
@@ -121,7 +121,8 @@ describe('analytics', () => {
       .update([salt, live.site.id, '203.0.113.7', DESKTOP_UA].join('\n'))
       .digest('base64url');
     const hashes = (
-      await t.connection
+      await t
+        .workspaceDb(workspaceId)
         .collection('analytics_seen')
         .find({ siteId: new Types.ObjectId(live.site.id) })
         .toArray()
@@ -172,20 +173,23 @@ describe('analytics', () => {
     const live = await liveSite();
     // Eight days ago belongs to the 7 days before, on the site and on its page.
     const earlier = addVnDays(vnDayOf(new Date()), -8);
-    await t.connection.collection('analytics_daily').insertMany(
-      [null, new Types.ObjectId(live.pageId)].map((pageId) => ({
-        workspaceId: new Types.ObjectId(workspaceId),
-        siteId: new Types.ObjectId(live.site.id),
-        pageId,
-        day: earlier,
-        source: 'cu',
-        medium: 'cpc',
-        device: 'mobile',
-        views: 4,
-        visitors: 3,
-        expiresAt: vnDayStart(addVnDays(earlier, 400)),
-      })),
-    );
+    await t
+      .workspaceDb(workspaceId)
+      .collection('analytics_daily')
+      .insertMany(
+        [null, new Types.ObjectId(live.pageId)].map((pageId) => ({
+          workspaceId: new Types.ObjectId(workspaceId),
+          siteId: new Types.ObjectId(live.site.id),
+          pageId,
+          day: earlier,
+          source: 'cu',
+          medium: 'cpc',
+          device: 'mobile',
+          views: 4,
+          visitors: 3,
+          expiresAt: vnDayStart(addVnDays(earlier, 400)),
+        })),
+      );
     await view(live);
 
     for (const query of ['', `?pageId=${live.pageId}`]) {
@@ -275,20 +279,23 @@ describe('analytics', () => {
     const live = await liveSite();
     const day = vnDayOf(new Date());
     const siteId = new Types.ObjectId(live.site.id);
-    await t.connection.collection('analytics_daily').insertMany(
-      Array.from({ length: 50 }, (_, index) => ({
-        workspaceId: new Types.ObjectId(workspaceId),
-        siteId,
-        pageId: null,
-        day,
-        source: `nguon-${String(index)}`,
-        medium: 'referral',
-        device: 'desktop',
-        views: 1,
-        visitors: 1,
-        expiresAt: vnDayStart(addVnDays(day, 400)),
-      })),
-    );
+    await t
+      .workspaceDb(workspaceId)
+      .collection('analytics_daily')
+      .insertMany(
+        Array.from({ length: 50 }, (_, index) => ({
+          workspaceId: new Types.ObjectId(workspaceId),
+          siteId,
+          pageId: null,
+          day,
+          source: `nguon-${String(index)}`,
+          medium: 'referral',
+          device: 'desktop',
+          views: 1,
+          visitors: 1,
+          expiresAt: vnDayStart(addVnDays(day, 400)),
+        })),
+      );
     await sendPageView(
       t,
       live.site.subdomain,
@@ -301,12 +308,14 @@ describe('analytics', () => {
       { ip: '203.0.113.30' },
     ).expect(204);
 
-    const rows = await t.connection
+    const rows = await t
+      .workspaceDb(workspaceId)
       .collection('analytics_daily')
       .find({ siteId, pageId: null, day, views: { $gt: 1 } })
       .toArray();
     expect(rows).toEqual([expect.objectContaining({ source: 'nguon-7', views: 2 })]);
-    const other = await t.connection
+    const other = await t
+      .workspaceDb(workspaceId)
       .collection('analytics_daily')
       .findOne({ siteId, pageId: null, day, ...ANALYTICS_OTHER_SOURCE });
     expect(other).toMatchObject({ views: 1, visitors: 1 });
@@ -326,7 +335,8 @@ describe('analytics', () => {
       { source: 'google', medium: 'organic' },
     ]) {
       expect(
-        await t.connection
+        await t
+          .workspaceDb(workspaceId)
           .collection('analytics_daily')
           .findOne({ siteId, pageId: null, day, ...standard }),
       ).toMatchObject({ views: 1, visitors: 1 });
@@ -377,7 +387,7 @@ describe('analytics', () => {
     const lead = leadListResponseSchema
       .parse((await owner.get(`/sites/${live.site.id}/leads`).expect(200)).body)
       .items.find((item) => item.name === 'Nguyễn Thu Hà');
-    await owner.patch(`/leads/${lead?.id ?? ''}`, { spam: true }).expect(200);
+    await owner.patch(`/sites/${live.site.id}/leads/${lead?.id ?? ''}`, { spam: true }).expect(200);
     expect((await report(live.site)).totals.leads).toBe(0);
   });
 

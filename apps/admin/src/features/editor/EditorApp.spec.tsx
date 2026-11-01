@@ -196,7 +196,9 @@ describe('EditorApp', () => {
     expect(screen.getByRole('link', { name: preview.url })).toHaveAttribute('href', preview.url);
     const [endpoint, args] =
       apiMock.mock.calls.find(([called]) => called === endpoints.createPreviewLink) ?? [];
-    expect(endpoint?.path(...(args ?? []))).toBe('/pages/64b000000000000000000002/preview-links');
+    expect(endpoint?.path(...(args ?? []))).toBe(
+      '/sites/64b000000000000000000001/pages/64b000000000000000000002/preview-links',
+    );
   });
 
   it('reminds that the live page keeps its look after the site theme changes', async () => {

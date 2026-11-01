@@ -71,30 +71,33 @@ export class PagesController {
     return this.pages.slugAvailability(user, siteId, query);
   }
 
-  @Get('pages/:pageId')
+  @Get('sites/:siteId/pages/:pageId')
   get(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('pageId') pageId: string,
   ): Promise<PageDetailResponse> {
-    return this.pages.get(user, pageId);
+    return this.pages.get(user, siteId, pageId);
   }
 
-  @Put('pages/:pageId/draft')
+  @Put('sites/:siteId/pages/:pageId/draft')
   saveDraft(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('pageId') pageId: string,
     @Body(new ZodPipe(saveDraftRequestSchema)) body: SaveDraftRequest,
   ): Promise<SaveDraftResponse> {
-    return this.pages.saveDraft(user, pageId, body);
+    return this.pages.saveDraft(user, siteId, pageId, body);
   }
 
-  @Post('pages/:pageId/draft/restore')
+  @Post('sites/:siteId/pages/:pageId/draft/restore')
   @HttpCode(200)
   restoreDraft(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('pageId') pageId: string,
     @Body(new ZodPipe(restoreDraftRequestSchema)) body: RestoreDraftRequest,
   ): Promise<PageDetailResponse> {
-    return this.pages.restoreDraft(user, pageId, body);
+    return this.pages.restoreDraft(user, siteId, pageId, body);
   }
 }

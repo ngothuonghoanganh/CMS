@@ -73,7 +73,8 @@ describe('composition validation on the server', () => {
 
   /** The draft as MongoDB holds it, so nothing the API filters on the way out can hide a value. */
   async function storedDraft(pageId: string): Promise<{ revision: number; composition: unknown }> {
-    const page = await t.connection
+    const page = await t
+      .workspaceDb(workspaceId)
       .collection<{ draft: { revision: number; composition: unknown } }>('pages')
       .findOne({ _id: new Types.ObjectId(pageId) });
     if (!page) {
@@ -85,7 +86,7 @@ describe('composition validation on the server', () => {
   /** Sends a hand-made composition as the next draft; the caller sets the expected status. */
   async function put(sections: readonly unknown[], frame: object = {}) {
     const page = await createPage(client, site.id);
-    const response = await client.put(`/pages/${page.page.id}/draft`, {
+    const response = await client.put(`/sites/${site.id}/pages/${page.page.id}/draft`, {
       baseRevision: 0,
       slug: page.page.slug,
       composition: { version: 1, sections, ...frame },
@@ -178,10 +179,11 @@ describe('composition validation on the server', () => {
       // Sample paths name real text fields once; the rest say nothing about the content.
       expect(storedHero?.samplePaths).toEqual(['heading', 'primaryCta.label']);
       expect(storedFooter?.samplePaths).toEqual(['links.0.link.label', 'copyright']);
-      expect(JSON.stringify((await getPage(client, pageId)).draft)).not.toContain(STRAY);
+      expect(JSON.stringify((await getPage(client, site.id, pageId)).draft)).not.toContain(STRAY);
 
-      const published = await publish(client, pageId);
-      const release = await t.connection
+      const published = await publish(client, site.id, pageId);
+      const release = await t
+        .workspaceDb(workspaceId)
         .collection('releases')
         .findOne({ _id: new Types.ObjectId(published.release.id) });
       expect(release).not.toBeNull();
@@ -196,21 +198,23 @@ describe('composition validation on the server', () => {
     it('publishes the parsed sections of a draft stored before drafts were parsed', async () => {
       const page = await createPage(client, site.id);
       const hero = heroSection();
-      await saveDraft(client, page.page.id, {
+      await saveDraft(client, site.id, page.page.id, {
         baseRevision: 0,
         slug: page.page.slug,
         composition: composition([hero]),
         seo: cleanSeo(),
       });
       // Written straight to MongoDB, as an older API version that stored the raw input would.
-      await t.connection
+      await t
+        .workspaceDb(workspaceId)
         .collection('pages')
         .updateOne(
           { _id: new Types.ObjectId(page.page.id) },
           { $set: { 'draft.composition.sections.0.content.script': STRAY } },
         );
-      const published = await publish(client, page.page.id);
-      const release = await t.connection
+      const published = await publish(client, site.id, page.page.id);
+      const release = await t
+        .workspaceDb(workspaceId)
         .collection('releases')
         .findOne({ _id: new Types.ObjectId(published.release.id) });
       expect(JSON.stringify(release)).not.toContain(STRAY);

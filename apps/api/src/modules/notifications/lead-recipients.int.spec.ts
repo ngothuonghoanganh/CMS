@@ -26,7 +26,7 @@ import {
   withRevalidationRecorder,
 } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
-import { confirmationToken, confirmRecipient } from '../../../test/recipients.js';
+import { confirmationLink, confirmRecipient } from '../../../test/recipients.js';
 import { addMember, createSite } from '../../../test/resources.js';
 
 /** "Nơi nhận lead" (ADR-018): confirmed addresses only, at most five, owner-managed. */
@@ -83,17 +83,28 @@ describe('lead recipients', () => {
     const [email] = t.emails.to('sales@smilecare.vn');
     expect(email?.subject).toBe('Xác nhận nhận lead của Nha khoa Smile Care');
     expect(email?.text).toContain(`${ownerName} đã thêm địa chỉ này vào "Nơi nhận lead"`);
-    const token = confirmationToken(t.emails, 'sales@smilecare.vn');
-    expect(email?.text).toContain(`http://localhost:3100/lead-recipients/confirm#token=${token}`);
+    const link = confirmationLink(t.emails, 'sales@smilecare.vn');
+    const { token } = link;
+    expect(link.siteId).toBe(site.id);
+    expect(email?.text).toContain(
+      `http://localhost:3100/lead-recipients/confirm#site=${site.id}&token=${token}`,
+    );
 
     // The database keeps a hash of the link's secret, never the secret.
-    const stored = await t.connection
+    const stored = await t
+      .workspaceDb(workspaceId)
       .collection<{ leadRecipients: Array<{ tokenHash: string | null }> }>('sites')
       .findOne({ _id: new Types.ObjectId(site.id) });
     expect(stored?.leadRecipients[0]?.tokenHash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(stored)).not.toContain(token);
 
-    const confirmed = await confirmRecipient(t, token).expect(200);
+    // The secret works only with its own site, whose workspace database holds the address
+    // (ADR-025): another site, or a site that does not exist, is the same 404.
+    const elsewhere = await createSite(owner, workspaceId);
+    await confirmRecipient(t, { siteId: elsewhere.id, token }).expect(404);
+    await confirmRecipient(t, { siteId: new Types.ObjectId().toHexString(), token }).expect(404);
+
+    const confirmed = await confirmRecipient(t, link).expect(200);
     expect(confirmLeadRecipientResponseSchema.parse(confirmed.body)).toEqual({
       siteName: 'Nha khoa Smile Care',
       email: 'sales@smilecare.vn',
@@ -101,7 +112,7 @@ describe('lead recipients', () => {
     const [after] = await list(site);
     expect(after).toMatchObject({ status: 'confirmed' });
     expect(after?.confirmedAt).not.toBeNull();
-    const again = await confirmRecipient(t, token).expect(404);
+    const again = await confirmRecipient(t, link).expect(404);
     expect(problemSchema.parse(again.body)).toMatchObject({
       title: 'Liên kết xác nhận không còn hiệu lực',
       detail: 'Liên kết đã được dùng hoặc đã quá 7 ngày. Nhờ chủ site gửi lại thư xác nhận.',
@@ -150,10 +161,10 @@ describe('lead recipients', () => {
       .post(`/sites/${site.id}/lead-recipients/${added.id}/resend`)
       .expect(200);
     expect(leadRecipientSchema.parse(resent.body)).toMatchObject({ status: 'pending' });
-    const first = confirmationToken(t.emails, 'le-tan@smilecare.vn');
+    const first = confirmationLink(t.emails, 'le-tan@smilecare.vn');
     await owner.post(`/sites/${site.id}/lead-recipients/${added.id}/resend`).expect(200);
-    const second = confirmationToken(t.emails, 'le-tan@smilecare.vn');
-    expect(second).not.toBe(first);
+    const second = confirmationLink(t.emails, 'le-tan@smilecare.vn');
+    expect(second.token).not.toBe(first.token);
     await confirmRecipient(t, first).expect(404);
     await confirmRecipient(t, second).expect(200);
 
@@ -200,15 +211,16 @@ describe('lead recipients', () => {
   it('lets a link work for 7 days only', async () => {
     const site = await createSite(owner, workspaceId);
     await add(site, 'cu@smilecare.vn');
-    const token = confirmationToken(t.emails, 'cu@smilecare.vn');
-    await t.connection
+    const link = confirmationLink(t.emails, 'cu@smilecare.vn');
+    await t
+      .workspaceDb(workspaceId)
       .collection('sites')
       .updateOne(
         { _id: new Types.ObjectId(site.id) },
         { $set: { 'leadRecipients.0.tokenExpiresAt': new Date(Date.now() - 1000) } },
       );
     expect((await list(site))[0]).toMatchObject({ status: 'expired' });
-    await confirmRecipient(t, token).expect(404);
+    await confirmRecipient(t, link).expect(404);
   });
 
   it('removes an address and logs how many are left', async () => {
@@ -249,15 +261,16 @@ describe('lead recipients', () => {
 
   it('refuses a malformed link, an invalid address, and a confirmation from another origin', async () => {
     const site = await createSite(owner, workspaceId);
-    await confirmRecipient(t, 'short').expect(422);
+    await confirmRecipient(t, { siteId: site.id, token: 'short' }).expect(422);
+    await confirmRecipient(t, { siteId: 'not-an-id', token: 'a'.repeat(43) }).expect(422);
     await owner
       .post(`/sites/${site.id}/lead-recipients`, { email: 'khong-phai-email' })
       .expect(422);
     await add(site, 'goc@smilecare.vn');
-    const token = confirmationToken(t.emails, 'goc@smilecare.vn');
+    const link = confirmationLink(t.emails, 'goc@smilecare.vn');
     const foreign = await request(t.app.getHttpServer())
       .post('/public/lead-recipients/confirm')
-      .send({ token })
+      .send(link)
       .expect(403);
     expect(problemSchema.parse(foreign.body).code).toBe('origin_rejected');
   });
@@ -268,13 +281,14 @@ describe('lead recipients', () => {
     const slug = uniqueSlug('form');
     const page = await createPage(owner, site.id, { title: 'Đăng ký', slug });
     const draft = formDraft(slug);
-    await replaceDraft(owner, page.page.id, draft);
+    await replaceDraft(owner, site.id, page.page.id, draft);
     const formId = draft.composition.sections[1]?.id;
 
     const blocked = await publishRequest(
       owner,
+      site.id,
       page.page.id,
-      await currentPublishBody(owner, page.page.id),
+      await currentPublishBody(owner, site.id, page.page.id),
     ).expect(422);
     const checks = checksResultSchema.parse(problemSchema.parse(blocked.body).context?.['checks']);
     expect(checks.blocking).toEqual([
@@ -286,10 +300,13 @@ describe('lead recipients', () => {
 
     // An address that has not confirmed does not count.
     await add(site, 'cho@smilecare.vn');
-    await publishRequest(owner, page.page.id, await currentPublishBody(owner, page.page.id)).expect(
-      422,
-    );
-    await confirmRecipient(t, confirmationToken(t.emails, 'cho@smilecare.vn')).expect(200);
-    expect((await publish(owner, page.page.id)).release.version).toBe(1);
+    await publishRequest(
+      owner,
+      site.id,
+      page.page.id,
+      await currentPublishBody(owner, site.id, page.page.id),
+    ).expect(422);
+    await confirmRecipient(t, confirmationLink(t.emails, 'cho@smilecare.vn')).expect(200);
+    expect((await publish(owner, site.id, page.page.id)).release.version).toBe(1);
   });
 });

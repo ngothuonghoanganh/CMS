@@ -76,9 +76,9 @@ describe('site settings snapshotted into releases', () => {
     return resolved.data;
   }
 
-  async function preview(pageId: string, body: object): Promise<PublicPageData> {
+  async function preview(siteId: string, pageId: string, body: object): Promise<PublicPageData> {
     const link = previewLinkResponseSchema.parse(
-      (await client.post(`/pages/${pageId}/preview-links`, body).expect(201)).body,
+      (await client.post(`/sites/${siteId}/pages/${pageId}/preview-links`, body).expect(201)).body,
     );
     const token = link.url.split('/_preview/')[1];
     if (token === undefined) {
@@ -97,7 +97,10 @@ describe('site settings snapshotted into releases', () => {
   }
 
   function storedRelease(releaseId: string) {
-    return t.connection.collection('releases').findOne({ _id: new Types.ObjectId(releaseId) });
+    return t
+      .workspaceDb(workspaceId)
+      .collection('releases')
+      .findOne({ _id: new Types.ObjectId(releaseId) });
   }
 
   /** The navigation bar shows the site name (empty brand text) and the site logo. */
@@ -135,12 +138,12 @@ describe('site settings snapshotted into releases', () => {
     });
     const slug = uniqueSlug('giao-dien');
     const page = await createPage(client, site.id, { slug });
-    await replaceDraft(client, page.page.id, {
+    await replaceDraft(client, site.id, page.page.id, {
       slug,
       composition: composition([navbar(), sampleSection('footer')]),
       seo: cleanSeo({ title: '' }),
     });
-    const v1 = await publish(client, page.page.id);
+    const v1 = await publish(client, site.id, page.page.id);
     return { site, logo, share, slug, pageId: page.page.id, v1 };
   }
 
@@ -225,14 +228,14 @@ describe('site settings snapshotted into releases', () => {
       expect(await resolvePage(site, slug)).toEqual(published);
       const reminder = [{ kind: 'site', label: chip, sectionId: null }];
       // Rule 2 is unchanged: the draft still has the live revision, so the page stays live.
-      expect((await getPage(client, pageId)).page).toMatchObject({
+      expect((await getPage(client, site.id, pageId)).page).toMatchObject({
         status: { kind: 'live', changeCount: 0, changes: [] },
         siteChanges: reminder,
       });
       expect((await listed(site.id, pageId)).siteChanges).toEqual(reminder);
 
       // Republishing the unchanged draft applies the new settings.
-      const v2 = await publish(client, pageId);
+      const v2 = await publish(client, site.id, pageId);
       expect(v2.release.version).toBe(2);
       expect(v2.release.changeSummary).toEqual(reminder);
       expect(v2.page.siteChanges).toEqual([]);
@@ -243,7 +246,7 @@ describe('site settings snapshotted into releases', () => {
 
       // Rolling back to v1 serves v1's snapshot again, and the reminder follows the live release.
       await client
-        .post(`/pages/${pageId}/pointer`, {
+        .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
           targetReleaseId: v1.release.id,
           expectedCurrentReleaseId: v2.release.id,
           reason: 'Giao diện mới chưa ổn',
@@ -257,50 +260,50 @@ describe('site settings snapshotted into releases', () => {
   it('refuses to publish site settings the publisher did not see', async () => {
     const { site, slug, pageId, v1 } = await livePageOnStyledSite();
     // The publish dialog is opened while the site still has the live look.
-    const seen = await currentPublishBody(client, pageId);
+    const seen = await currentPublishBody(client, site.id, pageId);
     expect(seen.acknowledgedSiteChanges).toEqual([]);
     const published = await resolvePage(site, slug);
 
     await updateSite(site, { themePresetId: 'sunset' });
-    const response = await publishRequest(client, pageId, seen).expect(409);
+    const response = await publishRequest(client, site.id, pageId, seen).expect(409);
     expect(problemSchema.parse(response.body).code).toBe('site_changed');
     // Nothing went live: same pointer and the same public page.
-    expect((await getPage(client, pageId)).page.liveRelease?.id).toBe(v1.release.id);
+    expect((await getPage(client, site.id, pageId)).page.liveRelease?.id).toBe(v1.release.id);
     expect(await resolvePage(site, slug)).toEqual(published);
 
     // Once the new look has been shown, the publish goes through.
-    const reviewed = await currentPublishBody(client, pageId);
+    const reviewed = await currentPublishBody(client, site.id, pageId);
     expect(reviewed.acknowledgedSiteChanges).toEqual(['Giao diện site: giao diện']);
-    await publishRequest(client, pageId, reviewed).expect(201);
+    await publishRequest(client, site.id, pageId, reviewed).expect(201);
   });
 
   it('adds site chips after the page changes in the change summary', async () => {
     const site = await createSite(client, workspaceId);
     const slug = uniqueSlug('ca-hai');
     const page = await createPage(client, site.id, { slug });
-    await replaceDraft(client, page.page.id, {
+    await replaceDraft(client, site.id, page.page.id, {
       slug,
       composition: composition([heroSection({ heading: 'Bản 1' })]),
       seo: cleanSeo(),
     });
-    await publish(client, page.page.id);
-    await editHeroHeading(client, page.page.id, 'Bản 2');
+    await publish(client, site.id, page.page.id);
+    await editHeroHeading(client, site.id, page.page.id, 'Bản 2');
     await updateSite(site, { name: 'Tên mới', themePresetId: 'indigo' });
 
-    const summary = (await getPage(client, page.page.id)).page;
+    const summary = (await getPage(client, site.id, page.page.id)).page;
     expect(summary.status).toMatchObject({ kind: 'live_with_changes', changeCount: 1 });
     expect(summary.siteChanges.map((change) => change.label)).toEqual([
       'Giao diện site: giao diện',
       'Giao diện site: tên site',
     ]);
-    const v2 = await publish(client, page.page.id);
+    const v2 = await publish(client, site.id, page.page.id);
     expect(v2.release.changeSummary.map((change) => change.label)).toEqual([
       'Sửa: Hero',
       'Giao diện site: giao diện',
       'Giao diện site: tên site',
     ]);
     const history = historyResponseSchema.parse(
-      (await client.get(`/pages/${page.page.id}/history`).expect(200)).body,
+      (await client.get(`/sites/${site.id}/pages/${page.page.id}/history`).expect(200)).body,
     );
     const newest = history.items[0];
     expect(newest?.kind === 'release' ? newest.release.changeSummary : null).toEqual(
@@ -312,7 +315,7 @@ describe('site settings snapshotted into releases', () => {
     const { site, logo, pageId, v1 } = await livePageOnStyledSite();
     await updateSite(site, { name: 'Smile Care mới', themePresetId: 'sunset', logoAssetId: null });
 
-    const release = await preview(pageId, { kind: 'release', releaseId: v1.release.id });
+    const release = await preview(site.id, pageId, { kind: 'release', releaseId: v1.release.id });
     expect(release.site).toMatchObject({
       name: SITE_NAME,
       themePresetId: 'mint',
@@ -320,7 +323,7 @@ describe('site settings snapshotted into releases', () => {
     });
     expect(release.page.seo.title).toBe(SITE_NAME);
 
-    const draft = await preview(pageId, { kind: 'draft' });
+    const draft = await preview(site.id, pageId, { kind: 'draft' });
     expect(draft.site).toMatchObject({
       name: 'Smile Care mới',
       themePresetId: 'sunset',
@@ -335,9 +338,9 @@ describe('site settings snapshotted into releases', () => {
     await updateSite(site, { themePresetId: 'indigo' });
 
     expect((await listed(site.id, draftOnly.page.id)).siteChanges).toEqual([]);
-    const detail = await getPage(client, pageId);
+    const detail = await getPage(client, site.id, pageId);
     await client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: null,
         expectedCurrentReleaseId: detail.page.liveRelease?.id ?? null,
         reason: 'Tạm gỡ',
@@ -347,7 +350,8 @@ describe('site settings snapshotted into releases', () => {
       status: { kind: 'unpublished' },
       siteChanges: [],
     });
-    const stored = await t.connection
+    const stored = await t
+      .workspaceDb(workspaceId)
       .collection('pages')
       .findOne({ _id: new Types.ObjectId(pageId) });
     expect(stored).not.toHaveProperty('siteChanges');
@@ -356,7 +360,8 @@ describe('site settings snapshotted into releases', () => {
   it('reads a release published before ADR-015, without a snapshot, as the current site', async () => {
     const { site, slug, pageId, v1 } = await livePageOnStyledSite();
     // Releases are immutable for the application; only a raw write can recreate a legacy one.
-    await t.connection
+    await t
+      .workspaceDb(workspaceId)
       .collection('releases')
       .updateOne({ _id: new Types.ObjectId(v1.release.id) }, { $unset: { sitePresentation: '' } });
     expect(await storedRelease(v1.release.id)).not.toHaveProperty('sitePresentation');
@@ -368,7 +373,7 @@ describe('site settings snapshotted into releases', () => {
     // It shows the current site, so there is nothing to remind about.
     expect((await listed(site.id, pageId)).siteChanges).toEqual([]);
 
-    const v2 = await publish(client, pageId);
+    const v2 = await publish(client, site.id, pageId);
     expect(v2.release.changeSummary).toEqual([]);
     expect((await storedRelease(v2.release.id))?.['sitePresentation']).toMatchObject({
       name: 'Smile Care mới',

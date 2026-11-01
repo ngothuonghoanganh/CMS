@@ -47,7 +47,7 @@ export function DraftNotice({ ensureSaved }: DraftNoticeProps) {
     try {
       // Settle autosave first so the restore is based on the server's current revision.
       const saved = await ensureSaved();
-      const detail = await api(endpoints.restoreDraft, [page.id], {
+      const detail = await api(endpoints.restoreDraft, [page.siteId, page.id], {
         body: { baseRevision: saved.revision, releaseId: live.id },
       });
       await replaceWithServerDraft(store, detail);

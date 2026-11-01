@@ -288,7 +288,10 @@ describe('HistoryScreen', () => {
 
     expect(await screen.findByText('Đã hoàn tác khôi phục')).toBeInTheDocument();
     expect(screen.getByText('v12 đang live trở lại.')).toBeInTheDocument();
-    expect(apiMock).toHaveBeenCalledWith(endpoints.undoActivity, ['64b0000000000000000000f1']);
+    expect(apiMock).toHaveBeenCalledWith(endpoints.undoActivity, [
+      SITE_ID,
+      '64b0000000000000000000f1',
+    ]);
     expect(screen.queryByRole('button', { name: 'Hoàn tác khôi phục' })).not.toBeInTheDocument();
     expect(screen.getByText('HOÀN TÁC')).toBeInTheDocument();
   });
@@ -405,7 +408,7 @@ describe('HistoryScreen', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Sao chép vào bản nháp' }));
 
     expect(await screen.findByText('Đã sao chép v11 vào bản nháp')).toBeInTheDocument();
-    expect(apiMock).toHaveBeenCalledWith(endpoints.restoreDraft, [PAGE_ID], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.restoreDraft, [SITE_ID, PAGE_ID], {
       body: { baseRevision: 9, releaseId: releaseId(11) },
     });
     await user.click(screen.getByRole('button', { name: 'Mở editor' }));
@@ -586,7 +589,7 @@ describe('HistoryScreen', () => {
     await vi.waitFor(() => {
       expect(open).toHaveBeenCalledWith('https://smilecare.payload.site/_preview/token', '_blank');
     });
-    expect(apiMock).toHaveBeenCalledWith(endpoints.createPreviewLink, [PAGE_ID], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.createPreviewLink, [SITE_ID, PAGE_ID], {
       body: { kind: 'release', releaseId: releaseId(11) },
     });
     expect(opened.opener).toBeNull();

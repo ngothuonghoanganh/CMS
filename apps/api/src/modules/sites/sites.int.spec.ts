@@ -120,23 +120,31 @@ describe('sites', () => {
   });
 
   describe('site limit', () => {
-    /** Stores `count` sites in the workspace directly, bypassing the API's site limit. */
+    /**
+     * Stores `count` sites in the workspace directly, bypassing the API's site limit: in the
+     * workspace's database, with their addresses in the master (ADR-025).
+     */
     async function insertSites(workspace: string, count: number): Promise<void> {
       const now = new Date();
-      await t.connection.collection('sites').insertMany(
-        Array.from({ length: count }, (_unused, index) => ({
-          workspaceId: new Types.ObjectId(workspace),
-          name: `Site ${index}`,
-          subdomain: uniqueSubdomain('day'),
-          themePresetId: 'mint',
-          logoAssetId: null,
-          defaultShareImageAssetId: null,
-          pageSeq: 0,
-          createdBy: new Types.ObjectId(),
-          createdAt: now,
-          updatedAt: now,
-        })),
-      );
+      const sites = Array.from({ length: count }, (_unused, index) => ({
+        _id: new Types.ObjectId(),
+        workspaceId: new Types.ObjectId(workspace),
+        name: `Site ${index}`,
+        subdomain: uniqueSubdomain('day'),
+        themePresetId: 'mint',
+        logoAssetId: null,
+        defaultShareImageAssetId: null,
+        pageSeq: 0,
+        createdBy: new Types.ObjectId(),
+        createdAt: now,
+        updatedAt: now,
+      }));
+      await t.workspaceDb(workspace).collection('sites').insertMany(sites);
+      await t.connection
+        .collection('site_addresses')
+        .insertMany(
+          sites.map(({ _id, workspaceId, subdomain }) => ({ _id, workspaceId, subdomain })),
+        );
     }
 
     it('creates only one of several racing sites when one slot is left', async () => {
@@ -366,6 +374,8 @@ describe('site creation transaction', () => {
     await client
       .post(`/workspaces/${workspaceId}/sites`, { name: 'Site', subdomain: uniqueSubdomain() })
       .expect(500);
-    expect(await t.connection.collection('sites').countDocuments()).toBe(0);
+    // Neither the site in the workspace's database nor its address in the master (ADR-025).
+    expect(await t.workspaceDb(workspaceId).collection('sites').countDocuments()).toBe(0);
+    expect(await t.connection.collection('site_addresses').countDocuments()).toBe(0);
   });
 });

@@ -89,7 +89,10 @@ export class LeadIntakeService {
     const content = leadFormContentSchema.parse(form.content);
     const submission =
       input.submissionId === null ? null : submissionKey(input.submissionId, input);
-    if (submission !== null && (await this.leads.existsPublicSubmission(site._id, submission))) {
+    if (
+      submission !== null &&
+      (await this.leads.existsPublicSubmission(site, site._id, submission))
+    ) {
       return { replayed: true };
     }
     const now = new Date();
@@ -147,14 +150,15 @@ export class LeadIntakeService {
       // The visitor gets the answer now; the email goes out in the background. Queued before
       // anything else can fail: a resend of this submission is answered as a replay and queues
       // nothing, so the stored lead would wait for the next restart.
-      this.notifier.enqueue(stored._id);
+      this.notifier.enqueue({ workspaceId: site.workspaceId, leadId: stored._id });
     }
     // The owner may have changed the retention period since the site was read above. Settings
     // commit before they recompute every lead, so either that recompute covers this lead or this
     // read sees the new period (ADR-017).
-    const latest = retentionOf(await this.sites.findPublicPrivacy(site._id));
+    const latest = retentionOf(await this.sites.findPublicPrivacy(site, site._id));
     if (latest !== retention) {
       await this.leads.setPublicExpiry(
+        site,
         stored._id,
         latest === null ? null : addMonthsUtc(now, latest),
       );
@@ -171,11 +175,11 @@ export class LeadIntakeService {
     if (!site || !isObjectIdString(releaseId)) {
       throw notFound(FORM_NOT_FOUND);
     }
-    const release = await this.releases.findPublicById(toObjectId(releaseId));
+    const release = await this.releases.findPublicById(site, toObjectId(releaseId));
     if (!release || !release.siteId.equals(site._id)) {
       throw notFound(FORM_NOT_FOUND);
     }
-    const page = await this.pages.findPublicById(release.pageId);
+    const page = await this.pages.findPublicById(site, release.pageId);
     if (!page || !page.siteId.equals(site._id) || page.publishedReleaseId === null) {
       throw notFound(FORM_NOT_FOUND);
     }

@@ -63,6 +63,6 @@ export class LeadRecipientsController {
   confirm(
     @Body(new ZodPipe(confirmLeadRecipientRequestSchema)) body: ConfirmLeadRecipientRequest,
   ): Promise<ConfirmLeadRecipientResponse> {
-    return this.recipients.confirm(body.token);
+    return this.recipients.confirm(body);
   }
 }

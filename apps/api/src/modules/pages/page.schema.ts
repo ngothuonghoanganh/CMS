@@ -1,5 +1,6 @@
 import { type Composition, type PageGoal, pageGoalIds, type Seo } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const PAGE_MODEL = 'Page';
 export const PAGES_DRAFT_SLUG_INDEX = 'pages_draft_slug_unique';
@@ -84,3 +85,6 @@ pageSchema.index(
   },
 );
 pageSchema.index({ workspaceId: 1, siteId: 1, updatedAt: -1, _id: -1 });
+
+/** In the workspace's own database (ADR-025). */
+export const PAGE_COLLECTION = workspaceCollection(PAGE_MODEL, pageSchema);

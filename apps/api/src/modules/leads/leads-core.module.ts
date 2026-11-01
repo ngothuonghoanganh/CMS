@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { LeadLimitsRepository } from './lead-limits.repository.js';
-import { LEAD_LIMIT_MODEL, LEAD_MODEL, leadLimitSchema, leadSchema } from './lead.schema.js';
+import { LEAD_COLLECTION, LEAD_LIMIT_MODEL, leadLimitSchema } from './lead.schema.js';
 import { LeadsRepository } from './leads.repository.js';
+import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-databases.js';
 
 /**
  * Lead persistence, without HTTP. The privacy module recomputes expiries when the retention
@@ -10,10 +11,8 @@ import { LeadsRepository } from './leads.repository.js';
  */
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: LEAD_MODEL, schema: leadSchema },
-      { name: LEAD_LIMIT_MODEL, schema: leadLimitSchema },
-    ]),
+    MongooseModule.forFeature([{ name: LEAD_LIMIT_MODEL, schema: leadLimitSchema }]),
+    WorkspaceCollectionsModule.forFeature([LEAD_COLLECTION]),
   ],
   providers: [LeadsRepository, LeadLimitsRepository],
   exports: [LeadsRepository, LeadLimitsRepository],

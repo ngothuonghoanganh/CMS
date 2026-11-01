@@ -135,13 +135,13 @@ export class PointerService {
    * the request; it flags the activity so the UI reports it.
    */
   async revalidate(
-    site: Pick<SiteRecord, 'subdomain'>,
+    site: Pick<SiteRecord, 'subdomain' | 'workspaceId'>,
     activityId: ObjectId,
   ): Promise<RevalidationResult> {
     const result = await this.revalidation.revalidateSite(site.subdomain);
     if (result === 'failed') {
       try {
-        await this.activity.markRevalidationFailed(activityId);
+        await this.activity.markRevalidationFailed(site, activityId);
       } catch (error) {
         // The pointer move is committed; report the bookkeeping failure without failing the request.
         this.logger.error(

@@ -151,7 +151,7 @@ export function HistoryScreen({
   const { toast } = useToast();
   const now = useNow(loadedAt);
   const pageId = initialPage.id;
-  const preview = useReleasePreview(pageId);
+  const preview = useReleasePreview(site.id, pageId);
   const [selectedId, setSelectedId] = useState<string | null>(restoreReleaseId);
   const [copyTarget, setCopyTarget] = useState<ReleaseSummary | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -174,7 +174,8 @@ export function HistoryScreen({
 
   const pageQuery = useQuery({
     queryKey: pageQueryKeys.summary(site.id, pageId),
-    queryFn: async ({ signal }) => (await api(endpoints.getPage, [pageId], { signal })).page,
+    queryFn: async ({ signal }) =>
+      (await api(endpoints.getPage, [site.id, pageId], { signal })).page,
     initialData: initialPage,
     initialDataUpdatedAt: loadedAt,
   });
@@ -183,7 +184,7 @@ export function HistoryScreen({
   const historyQuery = useInfiniteQuery({
     queryKey: pageQueryKeys.history(site.id, pageId),
     queryFn: ({ pageParam, signal }) =>
-      api(endpoints.history, [pageId], {
+      api(endpoints.history, [site.id, pageId], {
         query: {
           limit: HISTORY_PAGE_SIZE,
           ...(pageParam === null ? {} : { cursor: pageParam }),
@@ -251,7 +252,7 @@ export function HistoryScreen({
   }, [panelOpen, rollback]);
 
   const undo = useMutation({
-    mutationFn: (activityId: string) => api(endpoints.undoActivity, [activityId]),
+    mutationFn: (activityId: string) => api(endpoints.undoActivity, [site.id, activityId]),
     onSuccess: async (result) => {
       setPage(result.page);
       // Asked for before the refresh, like a rollback: the history it brings removes the banner.

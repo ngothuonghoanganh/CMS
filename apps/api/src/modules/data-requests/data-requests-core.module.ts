@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
-import { DATA_REQUEST_MODEL, dataRequestSchema } from './data-request.schema.js';
+import { DATA_REQUEST_COLLECTION } from './data-request.schema.js';
 import { DataRequestsRepository } from './data-requests.repository.js';
+import { WorkspaceCollectionsModule } from '../../shared/persistence/workspace-databases.js';
 
 /**
  * Data request persistence, without HTTP. Deleting a person's data from the inbox masks their
@@ -9,7 +9,7 @@ import { DataRequestsRepository } from './data-requests.repository.js';
  * depends on it.
  */
 @Module({
-  imports: [MongooseModule.forFeature([{ name: DATA_REQUEST_MODEL, schema: dataRequestSchema }])],
+  imports: [WorkspaceCollectionsModule.forFeature([DATA_REQUEST_COLLECTION])],
   providers: [DataRequestsRepository],
   exports: [DataRequestsRepository],
 })

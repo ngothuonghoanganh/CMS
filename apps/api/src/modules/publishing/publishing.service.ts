@@ -143,8 +143,8 @@ export class PublishingService {
     private readonly approvalNotifier: ApprovalNotifier,
   ) {}
 
-  async checks(user: AuthenticatedUser, pageId: string): Promise<ChecksResult> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.view');
+  async checks(user: AuthenticatedUser, siteId: string, pageId: string): Promise<ChecksResult> {
+    const { scope, site, page } = await this.pageAccess.access(user, siteId, pageId, 'pages.view');
     return (await this.evaluator.evaluate(scope, site, page)).checks;
   }
 
@@ -159,11 +159,17 @@ export class PublishingService {
    */
   async publish(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     idempotencyKey: string,
     input: PublishRequest,
   ): Promise<PublishOutcome> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.publish');
+    const { scope, site, page } = await this.pageAccess.access(
+      user,
+      siteId,
+      pageId,
+      'pages.publish',
+    );
     const existing = await this.releases.findByIdempotencyKey(scope, page._id, idempotencyKey);
     if (existing) {
       return { response: await this.replay(scope, site, existing), replayed: true };
@@ -342,10 +348,16 @@ export class PublishingService {
    */
   async movePointer(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     input: PointerMoveRequest,
   ): Promise<PointerMoveResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.manageLive');
+    const { scope, site, page } = await this.pageAccess.access(
+      user,
+      siteId,
+      pageId,
+      'pages.manageLive',
+    );
     const target =
       input.targetReleaseId === null
         ? null
@@ -383,20 +395,20 @@ export class PublishingService {
    * transaction, so a publish or rollback committed in between makes the undo fail with
    * `undo_not_available`, even when the pointer is back on the rollback's target.
    */
-  async undo(user: AuthenticatedUser, activityId: string): Promise<PointerMoveResponse> {
+  async undo(
+    user: AuthenticatedUser,
+    siteId: string,
+    activityId: string,
+  ): Promise<PointerMoveResponse> {
     const id = toObjectId(activityId, ACTIVITY_NOT_FOUND);
-    const ref = await this.activity.findAccessRef(id);
-    if (!ref) {
-      throw notFound(ACTIVITY_NOT_FOUND);
-    }
     const { scope, site } = await this.sites.accessById(
       user,
-      ref.siteId,
+      toObjectId(siteId, ACTIVITY_NOT_FOUND),
       'pages.manageLive',
       ACTIVITY_NOT_FOUND,
     );
     const rollback = await this.activity.findById(scope, id);
-    if (!rollback) {
+    if (!rollback?.siteId.equals(site._id)) {
       throw notFound(ACTIVITY_NOT_FOUND);
     }
     const pageId = rollback.pageId;
@@ -441,10 +453,11 @@ export class PublishingService {
   /** Releases and pointer moves of a page, newest first, with one cursor across both. */
   async history(
     user: AuthenticatedUser,
+    siteId: string,
     pageId: string,
     query: CursorQuery,
   ): Promise<HistoryResponse> {
-    const { scope, page } = await this.pageAccess.access(user, pageId, 'pages.view');
+    const { scope, page } = await this.pageAccess.access(user, siteId, pageId, 'pages.view');
     const [releases, events, latest] = await Promise.all([
       this.releases.listForPage(scope, page._id, query.cursor, query.limit),
       this.activity.listForPage(scope, page._id, query.cursor, query.limit, HISTORY_POINTER_TYPES),

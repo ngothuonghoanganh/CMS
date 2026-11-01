@@ -175,7 +175,7 @@ describe('request log', () => {
 
   it('keeps the preview token out of the URL and route params in the log', async () => {
     const response = await owner
-      .post(`/pages/${pageId}/preview-links`, { kind: 'draft' })
+      .post(`/sites/${site.id}/pages/${pageId}/preview-links`, { kind: 'draft' })
       .expect(201);
     const token = previewLinkResponseSchema.parse(response.body).url.split('/_preview/')[1];
     if (token === undefined) {

@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
-import { siteFixture } from '../dashboard/test-fixtures';
+import { SITE_ID, siteFixture } from '../dashboard/test-fixtures';
 import { apiError, renderWithProviders } from '../shell/test-utils';
 import { RollbackPanel } from './RollbackPanel';
 import { historyPage, PAGE_ID, releaseFixture, releaseId } from './test-fixtures';
@@ -83,7 +83,7 @@ describe('RollbackPanel', () => {
     await vi.waitFor(() => {
       expect(props.onRolledBack).toHaveBeenCalledWith(result);
     });
-    expect(apiMock).toHaveBeenCalledWith(endpoints.movePointer, [PAGE_ID], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.movePointer, [SITE_ID, PAGE_ID], {
       body: {
         targetReleaseId: releaseId(11),
         expectedCurrentReleaseId: releaseId(12),

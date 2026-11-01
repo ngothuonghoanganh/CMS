@@ -117,7 +117,8 @@ describe('auth', () => {
     expect(problemSchema.parse(meResponse.body).code).toBe('unauthenticated');
     const rename = await client.patch(`/sites/${site.id}`, { name: 'Đổi tên' }).expect(401);
     expect(problemSchema.parse(rename.body).code).toBe('unauthenticated');
-    const stored = await t.connection
+    const stored = await t
+      .workspaceDb(workspaceId)
       .collection('sites')
       .findOne({ _id: new Types.ObjectId(site.id) });
     expect(stored?.['name']).toBe('Nha khoa Smile Care');

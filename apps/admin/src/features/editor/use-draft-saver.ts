@@ -159,7 +159,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     state.markSaving();
     let response: SaveDraftResponse;
     try {
-      response = await api(endpoints.saveDraft, [state.page.id], {
+      response = await api(endpoints.saveDraft, [state.page.siteId, state.page.id], {
         body: { baseRevision: state.baseRevision, slug, composition, seo },
       });
     } catch (error) {

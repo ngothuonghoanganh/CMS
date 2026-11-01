@@ -16,7 +16,7 @@ export const loadPageDetail = cache(
     }
     let detail: PageDetailResponse;
     try {
-      detail = await serverApi(endpoints.getPage, [pageId]);
+      detail = await serverApi(endpoints.getPage, [siteId, pageId]);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         notFound();

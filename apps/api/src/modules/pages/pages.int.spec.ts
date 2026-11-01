@@ -62,28 +62,31 @@ describe('pages and drafts', () => {
   /** Stores `count` blank draft pages in the site directly, bypassing the API's page limit. */
   async function insertPages(siteId: string, count: number): Promise<void> {
     const now = new Date();
-    await t.connection.collection('pages').insertMany(
-      Array.from({ length: count }, (_unused, index) => ({
-        workspaceId: new Types.ObjectId(workspaceId),
-        siteId: new Types.ObjectId(siteId),
-        title: `Trang ${index}`,
-        goal: null,
-        draft: {
-          slug: `trang-${index}`,
-          composition: { version: 1, sections: [] },
-          seo: cleanSeo(),
-          revision: 0,
+    await t
+      .workspaceDb(workspaceId)
+      .collection('pages')
+      .insertMany(
+        Array.from({ length: count }, (_unused, index) => ({
+          workspaceId: new Types.ObjectId(workspaceId),
+          siteId: new Types.ObjectId(siteId),
+          title: `Trang ${index}`,
+          goal: null,
+          draft: {
+            slug: `trang-${index}`,
+            composition: { version: 1, sections: [] },
+            seo: cleanSeo(),
+            revision: 0,
+            updatedAt: now,
+            updatedBy: new Types.ObjectId(userId),
+          },
+          publishedReleaseId: null,
+          publishedSlug: null,
+          releaseSeq: 0,
+          createdBy: new Types.ObjectId(userId),
+          createdAt: now,
           updatedAt: now,
-          updatedBy: new Types.ObjectId(userId),
-        },
-        publishedReleaseId: null,
-        publishedSlug: null,
-        releaseSeq: 0,
-        createdBy: new Types.ObjectId(userId),
-        createdAt: now,
-        updatedAt: now,
-      })),
-    );
+        })),
+      );
   }
 
   async function activity(siteId: string): Promise<ActivityItem[]> {
@@ -206,7 +209,8 @@ describe('pages and drafts', () => {
         expect(problemSchema.parse(response.body).code).toBe('page_limit_reached');
       }
       expect(
-        await t.connection
+        await t
+          .workspaceDb(workspaceId)
           .collection('pages')
           .countDocuments({ siteId: new Types.ObjectId(almostFull.id) }),
       ).toBe(MAX_PAGES_PER_SITE);
@@ -233,19 +237,19 @@ describe('pages and drafts', () => {
     });
   });
 
-  describe('PUT /pages/:pageId/draft', () => {
+  describe('PUT /sites/:siteId/pages/:pageId/draft', () => {
     it('saves the draft, increments the revision and returns status and checks', async () => {
       const page = await createPage(client, site.id);
       const draft = publishableDraft(page.page.slug);
-      const saved = await saveDraft(client, page.page.id, { baseRevision: 0, ...draft });
+      const saved = await saveDraft(client, site.id, page.page.id, { baseRevision: 0, ...draft });
       expect(saved.revision).toBe(1);
       expect(saved.page.status.kind).toBe('draft');
       expect(saved.checks).toMatchObject({ revision: 1, blocking: [], warnings: [] });
       expect(saved.checks.passed).toHaveLength(8);
 
-      const again = await saveDraft(client, page.page.id, { baseRevision: 1, ...draft });
+      const again = await saveDraft(client, site.id, page.page.id, { baseRevision: 1, ...draft });
       expect(again.revision).toBe(2);
-      const detail = await getPage(client, page.page.id);
+      const detail = await getPage(client, site.id, page.page.id);
       expect(detail.draft.composition).toEqual(draft.composition);
       expect(detail.draft.seo).toEqual(draft.seo);
       expect(detail.draft.revision).toBe(2);
@@ -254,22 +258,22 @@ describe('pages and drafts', () => {
     it('answers a stale base revision with 409 and the current revision', async () => {
       const page = await createPage(client, site.id);
       const draft = publishableDraft(page.page.slug);
-      await saveDraft(client, page.page.id, { baseRevision: 0, ...draft });
+      await saveDraft(client, site.id, page.page.id, { baseRevision: 0, ...draft });
       const response = await client
-        .put(`/pages/${page.page.id}/draft`, { baseRevision: 0, ...draft })
+        .put(`/sites/${site.id}/pages/${page.page.id}/draft`, { baseRevision: 0, ...draft })
         .expect(409);
       expect(problemSchema.parse(response.body)).toMatchObject({
         code: 'revision_conflict',
         context: { currentRevision: 1 },
       });
-      expect((await getPage(client, page.page.id)).draft.revision).toBe(1);
+      expect((await getPage(client, site.id, page.page.id)).draft.revision).toBe(1);
     });
 
     it('rejects an invalid composition with the path of the problem', async () => {
       const page = await createPage(client, site.id);
       const hero = heroSection();
       const response = await client
-        .put(`/pages/${page.page.id}/draft`, {
+        .put(`/sites/${site.id}/pages/${page.page.id}/draft`, {
           baseRevision: 0,
           slug: page.page.slug,
           composition: composition([
@@ -303,7 +307,7 @@ describe('pages and drafts', () => {
         throw new Error('The goal page has no navigation bar');
       }
       const response = await client
-        .put(`/pages/${page.page.id}/draft`, {
+        .put(`/sites/${site.id}/pages/${page.page.id}/draft`, {
           baseRevision: 0,
           ...draft,
           composition: composition([...draft.composition.sections, navbar]),
@@ -323,7 +327,7 @@ describe('pages and drafts', () => {
       const own = await uploadImage(client, site.id);
       const page = await createPage(client, site.id);
       const response = await client
-        .put(`/pages/${page.page.id}/draft`, {
+        .put(`/sites/${site.id}/pages/${page.page.id}/draft`, {
           baseRevision: 0,
           slug: page.page.slug,
           composition: composition([
@@ -339,14 +343,14 @@ describe('pages and drafts', () => {
         ['seo', 'shareImageAssetId'],
       ]);
       expect(issues[0]?.message).toBe('Ảnh không có trong thư viện của site này');
-      expect((await getPage(client, page.page.id)).draft.revision).toBe(0);
+      expect((await getPage(client, site.id, page.page.id)).draft.revision).toBe(0);
     });
 
     it('rejects a draft slug another page uses', async () => {
       const first = await createPage(client, site.id);
       const second = await createPage(client, site.id);
       const response = await client
-        .put(`/pages/${second.page.id}/draft`, {
+        .put(`/sites/${site.id}/pages/${second.page.id}/draft`, {
           baseRevision: 0,
           ...publishableDraft(first.page.slug),
         })
@@ -356,14 +360,15 @@ describe('pages and drafts', () => {
 
     it('never changes what is live', async () => {
       const { pageId, published } = await createLivePage(client, site.id, uniqueSlug('live'));
-      const saved = await editHeroHeading(client, pageId, 'Tiêu đề mới');
+      const saved = await editHeroHeading(client, site.id, pageId, 'Tiêu đề mới');
       expect(saved.page.liveRelease?.id).toBe(published.release.id);
       expect(saved.page.status).toMatchObject({
         kind: 'live_with_changes',
         changeCount: 1,
         changes: [{ kind: 'modified', label: 'Sửa: Hero' }],
       });
-      const stored = await t.connection
+      const stored = await t
+        .workspaceDb(workspaceId)
         .collection<{ publishedReleaseId: Types.ObjectId | null }>('pages')
         .findOne({ _id: new Types.ObjectId(pageId) });
       expect(stored?.publishedReleaseId?.toHexString()).toBe(published.release.id);
@@ -403,7 +408,7 @@ describe('pages and drafts', () => {
         'Khai trương',
         'Khai trương',
       );
-      await editHeroHeading(client, changed.pageId, 'Khai trương chi nhánh 2');
+      await editHeroHeading(client, listSite.id, changed.pageId, 'Khai trương chi nhánh 2');
 
       const all = await listPages(client, listSite.id);
       expect(all.items.map((item) => item.title)).toEqual([
@@ -483,7 +488,7 @@ describe('pages and drafts', () => {
     });
   });
 
-  describe('POST /pages/:pageId/draft/restore', () => {
+  describe('POST /sites/:siteId/pages/:pageId/draft/restore', () => {
     it('copies a release into the draft without touching releases or the pointer', async () => {
       const { pageId, published } = await createLivePage(
         client,
@@ -491,10 +496,15 @@ describe('pages and drafts', () => {
         uniqueSlug('khoi-phuc'),
         'Bản 1',
       );
-      await replaceDraft(client, pageId, publishableDraft(published.release.slug, 'Bản nháp'));
-      const before = await getPage(client, pageId);
+      await replaceDraft(
+        client,
+        site.id,
+        pageId,
+        publishableDraft(published.release.slug, 'Bản nháp'),
+      );
+      const before = await getPage(client, site.id, pageId);
       const response = await client
-        .post(`/pages/${pageId}/draft/restore`, {
+        .post(`/sites/${site.id}/pages/${pageId}/draft/restore`, {
           baseRevision: before.draft.revision,
           releaseId: published.release.id,
         })
@@ -516,15 +526,15 @@ describe('pages and drafts', () => {
       const a = await createLivePage(client, site.id, uniqueSlug('a'));
       const b = await createLivePage(client, site.id, uniqueSlug('b'));
       const stale = await client
-        .post(`/pages/${a.pageId}/draft/restore`, {
+        .post(`/sites/${site.id}/pages/${a.pageId}/draft/restore`, {
           baseRevision: 0,
           releaseId: a.published.release.id,
         })
         .expect(409);
       expect(problemSchema.parse(stale.body).code).toBe('revision_conflict');
-      const current = await getPage(client, a.pageId);
+      const current = await getPage(client, site.id, a.pageId);
       const foreign = await client
-        .post(`/pages/${a.pageId}/draft/restore`, {
+        .post(`/sites/${site.id}/pages/${a.pageId}/draft/restore`, {
           baseRevision: current.draft.revision,
           releaseId: b.published.release.id,
         })
@@ -541,7 +551,7 @@ describe('pages and drafts', () => {
         site.id,
         uniqueSlug('live'),
       );
-      await replaceDraft(client, livePageId, publishableDraft(uniqueSlug('doi-slug')));
+      await replaceDraft(client, site.id, livePageId, publishableDraft(uniqueSlug('doi-slug')));
 
       async function check(slug: string, pageId?: string) {
         const query = new URLSearchParams({ slug, ...(pageId ? { pageId } : {}) });
@@ -580,8 +590,8 @@ describe('pages and drafts', () => {
   it('lets an editor of the workspace edit and publish', async () => {
     const editor = await addEditor(t, workspaceId);
     const page = await createPage(editor.client, site.id);
-    await replaceDraft(editor.client, page.page.id, publishableDraft(page.page.slug));
-    const published = await publish(editor.client, page.page.id);
+    await replaceDraft(editor.client, site.id, page.page.id, publishableDraft(page.page.slug));
+    const published = await publish(editor.client, site.id, page.page.id);
     expect(published.release.createdBy.name).toBe(editor.me.user.name);
   });
 });

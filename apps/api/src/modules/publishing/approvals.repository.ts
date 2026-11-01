@@ -1,16 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import type { ObjectId } from '../../shared/persistence/object-id.js';
 import type { Tx } from '../../shared/persistence/transaction.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
-import { APPROVAL_MODEL, type ApprovalRecord } from './approval.schema.js';
+import { APPROVAL_COLLECTION, type ApprovalRecord } from './approval.schema.js';
 import { approvalPurgeAt } from './domain/approval-rules.js';
+import {
+  WorkspaceDatabases,
+  type WorkspaceRef,
+} from '../../shared/persistence/workspace-databases.js';
 
 /** Requests to publish (ADR-023); every query is scoped to the workspace. */
 @Injectable()
 export class ApprovalsRepository {
-  constructor(@InjectModel(APPROVAL_MODEL) private readonly approvals: Model<ApprovalRecord>) {}
+  constructor(private readonly databases: WorkspaceDatabases) {}
 
   /**
    * Stores the member's request in the caller's transaction. The unique index refuses a second
@@ -23,11 +26,11 @@ export class ApprovalsRepository {
     ) {
       throw new Error('A member asks for themselves, in the workspace of their scope');
     }
-    await this.approvals.create([approval], { session: tx });
+    await this.approvals(scope).create([approval], { session: tx });
   }
 
   findPending(scope: WorkspaceScope, pageId: ObjectId, tx?: Tx): Promise<ApprovalRecord | null> {
-    return this.approvals
+    return this.approvals(scope)
       .findOne({ workspaceId: scope.workspaceId, pageId, status: 'pending' })
       .session(tx ?? null)
       .lean<ApprovalRecord>()
@@ -41,7 +44,7 @@ export class ApprovalsRepository {
     change: { revision: number; note: string; at: Date },
     tx: Tx,
   ): Promise<ApprovalRecord | null> {
-    return this.approvals
+    return this.approvals(scope)
       .findOneAndUpdate(
         { _id: id, workspaceId: scope.workspaceId, requestedBy: scope.userId, status: 'pending' },
         { $set: { revision: change.revision, note: change.note, sentAt: change.at } },
@@ -64,7 +67,7 @@ export class ApprovalsRepository {
       | { status: 'withdrawn'; at: Date }
       | { status: 'rejected'; at: Date; reason: string; revision: number; releaseSeq: number },
   ): Promise<ApprovalRecord | null> {
-    return this.approvals
+    return this.approvals(scope)
       .findOneAndUpdate(
         {
           _id: id,
@@ -103,7 +106,7 @@ export class ApprovalsRepository {
     at: Date,
     tx: Tx,
   ): Promise<ApprovalRecord | null> {
-    return this.approvals
+    return this.approvals(scope)
       .findOneAndUpdate(
         { workspaceId: scope.workspaceId, pageId, status: 'pending' },
         {
@@ -132,7 +135,7 @@ export class ApprovalsRepository {
     if (pageIds.length === 0) {
       return new Map();
     }
-    const rows = await this.approvals
+    const rows = await this.approvals(scope)
       .aggregate<{ latest: ApprovalRecord }>([
         { $match: { workspaceId: scope.workspaceId, pageId: { $in: pageIds } } },
         { $addFields: { pendingFirst: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } } },
@@ -142,5 +145,9 @@ export class ApprovalsRepository {
       ])
       .exec();
     return new Map(rows.map(({ latest }) => [latest.pageId.toHexString(), latest]));
+  }
+
+  private approvals(ref: WorkspaceRef): Model<ApprovalRecord> {
+    return this.databases.model(ref, APPROVAL_COLLECTION);
   }
 }

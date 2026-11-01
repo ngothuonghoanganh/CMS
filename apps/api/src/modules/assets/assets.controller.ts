@@ -60,12 +60,13 @@ export class AssetsController {
     return this.uploads.upload(user, siteId, fields, file);
   }
 
-  @Patch('assets/:assetId')
+  @Patch('sites/:siteId/assets/:assetId')
   update(
     @CurrentUser() user: AuthenticatedUser,
+    @Param('siteId') siteId: string,
     @Param('assetId') assetId: string,
     @Body(new ZodPipe(updateAssetRequestSchema)) body: UpdateAssetRequest,
   ): Promise<Asset> {
-    return this.assets.update(user, assetId, body);
+    return this.assets.update(user, siteId, assetId, body);
   }
 }

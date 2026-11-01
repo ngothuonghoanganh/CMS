@@ -65,7 +65,7 @@ export function UnpublishDialog({
 
   const unpublish = useMutation({
     mutationFn: (reason: string) =>
-      api(endpoints.movePointer, [page.id], {
+      api(endpoints.movePointer, [page.siteId, page.id], {
         body: {
           targetReleaseId: null,
           expectedCurrentReleaseId: page.liveRelease.id,

@@ -87,15 +87,21 @@ describe('lead notifications', () => {
     return lead.id;
   }
 
-  async function detail(leadId: string): Promise<LeadDetail> {
-    return leadDetailSchema.parse((await owner.get(`/leads/${leadId}`).expect(200)).body);
+  async function detail({ site }: FormSite, leadId: string): Promise<LeadDetail> {
+    return leadDetailSchema.parse(
+      (await owner.get(`/sites/${site.id}/leads/${leadId}`).expect(200)).body,
+    );
   }
 
-  async function settled(leadId: string, status: 'sent' | 'failed'): Promise<LeadDetail> {
+  async function settled(
+    form: FormSite,
+    leadId: string,
+    status: 'sent' | 'failed',
+  ): Promise<LeadDetail> {
     let lead: LeadDetail | undefined;
     await vi.waitFor(
       async () => {
-        lead = await detail(leadId);
+        lead = await detail(form, leadId);
         expect(lead.notification?.status).toBe(status);
       },
       { timeout: 5000, interval: 20 },
@@ -123,7 +129,7 @@ describe('lead notifications', () => {
       message: 'Gọi sau 18h',
     });
 
-    const lead = await settled(leadId, 'sent');
+    const lead = await settled(form, leadId, 'sent');
     expect(lead.notification).toMatchObject({
       status: 'sent',
       attempts: 1,
@@ -157,7 +163,7 @@ describe('lead notifications', () => {
     // The same entries again (a reloaded result page, a lost answer) are the same lead.
     await submitLead(t, form.site.subdomain, first).expect(200);
     const [stored] = await leadsNamed(name);
-    await settled(stored?.id ?? '', 'sent');
+    await settled(form, stored?.id ?? '', 'sent');
     expect(await leadsNamed(name)).toHaveLength(1);
     expect(leadEmails(name)).toHaveLength(1);
 
@@ -167,7 +173,7 @@ describe('lead notifications', () => {
     const both = await leadsNamed(name);
     expect(both).toHaveLength(2);
     for (const lead of both) {
-      await settled(lead.id, 'sent');
+      await settled(form, lead.id, 'sent');
     }
     expect(leadEmails(name)).toHaveLength(2);
 
@@ -181,7 +187,10 @@ describe('lead notifications', () => {
   it('never emails a lead suspected of spam', async () => {
     const form = await formSite();
     const leadId = await send(form, { name: 'Bot quảng cáo', honeypot: 'https://spam.example' });
-    expect((await detail(leadId)).notification).toMatchObject({ status: 'skipped', attempts: 0 });
+    expect((await detail(form, leadId)).notification).toMatchObject({
+      status: 'skipped',
+      attempts: 0,
+    });
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(leadEmails('Bot quảng cáo')).toEqual([]);
   });
@@ -190,7 +199,7 @@ describe('lead notifications', () => {
     const form = await formSite();
     t.emails.failNext('smtp_unavailable');
     const leadId = await send(form, { name: 'Lê Mai Anh' });
-    const lead = await settled(leadId, 'sent');
+    const lead = await settled(form, leadId, 'sent');
     expect(lead.notification).toMatchObject({ attempts: 2, lastErrorCode: null });
     expect(leadEmails('Lê Mai Anh')).toHaveLength(1);
   });
@@ -199,7 +208,7 @@ describe('lead notifications', () => {
     const form = await formSite();
     t.emails.failNext('smtp_rejected', 'smtp_rejected', 'smtp_rejected');
     const leadId = await send(form, { name: 'Phạm Gia Huy' });
-    const failed = await settled(leadId, 'failed');
+    const failed = await settled(form, leadId, 'failed');
     expect(failed.notification).toMatchObject({ attempts: 3, lastErrorCode: 'smtp_rejected' });
     const list = leadListResponseSchema.parse(
       (await owner.get(`/sites/${form.site.id}/leads`).expect(200)).body,
@@ -207,16 +216,20 @@ describe('lead notifications', () => {
     expect(list.items.find((item) => item.id === leadId)?.notificationFailed).toBe(true);
 
     // Chăm sóc khách hàng triages leads, "Gửi lại" included.
-    const retried = await support.post(`/leads/${leadId}/notification/retry`).expect(200);
+    const retried = await support
+      .post(`/sites/${form.site.id}/leads/${leadId}/notification/retry`)
+      .expect(200);
     expect(leadDetailSchema.parse(retried.body).notification).toMatchObject({
       attempts: 0,
       lastErrorCode: null,
     });
-    const sent = await settled(leadId, 'sent');
+    const sent = await settled(form, leadId, 'sent');
     expect(sent.notification).toMatchObject({ attempts: 1 });
     expect(leadEmails('Phạm Gia Huy')).toHaveLength(1);
 
-    const notFailed = await owner.post(`/leads/${leadId}/notification/retry`).expect(409);
+    const notFailed = await owner
+      .post(`/sites/${form.site.id}/leads/${leadId}/notification/retry`)
+      .expect(409);
     expect(problemSchema.parse(notFailed.body).title).toBe(
       'Email thông báo của lead này không ở trạng thái lỗi',
     );
@@ -228,7 +241,7 @@ describe('lead notifications', () => {
     const [only] = (recipients.body as { items: Array<{ id: string }> }).items;
     await owner.delete(`/sites/${form.site.id}/lead-recipients/${only?.id ?? ''}`).expect(204);
     const leadId = await send(form, { name: 'Võ Ngọc Trâm' });
-    const failed = await settled(leadId, 'failed');
+    const failed = await settled(form, leadId, 'failed');
     expect(failed.notification).toMatchObject({ attempts: 1, lastErrorCode: 'no_recipients' });
   });
 
@@ -239,11 +252,11 @@ describe('lead notifications', () => {
     t.emails.failNext('smtp_unavailable');
     const leadId = await send(form, { name: 'Spam trễ' });
     await first.started;
-    await owner.patch(`/leads/${leadId}`, { spam: true }).expect(200);
+    await owner.patch(`/sites/${form.site.id}/leads/${leadId}`, { spam: true }).expect(200);
     first.release();
     await vi.waitFor(
       async () => {
-        expect((await detail(leadId)).notification).toMatchObject({
+        expect((await detail(form, leadId)).notification).toMatchObject({
           status: 'skipped',
           attempts: 2,
         });
@@ -252,20 +265,20 @@ describe('lead notifications', () => {
     );
     expect(leadEmails('Spam trễ')).toEqual([]);
     // "Gửi lại" never applies to spam.
-    await owner.post(`/leads/${leadId}/notification/retry`).expect(409);
+    await owner.post(`/sites/${form.site.id}/leads/${leadId}/notification/retry`).expect(409);
   });
 
   it('refuses "Gửi lại" for a failed lead that was moved to spam', async () => {
     const form = await formSite();
     t.emails.failNext('smtp_rejected', 'smtp_rejected', 'smtp_rejected');
     const leadId = await send(form, { name: 'Lỗi rồi spam' });
-    await settled(leadId, 'failed');
-    await owner.patch(`/leads/${leadId}`, { spam: true }).expect(200);
+    await settled(form, leadId, 'failed');
+    await owner.patch(`/sites/${form.site.id}/leads/${leadId}`, { spam: true }).expect(200);
     const list = leadListResponseSchema.parse(
       (await owner.get(`/sites/${form.site.id}/leads?folder=spam`).expect(200)).body,
     );
     expect(list.items.find((item) => item.id === leadId)?.notificationFailed).toBe(false);
-    await owner.post(`/leads/${leadId}/notification/retry`).expect(409);
+    await owner.post(`/sites/${form.site.id}/leads/${leadId}/notification/retry`).expect(409);
     expect(leadEmails('Lỗi rồi spam')).toEqual([]);
   });
 
@@ -274,7 +287,7 @@ describe('lead notifications', () => {
     await addConfirmedRecipient(t, owner, form.site.id, 'da-nghi@smilecare.vn');
     t.emails.refuse('da-nghi@smilecare.vn');
     const leadId = await send(form, { name: 'Đỗ Hải Yến' });
-    const lead = await settled(leadId, 'sent');
+    const lead = await settled(form, leadId, 'sent');
     expect(lead.notification).toMatchObject({
       attempts: 1,
       recipients: 1,
@@ -290,7 +303,7 @@ describe('lead notifications', () => {
       new Error('database unreachable'),
     );
     const leadId = await send(form, { name: 'Mất kết nối' });
-    const lead = await settled(leadId, 'sent');
+    const lead = await settled(form, leadId, 'sent');
     expect(lead.notification).toMatchObject({ attempts: 2, lastErrorCode: null });
     expect(leadEmails('Mất kết nối')).toHaveLength(1);
   });
@@ -302,7 +315,7 @@ describe('lead notifications', () => {
       .mockRejectedValueOnce(new Error('database unreachable'));
     try {
       const leadId = await send(form, { name: 'Chưa giành được' });
-      const lead = await settled(leadId, 'sent');
+      const lead = await settled(form, leadId, 'sent');
       // The claim that failed counted no attempt.
       expect(lead.notification).toMatchObject({ attempts: 1, lastErrorCode: null });
       expect(leadEmails('Chưa giành được')).toHaveLength(1);
@@ -326,7 +339,7 @@ describe('lead notifications', () => {
       );
       const stored = list.items.filter((item) => item.name === 'Lưu rồi mới lỗi');
       expect(stored).toHaveLength(1);
-      expect((await settled(stored[0]?.id ?? '', 'sent')).notification).toMatchObject({
+      expect((await settled(form, stored[0]?.id ?? '', 'sent')).notification).toMatchObject({
         attempts: 1,
       });
       expect(leadEmails('Lưu rồi mới lỗi')).toHaveLength(1);
@@ -362,14 +375,14 @@ describe('lead notifications', () => {
       // Well past the wait before a third claim, which never comes.
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(claim).toHaveBeenCalledTimes(2);
-      expect((await detail(leadId)).notification).toMatchObject({
+      expect((await detail(form, leadId)).notification).toMatchObject({
         status: 'pending',
         attempts: 0,
       });
       expect(leadEmails('Chờ khởi động')).toEqual([]);
 
       await t.app.get(LeadNotifier).onApplicationBootstrap();
-      expect((await settled(leadId, 'sent')).notification).toMatchObject({ attempts: 1 });
+      expect((await settled(form, leadId, 'sent')).notification).toMatchObject({ attempts: 1 });
       expect(leadEmails('Chờ khởi động')).toHaveLength(1);
     } finally {
       claim.mockRestore();
@@ -388,10 +401,13 @@ describe('lead notifications', () => {
     await insertLeads(t, [lead]);
     const leads = t.app.get(LeadsRepository);
     const id = lead['_id'];
-    const leadId = id instanceof Types.ObjectId ? id : new Types.ObjectId();
+    const ref = {
+      workspaceId: new Types.ObjectId(workspaceId),
+      leadId: id instanceof Types.ObjectId ? id : new Types.ObjectId(),
+    };
     const claims = await Promise.all([
-      leads.claimNotification(leadId, new Date()),
-      leads.claimNotification(leadId, new Date()),
+      leads.claimNotification(ref, new Date()),
+      leads.claimNotification(ref, new Date()),
     ]);
     expect(claims.filter((claim) => claim !== null)).toHaveLength(1);
   });
@@ -419,16 +435,35 @@ describe('lead notifications', () => {
       }),
       storedLead({ ...ids, name: 'Đã gửi', notification: { status: 'sent', attempts: 1 } }),
     ]);
+    // Another workspace's leads are in its own database (ADR-025): the sweep visits each one.
+    const elsewhere = await signedUpClient(t.app);
+    const otherSite = await createSite(elsewhere.client, elsewhere.workspaceId);
+    await configurePrivacy(elsewhere.client, otherSite.id);
+    await addConfirmedRecipient(t, elsewhere.client, otherSite.id);
+    const otherPage = await createLiveFormPage(elsewhere.client, otherSite.id, uniqueSlug('khac'));
+    await insertLeads(t, [
+      storedLead({
+        workspaceId: elsewhere.workspaceId,
+        siteId: otherSite.id,
+        pageId: otherPage.pageId,
+        releaseId: otherPage.published.release.id,
+        name: 'Workspace khác',
+        notification: { status: 'pending' },
+      }),
+    ]);
 
     await t.app.get(LeadNotifier).onApplicationBootstrap();
 
     const notificationOf = async (name: string): Promise<unknown> =>
-      (await t.connection.collection('leads').findOne({ 'fields.name': name }))?.['notification'];
+      (await t.workspaceDb(workspaceId).collection('leads').findOne({ 'fields.name': name }))?.[
+        'notification'
+      ];
     // An email is recorded before its outcome is written: wait for the outcome.
     await vi.waitFor(
       async () => {
         expect(await notificationOf('Đang chờ')).toMatchObject({ status: 'sent', attempts: 1 });
         expect(await notificationOf('Gửi dở')).toMatchObject({ status: 'sent', attempts: 2 });
+        expect(leadEmails('Workspace khác')).toHaveLength(1);
       },
       { timeout: 5000, interval: 20 },
     );
@@ -445,7 +480,7 @@ describe('lead notifications', () => {
     const other = await createSite(owner, workspaceId);
     await addConfirmedRecipient(t, owner, other.id, 'khac@smilecare.vn');
     const leadId = await send(form, { name: 'Hoàng Thảo Vy' });
-    await settled(leadId, 'sent');
+    await settled(form, leadId, 'sent');
     expect(leadEmails('Hoàng Thảo Vy')[0]?.to).toEqual([RECIPIENT_EMAIL]);
   });
 });

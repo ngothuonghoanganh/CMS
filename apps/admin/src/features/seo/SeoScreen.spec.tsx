@@ -179,7 +179,7 @@ describe('SeoScreen', () => {
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(`/sites/${SITE_ID}/pages/${PAGE_ID}/edit`);
     });
-    expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], {
+    expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [SITE_ID, PAGE_ID], {
       body: expect.objectContaining({
         baseRevision: 3,
         seo: expect.objectContaining({ description: 'Tư vấn miễn phí' }) as unknown,
@@ -219,7 +219,11 @@ describe('SeoScreen', () => {
       await user.click(link);
 
       await waitFor(() => {
-        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(apiMock).toHaveBeenCalledWith(
+          endpoints.saveDraft,
+          [SITE_ID, PAGE_ID],
+          expect.anything(),
+        );
       });
       expect(router.push).not.toHaveBeenCalled();
       answerSave();
@@ -343,7 +347,11 @@ describe('SeoScreen', () => {
         pressBack();
         await user.click(link);
         await waitFor(() => {
-          expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+          expect(apiMock).toHaveBeenCalledWith(
+            endpoints.saveDraft,
+            [SITE_ID, PAGE_ID],
+            expect.anything(),
+          );
         });
 
         answerSave();
@@ -376,7 +384,11 @@ describe('SeoScreen', () => {
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       await user.click(link);
       await waitFor(() => {
-        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(apiMock).toHaveBeenCalledWith(
+          endpoints.saveDraft,
+          [SITE_ID, PAGE_ID],
+          expect.anything(),
+        );
       });
 
       // A menu navigating in code took the user elsewhere meanwhile.
@@ -484,7 +496,11 @@ describe('SeoScreen', () => {
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       await user.click(away);
       await waitFor(() => {
-        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(apiMock).toHaveBeenCalledWith(
+          endpoints.saveDraft,
+          [SITE_ID, PAGE_ID],
+          expect.anything(),
+        );
       });
 
       // A plain link (breadcrumb, sidebar) to the URL already open: the router handles it.
@@ -511,7 +527,11 @@ describe('SeoScreen', () => {
       await user.type(screen.getByRole('textbox', { name: 'Mô tả ngắn' }), 'Tư vấn miễn phí');
       await user.click(link);
       await waitFor(() => {
-        expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(apiMock).toHaveBeenCalledWith(
+          endpoints.saveDraft,
+          [SITE_ID, PAGE_ID],
+          expect.anything(),
+        );
       });
 
       // The user changes their mind and stays: the last place asked for is this screen.
@@ -592,7 +612,11 @@ describe('SeoScreen', () => {
 
         // Neither left the page: no save to leave, no going back, no toast.
         expect(routerListener).toHaveBeenCalledTimes(2);
-        expect(apiMock).not.toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+        expect(apiMock).not.toHaveBeenCalledWith(
+          endpoints.saveDraft,
+          [SITE_ID, PAGE_ID],
+          expect.anything(),
+        );
         expect(back).not.toHaveBeenCalled();
         expect(screen.queryByText('Chưa lưu được thiết lập SEO')).toBeNull();
       } finally {
@@ -630,7 +654,11 @@ describe('SeoScreen', () => {
         expect(routerListener).not.toHaveBeenCalled();
         expect(pushState).toHaveBeenCalledTimes(1);
         await waitFor(() => {
-          expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+          expect(apiMock).toHaveBeenCalledWith(
+            endpoints.saveDraft,
+            [SITE_ID, PAGE_ID],
+            expect.anything(),
+          );
         });
         expect(back).not.toHaveBeenCalled();
         answerSave();
@@ -904,7 +932,11 @@ describe('SeoScreen', () => {
 
       expect(await screen.findByText('Chưa lưu được thiết lập SEO')).toBeInTheDocument();
       expect(signOut).not.toHaveBeenCalled();
-      expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      expect(apiMock).toHaveBeenCalledWith(
+        endpoints.saveDraft,
+        [SITE_ID, PAGE_ID],
+        expect.anything(),
+      );
       await user.click(screen.getByRole('button', { name: 'Đăng xuất, bỏ thay đổi' }));
       expect(signOut).toHaveBeenCalledTimes(1);
     });
@@ -992,7 +1024,11 @@ describe('SeoScreen', () => {
       await waitFor(() => {
         expect(switchSite).toHaveBeenCalledTimes(1);
       });
-      expect(apiMock).toHaveBeenCalledWith(endpoints.saveDraft, [PAGE_ID], expect.anything());
+      expect(apiMock).toHaveBeenCalledWith(
+        endpoints.saveDraft,
+        [SITE_ID, PAGE_ID],
+        expect.anything(),
+      );
     });
 
     it('leaves at once when everything is saved, and stops taking the menus once gone', () => {

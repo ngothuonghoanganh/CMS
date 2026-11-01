@@ -66,7 +66,10 @@ describe('consent settings snapshotted into releases', () => {
   });
 
   function storedRelease(releaseId: string) {
-    return t.connection.collection('releases').findOne({ _id: new Types.ObjectId(releaseId) });
+    return t
+      .workspaceDb(workspaceId)
+      .collection('releases')
+      .findOne({ _id: new Types.ObjectId(releaseId) });
   }
 
   async function listed(siteId: string, pageId: string): Promise<PageSummary> {
@@ -94,7 +97,8 @@ describe('consent settings snapshotted into releases', () => {
       marketingText: consent.marketingText,
     };
     // Releases are immutable for the application; only a raw write can give one a snapshot.
-    await t.connection
+    await t
+      .workspaceDb(workspaceId)
       .collection('releases')
       .updateOne(
         { _id: new Types.ObjectId(published.release.id) },
@@ -141,18 +145,18 @@ describe('consent settings snapshotted into releases', () => {
 
   it('refuses to publish consent settings the publisher did not see', async () => {
     const { site, pageId, releaseId } = await liveFormPage();
-    const seen = await currentPublishBody(client, pageId);
+    const seen = await currentPublishBody(client, site.id, pageId);
     expect(seen.acknowledgedSiteChanges).toEqual([]);
 
     await saveConsentVersion(client, site.id, 1, { marketingText: null });
-    const response = await publishRequest(client, pageId, seen).expect(409);
+    const response = await publishRequest(client, site.id, pageId, seen).expect(409);
     expect(problemSchema.parse(response.body).code).toBe('site_changed');
-    expect((await getPage(client, pageId)).page.liveRelease?.id).toBe(releaseId);
+    expect((await getPage(client, site.id, pageId)).page.liveRelease?.id).toBe(releaseId);
 
-    const reviewed = await currentPublishBody(client, pageId);
+    const reviewed = await currentPublishBody(client, site.id, pageId);
     expect(reviewed.acknowledgedSiteChanges).toEqual(['Dữ liệu cá nhân: nội dung đồng ý']);
     const published = publishResponseSchema.parse(
-      (await publishRequest(client, pageId, reviewed).expect(201)).body,
+      (await publishRequest(client, site.id, pageId, reviewed).expect(201)).body,
     );
     // The draft has no form: the new release snapshots nothing and lists no consent chip.
     expect(await storedRelease(published.release.id)).toHaveProperty('leadCapture', null);
@@ -171,9 +175,9 @@ describe('consent settings snapshotted into releases', () => {
     return resolved.data;
   }
 
-  async function preview(pageId: string, body: object): Promise<PublicPageData> {
+  async function preview(siteId: string, pageId: string, body: object): Promise<PublicPageData> {
     const link = previewLinkResponseSchema.parse(
-      (await client.post(`/pages/${pageId}/preview-links`, body).expect(201)).body,
+      (await client.post(`/sites/${siteId}/pages/${pageId}/preview-links`, body).expect(201)).body,
     );
     const token = link.url.split('/_preview/')[1];
     if (token === undefined) {
@@ -191,13 +195,14 @@ describe('consent settings snapshotted into releases', () => {
     const slug = uniqueSlug('chua-dong-y');
     const page = await createPage(client, site.id, { slug });
     const draft = formDraft(slug);
-    await replaceDraft(client, page.page.id, draft);
+    await replaceDraft(client, site.id, page.page.id, draft);
     const formId = draft.composition.sections[1]?.id;
 
     const blocked = await publishRequest(
       client,
+      site.id,
       page.page.id,
-      await currentPublishBody(client, page.page.id),
+      await currentPublishBody(client, site.id, page.page.id),
     ).expect(422);
     const checks = checksResultSchema.parse(problemSchema.parse(blocked.body).context?.['checks']);
     expect(checks.blocking).toEqual([
@@ -208,7 +213,7 @@ describe('consent settings snapshotted into releases', () => {
     ]);
 
     await configurePrivacy(client, site.id);
-    const published = await publish(client, page.page.id);
+    const published = await publish(client, site.id, page.page.id);
     expect(await storedRelease(published.release.id)).toMatchObject({
       leadCapture: {
         consentVersion: 1,
@@ -219,7 +224,7 @@ describe('consent settings snapshotted into releases', () => {
       },
     });
     expect(
-      (await getPage(client, page.page.id)).checks.passed.map((passed) => passed.code),
+      (await getPage(client, site.id, page.page.id)).checks.passed.map((passed) => passed.code),
     ).toContain('privacy_policy');
   });
 
@@ -246,9 +251,10 @@ describe('consent settings snapshotted into releases', () => {
     // Saving is not publishing: the live page keeps its snapshot (rule 1).
     expect((await resolvePage(site, slug)).leadCapture).toEqual(snapshot);
     expect(
-      (await preview(pageId, { kind: 'release', releaseId: published.release.id })).leadCapture,
+      (await preview(site.id, pageId, { kind: 'release', releaseId: published.release.id }))
+        .leadCapture,
     ).toEqual(snapshot);
-    const draftPreview = await preview(pageId, { kind: 'draft' });
+    const draftPreview = await preview(site.id, pageId, { kind: 'draft' });
     expect(draftPreview.releaseId).toBeNull();
     expect(draftPreview.leadCapture).toEqual({
       requiredText: 'Tôi đồng ý để Smile Care gọi lại.',
@@ -263,16 +269,16 @@ describe('consent settings snapshotted into releases', () => {
     await addConfirmedRecipient(t, client, site.id);
     const slug = uniqueSlug('form-v2');
     const { pageId, published: v1 } = await createLiveFormPage(client, site.id, slug);
-    const seen = await currentPublishBody(client, pageId);
+    const seen = await currentPublishBody(client, site.id, pageId);
 
     await saveConsentVersion(client, site.id, 1, { requiredText: 'Bản 2: {Tên doanh nghiệp}.' });
     expect((await listed(site.id, pageId)).siteChanges.map((change) => change.label)).toEqual([
       'Dữ liệu cá nhân: nội dung đồng ý',
     ]);
-    const refused = await publishRequest(client, pageId, seen).expect(409);
+    const refused = await publishRequest(client, site.id, pageId, seen).expect(409);
     expect(problemSchema.parse(refused.body).code).toBe('site_changed');
 
-    const v2 = await publish(client, pageId);
+    const v2 = await publish(client, site.id, pageId);
     expect(v2.release.changeSummary).toEqual([
       { kind: 'privacy', label: 'Dữ liệu cá nhân: nội dung đồng ý', sectionId: null },
     ]);
@@ -281,7 +287,7 @@ describe('consent settings snapshotted into releases', () => {
     );
 
     await client
-      .post(`/pages/${pageId}/pointer`, {
+      .post(`/sites/${site.id}/pages/${pageId}/pointer`, {
         targetReleaseId: v1.release.id,
         expectedCurrentReleaseId: v2.release.id,
         reason: 'Dùng lại nội dung cũ',

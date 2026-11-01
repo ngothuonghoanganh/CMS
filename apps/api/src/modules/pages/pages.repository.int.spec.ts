@@ -57,24 +57,27 @@ describe('PagesRepository live-slug lookups', () => {
   it('finds a live page in its unique index, without reading the pages of the site', async () => {
     const siteId = new Types.ObjectId();
     const otherSiteId = new Types.ObjectId();
-    await t.connection.collection('pages').insertMany([
-      // Live pages, and drafts that were never published.
-      ...Array.from({ length: 40 }, (_, index) =>
-        storedPage(siteId, `trang-${index}`, index % 4 !== 0),
-      ),
-      // The same slug live on another site belongs to that site.
-      storedPage(otherSiteId, 'chi-o-site-khac', true),
-    ]);
+    await t
+      .workspaceDb(workspaceId)
+      .collection('pages')
+      .insertMany([
+        // Live pages, and drafts that were never published.
+        ...Array.from({ length: 40 }, (_, index) =>
+          storedPage(siteId, `trang-${index}`, index % 4 !== 0),
+        ),
+        // The same slug live on another site belongs to that site.
+        storedPage(otherSiteId, 'chi-o-site-khac', true),
+      ]);
     const pages = t.app.get(PagesRepository);
 
-    const sent = await recordCalls(t.connection, 'pages', async () => {
-      expect(await pages.findPublicLiveBySlug(siteId, 'trang-7')).toMatchObject({
+    const sent = await recordCalls(t.workspaceDb(workspaceId), 'pages', async () => {
+      expect(await pages.findPublicLiveBySlug(scope, siteId, 'trang-7')).toMatchObject({
         publishedSlug: 'trang-7',
       });
       // A draft that is not live, an unknown slug, and another site's live page.
-      expect(await pages.findPublicLiveBySlug(siteId, 'trang-8')).toBeNull();
-      expect(await pages.findPublicLiveBySlug(siteId, 'khong-co')).toBeNull();
-      expect(await pages.findPublicLiveBySlug(siteId, 'chi-o-site-khac')).toBeNull();
+      expect(await pages.findPublicLiveBySlug(scope, siteId, 'trang-8')).toBeNull();
+      expect(await pages.findPublicLiveBySlug(scope, siteId, 'khong-co')).toBeNull();
+      expect(await pages.findPublicLiveBySlug(scope, siteId, 'chi-o-site-khac')).toBeNull();
       expect(await pages.findLiveBySlug(scope, siteId, 'trang-7')).toMatchObject({
         title: 'Trang trang-7',
       });
@@ -84,7 +87,7 @@ describe('PagesRepository live-slug lookups', () => {
     // Each lookup explained exactly as it was sent.
     expect(sent.map((call) => call.method)).toEqual(Array.from({ length: 6 }, () => 'findOne'));
     for (const call of sent) {
-      const explained = await explainFindOne(t.connection, call);
+      const explained = await explainFindOne(t.workspaceDb(workspaceId), call);
       expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([PAGES_PUBLISHED_SLUG_INDEX]);
       expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
       expect(explained.executionStats.totalDocsExamined).toBeLessThanOrEqual(1);

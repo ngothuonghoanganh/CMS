@@ -143,14 +143,22 @@ export class DataRequestsService {
     );
   }
 
-  async get(user: AuthenticatedUser, requestId: string): Promise<DataRequestDetail> {
-    const { scope, site, request } = await this.requestAccess(user, requestId);
+  async get(
+    user: AuthenticatedUser,
+    siteId: string,
+    requestId: string,
+  ): Promise<DataRequestDetail> {
+    const { scope, site, request } = await this.requestAccess(user, siteId, requestId);
     return this.detail(scope, site, request);
   }
 
   /** "Đã phản hồi": the person was told their request is being handled. */
-  async respond(user: AuthenticatedUser, requestId: string): Promise<DataRequestDetail> {
-    const { scope, site, request } = await this.requestAccess(user, requestId);
+  async respond(
+    user: AuthenticatedUser,
+    siteId: string,
+    requestId: string,
+  ): Promise<DataRequestDetail> {
+    const { scope, site, request } = await this.requestAccess(user, siteId, requestId);
     this.requireStep('respond', request);
     const updated = await this.requests.markResponded(
       scope,
@@ -166,10 +174,11 @@ export class DataRequestsService {
   /** The file the owner sends to a person who asked to see their data. */
   async exportFile(
     user: AuthenticatedUser,
+    siteId: string,
     requestId: string,
     format: PersonExportRequest,
   ): Promise<LeadFile> {
-    const { scope, site, request } = await this.requestAccess(user, requestId);
+    const { scope, site, request } = await this.requestAccess(user, siteId, requestId);
     this.requireStep('export', request);
     const person = personOfRequest(request);
     if (person === null) {
@@ -190,8 +199,12 @@ export class DataRequestsService {
    * leads. Each in one transaction with the completion and the activity, so neither can happen
    * without the other.
    */
-  async complete(user: AuthenticatedUser, requestId: string): Promise<DataRequestDetail> {
-    const { scope, site, request } = await this.requestAccess(user, requestId);
+  async complete(
+    user: AuthenticatedUser,
+    siteId: string,
+    requestId: string,
+  ): Promise<DataRequestDetail> {
+    const { scope, site, request } = await this.requestAccess(user, siteId, requestId);
     this.requireStep('complete', request);
     const person = personOfRequest(request);
     const completed = await this.transactions.run(async (tx) => {
@@ -228,18 +241,18 @@ export class DataRequestsService {
   }
 
   /**
-   * Entry point of every request endpoint: the owner of the request's workspace only. Unknown
-   * requests and requests of another workspace are both 404 (ADR-003).
+   * Entry point of every request endpoint, through the request's site (ADR-025). Unknown requests
+   * and requests of another site or workspace are all 404 (ADR-003).
    */
-  private async requestAccess(user: AuthenticatedUser, requestId: string): Promise<RequestAccess> {
+  private async requestAccess(
+    user: AuthenticatedUser,
+    siteId: string,
+    requestId: string,
+  ): Promise<RequestAccess> {
     const id = toObjectId(requestId, DATA_REQUEST_NOT_FOUND);
-    const ref = await this.requests.findAccessRef(id);
-    if (!ref) {
-      throw notFound(DATA_REQUEST_NOT_FOUND);
-    }
     const { scope, site } = await this.sites.accessById(
       user,
-      ref.siteId,
+      toObjectId(siteId, DATA_REQUEST_NOT_FOUND),
       'personalData.manage',
       DATA_REQUEST_NOT_FOUND,
     );

@@ -12,9 +12,10 @@ interface HistoryPageProps {
 }
 
 async function loadHistory(
+  siteId: string,
   pageId: string,
 ): Promise<{ history: HistoryResponse; loadedAt: number }> {
-  const history = await serverApi(endpoints.history, [pageId], {
+  const history = await serverApi(endpoints.history, [siteId, pageId], {
     query: { limit: HISTORY_PAGE_SIZE },
   });
   return { history, loadedAt: Date.now() };
@@ -34,7 +35,7 @@ export default async function HistoryPage({ params, searchParams }: HistoryPageP
   const canManageLive = can(membership.role, 'pages.manageLive');
   // The page check comes first: a page of another site or workspace is a 404.
   const { page } = await loadPageDetail(siteId, pageId);
-  const { history, loadedAt } = await loadHistory(pageId);
+  const { history, loadedAt } = await loadHistory(siteId, pageId);
   const restore = idSchema.safeParse((await searchParams).restore);
   return (
     <HistoryScreen

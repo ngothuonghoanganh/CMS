@@ -1,5 +1,6 @@
 import { type AssetMimeType, assetMimeTypes } from '@plp/contracts';
 import { Schema, type Types } from 'mongoose';
+import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
 export const ASSET_MODEL = 'Asset';
 
@@ -49,3 +50,6 @@ assetSchema.pre('validate', function () {
     this.invalidate('alt', 'An asset needs a non-empty alt or the decorative flag, not both');
   }
 });
+
+/** In the workspace's own database (ADR-025). */
+export const ASSET_COLLECTION = workspaceCollection(ASSET_MODEL, assetSchema);

@@ -17,7 +17,8 @@ import {
   uploadImage,
   uploadRequest,
 } from '../../../test/resources.js';
-import { ASSET_MODEL, type AssetRecord } from './asset.schema.js';
+import { WorkspaceDatabases } from '../../shared/persistence/workspace-databases.js';
+import { ASSET_COLLECTION } from './asset.schema.js';
 
 describe('assets', () => {
   let t: TestApp;
@@ -335,7 +336,7 @@ describe('assets', () => {
       const asset = await uploadImage(owner, siteId);
 
       const decorative = await owner
-        .patch(`/assets/${asset.id}`, { alt: 'Bị bỏ qua', decorative: true })
+        .patch(`/sites/${siteId}/assets/${asset.id}`, { alt: 'Bị bỏ qua', decorative: true })
         .expect(200);
       expect(assetSchema.parse(decorative.body)).toMatchObject({
         id: asset.id,
@@ -345,7 +346,7 @@ describe('assets', () => {
       });
 
       const described = await owner
-        .patch(`/assets/${asset.id}`, { alt: ' Mô tả mới ', decorative: false })
+        .patch(`/sites/${siteId}/assets/${asset.id}`, { alt: ' Mô tả mới ', decorative: false })
         .expect(200);
       expect(assetSchema.parse(described.body)).toMatchObject({
         alt: 'Mô tả mới',
@@ -357,30 +358,47 @@ describe('assets', () => {
     it('rejects an empty description without the decorative flag', async () => {
       const asset = await uploadImage(owner, siteId);
       const response = await owner
-        .patch(`/assets/${asset.id}`, { alt: '   ', decorative: false })
+        .patch(`/sites/${siteId}/assets/${asset.id}`, { alt: '   ', decorative: false })
         .expect(422);
       expect(problemSchema.parse(response.body).issues?.[0]?.path).toEqual(['alt']);
     });
 
     it('answers 404 for an unknown asset', async () => {
       const response = await owner
-        .patch('/assets/0123456789abcdef01234567', { alt: 'x', decorative: false })
+        .patch(`/sites/${siteId}/assets/0123456789abcdef01234567`, { alt: 'x', decorative: false })
         .expect(404);
       expect(problemSchema.parse(response.body).title).toBe('Không tìm thấy ảnh');
+    });
+
+    it('answers 404 for an asset of another site, and leaves it as it was', async () => {
+      // The route names the site; an asset of another site of the workspace is not in it.
+      const other = await createSite(owner, workspaceId);
+      const asset = await uploadImage(owner, other.id);
+      const response = await owner
+        .patch(`/sites/${siteId}/assets/${asset.id}`, { alt: 'Sửa nhầm site', decorative: false })
+        .expect(404);
+      expect(problemSchema.parse(response.body).title).toBe('Không tìm thấy ảnh');
+      const stored = await t
+        .workspaceDb(workspaceId)
+        .collection('assets')
+        .findOne({ _id: new Types.ObjectId(asset.id) });
+      expect(stored?.['alt']).toBe(asset.alt);
     });
 
     it('lets an editor change descriptions', async () => {
       const asset = await uploadImage(owner, siteId);
       const editor = await addEditor(t, workspaceId);
       await editor.client
-        .patch(`/assets/${asset.id}`, { alt: 'Editor sửa', decorative: false })
+        .patch(`/sites/${siteId}/assets/${asset.id}`, { alt: 'Editor sửa', decorative: false })
         .expect(200);
     });
   });
 
   describe('model', () => {
     it('stores either a non-empty alt or the decorative flag, never both or neither', async () => {
-      const model = t.connection.model<AssetRecord>(ASSET_MODEL);
+      const model = t.app
+        .get(WorkspaceDatabases)
+        .model({ workspaceId: new Types.ObjectId(workspaceId) }, ASSET_COLLECTION);
       const base = {
         workspaceId: new Types.ObjectId(),
         siteId: new Types.ObjectId(),
