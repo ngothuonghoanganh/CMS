@@ -1,9 +1,11 @@
 'use client';
 
 import {
+  can,
   type CheckItem,
   checksResultSchema,
   endpoints,
+  holdersOf,
   IDEMPOTENCY_KEY_HEADER,
   type Role,
   type Site,
@@ -22,6 +24,8 @@ import {
   Field,
   Input,
   Spinner,
+  Textarea,
+  useToast,
   VisuallyHidden,
   WarningTriangleIcon,
 } from '@plp/ui';
@@ -39,27 +43,35 @@ import { cx } from '../shell/cx';
 import { pageHref } from '../shell/navigation';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import {
+  approvalLine,
   checksSummaryLine,
   currentAcknowledgements,
+  draftChangedSince,
   initialPublishState,
   isFirstPublish,
   liveSince,
   nextVersion,
   ownerOnlyFixNote,
+  pendingApproval,
   type PreparedPublish,
   publishChanges,
   publishDisabledReason,
   publishFooterNote,
+  publishModeOf,
   type PublishNotice,
   publishReducer,
   publishTitle,
+  requestButtonLabel,
+  requestDisabledReason,
   tallyChecks,
 } from './publish-state';
 import { qrCodeDataUrl } from './qr-code';
 import styles from './PublishDialog.module.css';
 
-/** Same bound as `publishRequestSchema.note`. */
+/** Same bound as `publishRequestSchema.note` and `requestApprovalSchema.note`. */
 const NOTE_MAX = 200;
+/** Same bound as `rejectApprovalSchema.reason`. */
+const REASON_MAX = 500;
 const QR_SIZE = 84;
 
 export interface PublishDialogProps extends PublishDialogRenderProps {
@@ -167,9 +179,17 @@ function PublishSession({
   onPageUpdated,
   role,
   site,
+  userId,
 }: Omit<PublishDialogProps, 'open'>) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [state, dispatch] = useReducer(publishReducer, initialPublishState);
+  // A role that cannot publish sends the draft for approval instead (ADR-023).
+  const mode = publishModeOf(role);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [rejectPending, setRejectPending] = useState(false);
   // One key for every attempt of this session: a retried request never publishes twice.
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const run = useRef(0);
@@ -273,21 +293,121 @@ function PublishSession({
         return;
       }
       if (error instanceof ApiError && error.code === 'publish_blocked') {
-        const notice = {
+        await showChangedChecks(error, prepared, {
           title: 'Kết quả kiểm tra đã thay đổi',
           message: 'Xem lại các mục bên dưới, sửa hoặc bỏ qua chúng rồi xuất bản.',
-        };
-        const checks = checksResultSchema.safeParse(error.problem.context?.checks);
-        if (checks.success) {
-          onPageUpdated(prepared.page, checks.data);
-          dispatch({ type: 'checks_refreshed', checks: checks.data, notice });
-        } else {
-          await prepare({ notice });
-        }
+        });
         return;
       }
       reportUnexpected('Publishing failed', error);
       dispatch({ type: 'submit_failed', message: problemMessage(error) });
+    }
+  }
+
+  /** A 422 `publish_blocked` carries the checks as they are now; show them with the notice. */
+  async function showChangedChecks(
+    error: ApiError,
+    prepared: PreparedPublish,
+    notice: PublishNotice,
+  ) {
+    const checks = checksResultSchema.safeParse(error.problem.context?.checks);
+    if (checks.success) {
+      onPageUpdated(prepared.page, checks.data);
+      dispatch({ type: 'checks_refreshed', checks: checks.data, notice });
+    } else {
+      await prepare({ notice });
+    }
+  }
+
+  /** The request was answered or withdrawn under the dialog: reload the page and say so. */
+  async function requestAnswered() {
+    await prepare({
+      fresh: true,
+      notice: {
+        title: 'Yêu cầu vừa được trả lời',
+        message:
+          'Trang vừa được xuất bản, hoặc yêu cầu đã được rút hay từ chối. Trang đã được tải lại.',
+      },
+    });
+  }
+
+  async function sendRequest(prepared: PreparedPublish) {
+    dispatch({ type: 'submit_started' });
+    try {
+      const { page } = await api(endpoints.requestApproval, [pageId], {
+        body: { expectedRevision: prepared.revision, note: state.note.trim() },
+      });
+      onPageUpdated(page, prepared.checks);
+      dispatch({ type: 'requested', page });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        // The draft was saved elsewhere, or someone else's request waits now.
+        await prepare({
+          fresh: true,
+          notice: {
+            title: error.problem.title,
+            message: 'Bản nháp và yêu cầu đã được tải lại, hãy xem lại.',
+          },
+        });
+        return;
+      }
+      if (error instanceof ApiError && error.code === 'publish_blocked') {
+        await showChangedChecks(error, prepared, {
+          title: 'Kết quả kiểm tra đã thay đổi',
+          message: 'Sửa các lỗi chặn bên dưới rồi gửi yêu cầu.',
+        });
+        return;
+      }
+      reportUnexpected('Sending a request to publish failed', error);
+      dispatch({ type: 'submit_failed', message: problemMessage(error) });
+    }
+  }
+
+  async function withdraw() {
+    dispatch({ type: 'submit_started' });
+    try {
+      const { page } = await api(endpoints.withdrawApproval, [pageId]);
+      onPageUpdated(page);
+      dispatch({ type: 'page_changed', page });
+      toast({ tone: 'success', title: 'Đã rút yêu cầu xuất bản' });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        await requestAnswered();
+        return;
+      }
+      reportUnexpected('Withdrawing a request to publish failed', error);
+      dispatch({ type: 'submit_failed', message: problemMessage(error) });
+    }
+  }
+
+  async function reject(approvalId: string, senderName: string) {
+    const text = reason.trim();
+    if (text === '') {
+      setRejectError('Nhập lý do để người gửi biết cần sửa gì');
+      return;
+    }
+    setRejectPending(true);
+    setRejectError(null);
+    try {
+      const { page } = await api(endpoints.rejectApproval, [pageId], {
+        body: { approvalId, reason: text },
+      });
+      onPageUpdated(page);
+      toast({
+        tone: 'success',
+        title: 'Đã từ chối yêu cầu',
+        description: `${senderName} sẽ nhận email kèm lý do.`,
+      });
+      onOpenChange(false);
+    } catch (error) {
+      setRejectPending(false);
+      if (error instanceof ApiError && error.status === 404) {
+        setRejecting(false);
+        await requestAnswered();
+        return;
+      }
+      reportUnexpected('Refusing a request to publish failed', error);
+      setRejectError(problemMessage(error));
     }
   }
 
@@ -299,7 +419,7 @@ function PublishSession({
     open: true,
     onOpenChange: (next: boolean) => {
       // A running publish cannot be dismissed half-way.
-      if (!next && !state.submitting) {
+      if (!next && !state.submitting && !rejectPending) {
         onOpenChange(false);
       }
     },
@@ -375,6 +495,78 @@ function PublishSession({
             </div>
           </div>
         </div>
+      </Dialog>
+    );
+  }
+
+  if (state.phase === 'requested') {
+    return (
+      <Dialog
+        {...dialogProps}
+        title="Đã gửi yêu cầu duyệt"
+        footer={<Button onClick={close}>Tiếp tục chỉnh sửa</Button>}
+      >
+        <div className={styles.stack}>
+          <div className={styles.success}>
+            <span className={styles.successIcon} aria-hidden="true">
+              <CheckIcon size={26} strokeWidth={2.2} />
+            </span>
+            <p className={styles.successText}>
+              {holdersOf('publishApprovals.decide')} sẽ nhận email và xem trang. Bạn sẽ nhận email
+              khi trang được xuất bản hoặc khi có góp ý.
+            </p>
+          </div>
+          <p className={styles.muted}>
+            Nếu sửa tiếp, hãy gửi lại yêu cầu để người duyệt biết có bản mới.
+          </p>
+        </div>
+      </Dialog>
+    );
+  }
+
+  const waiting = state.prepared === null ? null : pendingApproval(state.prepared.page);
+  if (rejecting && waiting !== null) {
+    return (
+      <Dialog
+        {...dialogProps}
+        title={`Từ chối yêu cầu của ${waiting.requestedBy.name}`}
+        description="Trang live giữ nguyên. Người gửi nhận email kèm lý do."
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={rejectPending}
+              onClick={() => {
+                setRejecting(false);
+                setRejectError(null);
+              }}
+            >
+              Quay lại
+            </Button>
+            <Button
+              variant="danger"
+              loading={rejectPending}
+              onClick={() => {
+                void reject(waiting.id, waiting.requestedBy.name);
+              }}
+            >
+              Từ chối yêu cầu
+            </Button>
+          </>
+        }
+      >
+        <Field label="Lý do" required error={rejectError ?? undefined}>
+          <Textarea
+            value={reason}
+            maxLength={REASON_MAX}
+            rows={3}
+            placeholder="Ví dụ: Giá ưu đãi chưa đúng, cần sửa lại phần Hero"
+            disabled={rejectPending}
+            onChange={(event) => {
+              setReason(event.target.value);
+            }}
+          />
+        </Field>
       </Dialog>
     );
   }
@@ -457,7 +649,14 @@ function PublishSession({
   const { page, checks } = prepared;
   const first = isFirstPublish(page);
   const tally = tallyChecks(checks, state.acknowledged);
-  const disabledReason = publishDisabledReason(tally, role);
+  const disabledReason =
+    mode === 'request'
+      ? requestDisabledReason(tally, page, userId)
+      : publishDisabledReason(tally, role);
+  const pending = pendingApproval(page);
+  const ownRequest = pending !== null && pending.requestedBy.id === userId;
+  const decides = can(role, 'publishApprovals.decide');
+  const refused = page.approval?.status === 'rejected' ? page.approval : null;
   const live = page.liveRelease;
   const since = liveSince(page);
   const version = nextVersion(page);
@@ -466,13 +665,17 @@ function PublishSession({
   return (
     <Dialog
       {...dialogProps}
-      title={publishTitle(page)}
+      title={mode === 'request' ? 'Gửi yêu cầu xuất bản' : publishTitle(page)}
       description={
         <span className={styles.target}>
           lên <span className={styles.url}>{targetAddress(site.publicOrigin, page.slug)}</span>
         </span>
       }
-      footerStart={publishFooterNote(page)}
+      footerStart={
+        mode === 'request'
+          ? `Chỉ ${holdersOf('publishApprovals.decide')} duyệt được. Trang live giữ nguyên tới khi được duyệt.`
+          : publishFooterNote(page)
+      }
       footer={
         <>
           {disabledReason === null ? null : (
@@ -480,20 +683,56 @@ function PublishSession({
               {disabledReason}
             </span>
           )}
+          {mode === 'request' && ownRequest ? (
+            <Button
+              variant="ghost"
+              disabled={state.submitting}
+              onClick={() => {
+                void withdraw();
+              }}
+            >
+              Rút yêu cầu
+            </Button>
+          ) : null}
+          {mode === 'publish' && decides && pending !== null ? (
+            <Button
+              variant="secondary"
+              disabled={state.submitting}
+              onClick={() => {
+                setRejecting(true);
+              }}
+            >
+              Từ chối
+            </Button>
+          ) : null}
           <Button variant="secondary" disabled={state.submitting} onClick={close}>
             Hủy
           </Button>
-          <Button
-            loading={state.submitting}
-            leadingIcon={<ArrowUpIcon size={18} />}
-            disabled={disabledReason !== null}
-            aria-describedby={disabledReason === null ? undefined : reasonId}
-            onClick={() => {
-              void publish(prepared);
-            }}
-          >
-            Xuất bản v{version}
-          </Button>
+          {mode === 'request' ? (
+            <Button
+              loading={state.submitting}
+              leadingIcon={<ArrowUpIcon size={18} />}
+              disabled={disabledReason !== null}
+              aria-describedby={disabledReason === null ? undefined : reasonId}
+              onClick={() => {
+                void sendRequest(prepared);
+              }}
+            >
+              {requestButtonLabel(page, userId)}
+            </Button>
+          ) : (
+            <Button
+              loading={state.submitting}
+              leadingIcon={<ArrowUpIcon size={18} />}
+              disabled={disabledReason !== null}
+              aria-describedby={disabledReason === null ? undefined : reasonId}
+              onClick={() => {
+                void publish(prepared);
+              }}
+            >
+              {decides && pending !== null ? 'Duyệt và xuất bản' : 'Xuất bản'} v{version}
+            </Button>
+          )}
         </>
       }
     >
@@ -529,6 +768,31 @@ function PublishSession({
           ) : null}
         </div>
 
+        {pending === null ? null : (
+          <Callout tone="info" title={approvalLine(pending, prepared.loadedAt)}>
+            {pending.note === '' ? null : <p className={styles.approvalNote}>“{pending.note}”</p>}
+            {draftChangedSince(pending, prepared.revision) ? (
+              <p>
+                {ownRequest
+                  ? 'Bản nháp có thay đổi sau khi gửi. Gửi lại để người duyệt biết có bản mới.'
+                  : 'Bản nháp đã thay đổi sau khi gửi yêu cầu. Bạn đang xem bản nháp hiện tại.'}
+              </p>
+            ) : null}
+            {mode === 'publish' && !decides ? (
+              <p>Xuất bản trang cũng trả lời yêu cầu này.</p>
+            ) : null}
+          </Callout>
+        )}
+
+        {refused === null ? null : (
+          <Callout
+            tone="warning"
+            title={`${refused.rejectedBy.name} chưa duyệt yêu cầu · ${formatRelativeTime(refused.rejectedAt, prepared.loadedAt)}`}
+          >
+            Lý do: {refused.reason}
+          </Callout>
+        )}
+
         {state.notice === null ? null : (
           <Callout tone="warning" role="status" title={state.notice.title}>
             {state.notice.message}
@@ -563,9 +827,14 @@ function PublishSession({
                   onFix={() => {
                     onFixTarget(item.target);
                   }}
-                  onToggle={() => {
-                    dispatch({ type: 'warning_toggled', fingerprint: item.fingerprint });
-                  }}
+                  // Whoever publishes decides on a warning; a request leaves it to them.
+                  {...(mode === 'publish'
+                    ? {
+                        onToggle: () => {
+                          dispatch({ type: 'warning_toggled', fingerprint: item.fingerprint });
+                        },
+                      }
+                    : {})}
                 />
               ))}
             </ul>
@@ -585,7 +854,11 @@ function PublishSession({
           ) : null}
         </section>
 
-        <Field label="Ghi chú cho phiên bản" optional id={noteId}>
+        <Field
+          label={mode === 'request' ? 'Ghi chú cho người duyệt' : 'Ghi chú cho phiên bản'}
+          optional
+          id={noteId}
+        >
           <Input
             value={state.note}
             maxLength={NOTE_MAX}
@@ -598,7 +871,11 @@ function PublishSession({
         </Field>
 
         {state.error === null ? null : (
-          <Callout tone="danger" role="alert" title="Chưa xuất bản được">
+          <Callout
+            tone="danger"
+            role="alert"
+            title={mode === 'request' ? 'Chưa gửi được yêu cầu' : 'Chưa xuất bản được'}
+          >
             {state.error}
           </Callout>
         )}

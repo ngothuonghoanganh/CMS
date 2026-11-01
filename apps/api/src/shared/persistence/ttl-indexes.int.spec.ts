@@ -5,7 +5,8 @@ import { createTestApp, type TestApp } from '../../../test/app.js';
  * Collections whose documents MongoDB deletes at their own `expiresAt`: sessions and login attempts
  * (ADR-004), lead rate-limit windows (ADR-016), leads past the site's retention (rule 10), and the
  * day salts, "seen today" hashes and daily totals of page views (ADR-019). Invitations and access
- * requests go at their `purgeAt` (ADR-021), since their `expiresAt` is when a link stops working.
+ * requests go at their `purgeAt` (ADR-021), since their `expiresAt` is when a link stops working,
+ * and closed requests to publish at theirs (ADR-023).
  * The app only computes the date, so without the index nothing is ever deleted.
  */
 const EXPIRING_COLLECTIONS: Record<string, string> = {
@@ -18,6 +19,7 @@ const EXPIRING_COLLECTIONS: Record<string, string> = {
   analytics_daily: 'expiresAt',
   invitations: 'purgeAt',
   access_requests: 'purgeAt',
+  publish_approvals: 'purgeAt',
 };
 
 interface TtlIndex {

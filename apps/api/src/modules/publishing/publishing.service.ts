@@ -37,6 +37,9 @@ import { diffSnapshots } from './domain/diff-snapshots.js';
 import { diffLeadCapture } from './domain/lead-capture.js';
 import { diffSitePresentation } from './domain/site-presentation.js';
 import { emptyPageSnapshot } from './domain/snapshot.js';
+import { ApprovalNotifier } from './approval-notifier.service.js';
+import type { ApprovalRecord } from './approval.schema.js';
+import { ApprovalsRepository } from './approvals.repository.js';
 import { mergeKeysetPages } from './history-merge.js';
 import { pointerConflict, PointerService } from './pointer.service.js';
 import { RELEASE_NOT_FOUND, toReleaseSummary } from './release-dto.js';
@@ -112,6 +115,8 @@ interface CommittedRelease {
   activityId: ObjectId;
   /** The site as the publish transaction read it (its settings are in the release). */
   site: SiteRecord;
+  /** The request to publish this release answered (ADR-023). */
+  approval: ApprovalRecord | null;
 }
 
 export interface PublishOutcome {
@@ -134,6 +139,8 @@ export class PublishingService {
     private readonly sites: SitesService,
     private readonly siteRecords: SitesRepository,
     private readonly consentVersions: ConsentVersionsRepository,
+    private readonly approvals: ApprovalsRepository,
+    private readonly approvalNotifier: ApprovalNotifier,
   ) {}
 
   async checks(user: AuthenticatedUser, pageId: string): Promise<ChecksResult> {
@@ -146,8 +153,9 @@ export class PublishingService {
    * 1. a release with this idempotency key exists → the same result again;
    * 2. the draft revision or the live pointer moved → 409;
    * 3. any blocking check or unacknowledged warning → 422 with the checks;
-   * 4. one transaction: claim the version, insert the release, move the pointer, record activity;
-   * 5. after the commit, revalidate the renderer.
+   * 4. one transaction: claim the version, insert the release, move the pointer, record activity,
+   *    close the page's pending request to publish (ADR-023);
+   * 5. after the commit, revalidate the renderer and tell whoever asked.
    */
   async publish(
     user: AuthenticatedUser,
@@ -209,6 +217,14 @@ export class PublishingService {
     const revalidation = await this.pointer.revalidate(site, committed.activityId);
     // The site as the transaction read it, so the summary compares the new release with it.
     const summary = await this.summaryOf(scope, committed.site, page._id);
+    const liveUrl = liveUrlOf(this.sites.publicOrigin(site), committed.release.slug);
+    if (committed.approval) {
+      await this.approvalNotifier.published(scope, page, committed.approval, {
+        version: committed.release.version,
+        publisherName: user.name,
+        liveUrl,
+      });
+    }
     return {
       response: {
         release: toReleaseSummary(committed.release, {
@@ -216,7 +232,7 @@ export class PublishingService {
           name: user.name,
         }),
         page: summary,
-        liveUrl: liveUrlOf(this.sites.publicOrigin(site), committed.release.slug),
+        liveUrl,
         revalidation,
       },
       replayed: false,
@@ -226,8 +242,9 @@ export class PublishingService {
   /**
    * Step 4 of publish, in one transaction: claim version `releaseSeq + 1` (guarded by revision,
    * pointer and sequence), snapshot the site settings (look, and the consent settings of a page
-   * with a form), insert the release, then `movePointer` records the activity. Any failure aborts
-   * everything, so no release exists without its pointer move.
+   * with a form), insert the release, then `movePointer` records the activity and the page's
+   * pending request to publish closes. Any failure aborts everything, so no release exists
+   * without its pointer move.
    */
   private async commitRelease(
     scope: WorkspaceScope,
@@ -309,7 +326,14 @@ export class PublishingService {
         { scope, page, from, target: release, reason: null, activityType: 'page.published' },
         tx,
       );
-      return { release, activityId, site: current };
+      const approval = await this.approvals.closeForRelease(
+        scope,
+        page._id,
+        release._id,
+        release.createdAt,
+        tx,
+      );
+      return { release, activityId, site: current, approval };
     });
   }
 

@@ -310,3 +310,10 @@
 .restoreLink:hover {
   text-decoration: underline;
 }
+
+/* The sender's note on a request to publish (ADR-023). */
+.approvalNote {
+  margin: 0;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}

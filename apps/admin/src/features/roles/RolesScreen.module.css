@@ -184,3 +184,31 @@
 .no {
   color: var(--color-muted);
 }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A role that asks for the row: Cộng tác viên publishing (ADR-023). */
+.request {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}

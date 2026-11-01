@@ -117,6 +117,31 @@ export const liveReleaseRefSchema = z.object({
 });
 export type LiveReleaseRef = z.infer<typeof liveReleaseRefSchema>;
 
+const approvalFields = {
+  id: idSchema,
+  requestedBy: userRefSchema,
+  /** The draft revision it was sent for; the draft may have changed since. */
+  revision: z.number().int().nonnegative(),
+  note: z.string(),
+  sentAt: isoDateTimeSchema,
+};
+
+/**
+ * A request to publish the page from a role that cannot publish (ADR-023): while it waits, or
+ * after a refusal until a later version of the draft goes live.
+ */
+export const pageApprovalSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('pending'), ...approvalFields }),
+  z.object({
+    status: z.literal('rejected'),
+    ...approvalFields,
+    rejectedBy: userRefSchema,
+    rejectedAt: isoDateTimeSchema,
+    reason: z.string(),
+  }),
+]);
+export type PageApproval = z.infer<typeof pageApprovalSchema>;
+
 export const pageSummarySchema = z.object({
   id: idSchema,
   siteId: idSchema,
@@ -141,6 +166,8 @@ export const pageSummarySchema = z.object({
   /** Public URL of the live page, null when nothing is live. */
   liveUrl: z.url().nullable(),
   checks: checkCountsSchema,
+  /** Derived on the server from the page's latest request to publish (ADR-023). */
+  approval: pageApprovalSchema.nullable(),
   createdBy: userRefSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,

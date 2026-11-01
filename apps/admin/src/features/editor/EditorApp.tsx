@@ -55,6 +55,8 @@ export interface EditorInitialData {
   pages: PageSummary[];
   /** The user's role in the site's workspace. */
   role: Role;
+  /** The signed-in user, to tell their own request to publish from someone else's (ADR-023). */
+  userId: string;
   /** Consent texts of the site's current settings, for a lead form on the canvas (ADR-017). */
   leadCapture: PublicLeadCapture | null;
 }
@@ -72,6 +74,7 @@ export interface PublishDialogRenderProps {
   onPageUpdated: (page: PageSummary, checks?: ChecksResult) => void;
   /** The user's role: an Editor is told which fixes only the Owner can make. */
   role: Role;
+  userId: string;
 }
 
 export interface EditorAppProps {
@@ -89,11 +92,12 @@ function previewErrorMessage(error: unknown): string {
 
 interface ShellProps {
   store: EditorStore;
+  userId: string;
   initialPages: PageSummary[];
   renderPublishDialog: EditorAppProps['renderPublishDialog'];
 }
 
-function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
+function EditorShell({ store, userId, initialPages, renderPublishDialog }: ShellProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -270,6 +274,7 @@ function EditorShell({ store, initialPages, renderPublishDialog }: ShellProps) {
           store.getState().setServerState(checks ? { page, checks } : { page });
         },
         role,
+        userId,
       })}
       <ConflictDialog />
       {guard.dialog}
@@ -296,6 +301,7 @@ export function EditorApp({ initial, renderPublishDialog }: EditorAppProps) {
     <EditorStoreProvider store={store}>
       <EditorShell
         store={store}
+        userId={initial.userId}
         initialPages={initial.pages}
         renderPublishDialog={renderPublishDialog}
       />

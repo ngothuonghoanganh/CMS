@@ -56,6 +56,10 @@ describe('member presentation', () => {
     expect(allowed).toContain('Xem lead và nơi nhận lead');
     expect(denied).toContain('Xuất lead ra CSV / Excel');
     expect(denied).toContain('Sửa bản nháp, section, SEO, tải ảnh lên');
+    // A Cộng tác viên publishes once Chủ sở hữu or Quản trị approves (ADR-023).
+    const contributor = permissionSummary('contributor');
+    expect(contributor.allowed).toContain('Xuất bản, cập nhật trang live (cần được duyệt)');
+    expect(contributor.denied).not.toContain('Xuất bản, cập nhật trang live');
   });
 
   it('marks the sites a change adds or removes', () => {

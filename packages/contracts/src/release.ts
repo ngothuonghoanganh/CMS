@@ -44,6 +44,23 @@ export const publishResponseSchema = z.object({
 });
 export type PublishResponse = z.infer<typeof publishResponseSchema>;
 
+/** A request to publish the saved draft, from a role that cannot publish (ADR-023). */
+export const requestApprovalSchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  note: z.string().trim().max(200, 'Ghi chú tối đa 200 ký tự'),
+});
+export type RequestApproval = z.infer<typeof requestApprovalSchema>;
+
+export const rejectApprovalSchema = z.object({
+  /** The request the approver saw; a newer or closed one is not refused by mistake. */
+  approvalId: idSchema,
+  reason: z.string().trim().min(1, 'Nhập lý do').max(500, 'Lý do tối đa 500 ký tự'),
+});
+export type RejectApproval = z.infer<typeof rejectApprovalSchema>;
+
+export const approvalResponseSchema = z.object({ page: pageSummarySchema });
+export type ApprovalResponse = z.infer<typeof approvalResponseSchema>;
+
 export const pointerMoveRequestSchema = z.object({
   /** Release to make live; null unpublishes the page. */
   targetReleaseId: idSchema.nullable(),

@@ -5,10 +5,12 @@ import {
   type ChecksResult,
   holdersOf,
   type LiveReleaseRef,
+  type PageApproval,
   type PageSummary,
   type PublishResponse,
   type Role,
 } from '@plp/contracts';
+import { formatRelativeTime } from '../../lib/format';
 import { pendingChangeCount } from '../editor/presentation';
 
 /**
@@ -47,7 +49,9 @@ export type PublishPhase =
   /** The draft was saved elsewhere since the editor loaded it: reload before publishing. */
   | 'stale'
   | 'review'
-  | 'published';
+  | 'published'
+  /** A role that cannot publish sent the draft for approval (ADR-023). */
+  | 'requested';
 
 export interface PublishState {
   phase: PublishPhase;
@@ -72,7 +76,10 @@ export type PublishAction =
   | { type: 'submit_started' }
   | { type: 'submit_failed'; message: string }
   | { type: 'checks_refreshed'; checks: ChecksResult; notice: PublishNotice }
-  | { type: 'published'; result: PublishedResult };
+  | { type: 'published'; result: PublishedResult }
+  | { type: 'requested'; page: PageSummary }
+  /** The request to publish was withdrawn: the page shows no request any more. */
+  | { type: 'page_changed'; page: PageSummary };
 
 export const initialPublishState: PublishState = {
   phase: 'preparing',
@@ -110,6 +117,11 @@ export function publishReducer(state: PublishState, action: PublishAction): Publ
         phase: 'review',
         prepared: action.prepared,
         acknowledged: currentAcknowledgements(action.prepared.checks, state.acknowledged),
+        // The note of a waiting request is the first suggestion for the version note.
+        note:
+          state.prepared === null && state.note === ''
+            ? (pendingApproval(action.prepared.page)?.note ?? '')
+            : state.note,
         error: null,
       };
     case 'prepare_failed':
@@ -153,7 +165,76 @@ export function publishReducer(state: PublishState, action: PublishAction): Publ
         notice: null,
         published: action.result,
       };
+    case 'requested':
+      return state.prepared === null
+        ? state
+        : {
+            ...state,
+            phase: 'requested',
+            submitting: false,
+            error: null,
+            notice: null,
+            prepared: { ...state.prepared, page: action.page },
+          };
+    case 'page_changed':
+      return state.prepared === null
+        ? state
+        : {
+            ...state,
+            submitting: false,
+            error: null,
+            prepared: { ...state.prepared, page: action.page },
+          };
   }
+}
+
+/** Whether the dialog publishes, or asks Chủ sở hữu and Quản trị to (ADR-023). */
+export type PublishMode = 'publish' | 'request';
+
+export function publishModeOf(role: Role): PublishMode {
+  return !can(role, 'pages.publish') && can(role, 'pages.requestPublish') ? 'request' : 'publish';
+}
+
+/** The page's request to publish while it waits. */
+export function pendingApproval(
+  page: PageSummary,
+): Extract<PageApproval, { status: 'pending' }> | null {
+  return page.approval?.status === 'pending' ? page.approval : null;
+}
+
+/** "Minh gửi yêu cầu xuất bản · 10 phút trước". */
+export function approvalLine(approval: PageApproval, now: number): string {
+  return `${approval.requestedBy.name} gửi yêu cầu xuất bản · ${formatRelativeTime(approval.sentAt, now)}`;
+}
+
+/** The draft was saved again after the request was sent. */
+export function draftChangedSince(approval: PageApproval, revision: number): boolean {
+  return approval.revision !== revision;
+}
+
+/** "Gửi yêu cầu duyệt", or "Gửi lại yêu cầu" when the user's own request waits. */
+export function requestButtonLabel(page: PageSummary, userId: string): string {
+  return pendingApproval(page)?.requestedBy.id === userId ? 'Gửi lại yêu cầu' : 'Gửi yêu cầu duyệt';
+}
+
+/**
+ * Why "Gửi yêu cầu duyệt" is disabled; null when it may be sent. Blocking errors must be fixed
+ * first; warnings are for the approver to decide. Someone else's waiting request already covers
+ * the draft, theirs and this user's changes alike.
+ */
+export function requestDisabledReason(
+  tally: ChecksTally,
+  page: PageSummary,
+  userId: string,
+): string | null {
+  if (tally.blocking > 0) {
+    return `Sửa ${tally.blocking} lỗi để gửi yêu cầu`;
+  }
+  const pending = pendingApproval(page);
+  if (pending !== null && pending.requestedBy.id !== userId) {
+    return `Đang chờ duyệt yêu cầu của ${pending.requestedBy.name}`;
+  }
+  return null;
 }
 
 /** Never published before: no live version to compare with, no version to restore. */

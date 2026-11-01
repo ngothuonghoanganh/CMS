@@ -225,3 +225,72 @@ export function domainMovedEmail(input: DomainEmailInput): EmailContent {
     html: layout(title, `${paragraph(body)}${button(input.domainsUrl, 'Mở mục Tên miền')}`),
   };
 }
+
+export interface ApprovalRequestEmailInput {
+  requesterName: string;
+  pageTitle: string;
+  siteName: string;
+  note: string;
+  /** True when the sender asks again for a newer draft. */
+  resent: boolean;
+  /** The page in the editor; publishing still checks the approver's role. */
+  pageUrl: string;
+}
+
+/** Tells Chủ sở hữu and Quản trị a page waits for their approval (ADR-023). */
+export function approvalRequestEmail(input: ApprovalRequestEmailInput): EmailContent {
+  const title = `${input.requesterName} ${input.resent ? 'gửi lại' : 'gửi'} yêu cầu xuất bản "${input.pageTitle}"`;
+  const intro = `Trang "${input.pageTitle}" của ${input.siteName} đang chờ bạn duyệt.`;
+  const note = input.note === '' ? null : `Ghi chú: ${input.note}`;
+  const action =
+    'Mở trang, xem trước và kiểm tra, rồi chọn "Duyệt và xuất bản" hoặc "Từ chối". Trang chỉ live khi bạn xuất bản.';
+  return {
+    subject: title,
+    text: [intro, ...(note === null ? [] : ['', note]), '', action, input.pageUrl].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(intro)}${note === null ? '' : paragraph(note)}${button(input.pageUrl, 'Xem và duyệt')}${smallPrint(action)}`,
+    ),
+  };
+}
+
+export interface ApprovalPublishedEmailInput {
+  pageTitle: string;
+  publisherName: string;
+  version: number;
+  liveUrl: string;
+}
+
+/** Tells the sender their page went live (ADR-023). */
+export function approvalPublishedEmail(input: ApprovalPublishedEmailInput): EmailContent {
+  const title = `"${input.pageTitle}" đã được xuất bản`;
+  const body = `${input.publisherName} đã duyệt và xuất bản phiên bản v${input.version}. Khách truy cập đang thấy phiên bản mới.`;
+  return {
+    subject: title,
+    text: [body, '', input.liveUrl].join('\n'),
+    html: layout(title, `${paragraph(body)}${button(input.liveUrl, 'Mở trang live')}`),
+  };
+}
+
+export interface ApprovalRejectedEmailInput {
+  pageTitle: string;
+  rejecterName: string;
+  reason: string;
+  pageUrl: string;
+}
+
+/** Tells the sender why their page was not published (ADR-023). */
+export function approvalRejectedEmail(input: ApprovalRejectedEmailInput): EmailContent {
+  const title = `Yêu cầu xuất bản "${input.pageTitle}" chưa được duyệt`;
+  const body = `${input.rejecterName} chưa duyệt yêu cầu. Trang live giữ nguyên.`;
+  const reason = `Lý do: ${input.reason}`;
+  const next = 'Sửa bản nháp theo góp ý rồi gửi lại yêu cầu.';
+  return {
+    subject: title,
+    text: [body, '', reason, '', next, input.pageUrl].join('\n'),
+    html: layout(
+      title,
+      `${paragraph(body)}${paragraph(reason)}${paragraph(next)}${button(input.pageUrl, 'Mở trang')}`,
+    ),
+  };
+}

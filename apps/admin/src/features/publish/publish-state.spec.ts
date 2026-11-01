@@ -2,20 +2,26 @@ import type { CheckItem, ChecksResult, PageSummary } from '@plp/contracts';
 import { describe, expect, it } from 'vitest';
 import { pageSummary } from '../editor/test-fixtures';
 import {
+  approvalLine,
   checksSummaryLine,
   currentAcknowledgements,
+  draftChangedSince,
   initialPublishState,
   isFirstPublish,
   liveSince,
   nextVersion,
   ownerOnlyFixNote,
+  pendingApproval,
   type PreparedPublish,
   publishDisabledReason,
   publishChanges,
   publishFooterNote,
+  publishModeOf,
   publishReducer,
   type PublishState,
   publishTitle,
+  requestButtonLabel,
+  requestDisabledReason,
   tallyChecks,
 } from './publish-state';
 
@@ -281,5 +287,63 @@ describe('ownerOnlyFixNote', () => {
     ).toBeNull();
     expect(ownerOnlyFixNote({ kind: 'seo', field: 'title' }, 'editor')).toBeNull();
     expect(ownerOnlyFixNote({ kind: 'slug' }, 'editor')).toBeNull();
+  });
+});
+
+describe('requests to publish (ADR-023)', () => {
+  const approval = {
+    status: 'pending' as const,
+    id: '64b0000000000000000000a1',
+    requestedBy: { id: 'u-minh', name: 'Minh' },
+    revision: 5,
+    note: 'Đổi giá',
+    sentAt: '2026-10-24T07:50:00.000Z',
+  };
+  const tally = { blocking: 0, openWarnings: 2, ignored: 0, passed: 3 };
+
+  it('lets roles that cannot publish ask instead', () => {
+    expect(publishModeOf('contributor')).toBe('request');
+    expect(publishModeOf('editor')).toBe('publish');
+    expect(publishModeOf('owner')).toBe('publish');
+    expect(publishModeOf('viewer')).toBe('publish');
+  });
+
+  it('sends with open warnings, not with a blocking error or while someone else waits', () => {
+    const page = pageSummary();
+    expect(requestDisabledReason(tally, page, 'u-minh')).toBeNull();
+    expect(requestDisabledReason({ ...tally, blocking: 2 }, page, 'u-minh')).toBe(
+      'Sửa 2 lỗi để gửi yêu cầu',
+    );
+    const asked = pageSummary({ approval });
+    expect(requestDisabledReason(tally, asked, 'u-minh')).toBeNull();
+    expect(requestDisabledReason(tally, asked, 'u-lan')).toBe('Đang chờ duyệt yêu cầu của Minh');
+    expect(requestButtonLabel(asked, 'u-minh')).toBe('Gửi lại yêu cầu');
+    expect(requestButtonLabel(asked, 'u-lan')).toBe('Gửi yêu cầu duyệt');
+  });
+
+  it('says who asked, when, and whether the draft changed since', () => {
+    expect(approvalLine(approval, Date.parse('2026-10-24T08:00:00.000Z'))).toBe(
+      'Minh gửi yêu cầu xuất bản · 10 phút trước',
+    );
+    expect(draftChangedSince(approval, 5)).toBe(false);
+    expect(draftChangedSince(approval, 6)).toBe(true);
+    expect(pendingApproval(pageSummary({ approval }))).toEqual(approval);
+    expect(pendingApproval(pageSummary())).toBeNull();
+  });
+
+  it('suggests the request’s note for the version, once, and ends in "requested"', () => {
+    const prepared = {
+      revision: 5,
+      page: pageSummary({ approval }),
+      checks: { revision: 5, blocking: [], warnings: [], passed: [] },
+      loadedAt: 0,
+    };
+    const ready = publishReducer(initialPublishState, { type: 'prepared', prepared });
+    expect(ready.note).toBe('Đổi giá');
+    const edited = publishReducer(ready, { type: 'note_changed', note: '' });
+    expect(publishReducer(edited, { type: 'prepared', prepared }).note).toBe('');
+    const sent = publishReducer(ready, { type: 'requested', page: pageSummary() });
+    expect(sent.phase).toBe('requested');
+    expect(sent.prepared?.page.approval).toBeNull();
   });
 });
