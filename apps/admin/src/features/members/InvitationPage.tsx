@@ -169,8 +169,8 @@ function SignupForm({
 }
 
 /**
- * The invitation's card, opened by who invites to which workspace, and the line under it for
- * someone who does not know them (board 15b).
+ * The invitation's card, headed by who invites to which workspace, and the line under it for
+ * someone who does not know the inviter (board 15b).
  */
 function InvitationCard({
   invitation,
