@@ -1243,7 +1243,11 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Link `{ADMIN_ORIGIN}/invite#token=…`: token 32 byte, DB chỉ giữ sha256, như link xác nhận nơi nhận lead (ADR-018).
     - Link có hạn 7 ngày, chỉ dùng một lần, chỉ cho đúng email được mời. "Gửi lại" tạo token mới và tính lại 7 ngày; link cũ hết tác dụng.
     - Email đã là thành viên thì không mời. Mỗi email chỉ có một lời mời đang chờ trong một workspace (unique partial index).
-    - Giới hạn email mỗi 24 giờ, đếm trước khi gửi và trả lại khi không gửi được, như ADR-018 (cùng một `EmailQuota` với thư xác nhận nơi nhận lead): 50 lời mời mỗi workspace, 5 lời mời cho một địa chỉ từ mọi workspace. Vượt giới hạn thì cả request bị từ chối (429), không tạo lời mời nào.
+    - Giới hạn email mỗi 24 giờ, đếm trước khi gửi và trả lại khi không gửi được, như ADR-018 (cùng một `EmailQuota` với thư xác nhận nơi nhận lead): 50 lời mời mỗi workspace, 5 lời mời cho một hộp thư từ mọi workspace. Vượt giới hạn thì cả request bị từ chối (429), không tạo lời mời nào, và mọi email đã đếm được trả lại.
+    - Sửa ngày 2026-11-01 sau vòng test Phase 1:
+      - Giới hạn theo hộp thư: bỏ phần `+tag` và chữ hoa; với Gmail, bỏ cả dấu chấm. Trước đó `an+1@`, `an+2@`… mỗi địa chỉ có 5 lời mời riêng nhưng cùng vào một hộp thư.
+      - Kiểm tra giới hạn 100 người và tạo lời mời nằm trong một transaction có tăng `inviteSeq` của workspace (như `siteSeq` của ADR-014). Hai lượt mời cùng lúc không thể cùng vừa giới hạn.
+      - Nhận hoặc từ chối lời mời đóng nó theo cả `tokenHash`, nên link cũ không dùng được nữa kể cả khi "Gửi lại" xảy ra cùng lúc.
     - Email gửi lỗi thì lời mời vẫn còn, `sentAt = null`, và "Gửi lại" thử lại.
     - Lời mời đã đóng (nhận, thu hồi, từ chối) và lời mời hết hạn tự xóa sau 30 ngày (TTL `purgeAt`).
   - **Nhận lời mời** (màn 15b):
@@ -1282,7 +1286,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Decision:**
   - **HTTPS: on-demand TLS ở biên (Caddy).**
     - Caddy xin chứng chỉ Let's Encrypt ở lần bắt tay TLS đầu tiên của một host. Trước đó nó hỏi `GET /public/tls/allowed?domain=…` của API.
-    - API trả 200 cho host của site (`{subdomain}.{BASE_DOMAIN}` của site có thật) và tên miền riêng đã xác minh, đang trỏ đúng; mọi host khác là 404. Người lạ trỏ DNS về hệ thống không làm Caddy xin chứng chỉ.
+    - API chỉ trả 200 cho tên miền riêng đã xác minh, đang trỏ đúng; mọi host khác là 404. Người lạ trỏ DNS về hệ thống không làm Caddy xin chứng chỉ.
+    - Địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}` dùng chung một chứng chỉ wildcard `*.{BASE_DOMAIN}` (DNS-01, §6), không qua `ask`. Sửa ngày 2026-11-01 sau vòng test Phase 1: trước đó mọi site có thật đều được xin chứng chỉ riêng, nên ai tạo hàng loạt site là dùng hết giới hạn chứng chỉ của CA cho `BASE_DOMAIN` (Let's Encrypt: 50 chứng chỉ mỗi tuần).
     - Không mất phí theo tên miền, không phụ thuộc nhà cung cấp, nên khách gắn tên miền tự do.
     - Cấu hình Caddy và IP tĩnh nằm ở §6.
   - **Tên miền** (collection `domains`):
@@ -1301,7 +1306,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Phân biệt tên miền phụ hay gốc chỉ để hướng dẫn (hai nhãn, hoặc ba nhãn với hậu tố như `com.vn`). Khi kiểm tra, CNAME đúng hoặc mọi bản ghi A thuộc IP của hệ thống đều được chấp nhận.
   - **Kiểm tra DNS và HTTPS:**
     - Interface `DomainDns`: production dùng `node:dns/promises` (timeout 5 giây). `DOMAIN_DNS_ZONE_FILE` đọc câu trả lời từ một file JSON, chỉ cho phát triển và E2E; production từ chối biến này.
-    - `DOMAIN_TLS_CHECK=on` (production): mở kết nối 443 với SNI, chứng chỉ phải hợp lệ, đọc hạn dùng. `off` khi phát triển và E2E, vì không có biên TLS.
+    - `DOMAIN_TLS_CHECK=on` (production): mở kết nối 443 tới IPv4 đầu tiên của biên (`CUSTOM_DOMAIN_IPV4`) với SNI là tên miền; chứng chỉ phải hợp lệ, đọc hạn dùng. `off` khi phát triển và E2E, vì không có biên TLS.
+    - Không kết nối tới nơi DNS của khách trỏ: một tên miền có thể trỏ vào mạng nội bộ (SSRF). API không khởi động khi bật kiểm tra mà thiếu `CUSTOM_DOMAIN_IPV4` (sửa ngày 2026-11-01 sau vòng test Phase 1).
   - **Trạng thái** (hàm thuần, từ lần kiểm tra gần nhất), khớp chú thích màn 13:
     - `taken`: chưa xác minh, site khác đang là chủ.
     - `pending_dns` "Chờ DNS": chưa thấy bản ghi.
@@ -1311,12 +1317,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - `lost` "Mất kết nối": từng hoạt động, nay DNS không còn trỏ đúng.
     - `needs_attention` "Cần can thiệp": DNS đúng mà HTTPS không hợp lệ quá 1 giờ.
   - **Tự kiểm tra:**
-    - Mỗi instance API mỗi phút lấy tối đa 50 tên miền tới hạn (`nextCheckAt`). Mỗi tên miền được giữ bằng một update có điều kiện, nên hai instance không kiểm tra cùng lúc.
-    - Chưa xác minh: mỗi phút trong giờ đầu, rồi mỗi 10 phút, dừng sau 7 ngày ("Kiểm tra ngay" chạy lại). Đã xác minh: mỗi 10 phút.
+    - Mỗi instance API mỗi phút lấy tối đa 50 tên miền tới hạn (`nextCheckAt`), 5 kiểm tra cùng lúc (chỗ trong vòng được giữ trước khi nhận, nên không vượt 50), và thôi nhận thêm sau 60 giây. Mỗi tên miền được giữ bằng một update có điều kiện, tính theo giờ lúc nhận nó, nên hai instance không kiểm tra cùng lúc.
+    - Chưa xác minh: mỗi phút trong giờ đầu, rồi mỗi 10 phút, dừng sau 7 ngày ("Kiểm tra ngay" chạy lại), kể cả khi DNS không trả lời. Đã xác minh: mỗi 10 phút; đang cấp chứng chỉ: mỗi phút.
+    - Kết quả DNS của tên miền vừa trỏ đúng được lưu trước lượt kiểm tra HTTPS đầu tiên, để `ask` của biên cho phép xin chứng chỉ ngay lượt đó.
+    - Email "đã hoạt động" và "mất kết nối" chỉ do lượt kiểm tra đặt được `activeSince` hoặc `lostSince` (update có điều kiện) gửi, nên hai lượt kiểm tra cùng lúc không gửi hai lần. Lần xác minh không thành thì hủy cả transaction chuyển chủ.
     - Email cho người thêm tên miền khi tên miền bắt đầu hoạt động và khi mất kết nối.
     - `DOMAIN_MONITOR_INTERVAL_MS=0` tắt vòng tự kiểm tra (integration test gọi trực tiếp).
   - **Địa chỉ chính:**
     - `sites.primaryDomainId` (null là địa chỉ mặc định). Chỉ tên miền `active` mới được đặt làm chính; không ngắt được địa chỉ chính.
+    - Đặt địa chỉ chính và ngắt tên miền chạy trong transaction. Đặt địa chỉ chính ghi cả bản ghi tên miền (`primarySetAt`), nên ngắt hoặc chuyển chủ cùng lúc sẽ xung đột thay vì để site trỏ tới một tên miền đã mất.
     - Renderer chuyển hướng 301 mọi host khác của site (mặc định và tên miền riêng khác) về địa chỉ chính, giữ đường dẫn và query, chỉ khi địa chỉ chính đang `active`. Khi nó mất kết nối, mọi host phục vụ như thường, và admin báo "Tạm dùng địa chỉ mặc định".
     - Canonical, sitemap, robots, `liveUrl` dùng địa chỉ công khai của site: địa chỉ chính (`CUSTOM_DOMAIN_ORIGIN_TEMPLATE`, mặc định `https://{host}`), nếu không thì địa chỉ mặc định. Link xem trước vẫn ở địa chỉ mặc định.
     - Đổi địa chỉ chính, thêm, gỡ, hay một tên miền đổi trạng thái đều revalidate site.
@@ -1349,14 +1358,16 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Yêu cầu không có bản chụp riêng. Người duyệt xuất bản đúng bản nháp họ đang xem; nếu bản nháp đã đổi sau khi gửi yêu cầu, hộp thoại báo điều đó.
     - Mọi lần xuất bản trang đều đóng yêu cầu đang chờ của trang, dù người xuất bản là người duyệt hay Biên tập. Yêu cầu chuyển thành `published`, ghi `decidedBy` và `releaseId`, trong cùng transaction tạo release (bước 4 của ADR-006).
   - **Yêu cầu** (collection `publish_approvals`):
-    - `{ workspaceId, siteId, pageId, requestedBy, revision, note, status: pending|published|rejected|withdrawn, createdAt, updatedAt, decidedAt|null, decidedBy|null, reason|null, releaseId|null, purgeAt|null }`.
+    - `{ workspaceId, siteId, pageId, requestedBy, revision, note, status: pending|published|rejected|withdrawn, createdAt, sentAt, decidedAt|null, decidedBy|null, reason|null, releaseId|null, releaseSeq|null, purgeAt|null }`. `releaseSeq` là số bản phát hành của trang lúc bị từ chối.
     - Mỗi trang có tối đa một yêu cầu đang chờ (unique partial index `pageId`).
-    - Gửi: `POST /pages/:pageId/approval { expectedRevision, note }`.
+    - Gửi: `POST /pages/:pageId/approval { expectedRevision, expectedPublishedReleaseId, approvalId, note }`. Bản live đã đổi kể từ lúc người gửi xem thì 409 `pointer_conflict`, như publish: không ai xin xuất bản thứ vừa live.
+      - Yêu cầu được lưu trong một transaction ghi lên trang (`approvalAskedAt`) với điều kiện đúng revision và con trỏ người gửi đã thấy. Publish cũng ghi lên trang, nên một lần publish cùng lúc hoặc đóng yêu cầu, hoặc làm yêu cầu nhận 409; không bao giờ còn một yêu cầu chờ cho bản nháp đã live.
       - Revision lệch với bản nháp thì 409. Có lỗi chặn thì 422 `publish_blocked` kèm kết quả kiểm tra.
       - Cảnh báo không chặn việc gửi, vì người duyệt mới là người quyết định về cảnh báo.
     - Gửi lại khi chính mình đang có yêu cầu chờ: cập nhật revision và ghi chú, rồi gửi email lại. Nếu trang đang có yêu cầu của người khác thì 409 `approval_pending`.
+    - `approvalId` là yêu cầu của chính người gửi mà họ đang thấy (null khi gửi mới). Yêu cầu đó đã được trả lời, hoặc có yêu cầu khác của họ mà họ chưa thấy, thì 409 `approval_changed`. Hộp thoại tải lại thay vì mở lại yêu cầu cho một trang vừa live (sửa ngày 2026-11-01 sau vòng test Phase 1).
     - Rút: `DELETE /pages/:pageId/approval`, chỉ người gửi.
-    - Từ chối: `POST /pages/:pageId/approval/reject { approvalId, reason }`, lý do 1–500 ký tự, cần quyền `publishApprovals.decide`.
+    - Từ chối: `POST /pages/:pageId/approval/reject { approvalId, revision, reason }`, lý do 1–500 ký tự, cần quyền `publishApprovals.decide`. `revision` là bản người duyệt đã xem; yêu cầu đã được gửi lại cho revision khác thì 404.
     - Từ chối và xuất bản cùng lúc: chỉ một bên đổi được yêu cầu đang chờ. Nếu xuất bản thắng, lời từ chối nhận 404. Nếu từ chối thắng, trang vẫn được xuất bản như thường.
     - Mỗi thành viên gửi tối đa 20 lần mỗi 24 giờ trong một workspace, kể cả gửi lại, đếm bằng `EmailQuota` như ADR-021.
     - Yêu cầu đã đóng tự xóa sau 30 ngày (TTL `purgeAt`).
@@ -1365,7 +1376,9 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Khi trang được xuất bản: người gửi nhận email kèm địa chỉ live. Khi bị từ chối: người gửi nhận email kèm lý do.
     - Email gửi lỗi thì chỉ ghi log, thao tác vẫn thành công (như ADR-021).
   - **Trên trang:** `PageSummary.approval` được suy ra, không lưu trên trang.
-    - Đó là yêu cầu mới nhất của trang, nếu nó đang chờ, hoặc bị từ chối mà bản live không mới hơn revision của nó.
+    - Đó là yêu cầu mới nhất của trang, nếu nó đang chờ, hoặc bị từ chối mà trang chưa được xuất bản lại sau lời từ chối (`releaseSeq` của trang chưa vượt `releaseSeq` lưu lúc từ chối). Bản nháp chỉ tăng, nên lần xuất bản đó luôn mới ít nhất bằng bản bị từ chối. So bằng số bản phát hành, không bằng giờ, vì các instance API có thể lệch đồng hồ.
+    - Gỡ trang hay rollback sau đó không làm lời từ chối hiện lại. Một bản xuất bản trước lời từ chối (trang rollback rồi được xin lại đúng bản nháp đó) không ẩn nó.
+    - Hộp thoại xuất bản đọc trang từ server mỗi lần mở, nên thấy yêu cầu mà người khác vừa gửi, trả lời hay từ chối.
     - Một truy vấn lấy cho mọi trang của danh sách.
   - **Admin:**
     - Editor:
@@ -1476,6 +1489,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 - GitHub Actions chạy lại được, hiện đang bị khóa do billing của tài khoản, và CI xanh trên `main`.
 - Tên miền riêng (ADR-022):
   - Caddy ở biên bật on-demand TLS, với `ask` trỏ tới `GET /public/tls/allowed` của API, và chuyển mọi host về renderer.
+  - Chứng chỉ wildcard `*.{BASE_DOMAIN}` qua DNS-01 (plugin DNS của nhà cung cấp tên miền) cho địa chỉ mặc định của các site.
   - Biên có IPv4 tĩnh, đặt vào `CUSTOM_DOMAIN_IPV4`; tên miền gốc của khách trỏ bản ghi A về đó.
   - Bản ghi DNS của `CUSTOM_DOMAIN_CNAME_TARGET` trỏ về biên.
   - `CUSTOM_DOMAIN_ORIGIN_TEMPLATE=https://{host}`, `DOMAIN_TLS_CHECK=on` và không đặt `DOMAIN_DNS_ZONE_FILE`.
