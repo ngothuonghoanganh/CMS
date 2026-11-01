@@ -38,6 +38,14 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Tên miền riêng: xác minh DNS, địa chỉ chính và chuyển hướng 301.
 - Tương ứng màn 13–16, 15b và Sidebar v2. Lát và trạng thái ở §5.
 
+**Hoàn thiện trước Phase 2** (chủ sản phẩm yêu cầu ngày 2026-11-02, sau khi đối chiếu mọi màn đã làm với thiết kế):
+
+- Tài khoản: xác nhận email khi đăng ký, quên mật khẩu, đổi mật khẩu (ADR-026).
+- Xóa trang và xóa site (ADR-027).
+- Màn Sites của workspace, số đếm ở Sidebar v2 (ADR-028).
+- Bốn thẻ còn thiếu của màn 04, link chính sách ở chân trang (ADR-007).
+- Những chỗ còn lệch thiết kế ở màn 01, 05, 06, 13, 14, 15, 15b (ADR-005, 006, 021, 022).
+
 **Ngoài phạm vi MVP B và Phase 1:**
 
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
@@ -333,6 +341,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Hộp thoại báo đúng số thay đổi sẽ mất, và gửi chính revision đó làm `baseRevision`.
   - Bản nháp được lưu ở nơi khác sau lúc đó sẽ làm server trả 409 `revision_conflict`. Hộp thoại đọc lại và cho xác nhận lần nữa, không bao giờ ghi đè mà người dùng không biết.
   - Số thay đổi sẽ mất nằm trong một vùng `role="status"`, nên trình đọc màn hình đọc nó khi có kết quả. Mỗi lần mở hộp thoại bắt đầu lại từ "Đang kiểm tra bản nháp hiện tại…".
+- **Amended 2026-11-02 (khớp thiết kế màn 01):** tìm trang theo tên hoặc đường dẫn không phân biệt dấu và hoa thường, cùng cách chuẩn hóa với hộp thư lead (ADR-018): "uu dai" tìm ra "Ưu đãi tháng 11".
+- **Amended 2026-11-02 (ADR-027):** activity có thêm `page.deleted`, và các sự kiện tên miền của ADR-022.
 
 ### ADR-006 — Kiểm tra, publish, rollback, gỡ trang
 
@@ -366,6 +376,15 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-10-25 (MVP B):**
   - Blocking thêm `consent_not_configured` (ADR-016, ADR-017) và `lead_destination_missing` (ADR-018). Cả hai chỉ áp dụng cho trang có section form.
   - Bước 4 của publish đọc thêm cài đặt dữ liệu cá nhân và phiên bản đồng ý để chụp `leadCapture` (ADR-017) trong cùng transaction.
+- **Amended 2026-11-02 (khớp thiết kế màn 05, 06):**
+  - **Mục đã đạt về địa chỉ** (màn 05), theo địa chỉ chính của site:
+    - Địa chỉ mặc định: "HTTPS hoạt động" (`https_active`), vì nó dùng chứng chỉ wildcard (§6).
+    - Tên miền riêng đang `active`: "Tên miền {host} đã xác minh" (`domain_verified`) và "HTTPS hoạt động".
+    - Trạng thái khác: không có hai mục này. Đây không phải lỗi chặn hay cảnh báo, vì trang vẫn được phục vụ ở địa chỉ mặc định (ADR-022), và màn 13 đã báo lỗi.
+    - Trạng thái tên miền được đọc một lần cho mỗi request, không theo từng trang.
+  - **Màn 06:**
+    - Bỏ nút chuyển chỉ còn một lựa chọn: không có điểm lưu bản nháp (ADR-005), nên chỉ để tiêu đề "Đã xuất bản · N".
+    - Panel rollback thêm dòng "Form trong vN gửi lead về cùng nơi nhận như hiện tại" khi release đích có form, vì nơi nhận lead là cài đặt của site (ADR-018), không nằm trong release.
 
 ### ADR-007 — Section registry, composition, theme
 
@@ -433,6 +452,18 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Cặp `max-width: 767px` / `min-width: 768px` để hở một khoảng: ở độ rộng lẻ (zoom, thanh cuộn) như 767,5 px, section ẩn trên một loại thiết bị lại hiện trên cả hai.
     - Unit test cấm `min-width`/`max-width` trong CSS của sections và renderer.
   - **Ảnh đầu trang:** ảnh đầu tiên của section đầu tiên trong thân trang (sau thanh điều hướng) tải ngay với `fetchpriority="high"`; mọi ảnh khác giữ `loading="lazy"`. Canvas của admin không đổi.
+- **Amended 2026-11-02 (khớp thiết kế màn 04, 09):** chủ sản phẩm yêu cầu làm các thẻ của màn 04 chưa có và chưa ADR nào ghi bỏ.
+
+  | Thẻ ở màn 04     | Cách làm                                       | Nhóm              | Nội dung                                                                                                                                            |
+  | ---------------- | ---------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Quy trình 3 bước | variant `steps` của Lợi ích                    | Lợi ích           | Tiêu đề, mở đầu, 3–5 bước đánh số (tiêu đề, mô tả). Ẩn biểu tượng và ảnh của mục                                                                    |
+  | Logo đối tác     | section `logos`, variant `row`                 | Bằng chứng xã hội | Tiêu đề (không bắt buộc), 3–12 logo, mỗi logo một ảnh bắt buộc và tên đối tác làm mô tả ảnh. Hiện đơn sắc, tự xuống dòng trên điện thoại            |
+  | Trước & sau      | section `before_after`, variant `side_by_side` | Bằng chứng xã hội | Tiêu đề, ảnh trước và ảnh sau (bắt buộc, mỗi ảnh một chú thích), dòng lưu ý (ví dụ "Kết quả có thể khác nhau tùy từng người"). Điện thoại xếp chồng |
+  | Gọi / Zalo nhanh | section `quick_contact`, variant `buttons`     | Form & liên hệ    | Tiêu đề, mô tả ngắn, nút gọi (link `phone`) và nút Zalo (link `zalo`), ít nhất một nút                                                              |
+  - Logo đơn sắc bằng CSS (`filter: grayscale`), không xử lý ảnh. Mọi màu chữ vẫn qua kiểm tra AA của theme.
+  - Ảnh của Trước & sau và Logo đối tác đi qua kiểm tra như mọi ảnh: thiếu ảnh bắt buộc là lỗi chặn, thiếu mô tả là cảnh báo (ADR-006).
+  - Vẫn ẩn (§2.1, quy tắc 9): nhóm Bảng giá, "Form + bản đồ", "Section đã lưu".
+  - **Chân trang có link chính sách:** release có `leadCapture` (trang có form, ADR-017) thì chân trang luôn hiện "Chính sách quyền riêng tư" trỏ tới `leadCapture.policyUrl`, sau các link người dùng tự thêm và không lặp nếu trùng URL. Canvas dùng cài đặt hiện tại của site, như form. Trang không có form không có link tự động.
 
 ### ADR-008 — Editor: một store, mọi thay đổi qua command
 
@@ -1290,8 +1321,18 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Membership được đọc trong transaction.
     - Không bắt lỗi khóa trùng bên trong transaction. MongoDB đã hủy transaction đó, nên lần commit sau sẽ được thử lại tới 120 giây.
   - Việc đọc thông tin để gửi email (Chủ sở hữu, workspace) là một phần của việc gửi. Lỗi ở bước này chỉ được log; yêu cầu đã lưu thì không trả 500.
-  - `/workspaces/:id` chuyển tới "Thành viên", hoặc trang chủ với vai trò không quản lý thành viên. Đây là nơi người dùng quay về khi đăng nhập lại từ một màn workspace.
+  - `/workspaces/:id` chuyển tới "Thành viên", hoặc trang chủ với vai trò không quản lý thành viên. Đây là nơi người dùng quay về khi đăng nhập lại từ một màn workspace. (Từ 2026-11-02 chuyển tới màn Sites, ADR-028.)
   - Trang bắt đầu (`/`) mở workspace đã chọn (cookie `plp_ws`, đặt bởi bộ chuyển workspace và trang nhận lời mời), kể cả khi workspace đó chưa có site. Chưa chọn workspace nào (lần đăng nhập đầu) mà workspace đầu tiên không có site và người dùng không tạo được site ở đó, thì trang mở site đầu tiên của một workspace khác, hoặc trang tạo site ở workspace mà họ được tạo. Cookie trỏ tới một workspace họ đã rời không tính là đã chọn. Không còn nơi nào như vậy thì trang tạo site của workspace đầu tiên giải thích rằng chỉ Chủ sở hữu và Quản trị tạo được site.
+- **Amended 2026-11-02 (khớp thiết kế màn 15, 15b):**
+  - **Hộp thoại mời:**
+    - Email tách thành thẻ khi gõ dấu phẩy, khoảng trắng hoặc Enter, và khi dán.
+    - Mỗi thẻ báo ngay "Đã là thành viên", "Đang có lời mời" hay "Email không hợp lệ", dựa trên danh sách màn 15 đã nạp. Nút gửi đếm các email mời được. API vẫn là nơi quyết định.
+  - **Đổi quyền:** có câu "Tóm tắt thay đổi" nói vai trò cũ → mới và các site thêm, gỡ.
+  - **Bộ lọc** vai trò, site và tìm kiếm áp dụng cho cả tab "Lời mời đang chờ".
+  - **Màn 15b:**
+    - Lời mời hết hạn có nút "Nhờ {người mời} gửi lại", là link `mailto:` tới email người mời.
+    - `lookup` trả `inviterEmail` chỉ khi lời mời đã hết hạn. Người cầm link chính là người được mời, và email đó đã gửi thư cho họ.
+    - Có ô chữ cái đầu của workspace, và dòng cuối "Không biết người mời? Bạn có thể bỏ qua email này. Lời mời tự hết hạn sau 7 ngày."
 
 ### ADR-022 — Tên miền riêng: on-demand TLS, không trùng tên miền, địa chỉ chính
 
@@ -1361,6 +1402,22 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
 - **Amended 2026-11-01 (vòng test sau Phase 1):**
   - Email trạng thái tên miền gửi người đã thêm tên miền nếu họ còn `domains.manage` trên site. Nếu không còn, email gửi Chủ sở hữu: người đã bị gỡ không nhận gì, nhưng tin vẫn tới một người phụ trách. Việc đọc người nhận cũng là một phần của email: lỗi ở đó chỉ được log, kết quả kiểm tra vẫn được lưu.
   - Giới hạn 5 tên miền mỗi site được kiểm tra trong transaction tăng `domainSeq` của site, như `pageSeq` (ADR-014). Hai lần thêm cùng lúc không vượt giới hạn.
+- **Amended 2026-11-02 (khớp thiết kế màn 01, 13, 14):**
+  - **Activity của tên miền** (activity của site, ADR-005), `data` chỉ có `hostname`:
+    - `domain.added`, `domain.removed`, `domain.primary_changed`: người làm là người dùng.
+    - `domain.activated` (đã xác minh và có HTTPS) và `domain.lost`: do vòng tự kiểm tra ghi, `actorId` null, admin ghi "Hệ thống".
+    - Chúng được ghi bởi đúng lần update có điều kiện đặt `activeSince` hay `lostSince`, như email, nên không ghi hai lần.
+    - "Hoạt động gần đây" ở màn 01 hiện chúng cùng các sự kiện xuất bản.
+  - **Kiểm tra trước khi thêm:** `GET /sites/:siteId/domains/availability?hostname=…` (`domains.manage`) trả `{ hostname, state }`.
+    - `state` là `invalid` (kèm lý do), `already_added` (site này đã có), `taken` (một site khác đã xác minh) hoặc `available`. Không bao giờ nói site nào.
+    - Màn 14 báo trùng ngay ở ô nhập, với "Tiếp tục để xác minh quyền sở hữu" như board.
+  - **Màn 01:**
+    - Checklist "Thiết lập site" có bước "Kết nối tên miền riêng", xong khi site có một tên miền `active`.
+    - Thẻ "Địa chỉ live" ghi "Đã kết nối · HTTPS" khi địa chỉ chính là tên miền riêng đang hoạt động, và báo lỗi kèm link tới màn 13 khi nó mất kết nối.
+  - **Màn 13 và 14:**
+    - Mỗi dòng của màn 13 có dòng chẩn đoán như màn 14.
+    - Tiêu đề bước của màn 14 đi theo trạng thái.
+    - Hộp "Đặt làm chính" nêu số trang đang live sẽ đổi địa chỉ và một địa chỉ ví dụ.
 
 ### ADR-023 — Duyệt xuất bản: Cộng tác viên gửi yêu cầu, Chủ sở hữu và Quản trị duyệt
 
@@ -1578,6 +1635,148 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - **Nhận lại email lead lúc khởi động** lấy 500 cái cũ nhất trên mọi workspace, như khi có một database; workspace nào lỗi thì log và bỏ qua, không chặn khởi động.
   - **Nhận lời mời** trả thêm `slug`; admin mở workspace vừa tham gia ở địa chỉ của nó, kể cả khi link được mở ở địa chỉ chung.
   - **Admin:** thành viên không tạo được site có lối ra ở màn tạo site: quay về site đầu tiên nếu workspace có site; một địa chỉ thì nút "Mở {workspace}" cho từng workspace khác; có địa chỉ workspace thì "Xem tất cả workspace" khi còn workspace khác; workspace chưa có site thì "Đăng xuất". Sidebar chỉ có "Xem tất cả workspace" khi thuộc từ hai workspace; thẻ "Chưa có workspace" có "Đăng xuất". Màn 35 và 36 có tiêu đề trang; màn 35 ghi "· toàn workspace" như board.
+- **Amended 2026-11-02 (ADR-026):** đăng ký có hai bước. Database của workspace chỉ được tạo khi email đã xác nhận, lúc `POST /auth/signup/verify`, theo đúng thứ tự ở trên.
+
+### ADR-026 — Tài khoản: xác nhận email khi đăng ký, quên mật khẩu, đổi mật khẩu
+
+- **Date:** 2026-11-02 · **Status:** Accepted
+- **Context:**
+  - Chủ sản phẩm yêu cầu ngày 2026-11-02 làm xong các việc trước Phase 2, trong đó có tài khoản cơ bản. API mới chỉ có đăng ký, đăng nhập, đăng xuất và `me`.
+  - §6 yêu cầu xác minh email hoặc giới hạn số workspace trước khi mở đăng ký, vì mỗi lần đăng ký tạo một database (ADR-025).
+  - Thiết kế không có board cho các màn này. Giao diện theo màn 34 (đăng nhập) và token của `@plp/ui`.
+- **Decision:**
+  - **Đăng ký hai bước:**
+    1. `POST /auth/signup { name, email, password, workspaceName }` chưa tạo tài khoản.
+       - API băm mật khẩu, ghi `pending_signups` ở master, rồi gửi email xác nhận. Trả 202 `{ email }`, không đặt cookie.
+       - `pending_signups { email (unique), name, passwordHash, workspaceName, tokenHash, expiresAt, createdAt }`, TTL index theo `expiresAt`. Token 32 byte, DB chỉ giữ sha256, như link mời (ADR-021). Link có hạn 24 giờ.
+       - Đăng ký lại cùng email thì thay bản ghi cũ, nên link cũ hết tác dụng.
+       - Email đã có tài khoản: không ghi gì, gửi thư "Email này đã có tài khoản" kèm link đăng nhập và quên mật khẩu. Phản hồi giống hệt, nên không lộ email nào đã đăng ký.
+    2. Link `{ADMIN_ORIGIN}/signup/verify#token=…` mở màn "Xác nhận email".
+       - Người dùng bấm "Xác nhận và tạo workspace", admin gọi `POST /auth/signup/verify { token }`. Token ở fragment và chỉ gửi bằng POST, nên trình quét link của hộp thư không tiêu nó.
+       - API tạo database của workspace, rồi trong một transaction tạo user, workspace, membership Chủ sở hữu và xóa bản ghi chờ, như đăng ký một bước trước đây (ADR-025). Xong thì đặt cookie và trả `MeResponse`.
+       - Token sai, đã dùng hay hết hạn: 410 `signup_link_invalid`, kèm hướng dẫn đăng ký lại.
+       - Email đã có tài khoản trong lúc chờ (ví dụ đã nhận lời mời): 409 `email_taken`, và bản ghi chờ bị xóa.
+    - `POST /auth/signup/resend { email }`: còn bản ghi chờ thì đổi token, tính lại 24 giờ và gửi lại. Luôn trả 202.
+    - Đăng ký từ lời mời vẫn một bước (ADR-021): link mời đã chứng minh email.
+    - Tài khoản đã có không đổi gì. User chỉ được tạo sau khi email được xác nhận, nên không cần cờ `emailVerified`.
+  - **Quên mật khẩu:**
+    - `POST /auth/password/forgot { email }` luôn trả 202.
+      - Email có tài khoản thì ghi `password_resets { userId (unique), tokenHash, expiresAt, createdAt }` (TTL index) và gửi link `{ADMIN_ORIGIN}/reset-password#token=…`, hiệu lực 60 phút.
+      - Mỗi user một link: link mới thay link cũ.
+    - `POST /auth/password/reset { token, password }`:
+      - Một transaction đổi `passwordHash`, xóa link và xóa **mọi** phiên của user.
+      - Bộ đếm đăng nhập sai của email đó được xóa (ADR-004).
+      - Rồi đăng nhập như đăng nhập thường.
+      - Token sai, đã dùng hay hết hạn: 410 `reset_link_invalid`.
+  - **Đổi mật khẩu:** `POST /auth/password { currentPassword, newPassword }`, cần phiên và `Origin` hợp lệ như mọi request ghi.
+    - Mật khẩu hiện tại sai thì tốn một lượt của giới hạn đăng nhập sai theo tài khoản (ADR-004), nên một phiên bị lấy cắp không dò được mật khẩu.
+    - Đúng thì đổi hash và xóa mọi phiên khác của user, giữ phiên đang dùng. Trả 204.
+  - **Đổi tên hiển thị:** `PATCH /auth/me { name }`, cùng giới hạn độ dài với đăng ký.
+  - **Giới hạn email:**
+    - Mỗi email nhận tối đa 3 thư tài khoản trong 60 phút, gồm thư xác nhận, gửi lại, quên mật khẩu và "đã có tài khoản".
+    - Đếm trong `auth_email_limits { key, count, expiresAt }` (master, TTL index). `key` là HMAC của email đã chuẩn hóa với `LOGIN_ATTEMPT_SECRET`, như `login_attempts`.
+    - Vượt giới hạn thì 429 `rate_limited`, như nhau dù email có tài khoản hay không. Rate limit theo địa chỉ của `/auth/*` vẫn áp dụng.
+  - **Gửi email lỗi:**
+    - SMTP không nhận thư thì 503 `email_unavailable` "Chưa gửi được email, thử lại sau ít phút", và lượt gửi được trả lại.
+    - Bản ghi chờ hay link vẫn được giữ, và "Gửi lại" dùng được.
+  - **Mật khẩu mới** dùng cùng `passwordSchema` với đăng ký.
+  - **Email** đi qua `EmailSender` của ADR-018, mẫu tiếng Việt cùng bố cục với thư mời. Link dẫn tới địa chỉ chung `ADMIN_ORIGIN`, vì người nhận chưa có workspace hoặc chưa đăng nhập.
+  - **Admin:**
+    - Đăng ký: gửi xong thì hiện "Kiểm tra email" với địa chỉ đã gửi, "Gửi lại" và "Đổi email".
+    - `/signup/verify`: "Xác nhận và tạo workspace"; thành công thì mở workspace như đăng ký trước đây.
+    - Đăng nhập (màn 34) có link "Quên mật khẩu?" tới `/forgot-password`. Gửi xong thì báo "Nếu email này có tài khoản, chúng tôi đã gửi link đặt lại mật khẩu".
+    - `/reset-password`: mật khẩu mới và nhập lại; thành công thì vào admin.
+    - `/account` "Tài khoản": email (chỉ xem), tên hiển thị, đổi mật khẩu (hiện tại, mới, nhập lại). Mở từ menu tài khoản ở Sidebar.
+- **Ngoài phạm vi:** đổi email, xóa tài khoản, đăng nhập bằng Google hay OAuth, xác thực hai lớp, danh sách phiên đang đăng nhập.
+- **Reason:**
+  - Không có database nào được tạo cho một email chưa ai xác nhận, và không ai chiếm được email của người khác.
+  - Link một lần, có hạn, chỉ lưu hash, như mọi link bí mật khác của hệ thống.
+  - Đặt lại mật khẩu xóa mọi phiên, vì người quên mật khẩu có thể đang bị người khác giữ phiên.
+- **Consequences:**
+  - Integration test:
+    - đăng ký không tạo user hay database trước khi xác nhận;
+    - xác nhận tạo đủ user, workspace, database; link dùng một lần, hết hạn;
+    - email đã có tài khoản nhận thư khác mà phản hồi giống hệt;
+    - quên và đặt lại mật khẩu xóa mọi phiên; đổi mật khẩu giữ phiên hiện tại; mật khẩu sai tốn lượt;
+    - giới hạn 3 thư mỗi giờ; SMTP lỗi trả 503 và trả lượt.
+  - E2E: đăng ký qua form, mở thư trong Mailpit, xác nhận; quên mật khẩu; đổi mật khẩu.
+  - Helper đăng ký của integration test và E2E đi qua bước xác nhận.
+
+### ADR-027 — Xóa trang và xóa site
+
+- **Date:** 2026-11-02 · **Status:** Accepted
+- **Context:**
+  - §6 để ngỏ câu hỏi "MVP có cần xóa trang hay không". Chủ sản phẩm chọn làm ngày 2026-11-02, cùng với xóa site.
+  - Trang và site đã tạo không xóa được, chỉ gỡ xuất bản được.
+- **Decision:**
+  - **Xóa trang:** `DELETE /sites/:siteId/pages/:pageId`, quyền `pages.manageLive` (Chủ sở hữu, Quản trị, Biên tập).
+    - Chỉ xóa được trang không live (`publishedReleaseId` null): bản nháp chưa xuất bản, hoặc trang đã gỡ. Trang đang live trả 409 `page_live` "Gỡ trang khỏi live trước khi xóa". Nhờ vậy trang live vẫn chỉ đổi qua publish, rollback, undo và gỡ trang (nguyên tắc 4).
+    - Một transaction:
+      1. Xóa page có điều kiện `publishedReleaseId: null`. Xuất bản chạy cùng lúc thì một trong hai thua; không bao giờ còn release live mà mất page.
+      2. Xóa redirect của trang và yêu cầu duyệt xuất bản của trang.
+      3. Xóa các release **không** được lead nào tham chiếu.
+      4. Ghi activity `page.deleted { title, slug }`.
+    - **Release được lead tham chiếu thì giữ:** nó là bằng chứng đồng ý của lead (quy tắc 10). Renderer chỉ đi từ page tới release, nên release còn lại không bao giờ được phục vụ, và không bị sửa.
+    - **Lead, số liệu Hiệu quả và activity cũ của trang được giữ.** Admin ghi "Trang đã xóa" ở nơi cần tên một trang không còn: hộp thư lead, Hiệu quả theo trang, hoạt động gần đây.
+    - Không cần revalidate, vì trang không live.
+    - **Admin:**
+      - Mục "Xóa trang" trong menu "⋯" của dòng trang (màn 01) và ở đầu trang chi tiết.
+      - Với trang đang live, mục bị vô hiệu và ghi "Gỡ xuất bản trước khi xóa".
+      - Hộp xác nhận nêu những gì bị xóa (bản nháp, lịch sử phiên bản, chuyển hướng) và những gì còn (lead đã nhận).
+  - **Xóa site:** `DELETE /sites/:siteId { confirmName }`.
+    - Cần cả `sites.manage` và `personalData.manage` (Chủ sở hữu, Quản trị), vì xóa cả lead. `confirmName` phải đúng tên site (so sau chuẩn hóa NFC); sai thì 422.
+    - **Một transaction ghi cả master và workspace DB** (ADR-025):
+      - Master: xóa `site_addresses` (subdomain được giải phóng) và mọi `domains` của site (biên không cấp chứng chỉ cho chúng nữa). Bỏ `siteId` khỏi `memberships.siteIds` và `invitations.siteIds`.
+      - Workspace DB: xóa `sites` và mọi document có `siteId` đó trong `pages`, `releases`, `redirects`, `assets`, `leads`, `activity`, `consent_versions`, `data_requests`, `publish_approvals`, `analytics_daily`, `analytics_seen`.
+      - Bộ đếm ở master (`lead_limits`, `analytics_salts`) tự hết hạn.
+    - **Phạm vi còn rỗng:**
+      - Thành viên có phạm vi chỉ gồm site đó vẫn ở workspace, nhưng không thấy site nào. Chủ sở hữu đổi quyền hoặc gỡ họ.
+      - Lời mời đang chờ có phạm vi rỗng bị thu hồi trong cùng transaction.
+    - **Sau commit:**
+      - Xóa file ảnh của site trên storage (tiền tố của site), và revalidate renderer để trang đã cache không còn.
+      - Một trong hai lỗi thì log (kèm `siteId`, không có dữ liệu cá nhân), không hoàn tác việc xóa. Ảnh còn sót là file công khai không còn ai tham chiếu.
+    - **Không có thùng rác hay khôi phục:** lead bị xóa thật như một yêu cầu xóa dữ liệu (quy tắc 10). Hộp xác nhận nhắc xuất lead trước.
+    - **Giới hạn của transaction MongoDB** (60 giây, 16 MB mỗi lần ghi oplog) đủ cho quy mô pilot. Site rất lớn cần xóa theo lô, khi đó cần một ADR mới.
+    - **Admin:**
+      - Cài đặt site có thẻ "Xóa site" ở cuối, kèm số trang, số trang đang live, số lead và tên miền riêng sẽ bị xóa.
+      - Nhập tên site để xác nhận.
+      - Xong thì mở màn Sites của workspace (ADR-028).
+- **Ngoài phạm vi:** thùng rác và khôi phục, xóa workspace (ADR-025), nhân bản trang.
+- **Reason:**
+  - Xóa không bao giờ là một cách đổi trang live: trang phải được gỡ trước.
+  - Bằng chứng đồng ý sống cùng lead chứ không cùng trang.
+  - Site là đơn vị dữ liệu của một khách hàng; xóa nó phải xóa hết, trong một transaction, không để lại định tuyến tới dữ liệu đã mất.
+- **Consequences:**
+  - Integration test:
+    - xóa trang không live; từ chối trang live; xuất bản và xóa cùng lúc;
+    - release có lead được giữ, release khác bị xóa;
+    - lead và Hiệu quả của trang đã xóa vẫn đọc được;
+    - xóa site xóa đủ mọi collection và bản ghi ở master, giải phóng subdomain và tên miền;
+    - phạm vi thành viên và lời mời; quyền; người ngoài workspace nhận 404.
+  - E2E: gỡ rồi xóa một trang; xóa một site.
+
+### ADR-028 — Màn Sites của workspace và số đếm ở Sidebar v2
+
+- **Date:** 2026-11-02 · **Status:** Accepted
+- **Context:**
+  - Sidebar v2 có mục "Sites" mang số đếm, đứng đầu nhóm WORKSPACE, và mục "Thành viên" mang số đếm.
+  - Lần đối chiếu thiết kế ngày 2026-11-02 thấy cả hai chưa làm, và không ADR nào ghi bỏ chúng. Agency quản lý nhiều site khách chỉ có dropdown chuyển site.
+- **Decision:**
+  - **Màn Sites** ở `/workspaces/[workspaceId]/sites`:
+    - Danh sách các site người dùng thấy được (phạm vi site, ADR-020): tên, địa chỉ công khai, số trang, số trang đang live, và lead 7 ngày.
+    - Lead 7 ngày chỉ có với `leads.view`, như cột ở màn 01 (ADR-024).
+    - Mỗi dòng mở danh sách trang của site.
+    - "Tạo site" với `sites.manage`. Chưa có site thì trạng thái trống có "Tạo site".
+  - **`GET /workspaces/:id/sites`** trả thêm `summary { pages, livePages, leadsLast7Days|null }` cho mỗi site. Dùng một aggregate cho trang và một cho lead, nhóm theo `siteId`, không truy vấn theo từng site.
+  - **`/workspaces/[id]`** mở màn Sites, thay cho Thành viên (sửa ADR-021).
+  - **Sidebar v2,** nhóm WORKSPACE:
+    - "Sites" đứng đầu, với mọi vai trò; số đếm là số site người dùng thấy được.
+    - "Thành viên" có số thành viên của workspace, và vẫn chỉ hiện với `members.manage`.
+- **Ngoài phạm vi:** Templates, Marketplace, Gói & thanh toán, Khách hàng, Automation của Sidebar v2 (Phase 2–4).
+- **Reason:** Đúng board Sidebar v2; một màn tổng quan cho agency. Số liệu theo site lấy bằng aggregate, nên chi phí không tăng theo số site.
+- **Consequences:**
+  - Integration test cho `summary` theo phạm vi site và quyền `leads.view`.
+  - E2E: mở Sites từ Sidebar, mở một site.
 
 ---
 
@@ -1649,6 +1848,17 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | D1  | Master DB và workspace DB, endpoint mang `siteId`, tạo DB lúc đăng ký, index mọi DB, đường công khai qua master | —                      | Xong       |
 | D2  | Địa chỉ admin riêng mỗi workspace, cookie dùng chung, chọn workspace ở địa chỉ chung, link email theo workspace | 34, 35, 36, Sidebar v2 | Xong       |
 
+**Hoàn thiện trước Phase 2** (chủ sản phẩm yêu cầu ngày 2026-11-02):
+
+| Lát | Nội dung                                                                                                                                                                               | Màn              | Trạng thái |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------- |
+| E1  | Khớp thiết kế: bước tên miền và trạng thái địa chỉ ở màn 01, tìm trang không dấu, sự kiện tên miền, chẩn đoán và kiểm tra trùng ở màn 13–14, mục đã đạt về địa chỉ (ADR-005, 006, 022) | 01, 05, 13, 14   | Đang làm   |
+| E2  | Khớp thiết kế: lịch sử, thành viên, nhận lời mời (ADR-006, 021)                                                                                                                        | 06, 15, 15b      | Đang làm   |
+| E3  | Tài khoản: xác nhận email khi đăng ký, quên và đổi mật khẩu (ADR-026)                                                                                                                  | 34               | Đang làm   |
+| E4  | Xóa trang, xóa site (ADR-027)                                                                                                                                                          | 01, Cài đặt site | Đang làm   |
+| E5  | Quy trình 3 bước, Logo đối tác, Trước & sau, Gọi / Zalo nhanh, link chính sách ở chân trang (ADR-007)                                                                                  | 04, 09           | Đang làm   |
+| E6  | Màn Sites, số đếm ở Sidebar v2 (ADR-028)                                                                                                                                               | Sidebar v2       | Đang làm   |
+
 ## 6. Trước khi phát hành
 
 Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR quy định nó. Chưa đủ hết thì không đưa dữ liệu thật của khách vào.
@@ -1663,7 +1873,7 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
   - **Khôi phục một workspace** từ snapshot thì khôi phục cả các dòng của nó ở master cùng thời điểm: `site_addresses`, `domains`, `memberships`, `custom_roles`, `invitations`, `access_requests`. Khôi phục master mà thiếu workspace DB thì API tạo database rỗng cho workspace đó lúc khởi động.
   - Lúc khởi động, API dựng index cho mọi workspace DB (8 database cùng lúc); số workspace tăng thì thời gian khởi động tăng theo. Một workspace DB không dựng được index thì API không khởi động, như ADR-013.
   - **Index mới hay đổi của collection trong workspace DB:** sau khi mọi instance cũ đã dừng, khởi động lại instance mới một lần, để workspace nào đăng ký trên instance cũ trong lúc chuyển cũng có index đó. Đổi option của index đã có vẫn là bước migration chạy trước khi deploy, trên mọi workspace DB.
-  - **Đăng ký mở** tạo một database mỗi lần. Trước khi mở cho khách thật cần xác minh email hoặc giới hạn số workspace, vì ADR-025 tính cho dưới 500 workspace trên một cluster.
+  - **Đăng ký mở** tạo một database cho mỗi email đã xác nhận (ADR-026). ADR-025 tính cho dưới 500 workspace trên một cluster: theo dõi số workspace, và giới hạn đăng ký nếu cần.
 - Địa chỉ admin của workspace (ADR-025):
   - Bản ghi DNS wildcard và chứng chỉ wildcard `*.{miền admin}` qua DNS-01, cùng lý do với `*.{BASE_DOMAIN}` (giới hạn chứng chỉ của CA).
   - API và admin cùng đặt `ADMIN_ORIGIN` và `ADMIN_WORKSPACE_ORIGIN_TEMPLATE`; API đặt thêm `SESSION_COOKIE_DOMAIN`. Hai cách đặt:
@@ -1690,7 +1900,6 @@ Các điều kiện dưới đây nằm ngoài code. Mỗi mục trỏ về ADR 
 **Chủ sản phẩm cần quyết**
 
 - `BASE_DOMAIN` của production, tức domain của địa chỉ mặc định `{subdomain}.{BASE_DOMAIN}`.
-- MVP có cần xóa trang hay không. Hiện tại chỉ có gỡ xuất bản.
 
 **Người phụ trách pháp lý cần xác nhận** (ADR-017)
 
