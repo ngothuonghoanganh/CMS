@@ -5,7 +5,7 @@ import { SITE_ID } from '../dashboard/test-fixtures';
 
 export { SITE_ID };
 export const PAGE_ID = '64b000000000000000000101';
-export const OTHER_PAGE_ID = '64b000000000000000000102';
+const OTHER_PAGE_ID = '64b000000000000000000102';
 export const LEAD_ID = '64b000000000000000000401';
 export const OTHER_LEAD_ID = '64b000000000000000000402';
 

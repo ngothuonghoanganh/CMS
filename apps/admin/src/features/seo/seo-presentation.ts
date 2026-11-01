@@ -9,8 +9,8 @@ import { firstHeroHeading } from '@plp/sections/schema';
 /** Display rules of "SEO & chia sẻ" (board 07). Pure functions, unit-tested. */
 
 /** Search engines cut longer titles; the preview shows 58 characters and "…" (board). */
-export const SEARCH_TITLE_VISIBLE = 58;
-export const SEARCH_DESCRIPTION_VISIBLE = 157;
+const SEARCH_TITLE_VISIBLE = 58;
+const SEARCH_DESCRIPTION_VISIBLE = 157;
 /** Same bound as `slugSchema`. */
 export const SLUG_MAX = 80;
 

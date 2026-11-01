@@ -60,7 +60,7 @@ import { SiteSummary } from './SiteSummary';
 import { type UnpublishablePage, UnpublishDialog } from './UnpublishDialog';
 import styles from './Dashboard.module.css';
 
-export const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const FIRST_PAGE: string | null = null;
 

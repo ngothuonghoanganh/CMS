@@ -36,7 +36,7 @@ import { EmailSender, EmailSendError } from './email-sender.js';
 import { recipientConfirmationEmail } from './email-templates.js';
 import { toLeadRecipientDto } from './recipient-dto.js';
 
-export const RECIPIENT_NOT_FOUND = 'Không tìm thấy địa chỉ nhận lead';
+const RECIPIENT_NOT_FOUND = 'Không tìm thấy địa chỉ nhận lead';
 const LINK_EXPIRED = 'Liên kết xác nhận không còn hiệu lực';
 
 /** Confirmation emails on the daily limits (`INVITE_LIMITS_PER_DAY`); over a limit is a 429. */

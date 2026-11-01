@@ -42,10 +42,10 @@ import { SitesRepository } from '../sites/sites.repository.js';
 import { SitesService } from '../sites/sites.service.js';
 import { SiteHosts } from '../domains/site-hosts.js';
 
-export const PUBLIC_PAGE_NOT_FOUND = 'Không tìm thấy trang';
+const PUBLIC_PAGE_NOT_FOUND = 'Không tìm thấy trang';
 
 /** Path of a live slug on the site: "/" for the home page (""), "/uu-dai" otherwise. */
-export function livePath(slug: string): string {
+function livePath(slug: string): string {
   return `/${slug}`;
 }
 

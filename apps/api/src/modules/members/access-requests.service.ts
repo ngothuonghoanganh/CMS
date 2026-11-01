@@ -33,7 +33,7 @@ import { WorkspaceLinks } from '../workspaces/workspace-links.js';
 import { WorkspacesRepository } from '../workspaces/workspaces.repository.js';
 import { MEMBER_NOT_FOUND, MemberGrants, toMemberDto } from './member-grants.js';
 
-export const ACCESS_REQUEST_NOT_FOUND = 'Không tìm thấy yêu cầu đổi quyền';
+const ACCESS_REQUEST_NOT_FOUND = 'Không tìm thấy yêu cầu đổi quyền';
 
 const REQUESTS: QuotaUse = {
   what: 'Access request email',

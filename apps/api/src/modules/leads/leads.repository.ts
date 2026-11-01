@@ -56,13 +56,6 @@ export class SubmissionTakenError extends Error {
   }
 }
 
-/** The minimum needed to check access to a lead through its site. */
-export interface LeadAccessRef {
-  id: ObjectId;
-  workspaceId: ObjectId;
-  siteId: ObjectId;
-}
-
 /** What a row of the inbox shows; the message, note and consent stay in the database. */
 export type LeadListRow = Pick<LeadRecord, '_id' | 'pageId' | 'source' | 'status' | 'createdAt'> & {
   fields: Pick<LeadRecord['fields'], 'name' | 'phone'>;

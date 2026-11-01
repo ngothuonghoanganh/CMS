@@ -15,7 +15,7 @@ import {
 } from './store';
 
 /** Debounce after the last command (ADR-008). */
-export const AUTOSAVE_DELAY_MS = 1500;
+const AUTOSAVE_DELAY_MS = 1500;
 /** Automatic retries after a network or server error; afterwards only "Thử lại" retries. */
 export const RETRY_DELAYS_MS: readonly number[] = [2000, 5000, 10_000];
 

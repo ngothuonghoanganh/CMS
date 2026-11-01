@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AssetField, AssetPickerDialog } from '../assets';
 import styles from './SeoScreen.module.css';
 
-export const SHARE_IMAGE_SIZE = '1200 × 630 px';
+const SHARE_IMAGE_SIZE = '1200 × 630 px';
 export const SHARE_IMAGE_FIELD_ID = 'seo-share-image';
 
 export interface ShareImageFieldProps {

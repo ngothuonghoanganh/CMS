@@ -21,7 +21,7 @@ const SEO_LABELS: { field: keyof Seo; label: string }[] = [
   { field: 'noindex', label: 'SEO: hiển thị tìm kiếm' },
 ];
 
-export const SLUG_CHANGE_LABEL = 'Đường dẫn';
+const SLUG_CHANGE_LABEL = 'Đường dẫn';
 
 function labelOf(section: SectionInstance): string {
   return getSectionDefinition(section.type).label;

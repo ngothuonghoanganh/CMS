@@ -32,7 +32,7 @@ import { LeadLimitsRepository } from './lead-limits.repository.js';
 import type { LeadRecord } from './lead.schema.js';
 import { LeadsRepository, SubmissionTakenError } from './leads.repository.js';
 
-export const FORM_NOT_FOUND = 'Form này không còn nhận đăng ký';
+const FORM_NOT_FOUND = 'Form này không còn nhận đăng ký';
 
 /**
  * Months a site keeps its leads; null keeps them until deleted by hand. The default only applies

@@ -12,7 +12,7 @@ export const benefitIcons = [
   'smile',
   'leaf',
 ] as const;
-export const benefitIconLabels: Record<(typeof benefitIcons)[number], string> = {
+const benefitIconLabels: Record<(typeof benefitIcons)[number], string> = {
   sparkles: 'Lấp lánh',
   shield: 'Khiên bảo vệ',
   clock: 'Đồng hồ',
@@ -24,9 +24,9 @@ export const benefitIconLabels: Record<(typeof benefitIcons)[number], string> = 
 };
 
 /** The alternating layout explains 2 to 6 points; the grid needs 3 to 6 (ADR-007). */
-export const BENEFITS_MIN = 2;
-export const BENEFITS_GRID_MIN = 3;
-export const BENEFITS_MAX = 6;
+const BENEFITS_MIN = 2;
+const BENEFITS_GRID_MIN = 3;
+const BENEFITS_MAX = 6;
 
 const benefitItemSchema = z.object({
   icon: z.enum(benefitIcons),

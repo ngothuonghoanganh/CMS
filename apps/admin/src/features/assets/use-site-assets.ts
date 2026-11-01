@@ -5,9 +5,9 @@ import { type InfiniteData, useInfiniteQuery, useQueryClient } from '@tanstack/r
 import { useCallback } from 'react';
 import { api } from '../../lib/api';
 
-export const ASSET_PAGE_SIZE = 24;
+const ASSET_PAGE_SIZE = 24;
 
-export function siteAssetsQueryKey(siteId: string) {
+function siteAssetsQueryKey(siteId: string) {
   return ['sites', siteId, 'assets'] as const;
 }
 

@@ -49,7 +49,7 @@ import { MemberGrants } from './member-grants.js';
 
 type CreateInvitationsValues = z.output<typeof createInvitationsRequestSchema>;
 
-export const INVITATION_NOT_FOUND = 'Không tìm thấy lời mời';
+const INVITATION_NOT_FOUND = 'Không tìm thấy lời mời';
 const LINK_INVALID = 'Liên kết mời không hợp lệ';
 
 const INVITATIONS: QuotaUse = {

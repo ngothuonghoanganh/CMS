@@ -119,7 +119,7 @@ const LABELS = new Map<CustomizablePermission, string>([
   ['pages.requestPublish', 'Gửi yêu cầu xuất bản (phải được duyệt)'],
 ]);
 
-export function permissionLabel(permission: CustomizablePermission): string {
+function permissionLabel(permission: CustomizablePermission): string {
   return LABELS.get(permission) ?? permission;
 }
 

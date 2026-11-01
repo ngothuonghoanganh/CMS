@@ -25,7 +25,7 @@ export type CreateSiteValues = z.output<typeof createSiteRequestSchema>;
 
 export const ASSET_NOT_IN_SITE_MESSAGE = 'Ảnh không có trong thư viện của site này';
 
-export const SITE_LIMIT_MESSAGE = `Mỗi workspace có tối đa ${MAX_SITES_PER_WORKSPACE} site`;
+const SITE_LIMIT_MESSAGE = `Mỗi workspace có tối đa ${MAX_SITES_PER_WORKSPACE} site`;
 
 const ASSET_FIELDS = ['logoAssetId', 'defaultShareImageAssetId'] as const;
 

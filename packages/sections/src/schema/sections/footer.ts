@@ -2,7 +2,7 @@ import { ctaSchema, textSchema } from '@plp/contracts';
 import { z } from 'zod';
 import { defineSection } from '../define.js';
 
-export const FOOTER_LINKS_MAX = 6;
+const FOOTER_LINKS_MAX = 6;
 
 export const footerContentSchema = z.object({
   /** Empty means "use the site name". */

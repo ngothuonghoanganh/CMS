@@ -70,7 +70,7 @@ export interface LeadRecord {
   expiresAt: Date | null;
 }
 
-export const leadSchema = new Schema<LeadRecord>(
+const leadSchema = new Schema<LeadRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

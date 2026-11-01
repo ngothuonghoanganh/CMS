@@ -4,7 +4,7 @@
  * Every label is computed in one fixed time zone, so the server render and the browser hydration
  * produce the same text whatever the machine's zone is. The product serves Vietnamese teams.
  */
-export const ADMIN_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const ADMIN_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

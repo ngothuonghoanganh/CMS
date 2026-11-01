@@ -4,7 +4,7 @@ import sharp, { type Sharp } from 'sharp';
 import { AppError } from '../../shared/errors.js';
 import { TaskLimiter, TooManyWaitingError } from '../../shared/task-limiter.js';
 
-export const UNSUPPORTED_IMAGE_MESSAGE = 'Chỉ hỗ trợ ảnh JPG, PNG, WebP, AVIF hoặc GIF';
+const UNSUPPORTED_IMAGE_MESSAGE = 'Chỉ hỗ trợ ảnh JPG, PNG, WebP, AVIF hoặc GIF';
 
 /**
  * Decoding costs memory in proportion to the pixels, whatever the file size: a 1 KB AVIF can

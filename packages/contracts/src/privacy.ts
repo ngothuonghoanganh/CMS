@@ -8,7 +8,6 @@ import { httpUrlSchema } from './content.js';
  */
 
 /** How long leads and their consent evidence are kept; null keeps them until deleted by hand. */
-export const retentionMonthOptions = [12, 24, 6] as const;
 export const retentionMonthsSchema = z
   .union([z.literal(6), z.literal(12), z.literal(24)])
   .nullable();

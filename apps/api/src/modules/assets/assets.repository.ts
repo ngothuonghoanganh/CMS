@@ -29,12 +29,6 @@ export interface CreateAssetInput {
   decorative: boolean;
 }
 
-/** The minimum needed to check access to an asset through its site. */
-export interface AssetAccessRef {
-  id: ObjectId;
-  siteId: ObjectId;
-}
-
 function byId(assets: readonly AssetRecord[]): Map<string, AssetRecord> {
   return new Map(assets.map((asset) => [asset._id.toHexString(), asset]));
 }

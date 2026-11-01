@@ -2,8 +2,8 @@ import { textSchema } from '@plp/contracts';
 import { z } from 'zod';
 import { defineSection } from '../define.js';
 
-export const FAQ_MIN = 1;
-export const FAQ_MAX = 12;
+const FAQ_MIN = 1;
+const FAQ_MAX = 12;
 
 const faqItemSchema = z.object({
   question: textSchema(160),

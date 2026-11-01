@@ -13,7 +13,7 @@ export interface PageListFilter {
 }
 
 /** Whether a page with status `kind` is listed under the `status` filter (and its chip count). */
-export function matchesStatusFilter(kind: PageStatusKind, filter: PageStatusKind): boolean {
+function matchesStatusFilter(kind: PageStatusKind, filter: PageStatusKind): boolean {
   // "Live" means currently live, so it includes the live pages with unpublished changes.
   return filter === 'live' ? kind === 'live' || kind === 'live_with_changes' : kind === filter;
 }

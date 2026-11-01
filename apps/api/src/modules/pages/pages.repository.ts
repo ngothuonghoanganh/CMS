@@ -17,7 +17,7 @@ import {
   type WorkspaceRef,
 } from '../../shared/persistence/workspace-databases.js';
 
-export const DRAFT_SLUG_TAKEN_MESSAGE = 'Đường dẫn này đã được một trang khác trong site dùng';
+const DRAFT_SLUG_TAKEN_MESSAGE = 'Đường dẫn này đã được một trang khác trong site dùng';
 
 /** A page that is live, as other pages see it (slug checks, links, sitemap). */
 export interface LivePageRow {

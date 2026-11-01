@@ -99,7 +99,7 @@ export const recipientStatusTones: Record<LeadRecipientStatus, BadgeTone> = {
   unsent: 'danger',
 };
 
-export const notificationErrorLabels: Record<LeadNotificationErrorCode, string> = {
+const notificationErrorLabels: Record<LeadNotificationErrorCode, string> = {
   no_recipients: 'site chưa có email nhận lead nào đã xác nhận',
   smtp_unavailable: 'không kết nối được máy chủ gửi thư',
   smtp_rejected: 'máy chủ gửi thư từ chối thư',

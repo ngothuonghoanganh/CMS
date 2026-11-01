@@ -29,7 +29,7 @@ import { groupLabels } from './presentation';
 import { visibilityGroupOf } from './store';
 
 /** Image fields with an asset but neither a description nor the "decorative" flag. */
-export function imagesMissingAlt(section: SectionInstance): string[] {
+function imagesMissingAlt(section: SectionInstance): string[] {
   return collectLeaves(section)
     .filter((leaf) => leaf.field.kind === 'image')
     .flatMap((leaf) => {

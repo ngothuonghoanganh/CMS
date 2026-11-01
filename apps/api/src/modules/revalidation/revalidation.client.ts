@@ -10,7 +10,7 @@ import type { Env } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { signRevalidation } from './revalidation-signature.js';
 
-export const REVALIDATE_TIMEOUT_MS = 3_000;
+const REVALIDATE_TIMEOUT_MS = 3_000;
 const ATTEMPTS = 2;
 
 /**

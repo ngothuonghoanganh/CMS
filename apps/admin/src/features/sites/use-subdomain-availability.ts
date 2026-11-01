@@ -6,7 +6,7 @@ import { api } from '../../lib/api';
 import { useDebouncedValue } from '../shell/use-debounced-value';
 import { fieldError } from '../shell/use-schema-form';
 
-export const AVAILABILITY_DEBOUNCE_MS = 400;
+const AVAILABILITY_DEBOUNCE_MS = 400;
 
 export type SubdomainAvailabilityState =
   | { kind: 'idle' }

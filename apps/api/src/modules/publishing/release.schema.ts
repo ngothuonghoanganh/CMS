@@ -10,8 +10,8 @@ import type { LeadCapture } from './domain/lead-capture.js';
 import type { SitePresentation } from './domain/site-presentation.js';
 import { workspaceCollection } from '../../shared/persistence/workspace-databases.js';
 
-export const RELEASE_MODEL = 'Release';
-export const RELEASES_VERSION_INDEX = 'releases_page_version_unique';
+const RELEASE_MODEL = 'Release';
+const RELEASES_VERSION_INDEX = 'releases_page_version_unique';
 export const RELEASES_IDEMPOTENCY_INDEX = 'releases_page_idempotency_unique';
 
 /**
@@ -84,7 +84,7 @@ const leadCaptureSchema = new Schema<LeadCapture>(
   { _id: false },
 );
 
-export const releaseSchema = new Schema<ReleaseRecord>(
+const releaseSchema = new Schema<ReleaseRecord>(
   {
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     siteId: { type: Schema.Types.ObjectId, required: true },

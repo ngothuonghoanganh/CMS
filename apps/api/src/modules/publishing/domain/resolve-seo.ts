@@ -10,7 +10,7 @@ import type { PageSnapshot } from './snapshot.js';
 export type SeoSiteDefaults = Pick<SitePresentation, 'name' | 'defaultShareImageAssetId'>;
 
 /** Public address of a page: the origin plus its slug ("/" for the home page). */
-export function canonicalUrl(origin: string, slug: string): string {
+function canonicalUrl(origin: string, slug: string): string {
   return `${origin}/${slug}`;
 }
 

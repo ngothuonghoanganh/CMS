@@ -38,12 +38,6 @@ export interface DataRequestCompletion {
   maskedContact: DataRequestContact | null;
 }
 
-/** The minimum needed to check access to a request through its site. */
-export interface DataRequestAccessRef {
-  workspaceId: ObjectId;
-  siteId: ObjectId;
-}
-
 /** Appends one entry and keeps the newest `DATA_REQUEST_LOG_MAX`. */
 function pushLog(entry: DataRequestLogRecord) {
   return { log: { $each: [entry], $slice: -DATA_REQUEST_LOG_MAX } };
