@@ -1634,7 +1634,7 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 | Lát | Nội dung                                                                                                        | Màn                    | Trạng thái |
 | --- | --------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------- |
 | D1  | Master DB và workspace DB, endpoint mang `siteId`, tạo DB lúc đăng ký, index mọi DB, đường công khai qua master | —                      | Xong       |
-| D2  | Địa chỉ admin riêng mỗi workspace, cookie dùng chung, chọn workspace ở địa chỉ chung, link email theo workspace | 34, 35, 36, Sidebar v2 | Đang làm   |
+| D2  | Địa chỉ admin riêng mỗi workspace, cookie dùng chung, chọn workspace ở địa chỉ chung, link email theo workspace | 34, 35, 36, Sidebar v2 | Xong       |
 
 ## 6. Trước khi phát hành
 
