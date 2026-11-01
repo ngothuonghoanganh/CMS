@@ -10,8 +10,8 @@ export interface NavItem<Key extends string> {
   key: Key;
   label: string;
   href: string;
-  /** The sidebar shows the item only to roles that hold it (ADR-020). */
-  permission: Permission;
+  /** The sidebar shows the item only to roles that hold one of these (ADR-020). */
+  permissions: readonly Permission[];
 }
 
 export type SiteNavItem = NavItem<SiteNavKey>;
@@ -23,27 +23,34 @@ export function siteHref(siteId: string): string {
 
 /**
  * Sections of a site. "Cài đặt site" is read-only for roles that edit pages but not the site, so
- * it shows to them; "Dữ liệu & đồng ý" and "Tên miền" only to the roles that change them.
+ * it shows to them; "Tên miền" only to the roles that change it, "Dữ liệu & đồng ý" also to those
+ * who answer data requests there.
  */
 export function siteNavItems(siteId: string): SiteNavItem[] {
   const base = siteHref(siteId);
   return [
-    { key: 'pages', label: 'Trang', href: base, permission: 'pages.view' },
-    { key: 'leads', label: 'Leads', href: leadsHref(siteId), permission: 'leads.view' },
+    { key: 'pages', label: 'Trang', href: base, permissions: ['pages.view'] },
+    { key: 'leads', label: 'Leads', href: leadsHref(siteId), permissions: ['leads.view'] },
     {
       key: 'analytics',
       label: 'Hiệu quả',
       href: analyticsHref(siteId),
-      permission: 'pages.view',
+      permissions: ['pages.view'],
     },
-    { key: 'domain', label: 'Tên miền', href: `${base}/domain`, permission: 'domains.manage' },
+    { key: 'domain', label: 'Tên miền', href: `${base}/domain`, permissions: ['domains.manage'] },
     {
       key: 'privacy',
       label: 'Dữ liệu & đồng ý',
       href: privacyHref(siteId),
-      permission: 'privacy.manage',
+      // The settings, or the data requests of the people who sent a form (ADR-017, ADR-024).
+      permissions: ['privacy.manage', 'personalData.manage'],
     },
-    { key: 'settings', label: 'Cài đặt site', href: `${base}/settings`, permission: 'pages.edit' },
+    {
+      key: 'settings',
+      label: 'Cài đặt site',
+      href: `${base}/settings`,
+      permissions: ['pages.edit'],
+    },
   ];
 }
 
@@ -67,13 +74,13 @@ export function workspaceNavItems(workspaceId: string): WorkspaceNavItem[] {
       key: 'members',
       label: 'Thành viên',
       href: membersHref(workspaceId),
-      permission: 'members.manage',
+      permissions: ['members.manage'],
     },
     {
       key: 'roles',
       label: 'Vai trò & quyền',
       href: rolesHref(workspaceId),
-      permission: 'members.manage',
+      permissions: ['members.manage'],
     },
   ];
 }

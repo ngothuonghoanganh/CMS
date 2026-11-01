@@ -17,36 +17,36 @@ const [pages, leads, analytics, domain, privacy, settings] = siteNavItems(siteId
 describe('siteNavItems', () => {
   it('lists the sections of a site in the order of the design', () => {
     expect(siteNavItems(siteId)).toEqual([
-      { key: 'pages', label: 'Trang', href: `/sites/${siteId}`, permission: 'pages.view' },
+      { key: 'pages', label: 'Trang', href: `/sites/${siteId}`, permissions: ['pages.view'] },
       {
         key: 'leads',
         label: 'Leads',
         href: `/sites/${siteId}/leads`,
-        permission: 'leads.view',
+        permissions: ['leads.view'],
       },
       {
         key: 'analytics',
         label: 'Hiệu quả',
         href: `/sites/${siteId}/analytics`,
-        permission: 'pages.view',
+        permissions: ['pages.view'],
       },
       {
         key: 'domain',
         label: 'Tên miền',
         href: `/sites/${siteId}/domain`,
-        permission: 'domains.manage',
+        permissions: ['domains.manage'],
       },
       {
         key: 'privacy',
         label: 'Dữ liệu & đồng ý',
         href: `/sites/${siteId}/privacy`,
-        permission: 'privacy.manage',
+        permissions: ['privacy.manage', 'personalData.manage'],
       },
       {
         key: 'settings',
         label: 'Cài đặt site',
         href: `/sites/${siteId}/settings`,
-        permission: 'pages.edit',
+        permissions: ['pages.edit'],
       },
     ]);
   });
@@ -57,13 +57,13 @@ describe('siteNavItems', () => {
         key: 'members',
         label: 'Thành viên',
         href: '/workspaces/64b0000000000000000000aa/members',
-        permission: 'members.manage',
+        permissions: ['members.manage'],
       },
       {
         key: 'roles',
         label: 'Vai trò & quyền',
         href: '/workspaces/64b0000000000000000000aa/roles',
-        permission: 'members.manage',
+        permissions: ['members.manage'],
       },
     ]);
   });

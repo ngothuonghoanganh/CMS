@@ -20,7 +20,7 @@ import {
   useToast,
 } from '@plp/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type SubmitEvent, useState } from 'react';
+import { type SubmitEvent, useId, useState } from 'react';
 import { api } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -54,6 +54,8 @@ export function AccessRequestDialog({
   const [wanted, setWanted] = useState<AssignableRole | null>(null);
   const [wholeWorkspace, setWholeWorkspace] = useState(false);
   const [note, setNote] = useState('');
+  const [roleError, setRoleError] = useState(false);
+  const roleErrorId = useId();
   const key = memberQueryKeys.myRequest(workspaceId);
   const mine = useQuery({
     queryKey: key,
@@ -81,7 +83,11 @@ export function AccessRequestDialog({
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (wanted === null || send.isPending) {
+    if (send.isPending) {
+      return;
+    }
+    if (wanted === null) {
+      setRoleError(true);
       return;
     }
     // Quản trị always works on every site; the same role is only worth asking for on every site.
@@ -103,7 +109,13 @@ export function AccessRequestDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A running save cannot be dismissed half-way: its answer shows here.
+        if (!next && send.isPending) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       title="Yêu cầu đổi quyền"
       description={`Bạn đang là ${accessLabel(role)}. Yêu cầu được gửi tới Chủ sở hữu qua email; quyền chỉ đổi khi họ chấp nhận.`}
       footer={
@@ -111,13 +123,19 @@ export function AccessRequestDialog({
           <>
             <Button
               variant="secondary"
+              disabled={send.isPending}
               onClick={() => {
                 onOpenChange(false);
               }}
             >
               Hủy
             </Button>
-            <Button type="submit" form="access-request" loading={send.isPending}>
+            <Button
+              type="submit"
+              form="access-request"
+              loading={send.isPending}
+              disabled={mine.isError}
+            >
               Gửi yêu cầu
             </Button>
           </>
@@ -135,6 +153,26 @@ export function AccessRequestDialog({
     >
       {mine.isPending ? (
         <Spinner label="Đang tải yêu cầu của bạn" />
+      ) : mine.isError ? (
+        // Without it the form could ask again while a request waits.
+        <Callout
+          tone="danger"
+          role="alert"
+          title="Chưa tải được yêu cầu của bạn"
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                void mine.refetch();
+              }}
+            >
+              Thử lại
+            </Button>
+          }
+        >
+          {problemMessage(mine.error)}
+        </Callout>
       ) : pending !== null ? (
         <Callout tone="info" title="Bạn đang có một yêu cầu chờ duyệt">
           Xin làm {roleLabels[pending.role]}
@@ -148,9 +186,19 @@ export function AccessRequestDialog({
             showLegend
             options={options}
             value={wanted}
-            onChange={setWanted}
+            onChange={(value) => {
+              setWanted(value);
+              setRoleError(false);
+            }}
             minColumnWidth={200}
+            invalid={roleError}
+            describedBy={roleError ? roleErrorId : undefined}
           />
+          {roleError ? (
+            <p id={roleErrorId} className={styles.error} role="alert">
+              Chọn vai trò bạn cần.
+            </p>
+          ) : null}
           {wanted === null || wanted === 'admin' || wanted === role ? null : (
             <Checkbox
               label="Trên toàn workspace"

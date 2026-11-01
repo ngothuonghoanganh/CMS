@@ -56,7 +56,13 @@ export function TransferOwnershipDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // A running save cannot be dismissed half-way: its answer shows here.
+        if (!next && transfer.isPending) {
+          return;
+        }
+        onOpenChange(next);
+      }}
       title="Chuyển quyền sở hữu workspace"
       footer={
         <>

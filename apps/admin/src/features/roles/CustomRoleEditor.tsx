@@ -283,6 +283,7 @@ export function CustomRoleEditor({
               disabled={holders > 0}
               aria-describedby={holders > 0 ? deleteNoteId : undefined}
               onClick={() => {
+                remove.reset();
                 setDeleteOpen(true);
               }}
             >

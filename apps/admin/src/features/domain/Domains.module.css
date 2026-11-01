@@ -202,9 +202,9 @@
 }
 
 .checked {
-  display: block;
-  margin-top: 6px;
+  margin: 0;
   font-size: var(--text-sm);
+  color: var(--color-muted);
 }
 
 .instructions {

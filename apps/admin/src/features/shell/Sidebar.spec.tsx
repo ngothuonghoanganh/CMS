@@ -165,10 +165,28 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: /Ngọc Anh/ })).toHaveTextContent('Biên tập · 2 site');
     unmount();
 
-    renderSidebar({ membership: { ...agency, role: 'support', siteIds: [SITE_ID] } });
+    const support = renderSidebar({
+      membership: { ...agency, role: 'support', siteIds: [SITE_ID] },
+    });
     expect(
       screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
     ).toEqual(['Trang 6 trang', 'Leads', 'Hiệu quả']);
+    support.unmount();
+
+    // A custom role answering data requests finds them under "Dữ liệu & đồng ý" (ADR-024).
+    renderSidebar({
+      membership: {
+        ...agency,
+        role: {
+          customRoleId: '64b0000000000000000000c1',
+          name: 'Pháp chế',
+          permissions: ['pages.view', 'leads.view', 'personalData.manage'],
+        },
+      },
+    });
+    expect(
+      screen.getAllByRole('link').map((link) => link.textContent.replace(/\s+/g, ' ').trim()),
+    ).toEqual(['Trang 6 trang', 'Leads', 'Hiệu quả', 'Dữ liệu & đồng ý']);
   });
 
   it('offers a first site on a workspace screen of a workspace without one', () => {

@@ -3,7 +3,7 @@ import {
   type LeadCounts,
   type LeadDetail,
   type LeadListResponse,
-  type Role,
+  type Access,
   updateLeadRequestSchema,
 } from '@plp/contracts';
 import type { QueryClient } from '@tanstack/react-query';
@@ -63,7 +63,7 @@ interface Setup {
   recipientsOpen?: boolean;
   list?: LeadListResponse;
   filters?: LeadInboxFilters;
-  role?: Role;
+  role?: Access;
   leadId?: string | null;
   /** The details the API knows; a lead missing here answers 404. */
   details?: LeadDetail[];
@@ -385,6 +385,42 @@ describe('LeadInbox', () => {
     await user.click(within(panel).getByRole('button', { name: 'Không phải spam' }));
     expect(await screen.findByText('Đã chuyển về Hộp thư')).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Chuyển vào spam' })).toBeInTheDocument();
+  });
+
+  it('shows a lead read only to a custom role that sees leads but does not handle them', async () => {
+    const failed = leadDetail({
+      note: 'Hẹn gọi lại sau 18h',
+      notification: {
+        status: 'failed',
+        attempts: 3,
+        lastErrorCode: 'smtp_unavailable',
+        sentAt: null,
+        recipients: null,
+        rejectedRecipients: null,
+      },
+    });
+    renderInbox({
+      role: {
+        customRoleId: 'role-1',
+        name: 'Trưởng nhóm',
+        permissions: ['pages.view', 'leads.view'],
+      },
+      details: [failed, baoDetail],
+    });
+    const { panel } = await openLead();
+
+    expect(within(panel).getByText('Mới')).toBeInTheDocument();
+    expect(
+      within(panel).queryByRole('combobox', { name: 'Trạng thái lead' }),
+    ).not.toBeInTheDocument();
+    expect(within(panel).getByRole('region', { name: 'Ghi chú nội bộ' })).toHaveTextContent(
+      'Hẹn gọi lại sau 18h',
+    );
+    expect(within(panel).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Gửi lại' })).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByRole('button', { name: 'Chuyển vào spam' }),
+    ).not.toBeInTheDocument();
   });
 
   it('deletes the data of a person after a confirmation, then focuses the empty panel', async () => {

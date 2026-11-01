@@ -15,6 +15,7 @@ import {
 } from '@plp/contracts';
 import {
   AlertCircleIcon,
+  Badge,
   Button,
   ButtonLink,
   Callout,
@@ -47,6 +48,7 @@ import {
   consentMoment,
   leadDetailMeta,
   leadSourceLine,
+  leadStatusTones,
   notificationView,
   spamReasonLabels,
   telUrl,
@@ -61,6 +63,8 @@ export interface LeadDetailPanelProps {
   /** The detail the server loaded for this lead, if any, and when. */
   initialDetail?: LeadDetail | undefined;
   loadedAt: number;
+  /** Status, note, spam and "Gửi lại" (`leads.handle`); without it the lead is read only. */
+  canHandle: boolean;
   /** The workspace owner corrects, exports and deletes a person's data (ADR-017). */
   canManage: boolean;
   /** Move focus to the lead's name once it shows: the user just picked it in the list. */
@@ -85,6 +89,7 @@ export function LeadDetailPanel({
   leadId,
   initialDetail,
   loadedAt,
+  canHandle,
   canManage,
   focusOnShow,
   onGone,
@@ -281,26 +286,30 @@ export function LeadDetailPanel({
           </h2>
           <span className={styles.sub}>{leadDetailMeta(lead)}</span>
         </div>
-        <Field label="Trạng thái lead" hideLabel className={styles.statusField}>
-          <Select
-            value={pendingStatus ?? lead.status}
-            // Never disabled while saving: that would drop keyboard focus. A choice made before
-            // the save answers is ignored; the select shows the status being saved.
-            aria-busy={update.isPending}
-            onChange={(event) => {
-              const status = leadStatusSchema.safeParse(event.target.value);
-              if (status.success && !update.isPending) {
-                update.mutate({ status: status.data });
-              }
-            }}
-          >
-            {leadStatuses.map((status) => (
-              <option key={status} value={status}>
-                {leadStatusLabels[status]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {canHandle ? (
+          <Field label="Trạng thái lead" hideLabel className={styles.statusField}>
+            <Select
+              value={pendingStatus ?? lead.status}
+              // Never disabled while saving: that would drop keyboard focus. A choice made before
+              // the save answers is ignored; the select shows the status being saved.
+              aria-busy={update.isPending}
+              onChange={(event) => {
+                const status = leadStatusSchema.safeParse(event.target.value);
+                if (status.success && !update.isPending) {
+                  update.mutate({ status: status.data });
+                }
+              }}
+            >
+              {leadStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {leadStatusLabels[status]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Badge tone={leadStatusTones[lead.status]}>{leadStatusLabels[lead.status]}</Badge>
+        )}
       </div>
 
       <div className={styles.detailBody}>
@@ -423,7 +432,7 @@ export function LeadDetailPanel({
                   </time>
                 ) : null}
               </span>
-              {delivery.kind === 'failed' ? (
+              {delivery.kind === 'failed' && canHandle ? (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -442,107 +451,120 @@ export function LeadDetailPanel({
           </section>
         )}
 
-        <form
-          className={styles.noteForm}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (noteChanged) {
-              update.mutate({ note: note.trim() });
-            }
-          }}
-        >
-          <Field label="Ghi chú nội bộ" counter={{ length: note.length, max: LEAD_NOTE_MAX }}>
-            <Textarea
-              ref={noteRef}
-              rows={2}
-              value={note}
-              maxLength={LEAD_NOTE_MAX}
-              placeholder="Ví dụ: hẹn gọi lại sau 18h"
-              onChange={(event) => {
-                setNoteDraft(event.target.value);
-              }}
-            />
-          </Field>
-          {noteChanged ? (
-            <div className={styles.noteActions}>
-              <Button
-                type="submit"
-                variant="secondary"
-                size="sm"
-                loading={update.isPending && update.variables.note !== undefined}
-              >
-                Lưu ghi chú
-              </Button>
-            </div>
-          ) : null}
-        </form>
-      </div>
-
-      <div className={styles.detailActions}>
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={update.isPending && update.variables.spam !== undefined}
-          onClick={() => {
-            update.mutate({ spam: !lead.spam.suspected });
-          }}
-        >
-          {lead.spam.suspected ? 'Không phải spam' : 'Chuyển vào spam'}
-        </Button>
-        {canManage ? (
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setEditKey((key) => key + 1);
-                setEditOpen(true);
-              }}
-            >
-              Sửa thông tin
-            </Button>
-            <DropdownMenu
-              align="start"
-              trigger={
+        {canHandle ? (
+          <form
+            className={styles.noteForm}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (noteChanged) {
+                update.mutate({ note: note.trim() });
+              }
+            }}
+          >
+            <Field label="Ghi chú nội bộ" counter={{ length: note.length, max: LEAD_NOTE_MAX }}>
+              <Textarea
+                ref={noteRef}
+                rows={2}
+                value={note}
+                maxLength={LEAD_NOTE_MAX}
+                placeholder="Ví dụ: hẹn gọi lại sau 18h"
+                onChange={(event) => {
+                  setNoteDraft(event.target.value);
+                }}
+              />
+            </Field>
+            {noteChanged ? (
+              <div className={styles.noteActions}>
                 <Button
+                  type="submit"
                   variant="secondary"
                   size="sm"
-                  leadingIcon={<DownloadIcon size={16} />}
-                  loading={exportFile.isPending}
+                  loading={update.isPending && update.variables.note !== undefined}
                 >
-                  Xuất dữ liệu người này
+                  Lưu ghi chú
                 </Button>
-              }
-            >
-              <DropdownMenuItem
-                onSelect={() => {
-                  exportFile.mutate('json');
-                }}
-              >
-                File JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  exportFile.mutate('csv');
-                }}
-              >
-                File CSV (Excel)
-              </DropdownMenuItem>
-            </DropdownMenu>
+              </div>
+            ) : null}
+          </form>
+        ) : lead.note === '' ? null : (
+          <section className={styles.noteForm} aria-labelledby={`${headingId}-note`}>
+            <h3 id={`${headingId}-note`} className={styles.deliveryTitle}>
+              Ghi chú nội bộ
+            </h3>
+            <p>{lead.note}</p>
+          </section>
+        )}
+      </div>
+
+      {canHandle || canManage ? (
+        <div className={styles.detailActions}>
+          {canHandle ? (
             <Button
               variant="secondary"
               size="sm"
-              className={styles.dangerAction}
+              loading={update.isPending && update.variables.spam !== undefined}
               onClick={() => {
-                remove.reset();
-                setDeleteOpen(true);
+                update.mutate({ spam: !lead.spam.suspected });
               }}
             >
-              Xóa dữ liệu người này
+              {lead.spam.suspected ? 'Không phải spam' : 'Chuyển vào spam'}
             </Button>
-          </>
-        ) : null}
-      </div>
+          ) : null}
+          {canManage ? (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setEditKey((key) => key + 1);
+                  setEditOpen(true);
+                }}
+              >
+                Sửa thông tin
+              </Button>
+              <DropdownMenu
+                align="start"
+                trigger={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leadingIcon={<DownloadIcon size={16} />}
+                    loading={exportFile.isPending}
+                  >
+                    Xuất dữ liệu người này
+                  </Button>
+                }
+              >
+                <DropdownMenuItem
+                  onSelect={() => {
+                    exportFile.mutate('json');
+                  }}
+                >
+                  File JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    exportFile.mutate('csv');
+                  }}
+                >
+                  File CSV (Excel)
+                </DropdownMenuItem>
+              </DropdownMenu>
+              <Button
+                variant="secondary"
+                size="sm"
+                className={styles.dangerAction}
+                onClick={() => {
+                  remove.reset();
+                  setDeleteOpen(true);
+                }}
+              >
+                Xóa dữ liệu người này
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       <ConsentEvidenceDialog consent={consent} open={evidenceOpen} onOpenChange={setEvidenceOpen} />
       {canManage && editKey > 0 ? (

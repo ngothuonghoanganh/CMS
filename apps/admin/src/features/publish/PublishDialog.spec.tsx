@@ -5,7 +5,7 @@ import {
   type PageApproval,
   type PageSummary,
   type PublishResponse,
-  type Role,
+  type Access,
   type SaveDraftResponse,
 } from '@plp/contracts';
 import { screen, within } from '@testing-library/react';
@@ -131,7 +131,7 @@ interface Setup {
   /** The page as the server has it, when the editor holds an older summary. */
   serverPage?: PageSummary;
   result?: ChecksResult;
-  role?: Role;
+  role?: Access;
   userId?: string;
 }
 
@@ -424,6 +424,23 @@ describe('PublishDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Tiếp tục chỉnh sửa' }));
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('offers no restore to a role that publishes but does not roll back (ADR-024)', async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      role: {
+        customRoleId: '64b0000000000000000000c1',
+        name: 'Người đăng bài',
+        permissions: ['pages.view', 'pages.edit', 'pages.publish'],
+      },
+    });
+    await screen.findByRole('heading', { name: 'Xuất bản 2 thay đổi' });
+    apiMock.mockResolvedValueOnce(publishResponse());
+    await user.click(publishButton());
+
+    expect(await screen.findByRole('heading', { name: 'v13 đã live' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Khôi phục/ })).not.toBeInTheDocument();
   });
 
   it('warns when the live page could not be refreshed and offers no restore after a first publish', async () => {

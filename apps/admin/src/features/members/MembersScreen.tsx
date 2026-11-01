@@ -37,7 +37,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import { formatDate, formatRelativeTime } from '../../lib/format';
 import { rolesHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
@@ -171,6 +171,10 @@ export function MembersScreen({
     },
     onError: (error) => {
       reportUnexpected('Revoking an invitation failed', error);
+      // Accepted or revoked meanwhile: the list stops offering it.
+      if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+        refresh();
+      }
     },
   });
 
@@ -350,7 +354,8 @@ export function MembersScreen({
                         <td>{scopeLabel(member.siteIds, sites)}</td>
                         <td>{formatDate(member.joinedAt)}</td>
                         <td className={styles.actions}>
-                          {member.role !== 'owner' ? (
+                          {/* Nobody changes their own role: another Quản trị or Chủ sở hữu does. */}
+                          {member.role !== 'owner' && !self ? (
                             <Button
                               variant="secondary"
                               size="sm"
@@ -593,6 +598,8 @@ export function MembersScreen({
         onOpenChange={(open) => {
           if (!open) {
             setRevoking(null);
+            // The next invitation's dialog starts without this one's error.
+            revoke.reset();
           }
         }}
         tone="danger"

@@ -431,7 +431,8 @@ function PublishSession({
         {...dialogProps}
         title={`v${response.release.version} đã live`}
         footerStart={
-          previousLive === null ? null : (
+          // Restoring moves the live pointer: only roles that roll back are offered it.
+          previousLive === null || !can(role, 'pages.manageLive') ? null : (
             <Link
               href={`${pageHref(site.id, pageId, 'history')}?restore=${encodeURIComponent(previousLive.id)}`}
               className={styles.restoreLink}
