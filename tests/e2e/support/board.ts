@@ -16,6 +16,7 @@ import {
   type LeadStatus,
   pageDetailResponseSchema,
   type PageDetailResponse,
+  type PageSummary,
   pointerMoveResponseSchema,
   publishResponseSchema,
   type PublishResponse,
@@ -57,47 +58,61 @@ function sectionId(): string {
   return randomBytes(6).toString('hex');
 }
 
+/** A page as the API names it: through its site (ADR-025). */
+export type PageRef = Pick<PageSummary, 'id' | 'siteId'>;
+
 export function getPageViaApi(
   request: APIRequestContext,
-  pageId: string,
+  page: PageRef,
 ): Promise<PageDetailResponse> {
-  return call(request, 'GET', endpoints.getPage.path(pageId), pageDetailResponseSchema);
+  return call(
+    request,
+    'GET',
+    endpoints.getPage.path(page.siteId, page.id),
+    pageDetailResponseSchema,
+  );
 }
 
 /** Autosaves a draft changed by `change`, as the editor does (ADR-005). */
 export async function saveDraftViaApi(
   request: APIRequestContext,
-  pageId: string,
+  page: PageRef,
   change: (draft: PageDetailResponse['draft']) => Partial<{
     composition: Composition;
     slug: string;
     seo: PageDetailResponse['draft']['seo'];
   }>,
 ): Promise<void> {
-  const { draft } = await getPageViaApi(request, pageId);
+  const { draft } = await getPageViaApi(request, page);
   const changed = change(draft);
-  await call(request, 'PUT', endpoints.saveDraft.path(pageId), saveDraftResponseSchema, {
-    baseRevision: draft.revision,
-    slug: changed.slug ?? draft.slug,
-    composition: changed.composition ?? draft.composition,
-    seo: changed.seo ?? draft.seo,
-  });
+  await call(
+    request,
+    'PUT',
+    endpoints.saveDraft.path(page.siteId, page.id),
+    saveDraftResponseSchema,
+    {
+      baseRevision: draft.revision,
+      slug: changed.slug ?? draft.slug,
+      composition: changed.composition ?? draft.composition,
+      seo: changed.seo ?? draft.seo,
+    },
+  );
 }
 
 /** Publishes the draft as the publish dialog does when every warning is skipped. */
 export async function publishViaApi(
   request: APIRequestContext,
-  pageId: string,
+  ref: PageRef,
   note = '',
 ): Promise<PublishResponse> {
-  const { page, checks } = await getPageViaApi(request, pageId);
+  const { page, checks } = await getPageViaApi(request, ref);
   if (checks.blocking.length > 0) {
-    throw new Error(`Page ${pageId} cannot be published: ${checks.blocking[0]?.title ?? ''}`);
+    throw new Error(`Page ${ref.id} cannot be published: ${checks.blocking[0]?.title ?? ''}`);
   }
   return call(
     request,
     'POST',
-    endpoints.publish.path(pageId),
+    endpoints.publish.path(ref.siteId, ref.id),
     publishResponseSchema,
     {
       expectedRevision: checks.revision,
@@ -113,16 +128,22 @@ export async function publishViaApi(
 /** Rollback (`target` = an older release) or unpublish (`target` = null), with a reason. */
 export async function movePointerViaApi(
   request: APIRequestContext,
-  pageId: string,
+  ref: PageRef,
   target: string | null,
   reason: string,
 ): Promise<void> {
-  const { page } = await getPageViaApi(request, pageId);
-  await call(request, 'POST', endpoints.movePointer.path(pageId), pointerMoveResponseSchema, {
-    targetReleaseId: target,
-    expectedCurrentReleaseId: page.liveRelease?.id ?? null,
-    reason,
-  });
+  const { page } = await getPageViaApi(request, ref);
+  await call(
+    request,
+    'POST',
+    endpoints.movePointer.path(ref.siteId, ref.id),
+    pointerMoveResponseSchema,
+    {
+      targetReleaseId: target,
+      expectedCurrentReleaseId: page.liveRelease?.id ?? null,
+      reason,
+    },
+  );
 }
 
 export function setThemeViaApi(
@@ -413,36 +434,36 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
       goalPage('triAn', 'about', 'Tri ân khách hàng 2025'),
     ),
   };
-  const pageId = (key: BoardPageKey) => created[key].page.id;
+  const pageRef = (key: BoardPageKey) => created[key].page;
 
   // "Tri ân khách hàng 2025": published, then taken down.
-  await publishViaApi(request, pageId('triAn'), 'Chương trình tri ân');
-  await movePointerViaApi(request, pageId('triAn'), null, 'Hết chương trình');
+  await publishViaApi(request, pageRef('triAn'), 'Chương trình tri ân');
+  await movePointerViaApi(request, pageRef('triAn'), null, 'Hết chương trình');
 
   // "Cấy ghép Implant": v2 went live, then the owner went back to v1.
-  const implantV1 = await publishViaApi(request, pageId('implant'), 'Bản đầu tiên');
-  await saveDraftViaApi(request, pageId('implant'), (draft) => ({
+  const implantV1 = await publishViaApi(request, pageRef('implant'), 'Bản đầu tiên');
+  await saveDraftViaApi(request, pageRef('implant'), (draft) => ({
     composition: withSection(draft.composition, 'hero', (hero) => ({
       ...hero,
       content: { ...hero.content, heading: 'Cấy ghép Implant — giá mới từ 15 triệu' },
     })),
   }));
-  await publishViaApi(request, pageId('implant'), 'Bảng giá mới');
-  await movePointerViaApi(request, pageId('implant'), implantV1.release.id, 'Bảng giá v2 sai');
+  await publishViaApi(request, pageRef('implant'), 'Bảng giá mới');
+  await movePointerViaApi(request, pageRef('implant'), implantV1.release.id, 'Bảng giá v2 sai');
 
-  await publishViaApi(request, pageId('home'), 'Trang chủ mới');
+  await publishViaApi(request, pageRef('home'), 'Trang chủ mới');
 
   // "Ưu đãi niềng răng tháng 11": three versions, then a draft with 4 changes, a blocking error
   // (the second Hero button leads nowhere) and a photo without description.
-  await publishViaApi(request, pageId('promo'), 'Ưu đãi tháng 11');
-  await saveDraftViaApi(request, pageId('promo'), (draft) => ({
+  await publishViaApi(request, pageRef('promo'), 'Ưu đãi tháng 11');
+  await saveDraftViaApi(request, pageRef('promo'), (draft) => ({
     composition: withSection(draft.composition, 'faq', (faq) => ({
       ...faq,
       content: { ...faq.content, heading: 'Câu hỏi thường gặp về niềng răng' },
     })),
   }));
-  await publishViaApi(request, pageId('promo'), 'Thêm câu hỏi thường gặp');
-  await saveDraftViaApi(request, pageId('promo'), (draft) => {
+  await publishViaApi(request, pageRef('promo'), 'Thêm câu hỏi thường gặp');
+  await saveDraftViaApi(request, pageRef('promo'), (draft) => {
     const faqId = draft.composition.sections.find((section) => section.type === 'faq')?.id ?? '';
     return {
       composition: withSection(draft.composition, 'hero', (hero) => ({
@@ -459,8 +480,8 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
       })),
     };
   });
-  await publishViaApi(request, pageId('promo'), 'Cập nhật giá ưu đãi tháng 11');
-  await saveDraftViaApi(request, pageId('promo'), (draft) => {
+  await publishViaApi(request, pageRef('promo'), 'Cập nhật giá ưu đãi tháng 11');
+  await saveDraftViaApi(request, pageRef('promo'), (draft) => {
     let composition = withSection(draft.composition, 'hero', (hero) => ({
       ...hero,
       content: {
@@ -487,7 +508,7 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
   // Every lead comes from a live page's form, in the board's order (newest last).
   const live = new Map<string, string>();
   for (const key of ['promo', 'home', 'implant'] as const) {
-    const { page } = await getPageViaApi(request, pageId(key));
+    const { page } = await getPageViaApi(request, pageRef(key));
     if (page.liveRelease === null) {
       throw new Error(`${page.title} is not live`);
     }
@@ -521,7 +542,7 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
       throw new Error(`Lead of ${lead.name} was not received`);
     }
     if (lead.status !== 'new') {
-      await call(request, 'PATCH', endpoints.updateLead.path(id), leadDetailSchema, {
+      await call(request, 'PATCH', endpoints.updateLead.path(site.id, id), leadDetailSchema, {
         status: lead.status,
       });
     }
@@ -558,7 +579,7 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
   await call(
     request,
     'POST',
-    endpoints.respondDataRequest.path(access.id),
+    endpoints.respondDataRequest.path(site.id, access.id),
     dataRequestDetailSchema,
   );
   const withdraw = await recorded(
@@ -569,7 +590,7 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
   await call(
     request,
     'POST',
-    endpoints.completeDataRequest.path(withdraw.id),
+    endpoints.completeDataRequest.path(site.id, withdraw.id),
     dataRequestDetailSchema,
   );
   await recorded('delete', { name: 'Lê Mai Anh', phone: '0987 106 223', email: '' }, 20);
@@ -577,7 +598,7 @@ export async function seedBoard(request: APIRequestContext): Promise<Board> {
   const pages = Object.fromEntries(
     await Promise.all(
       (Object.keys(BOARD_PAGES) as BoardPageKey[]).map(
-        async (key) => [key, (await getPageViaApi(request, pageId(key))).page] as const,
+        async (key) => [key, (await getPageViaApi(request, pageRef(key))).page] as const,
       ),
     ),
   ) as Record<BoardPageKey, PageDetailResponse['page']>;
@@ -635,7 +656,7 @@ export async function createSchemePageViaApi(
     }
     sections.push(copy);
   }
-  await saveDraftViaApi(request, lead.page.id, () => ({
+  await saveDraftViaApi(request, lead.page, () => ({
     composition: {
       version: 1,
       sections: sections.map((section) => ({ ...section, colorScheme: scheme })),

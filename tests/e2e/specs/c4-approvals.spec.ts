@@ -72,19 +72,30 @@ async function setUp(
 }
 
 /** Sends the saved draft for approval through the API, as the dialog does. */
-async function askViaApi(member: APIRequestContext, pageId: string, note: string): Promise<void> {
+async function askViaApi(
+  member: APIRequestContext,
+  siteId: string,
+  pageId: string,
+  note: string,
+): Promise<void> {
   const detail = await call(
     member,
     'GET',
-    endpoints.getPage.path(pageId),
+    endpoints.getPage.path(siteId, pageId),
     pageDetailResponseSchema,
   );
-  await call(member, 'POST', endpoints.requestApproval.path(pageId), approvalResponseSchema, {
-    expectedRevision: detail.draft.revision,
-    expectedPublishedReleaseId: detail.page.liveRelease?.id ?? null,
-    approvalId: null,
-    note,
-  });
+  await call(
+    member,
+    'POST',
+    endpoints.requestApproval.path(siteId, pageId),
+    approvalResponseSchema,
+    {
+      expectedRevision: detail.draft.revision,
+      expectedPublishedReleaseId: detail.page.liveRelease?.id ?? null,
+      approvalId: null,
+      note,
+    },
+  );
 }
 
 async function contributorPage(browser: Browser): Promise<Page> {
@@ -171,7 +182,7 @@ test.describe('C4 · requests to publish', () => {
         member.request,
         request,
       );
-      await askViaApi(member.request, pageId, 'Nhờ anh chị xem giúp');
+      await askViaApi(member.request, siteId, pageId, 'Nhờ anh chị xem giúp');
 
       // The page list marks the page; Chủ sở hữu opens it and refuses.
       await page.goto(`/sites/${siteId}`);
@@ -213,7 +224,7 @@ test.describe('C4 · requests to publish', () => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await member.setViewportSize({ width: viewport.width, height: viewport.height });
         const { siteId, pageId } = await setUp(page.request, member.request, request);
-        await askViaApi(member.request, pageId, 'Nhờ anh chị xem giúp');
+        await askViaApi(member.request, siteId, pageId, 'Nhờ anh chị xem giúp');
 
         const memberEditor = new Editor(member);
         await memberEditor.goto(siteId, pageId);

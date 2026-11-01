@@ -77,7 +77,8 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'pnpm --filter @plp/api start',
+      // Each run starts from an empty database: one per workspace accumulates otherwise (ADR-025).
+      command: 'pnpm --filter @plp/api db:drop-test && pnpm --filter @plp/api start',
       cwd: repoRoot,
       env: apiEnv,
       url: `${urls.api}/health`,

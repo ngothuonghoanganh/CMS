@@ -98,7 +98,7 @@ test.describe('Third round · admin and renderer', () => {
     const preview = await call(
       page.request,
       'POST',
-      endpoints.createPreviewLink.path(board.pages.promo.id),
+      endpoints.createPreviewLink.path(board.site.id, board.pages.promo.id),
       previewLinkResponseSchema,
       { kind: 'draft' },
     );

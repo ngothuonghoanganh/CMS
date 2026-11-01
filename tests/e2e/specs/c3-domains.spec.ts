@@ -54,7 +54,7 @@ test.describe('C3 · custom domains', () => {
     await setUpLeadCaptureViaApi(page.request, site.id);
     const slug = `uu-dai-${uniqueId()}`;
     const created = await createPageViaApi(page.request, site.id, promoPage(slug, 'Giảm 30%'));
-    await publishViaApi(page.request, created.page.id, 'Bản đầu tiên');
+    await publishViaApi(page.request, created.page, 'Bản đầu tiên');
     const hostname = `go.${uniqueId()}.e2e.test`;
 
     const txt = await addDomain(page, site.id, hostname);

@@ -36,7 +36,7 @@ test.beforeAll(async ({ browser }) => {
   schemePages = [];
   for (const scheme of colorSchemeIds) {
     const pageId = await createSchemePageViaApi(context.request, site.id, scheme, photo);
-    await publishViaApi(context.request, pageId, 'Bản đầu tiên');
+    await publishViaApi(context.request, { siteId: site.id, id: pageId }, 'Bản đầu tiên');
     schemePages.push({ scheme, pageId });
   }
   session = (await context.storageState()).cookies;
@@ -52,7 +52,7 @@ test.describe('Accessibility · public pages', () => {
     test(`live pages in every color scheme of the theme "${theme}"`, async ({ page, browser }) => {
       await setThemeViaApi(page.request, site.id, theme);
       for (const { pageId } of schemePages) {
-        await publishViaApi(page.request, pageId, `Giao diện ${theme}`);
+        await publishViaApi(page.request, { siteId: site.id, id: pageId }, `Giao diện ${theme}`);
       }
       const context = await browser.newContext();
       const visitor = await context.newPage();
@@ -87,7 +87,7 @@ test.describe('Accessibility · public pages', () => {
     const preview = await call(
       page.request,
       'POST',
-      endpoints.createPreviewLink.path(first.pageId),
+      endpoints.createPreviewLink.path(site.id, first.pageId),
       previewLinkResponseSchema,
       createPreviewLinkRequestSchema.parse({ kind: 'draft' }),
     );
