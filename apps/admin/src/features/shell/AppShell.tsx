@@ -5,6 +5,7 @@ import { Dialog as RadixDialog } from 'radix-ui';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Brand } from './Brand';
 import { Sidebar, type SidebarProps } from './Sidebar';
+import { sitePreferenceCookie } from './site-preference';
 import styles from './AppShell.module.css';
 
 /** Below this width the sidebar moves into a drawer behind the menu button. */
@@ -20,6 +21,14 @@ export interface AppShellProps extends Omit<SidebarProps, 'onNavigate'> {
  */
 export function AppShell({ children, ...sidebar }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const siteId = sidebar.site?.id ?? null;
+
+  // The workspace screens show the site the user worked on last in the sidebar.
+  useEffect(() => {
+    if (siteId !== null) {
+      document.cookie = sitePreferenceCookie(siteId);
+    }
+  }, [siteId]);
 
   useEffect(() => {
     const query = window.matchMedia(WIDE_LAYOUT_QUERY);
@@ -66,7 +75,9 @@ export function AppShell({ children, ...sidebar }: AppShellProps) {
             </RadixDialog.Portal>
           </RadixDialog.Root>
           <Brand />
-          <span className={styles.topBarSite}>{sidebar.site.name}</span>
+          <span className={styles.topBarSite}>
+            {sidebar.site?.name ?? sidebar.membership.workspace.name}
+          </span>
         </header>
         <aside className={styles.sidebar}>
           <Sidebar {...sidebar} />

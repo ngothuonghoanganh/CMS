@@ -3,6 +3,7 @@ import {
   type LeadCounts,
   type LeadDetail,
   type LeadListResponse,
+  type Role,
   updateLeadRequestSchema,
 } from '@plp/contracts';
 import type { QueryClient } from '@tanstack/react-query';
@@ -62,7 +63,7 @@ interface Setup {
   recipientsOpen?: boolean;
   list?: LeadListResponse;
   filters?: LeadInboxFilters;
-  canManage?: boolean;
+  role?: Role;
   leadId?: string | null;
   /** The details the API knows; a lead missing here answers 404. */
   details?: LeadDetail[];
@@ -146,7 +147,7 @@ function renderInbox(
       counts: { inbox: { count: 2, capped: false }, spam: { count: 1, capped: false } },
     }),
     filters = DEFAULT_LEAD_FILTERS,
-    canManage = true,
+    role = 'owner',
     leadId = null,
     details = [leadDetail(), baoDetail],
     initialDetail = null,
@@ -160,7 +161,7 @@ function renderInbox(
   return renderWithProviders(
     <LeadInbox
       site={siteFixture()}
-      canManage={canManage}
+      role={role}
       initialFilters={filters}
       initialLeadId={leadId}
       initialList={list}
@@ -355,8 +356,8 @@ describe('LeadInbox', () => {
     expect(updateCalls()).toBe(1);
   });
 
-  it('moves a lead to spam and back for editors, without the owner-only actions', async () => {
-    const { queryClient } = renderInbox({ canManage: false });
+  it('moves a lead to spam and back for Chăm sóc khách hàng, without exports or deletion', async () => {
+    const { queryClient } = renderInbox({ role: 'support' });
     // "Hiệu quả" leaves spam out: a report kept from a visit there is read again.
     const analytics = analyticsQueryKeys.report(SITE_ID, { range: '7d', pageId: null });
     queryClient.setQueryData(analytics, { kept: true });
@@ -705,7 +706,7 @@ describe('LeadInbox', () => {
     renderWithProviders(
       <LeadInbox
         site={siteFixture()}
-        canManage
+        role="owner"
         initialFilters={DEFAULT_LEAD_FILTERS}
         initialLeadId={null}
         initialList={leadList([ha, bao])}

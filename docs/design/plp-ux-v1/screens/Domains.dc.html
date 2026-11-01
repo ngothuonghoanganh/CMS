@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Quản lý tên miền — Nha khoa Smile Care</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="domain" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 40px 56px">
+    <div style="max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px">
+
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Tên miền</h1>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">Các địa chỉ khách dùng để mở trang đã xuất bản của Nha khoa Smile Care.</p>
+        </div>
+        <a href="DomainConnect.dc.html" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+          Kết nối tên miền riêng
+        </a>
+      </header>
+
+      <sc-if value="{{ showLost }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: #FDEBE9; border: 1px solid #F6C9C4; color: #7A1A12">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+          <div style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.55">
+            <span style="font-size: 14px; font-weight: 600">Địa chỉ chính go.smilecare.vn đang không truy cập được</span>
+            <span>Từ 08:12 hôm nay, bản ghi CNAME của <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">go</span> không còn trỏ tới Payload. Khách mở link quảng cáo sẽ gặp lỗi. Các trang vẫn mở được qua <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">smilecare.payload.site</span>.</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <a href="DomainConnect.dc.html" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 10px; background: #B42318; color: #FFFFFF; font-size: 13px; font-weight: 600; text-decoration: none">Xem cách sửa</a>
+            <button type="button" style="min-height: 40px; padding: 0 14px; border: 1px solid #F6C9C4; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #7A1A12; cursor: pointer">Tạm dùng địa chỉ mặc định</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+        <section aria-labelledby="dlist" style="flex: 999 1 560px; min-width: 0; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow: hidden">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 20px; border-bottom: 1px solid #EEF0F3">
+            <h2 id="dlist" style="margin: 0; font-size: 15px; font-weight: 600">{{ countLabel }}</h2>
+            <span style="font-size: 12px; color: #5E6573">Tự kiểm tra mỗi 10 phút · Kiểm tra lần cuối 5 phút trước</span>
+          </div>
+          <ul style="list-style: none; margin: 0; padding: 0">
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+              <li style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 16px 20px; border-bottom: 1px solid #EEF0F3">
+                <div style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500">{{ r.host }}</span>
+                    <sc-if value="{{ r.primary }}" hint-placeholder-val="{{ false }}"><span style="padding: 2px 8px; border-radius: 999px; background: #EEF0FF; color: #3730A3; font-size: 11px; font-weight: 700">ĐỊA CHỈ CHÍNH</span></sc-if>
+                    <sc-if value="{{ r.isDefault }}" hint-placeholder-val="{{ false }}"><span style="padding: 2px 8px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 11px; font-weight: 700">MẶC ĐỊNH</span></sc-if>
+                  </div>
+                  <span style="font-size: 13px; color: #5E6573">{{ r.note }}</span>
+                </div>
+                <div style="flex: 0 1 200px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: {{ r.bg }}; color: {{ r.fg }}; font-size: 12px; font-weight: 600">
+                    <span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: {{ r.dot }}"></span>{{ r.status }}
+                  </span>
+                  <span style="font-size: 12px; color: #5E6573">{{ r.https }}</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+                  <sc-if value="{{ r.fix }}" hint-placeholder-val="{{ false }}">
+                    <a href="DomainConnect.dc.html" style="display: inline-flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; font-size: 13px; font-weight: 600; color: #15171C; text-decoration: none; background: #FFFFFF">Sửa cấu hình</a>
+                  </sc-if>
+                  <sc-if value="{{ r.canPrimary }}" hint-placeholder-val="{{ false }}">
+                    <button type="button" onClick="{{ r.openPrimary }}" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Đặt làm chính</button>
+                  </sc-if>
+                  <sc-if value="{{ r.canRemove }}" hint-placeholder-val="{{ false }}">
+                    <button type="button" onClick="{{ r.openRemove }}" aria-label="Ngắt kết nối {{ r.host }}" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center">
+                      <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6M10 6l1.5-1.5a4.2 4.2 0 0 1 6 6L16 12M8 12l-1.5 1.5a4.2 4.2 0 0 0 6 6L14 18"></path></svg>
+                    </button>
+                  </sc-if>
+                </div>
+              </li>
+            </sc-for>
+          </ul>
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 24px 36px; text-align: center">
+              <span aria-hidden="true" style="width: 48px; height: 48px; border-radius: 12px; background: #EEF0FF; color: #4338CA; display: flex; align-items: center; justify-content: center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0zM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"></path></svg>
+              </span>
+              <span style="font-size: 16px; font-weight: 600">Chưa có tên miền riêng</span>
+              <span style="max-width: 460px; font-size: 14px; line-height: 1.6; color: #3C424E">Trang của bạn đang chạy ở địa chỉ mặc định. Dùng tên miền riêng như <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">go.smilecare.vn</span> để khách tin tưởng hơn khi bấm quảng cáo. Mất khoảng 10 phút nếu bạn có quyền vào trang quản lý tên miền.</span>
+              <a href="DomainConnect.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px; background: #4338CA; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">Kết nối tên miền riêng</a>
+            </div>
+          </sc-if>
+        </section>
+
+        <aside aria-labelledby="legend" style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA">
+          <h2 id="legend" style="margin: 0; font-size: 14px; font-weight: 600">Trạng thái nghĩa là gì</h2>
+          <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+            <sc-for list="{{ legend }}" as="l" hint-placeholder-count="8">
+              <li style="display: flex; flex-direction: column; gap: 3px">
+                <span style="display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: {{ l.bg }}; color: {{ l.fg }}; font-size: 12px; font-weight: 600"><span aria-hidden="true" style="width: 6px; height: 6px; border-radius: 999px; background: {{ l.dot }}"></span>{{ l.name }}</span>
+                <span style="font-size: 12px; line-height: 1.5; color: #3C424E">{{ l.desc }}</span>
+              </li>
+            </sc-for>
+          </ul>
+          <p style="margin: 4px 0 0; padding-top: 12px; border-top: 1px solid #EEF0F3; font-size: 12px; line-height: 1.5; color: #5E6573">Chỉ Chủ sở hữu và Quản trị được kết nối, đổi địa chỉ chính hoặc ngắt tên miền.</p>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ showPrimary }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 120px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="mp-title" style="width: 100%; max-width: 520px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="padding: 22px 24px 8px; display: flex; flex-direction: column; gap: 8px">
+          <h2 id="mp-title" style="margin: 0; font-size: 18px; font-weight: 700">Đặt smilecare.vn làm địa chỉ chính?</h2>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Thay đổi có hiệu lực ngay cho mọi trang đang live, không cần xuất bản lại.</p>
+        </div>
+        <ul style="margin: 8px 24px; padding: 14px 16px 14px 34px; border-radius: 12px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 13px; line-height: 1.65; color: #15171C">
+          <li>6 trang đang live sẽ có địa chỉ mới, ví dụ <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">smilecare.vn/uu-dai-nieng-rang</span>.</li>
+          <li>Link cũ trên <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">go.smilecare.vn</span> vẫn mở được, tự chuyển hướng 301 sang địa chỉ mới.</li>
+          <li>Sitemap và thẻ canonical được cập nhật. Google có thể mất vài ngày để cập nhật kết quả tìm kiếm.</li>
+          <li>Kiểm tra lại link trong quảng cáo Facebook, TikTok để tránh một lần chuyển hướng thừa.</li>
+        </ul>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 12px 24px 22px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đặt smilecare.vn làm địa chỉ chính</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showRemove }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 120px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="rm-title" style="width: 100%; max-width: 500px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="padding: 22px 24px 8px; display: flex; flex-direction: column; gap: 8px">
+          <h2 id="rm-title" style="margin: 0; font-size: 18px; font-weight: 700">Ngắt kết nối uudai.smilecare.vn?</h2>
+          <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Khách mở địa chỉ này sẽ không còn thấy trang của bạn. Trang, bản nháp và lead không bị xóa.</p>
+        </div>
+        <div style="margin: 8px 24px; display: flex; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00; font-size: 13px; line-height: 1.55">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C27803" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17.2v.1"></path></svg>
+          <span>Bạn nên xóa bản ghi CNAME <span style="font-family: 'JetBrains Mono', ui-monospace, monospace">uudai</span> tại nhà cung cấp tên miền sau khi ngắt. Muốn ngắt địa chỉ chính, hãy đặt một địa chỉ khác làm chính trước.</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 12px 24px 22px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Giữ kết nối</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #B42318; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Ngắt kết nối</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["overview","empty","primaryLost","makePrimary","disconnect"],"default":"overview"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'overview';
+    var T = {
+      ok: { bg: '#E2F4EA', fg: '#0B6B45', dot: '#12A06A' },
+      warn: { bg: '#FFF1D6', fg: '#8A5300', dot: '#E39A12' },
+      bad: { bg: '#FDEBE9', fg: '#7A1A12', dot: '#B42318' },
+      work: { bg: '#EEF0FF', fg: '#3730A3', dot: '#4338CA' },
+      none: { bg: '#ECEEF2', fg: '#474E5C', dot: '#8A91A0' }
+    };
+    function row(host, tone, status, https, note, o) {
+      var r = { host: host, status: status, https: https, note: note, primary: false, isDefault: false, fix: false, canPrimary: false, canRemove: true,
+        openPrimary: function () { self.setState({ dialog: 'primary' }); },
+        openRemove: function () { self.setState({ dialog: 'remove' }); } };
+      var t = T[tone]; r.bg = t.bg; r.fg = t.fg; r.dot = t.dot;
+      for (var k in o || {}) { r[k] = o[k]; }
+      return r;
+    }
+    var lost = s === 'primaryLost';
+    var rows = s === 'empty' ? [
+      row('smilecare.payload.site', 'ok', 'Hoạt động', 'HTTPS tự động', 'Có sẵn khi tạo site, luôn hoạt động.', { primary: true, isDefault: true, canRemove: false })
+    ] : [
+      lost
+        ? row('go.smilecare.vn', 'bad', 'Mất kết nối', 'HTTPS hợp lệ tới 12/01/2027', 'CNAME đổi lúc 08:12 hôm nay, đang trỏ tới 45.119.84.10.', { primary: true, fix: true, canRemove: false })
+        : row('go.smilecare.vn', 'ok', 'Hoạt động', 'HTTPS hợp lệ tới 12/01/2027', 'Kết nối từ 14/10/2026 bởi Ngọc Anh.', { primary: true, canRemove: false }),
+      row('smilecare.vn', 'ok', 'Hoạt động', 'HTTPS hợp lệ tới 03/02/2027', 'Tên miền gốc · đang chuyển hướng → go.smilecare.vn', { canPrimary: true }),
+      row('uudai.smilecare.vn', 'warn', 'Cấu hình sai', 'Chưa có HTTPS', 'Đang có bản ghi A, cần đổi sang CNAME.', { fix: true }),
+      row('nhakhoasmile.com', 'work', 'Đang cấp chứng chỉ', 'Đang cấp HTTPS · khoảng 5 phút', 'DNS đúng, đã xác minh quyền sở hữu.'),
+      row('smilecare.payload.site', 'ok', 'Hoạt động', 'HTTPS tự động', 'Đang chuyển hướng → go.smilecare.vn', { isDefault: true, canRemove: false })
+    ];
+    var legend = [
+      ['none', 'Chưa cấu hình', 'Đã thêm tên miền, chưa thêm bản ghi DNS.'],
+      ['work', 'Chờ DNS', 'Đang chờ bản ghi có hiệu lực, thường vài phút, tối đa 48 giờ.'],
+      ['warn', 'Cấu hình sai', 'Tìm thấy bản ghi nhưng giá trị chưa đúng.'],
+      ['work', 'Đang xác minh', 'Đang kiểm tra bạn sở hữu tên miền.'],
+      ['work', 'Đang cấp chứng chỉ', 'Bạn không cần làm gì thêm.'],
+      ['ok', 'Hoạt động', 'Khách mở được trang qua HTTPS.'],
+      ['bad', 'Mất kết nối', 'Từng hoạt động, nay DNS không còn trỏ đúng.'],
+      ['bad', 'Cần can thiệp', 'Không tự gia hạn được HTTPS hoặc tên miền bị site khác giữ.']
+    ].map(function (x) { var t = T[x[0]]; return { name: x[1], desc: x[2], bg: t.bg, fg: t.fg, dot: t.dot }; });
+    var dialog = this.state.dialog ?? (s === 'makePrimary' ? 'primary' : (s === 'disconnect' ? 'remove' : null));
+    return {
+      rows: rows,
+      legend: legend,
+      isEmpty: s === 'empty',
+      showLost: lost,
+      countLabel: s === 'empty' ? 'Địa chỉ của site' : '5 địa chỉ',
+      showPrimary: dialog === 'primary',
+      showRemove: dialog === 'remove',
+      openPrimary: function () { self.setState({ dialog: 'primary' }); },
+      openRemove: function () { self.setState({ dialog: 'remove' }); },
+      close: function () { self.setState({ dialog: 'closed' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

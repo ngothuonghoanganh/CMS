@@ -56,7 +56,7 @@ function renderDashboard(
     pages?: PageListResponse;
     activity?: ActivityListResponse;
     filters?: DashboardFilters;
-    leadCounts?: LeadCounts;
+    leadCounts?: LeadCounts | null;
     site?: Site;
     loadedAt?: number;
     role?: Role;
@@ -373,8 +373,8 @@ describe('Dashboard', () => {
     expect(screen.getByText('1/4')).toBeInTheDocument();
   });
 
-  it("tells an Editor which setup steps are the Owner's instead of linking to read-only settings", () => {
-    renderDashboard({ role: 'editor', pages: pageListFixture([draftPage]) });
+  it('tells a Biên tập who takes the setup steps of the site instead of linking to read-only settings', () => {
+    renderDashboard({ role: 'editor', leadCounts: null, pages: pageListFixture([draftPage]) });
     for (const label of [
       'Thêm logo & chọn giao diện',
       'Thêm chính sách quyền riêng tư',
@@ -382,11 +382,42 @@ describe('Dashboard', () => {
     ]) {
       expect(screen.queryByRole('link', { name: label })).toBeNull();
       expect(screen.getByText(label, { exact: false })).toHaveTextContent(
-        `${label} · Owner của workspace làm bước này`,
+        `${label} · Chủ sở hữu và Quản trị làm bước này`,
       );
     }
-    // Publishing a page is the Editor's to do.
+    // Publishing a page is the Biên tập's to do.
     expect(screen.getByRole('button', { name: 'Xuất bản trang đầu tiên' })).toBeInTheDocument();
+    // Leads are not theirs to see (ADR-020).
+    expect(screen.queryByText('Lead 7 ngày qua')).toBeNull();
+    expect(screen.queryByRole('link', { name: /Quản lý tên miền/ })).toBeNull();
+  });
+
+  it('names who publishes the first page when the user cannot create one', () => {
+    renderDashboard({ role: 'viewer', leadCounts: null, pages: pageListFixture([]) });
+    expect(screen.queryByRole('link', { name: 'Xuất bản trang đầu tiên' })).toBeNull();
+    expect(screen.getByText('Xuất bản trang đầu tiên', { exact: false })).toHaveTextContent(
+      'Xuất bản trang đầu tiên · Chủ sở hữu, Quản trị và Biên tập làm bước này',
+    );
+    expect(screen.queryByRole('link', { name: 'Tạo trang đầu tiên' })).toBeNull();
+  });
+
+  it('opens pages in their history for a Chỉ xem, with nothing to change', async () => {
+    const user = userEvent.setup();
+    renderDashboard({ role: 'viewer', leadCounts: null });
+    expect(screen.queryByRole('link', { name: 'Tạo trang' })).toBeNull();
+    const row = livePageRow();
+    expect(within(row).getByRole('link', { name: livePage.title })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/pages/${livePage.id}/history`,
+    );
+    expect(within(row).getByRole('link', { name: 'Xem' })).toHaveAttribute(
+      'href',
+      `${DASHBOARD_PATH}/pages/${livePage.id}/history`,
+    );
+    await user.click(within(row).getByRole('button', { name: /Tùy chọn khác/ }));
+    expect(screen.getByRole('menuitem', { name: 'Lịch sử phiên bản' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'SEO & chia sẻ' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Gỡ xuất bản' })).toBeNull();
   });
 
   it('ticks the setup steps the site has done', () => {

@@ -137,7 +137,7 @@ export class PublishingService {
   ) {}
 
   async checks(user: AuthenticatedUser, pageId: string): Promise<ChecksResult> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId);
+    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.view');
     return (await this.evaluator.evaluate(scope, site, page)).checks;
   }
 
@@ -155,7 +155,7 @@ export class PublishingService {
     idempotencyKey: string,
     input: PublishRequest,
   ): Promise<PublishOutcome> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId);
+    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.publish');
     const existing = await this.releases.findByIdempotencyKey(scope, page._id, idempotencyKey);
     if (existing) {
       return { response: await this.replay(scope, site, existing), replayed: true };
@@ -322,7 +322,7 @@ export class PublishingService {
     pageId: string,
     input: PointerMoveRequest,
   ): Promise<PointerMoveResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId);
+    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.manageLive');
     const target =
       input.targetReleaseId === null
         ? null
@@ -366,7 +366,12 @@ export class PublishingService {
     if (!ref) {
       throw notFound(ACTIVITY_NOT_FOUND);
     }
-    const { scope, site } = await this.sites.accessById(user, ref.siteId, ACTIVITY_NOT_FOUND);
+    const { scope, site } = await this.sites.accessById(
+      user,
+      ref.siteId,
+      'pages.manageLive',
+      ACTIVITY_NOT_FOUND,
+    );
     const rollback = await this.activity.findById(scope, id);
     if (!rollback) {
       throw notFound(ACTIVITY_NOT_FOUND);
@@ -416,7 +421,7 @@ export class PublishingService {
     pageId: string,
     query: CursorQuery,
   ): Promise<HistoryResponse> {
-    const { scope, page } = await this.pageAccess.access(user, pageId);
+    const { scope, page } = await this.pageAccess.access(user, pageId, 'pages.view');
     const [releases, events, latest] = await Promise.all([
       this.releases.listForPage(scope, page._id, query.cursor, query.limit),
       this.activity.listForPage(scope, page._id, query.cursor, query.limit, HISTORY_POINTER_TYPES),

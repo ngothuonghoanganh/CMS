@@ -5,7 +5,7 @@ Thư mục này là bản sao chỉ đọc của thiết kế sản phẩm. Dùn
 ## Nguồn
 
 - **Artifact:** "Payload Landing Page — Product Design", https://claude.ai/artifact/1zhYYRkfqj7xNUVf1WSn4k
-- **Phiên bản đã nhập:** `1792838787-b170`, ngày 2026-10-24
+- **Phiên bản đã nhập:** `1792838787-b170`, ngày 2026-10-24 (màn 01–12, Sidebar). Các board Phase 1 (màn 13–16, 15b, Sidebar v2) và hai ghi chú `phase1`, `phase1Decisions` của `canvas.json` nhập từ `1793503258-d63e`, ngày 2026-11-01.
 - **Nội dung:** `screens/*.dc.html` (một file một board) và `screens/canvas.json` (tên board, bố cục canvas, giả định thiết kế).
 - **Không tìm thấy khi nhập:** `README` gốc (danh sách quy tắc UX cốt lõi), `proposal/` và `research/`. Artifact "Design System" cũng chưa có token.
   - Token admin vì vậy được trích từ inline style của các màn 01–08.
@@ -30,6 +30,17 @@ File `.dc.html` cần runtime của artifact Design (`support.js`) để render 
 | 11  | Hiệu quả trang                        | `Analytics.dc.html`  | Không (MVP B)              |
 | 12  | Dữ liệu cá nhân & đồng ý              | `Consent.dc.html`    | Không (MVP B)              |
 | —   | Sidebar điều hướng                    | `Sidebar.dc.html`    | Có (S1)                    |
+
+**Phase 1 — Vận hành & đội nhóm** (ARCHITECTURE §5, ADR-020):
+
+| #   | Board                         | File                    | Lát                                   |
+| --- | ----------------------------- | ----------------------- | ------------------------------------- |
+| 13  | Quản lý tên miền              | `Domains.dc.html`       | C3                                    |
+| 14  | Kết nối & xác minh tên miền   | `DomainConnect.dc.html` | C3                                    |
+| 15  | Thành viên workspace          | `Members.dc.html`       | C2                                    |
+| 15b | Nhận lời mời (mobile)         | `InviteAccept.dc.html`  | C2                                    |
+| 16  | Vai trò & phân quyền          | `Roles.dc.html`         | C1 (ma trận và trạng thái bị từ chối) |
+| —   | Sidebar v2 (workspace + site) | `SidebarV2.dc.html`     | C1                                    |
 
 ## Giả định thiết kế (từ `canvas.json`)
 

@@ -497,11 +497,11 @@ function leadCaptureGapDescription(gaps: readonly LeadCaptureGap[]): string {
   const settings = gaps.includes('privacy');
   const consent = gaps.includes('consent');
   if (settings && consent) {
-    return 'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư, rồi lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.';
+    return 'Chủ sở hữu hoặc Quản trị của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư, rồi lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.';
   }
   return settings
-    ? 'Owner của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư ở mục “Dữ liệu & đồng ý”.'
-    : 'Owner của workspace cần lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.';
+    ? 'Chủ sở hữu hoặc Quản trị của workspace cần nhập đơn vị thu thập dữ liệu và link chính sách quyền riêng tư ở mục “Dữ liệu & đồng ý”.'
+    : 'Chủ sở hữu hoặc Quản trị của workspace cần lưu nội dung đồng ý ở mục “Dữ liệu & đồng ý”.';
 }
 
 /** A form collects personal data only with the site's consent settings (rule 10, ADR-017). */

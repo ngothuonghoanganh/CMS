@@ -58,6 +58,10 @@ export interface HistoryScreenProps {
   loadedAt: number;
   /** `?restore={releaseId}` from "Có vấn đề? Khôi phục v12": opens the rollback panel for it. */
   restoreReleaseId: string | null;
+  /** The user edits drafts: "Sao chép vào bản nháp" and the editor links show (ADR-020). */
+  canEdit: boolean;
+  /** The user moves the live version: rollback, undo and unpublish show. */
+  canManageLive: boolean;
 }
 
 /** Drops `?restore=` once the panel it opened is closed, so a reload does not reopen it. */
@@ -87,7 +91,8 @@ function RollbackBanner({
   page: PageSummary;
   now: number;
   undoPending: boolean;
-  onUndo: () => void;
+  /** Null for roles that do not move the live version (ADR-020). */
+  onUndo: (() => void) | null;
   ref: Ref<HTMLDivElement>;
 }) {
   const liveUrl = page.liveUrl;
@@ -107,7 +112,7 @@ function RollbackBanner({
         </span>
       </span>
       <span className={styles.bannerActions}>
-        {entry.undoable ? (
+        {entry.undoable && onUndo !== null ? (
           <Button variant="secondary" size="sm" loading={undoPending} onClick={onUndo}>
             Hoàn tác khôi phục
           </Button>
@@ -139,6 +144,8 @@ export function HistoryScreen({
   initialHistory,
   loadedAt,
   restoreReleaseId,
+  canEdit,
+  canManageLive,
 }: HistoryScreenProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -302,6 +309,8 @@ export function HistoryScreen({
         page={page}
         current="history"
         now={now}
+        canEdit={canEdit}
+        canManageLive={canManageLive}
         onUnpublished={(result) => {
           setPage(result.page);
         }}
@@ -317,9 +326,13 @@ export function HistoryScreen({
             now={now}
             ref={bannerRef}
             undoPending={undo.isPending}
-            onUndo={() => {
-              undo.mutate(rollback.activityId);
-            }}
+            onUndo={
+              canManageLive
+                ? () => {
+                    undo.mutate(rollback.activityId);
+                  }
+                : null
+            }
           />
         )}
       </div>
@@ -369,9 +382,11 @@ export function HistoryScreen({
               title="Chưa có phiên bản nào"
               description="Mỗi lần xuất bản sẽ tạo một phiên bản ở đây. Bạn có thể xem lại, sao chép vào bản nháp hoặc khôi phục bất cứ lúc nào."
               action={
-                <ButtonLink as={Link} href={pageHref(site.id, pageId, 'edit')}>
-                  Mở editor
-                </ButtonLink>
+                canEdit ? (
+                  <ButtonLink as={Link} href={pageHref(site.id, pageId, 'edit')}>
+                    Mở editor
+                  </ButtonLink>
+                ) : undefined
               }
             />
           ) : (
@@ -383,13 +398,21 @@ export function HistoryScreen({
               onPreview={(release) => {
                 void preview.openPreview(release.id, release.version);
               }}
-              onCopyToDraft={(release) => {
-                setCopyTarget(release);
-                setCopyOpen(true);
-              }}
-              onRestore={(release) => {
-                setSelectedId(release.id);
-              }}
+              onCopyToDraft={
+                canEdit
+                  ? (release) => {
+                      setCopyTarget(release);
+                      setCopyOpen(true);
+                    }
+                  : null
+              }
+              onRestore={
+                canManageLive
+                  ? (release) => {
+                      setSelectedId(release.id);
+                    }
+                  : null
+              }
             />
           )}
 

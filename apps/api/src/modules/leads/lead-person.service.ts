@@ -5,7 +5,6 @@ import { type Tx, TransactionRunner } from '../../shared/persistence/transaction
 import { ActivityRepository } from '../activity/activity.repository.js';
 import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 import { DataRequestsRepository } from '../data-requests/data-requests.repository.js';
-import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { LeadAccessService, personOfLead } from './lead-access.service.js';
 import { type LeadPerson, LeadsRepository } from './leads.repository.js';
@@ -18,7 +17,6 @@ import { type LeadPerson, LeadsRepository } from './leads.repository.js';
 @Injectable()
 export class LeadPersonService {
   constructor(
-    private readonly access: AccessService,
     private readonly leadAccess: LeadAccessService,
     private readonly leads: LeadsRepository,
     private readonly requests: DataRequestsRepository,
@@ -28,8 +26,7 @@ export class LeadPersonService {
 
   /** "Xóa dữ liệu người này", from one of their leads. */
   async deleteFromLead(user: AuthenticatedUser, leadId: string): Promise<PersonDeleteResponse> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
-    this.access.requireOwner(scope);
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'personalData.manage');
     return { deletedCount: await this.deletePerson(scope, site._id, personOfLead(lead)) };
   }
 

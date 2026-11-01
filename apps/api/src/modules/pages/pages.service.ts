@@ -84,7 +84,7 @@ export class PagesService {
     siteId: string,
     query: PageListQueryValues,
   ): Promise<PageListResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     const pages = await this.pages.listForSite(scope, site._id);
     const livePages = pages.flatMap((page) =>
       page.publishedSlug !== null && page.publishedReleaseId !== null
@@ -125,7 +125,7 @@ export class PagesService {
 
   /** Id and title of every page of the site, by title: the page filter of the lead inbox. */
   async listRefs(user: AuthenticatedUser, siteId: string): Promise<PageRefListResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     const pages = await this.pages.listTitlesForSite(scope, site._id);
     return {
       items: pages
@@ -136,7 +136,7 @@ export class PagesService {
 
   /** The number of pages of a site, without evaluating them (the sidebar count). */
   async count(user: AuthenticatedUser, siteId: string): Promise<PageCountResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     return { count: await this.pages.countForSite(scope, site._id) };
   }
 
@@ -150,7 +150,7 @@ export class PagesService {
     siteId: string,
     input: CreatePageValues,
   ): Promise<PageDetailResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
     const composition = this.initialComposition(site, input.start);
     const page = await this.transactions.run(async (tx) => {
       await this.sitesRepository.recordPageCreation(scope, site._id, tx);
@@ -180,7 +180,7 @@ export class PagesService {
   }
 
   async get(user: AuthenticatedUser, pageId: string): Promise<PageDetailResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId);
+    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.view');
     return this.detail(scope, site, page);
   }
 
@@ -195,7 +195,7 @@ export class PagesService {
     pageId: string,
     input: SaveDraftRequest,
   ): Promise<SaveDraftResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId);
+    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.edit');
     const parsed = parseComposition(input.composition);
     if (!parsed.success) {
       throw validationFailed(
@@ -231,7 +231,7 @@ export class PagesService {
     pageId: string,
     input: RestoreDraftRequest,
   ): Promise<PageDetailResponse> {
-    const { scope, site, page } = await this.pageAccess.access(user, pageId);
+    const { scope, site, page } = await this.pageAccess.access(user, pageId, 'pages.edit');
     const release = await this.releases.findById(
       scope,
       toObjectId(input.releaseId, RELEASE_NOT_FOUND),
@@ -274,7 +274,7 @@ export class PagesService {
     siteId: string,
     query: SlugAvailabilityQuery,
   ): Promise<SlugAvailability> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     const parsed = slugSchema.safeParse(query.slug);
     if (!parsed.success) {
       const slug = query.slug.trim();

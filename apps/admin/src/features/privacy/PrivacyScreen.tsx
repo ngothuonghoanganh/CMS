@@ -1,6 +1,6 @@
 'use client';
 
-import type { PrivacySettings } from '@plp/contracts';
+import { holdersOf, type PrivacySettings } from '@plp/contracts';
 import { Callout } from '@plp/ui';
 import { useState } from 'react';
 import { DataRequestsSection } from '../data-requests/DataRequestsSection';
@@ -37,8 +37,8 @@ export function PrivacyScreen({
       </Callout>
       {canEdit ? null : (
         <Callout tone="info">
-          Chỉ Owner của workspace được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu cầu từ người
-          gửi form.
+          Chỉ {holdersOf('privacy.manage')} được thay đổi dữ liệu cá nhân và đồng ý, và xử lý yêu
+          cầu từ người gửi form.
         </Callout>
       )}
       <div className={styles.columns}>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Nhận lời mời vào workspace</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C; display: flex; flex-direction: column; padding: 24px 16px">
+  <div style="display: flex; align-items: center; gap: 8px; padding: 4px 4px 20px">
+    <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 6px; background: #4338CA; display: flex; align-items: center; justify-content: center">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>
+    </span>
+    <span style="font-size: 15px; font-weight: 700">Payload</span>
+  </div>
+
+  <main style="display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E2E5EA">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 10px; background: #15171C; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px">MX</span>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 13px; color: #5E6573">Ngọc Anh mời bạn vào</span>
+        <span style="font-size: 17px; font-weight: 700">Mây Xanh Agency</span>
+      </div>
+    </div>
+
+    <sc-if value="{{ isUsable }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 13px; line-height: 1.55">
+        <span><strong>Biên tập</strong> trên site Nha khoa Smile Care</span>
+        <span style="color: #3C424E">Bạn sửa và xuất bản được trang. Bạn không xem được lead hay thanh toán.</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isNew }}" hint-placeholder-val="{{ true }}">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 700">Tạo tài khoản để tham gia</h1>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="ia-email" style="font-size: 14px; font-weight: 600">Email</label>
+        <input id="ia-email" type="email" value="thuy.mkt@smilecare.vn" readonly aria-describedby="ia-email-help" style="min-height: 48px; box-sizing: border-box; padding: 0 12px; border: 1px solid #E2E5EA; border-radius: 10px; background: #FAFBFC; font: inherit; font-size: 15px; color: #3C424E">
+        <span id="ia-email-help" style="font-size: 12px; color: #5E6573">Lời mời gắn với email này.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="ia-name" style="font-size: 14px; font-weight: 600">Họ và tên</label>
+        <input id="ia-name" type="text" autocomplete="name" style="min-height: 48px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 15px">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <label for="ia-pw" style="font-size: 14px; font-weight: 600">Mật khẩu</label>
+        <input id="ia-pw" type="password" autocomplete="new-password" aria-describedby="ia-pw-help" style="min-height: 48px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 15px">
+        <span id="ia-pw-help" style="font-size: 12px; color: #5E6573">Ít nhất 10 ký tự.</span>
+      </div>
+      <button type="button" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Tạo tài khoản và tham gia</button>
+      <span style="font-size: 12px; line-height: 1.5; color: #5E6573; text-align: center">Đã có tài khoản với email này? <a href="#" style="font-weight: 600; text-decoration: none">Đăng nhập</a></span>
+    </sc-if>
+
+    <sc-if value="{{ isExisting }}" hint-placeholder-val="{{ false }}">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 700">Tham gia Mây Xanh Agency?</h1>
+      <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Bạn đang đăng nhập bằng <strong>thuy.mkt@smilecare.vn</strong>. Workspace mới sẽ có trong danh sách đổi workspace.</p>
+      <button type="button" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Tham gia</button>
+      <button type="button" style="min-height: 44px; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #3C424E; cursor: pointer">Từ chối lời mời</button>
+    </sc-if>
+
+    <sc-if value="{{ isWrong }}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: #FFF8EB; border: 1px solid #F3E2BD; color: #5C3D00; font-size: 13px; line-height: 1.55">
+        <span style="font-size: 15px; font-weight: 700">Lời mời này dành cho email khác</span>
+        <span>Bạn đang đăng nhập bằng <strong>khoa@mayxanh.vn</strong>. Lời mời được gửi tới <strong>thuy.mkt@smilecare.vn</strong>.</span>
+      </div>
+      <button type="button" style="min-height: 48px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; cursor: pointer">Đăng xuất và dùng email được mời</button>
+      <span style="font-size: 12px; line-height: 1.5; color: #5E6573">Muốn dùng email hiện tại? Nhờ Ngọc Anh gửi lời mời mới tới khoa@mayxanh.vn.</span>
+    </sc-if>
+
+    <sc-if value="{{ isDead }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <h1 style="margin: 0; font-size: 20px; font-weight: 700">{{ deadTitle }}</h1>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">{{ deadBody }}</p>
+      </div>
+      <a href="#" style="display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 10px; background: {{ deadCtaBg }}; color: {{ deadCtaFg }}; border: 1px solid {{ deadCtaBorder }}; font-size: 15px; font-weight: 600; text-decoration: none">{{ deadCta }}</a>
+    </sc-if>
+  </main>
+  <p style="margin: auto 0 0; padding: 16px 8px 0; font-size: 12px; line-height: 1.5; color: #5E6573; text-align: center">Không biết người mời? Bạn có thể bỏ qua email này, tài khoản sẽ không được tạo.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["newUser","existingUser","wrongAccount","expired","used"],"default":"newUser"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var s = this.props.state ?? 'newUser';
+    var expired = s === 'expired';
+    return {
+      isUsable: s === 'newUser' || s === 'existingUser',
+      isNew: s === 'newUser',
+      isExisting: s === 'existingUser',
+      isWrong: s === 'wrongAccount',
+      isDead: expired || s === 'used',
+      deadTitle: expired ? 'Lời mời đã hết hạn' : 'Lời mời đã được dùng',
+      deadBody: expired
+        ? 'Lời mời được gửi ngày 20/10 và hết hạn sau 7 ngày. Hãy nhờ Ngọc Anh gửi lại; email cũ không còn dùng được.'
+        : 'Lời mời này đã được chấp nhận. Nếu đó là bạn, hãy đăng nhập để vào Mây Xanh Agency.',
+      deadCta: expired ? 'Nhờ Ngọc Anh gửi lại' : 'Đăng nhập',
+      deadCtaBg: expired ? '#FFFFFF' : '#4338CA',
+      deadCtaFg: expired ? '#15171C' : '#FFFFFF',
+      deadCtaBorder: expired ? '#CDD2DA' : '#4338CA'
+    };
+  }
+}
+</script>
+</body>
+</html>

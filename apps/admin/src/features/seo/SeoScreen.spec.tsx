@@ -791,10 +791,12 @@ describe('SeoScreen', () => {
     const agency: Membership = {
       workspace: { id: WORKSPACE_ID, name: 'Mây Xanh Agency' },
       role: 'owner',
+      siteIds: null,
     };
     const clinic: Membership = {
       workspace: { id: '64b0000000000000000000a2', name: 'Phòng khám Gia Đình' },
       role: 'editor',
+      siteIds: null,
     };
 
     /** The real sidebar next to the screen, whose saves fail: the server is down. */

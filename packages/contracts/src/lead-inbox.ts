@@ -5,8 +5,9 @@ import { leadEmailSchema, leadNameSchema, leadPhoneSchema } from './lead.js';
 import { leadNotificationSchema } from './lead-recipients.js';
 
 /**
- * The lead inbox (board 10, ADR-018). Owners and editors read leads and change their status, note
- * and spam flag; only the owner exports leads or deletes a person's data (ADR-017).
+ * The lead inbox (board 10, ADR-018). Roles with `leads.view` read leads, `leads.handle` changes
+ * their status, note and spam flag; exporting leads or deleting a person's data needs
+ * `leads.export` or `personalData.manage` (ADR-017, ADR-020).
  */
 
 /** One list of statuses for the filter, the badge, the detail and the CSV. */
@@ -251,8 +252,8 @@ export const updateLeadRequestSchema = z
 export type UpdateLeadRequest = z.input<typeof updateLeadRequestSchema>;
 
 /**
- * Owner only: corrects how a person is named and reached, e.g. for a request to correct their data
- * (ADR-017). The same rules as the form: the phone number is stored as E.164.
+ * `personalData.manage`: corrects how a person is named and reached, e.g. for a request to correct
+ * their data (ADR-017). The same rules as the form: the phone number is stored as E.164.
  */
 export const updateLeadContactRequestSchema = z.object({
   name: leadNameSchema,

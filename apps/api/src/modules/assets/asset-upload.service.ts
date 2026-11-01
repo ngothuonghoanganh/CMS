@@ -46,7 +46,7 @@ export class AssetUploadService {
     fields: UploadAssetFieldValues,
     file: UploadedImageFile | undefined,
   ): Promise<Asset> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.edit');
     if (!file) {
       throw validationFailed([
         { path: ['file'], code: 'required', message: FILE_REQUIRED_MESSAGE },

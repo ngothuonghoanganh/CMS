@@ -19,7 +19,7 @@ export class ActivityController {
     @Param('siteId') siteId: string,
     @Query(new ZodPipe(activityListQuerySchema)) query: ActivityListQueryValues,
   ): Promise<ActivityListResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'pages.view');
     return this.activity.listForSite(scope, site._id, query);
   }
 }

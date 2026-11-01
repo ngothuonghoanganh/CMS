@@ -205,7 +205,7 @@ export function CreateSiteForm({ workspaceId, originTemplate, cancelHref }: Crea
           }}
         />
         <p className={styles.themeHelp}>
-          Màu và chữ của toàn site. Owner đổi được sau trong Cài đặt site.
+          Màu và chữ của toàn site. Bạn đổi được sau trong Cài đặt site.
         </p>
       </div>
 

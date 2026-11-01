@@ -3,21 +3,66 @@ import { Badge, Card, CheckCircleIcon, LockIcon } from '@plp/ui';
 import Link from 'next/link';
 import { hostOf } from '../../lib/site-url';
 import { cappedCountLabel } from '../leads/lead-presentation';
-import { leadsHref, newLeadsHref, pageHref, siteHref } from '../shell/navigation';
+import { useLeadCounts } from '../leads/queries';
+import { leadsHref, newLeadsHref, openPageHref, siteHref } from '../shell/navigation';
 import styles from './SiteSummary.module.css';
 
 export interface SiteSummaryProps {
   site: Site;
   attention: PageListResponse['attention'];
-  leadCounts: LeadCounts;
+  /** The counts the server loaded; null for roles that do not see leads (ADR-020). */
+  initialLeadCounts: LeadCounts | null;
+  loadedAt: number;
+  /** The user edits pages: "Mở trang" opens the editor rather than the history. */
+  canEditPages: boolean;
+  /** The user manages domains: the card links to "Tên miền". */
+  canManageDomains: boolean;
 }
 
 function Arrow() {
   return <span aria-hidden="true">→</span>;
 }
 
+/** The leads of the last 7 days, following changes made in the inbox. */
+function LeadsCard({
+  siteId,
+  initial,
+  loadedAt,
+}: {
+  siteId: string;
+  initial: LeadCounts;
+  loadedAt: number;
+}) {
+  const leadCounts = useLeadCounts(siteId, initial, loadedAt).data;
+  return (
+    <Card className={styles.card}>
+      <span className={styles.label}>Lead 7 ngày qua</span>
+      <div className={styles.leadRow}>
+        <span className={styles.leadCount}>{cappedCountLabel(leadCounts.last7Days)}</span>
+        {leadCounts.new.count === 0 ? null : (
+          // "Chưa xử lý" counts the status "Mới" of every time, like the sidebar badge.
+          <Link href={newLeadsHref(siteId)} className={styles.pending}>
+            {cappedCountLabel(leadCounts.new)} chưa xử lý
+          </Link>
+        )}
+      </div>
+      <Link href={leadsHref(siteId)} className={styles.link}>
+        Mở hộp thư lead
+        <Arrow />
+      </Link>
+    </Card>
+  );
+}
+
 /** "Tóm tắt site": the live address, what needs attention and the leads of the last 7 days. */
-export function SiteSummary({ site, attention, leadCounts }: SiteSummaryProps) {
+export function SiteSummary({
+  site,
+  attention,
+  initialLeadCounts,
+  loadedAt,
+  canEditPages,
+  canManageDomains,
+}: SiteSummaryProps) {
   const { pagesWithChanges, pagesWithBlockingErrors, firstPage } = attention;
   const allGood = pagesWithChanges === 0 && pagesWithBlockingErrors === 0;
   return (
@@ -30,10 +75,12 @@ export function SiteSummary({ site, attention, leadCounts }: SiteSummaryProps) {
             Luôn hoạt động
           </Badge>
         </div>
-        <Link href={`${siteHref(site.id)}/domain`} className={styles.link}>
-          Quản lý tên miền
-          <Arrow />
-        </Link>
+        {canManageDomains ? (
+          <Link href={`${siteHref(site.id)}/domain`} className={styles.link}>
+            Quản lý tên miền
+            <Arrow />
+          </Link>
+        ) : null}
       </Card>
 
       <Card className={styles.card}>
@@ -61,29 +108,16 @@ export function SiteSummary({ site, attention, leadCounts }: SiteSummaryProps) {
           </ul>
         )}
         {firstPage === null ? null : (
-          <Link href={pageHref(site.id, firstPage.id, 'edit')} className={styles.link}>
+          <Link href={openPageHref(site.id, firstPage.id, canEditPages)} className={styles.link}>
             Mở trang “{firstPage.title}”
             <Arrow />
           </Link>
         )}
       </Card>
 
-      <Card className={styles.card}>
-        <span className={styles.label}>Lead 7 ngày qua</span>
-        <div className={styles.leadRow}>
-          <span className={styles.leadCount}>{cappedCountLabel(leadCounts.last7Days)}</span>
-          {leadCounts.new.count === 0 ? null : (
-            // "Chưa xử lý" counts the status "Mới" of every time, like the sidebar badge.
-            <Link href={newLeadsHref(site.id)} className={styles.pending}>
-              {cappedCountLabel(leadCounts.new)} chưa xử lý
-            </Link>
-          )}
-        </div>
-        <Link href={leadsHref(site.id)} className={styles.link}>
-          Mở hộp thư lead
-          <Arrow />
-        </Link>
-      </Card>
+      {initialLeadCounts === null ? null : (
+        <LeadsCard siteId={site.id} initial={initialLeadCounts} loadedAt={loadedAt} />
+      )}
     </section>
   );
 }

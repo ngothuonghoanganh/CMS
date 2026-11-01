@@ -1,4 +1,5 @@
 import {
+  can,
   endpoints,
   idSchema,
   type LeadCounts,
@@ -22,8 +23,11 @@ export interface SiteContext {
   sites: Site[];
   /** Number of pages of the site, for the sidebar. */
   pageCount: number;
-  /** "N mới" in the sidebar and the lead card of the dashboard (ADR-018). */
-  leadCounts: LeadCounts;
+  /**
+   * "N mới" in the sidebar and the lead card of the dashboard (ADR-018); null for roles that do
+   * not see leads (ADR-020).
+   */
+  leadCounts: LeadCounts | null;
 }
 
 async function loadSite(siteId: string): Promise<Site> {
@@ -56,7 +60,7 @@ export const loadSiteContext = cache(async (siteId: string): Promise<SiteContext
   const [siteList, pageCount, leadCounts] = await Promise.all([
     serverApi(endpoints.listSites, [site.workspaceId]),
     serverApi(endpoints.countPages, [site.id]),
-    serverApi(endpoints.leadCounts, [site.id]),
+    can(membership.role, 'leads.view') ? serverApi(endpoints.leadCounts, [site.id]) : null,
   ]);
   return { me, membership, site, sites: siteList.items, pageCount: pageCount.count, leadCounts };
 });

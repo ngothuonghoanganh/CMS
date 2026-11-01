@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thành viên workspace — Mây Xanh Agency</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#3730A3}a:hover{color:#26208A}
+:focus-visible{outline:2px solid #4338CA;outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+</style>
+</helmet>
+<div style="position: relative; display: flex; flex-wrap: wrap; min-height: 1000px; background: #F5F6F8; font-family: 'Be Vietnam Pro', system-ui, sans-serif; color: #15171C">
+  <div style="flex: 1 1 248px; max-width: 100%; background: #FFFFFF; border-right: 1px solid #E2E5EA; display: flex">
+    <dc-import name="SidebarV2" active="members" hint-size="248px,1000px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 56px">
+    <div style="max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px">
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h1 style="margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em">Thành viên</h1>
+          <p style="margin: 0; font-size: 14px; color: #3C424E">Người cùng làm việc trong Mây Xanh Agency và các site họ được vào. <a href="Roles.dc.html" style="font-weight: 600; text-decoration: none">Xem vai trò &amp; quyền</a></p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+          <span style="font-size: 13px; color: #5E6573">Đang dùng 7 chỗ · <a href="Plan.dc.html" style="font-weight: 600; text-decoration: none">hạn mức theo gói</a></span>
+          <button type="button" onClick="{{ openInvite }}" style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>
+            Mời thành viên
+          </button>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+        <div role="tablist" aria-label="Danh sách" style="display: flex; gap: 4px; padding: 3px; background: #ECEEF2; border-radius: 10px">
+          <button type="button" role="tab" aria-selected="{{ tabActive.sel }}" onClick="{{ showActive }}" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ tabActive.bg }}; box-shadow: {{ tabActive.shadow }}; font: inherit; font-size: 13px; font-weight: {{ tabActive.fw }}; color: #15171C; cursor: pointer">Đang hoạt động · 7</button>
+          <button type="button" role="tab" aria-selected="{{ tabInv.sel }}" onClick="{{ showInvites }}" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: {{ tabInv.bg }}; box-shadow: {{ tabInv.shadow }}; font: inherit; font-size: 13px; font-weight: {{ tabInv.fw }}; color: #15171C; cursor: pointer">Lời mời đang chờ · 2</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+          <label for="f-role" class="sr-only">Lọc theo vai trò</label>
+          <select id="f-role" style="min-height: 40px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 13px; background: #FFFFFF; color: #15171C"><option>Mọi vai trò</option><option>Chủ sở hữu</option><option>Quản trị</option><option>Biên tập</option><option>Cộng tác viên</option><option>Chăm sóc khách hàng</option><option>Chỉ xem</option></select>
+          <label for="f-site" class="sr-only">Lọc theo site</label>
+          <select id="f-site" style="min-height: 40px; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; font: inherit; font-size: 13px; background: #FFFFFF; color: #15171C"><option>Mọi site</option><option>Nha khoa Smile Care</option><option>Bếp Nhà Mây</option><option>Spa Lá Xanh</option><option>Gym Tân Phú</option></select>
+          <div style="display: flex; align-items: center; gap: 8px; min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; width: 220px">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5E6573" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+            <label for="m-search" class="sr-only">Tìm thành viên</label>
+            <input id="m-search" type="search" placeholder="Tên hoặc email" style="flex: 1; min-width: 0; border: 0; outline: none; font: inherit; font-size: 13px; background: transparent; color: #15171C">
+          </div>
+        </div>
+      </div>
+
+      <section aria-label="{{ listLabel }}" style="border-radius: 14px; background: #FFFFFF; border: 1px solid #E2E5EA; overflow-x: auto">
+        <div style="min-width: 820px">
+          <sc-if value="{{ isActiveTab }}" hint-placeholder-val="{{ true }}">
+            <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1fr) 150px; gap: 14px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+              <span>THÀNH VIÊN</span><span>VAI TRÒ</span><span>PHẠM VI</span><span>HOẠT ĐỘNG</span><span></span>
+            </div>
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="7">
+              <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1fr) 150px; gap: 14px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                <span style="display: flex; align-items: center; gap: 10px; min-width: 0">
+                  <span aria-hidden="true" style="flex: none; width: 34px; height: 34px; border-radius: 999px; background: {{ m.avBg }}; color: {{ m.avFg }}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">{{ m.ini }}</span>
+                  <span style="display: flex; flex-direction: column; min-width: 0">
+                    <span style="font-weight: 600">{{ m.name }}</span>
+                    <span style="font-size: 12px; color: #5E6573; overflow: hidden; text-overflow: ellipsis">{{ m.email }}</span>
+                  </span>
+                </span>
+                <span><span style="display: inline-block; padding: 3px 9px; border-radius: 999px; background: {{ m.roleBg }}; color: {{ m.roleFg }}; font-size: 12px; font-weight: 600">{{ m.role }}</span></span>
+                <span style="font-size: 13px; color: #3C424E">{{ m.scope }}</span>
+                <span style="font-size: 13px; color: {{ m.lastColor }}">{{ m.last }}</span>
+                <span style="display: flex; justify-content: flex-end; gap: 6px">
+                  <button type="button" onClick="{{ m.edit }}" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Đổi quyền</button>
+                  <button type="button" aria-label="Thao tác khác cho {{ m.name }}" onClick="{{ m.more }}" style="width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+                </span>
+              </div>
+            </sc-for>
+          </sc-if>
+          <sc-if value="{{ isInviteTab }}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 190px; gap: 14px; padding: 10px 20px; background: #FAFBFC; border-bottom: 1px solid #E2E5EA; font-size: 12px; font-weight: 600; color: #5E6573">
+              <span>EMAIL ĐƯỢC MỜI</span><span>VAI TRÒ</span><span>PHẠM VI</span><span>TRẠNG THÁI</span><span></span>
+            </div>
+            <sc-for list="{{ invites }}" as="v" hint-placeholder-count="2">
+              <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 190px; gap: 14px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #EEF0F3; font-size: 14px">
+                <span style="display: flex; flex-direction: column; min-width: 0">
+                  <span style="font-weight: 600; overflow: hidden; text-overflow: ellipsis">{{ v.email }}</span>
+                  <span style="font-size: 12px; color: #5E6573">Mời bởi {{ v.by }}</span>
+                </span>
+                <span><span style="display: inline-block; padding: 3px 9px; border-radius: 999px; background: #ECEEF2; color: #474E5C; font-size: 12px; font-weight: 600">{{ v.role }}</span></span>
+                <span style="font-size: 13px; color: #3C424E">{{ v.scope }}</span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: {{ v.fg }}"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 999px; background: {{ v.dot }}"></span>{{ v.status }}</span>
+                <span style="display: flex; justify-content: flex-end; gap: 6px">
+                  <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; background: #FFFFFF; font: inherit; font-size: 13px; font-weight: 600; color: #15171C; cursor: pointer">Gửi lại</button>
+                  <button type="button" style="min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: #B42318; cursor: pointer">Thu hồi</button>
+                </span>
+              </div>
+            </sc-for>
+            <p style="margin: 0; padding: 12px 20px; font-size: 12px; color: #5E6573">Lời mời chỉ dùng được một lần, cho đúng email được mời, và hết hạn sau 7 ngày.</p>
+          </sc-if>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <sc-if value="{{ showInvite }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 64px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="inv-title" style="width: 100%; max-width: 640px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 4px">
+          <h2 id="inv-title" style="margin: 0; font-size: 18px; font-weight: 700">Mời thành viên</h2>
+          <button type="button" aria-label="Đóng" onClick="{{ close }}" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+        <div style="padding: 8px 24px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="inv-emails" style="font-size: 14px; font-weight: 600">Email</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 48px; box-sizing: border-box; padding: 6px 10px; border: 1px solid #828998; border-radius: 10px">
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: #EEF0FF; color: #3730A3; font-size: 13px">thuy.mkt@smilecare.vn</span>
+              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; background: #FDEBE9; color: #7A1A12; font-size: 13px">khoa@mayxanh.vn · đã là thành viên</span>
+              <input id="inv-emails" type="text" placeholder="Thêm email, cách nhau bằng dấu phẩy" style="flex: 1; min-width: 160px; border: 0; outline: none; font: inherit; font-size: 14px">
+            </div>
+          </div>
+          <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+            <legend style="padding: 0 0 6px; font-size: 14px; font-weight: 600">Vai trò</legend>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+              <sc-for list="{{ roleCards }}" as="rc" hint-placeholder-count="5">
+                <label style="display: flex; gap: 10px; padding: 10px 12px; border: 1px solid {{ rc.border }}; background: {{ rc.bg }}; border-radius: 10px; cursor: pointer">
+                  <input type="radio" name="inv-role" checked="{{ rc.on }}" style="width: 18px; height: 18px; margin: 2px 0 0; accent-color: #4338CA">
+                  <span style="display: flex; flex-direction: column; gap: 2px">
+                    <span style="font-size: 14px; font-weight: 600">{{ rc.name }}</span>
+                    <span style="font-size: 12px; line-height: 1.45; color: #3C424E">{{ rc.desc }}</span>
+                  </span>
+                </label>
+              </sc-for>
+            </div>
+          </fieldset>
+          <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+            <legend style="padding: 0 0 6px; font-size: 14px; font-weight: 600">Phạm vi</legend>
+            <label style="display: flex; gap: 10px; align-items: center; font-size: 14px"><input type="radio" name="inv-scope" style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">Toàn workspace, gồm site tạo sau này</label>
+            <label style="display: flex; gap: 10px; align-items: center; font-size: 14px"><input type="radio" name="inv-scope" checked style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">Chỉ các site được chọn</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-left: 28px">
+              <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid #4338CA; background: #F5F5FF; border-radius: 8px; font-size: 13px"><input type="checkbox" checked style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Nha khoa Smile Care</label>
+              <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; font-size: 13px"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Bếp Nhà Mây</label>
+              <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; font-size: 13px"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Spa Lá Xanh</label>
+              <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid #CDD2DA; border-radius: 8px; font-size: 13px"><input type="checkbox" style="width: 16px; height: 16px; margin: 0; accent-color: #4338CA">Gym Tân Phú</label>
+            </div>
+          </fieldset>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 13px; line-height: 1.6">
+            <div style="padding: 12px 14px; border-radius: 10px; background: #E2F4EA; color: #0B4F33">
+              <span style="display: block; font-weight: 600; margin-bottom: 2px">Biên tập trên Smile Care được</span>
+              Sửa trang, SEO, xuất bản và rollback.
+            </div>
+            <div style="padding: 12px 14px; border-radius: 10px; background: #F0F2F5; color: #3C424E">
+              <span style="display: block; font-weight: 600; margin-bottom: 2px; color: #15171C">Không được</span>
+              Xem lead, đổi tên miền, mời người khác, xem thanh toán.
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 14px 24px 22px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Gửi 1 lời mời</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showChange }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; justify-content: flex-end">
+      <div role="dialog" aria-modal="true" aria-labelledby="ch-title" style="width: 100%; max-width: 460px; min-height: 100%; background: #FFFFFF; box-shadow: 0 24px 64px rgba(21,23,28,0.28); display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 20px 24px; border-bottom: 1px solid #EEF0F3">
+          <span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 999px; background: #FFF1D6; color: #8A5300; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px">MK</span>
+          <span style="flex: 1; display: flex; flex-direction: column">
+            <h2 id="ch-title" style="margin: 0; font-size: 17px; font-weight: 700">Quyền của Minh Khoa</h2>
+            <span style="font-size: 13px; color: #5E6573">khoa@mayxanh.vn</span>
+          </span>
+          <button type="button" aria-label="Đóng" onClick="{{ close }}" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: #3C424E; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+        <div style="flex: 1; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <label for="ch-role" style="font-size: 14px; font-weight: 600">Vai trò</label>
+            <select id="ch-role" style="min-height: 44px; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF; color: #15171C"><option>Quản trị</option><option selected>Biên tập</option><option>Cộng tác viên</option><option>Chăm sóc khách hàng</option><option>Chỉ xem</option></select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <span style="font-size: 14px; font-weight: 600">Site được vào</span>
+            <sc-for list="{{ siteRows }}" as="sr" hint-placeholder-count="4">
+              <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 1px solid #E2E5EA; border-radius: 10px; font-size: 14px">
+                <input type="checkbox" checked="{{ sr.on }}" style="width: 18px; height: 18px; margin: 0; accent-color: #4338CA">
+                <span style="flex: 1">{{ sr.name }}</span>
+                <span style="font-size: 12px; color: {{ sr.noteColor }}">{{ sr.note }}</span>
+              </label>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 13px; line-height: 1.6">
+            <span style="font-weight: 600">Tóm tắt thay đổi</span>
+            <span style="color: #3C424E">Thêm quyền Biên tập trên <strong>Spa Lá Xanh</strong>. Gỡ quyền trên <strong>Bếp Nhà Mây</strong>.</span>
+          </div>
+          <div role="note" style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 10px; background: #EEF0FF; color: #26208A; font-size: 13px; line-height: 1.55">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.8v.1"></path></svg>
+            <span>Minh Khoa đang mở editor trang “Món mới tháng 11” của Bếp Nhà Mây. Khi lưu, họ sẽ được báo mất quyền; bản nháp đã tự lưu vẫn giữ nguyên.</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding: 16px 24px; border-top: 1px solid #EEF0F3">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #B42318; cursor: pointer">Gỡ khỏi workspace</button>
+          <span style="display: flex; gap: 10px">
+            <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+            <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Lưu quyền</button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showLastOwner }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 140px 16px 16px; box-sizing: border-box">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="lo-title" aria-describedby="lo-desc" style="width: 100%; max-width: 480px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="lo-title" style="margin: 0; font-size: 18px; font-weight: 700">Không thể gỡ Chủ sở hữu cuối cùng</h2>
+        <p id="lo-desc" style="margin: 0; font-size: 14px; line-height: 1.6; color: #3C424E">Mây Xanh Agency cần ít nhất một Chủ sở hữu để quản lý thanh toán và thành viên. Hãy chuyển quyền sở hữu cho một Quản trị trước, sau đó bạn có thể rời workspace.</p>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding-top: 6px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Đóng</button>
+          <button type="button" onClick="{{ openTransfer }}" style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #4338CA; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: pointer">Chuyển quyền sở hữu</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showTransfer }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: rgba(21,23,28,0.48); display: flex; align-items: flex-start; justify-content: center; padding: 100px 16px 16px; box-sizing: border-box">
+      <div role="dialog" aria-modal="true" aria-labelledby="tr-title" style="width: 100%; max-width: 520px; background: #FFFFFF; border-radius: 16px; box-shadow: 0 24px 64px rgba(21,23,28,0.28); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 id="tr-title" style="margin: 0; font-size: 18px; font-weight: 700">Chuyển quyền sở hữu workspace</h2>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="tr-to" style="font-size: 14px; font-weight: 600">Chủ sở hữu mới</label>
+          <select id="tr-to" style="min-height: 44px; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px; background: #FFFFFF; color: #15171C"><option>Quốc Bảo · Quản trị</option></select>
+          <span style="font-size: 12px; color: #5E6573">Chỉ Quản trị mới nhận được quyền sở hữu.</span>
+        </div>
+        <ul style="margin: 0; padding: 12px 14px 12px 32px; border-radius: 10px; background: #FAFBFC; border: 1px solid #EEF0F3; font-size: 13px; line-height: 1.65">
+          <li>Quốc Bảo quản lý gói dịch vụ, thanh toán và có thể gỡ bạn.</li>
+          <li>Bạn trở thành Quản trị. Bạn không còn thấy hóa đơn.</li>
+          <li>Quốc Bảo phải đồng ý qua email trong 7 ngày; trước đó mọi thứ giữ nguyên.</li>
+        </ul>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <label for="tr-confirm" style="font-size: 14px; font-weight: 600">Nhập tên workspace để xác nhận</label>
+          <input id="tr-confirm" type="text" placeholder="Mây Xanh Agency" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #828998; border-radius: 10px; font: inherit; font-size: 14px">
+        </div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px">
+          <button type="button" onClick="{{ close }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #CDD2DA; border-radius: 10px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #15171C; cursor: pointer">Hủy</button>
+          <button type="button" disabled style="min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: #A8AEB9; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; cursor: not-allowed">Gửi yêu cầu chuyển</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"state":{"editor":"enum","options":["members","invites","invite","changeRole","lastOwner","transfer"],"default":"members"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: null, dialog: null };
+  }
+  renderVals() {
+    var self = this;
+    var s = this.props.state ?? 'members';
+    var tab = this.state.tab ?? (s === 'invites' ? 'invites' : 'members');
+    var dialog = this.state.dialog ?? ({ invite: 'invite', changeRole: 'change', lastOwner: 'lastOwner', transfer: 'transfer' }[s] || null);
+    function open(d) { return function () { self.setState({ dialog: d }); }; }
+    var roleTone = {
+      'Chủ sở hữu': ['#EEF0FF', '#3730A3'],
+      'Quản trị': ['#15171C', '#FFFFFF']
+    };
+    var avatars = [['#EEF0FF', '#3730A3'], ['#E2F4EA', '#0B6B45'], ['#FFF1D6', '#8A5300'], ['#ECEEF2', '#474E5C']];
+    var data = [
+      ['Ngọc Anh (bạn)', 'NA', 'ngocanh@mayxanh.vn', 'Chủ sở hữu', 'Toàn workspace', 'Đang trực tuyến', 'lastOwner'],
+      ['Quốc Bảo', 'QB', 'bao@mayxanh.vn', 'Quản trị', 'Toàn workspace', '2 giờ trước', 'change'],
+      ['Minh Khoa', 'MK', 'khoa@mayxanh.vn', 'Biên tập', 'Smile Care, Bếp Nhà Mây', 'Đang sửa một trang', 'change'],
+      ['Lan Phương', 'LP', 'phuong@mayxanh.vn', 'Cộng tác viên', 'Nha khoa Smile Care', '3 ngày trước', 'change'],
+      ['Thu Hà', 'TH', 'ha.cskh@smilecare.vn', 'Chăm sóc khách hàng', 'Nha khoa Smile Care', '10 phút trước', 'change'],
+      ['Đức Trí', 'ĐT', 'tri@smilecare.vn', 'Chỉ xem', 'Nha khoa Smile Care', 'Chưa đăng nhập 32 ngày', 'change'],
+      ['Hoàng Yến', 'HY', 'yen@mayxanh.vn', 'Biên tập', 'Toàn workspace', 'Hôm qua', 'change']
+    ];
+    var members = data.map(function (d, i) {
+      var t = roleTone[d[3]] || ['#ECEEF2', '#474E5C'];
+      var av = avatars[i % 4];
+      return {
+        name: d[0], ini: d[1], email: d[2], role: d[3], scope: d[4], last: d[5],
+        lastColor: d[5].indexOf('Chưa') === 0 ? '#8A5300' : '#3C424E',
+        roleBg: t[0], roleFg: t[1], avBg: av[0], avFg: av[1],
+        edit: open(d[6]), more: open(d[6] === 'lastOwner' ? 'transfer' : d[6])
+      };
+    });
+    var invites = [
+      { email: 'an.tran@bepnhamay.vn', by: 'Ngọc Anh · 2 ngày trước', role: 'Chỉ xem', scope: 'Bếp Nhà Mây', status: 'Hết hạn sau 5 ngày', fg: '#3730A3', dot: '#4338CA' },
+      { email: 'marketing@spalaxanh.vn', by: 'Quốc Bảo · 9 ngày trước', role: 'Biên tập', scope: 'Spa Lá Xanh', status: 'Đã hết hạn', fg: '#8A5300', dot: '#E39A12' }
+    ];
+    var roles = [
+      ['Quản trị', 'Mọi thứ trừ thanh toán và chuyển quyền sở hữu.'],
+      ['Biên tập', 'Sửa, xuất bản, rollback trang. Không xem lead.'],
+      ['Cộng tác viên', 'Sửa bản nháp, gửi yêu cầu xuất bản.'],
+      ['Chăm sóc khách hàng', 'Xem lead, khách hàng, pipeline. Không sửa trang.'],
+      ['Chỉ xem', 'Xem trang và hiệu quả. Không sửa gì.']
+    ];
+    var roleCards = roles.map(function (r) {
+      var on = r[0] === 'Biên tập';
+      return { name: r[0], desc: r[1], on: on, border: on ? '#4338CA' : '#E2E5EA', bg: on ? '#F5F5FF' : '#FFFFFF' };
+    });
+    var siteRows = [
+      { name: 'Nha khoa Smile Care', on: true, note: 'Giữ nguyên', noteColor: '#5E6573' },
+      { name: 'Bếp Nhà Mây', on: false, note: 'Sẽ gỡ', noteColor: '#B42318' },
+      { name: 'Spa Lá Xanh', on: true, note: 'Sẽ thêm', noteColor: '#0B6B45' },
+      { name: 'Gym Tân Phú', on: false, note: '', noteColor: '#5E6573' }
+    ];
+    function tabStyle(on) { return { sel: on ? 'true' : 'false', bg: on ? '#FFFFFF' : 'transparent', shadow: on ? '0 1px 2px rgba(21,23,28,0.08)' : 'none', fw: on ? 600 : 500 }; }
+    return {
+      members: members, invites: invites, roleCards: roleCards, siteRows: siteRows,
+      isActiveTab: tab === 'members', isInviteTab: tab === 'invites',
+      listLabel: tab === 'members' ? 'Thành viên đang hoạt động' : 'Lời mời đang chờ',
+      tabActive: tabStyle(tab === 'members'), tabInv: tabStyle(tab === 'invites'),
+      showActive: function () { self.setState({ tab: 'members' }); },
+      showInvites: function () { self.setState({ tab: 'invites' }); },
+      showInvite: dialog === 'invite', showChange: dialog === 'change',
+      showLastOwner: dialog === 'lastOwner', showTransfer: dialog === 'transfer',
+      openInvite: open('invite'), openRemoveOwner: open('lastOwner'), openTransfer: open('transfer'),
+      close: function () { self.setState({ dialog: 'none' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,11 +1,13 @@
-import type {
-  ChangeItem,
-  CheckTarget,
-  ChecksResult,
-  LiveReleaseRef,
-  PageSummary,
-  PublishResponse,
-  Role,
+import {
+  can,
+  type ChangeItem,
+  type CheckTarget,
+  type ChecksResult,
+  holdersOf,
+  type LiveReleaseRef,
+  type PageSummary,
+  type PublishResponse,
+  type Role,
 } from '@plp/contracts';
 import { pendingChangeCount } from '../editor/presentation';
 
@@ -234,9 +236,13 @@ export function checksSummaryLine(tally: ChecksTally): string {
 
 /**
  * Why "Xuất bản" is disabled, linked to the button with `aria-describedby`; null when publishing
- * is allowed. Blocking errors must be fixed; each warning must be fixed or skipped (ADR-006).
+ * is allowed. The role must hold `pages.publish` (ADR-020); blocking errors must be fixed; each
+ * warning must be fixed or skipped (ADR-006).
  */
-export function publishDisabledReason(tally: ChecksTally): string | null {
+export function publishDisabledReason(tally: ChecksTally, role: Role): string | null {
+  if (!can(role, 'pages.publish')) {
+    return `Chỉ ${holdersOf('pages.publish')} được xuất bản trang`;
+  }
   if (tally.blocking > 0) {
     return `Sửa ${tally.blocking} lỗi để xuất bản`;
   }
@@ -247,19 +253,20 @@ export function publishDisabledReason(tally: ChecksTally): string | null {
 }
 
 /**
- * What an Editor reads instead of "Sửa ngay" when the fix is a site setting only the Owner may
- * change (ADR-004, ADR-017, ADR-018): those screens would only show it read-only. Null when the
- * user can fix the item themselves.
+ * What a role without `privacy.manage` reads instead of "Sửa ngay" when the fix is a site setting
+ * it may not change (ADR-017, ADR-018, ADR-020): those screens would only show it read-only. Null
+ * when the user can fix the item themselves.
  */
 export function ownerOnlyFixNote(target: CheckTarget, role: Role): string | null {
-  if (role === 'owner') {
+  if (can(role, 'privacy.manage')) {
     return null;
   }
+  const holders = holdersOf('privacy.manage');
   switch (target.kind) {
     case 'privacy':
-      return 'Chỉ Owner của workspace cài đặt được dữ liệu cá nhân và nội dung đồng ý. Hãy nhờ Owner làm bước này, rồi xuất bản lại.';
+      return `Chỉ ${holders} cài đặt được dữ liệu cá nhân và nội dung đồng ý. Hãy nhờ họ làm bước này, rồi xuất bản lại.`;
     case 'lead_recipients':
-      return 'Chỉ Owner của workspace chọn được nơi nhận lead. Hãy nhờ Owner thêm và xác nhận một email, rồi xuất bản lại.';
+      return `Chỉ ${holders} chọn được nơi nhận lead. Hãy nhờ họ thêm và xác nhận một email, rồi xuất bản lại.`;
     default:
       return null;
   }

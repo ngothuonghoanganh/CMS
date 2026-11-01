@@ -29,7 +29,7 @@ export const SITE_LIMIT_MESSAGE = `Mỗi workspace có tối đa ${MAX_SITES_PER
 
 const ASSET_FIELDS = ['logoAssetId', 'defaultShareImageAssetId'] as const;
 
-/** Owner-only site changes (ADR-004): creating a site and editing its settings. */
+/** Site changes that need `sites.manage` (ADR-020): creating a site and editing its settings. */
 @Injectable()
 export class SiteManagementService {
   constructor(
@@ -52,8 +52,8 @@ export class SiteManagementService {
     workspaceId: string,
     input: CreateSiteValues,
   ): Promise<Site> {
-    const scope = await this.sitesService.scopeForWorkspace(user, workspaceId);
-    this.access.requireOwner(scope);
+    const scope = await this.access.scopeForWorkspace(user, workspaceId);
+    this.access.require(scope, 'sites.manage');
     const site = await this.transactions.run(async (tx) => {
       await this.workspaces.recordSiteCreation(scope, tx);
       if ((await this.sites.countForWorkspace(scope, tx)) >= MAX_SITES_PER_WORKSPACE) {
@@ -73,8 +73,7 @@ export class SiteManagementService {
    * before ADR-015 aside, which pick it up when the renderer cache expires).
    */
   async update(user: AuthenticatedUser, siteId: string, input: UpdateSiteRequest): Promise<Site> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'sites.manage');
     const patch = await this.toPatch(scope, site, input);
     const updated = await this.sites.update(scope, site._id, patch);
     if (!updated) {

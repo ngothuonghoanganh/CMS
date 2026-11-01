@@ -46,7 +46,7 @@ test.describe('S1 · auth, site and dashboard', () => {
     );
     await expect(page.getByText(`${own}.localhost:3101`).first()).toBeVisible();
     const sidebar = page.getByRole('navigation', { name: 'Điều hướng chính' });
-    await expect(sidebar.getByRole('button', { name: /Ngọc Anh.*Owner/ })).toBeVisible();
+    await expect(sidebar.getByRole('button', { name: /Ngọc Anh.*Chủ sở hữu/ })).toBeVisible();
   });
 
   test('log out, protected pages ask to log in, log back in', async ({ page }) => {
@@ -54,7 +54,7 @@ test.describe('S1 · auth, site and dashboard', () => {
     await page.goto(`/sites/${site.id}`);
     await expect(page.getByRole('heading', { name: 'Chưa có trang nào' })).toBeVisible();
 
-    await page.getByRole('button', { name: /Owner$/ }).click();
+    await page.getByRole('button', { name: /Chủ sở hữu$/ }).click();
     await page.getByRole('menuitem', { name: 'Đăng xuất' }).click();
     await expect(page).toHaveURL(/\/login$/);
 

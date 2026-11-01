@@ -3,6 +3,7 @@ import {
   assetSchema,
   type CreateSiteRequest,
   type MeResponse,
+  type Role,
   type Site,
   siteSchema,
 } from '@plp/contracts';
@@ -74,21 +75,43 @@ export async function uploadImage(
 }
 
 /**
- * Signs up another user and makes them an editor of `workspaceId`. There are no invitations in
- * MVP A, so the membership is inserted directly.
+ * Makes an existing user a member of `workspaceId` with `role`, on every site (`null`) or on the
+ * given sites. There are no invitations yet, so the membership is inserted directly.
  */
-export async function addEditor(
+export async function insertMembership(
+  t: TestApp,
+  workspaceId: string,
+  userId: string,
+  role: Role,
+  siteIds: readonly string[] | null = null,
+): Promise<void> {
+  await t.connection.collection('memberships').insertOne({
+    workspaceId: new Types.ObjectId(workspaceId),
+    userId: new Types.ObjectId(userId),
+    role,
+    siteIds: siteIds === null ? null : siteIds.map((id) => new Types.ObjectId(id)),
+    createdAt: new Date(),
+  });
+}
+
+/** Signs up another user and makes them a member of `workspaceId` with `role` (ADR-020). */
+export async function addMember(
+  t: TestApp,
+  workspaceId: string,
+  role: Role,
+  siteIds: readonly string[] | null = null,
+): Promise<{ client: TestClient; me: MeResponse }> {
+  const { client, me } = await signedUpClient(t.app);
+  await insertMembership(t, workspaceId, me.user.id, role, siteIds);
+  return { client, me };
+}
+
+/** Signs up another user and makes them a Biên tập of the whole workspace. */
+export function addEditor(
   t: TestApp,
   workspaceId: string,
 ): Promise<{ client: TestClient; me: MeResponse }> {
-  const { client, me } = await signedUpClient(t.app);
-  await t.connection.collection('memberships').insertOne({
-    workspaceId: new Types.ObjectId(workspaceId),
-    userId: new Types.ObjectId(me.user.id),
-    role: 'editor',
-    createdAt: new Date(),
-  });
-  return { client, me };
+  return addMember(t, workspaceId, 'editor');
 }
 
 /** The `WorkspaceScope` of a signed-up user, built the only legitimate way (AccessService). */

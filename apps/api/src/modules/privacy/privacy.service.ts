@@ -19,7 +19,6 @@ import { LeadsRepository } from '../leads/leads.repository.js';
 import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { SITE_NOT_FOUND, SitesService } from '../sites/sites.service.js';
-import { AccessService } from '../workspaces/access.service.js';
 import type { ConsentVersionRecord } from './consent-version.schema.js';
 import {
   ConsentVersionsRepository,
@@ -58,7 +57,6 @@ export class PrivacyService {
     private readonly sitesService: SitesService,
     private readonly sites: SitesRepository,
     private readonly versions: ConsentVersionsRepository,
-    private readonly access: AccessService,
     private readonly activity: ActivityRepository,
     private readonly users: UsersRepository,
     private readonly transactions: TransactionRunner,
@@ -66,7 +64,7 @@ export class PrivacyService {
   ) {}
 
   async get(user: AuthenticatedUser, siteId: string): Promise<PrivacySettings> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'pages.view');
     return this.settingsOf(site, await this.versions.findCurrent(scope, site._id));
   }
 
@@ -75,8 +73,7 @@ export class PrivacyService {
     siteId: string,
     input: UpdatePrivacyValues,
   ): Promise<PrivacySettings> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'privacy.manage');
     const updated = await this.transactions.run(async (tx) => {
       const saved = await this.sites.updatePrivacy(
         scope,
@@ -107,7 +104,7 @@ export class PrivacyService {
     siteId: string,
     query: CursorQuery,
   ): Promise<ConsentVersionListResponse> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'pages.view');
     const page = await this.versions.listForSite(scope, site._id, query.cursor, query.limit);
     const users = await this.users.findRefs(page.items.map((version) => version.createdBy));
     return {
@@ -128,8 +125,7 @@ export class PrivacyService {
     siteId: string,
     input: CreateConsentVersionRequest,
   ): Promise<ConsentVersion> {
-    const { scope, site } = await this.sitesService.access(user, siteId);
-    this.access.requireOwner(scope);
+    const { scope, site } = await this.sitesService.access(user, siteId, 'privacy.manage');
     let created: ConsentVersionRecord;
     try {
       created = await this.transactions.run(async (tx) => {

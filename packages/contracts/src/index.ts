@@ -17,6 +17,7 @@ export * from './lead-inbox.js';
 export * from './lead-recipients.js';
 export * from './page.js';
 export * from './page-view.js';
+export * from './permissions.js';
 export * from './preview.js';
 export * from './privacy.js';
 export * from './public.js';

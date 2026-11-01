@@ -24,7 +24,7 @@ import {
 } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
 import { addConfirmedRecipient, RECIPIENT_EMAIL } from '../../../test/recipients.js';
-import { addEditor, createSite } from '../../../test/resources.js';
+import { addMember, createSite } from '../../../test/resources.js';
 import { LeadsRepository } from '../leads/leads.repository.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import { LeadNotifier } from './lead-notifier.service.js';
@@ -35,7 +35,7 @@ const MINUTE = 60_000;
 describe('lead notifications', () => {
   let t: TestApp;
   let owner: TestClient;
-  let editor: TestClient;
+  let support: TestClient;
   let workspaceId: string;
 
   beforeAll(async () => {
@@ -48,7 +48,7 @@ describe('lead notifications', () => {
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
-    editor = (await addEditor(t, workspaceId)).client;
+    support = (await addMember(t, workspaceId, 'support')).client;
   });
 
   afterAll(async () => {
@@ -206,8 +206,8 @@ describe('lead notifications', () => {
     );
     expect(list.items.find((item) => item.id === leadId)?.notificationFailed).toBe(true);
 
-    // Editors triage leads, "Gửi lại" included.
-    const retried = await editor.post(`/leads/${leadId}/notification/retry`).expect(200);
+    // Chăm sóc khách hàng triages leads, "Gửi lại" included.
+    const retried = await support.post(`/leads/${leadId}/notification/retry`).expect(200);
     expect(leadDetailSchema.parse(retried.body).notification).toMatchObject({
       attempts: 0,
       lastErrorCode: null,

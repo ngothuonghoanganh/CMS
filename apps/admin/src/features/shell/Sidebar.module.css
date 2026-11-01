@@ -99,10 +99,18 @@
   color: var(--color-muted);
 }
 
-.siteGroup {
+.siteGroup,
+.navGroup {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.noSite {
+  margin: 0;
+  padding: 0 8px;
+  font-size: var(--text-body-sm);
+  color: var(--color-muted);
 }
 
 .groupLabel {

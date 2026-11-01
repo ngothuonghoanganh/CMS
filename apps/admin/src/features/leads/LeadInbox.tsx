@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  can,
   endpoints,
   LEAD_EXPORT_MAX_ROWS,
   type LeadCounts,
@@ -12,6 +13,7 @@ import {
   leadStatuses,
   leadStatusLabels,
   leadStatusSchema,
+  type Role,
   type Site,
 } from '@plp/contracts';
 import {
@@ -76,8 +78,11 @@ const rangeLabels: Record<LeadRange, string> = {
 
 export interface LeadInboxProps {
   site: Site;
-  /** The workspace owner exports leads and deletes a person's data (ADR-017). */
-  canManage: boolean;
+  /**
+   * The user's role: exporting leads, changing where they go and a person's data each need their
+   * permission (ADR-017, ADR-020).
+   */
+  role: Role;
   /** Filters and lead read from the URL by the server, and what it loaded for them. */
   initialFilters: LeadInboxFilters;
   initialLeadId: string | null;
@@ -109,7 +114,7 @@ function sameFilters(a: LeadInboxFilters, b: LeadInboxFilters): boolean {
 /** Screen 10 "Leads": every lead from the forms of the site, with filters and the lead's detail. */
 export function LeadInbox({
   site,
-  canManage,
+  role,
   initialFilters,
   initialLeadId,
   initialList,
@@ -256,7 +261,7 @@ export function LeadInbox({
             >
               Nơi nhận lead
             </Button>
-            {canManage ? (
+            {can(role, 'leads.export') ? (
               <Button
                 variant="secondary"
                 leadingIcon={<DownloadIcon size={16} />}
@@ -276,7 +281,7 @@ export function LeadInbox({
         siteId={site.id}
         open={recipientsOpen}
         onOpenChange={setRecipientsOpen}
-        canManage={canManage}
+        canManage={can(role, 'privacy.manage')}
       />
 
       <div className={styles.toolbar}>
@@ -521,7 +526,7 @@ export function LeadInbox({
             // picked leads, the cache holds newer data.
             initialDetail={!picked && initialDetail?.id === selectedId ? initialDetail : undefined}
             loadedAt={loadedAt}
-            canManage={canManage}
+            canManage={can(role, 'personalData.manage')}
             // A lead opened by its link (the notification email's "Mở lead trong hộp thư") takes the
             // focus too: on a phone its detail sits below the whole list, and focus brings it into
             // view.

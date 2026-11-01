@@ -162,12 +162,24 @@ describe('checks tally', () => {
 
   it('disables publishing while a blocking error is left, then while a warning is open', () => {
     const blocked = checks({ blocking: [blocking('b1')], warnings: [warning('w1')] });
-    expect(publishDisabledReason(tallyChecks(blocked, ['w1']))).toBe('Sửa 1 lỗi để xuất bản');
+    expect(publishDisabledReason(tallyChecks(blocked, ['w1']), 'editor')).toBe(
+      'Sửa 1 lỗi để xuất bản',
+    );
 
     const warned = checks({ warnings: [warning('w1'), warning('w2')] });
-    expect(publishDisabledReason(tallyChecks(warned, []))).toBe('Sửa hoặc bỏ qua 2 cảnh báo');
-    expect(publishDisabledReason(tallyChecks(warned, ['w1']))).toBe('Sửa hoặc bỏ qua 1 cảnh báo');
-    expect(publishDisabledReason(tallyChecks(warned, ['w1', 'w2']))).toBeNull();
+    expect(publishDisabledReason(tallyChecks(warned, []), 'editor')).toBe(
+      'Sửa hoặc bỏ qua 2 cảnh báo',
+    );
+    expect(publishDisabledReason(tallyChecks(warned, ['w1']), 'editor')).toBe(
+      'Sửa hoặc bỏ qua 1 cảnh báo',
+    );
+    expect(publishDisabledReason(tallyChecks(warned, ['w1', 'w2']), 'editor')).toBeNull();
+  });
+
+  it('keeps publishing from a Cộng tác viên, whatever the checks (ADR-020)', () => {
+    expect(publishDisabledReason(tallyChecks(checks(), []), 'contributor')).toBe(
+      'Chỉ Chủ sở hữu, Quản trị và Biên tập được xuất bản trang',
+    );
   });
 
   it('ignores acknowledgements of warnings that no longer exist', () => {
@@ -254,14 +266,16 @@ describe('ownerOnlyFixNote', () => {
   const privacy = { kind: 'privacy', sectionId: 'form00000001' } as const;
   const recipients = { kind: 'lead_recipients', sectionId: 'form00000001' } as const;
 
-  it('asks an Editor to turn to the Owner for the site settings a form needs', () => {
-    expect(ownerOnlyFixNote(privacy, 'editor')).toMatch(/^Chỉ Owner của workspace cài đặt được/);
-    expect(ownerOnlyFixNote(recipients, 'editor')).toMatch(/^Chỉ Owner của workspace chọn được/);
+  it('asks a Biên tập to turn to Chủ sở hữu and Quản trị for the site settings a form needs', () => {
+    expect(ownerOnlyFixNote(privacy, 'editor')).toMatch(/^Chỉ Chủ sở hữu và Quản trị cài đặt được/);
+    expect(ownerOnlyFixNote(recipients, 'contributor')).toMatch(
+      /^Chỉ Chủ sở hữu và Quản trị chọn được/,
+    );
   });
 
-  it('lets the Owner fix them, and an Editor fix the page itself', () => {
+  it('lets Chủ sở hữu and Quản trị fix them, and a Biên tập fix the page itself', () => {
     expect(ownerOnlyFixNote(privacy, 'owner')).toBeNull();
-    expect(ownerOnlyFixNote(recipients, 'owner')).toBeNull();
+    expect(ownerOnlyFixNote(recipients, 'admin')).toBeNull();
     expect(
       ownerOnlyFixNote({ kind: 'section', sectionId: 'hero00000001', fieldPath: null }, 'editor'),
     ).toBeNull();

@@ -2,7 +2,9 @@
 
 import {
   type ActivityListResponse,
+  can,
   endpoints,
+  holdersOf,
   type LeadCounts,
   type PageListResponse,
   type Role,
@@ -34,7 +36,6 @@ import Link from 'next/link';
 import { internalVisitUrl } from '../../lib/site-url';
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
-import { useLeadCounts } from '../leads/queries';
 import { cx } from '../shell/cx';
 import { leadRecipientsHref, newPageHref, privacyHref, siteHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
@@ -70,10 +71,11 @@ export interface DashboardProps {
   initialFilters: DashboardFilters;
   initialPages: PageListResponse;
   initialActivity: ActivityListResponse;
-  initialLeadCounts: LeadCounts;
+  /** Null for roles that do not see leads (ADR-020). */
+  initialLeadCounts: LeadCounts | null;
   /** When the server loaded the data (epoch ms); hydration uses it for identical relative times. */
   loadedAt: number;
-  /** The user's role: the site setup steps are the Owner's (ADR-004). */
+  /** The user's role: what they may do on the site follows it (ADR-020). */
   role: Role;
 }
 
@@ -94,7 +96,7 @@ export function Dashboard({
 }: DashboardProps) {
   const queryClient = useQueryClient();
   const now = useNow(loadedAt);
-  const leadCounts = useLeadCounts(site.id, initialLeadCounts, loadedAt).data;
+  const canEditPages = can(role, 'pages.edit');
   const [status, setStatus] = useState(initialFilters.status);
   const [searchText, setSearchText] = useState(initialFilters.q);
   const q = normalizeSearch(useDebouncedValue(searchText, SEARCH_DEBOUNCE_MS));
@@ -171,35 +173,42 @@ export function Dashboard({
   const anyReleased = counts.live + counts.unpublished > 0;
   const thumbnailColor = themePresets[site.themePresetId].schemes.brand.background;
 
-  const owner = role === 'owner';
+  const canChangeSite = can(role, 'sites.manage');
+  const canChangePrivacy = can(role, 'privacy.manage');
   const setupSteps: SetupStep[] = [
     {
       label: 'Thêm logo & chọn giao diện',
       done: site.logoAssetId !== null,
-      action: owner ? { href: `${siteHref(site.id)}/settings` } : null,
+      action: canChangeSite ? { href: `${siteHref(site.id)}/settings` } : null,
+      holders: holdersOf('sites.manage'),
     },
     {
       label: 'Xuất bản trang đầu tiên',
       done: anyReleased,
       action:
         counts.all === 0
-          ? { href: newPageHref(site.id) }
+          ? canEditPages
+            ? { href: newPageHref(site.id) }
+            : null
           : {
               onClick: () => {
                 setStatus('draft');
               },
             },
+      holders: holdersOf('pages.publish'),
     },
     // Board 01 also lists a custom domain, which MVP A and B do not offer.
     {
       label: 'Thêm chính sách quyền riêng tư',
       done: site.privacyConfigured,
-      action: owner ? { href: privacyHref(site.id) } : null,
+      action: canChangePrivacy ? { href: privacyHref(site.id) } : null,
+      holders: holdersOf('privacy.manage'),
     },
     {
       label: 'Chọn nơi nhận lead (email)',
       done: site.confirmedLeadRecipients > 0,
-      action: owner ? { href: leadRecipientsHref(site.id) } : null,
+      action: canChangePrivacy ? { href: leadRecipientsHref(site.id) } : null,
+      holders: holdersOf('privacy.manage'),
     },
   ];
 
@@ -234,14 +243,27 @@ export function Dashboard({
                 <VisuallyHidden> (mở trong thẻ mới)</VisuallyHidden>
               </ButtonLink>
             )}
-            <ButtonLink as={Link} href={newPageHref(site.id)} leadingIcon={<PlusIcon size={16} />}>
-              Tạo trang
-            </ButtonLink>
+            {canEditPages ? (
+              <ButtonLink
+                as={Link}
+                href={newPageHref(site.id)}
+                leadingIcon={<PlusIcon size={16} />}
+              >
+                Tạo trang
+              </ButtonLink>
+            ) : null}
           </>
         }
       />
 
-      <SiteSummary site={site} attention={summary.attention} leadCounts={leadCounts} />
+      <SiteSummary
+        site={site}
+        attention={summary.attention}
+        initialLeadCounts={initialLeadCounts}
+        loadedAt={loadedAt}
+        canEditPages={canEditPages}
+        canManageDomains={can(role, 'domains.manage')}
+      />
 
       <Card as="section" padding="none" aria-labelledby="pages-heading">
         <h2 id="pages-heading" className={styles.srOnly}>
@@ -297,15 +319,21 @@ export function Dashboard({
             headingLevel={3}
             icon={<FileIcon size={24} />}
             title="Chưa có trang nào"
-            description={`Tạo trang đầu tiên cho ${site.name}: chọn mục tiêu, điền vài thông tin chính, rồi chỉnh sửa và xuất bản.`}
+            description={
+              canEditPages
+                ? `Tạo trang đầu tiên cho ${site.name}: chọn mục tiêu, điền vài thông tin chính, rồi chỉnh sửa và xuất bản.`
+                : `${site.name} chưa có trang nào. Trang sẽ hiện ở đây khi ${holdersOf('pages.edit')} tạo trang.`
+            }
             action={
-              <ButtonLink
-                as={Link}
-                href={newPageHref(site.id)}
-                leadingIcon={<PlusIcon size={16} />}
-              >
-                Tạo trang đầu tiên
-              </ButtonLink>
+              canEditPages ? (
+                <ButtonLink
+                  as={Link}
+                  href={newPageHref(site.id)}
+                  leadingIcon={<PlusIcon size={16} />}
+                >
+                  Tạo trang đầu tiên
+                </ButtonLink>
+              ) : undefined
             }
           />
         ) : pages.length === 0 && !loadingPages ? (
@@ -331,6 +359,8 @@ export function Dashboard({
               pages={pages}
               now={now}
               thumbnailColor={thumbnailColor}
+              canEdit={canEditPages}
+              canManageLive={can(role, 'pages.manageLive')}
               onUnpublish={(page) => {
                 setUnpublishTarget(page);
                 setUnpublishOpen(true);

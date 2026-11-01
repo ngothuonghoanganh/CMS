@@ -27,14 +27,14 @@ import {
 } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
 import { confirmationToken, confirmRecipient } from '../../../test/recipients.js';
-import { addEditor, createSite } from '../../../test/resources.js';
+import { addMember, createSite } from '../../../test/resources.js';
 
 /** "Nơi nhận lead" (ADR-018): confirmed addresses only, at most five, owner-managed. */
 describe('lead recipients', () => {
   let t: TestApp;
   let owner: TestClient;
   let ownerName: string;
-  let editor: TestClient;
+  let support: TestClient;
   let workspaceId: string;
 
   beforeAll(async () => {
@@ -46,7 +46,7 @@ describe('lead recipients', () => {
     owner = signedUp.client;
     ownerName = signedUp.me.user.name;
     workspaceId = signedUp.workspaceId;
-    editor = (await addEditor(t, workspaceId)).client;
+    support = (await addMember(t, workspaceId, 'support')).client;
   });
 
   afterAll(async () => {
@@ -222,15 +222,15 @@ describe('lead recipients', () => {
     await owner.delete(`/sites/${site.id}/lead-recipients/not-an-id`).expect(404);
   });
 
-  it('shows the addresses to editors and lets only the owner change them', async () => {
+  it('shows the addresses to Chăm sóc khách hàng and lets only the owner change them', async () => {
     const site = await createSite(owner, workspaceId);
     const added = await add(site, 'chu@smilecare.vn');
-    expect(await list(site, editor)).toHaveLength(1);
-    await editor
+    expect(await list(site, support)).toHaveLength(1);
+    await support
       .post(`/sites/${site.id}/lead-recipients`, { email: 'nv@smilecare.vn' })
       .expect(403);
-    await editor.post(`/sites/${site.id}/lead-recipients/${added.id}/resend`).expect(403);
-    await editor.delete(`/sites/${site.id}/lead-recipients/${added.id}`).expect(403);
+    await support.post(`/sites/${site.id}/lead-recipients/${added.id}/resend`).expect(403);
+    await support.delete(`/sites/${site.id}/lead-recipients/${added.id}`).expect(403);
     expect(await list(site)).toHaveLength(1);
   });
 

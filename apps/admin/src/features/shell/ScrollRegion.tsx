@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
-import styles from './Analytics.module.css';
+import styles from './ScrollRegion.module.css';
 
 export interface ScrollRegionProps {
   /** The region's name while it scrolls, e.g. "Bảng nguồn truy cập". */
@@ -64,7 +64,7 @@ export function ScrollRegion({ label, children }: ScrollRegionProps) {
   return (
     <div
       ref={box}
-      className={styles.tableScroll}
+      className={styles.region}
       onFocus={() => {
         setFocused(true);
       }}

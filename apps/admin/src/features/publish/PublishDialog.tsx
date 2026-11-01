@@ -457,7 +457,7 @@ function PublishSession({
   const { page, checks } = prepared;
   const first = isFirstPublish(page);
   const tally = tallyChecks(checks, state.acknowledged);
-  const disabledReason = publishDisabledReason(tally);
+  const disabledReason = publishDisabledReason(tally, role);
   const live = page.liveRelease;
   const since = liveSince(page);
   const version = nextVersion(page);

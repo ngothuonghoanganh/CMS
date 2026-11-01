@@ -24,7 +24,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { DateInput } from '../../lib/format';
 import { internalVisitUrl, slugPath } from '../../lib/site-url';
 import { cx } from '../shell/cx';
-import { pageHref } from '../shell/navigation';
+import { openPageHref, pageHref } from '../shell/navigation';
 import { type ChecksTone, presentPageStatus } from './status-presentation';
 import { type UnpublishablePage, unpublishable } from './UnpublishDialog';
 import styles from './PageTable.module.css';
@@ -42,6 +42,10 @@ export interface PageTableProps {
   now: DateInput;
   /** Thumbnail color of published pages, from the site theme. */
   thumbnailColor: string;
+  /** The user edits pages: rows open the editor and offer "SEO & chia sẻ" (ADR-020). */
+  canEdit: boolean;
+  /** The user takes pages off the live site: rows offer "Gỡ xuất bản". */
+  canManageLive: boolean;
   /** Opens the unpublish dialog; focus returns to the row's menu button when it closes. */
   onUnpublish: (page: UnpublishablePage) => void;
 }
@@ -49,19 +53,23 @@ export interface PageTableProps {
 function RowActions({
   siteId,
   page,
+  canEdit,
+  canManageLive,
   onUnpublish,
 }: {
   siteId: string;
   page: PageSummary;
+  canEdit: boolean;
+  canManageLive: boolean;
   onUnpublish: PageTableProps['onUnpublish'];
 }) {
   const router = useRouter();
-  const live = unpublishable(page);
+  const live = canManageLive ? unpublishable(page) : null;
   const { liveUrl } = page;
   return (
     <div className={styles.actions}>
-      <ButtonLink as={Link} href={pageHref(siteId, page.id, 'edit')} variant="secondary">
-        Sửa
+      <ButtonLink as={Link} href={openPageHref(siteId, page.id, canEdit)} variant="secondary">
+        {canEdit ? 'Sửa' : 'Xem'}
       </ButtonLink>
       <DropdownMenu
         trigger={
@@ -81,14 +89,16 @@ function RowActions({
             Xem trang live
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          icon={<SearchIcon size={18} />}
-          onSelect={() => {
-            router.push(pageHref(siteId, page.id, 'seo'));
-          }}
-        >
-          SEO & chia sẻ
-        </DropdownMenuItem>
+        {canEdit ? (
+          <DropdownMenuItem
+            icon={<SearchIcon size={18} />}
+            onSelect={() => {
+              router.push(pageHref(siteId, page.id, 'seo'));
+            }}
+          >
+            SEO & chia sẻ
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem
           icon={<HistoryIcon size={18} />}
           onSelect={() => {
@@ -122,7 +132,15 @@ function leadsCell(page: PageListItem): string {
 }
 
 /** The page list of screen 01: page, status, live version, checks, recent leads and actions. */
-export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: PageTableProps) {
+export function PageTable({
+  siteId,
+  pages,
+  now,
+  thumbnailColor,
+  canEdit,
+  canManageLive,
+  onUnpublish,
+}: PageTableProps) {
   return (
     <table className={styles.table}>
       <thead>
@@ -157,7 +175,7 @@ export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: P
                     <span />
                   </div>
                   <div className={styles.stack}>
-                    <Link href={pageHref(siteId, page.id, 'edit')} className={styles.title}>
+                    <Link href={openPageHref(siteId, page.id, canEdit)} className={styles.title}>
                       {page.title}
                     </Link>
                     <span className={styles.slug}>{slugPath(page.slug)}</span>
@@ -196,7 +214,13 @@ export function PageTable({ siteId, pages, now, thumbnailColor, onUnpublish }: P
               </td>
               <td className={styles.leads}>{leadsCell(page)}</td>
               <td>
-                <RowActions siteId={siteId} page={page} onUnpublish={onUnpublish} />
+                <RowActions
+                  siteId={siteId}
+                  page={page}
+                  canEdit={canEdit}
+                  canManageLive={canManageLive}
+                  onUnpublish={onUnpublish}
+                />
               </td>
             </tr>
           );

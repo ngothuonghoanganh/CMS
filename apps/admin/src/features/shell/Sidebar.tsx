@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  can,
   type LeadCounts,
   type Membership,
   roleLabels,
@@ -10,6 +11,7 @@ import {
 import {
   Avatar,
   Badge,
+  ButtonLink,
   ChartBarIcon,
   ChevronUpDownIcon,
   DropdownMenu,
@@ -22,6 +24,7 @@ import {
   GlobeIcon,
   type IconComponent,
   InboxIcon,
+  LockIcon,
   LogoutIcon,
   PlusIcon,
   SettingsIcon,
@@ -30,25 +33,36 @@ import {
 } from '@plp/ui';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import type { ReactNode } from 'react';
 import { loadPage } from '../../lib/page-load';
 import { hostOf } from '../../lib/site-url';
 import { newLeadsBadge } from '../leads/lead-presentation';
 import { useLeadCounts } from '../leads/queries';
 import { Brand } from './Brand';
-import { navCurrent, newLeadsHref, siteHref, siteNavItems, type SiteNavKey } from './navigation';
+import {
+  type NavItem,
+  navCurrent,
+  newLeadsHref,
+  siteHref,
+  siteNavItems,
+  type SiteNavKey,
+  workspaceNavItems,
+  type WorkspaceNavKey,
+} from './navigation';
 import { leaveScreen } from './screen-leave';
 import { siteInitial, siteTileStyle } from './site-tile';
 import { useLogout } from './use-logout';
 import { workspacePreferenceCookie } from './workspace-preference';
 import styles from './Sidebar.module.css';
 
-const navIcons: Record<SiteNavKey, IconComponent> = {
+const navIcons: Record<SiteNavKey | WorkspaceNavKey, IconComponent> = {
   pages: FileIcon,
   leads: InboxIcon,
   analytics: ChartBarIcon,
   domain: GlobeIcon,
   privacy: ShieldCheckIcon,
   settings: SettingsIcon,
+  roles: LockIcon,
 };
 
 export interface SidebarProps {
@@ -56,12 +70,16 @@ export interface SidebarProps {
   memberships: readonly Membership[];
   /** The user's membership in the workspace of the current site. */
   membership: Membership;
-  site: Site;
-  /** Sites of the current workspace. */
+  /** The site of the frame; null on a workspace screen of a workspace without a site yet. */
+  site: Site | null;
+  /** Sites of the current workspace the user may open. */
   sites: readonly Site[];
   pageCount: number;
-  /** Lead counts the server loaded; the badge then follows changes made in the inbox. */
-  leadCounts: LeadCounts;
+  /**
+   * Lead counts the server loaded; the badge then follows changes made in the inbox. Null for
+   * roles that do not see leads (ADR-020).
+   */
+  leadCounts: LeadCounts | null;
   /** Called before navigating, so the mobile drawer can close. */
   onNavigate?: (() => void) | undefined;
 }
@@ -74,7 +92,63 @@ function SiteTile({ site }: { site: Site }) {
   );
 }
 
-/** Main navigation of a site: brand, workspace and site switchers, sections and the account. */
+/** "Chủ sở hữu", or "Biên tập · 2 site" for a member kept to some sites. */
+export function membershipLabel(membership: Membership): string {
+  const role = roleLabels[membership.role];
+  return membership.siteIds === null ? role : `${role} · ${membership.siteIds.length} site`;
+}
+
+interface NavLinkProps {
+  item: NavItem<SiteNavKey | WorkspaceNavKey>;
+  pathname: string;
+  onNavigate: (() => void) | undefined;
+  /** Overrides the item's address, e.g. the new leads behind the badge. */
+  href?: string;
+  children?: ReactNode;
+}
+
+function NavLink({ item, pathname, onNavigate, href = item.href, children }: NavLinkProps) {
+  const Icon = navIcons[item.key];
+  return (
+    <Link
+      href={href}
+      aria-current={navCurrent(pathname, item)}
+      className={styles.navLink}
+      {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
+    >
+      <Icon size={18} />
+      <span className={styles.navLabel}>{item.label}</span>
+      {children}
+    </Link>
+  );
+}
+
+/** "Leads" with "N mới": the badge follows the inbox, and opens exactly those leads (ADR-018). */
+function LeadsNavLink({
+  siteId,
+  leadCounts,
+  ...link
+}: Omit<NavLinkProps, 'href' | 'children'> & { siteId: string; leadCounts: LeadCounts }) {
+  const newLeads = newLeadsBadge(useLeadCounts(siteId, leadCounts).data);
+  return (
+    <NavLink {...link} href={newLeads === null ? link.item.href : newLeadsHref(siteId)}>
+      {newLeads === null ? null : (
+        <>
+          {' '}
+          <Badge tone="primary" size="sm" className={styles.navBadge}>
+            {newLeads}
+          </Badge>
+        </>
+      )}
+    </NavLink>
+  );
+}
+
+/**
+ * Main navigation (Sidebar v2): brand, the workspace switcher and its sections, the site switcher
+ * and the site's sections, and the account. Each section shows only to roles that hold its
+ * permission (ADR-020).
+ */
 export function Sidebar({
   user,
   memberships,
@@ -89,7 +163,11 @@ export function Sidebar({
   const pathname = usePathname();
   const logout = useLogout();
   const workspace = membership.workspace;
-  const newLeads = newLeadsBadge(useLeadCounts(site.id, leadCounts).data);
+  const allowed = <Key extends string>(items: NavItem<Key>[]) =>
+    items.filter((item) => can(membership.role, item.permission));
+  const workspaceItems = allowed(workspaceNavItems(workspace.id));
+  const canCreateSite = can(membership.role, 'sites.manage');
+  const newSiteHref = `/sites/new?workspace=${encodeURIComponent(workspace.id)}`;
 
   // Code navigation leaves through the screen on display, which saves what it holds first.
   function go(href: string) {
@@ -157,93 +235,116 @@ export function Sidebar({
         </DropdownMenuRadioGroup>
       </DropdownMenu>
 
+      {workspaceItems.length === 0 ? null : (
+        <div className={styles.navGroup}>
+          <span className={styles.groupLabel} aria-hidden="true">
+            WORKSPACE
+          </span>
+          <ul className={styles.navList}>
+            {workspaceItems.map((item) => (
+              <li key={item.key}>
+                <NavLink item={item} pathname={pathname} onNavigate={onNavigate} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className={styles.siteGroup}>
         <span className={styles.groupLabel} aria-hidden="true">
           SITE KHÁCH HÀNG
         </span>
-        <DropdownMenu
-          align="start"
-          trigger={
-            <button type="button" className={styles.siteButton}>
-              <SiteTile site={site} />
-              <span className={styles.stack}>
-                <span className={styles.siteName}>{site.name}</span>{' '}
-                <span className={styles.siteHost}>{hostOf(site.defaultOrigin)}</span>
-              </span>
-              <VisuallyHidden>, đổi site</VisuallyHidden>
-              <span className={styles.chevron}>
-                <ChevronUpDownIcon size={16} />
-              </span>
-            </button>
-          }
-        >
-          <DropdownMenuLabel>Site khách hàng</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={site.id}
-            onValueChange={(siteId) => {
-              if (siteId !== site.id) {
-                go(siteHref(siteId));
-              }
-            }}
+        {site === null ? (
+          canCreateSite ? (
+            <ButtonLink
+              as={Link}
+              href={newSiteHref}
+              variant="secondary"
+              leadingIcon={<PlusIcon size={16} />}
+            >
+              Tạo site mới
+            </ButtonLink>
+          ) : (
+            <p className={styles.noSite}>Bạn chưa được giao site nào.</p>
+          )
+        ) : (
+          <DropdownMenu
+            align="start"
+            trigger={
+              <button type="button" className={styles.siteButton}>
+                <SiteTile site={site} />
+                <span className={styles.stack}>
+                  <span className={styles.siteName}>{site.name}</span>{' '}
+                  <span className={styles.siteHost}>{hostOf(site.defaultOrigin)}</span>
+                </span>
+                <VisuallyHidden>, đổi site</VisuallyHidden>
+                <span className={styles.chevron}>
+                  <ChevronUpDownIcon size={16} />
+                </span>
+              </button>
+            }
           >
-            {sites.map((item) => (
-              <DropdownMenuRadioItem key={item.id} value={item.id}>
-                <span className={styles.menuSiteName}>{item.name}</span>
-                <span className={styles.menuSiteHost}>{hostOf(item.defaultOrigin)}</span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-          {membership.role === 'owner' ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                icon={<PlusIcon size={18} />}
-                onSelect={() => {
-                  go(`/sites/new?workspace=${encodeURIComponent(workspace.id)}`);
-                }}
-              >
-                Tạo site mới
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenu>
+            <DropdownMenuLabel>Site khách hàng</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={site.id}
+              onValueChange={(siteId) => {
+                if (siteId !== site.id) {
+                  go(siteHref(siteId));
+                }
+              }}
+            >
+              {sites.map((item) => (
+                <DropdownMenuRadioItem key={item.id} value={item.id}>
+                  <span className={styles.menuSiteName}>{item.name}</span>
+                  <span className={styles.menuSiteHost}>{hostOf(item.defaultOrigin)}</span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            {canCreateSite ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  icon={<PlusIcon size={18} />}
+                  onSelect={() => {
+                    go(newSiteHref);
+                  }}
+                >
+                  Tạo site mới
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenu>
+        )}
       </div>
 
-      <ul className={styles.navList}>
-        {siteNavItems(site.id).map((item) => {
-          const Icon = navIcons[item.key];
-          return (
+      {site === null ? null : (
+        <ul className={styles.navList}>
+          {allowed(siteNavItems(site.id)).map((item) => (
             <li key={item.key}>
-              <Link
-                // The badge counts new leads of every time: it opens exactly those (ADR-018).
-                href={item.key === 'leads' && newLeads !== null ? newLeadsHref(site.id) : item.href}
-                aria-current={navCurrent(pathname, item)}
-                className={styles.navLink}
-                {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
-              >
-                <Icon size={18} />
-                <span className={styles.navLabel}>{item.label}</span>
-                {item.key === 'pages' ? (
-                  <>
-                    {' '}
-                    <span className={styles.navCount}>
-                      {pageCount} <VisuallyHidden>trang</VisuallyHidden>
-                    </span>
-                  </>
-                ) : null}
-                {item.key === 'leads' && newLeads !== null ? (
-                  <>
-                    {' '}
-                    <Badge tone="primary" size="sm" className={styles.navBadge}>
-                      {newLeads}
-                    </Badge>
-                  </>
-                ) : null}
-              </Link>
+              {item.key === 'leads' && leadCounts !== null ? (
+                <LeadsNavLink
+                  item={item}
+                  pathname={pathname}
+                  onNavigate={onNavigate}
+                  siteId={site.id}
+                  leadCounts={leadCounts}
+                />
+              ) : (
+                <NavLink item={item} pathname={pathname} onNavigate={onNavigate}>
+                  {item.key === 'pages' ? (
+                    <>
+                      {' '}
+                      <span className={styles.navCount}>
+                        {pageCount} <VisuallyHidden>trang</VisuallyHidden>
+                      </span>
+                    </>
+                  ) : null}
+                </NavLink>
+              )}
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      )}
 
       <div className={styles.account}>
         <DropdownMenu
@@ -254,7 +355,7 @@ export function Sidebar({
               <Avatar name={user.name} />
               <span className={styles.stack}>
                 <span className={styles.userName}>{user.name}</span>{' '}
-                <span className={styles.userRole}>{roleLabels[membership.role]}</span>
+                <span className={styles.userRole}>{membershipLabel(membership)}</span>
               </span>
               <span className={styles.chevron}>
                 <ChevronUpDownIcon size={16} />

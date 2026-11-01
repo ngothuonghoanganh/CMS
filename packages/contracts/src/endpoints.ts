@@ -8,6 +8,7 @@ import {
   updateAssetRequestSchema,
 } from './asset.js';
 import { loginRequestSchema, meResponseSchema, signupRequestSchema } from './auth.js';
+import { roleCountsSchema } from './permissions.js';
 import { checksResultSchema } from './checks.js';
 import { cursorQuerySchema } from './common.js';
 import {
@@ -156,6 +157,15 @@ export const endpoints = {
     response: meResponseSchema,
   }),
 
+  // Workspace roles (ADR-020)
+  roleCounts: endpoint({
+    method: 'GET',
+    path: (workspaceId: string) => `/workspaces/${e(workspaceId)}/role-counts`,
+    request: null,
+    query: null,
+    response: roleCountsSchema,
+  }),
+
   // Sites
   listSites: endpoint({
     method: 'GET',
@@ -193,7 +203,7 @@ export const endpoints = {
     response: siteSchema,
   }),
 
-  // Personal data and consent (ADR-017): every member reads, the owner writes
+  // Personal data and consent (ADR-017): every member reads, `privacy.manage` writes (ADR-020)
   getPrivacySettings: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/privacy`,
@@ -225,7 +235,8 @@ export const endpoints = {
     response: consentVersionSchema,
   }),
 
-  // Lead inbox (ADR-018): members read and triage leads, the owner exports and deletes them
+  // Lead inbox (ADR-018): `leads.view` reads, `leads.handle` triages, `leads.export` and
+  // `personalData.manage` export and delete (ADR-020)
   /** Newest first, with the folder counts for the same filters; `searchLeads` adds a search. */
   listLeads: endpoint({
     method: 'GET',
@@ -254,7 +265,7 @@ export const endpoints = {
     response: leadCountsSchema,
   }),
   /**
-   * Owner only. A CSV file (UTF-8 with BOM) of the leads matching the filters, newest first, at
+   * `leads.export`. A CSV file (UTF-8 with BOM) of the leads matching the filters, newest first, at
    * most `LEAD_EXPORT_MAX_ROWS`; `EXPORT_TRUNCATED_HEADER` tells whether more matched.
    */
   exportLeads: endpoint({
@@ -279,7 +290,10 @@ export const endpoints = {
     query: null,
     response: leadDetailSchema,
   }),
-  /** Owner only: the lead's name, phone number and email, e.g. for a request to correct them. */
+  /**
+   * `personalData.manage`: the lead's name, phone number and email, e.g. for a request to correct
+   * them.
+   */
   updateLeadContact: endpoint({
     method: 'PATCH',
     path: (leadId: string) => `/leads/${e(leadId)}/contact`,
@@ -288,8 +302,8 @@ export const endpoints = {
     response: leadDetailSchema,
   }),
   /**
-   * Owner only. A JSON or CSV file with every lead of the same person (phone number or email) in
-   * the site, consent evidence included; at most `LEAD_PERSON_EXPORT_MAX` leads.
+   * `personalData.manage`. A JSON or CSV file with every lead of the same person (phone number or
+   * email) in the site, consent evidence included; at most `LEAD_PERSON_EXPORT_MAX` leads.
    */
   exportLeadPerson: endpoint({
     method: 'POST',
@@ -299,8 +313,8 @@ export const endpoints = {
     response: null,
   }),
   /**
-   * Owner only. Deletes every lead of the same person in the site. Copies already sent by email
-   * are not deleted (ADR-017).
+   * `personalData.manage`. Deletes every lead of the same person in the site. Copies already sent
+   * by email are not deleted (ADR-017).
    */
   deleteLeadPerson: endpoint({
     method: 'DELETE',
@@ -310,7 +324,7 @@ export const endpoints = {
     response: personDeleteResponseSchema,
   }),
 
-  /** Members: sends the lead's email notification again after it failed (ADR-018). */
+  /** `leads.handle`: sends the lead's email notification again after it failed (ADR-018). */
   retryLeadNotification: endpoint({
     method: 'POST',
     path: (leadId: string) => `/leads/${e(leadId)}/notification/retry`,
@@ -331,7 +345,7 @@ export const endpoints = {
     query: null,
     response: null,
   }),
-  /** Members: "Hiệu quả" for a range, of the site or one page. */
+  /** `pages.view`: "Hiệu quả" for a range, of the site or one page. */
   analyticsReport: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/analytics`,
@@ -340,7 +354,7 @@ export const endpoints = {
     response: analyticsReportSchema,
   }),
 
-  // Requests from people who sent a form (ADR-017): owner only
+  // Requests from people who sent a form (ADR-017): `personalData.manage` (ADR-020)
   listDataRequests: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/data-requests`,
@@ -395,7 +409,7 @@ export const endpoints = {
     response: dataRequestDetailSchema,
   }),
 
-  // Lead recipients (ADR-018): members read them, the owner changes them
+  // Lead recipients (ADR-018): `leads.view` reads them, `privacy.manage` changes them (ADR-020)
   listLeadRecipients: endpoint({
     method: 'GET',
     path: (siteId: string) => `/sites/${e(siteId)}/lead-recipients`,

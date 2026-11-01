@@ -5,8 +5,10 @@ import {
   navCurrent,
   newLeadsHref,
   newPageHref,
+  openPageHref,
   pageHref,
   siteNavItems,
+  workspaceNavItems,
 } from './navigation';
 
 const siteId = '64b000000000000000000001';
@@ -15,12 +17,48 @@ const [pages, leads, analytics, domain, privacy, settings] = siteNavItems(siteId
 describe('siteNavItems', () => {
   it('lists the sections of a site in the order of the design', () => {
     expect(siteNavItems(siteId)).toEqual([
-      { key: 'pages', label: 'Trang', href: `/sites/${siteId}` },
-      { key: 'leads', label: 'Leads', href: `/sites/${siteId}/leads` },
-      { key: 'analytics', label: 'Hiệu quả', href: `/sites/${siteId}/analytics` },
-      { key: 'domain', label: 'Tên miền', href: `/sites/${siteId}/domain` },
-      { key: 'privacy', label: 'Dữ liệu & đồng ý', href: `/sites/${siteId}/privacy` },
-      { key: 'settings', label: 'Cài đặt site', href: `/sites/${siteId}/settings` },
+      { key: 'pages', label: 'Trang', href: `/sites/${siteId}`, permission: 'pages.view' },
+      {
+        key: 'leads',
+        label: 'Leads',
+        href: `/sites/${siteId}/leads`,
+        permission: 'leads.view',
+      },
+      {
+        key: 'analytics',
+        label: 'Hiệu quả',
+        href: `/sites/${siteId}/analytics`,
+        permission: 'pages.view',
+      },
+      {
+        key: 'domain',
+        label: 'Tên miền',
+        href: `/sites/${siteId}/domain`,
+        permission: 'domains.manage',
+      },
+      {
+        key: 'privacy',
+        label: 'Dữ liệu & đồng ý',
+        href: `/sites/${siteId}/privacy`,
+        permission: 'privacy.manage',
+      },
+      {
+        key: 'settings',
+        label: 'Cài đặt site',
+        href: `/sites/${siteId}/settings`,
+        permission: 'pages.edit',
+      },
+    ]);
+  });
+
+  it('lists the workspace sections, each behind its permission', () => {
+    expect(workspaceNavItems('64b0000000000000000000aa')).toEqual([
+      {
+        key: 'roles',
+        label: 'Vai trò & quyền',
+        href: '/workspaces/64b0000000000000000000aa/roles',
+        permission: 'members.manage',
+      },
     ]);
   });
 });
@@ -57,6 +95,11 @@ describe('page routes', () => {
     expect(pageHref(siteId, 'p1', 'seo')).toBe(`/sites/${siteId}/pages/p1/seo`);
     expect(pageHref(siteId, 'p1', 'history')).toBe(`/sites/${siteId}/pages/p1/history`);
     expect(newPageHref(siteId)).toBe(`/sites/${siteId}/pages/new`);
+  });
+
+  it('opens a page in the editor for roles that edit it, in its history otherwise', () => {
+    expect(openPageHref(siteId, 'p1', true)).toBe(`/sites/${siteId}/pages/p1/edit`);
+    expect(openPageHref(siteId, 'p1', false)).toBe(`/sites/${siteId}/pages/p1/history`);
   });
 
   it('opens the inbox with filters, and the new leads of every time for the badge', () => {

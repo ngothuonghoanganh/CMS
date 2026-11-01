@@ -39,13 +39,23 @@ export const loginRequestSchema = z.object({
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 
-export const roleSchema = z.enum(['owner', 'editor']);
+/** The six fixed roles of board 16, most powerful first (ADR-020). */
+export const roleSchema = z.enum(['owner', 'admin', 'editor', 'contributor', 'support', 'viewer']);
 export type Role = z.infer<typeof roleSchema>;
 
 export const roleLabels: Record<Role, string> = {
-  owner: 'Owner',
-  editor: 'Editor',
+  owner: 'Chủ sở hữu',
+  admin: 'Quản trị',
+  editor: 'Biên tập',
+  contributor: 'Cộng tác viên',
+  support: 'Chăm sóc khách hàng',
+  viewer: 'Chỉ xem',
 };
+
+/** Roles that always cover every site of the workspace, including sites created later. */
+export function roleCoversAllSites(role: Role): boolean {
+  return role === 'owner' || role === 'admin';
+}
 
 export const sessionUserSchema = z.object({
   id: idSchema,
@@ -57,6 +67,8 @@ export type SessionUser = z.infer<typeof sessionUserSchema>;
 export const membershipSchema = z.object({
   workspace: z.object({ id: idSchema, name: z.string() }),
   role: roleSchema,
+  /** Sites the member may open; `null` is the whole workspace, sites created later included. */
+  siteIds: z.array(idSchema).nullable(),
 });
 export type Membership = z.infer<typeof membershipSchema>;
 

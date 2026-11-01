@@ -89,7 +89,7 @@ export class AssetsService {
     if (!ref) {
       throw notFound(ASSET_NOT_FOUND);
     }
-    const { scope } = await this.sites.accessById(user, ref.siteId, ASSET_NOT_FOUND);
+    const { scope } = await this.sites.accessById(user, ref.siteId, 'pages.edit', ASSET_NOT_FOUND);
     const updated = await this.assets.update(scope, id, {
       alt: input.decorative ? null : input.alt,
       decorative: input.decorative,

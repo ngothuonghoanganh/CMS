@@ -118,7 +118,7 @@ describe('SiteSettingsForm', () => {
   it('shows a refusal from the server', async () => {
     const user = userEvent.setup();
     apiMock.mockRejectedValueOnce(
-      apiError(403, 'forbidden', 'Chỉ Owner của workspace được thay đổi cài đặt site'),
+      apiError(403, 'forbidden', 'Chỉ Chủ sở hữu và Quản trị được thực hiện thao tác này'),
     );
     renderWithProviders(<SiteSettingsForm site={siteFixture()} assets={[]} canEdit />);
 
@@ -126,7 +126,7 @@ describe('SiteSettingsForm', () => {
     await user.click(screen.getByRole('button', { name: 'Lưu cài đặt' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Chỉ Owner của workspace được thay đổi cài đặt site',
+      'Chỉ Chủ sở hữu và Quản trị được thực hiện thao tác này',
     );
   });
 
@@ -159,7 +159,7 @@ describe('SiteSettingsForm', () => {
     );
 
     expect(
-      screen.getByText('Chỉ Owner của workspace được thay đổi cài đặt site.'),
+      screen.getByText('Chỉ Chủ sở hữu và Quản trị được thay đổi cài đặt site.'),
     ).toBeInTheDocument();
     expect(nameInput()).toBeDisabled();
     expect(screen.getByRole('radio', { name: 'Bạc hà' })).toBeDisabled();

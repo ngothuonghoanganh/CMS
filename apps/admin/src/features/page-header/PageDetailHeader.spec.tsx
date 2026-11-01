@@ -39,6 +39,8 @@ function Screen({ initial }: { initial: PageSummary }) {
   const [page, setPage] = useState(initial);
   return (
     <PageDetailHeader
+      canEdit
+      canManageLive
       siteId={SITE_ID}
       page={page}
       current="seo"
@@ -69,7 +71,14 @@ describe('pageTabs', () => {
 describe('PageDetailHeader', () => {
   it('has no extra menu for a page that is not live', () => {
     renderWithProviders(
-      <PageDetailHeader siteId={SITE_ID} page={draftPageFixture()} current="seo" now={NOW} />,
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={draftPageFixture()}
+        current="seo"
+        now={NOW}
+        canEdit
+        canManageLive
+      />,
     );
     expect(screen.getByRole('navigation', { name: 'Đường dẫn' })).toHaveTextContent(
       'Trang / Webinar chăm sóc răng trẻ em',
@@ -83,7 +92,14 @@ describe('PageDetailHeader', () => {
     const user = userEvent.setup();
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     renderWithProviders(
-      <PageDetailHeader siteId={SITE_ID} page={pageFixture()} current="history" now={NOW} />,
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={pageFixture()}
+        current="history"
+        now={NOW}
+        canEdit
+        canManageLive
+      />,
     );
 
     await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
@@ -96,6 +112,25 @@ describe('PageDetailHeader', () => {
     open.mockRestore();
   });
 
+  it('leaves a Chỉ xem the history alone: no editor, no tabs, no unpublishing (ADR-020)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <PageDetailHeader
+        siteId={SITE_ID}
+        page={pageFixture()}
+        current="history"
+        now={NOW}
+        canEdit={false}
+        canManageLive={false}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: 'Mở editor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Mục của trang' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Tùy chọn khác' }));
+    expect(screen.getByRole('menuitem', { name: 'Xem trang live' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Gỡ xuất bản' })).not.toBeInTheDocument();
+  });
+
   it('unpublishes a live page with a reason from "Tùy chọn khác"', async () => {
     const user = userEvent.setup();
     const page = pageFixture();
@@ -104,6 +139,8 @@ describe('PageDetailHeader', () => {
     apiMock.mockResolvedValueOnce(result);
     renderWithProviders(
       <PageDetailHeader
+        canEdit
+        canManageLive
         siteId={SITE_ID}
         page={page}
         current="history"
@@ -192,7 +229,14 @@ describe('PageDetailHeader', () => {
     /** The header as History renders it, its page replaced by the screen's next read. */
     function renderReading() {
       const header = (page: PageSummary) => (
-        <PageDetailHeader siteId={SITE_ID} page={page} current="history" now={NOW} />
+        <PageDetailHeader
+          siteId={SITE_ID}
+          page={page}
+          current="history"
+          now={NOW}
+          canEdit
+          canManageLive
+        />
       );
       const { rerender, queryClient } = renderWithProviders(header(live));
       return (page: PageSummary) => {

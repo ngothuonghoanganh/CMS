@@ -23,7 +23,7 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - SEO, redirect, sitemap/robots, màn tên miền mặc định, tạo trang theo mục tiêu.
 - Tương ứng màn 01–09 trong thiết kế.
 
-**MVP B (convert), đang làm:**
+**MVP B (convert), đã xong:**
 
 - Section Form đăng ký, thu lead có bằng chứng đồng ý, chống spam (ADR-016).
 - Đồng ý và dữ liệu cá nhân: đơn vị thu thập dữ liệu, nội dung đồng ý có phiên bản, thời gian lưu, yêu cầu từ người gửi form (ADR-017).
@@ -31,11 +31,19 @@ Mọi agent và contributor đọc `AGENTS.md` rồi đọc tài liệu này tr�
 - Hiệu quả trang, đo không dùng cookie (ADR-019).
 - Tương ứng màn 10–12, cộng các phần MVP A đang ẩn ở màn 01, 02, 04, 05, 09 và sidebar.
 
-**Ngoài phạm vi MVP B:**
+**Phase 1 (vận hành & đội nhóm), đang làm** (chủ sản phẩm yêu cầu ngày 2026-11-01, theo board Phase 1 của artifact thiết kế):
+
+- Sáu vai trò cố định, phạm vi site, kiểm tra quyền ở mọi endpoint (ADR-020).
+- Thành viên và lời mời, đổi quyền, gỡ, chuyển quyền sở hữu.
+- Tên miền riêng: xác minh DNS, địa chỉ chính và chuyển hướng 301.
+- Tương ứng màn 13–16, 15b và Sidebar v2. Lát và trạng thái ở §5.
+
+**Ngoài phạm vi MVP B và Phase 1:**
 
 - Google Sheets, Meta Conversions API, Zalo OA; "Form + bản đồ", section Bảng giá, "Section đã lưu".
 - Form có trường tùy ý, captcha của bên thứ ba, banner cookie, tạo trang chính sách từ mẫu.
-- Custom domain, mời thành viên, billing, template library, AI.
+- Billing, template library, AI (Phase 2–4 của artifact thiết kế, chưa có quyết định phạm vi).
+- Vai trò tùy chỉnh, luồng "yêu cầu xuất bản" của Cộng tác viên (ADR-020).
 - Free styling, điểm lưu bản nháp, rich text, màu thương hiệu tự nhập.
 
 **Nguyên tắc:**
@@ -265,6 +273,7 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Rate limit theo địa chỉ của `/auth/*` (`@nestjs/throttler`) đếm trong bộ nhớ của từng tiến trình, nên N instance cho một địa chỉ tối đa N × `AUTH_RATE_LIMIT_PER_MINUTE` lần mỗi phút.
     - Giới hạn theo tài khoản nằm trong MongoDB, đúng với mọi số instance, và là lớp chặn dò mật khẩu thật.
     - Integration test chạy hai instance trên một database giữ cả hai điều này.
+- **Amended 2026-11-01 (Phase 1, C1):** phần **Quyền** ở trên được thay bằng sáu vai trò và bảng quyền của ADR-020. Quản trị cũng tạo site và sửa cài đặt site.
 - **Amended 2026-10-31 (vòng test thứ ba, rate limit `/auth/*`):** throttle theo địa chỉ đếm theo cùng khóa với giới hạn khách của ADR-016 (`addressNetwork`, trong `shared/`): một địa chỉ IPv4, hoặc một mạng IPv6 /64, và mỗi địa chỉ chỉ có một cách viết. Trước đây một client IPv6 đổi địa chỉ trong /64 của mình là có bucket mới.
   - Sau proxy tin cậy (`TRUST_PROXY_HOPS` ≥ 1), Express lấy `req.ip` từ `X-Forwarded-For` mà không kiểm tra. Địa chỉ không phải IP được đếm vào bucket của địa chỉ socket (proxy): mọi người gửi chuỗi rác chung một bucket, không đổi chuỗi để thoát được. Chỉ khi cả hai địa chỉ đều không phải IP thì mới ném lỗi. Trước đây `X-Forwarded-For: foo` làm `/auth/login` trả 500.
   - Một số load balancer ghi cả cổng vào `X-Forwarded-For` (`ip:port`, `[v6]:port`). Trước khi kiểm tra địa chỉ, API bỏ cổng của IPv4, bỏ ngoặc vuông và cổng của IPv6 (`withoutPort`, trong `shared/`), nên `203.0.113.7:51234` và `203.0.113.7` là một bucket. Chỉ giá trị vẫn không phải IP sau bước đó mới đếm vào bucket của proxy. Trước đây mọi client sau một load balancer như vậy chung bucket của proxy.
@@ -277,7 +286,8 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   ```ts
   users       { email(unique, lowercase), passwordHash, name, createdAt }
   workspaces  { name, createdAt, createdBy }
-  memberships { workspaceId, userId, role: 'owner'|'editor' }                 // unique(workspaceId,userId)
+  memberships { workspaceId, userId, role: Role,                              // unique(workspaceId,userId)
+                siteIds: ObjectId[]|null }                                       // ADR-020
   sites       { workspaceId, name, subdomain(unique global), themePresetId,
                 logoAssetId|null, defaultShareImageAssetId|null, createdAt,
                 privacy|null,                                                     // ADR-017
@@ -1147,6 +1157,61 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
   - Mỗi instance đọc các cặp đã lưu một lần, ở lượt xem có chiến dịch đầu tiên trong ngày, rồi đếm riêng. Với N instance, một site lưu được gần N × 50 cặp mỗi ngày; test với hai instance ra 99 cặp.
   - Số khách duy nhất và số lượt xem cộng đúng qua các instance.
 
+### ADR-020 — Vai trò cố định, phạm vi site và kiểm tra quyền
+
+- **Date:** 2026-11-01 · **Status:** Accepted
+- **Context:**
+  - Chủ sản phẩm yêu cầu triển khai Phase 1 của artifact thiết kế ("Vận hành & đội nhóm", màn 13–16, 15b, Sidebar v2) ngày 2026-11-01.
+  - Lấy các giả định của ghi chú "Phase 1 · Giả định đang vẽ" làm quyết định, trừ những mục ghi ở **Ngoài phạm vi**.
+  - Lát này là C1; thành viên và lời mời ở C2, tên miền riêng ở C3.
+- **Decision:**
+  - **Sáu vai trò cố định:** `owner` (Chủ sở hữu), `admin` (Quản trị), `editor` (Biên tập), `contributor` (Cộng tác viên), `support` (Chăm sóc khách hàng), `viewer` (Chỉ xem). Không sửa được.
+  - **Quyền** là một dòng của màn 16. Bảng quyền nằm trong `@plp/contracts` (`can`, `rolesWith`, `holdersOf`). API kiểm tra bằng bảng này, admin ẩn thao tác bằng chính bảng này.
+
+    | Quyền                                                            | Chủ sở hữu | Quản trị | Biên tập | Cộng tác viên | CSKH | Chỉ xem |
+    | ---------------------------------------------------------------- | ---------- | -------- | -------- | ------------- | ---- | ------- |
+    | `pages.view`: xem trang, bản nháp, hiệu quả, xem trước           | ✓          | ✓        | ✓        | ✓             | ✓    | ✓       |
+    | `pages.edit`: sửa bản nháp, section, SEO, tạo trang, tải ảnh     | ✓          | ✓        | ✓        | ✓             |      |         |
+    | `pages.publish`: xuất bản                                        | ✓          | ✓        | ✓        |               |      |         |
+    | `pages.manageLive`: rollback, hoàn tác, gỡ trang                 | ✓          | ✓        | ✓        |               |      |         |
+    | `leads.view`: hộp thư lead, số lead, nơi nhận lead               | ✓          | ✓        |          |               | ✓    |         |
+    | `leads.handle`: trạng thái, ghi chú, spam, "Gửi lại"             | ✓          | ✓        |          |               | ✓    |         |
+    | `leads.export`: xuất CSV                                         | ✓          | ✓        |          |               |      |         |
+    | `personalData.manage`: yêu cầu dữ liệu, sửa và xóa một người     | ✓          | ✓        |          |               |      |         |
+    | `privacy.manage`: cài đặt dữ liệu cá nhân, đồng ý, nơi nhận lead | ✓          | ✓        |          |               |      |         |
+    | `sites.manage`: tạo site, tên, logo, giao diện                   | ✓          | ✓        |          |               |      |         |
+    | `domains.manage`: tên miền                                       | ✓          | ✓        |          |               |      |         |
+    | `members.manage`: vai trò & quyền, thành viên                    | ✓          | ✓        |          |               |      |         |
+    - "Xem lead" và "Xuất / xóa dữ liệu cá nhân" là hai quyền riêng, như ghi chú Phase 1.
+    - Cài đặt dữ liệu cá nhân và phiên bản đồng ý vẫn đọc được với `pages.view`, vì chúng hiện trên trang live và Biên tập cần biết form sẽ hiện gì.
+    - `sites.manage` không có trên màn 16. Nó thay quy tắc "chỉ Owner tạo site và sửa cài đặt site" của ADR-004, và màn 16 có thêm dòng "Site".
+
+  - **Phạm vi:** `memberships.siteIds` là danh sách site, hoặc `null` cho toàn workspace kể cả site tạo sau. Chủ sở hữu và Quản trị luôn là `null`. Membership cũ không có trường này được đọc như `null`.
+  - **Kiểm tra ở API:**
+    - `SitesService.access(user, siteId, permission)` và các lối vào theo trang, lead, asset, yêu cầu dữ liệu, activity bắt buộc nhận quyền. Một endpoint quên khai báo quyền là lỗi biên dịch.
+    - Thứ tự: site không tồn tại, của workspace khác, hoặc ngoài phạm vi của thành viên thì 404 (ADR-003). Vai trò thiếu quyền thì 403 `forbidden`, tiêu đề "Chỉ {các vai trò có quyền} được thực hiện thao tác này".
+    - Danh sách site của workspace chỉ có các site trong phạm vi. `GET /auth/me` trả `siteIds` của từng membership.
+    - Endpoint cấp workspace (tạo site, `GET /workspaces/:id/role-counts`) kiểm tra membership rồi quyền qua `AccessService.require`.
+  - **Admin:**
+    - Sidebar v2: nhóm WORKSPACE ("Vai trò & quyền"), bộ đổi site, các mục của site. Mỗi mục chỉ hiện với vai trò có quyền của nó. "Cài đặt site" hiện với `pages.edit` (chỉ đọc khi thiếu `sites.manage`), "Dữ liệu & đồng ý" với `privacy.manage`, "Tên miền" với `domains.manage`.
+    - Màn 16 ở `/workspaces/:id/roles`: danh sách vai trò với số thành viên, ma trận quyền là một `<table>`. Vai trò thiếu `members.manage` thấy trạng thái "Bạn chưa có quyền xem vai trò & quyền".
+    - Màn của workspace dùng khung sidebar như màn của site, với site mở gần nhất. Site đó nhớ bằng cookie `plp_site`, chỉ là tùy chọn giao diện; API vẫn kiểm tra mọi request.
+    - Vai trò thiếu `pages.edit` mở trang ở "Lịch sử phiên bản": xem các phiên bản và bản xem trước, không có nút thay đổi. Editor và "SEO & chia sẻ" chuyển hướng về đó; "Tạo trang" và hộp thư lead hiện trạng thái thiếu quyền.
+    - Cộng tác viên mở hộp thoại xuất bản để xem kiểm tra, nút "Xuất bản" bị khóa với lý do "Chỉ Chủ sở hữu, Quản trị và Biên tập được xuất bản trang".
+    - Chữ "Owner"/"Editor" trên giao diện đổi thành tên vai trò tiếng Việt; ghi chú "ai làm bước này" lấy từ bảng quyền.
+  - **Thay đổi so với MVP B:** Biên tập không còn xem và xử lý lead (màn 16); việc đó thuộc Chăm sóc khách hàng. Chưa có dữ liệu thật (§6), nên không cần migration.
+- **Ngoài phạm vi** (chọn mặc định, chờ chủ sản phẩm chốt):
+  - Luồng "Yêu cầu xuất bản" của Cộng tác viên (ô "Yêu cầu" trên màn 16). Hiện Cộng tác viên chỉ lưu bản nháp.
+  - Vai trò tùy chỉnh và nút "Vai trò tùy chỉnh"; "Nhờ … cấp quyền" ở trạng thái thiếu quyền.
+  - Nhãn "Theo gói" và "Nâng cấp" (Phase 4); các dòng AI, template, automation, thanh toán, "Chuyển quyền sở hữu" của màn 16 có cùng tính năng của chúng.
+  - Trong C1, Quản trị làm được mọi việc của Chủ sở hữu. Khác biệt (chuyển quyền sở hữu, thanh toán) đến ở C2 và Phase 4.
+  - `domains.manage` chỉ ẩn/hiện mục "Tên miền" cho tới C3.
+- **Reason:** Một bảng quyền dùng chung, kiểm tra ở một lối vào duy nhất mà trình biên dịch buộc phải dùng; giao diện không thể cho phép điều API từ chối.
+- **Consequences:**
+  - `role-matrix.int.spec.ts` gọi mọi endpoint có session với sáu vai trò, một thành viên chỉ được vào site khác và người ngoài workspace. Lời gọi bị từ chối không đổi dữ liệu.
+  - Thêm một endpoint theo site mà không chọn quyền thì không biên dịch được. Thêm một quyền thì phải thêm dòng của nó trên màn 16 (`permissionGroups`) và vào ma trận test.
+  - E2E của các vai trò khác Chủ sở hữu chờ lời mời (C2); C1 có E2E của màn 16 và test giao diện theo từng vai trò.
+
 ---
 
 ## 5. Lát cắt giao hàng
@@ -1199,6 +1264,16 @@ Mỗi lát gồm unit, integration, E2E Playwright cho luồng chính, và một
 5. Lead có trong hộp thư, với bằng chứng đồng ý đúng bản đã publish.
 6. Màn Hiệu quả có lượt xem và 1 lead.
 7. Owner ghi nhận yêu cầu xóa và xóa dữ liệu người đó: lead biến mất và số lead về 0.
+
+**Phase 1 — Vận hành & đội nhóm:**
+
+| Lát | Nội dung                                                                                                      | Màn            | Trạng thái |
+| --- | ------------------------------------------------------------------------------------------------------------- | -------------- | ---------- |
+| C1  | Sáu vai trò, phạm vi site, kiểm tra quyền ở mọi endpoint, Sidebar v2, màn Vai trò & quyền (ADR-020)           | 16, Sidebar v2 | Xong       |
+| C2  | Thành viên, lời mời qua email (7 ngày, một lần, đúng email), nhận lời mời, đổi quyền, gỡ, chuyển quyền sở hữu | 15, 15b        | Chưa làm   |
+| C3  | Tên miền riêng: thêm, bản ghi DNS và TXT, xác minh, trạng thái, địa chỉ chính, 301, renderer, sitemap         | 13, 14, 08     | Chưa làm   |
+
+C2 và C3 cần quyết định riêng (ADR) trước khi làm; câu hỏi mở nằm trong báo cáo của C1.
 
 ## 6. Trước khi phát hành
 

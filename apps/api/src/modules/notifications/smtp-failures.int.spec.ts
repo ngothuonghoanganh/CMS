@@ -20,7 +20,7 @@ import {
 } from '../../../test/pages.js';
 import { configurePrivacy } from '../../../test/privacy.js';
 import { confirmRecipient } from '../../../test/recipients.js';
-import { addEditor, createSite } from '../../../test/resources.js';
+import { addMember, createSite } from '../../../test/resources.js';
 import {
   plainTextOf,
   SmtpStub,
@@ -116,7 +116,7 @@ describe('lead emails over a failing SMTP server', () => {
   let stub: SmtpStub;
   let t: TestApp;
   let owner: TestClient;
-  let editor: TestClient;
+  let support: TestClient;
   let workspaceId: string;
   const RECIPIENT = 'sales@smilecare.vn';
 
@@ -137,7 +137,7 @@ describe('lead emails over a failing SMTP server', () => {
     const signedUp = await signedUpClient(t.app);
     owner = signedUp.client;
     workspaceId = signedUp.workspaceId;
-    editor = (await addEditor(t, workspaceId)).client;
+    support = (await addMember(t, workspaceId, 'support')).client;
   });
 
   afterEach(async () => {
@@ -225,7 +225,7 @@ describe('lead emails over a failing SMTP server', () => {
     expect(list.items.find((item) => item.id === leadId)?.notificationFailed).toBe(true);
 
     // "Gửi lại" while the server is still down starts three attempts over, which fail the same way.
-    const retried = await editor.post(`/leads/${leadId}/notification/retry`).expect(200);
+    const retried = await support.post(`/leads/${leadId}/notification/retry`).expect(200);
     expect(leadDetailSchema.parse(retried.body).notification).toMatchObject({
       status: 'pending',
       attempts: 0,

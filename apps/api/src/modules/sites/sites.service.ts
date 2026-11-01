@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Site, SiteListResponse, SubdomainAvailability } from '@plp/contracts';
+import type { Permission, Site, SiteListResponse, SubdomainAvailability } from '@plp/contracts';
 import { type Env, siteOrigin } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
 import { notFound } from '../../shared/errors.js';
@@ -13,7 +13,6 @@ import { SitesRepository } from './sites.repository.js';
 import { checkSubdomainAvailability } from './subdomain-availability.js';
 
 export const SITE_NOT_FOUND = 'Không tìm thấy site';
-export const WORKSPACE_NOT_FOUND = 'Không tìm thấy workspace';
 
 /** A site the user may access, with the scope every site-scoped repository call needs. */
 export interface SiteAccess {
@@ -31,11 +30,13 @@ export class SitesService {
 
   /**
    * Entry point of every site-scoped endpoint, in every module: parses the id from the URL, checks
-   * membership in the site's workspace and loads the site. An unknown site and a site of another
-   * workspace are both 404 "Không tìm thấy site" (ADR-003).
+   * membership in the site's workspace, the member's sites and the permission the endpoint needs,
+   * and loads the site. An unknown site, a site of another workspace and a site outside the
+   * member's sites are all 404 "Không tìm thấy site" (ADR-003); a role without the permission is
+   * 403 (ADR-020).
    */
-  access(user: AuthenticatedUser, siteId: string): Promise<SiteAccess> {
-    return this.accessById(user, toObjectId(siteId, SITE_NOT_FOUND));
+  access(user: AuthenticatedUser, siteId: string, permission: Permission): Promise<SiteAccess> {
+    return this.accessById(user, toObjectId(siteId, SITE_NOT_FOUND), permission);
   }
 
   /**
@@ -45,6 +46,7 @@ export class SitesService {
   async accessById(
     user: AuthenticatedUser,
     siteId: ObjectId,
+    permission: Permission,
     notFoundTitle = SITE_NOT_FOUND,
   ): Promise<SiteAccess> {
     const ref = await this.sites.findAccessRef(siteId);
@@ -52,6 +54,10 @@ export class SitesService {
       throw notFound(notFoundTitle);
     }
     const scope = await this.accessService.scopeFor(user, ref.workspaceId, notFoundTitle);
+    if (!this.accessService.coversSite(scope, ref.id)) {
+      throw notFound(notFoundTitle);
+    }
+    this.accessService.require(scope, permission);
     const site = await this.sites.findById(scope, ref.id);
     if (!site) {
       throw notFound(notFoundTitle);
@@ -59,18 +65,12 @@ export class SitesService {
     return { scope, site };
   }
 
-  /** Scope of a workspace from the URL; non-members get 404. */
-  scopeForWorkspace(user: AuthenticatedUser, workspaceId: string): Promise<WorkspaceScope> {
-    return this.accessService.scopeFor(
-      user,
-      toObjectId(workspaceId, WORKSPACE_NOT_FOUND),
-      WORKSPACE_NOT_FOUND,
-    );
-  }
-
+  /** The sites of the workspace the member may open (ADR-020). */
   async listForWorkspace(user: AuthenticatedUser, workspaceId: string): Promise<SiteListResponse> {
-    const scope = await this.scopeForWorkspace(user, workspaceId);
-    const sites = await this.sites.listForWorkspace(scope);
+    const scope = await this.accessService.scopeForWorkspace(user, workspaceId);
+    const sites = (await this.sites.listForWorkspace(scope)).filter((site) =>
+      this.accessService.coversSite(scope, site._id),
+    );
     return { items: sites.map((site) => this.toDto(site)) };
   }
 

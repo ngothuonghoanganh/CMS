@@ -1,6 +1,6 @@
 'use client';
 
-import { endpoints, type Site, type ThemePresetId } from '@plp/contracts';
+import { endpoints, holdersOf, type Site, type ThemePresetId } from '@plp/contracts';
 import { Button, Callout, Dialog, useToast } from '@plp/ui';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -54,7 +54,11 @@ export function ThemePickerDialog({
       title="Giao diện site"
       description="Màu và kiểu chữ dùng chung cho mọi trang của site. Mọi bảng màu đều đạt tương phản AA."
       footerStart={
-        canEdit ? null : <span className={styles.readOnly}>Chỉ Owner đổi được giao diện site</span>
+        canEdit ? null : (
+          <span className={styles.readOnly}>
+            Chỉ {holdersOf('sites.manage')} đổi được giao diện site
+          </span>
+        )
       }
       footer={
         canEdit ? (

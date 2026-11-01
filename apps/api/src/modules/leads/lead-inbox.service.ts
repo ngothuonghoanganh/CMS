@@ -16,7 +16,6 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
 import type { SiteRecord } from '../sites/site.schema.js';
 import { SitesService } from '../sites/sites.service.js';
-import { AccessService } from '../workspaces/access.service.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { type LeadCriteria, leadCriteria } from './domain/lead-filters.js';
 import { LeadAccessService, personOfLead } from './lead-access.service.js';
@@ -47,14 +46,14 @@ const INBOX: LeadCriteria = {
 };
 
 /**
- * The lead inbox (board 10, ADR-018). Owners and editors read leads and triage them: status,
- * internal note, spam. Personal data is returned to members only and never logged (rule 10).
+ * The lead inbox (board 10, ADR-018). Roles with `leads.view` read leads, `leads.handle` triages
+ * them: status, internal note, spam (ADR-020). Personal data is returned to members only and never
+ * logged (rule 10).
  */
 @Injectable()
 export class LeadInboxService {
   constructor(
     private readonly sites: SitesService,
-    private readonly access: AccessService,
     private readonly leadAccess: LeadAccessService,
     private readonly leads: LeadsRepository,
     private readonly pages: PagesRepository,
@@ -71,7 +70,7 @@ export class LeadInboxService {
     siteId: string,
     query: LeadPageQuery,
   ): Promise<LeadListResponse> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'leads.view');
     const criteria = leadCriteria(query, new Date());
     const [page, inbox, spam] = await Promise.all([
       this.leads.listForInbox(scope, site._id, criteria, query.cursor, query.limit),
@@ -94,7 +93,7 @@ export class LeadInboxService {
    * every time, so the badge matches the inbox it opens (ADR-018).
    */
   async counts(user: AuthenticatedUser, siteId: string): Promise<LeadCounts> {
-    const { scope, site } = await this.sites.access(user, siteId);
+    const { scope, site } = await this.sites.access(user, siteId, 'leads.view');
     const [fresh, recent] = await Promise.all([
       this.leads.countMatching(scope, site._id, { ...INBOX, status: 'new' }, CAPPED_COUNT_LIMIT),
       this.leads.countMatching(
@@ -108,7 +107,7 @@ export class LeadInboxService {
   }
 
   async get(user: AuthenticatedUser, leadId: string): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'leads.view');
     return this.detail(scope, site, lead);
   }
 
@@ -118,7 +117,7 @@ export class LeadInboxService {
     leadId: string,
     input: UpdateLeadValues,
   ): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'leads.handle');
     const updated = await this.leads.update(scope, lead._id, input);
     if (!updated) {
       // Deleted (by the owner or its retention period) since it was read.
@@ -136,8 +135,7 @@ export class LeadInboxService {
     leadId: string,
     contact: UpdateLeadContactValues,
   ): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
-    this.access.requireOwner(scope);
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'personalData.manage');
     const updated = await this.leads.updateContact(scope, lead._id, contact);
     if (!updated) {
       throw notFound(LEAD_NOT_FOUND);
@@ -147,7 +145,7 @@ export class LeadInboxService {
 
   /** "Gửi lại": a failed email notification starts over with three new attempts (ADR-018). */
   async retryNotification(user: AuthenticatedUser, leadId: string): Promise<LeadDetail> {
-    const { scope, site, lead } = await this.leadAccess.access(user, leadId);
+    const { scope, site, lead } = await this.leadAccess.access(user, leadId, 'leads.handle');
     const reset = await this.leads.resetFailedNotification(scope, lead._id, new Date());
     if (!reset) {
       throw new AppError(409, 'conflict', 'Email thông báo của lead này không ở trạng thái lỗi', {
