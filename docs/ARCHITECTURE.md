@@ -505,18 +505,27 @@ docs/design/plp-ux-v1 thiết kế UX (chỉ đọc)
     - Back về URL của màn không có fragment: lịch sử không tăng, entry của skip link vẫn ở phía trước (Forward về lại `#main-content`), không hộp thoại, không toast;
     - sau "Thử lại", thay đổi được lưu.
 - **Amended 2026-11-01 (vòng test thứ ba, rời trang không lưu):**
-  - **"Rời trang, bỏ thay đổi"** (hộp thoại của editor, nút trên toast của màn SEO, kể cả "Đăng xuất, bỏ thay đổi") nghĩa là: lần rời trang này không chờ lưu, không hỏi và không lưu trên đường đi. Không hơn.
-  - **Một cờ tạm thời của store, `leavingWithoutSaving`.** `discardFor(leave)` của saver bật cờ khi lần rời trang bắt đầu, và tắt khi lần đó báo `'stayed'` hoặc ném lỗi. Lần rời trang báo `'leaving'` thì cờ giữ tới khi màn unmount.
-    - Khi cờ bật, `leavingLoses` trả false: `beforeunload` không hỏi, guard của Back/Forward để sự kiện đi qua, màn SEO và editor cho mọi lần rời trang khác đi ngay, kể cả khi đường dẫn còn đang chờ kiểm tra.
-    - Saver không lưu lúc dừng (màn unmount) khi cờ bật.
-    - Các lần rời trang chồng nhau dùng chung cờ. Một lần báo `'stayed'` tắt cờ trong khi lần khác còn chạy, nên nếu lần kia tải lại cả trang thì trình duyệt có thể hỏi một lần; đó là phía an toàn.
-  - **Autosave vẫn chạy như thường.** Lần lưu nào xong trước khi màn rời đi thì bản nháp giữ các thay đổi đó. Chấp nhận được: đó là bản nháp, trang live không đổi (quy tắc 1), và không mất dữ liệu.
+  - **"Rời trang, bỏ thay đổi"** (hộp thoại của editor, nút trên toast của màn SEO, kể cả "Đăng xuất, bỏ thay đổi") nghĩa là: lần rời trang này không chờ lưu, không hỏi và không lưu trên đường đi những thay đổi đang có lúc bấm. Không hơn.
+  - **Store ghi phiên bản bản nháp bị bỏ, `leavingWithoutSaving`:** `draftVersion` lúc bấm, hoặc `null`. Cờ chỉ có hiệu lực khi `draftVersion` vẫn bằng nó (`isLeavingWithoutSaving`).
+    - `discardFor(leave)` của saver ghi phiên bản khi lần rời trang bắt đầu, và xóa khi lần đó báo `'stayed'` hoặc ném lỗi. Lần rời trang báo `'leaving'` thì phiên bản giữ nguyên, kể cả khi màn không unmount (nút bỏ thay đổi trên toast của màn SEO trỏ tới chính URL đang mở).
+    - Thay đổi mới tăng `draftVersion` nên tự kết thúc cờ: thay đổi đó được hỏi, autosave và lưu lúc unmount như thường. Lần lưu đó gửi cả bản nháp, gồm cả các thay đổi đã bỏ trước đó.
+    - Khi cờ có hiệu lực, `leavingLoses` trả false: `beforeunload` không hỏi, guard của Back/Forward để sự kiện đi qua, màn SEO và editor cho mọi lần rời trang khác đi ngay, kể cả khi đường dẫn còn đang chờ kiểm tra.
+    - Saver không lưu lúc dừng (màn unmount) khi cờ có hiệu lực.
+  - **Hẹn giờ của saver:**
+    - `discardFor` hủy hẹn giờ debounce và hẹn giờ thử lại khi bắt đầu, và saver không hẹn lần thử lại nào khi cờ có hiệu lực: lần thử lại không ghi các thay đổi đã bỏ vào bản nháp trong lúc đăng xuất chậm.
+    - Lần rời trang báo `'stayed'` hoặc ném lỗi thì saver hẹn lại một lần lưu nếu còn thay đổi chưa lưu, nên autosave chạy tiếp mà không cần sửa gì thêm.
+  - **Lần lưu đang chạy lúc bấm thì chạy tới hết,** kể cả phần thay đổi đến trong lúc nó chạy, và bản nháp giữ các thay đổi đó. Chấp nhận được: đó là bản nháp, trang live không đổi (quy tắc 1), và không mất dữ liệu.
   - `ensureSaved`, "Thử lại", xuất bản, xem trước và "Quay về bản live" không xét cờ: chúng luôn lưu.
   - Màn SEO vẫn giữ một lần rời trang đang chờ lưu. Nút bỏ thay đổi trên toast xóa lần đang chờ đó rồi mới rời đi, nên người dùng rời đi một lần, tới đích của nút vừa bấm.
   - **Kết quả của "Đăng xuất"** (`useLogout`):
-    - Chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được". Trước đây mọi lỗi, kể cả lỗi ném ra khi đã bắt đầu mở trang đăng nhập, đều thành `'stayed'` dù session đã hết.
+    - Chỉ lỗi của chính request đăng xuất (session vẫn còn) là `'stayed'`, kèm toast "Chưa đăng xuất được".
     - Sau khi request thành công: xóa cache, `router.replace('/login')`, rồi `router.refresh()`. Bước nào lỗi thì được báo (`reportUnexpected`) và không cản việc mở trang đăng nhập.
-    - `router.replace('/login')` ném lỗi thì báo lỗi rồi tải lại cả trang tới `/login` (`loadPage`); kết quả vẫn là `'leaving'`. Tải trang cũng lỗi thì báo lỗi và trả `'stayed'`: cờ tắt, màn lưu và hỏi lại như thường.
+    - `router.replace('/login')` ném lỗi thì báo lỗi rồi tải lại cả trang tới `/login` (`loadPage`); kết quả vẫn là `'leaving'`.
+    - Tải trang cũng lỗi thì báo lỗi, hiện toast danger "Bạn đã đăng xuất" ("Không mở được trang đăng nhập. Hãy tải lại trang.") và trả `'stayed'`: màn giữ thay đổi, lưu và hỏi lại như thường.
+  - **Chấp nhận như hiện tại:**
+    - Các lần rời trang chồng nhau dùng chung cờ: lần nào báo `'stayed'` cũng xóa cờ của các lần kia. Tệ nhất là trình duyệt hỏi một lần trước khi lần kia tải lại trang, hoặc một lần lưu lúc unmount sau khi đã đăng xuất nhận 401; không bao giờ mất dữ liệu.
+    - Fallback `loadPage('/login')` có thể làm trình duyệt hiện hộp thoại rời trang của nó khi đăng xuất không đi qua `discardFor` mà màn còn thay đổi chưa lưu.
+    - `refocus` của `Alt+↑/↓` (`use-editor-shortcuts.ts`) chỉ trả focus khi focus đã rơi về `body`: trình duyệt đưa focus về đó khi phần tử đang focus bị gỡ hoặc bị vô hiệu hóa.
 
 ### ADR-009 — Renderer: phân giải, cache, revalidation
 
