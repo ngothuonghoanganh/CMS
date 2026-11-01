@@ -3,7 +3,7 @@
 import { EMPTY_IMAGE, imageRefSchema } from '@plp/contracts';
 import { getAtPath, type ImageField } from '@plp/sections/schema';
 import { Button, Checkbox, Field, Input } from '@plp/ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AssetPickerDialog, AssetThumb } from '../../assets';
 import { ALT_MAX_LENGTH } from '../content-fields';
 import { useEditor, useEditorServices, useEditorStoreApi } from '../editor-context';
@@ -18,6 +18,7 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
   const store = useEditorStoreApi();
   const { siteId } = useEditorServices();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const chooseRef = useRef<HTMLButtonElement>(null);
   const parsed = imageRefSchema.safeParse(getAtPath(section.content, path));
   const image = parsed.success ? parsed.data : EMPTY_IMAGE;
   const asset = useEditor((state) =>
@@ -33,6 +34,7 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
       <div className={styles.imageRow}>
         <AssetThumb asset={asset ?? null} />
         <Button
+          ref={chooseRef}
           variant="secondary"
           size="sm"
           data-field-focus={chosen ? undefined : ''}
@@ -48,6 +50,8 @@ export function ImageControl({ section, field, path }: ControlProps<ImageField>)
             size="sm"
             onClick={() => {
               store.getState().updateContent(section.id, path, { ...EMPTY_IMAGE });
+              // "Gỡ ảnh" goes away with the image: focus stays on the button next to it.
+              chooseRef.current?.focus();
             }}
           >
             Gỡ ảnh

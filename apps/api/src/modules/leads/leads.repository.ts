@@ -172,9 +172,21 @@ export class LeadsRepository {
     }
   }
 
-  /** Whether the site already received this submission (a retry of the same form). */
+  /** Corrects the expiry of a lead the public intake just stored (see `LeadIntakeService`). */
+  async setPublicExpiry(id: ObjectId, expiresAt: Date | null): Promise<void> {
+    await this.leads.updateOne({ _id: id }, { $set: { expiresAt } }).exec();
+  }
+
+  /**
+   * Whether the site already received this submission (a retry of the same form). MongoDB uses a
+   * partial index only for a query that implies its filter, which a plain equality does not: the
+   * type check keeps this one probe of the unique index rather than a read of every lead of the site.
+   */
   async existsPublicSubmission(siteId: ObjectId, submissionId: string): Promise<boolean> {
-    return (await this.leads.exists({ siteId, submissionId }).exec()) !== null;
+    const found = await this.leads
+      .exists({ siteId, submissionId: { $eq: submissionId, $type: 'string' } })
+      .exec();
+    return found !== null;
   }
 
   /**

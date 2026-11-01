@@ -57,6 +57,27 @@ export function attentionOf(pages: readonly ListedPage[]): PageListResponse['att
   };
 }
 
+/**
+ * Where "Xem site live" leads: a site's address shows its home page, which only exists once a page
+ * with the empty slug is live; otherwise the page published most recently.
+ */
+export function liveSiteUrlOf(pages: readonly ListedPage[]): string | null {
+  let latest: { url: string; publishedAt: string } | null = null;
+  for (const { summary } of pages) {
+    const release = summary.liveRelease;
+    if (release === null || summary.liveUrl === null) {
+      continue;
+    }
+    if (release.slug === '') {
+      return summary.liveUrl;
+    }
+    if (latest === null || release.publishedAt > latest.publishedAt) {
+      latest = { url: summary.liveUrl, publishedAt: release.publishedAt };
+    }
+  }
+  return latest?.url ?? null;
+}
+
 /** Status filter and a case-insensitive substring search on the title or the slug. */
 export function filterPages(pages: readonly ListedPage[], filter: PageListFilter): ListedPage[] {
   const query = filter.q?.trim().toLocaleLowerCase('vi') ?? '';

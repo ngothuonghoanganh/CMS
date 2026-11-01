@@ -108,6 +108,8 @@ export function pageListFixture(
       unpublished: count('unpublished'),
     },
     attention: { pagesWithChanges: 0, pagesWithBlockingErrors: 0, firstPage: null },
+    // As the API answers it: the first live page here (no home page in these fixtures).
+    liveSiteUrl: items.find((item) => item.liveUrl !== null)?.liveUrl ?? null,
     ...overrides,
   };
 }

@@ -8,6 +8,7 @@ import {
 } from '@plp/contracts';
 import { ConfirmDialog, useToast } from '@plp/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { RefObject } from 'react';
 import { api, ApiError } from '../../lib/api';
 import { displayUrl } from '../../lib/site-url';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
@@ -40,6 +41,11 @@ export interface UnpublishDialogProps {
   onUnpublished?: ((result: PointerMoveResponse) => void) | undefined;
   /** Runs when the live page changed in the meantime (409), after the queries were refreshed. */
   onConflict?: (() => void) | undefined;
+  /**
+   * Where focus goes on close when the element that opened the dialog is gone: a page header's
+   * "Tùy chọn khác" exists for a live page only, so unpublishing removes it.
+   */
+  fallbackFocusRef?: RefObject<HTMLElement | null> | undefined;
 }
 
 /**
@@ -52,6 +58,7 @@ export function UnpublishDialog({
   onOpenChange,
   onUnpublished,
   onConflict,
+  fallbackFocusRef,
 }: UnpublishDialogProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -103,6 +110,7 @@ export function UnpublishDialog({
         }
         onOpenChange(next);
       }}
+      fallbackFocusRef={fallbackFocusRef}
       title={`Gỡ xuất bản “${page.title}”?`}
       description="Khách truy cập sẽ không xem được trang này nữa. Bản nháp và các phiên bản cũ vẫn được giữ, bạn có thể xuất bản lại bất cứ lúc nào."
       tone="danger"

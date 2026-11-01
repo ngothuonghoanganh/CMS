@@ -78,10 +78,24 @@ test.describe('B2 · lead form', () => {
     await expect(form.getByText('Bạn cần đồng ý để gửi đăng ký')).toBeVisible();
     await expect(consent).toBeFocused();
     await consent.check();
+    // A refused send (too many from one place) keeps the visitor on the button, the reason read
+    // out: the button is never disabled while sending.
+    await visitor.route(
+      '**/_lead',
+      (route) =>
+        route.fulfill({ status: 429, contentType: 'application/json', body: '{"ok":false}' }),
+      { times: 1 },
+    );
+    const send = form.getByRole('button', { name: 'Gửi đăng ký' });
+    await send.click();
+    await expect(form.getByRole('alert')).toHaveText(
+      'Bạn đã gửi nhiều lần, hãy thử lại sau ít phút.',
+    );
+    await expect(send).toBeFocused();
     const relayed = visitor.waitForResponse(
       (response) => response.url().endsWith('/_lead') && response.request().method() === 'POST',
     );
-    await form.getByRole('button', { name: 'Gửi đăng ký' }).click();
+    await send.click();
     expect((await relayed).status()).toBe(200);
     const sent = visitor.getByRole('status').filter({ hasText: 'Đã nhận đăng ký của bạn' });
     await expect(sent).toBeVisible();

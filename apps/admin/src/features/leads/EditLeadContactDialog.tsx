@@ -12,7 +12,7 @@ import { useMutation } from '@tanstack/react-query';
 import { type SubmitEvent, useId, useRef } from 'react';
 import { ApiError, api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
-import { firstInvalidField, useSchemaForm } from '../shell/use-schema-form';
+import { firstInvalidField, keepFieldFocus, useSchemaForm } from '../shell/use-schema-form';
 import styles from './LeadInbox.module.css';
 
 export interface EditLeadContactDialogProps {
@@ -103,7 +103,7 @@ export function EditLeadContactDialog({
           >
             Hủy
           </Button>
-          <Button type="submit" form={formId} loading={save.isPending}>
+          <Button type="submit" form={formId} loading={save.isPending} onMouseDown={keepFieldFocus}>
             Lưu thông tin
           </Button>
         </>

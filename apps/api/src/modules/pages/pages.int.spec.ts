@@ -468,6 +468,19 @@ describe('pages and drafts', () => {
       const [home] = (await listPages(client, homeSite.id)).items;
       expect(home?.liveUrl).toBe(homeSite.defaultOrigin);
     });
+
+    it('leads "Xem site live" to the home page, or to a live page while there is none', async () => {
+      const liveSite = await createSite(client, workspaceId);
+      expect((await listPages(client, liveSite.id)).liveSiteUrl).toBeNull();
+      const slug = uniqueSlug('uu-dai');
+      await createLivePage(client, liveSite.id, slug);
+      // Even when the filter lists none of the live pages.
+      expect((await listPages(client, liveSite.id, '?status=draft')).liveSiteUrl).toBe(
+        `${liveSite.defaultOrigin}/${slug}`,
+      );
+      await createLivePage(client, liveSite.id, '');
+      expect((await listPages(client, liveSite.id)).liveSiteUrl).toBe(liveSite.defaultOrigin);
+    });
   });
 
   describe('POST /pages/:pageId/draft/restore', () => {

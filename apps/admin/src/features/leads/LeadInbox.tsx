@@ -30,14 +30,21 @@ import {
   useToast,
   VisuallyHidden,
 } from '@plp/ui';
-import { keepPreviousData, useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api, downloadFile } from '../../lib/api';
 import { cx } from '../shell/cx';
 import { leadsHref } from '../shell/navigation';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
+import { adoptServerRender, serverFirstPage } from '../shell/server-render';
 import { useDebouncedValue } from '../shell/use-debounced-value';
+import { useFocusNewItems } from '../shell/use-focus-new-items';
 import { useNow } from '../shell/use-now';
 import {
   DEFAULT_LEAD_FILTERS,
@@ -112,6 +119,7 @@ export function LeadInbox({
   initialRecipientsOpen,
   loadedAt,
 }: LeadInboxProps) {
+  const queryClient = useQueryClient();
   const now = useNow(loadedAt);
   const { toast } = useToast();
   useLeadCounts(site.id, leadCounts, loadedAt);
@@ -138,6 +146,19 @@ export function LeadInbox({
     }
   }, [search]);
 
+  // Coming back renders the inbox again on the server: its list is newer than one the cache kept
+  // from an earlier visit (leads arrive from the forms), as the counts of the badge are.
+  useEffect(() => {
+    if (initialList !== null) {
+      adoptServerRender(
+        queryClient,
+        leadQueryKeys.list(site.id, initialFilters),
+        serverFirstPage(initialList),
+        loadedAt,
+      );
+    }
+  }, [queryClient, site.id, initialFilters, initialList, loadedAt]);
+
   const check = leadFilterQuery(filters);
   const listQuery = useInfiniteQuery({
     queryKey: leadQueryKeys.list(site.id, filters),
@@ -159,7 +180,7 @@ export function LeadInbox({
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialData: () =>
       initialList !== null && sameFilters(filters, initialFilters)
-        ? { pages: [initialList], pageParams: [FIRST_PAGE] }
+        ? serverFirstPage(initialList)
         : undefined,
     initialDataUpdatedAt: loadedAt,
     placeholderData: keepPreviousData,
@@ -191,6 +212,12 @@ export function LeadInbox({
 
   const lists = listQuery.data?.pages ?? [];
   const leads = lists.flatMap((list) => list.items);
+  // After "Tải thêm", or "Bỏ bộ lọc" with its empty state, the first lead shown takes the focus.
+  const { listRef: newItemsRef, expectMore } = useFocusNewItems<HTMLDivElement>(
+    leads.length,
+    'tbody tr',
+    'a[href]',
+  );
   const counts = lists[0]?.counts ?? null;
   const loading = listQuery.isPlaceholderData || (check.ok && listQuery.data === undefined);
   const folderCount = counts === null ? null : counts[filters.folder];
@@ -203,6 +230,7 @@ export function LeadInbox({
   }
 
   function clearFilters() {
+    expectMore();
     const { q: _search, ...defaults } = DEFAULT_LEAD_FILTERS;
     setBase({ ...defaults, folder: base.folder });
     setSearchText('');
@@ -428,7 +456,11 @@ export function LeadInbox({
               />
             )
           ) : (
-            <div className={cx(styles.tableScroll, loading && styles.loading)} aria-busy={loading}>
+            <div
+              ref={newItemsRef}
+              className={cx(styles.tableScroll, loading && styles.loading)}
+              aria-busy={loading}
+            >
               <LeadTable
                 leads={leads}
                 selectedId={selectedId}
@@ -455,6 +487,7 @@ export function LeadInbox({
                   size="sm"
                   loading={listQuery.isFetchingNextPage}
                   onClick={() => {
+                    expectMore();
                     void listQuery.fetchNextPage();
                   }}
                 >
@@ -489,7 +522,10 @@ export function LeadInbox({
             initialDetail={!picked && initialDetail?.id === selectedId ? initialDetail : undefined}
             loadedAt={loadedAt}
             canManage={canManage}
-            focusOnShow={picked}
+            // A lead opened by its link (the notification email's "Mở lead trong hộp thư") takes the
+            // focus too: on a phone its detail sits below the whole list, and focus brings it into
+            // view.
+            focusOnShow={picked || selectedId === initialLeadId}
             onGone={() => {
               focusEmptyPanel.current = true;
               setSelectedId(null);

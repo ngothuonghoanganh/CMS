@@ -6,6 +6,8 @@
 
 .upload {
   flex: 1 1 260px;
+  /* Its file input would otherwise keep it wider than a phone's dialog. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;

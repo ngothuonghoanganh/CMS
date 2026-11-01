@@ -202,6 +202,11 @@ export const pageListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
   /** Counts over every page of the site, independent of the filter. */
   counts: pageCountsSchema,
+  /**
+   * Where "Xem site live" leads, whatever the filter: the home page (the empty slug) when it is
+   * live, otherwise the page published most recently; null while no page is live.
+   */
+  liveSiteUrl: z.url().nullable(),
   attention: z.object({
     pagesWithChanges: z.number().int().nonnegative(),
     pagesWithBlockingErrors: z.number().int().nonnegative(),

@@ -1,6 +1,6 @@
 'use client';
 
-import { type ElementType, type KeyboardEvent, useLayoutEffect, useRef } from 'react';
+import { type ElementType, type KeyboardEvent, useLayoutEffect, useRef, useState } from 'react';
 import frame from './frame.module.css';
 
 export interface EditableTextProps {
@@ -25,13 +25,22 @@ export function EditableText({
   onCommit,
 }: EditableTextProps) {
   const ref = useRef<HTMLElement>(null);
+  // Bumped by every commit: the host may keep `value` as it was (text cut back to a full field's
+  // limit, whitespace the commit normalized away) and then nothing else rewrites the element.
+  const [commits, setCommits] = useState(0);
 
   useLayoutEffect(() => {
     const element = ref.current;
-    if (element && document.activeElement !== element && element.textContent !== value) {
+    // Chromium leaves a <br> in a field emptied by editing: the text matches an empty value, but
+    // the element is not `:empty`, so its placeholder would not show.
+    if (
+      element &&
+      document.activeElement !== element &&
+      (element.textContent !== value || element.firstElementChild !== null)
+    ) {
       element.textContent = value;
     }
-  }, [value]);
+  }, [value, commits]);
 
   function commit() {
     const element = ref.current;
@@ -45,6 +54,7 @@ export function EditableText({
     if (next !== value) {
       onCommit(next);
     }
+    setCommits((count) => count + 1);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {

@@ -1,5 +1,5 @@
 import { endpoints, LEAD_PHONE_MESSAGE } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -34,6 +34,14 @@ beforeEach(() => {
 });
 
 describe('EditLeadContactDialog', () => {
+  it('keeps focus in the field when "Lưu thông tin" is pressed, so its check cannot move the button', () => {
+    const { dialog } = renderDialog();
+    // `fireEvent` returns false when the handler prevented the default (moving focus).
+    expect(fireEvent.mouseDown(within(dialog).getByRole('button', { name: 'Lưu thông tin' }))).toBe(
+      false,
+    );
+  });
+
   it('starts from the lead as it is and saves the corrected contact', async () => {
     const user = userEvent.setup();
     const saved = leadDetail({ phone: '+84901234568', email: null });

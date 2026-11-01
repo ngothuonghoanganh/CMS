@@ -48,7 +48,7 @@ export function Input({
       ) : null}
       {hasPrefix ? (
         <span id={prefixId} className={styles.prefix}>
-          {prefix}
+          <span className={styles.prefixText}>{prefix}</span>
         </span>
       ) : null}
       <input

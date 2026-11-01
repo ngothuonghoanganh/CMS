@@ -40,7 +40,9 @@ export interface SlugField {
 
 /**
  * The page slug of the SEO form. Typing is normalized and buffered; a slug reaches the draft only
- * after the server confirmed it is free, so autosave never sends a slug another page uses.
+ * after the server confirmed it is free, so autosave never sends a slug another page uses. When the
+ * draft gets another slug from elsewhere (a conflict reload), the field shows it and drops the
+ * typing.
  */
 export function useSlugField({
   siteId,
@@ -56,6 +58,8 @@ export function useSlugField({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Only the answer for the latest text counts.
   const latest = useRef(0);
+  // The draft's slug as this field last saw or wrote it.
+  const knownSlug = useRef(committed);
 
   useEffect(
     () => () => {
@@ -66,6 +70,22 @@ export function useSlugField({
     [],
   );
 
+  useEffect(() => {
+    if (committed === knownSlug.current) {
+      return;
+    }
+    // Replaced from elsewhere: the typed text and its check are about the old draft, and an answer
+    // still on its way must not write that text over the new one.
+    knownSlug.current = committed;
+    latest.current += 1;
+    if (timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    setEditing(null);
+    setCheck({ state: 'idle' });
+  }, [committed]);
+
   async function verify(slug: string, run: number) {
     try {
       const result = await queryClient.query(slugAvailabilityQuery(siteId, slug, pageId));
@@ -73,6 +93,7 @@ export function useSlugField({
         return;
       }
       if (result.available) {
+        knownSlug.current = slug;
         onCommit(slug);
         setCheck({ state: 'available' });
       } else {

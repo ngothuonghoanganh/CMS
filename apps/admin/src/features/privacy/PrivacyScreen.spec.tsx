@@ -6,7 +6,7 @@ import {
   SUGGESTED_MARKETING_CONSENT_TEXT,
   SUGGESTED_REQUIRED_CONSENT_TEXT,
 } from '@plp/contracts';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -157,8 +157,10 @@ describe('PrivacyScreen', () => {
     );
     const card = consentCard();
     const save = within(card).getByRole('button', { name: 'Lưu thành bản 3' });
-    // Nothing differs from Bản 2 yet.
-    expect(save).toBeDisabled();
+    // Nothing differs from Bản 2 yet: pressing it saves nothing.
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    await user.click(save);
+    expect(apiMock).not.toHaveBeenCalled();
 
     await user.click(within(card).getByRole('switch', { name: /Thêm ô đồng ý nhận ưu đãi/ }));
     expect(within(card).queryByRole('textbox', { name: 'Nội dung ô nhận ưu đãi' })).toBeNull();
@@ -176,7 +178,10 @@ describe('PrivacyScreen', () => {
       },
     });
     expect(within(card).getByText('Bản 3 · đang dùng từ 01/10/2026')).toBeInTheDocument();
-    expect(within(card).getByRole('button', { name: 'Lưu thành bản 4' })).toBeDisabled();
+    // The same button, now with nothing to save, keeps the focus.
+    const next = within(card).getByRole('button', { name: 'Lưu thành bản 4' });
+    expect(next).toHaveAttribute('aria-disabled', 'true');
+    expect(next).toHaveFocus();
   });
 
   it('offers the latest version when someone saved one in the meantime', async () => {
@@ -198,9 +203,10 @@ describe('PrivacyScreen', () => {
 
     await user.click(within(alert).getByRole('button', { name: 'Tải bản mới nhất' }));
     expect(await within(card).findByText('Bản 3 · đang dùng từ 01/10/2026')).toBeInTheDocument();
-    expect(within(card).getByRole('textbox', { name: /Đồng ý bắt buộc/ })).toHaveValue(
-      'Bản của người khác.',
-    );
+    const required = within(card).getByRole('textbox', { name: /Đồng ý bắt buộc/ });
+    expect(required).toHaveValue('Bản của người khác.');
+    // The notice and its button are gone: focus is on the text to edit again.
+    expect(required).toHaveFocus();
   });
 
   it('shows editors the settings read-only', () => {
@@ -239,5 +245,24 @@ describe('PrivacyScreen', () => {
       'Bản 1 · 01/10/2026 10:00 · Ngọc Anh',
     ]);
     expect(items[1]).toHaveTextContent('Không có ô nhận ưu đãi');
+  });
+
+  it('hands the focus to the first older version "Xem thêm" brought, as it goes away', async () => {
+    const user = userEvent.setup();
+    apiMock
+      .mockResolvedValueOnce({ items: [consentVersion(2)], nextCursor: 'cursor-2' })
+      .mockResolvedValueOnce({ items: [consentVersion(1)], nextCursor: null });
+    renderWithProviders(
+      <PrivacyScreen siteId={SITE_ID} settings={configured} canEdit dataRequests={null} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Xem các bản đã lưu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Các bản nội dung đồng ý' });
+    await user.click(await within(dialog).findByRole('button', { name: 'Xem thêm' }));
+    const older = await within(dialog).findByRole('heading', { name: /^Bản 1 ·/ });
+    expect(within(dialog).queryByRole('button', { name: 'Xem thêm' })).toBeNull();
+    await waitFor(() => {
+      expect(older).toHaveFocus();
+    });
   });
 });

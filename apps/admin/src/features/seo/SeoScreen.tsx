@@ -4,7 +4,7 @@ import type { Asset, PageDetailResponse, Role, Site } from '@plp/contracts';
 import { seoTitleOf } from '@plp/sections/schema';
 import { Callout, type LinkComponentProps, useToast } from '@plp/ui';
 import { useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { hostOf } from '../../lib/site-url';
 import {
   ConflictDialog,
@@ -13,14 +13,16 @@ import {
   type EditorStore,
   EditorStoreProvider,
   isUnsaved,
+  refreshPageSummary,
   useBeforeUnloadGuard,
   useDraftSaver,
   useEditor,
+  useHistoryLeaveGuard,
   useLatestServerDraft,
 } from '../editor';
 import { PageDetailHeader } from '../page-header/PageDetailHeader';
 import { PageContainer } from '../shell/PageHeader';
-import { problemMessage } from '../shell/problem-message';
+import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import { useNow } from '../shell/use-now';
 import { type SeoFocus, SeoForm } from './SeoForm';
 import { SeoPreviews } from './SeoPreviews';
@@ -71,6 +73,46 @@ function SaveFirstLink({ href, className, children, ref, ...aria }: LinkComponen
   );
 }
 
+/**
+ * Every link on the page leaves through `navigate`, which saves first: the sidebar lives outside
+ * this screen and uses plain links. The click is taken before any link's own handler sees it; only
+ * its default is prevented, so those handlers still run (the phone drawer closes) while Next's
+ * Link and `SaveFirstLink` see `defaultPrevented` and do not navigate themselves.
+ */
+function useSaveFirstLinks(store: EditorStore, navigate: (href: string) => void): void {
+  useEffect(() => {
+    function onClick(event: MouseEvent) {
+      const modified =
+        event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+      if (modified || !isUnsaved(store.getState().saveState)) {
+        return;
+      }
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        (link.target !== '' && link.target !== '_self') ||
+        link.hasAttribute('download')
+      ) {
+        return;
+      }
+      const url = new URL(link.href);
+      const here = window.location;
+      if (
+        url.origin !== here.origin ||
+        (url.pathname === here.pathname && url.search === here.search)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      navigate(`${url.pathname}${url.search}${url.hash}`);
+    }
+    document.addEventListener('click', onClick, true);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+    };
+  }, [store, navigate]);
+}
+
 function SeoScreenBody({
   store,
   loadedAt,
@@ -79,7 +121,7 @@ function SeoScreenBody({
   const router = useRouter();
   const { toast } = useToast();
   const now = useNow(loadedAt);
-  const { ensureSaved, retry } = useDraftSaver(store);
+  const { ensureSaved, retry, discard } = useDraftSaver(store);
   useLatestServerDraft(store);
   useBeforeUnloadGuard(store);
   const page = useEditor((state) => state.page);
@@ -91,31 +133,79 @@ function SeoScreenBody({
   const host = hostOf(site.defaultOrigin);
   const shareImageId = seo.shareImageAssetId ?? site.defaultShareImageAssetId;
 
-  const navigate = useCallback(
-    (href: string) => {
-      if (!isUnsaved(store.getState().saveState)) {
-        router.push(href);
+  const leaveFailed = useCallback(
+    (error: unknown, leave: () => void) => {
+      // A conflict opens the blocking reload dialog; anything else keeps the user here, with a way
+      // out when the save cannot succeed (signed out elsewhere, role lowered).
+      if (error instanceof DraftConflictError) {
         return;
+      }
+      toast({
+        tone: 'danger',
+        title: 'Chưa lưu được thiết lập SEO',
+        description: `${problemMessage(error)} Thay đổi vẫn ở đây, hãy thử lại.`,
+        action: {
+          label: 'Rời trang, bỏ thay đổi',
+          onClick: () => {
+            discard();
+            leave();
+          },
+        },
+      });
+    },
+    [toast, discard],
+  );
+
+  // Leaving saves first, whichever way: a save sent as the screen unmounts would land after the
+  // next screen read the page (it would show the state before it), and could fail unseen (ADR-008).
+  // One leave waits at a time: another link, Back or Forward during the save only changes where
+  // the user goes when it ends, so the user leaves once.
+  const pendingLeave = useRef<(() => void) | null>(null);
+  useEffect(
+    () => () => {
+      // Something else took the user away (a menu navigating in code): never follow a stale leave.
+      pendingLeave.current = null;
+    },
+    [],
+  );
+  const leaveAfterSave = useCallback(
+    (leave: () => void) => {
+      pendingLeave.current = leave;
+      // Concurrent calls share the running save; the first to settle takes the leave.
+      function takePending(): (() => void) | null {
+        const next = pendingLeave.current;
+        pendingLeave.current = null;
+        return next;
       }
       ensureSaved().then(
         () => {
-          router.push(href);
+          takePending()?.();
         },
         (error: unknown) => {
-          // A conflict opens the blocking reload dialog; anything else keeps the user here.
-          if (error instanceof DraftConflictError) {
-            return;
+          const next = takePending();
+          if (next !== null) {
+            leaveFailed(error, next);
           }
-          toast({
-            tone: 'danger',
-            title: 'Chưa lưu được thiết lập SEO',
-            description: `${problemMessage(error)} Thay đổi vẫn ở đây, hãy thử lại.`,
-          });
         },
       );
     },
-    [store, router, ensureSaved, toast],
+    [ensureSaved, leaveFailed],
   );
+  const navigate = useCallback(
+    (href: string) => {
+      const go = () => {
+        router.push(href);
+      };
+      if (!isUnsaved(store.getState().saveState) && pendingLeave.current === null) {
+        go();
+        return;
+      }
+      leaveAfterSave(go);
+    },
+    [store, router, leaveAfterSave],
+  );
+  useHistoryLeaveGuard(store, leaveAfterSave);
+  useSaveFirstLinks(store, navigate);
 
   return (
     <NavigateContext.Provider value={navigate}>
@@ -128,6 +218,12 @@ function SeoScreenBody({
           link={SaveFirstLink}
           onUnpublished={(result) => {
             store.getState().setServerState({ page: result.page });
+          }}
+          onUnpublishConflict={() => {
+            // The header shows the page from the store, which the site's queries do not refresh.
+            refreshPageSummary(store).catch((error: unknown) => {
+              reportUnexpected('Reading the page again after an unpublish conflict failed', error);
+            });
           }}
         />
         <Callout tone="info">

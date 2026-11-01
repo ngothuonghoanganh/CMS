@@ -57,4 +57,10 @@ export default defineConfig(
       '@next/next/no-html-link-for-pages': 'off',
     },
   },
+  {
+    // The shared React code (section views, admin components) follows the same hook rules.
+    files: ['packages/sections/src/react/**/*.{ts,tsx}', 'packages/ui/src/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: reactHooks.configs.flat.recommended.rules,
+  },
 );

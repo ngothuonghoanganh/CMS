@@ -1,5 +1,5 @@
 import { type Asset, endpoints } from '@plp/contracts';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
@@ -137,6 +137,16 @@ describe('SiteSettingsForm', () => {
     await user.type(nameInput(), ' mới');
     await user.click(screen.getByRole('button', { name: 'Hủy thay đổi' }));
     expect(nameInput()).toHaveValue('Nha khoa Smile Care');
+  });
+
+  it('keeps the focus on the logo button after "Gỡ ảnh" removes itself', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SiteSettingsForm site={siteFixture({ logoAssetId: logo.id })} assets={[logo]} canEdit />,
+    );
+    const logoField = screen.getByRole('group', { name: 'Logo' });
+    await user.click(within(logoField).getByRole('button', { name: 'Gỡ ảnh' }));
+    expect(within(logoField).getByRole('button', { name: 'Chọn ảnh' })).toHaveFocus();
   });
 
   it('is read-only for editors', () => {

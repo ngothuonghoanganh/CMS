@@ -72,10 +72,17 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
     await expect(editor.canvas).toBeVisible();
     await editor.publish(2, 'Đổi đường dẫn');
 
-    // The old slug answers a permanent redirect to the new one.
+    // The old slug answers a permanent redirect to the new one, keeping an ad's campaign tags.
     const old = await fetchPublic(request, site.subdomain, '/uu-dai');
     expect(old.status).toBe(308);
     expect(old.location).toBe('/uu-dai-thang-11');
+    const tagged = await fetchPublic(
+      request,
+      site.subdomain,
+      '/uu-dai?utm_source=zalo&utm_medium=cpc&gclid=abc123',
+    );
+    expect(tagged.status).toBe(308);
+    expect(tagged.location).toBe('/uu-dai-thang-11?utm_source=zalo&utm_medium=cpc&gclid=abc123');
     const visitor = await page.context().newPage();
     await visitor.goto(`${origin}/uu-dai`);
     await expect(visitor).toHaveURL(`${origin}/uu-dai-thang-11`);
@@ -113,6 +120,33 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
     expect((await fetchPublic(request, site.subdomain, '/uu-dai-thang-11')).html).toMatch(
       /<meta name="robots" content="noindex/,
     );
+  });
+
+  test('leaving SEO through the phone menu right after typing saves first and closes the menu', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    const { site } = await setUpSite(page.request);
+    const created = await createPageViaApi(page.request, site.id, {
+      title: 'Giới thiệu',
+      slug: 'gioi-thieu',
+      start: { kind: 'blank' },
+    });
+    const seoUrl = `/sites/${site.id}/pages/${created.page.id}/seo`;
+    await page.goto(seoUrl);
+    const seo = page.getByRole('region', { name: 'Thiết lập SEO' });
+    await seo.getByRole('textbox', { name: 'Mô tả ngắn' }).fill(SEO_DESCRIPTION);
+
+    // Gone before the autosave delay ends, through the real router: the screen saves, then goes,
+    // and the menu closes on the way (ADR-008).
+    await page.getByRole('button', { name: 'Mở menu điều hướng' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Menu điều hướng' });
+    await drawer.getByRole('link', { name: /^Trang/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/sites/${site.id}(\\?.*)?$`));
+    await expect(drawer).toBeHidden();
+
+    await page.goto(seoUrl);
+    await expect(seo.getByRole('textbox', { name: 'Mô tả ngắn' })).toHaveValue(SEO_DESCRIPTION);
   });
 
   test('a new site theme reaches a live page only when the page is published again', async ({
@@ -181,6 +215,31 @@ test.describe('S5 · SEO, redirects, sitemap, robots and the default domain', ()
       .filter({ has: page.getByRole('heading', { name: 'v2', exact: true }) });
     await expect(v2).toContainText('ĐANG LIVE');
     await expect(v2).toContainText('Giao diện site: giao diện');
+  });
+
+  test('the image picker fits a phone screen', async ({ page }) => {
+    const { site } = await setUpSite(page.request);
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto(`/sites/${site.id}/settings`);
+    await page
+      .getByRole('group', { name: 'Logo' })
+      .getByRole('button', { name: 'Chọn ảnh' })
+      .click();
+    const dialog = page.getByRole('dialog', { name: 'Chọn ảnh' });
+    await expect(dialog.getByText('Tải ảnh mới')).toBeVisible();
+    // Nothing in the dialog reaches past its right edge, and nothing scrolls sideways.
+    const overflow = await dialog.evaluate((element) => {
+      const edge = element.getBoundingClientRect().right;
+      const past = [...element.querySelectorAll('*')].filter(
+        (child) => child.getBoundingClientRect().right > edge + 0.5,
+      );
+      const sideways = [element, ...element.querySelectorAll('*')].filter(
+        (node) =>
+          node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== 'visible',
+      );
+      return { past: past.length, sideways: sideways.length };
+    });
+    expect(overflow).toEqual({ past: 0, sideways: 0 });
   });
 
   test('the domain screen shows the default domain only', async ({ page }) => {

@@ -84,7 +84,7 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   private schedule(leadId: ObjectId, delayMs: number): void {
-    this.later(delayMs, leadId, () => this.attempt(leadId));
+    this.later(delayMs, leadId, () => this.attempt(leadId, true));
   }
 
   /** Runs `task` after `delayMs`, unless the module stops first; failures are logged. */
@@ -111,9 +111,26 @@ export class LeadNotifier implements OnApplicationBootstrap, OnModuleDestroy {
     this.timers.add(timer);
   }
 
-  /** One attempt: claim the lead, deliver, and record how it went. */
-  private async attempt(leadId: ObjectId): Promise<void> {
-    const lead = await this.leads.claimNotification(leadId, new Date());
+  /**
+   * One attempt: claim the lead, deliver, and record how it went. When the claim itself fails,
+   * claims once more after the first wait; past that the startup sweep takes the lead on.
+   */
+  private async attempt(leadId: ObjectId, retry: boolean): Promise<void> {
+    let lead: LeadRecord | null;
+    try {
+      lead = await this.leads.claimNotification(leadId, new Date());
+    } catch (error) {
+      // No attempt was counted and the lead stays `pending`, which nothing else takes on before a
+      // restart: "Gửi lại" only applies to `failed`.
+      this.logger.error(
+        { err: error, leadId: leadId.toHexString() },
+        'Lead notification not claimed',
+      );
+      if (retry) {
+        this.later(this.retryDelays[0] ?? 0, leadId, () => this.attempt(leadId, false));
+      }
+      return;
+    }
     if (lead?.notification === undefined) {
       return;
     }

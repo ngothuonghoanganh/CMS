@@ -4,6 +4,7 @@ import {
   type PointerMoveResponse,
   pointerMoveResponseSchema,
   problemSchema,
+  type PublishResponse,
   type ResolveResponse,
   resolveResponseSchema,
   type Site,
@@ -100,6 +101,39 @@ describe('rollback, undo, unpublish, redirects and history', () => {
     return { pageId, v1, v2 };
   }
 
+  /**
+   * Runs `move` while another tab publishes v3 between the move's first check and its
+   * transaction, so only the conditional pointer update inside the transaction sees the conflict.
+   * `published` holds that publish, which proves the race took place.
+   */
+  async function duringConcurrentPublish<T>(
+    pageId: string,
+    move: () => Promise<T>,
+  ): Promise<{ result: T; published: PublishResponse[] }> {
+    const runner = t.app.get(TransactionRunner, { strict: false });
+    const realRun = runner.run.bind(runner);
+    const published: PublishResponse[] = [];
+    const spy = vi.spyOn(runner, 'run').mockImplementationOnce(async (work) => {
+      await editHeroHeading(client, pageId, 'Bản 3');
+      published.push(await publish(client, pageId));
+      return realRun(work);
+    });
+    try {
+      return { result: await move(), published };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  /** Activity types recorded for one page, newest first. */
+  async function pageActivityTypes(pageId: string): Promise<string[]> {
+    const events = await client.get(`/sites/${site.id}/activity?limit=50`).expect(200);
+    return activityListResponseSchema
+      .parse(events.body)
+      .items.filter((item) => item.page?.id === pageId)
+      .map((item) => item.type);
+  }
+
   describe('rollback', () => {
     it('moves only the pointer: releases and the draft stay byte for byte', async () => {
       const { pageId, v1 } = await twoVersions();
@@ -154,6 +188,23 @@ describe('rollback, undo, unpublish, redirects and history', () => {
         reason: 'Cũ',
       }).expect(409);
       expect(problemSchema.parse(response.body).code).toBe('pointer_conflict');
+    });
+
+    it('re-checks the pointer inside its transaction: a publish committed meanwhile stays live', async () => {
+      const { pageId, v1, v2 } = await twoVersions();
+      const { result: response, published } = await duringConcurrentPublish(pageId, async () =>
+        pointer(pageId, {
+          targetReleaseId: v1.release.id,
+          expectedCurrentReleaseId: v2.release.id,
+          reason: 'Bản 2 sai giá',
+        }).expect(409),
+      );
+      expect(problemSchema.parse(response.body).code).toBe('pointer_conflict');
+      expect(published.map((item) => item.release.version)).toEqual([3]);
+      expect((await getPage(client, pageId)).page.liveRelease?.version).toBe(3);
+      const activity = await pageActivityTypes(pageId);
+      expect(activity[0]).toBe('page.published');
+      expect(activity).not.toContain('page.rolled_back');
     });
 
     it('requires a reason', async () => {
@@ -269,6 +320,25 @@ describe('rollback, undo, unpublish, redirects and history', () => {
       const back = await moveTo(pageId, published.release.id, 'Mở lại');
       expect(back.page.status.kind).toBe('live');
       expect((await resolve(site, slug)).kind).toBe('page');
+    });
+
+    it('re-checks the pointer inside its transaction: a publish committed meanwhile stays online', async () => {
+      const slug = uniqueSlug('go');
+      const { pageId, v2 } = await twoVersions(slug);
+      const { result: response, published } = await duringConcurrentPublish(pageId, async () =>
+        pointer(pageId, {
+          targetReleaseId: null,
+          expectedCurrentReleaseId: v2.release.id,
+          reason: 'Hết chương trình',
+        }).expect(409),
+      );
+      expect(problemSchema.parse(response.body).code).toBe('pointer_conflict');
+      expect(published.map((item) => item.release.version)).toEqual([3]);
+      expect((await getPage(client, pageId)).page.liveRelease?.version).toBe(3);
+      expect((await resolve(site, slug)).kind).toBe('page');
+      const activity = await pageActivityTypes(pageId);
+      expect(activity[0]).toBe('page.published');
+      expect(activity).not.toContain('page.unpublished');
     });
   });
 

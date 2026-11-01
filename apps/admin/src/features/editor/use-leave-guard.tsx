@@ -42,14 +42,21 @@ function currentEntry(): HistoryEntry {
 }
 
 /**
- * Browser Back/Forward out of the editor (see `history-guard`). While changes are unsaved the
- * guard keeps the router from handling the event, puts the editor's entry back (with the router's
- * own state, so the router keeps working) and asks through `onBlocked`. Leaving after all goes
- * back once more: the editor's entry was pushed right after the one the user chose, so
- * `history.back()` reaches it whichever direction they went.
+ * Browser Back/Forward out of a screen that edits the draft (see `history-guard`). While changes
+ * are unsaved the guard keeps the router from handling the event, puts the screen's entry back
+ * (with the router's own state, so the router keeps working) and hands `onBlocked` the way to
+ * leave after all: going back once more. The screen's entry was pushed right after the one the
+ * user chose, so `history.back()` reaches it whichever direction they went.
  */
-function useHistoryLeaveGuard(store: EditorStore, onBlocked: () => void) {
+export function useHistoryLeaveGuard(
+  store: EditorStore,
+  onBlocked: (leave: () => void) => void,
+): () => void {
   const allowNext = useRef(false);
+  const leave = useCallback(() => {
+    allowNext.current = true;
+    window.history.back();
+  }, []);
 
   useEffect(() => {
     let entry = currentEntry();
@@ -67,19 +74,16 @@ function useHistoryLeaveGuard(store: EditorStore, onBlocked: () => void) {
         return false;
       }
       window.history.pushState(entry.state, '', entry.url);
-      onBlocked();
+      onBlocked(leave);
       return true;
     });
     return () => {
       unsubscribe();
       removeGuard();
     };
-  }, [store, onBlocked]);
+  }, [store, onBlocked, leave]);
 
-  return useCallback(() => {
-    allowNext.current = true;
-    window.history.back();
-  }, []);
+  return leave;
 }
 
 export interface LeaveGuard {

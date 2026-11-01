@@ -1,8 +1,10 @@
 'use client';
 
 import { endpoints, type SaveDraftResponse } from '@plp/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import { markPageScreensStale } from './stale-screens';
 import {
   currentSaveResponse,
   type EditorStore,
@@ -44,6 +46,8 @@ export interface DraftSaver {
 export interface DraftSaverOptions {
   debounceMs?: number;
   retryDelaysMs?: readonly number[];
+  /** Called after each save the server accepted. */
+  onSaved?: () => void;
 }
 
 function firstIssueMessage(error: ApiError): string {
@@ -75,6 +79,28 @@ function isKnownSaveFailure(error: unknown): boolean {
   return (
     error instanceof ApiError || error instanceof DraftConflictError || error instanceof TypeError
   );
+}
+
+/**
+ * Saves running in this tab, per page. A screen that unmounts saves its pending changes in the
+ * background (Back from "SEO & chia sẻ" to the editor), while the next screen of the page reads it
+ * once on mount (ADR-008): a read that overtook such a save would keep a base revision the next
+ * save conflicts with.
+ */
+const runningSaves = new Map<string, Promise<void>>();
+
+function trackRunningSave(pageId: string, save: Promise<unknown>): void {
+  const ended: Promise<void> = Promise.allSettled([runningSaves.get(pageId), save]).then(() => {
+    if (runningSaves.get(pageId) === ended) {
+      runningSaves.delete(pageId);
+    }
+  });
+  runningSaves.set(pageId, ended);
+}
+
+/** Resolves once the saves of the page running now have ended, whether they succeeded or not. */
+export function runningSavesSettled(pageId: string): Promise<void> {
+  return runningSaves.get(pageId) ?? Promise.resolve();
 }
 
 /**
@@ -138,6 +164,7 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
     }
     retryAttempt = 0;
     store.getState().applySaved(response, version);
+    options.onSaved?.();
   }
 
   async function saveUntilCurrent(): Promise<SaveDraftResponse> {
@@ -155,9 +182,12 @@ export function createDraftSaver(store: EditorStore, options: DraftSaverOptions 
 
   function flush(): Promise<SaveDraftResponse> {
     clearTimers();
-    running ??= saveUntilCurrent().finally(() => {
-      running = null;
-    });
+    if (running === null) {
+      running = saveUntilCurrent().finally(() => {
+        running = null;
+      });
+      trackRunningSave(store.getState().page.id, running);
+    }
     return running;
   }
 
@@ -226,7 +256,19 @@ export function useDraftSaver(
   store: EditorStore,
   options?: DraftSaverOptions,
 ): Pick<DraftSaver, 'ensureSaved' | 'retry' | 'discard'> {
-  const [saver] = useState(() => createDraftSaver(store, options));
+  const queryClient = useQueryClient();
+  const [saver] = useState(() =>
+    createDraftSaver(store, {
+      ...options,
+      // One on screen already is read at once: a save sent as its screen unmounted can land
+      // after the next screen showed.
+      onSaved: () => {
+        options?.onSaved?.();
+        const { site, page } = store.getState();
+        markPageScreensStale(queryClient, site.id, page.id);
+      },
+    }),
+  );
   useEffect(() => saver.start(), [saver]);
   return saver;
 }

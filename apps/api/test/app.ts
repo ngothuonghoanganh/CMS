@@ -3,6 +3,7 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import type { Connection } from 'mongoose';
+import type { DestinationStream } from 'pino';
 import { AppModule } from '../src/app.module.js';
 import { type Env, type EnvInput, parseEnv } from '../src/config/env.js';
 import { configureApp, NEST_APP_OPTIONS } from '../src/configure-app.js';
@@ -29,6 +30,11 @@ export interface TestAppOptions {
   realEmail?: boolean;
   /** Waits between notification attempts; short in tests of retries. */
   notificationRetryDelaysMs?: readonly number[];
+  /**
+   * Where the log goes instead of stdout; set `env.LOG_LEVEL` too, since tests run `silent`.
+   * nestjs-pino builds one logger per process, so the first app of a test file decides both.
+   */
+  logDestination?: DestinationStream;
 }
 
 /** Boots the whole API against a database of its own, with every index built. */
@@ -39,7 +45,9 @@ export async function createTestApp(
   const mongoUri = isolatedMongoUri(prefix);
   const env = parseEnv(testEnvInput({ ...options.env, MONGODB_URI: mongoUri }));
   const emails = new RecordingEmailSender();
-  let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });
+  let builder = Test.createTestingModule({
+    imports: [AppModule.forRoot(env, options.logDestination)],
+  });
   if (options.realEmail !== true) {
     builder = builder.overrideProvider(EmailSender).useValue(emails);
   }

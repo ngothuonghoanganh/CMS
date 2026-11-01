@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { DEFAULT_RETENTION_MONTHS, type PublicLeadValues } from '@plp/contracts';
+import {
+  DEFAULT_RETENTION_MONTHS,
+  type PublicLeadValues,
+  type RetentionMonths,
+} from '@plp/contracts';
 import { leadFormContentSchema, leadFormSectionOf } from '@plp/sections/schema';
 import { type Env, siteOrigin } from '../../config/env.js';
 import { InjectEnv } from '../../shared/env.js';
@@ -11,7 +15,7 @@ import { PagesRepository } from '../pages/pages.repository.js';
 import { releaseLeadCapture } from '../publishing/release-presentation.js';
 import type { ReleaseRecord } from '../publishing/release.schema.js';
 import { ReleasesRepository } from '../publishing/releases.repository.js';
-import { type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
+import { type SitePrivacyRecord, type SiteRecord, sitePrivacyOf } from '../sites/site.schema.js';
 import { SitesRepository } from '../sites/sites.repository.js';
 import {
   addMonthsUtc,
@@ -27,6 +31,14 @@ import type { LeadRecord } from './lead.schema.js';
 import { LeadsRepository, SubmissionTakenError } from './leads.repository.js';
 
 export const FORM_NOT_FOUND = 'Form này không còn nhận đăng ký';
+
+/**
+ * Months a site keeps its leads; null keeps them until deleted by hand. The default only applies
+ * without settings, which a form's release cannot have (it snapshotted them).
+ */
+function retentionOf(privacy: SitePrivacyRecord | null): RetentionMonths {
+  return privacy === null ? DEFAULT_RETENTION_MONTHS : privacy.retentionMonths;
+}
 const RATE_LIMITED = 'Bạn đã gửi nhiều lần, hãy thử lại sau ít phút.';
 
 export interface IntakeOutcome {
@@ -83,10 +95,7 @@ export class LeadIntakeService {
 
     const reasons = spamReasons({ honeypot: input.honeypot, elapsedMs: input.elapsedMs });
     const spam = reasons.length > 0;
-    // Null keeps leads until deleted by hand; the default only applies without settings, which a
-    // form's release cannot have (it snapshotted them).
-    const privacy = sitePrivacyOf(site);
-    const retention = privacy === null ? DEFAULT_RETENTION_MONTHS : privacy.retentionMonths;
+    const retention = retentionOf(sitePrivacyOf(site));
     let stored: LeadRecord;
     try {
       stored = await this.leads.insertPublic(site, {
@@ -133,8 +142,20 @@ export class LeadIntakeService {
       throw error;
     }
     if (!spam) {
-      // The visitor gets the answer now; the email goes out in the background.
+      // The visitor gets the answer now; the email goes out in the background. Queued before
+      // anything else can fail: a resend of this submission is answered as a replay and queues
+      // nothing, so the stored lead would wait for the next restart.
       this.notifier.enqueue(stored._id);
+    }
+    // The owner may have changed the retention period since the site was read above. Settings
+    // commit before they recompute every lead, so either that recompute covers this lead or this
+    // read sees the new period (ADR-017).
+    const latest = retentionOf(await this.sites.findPublicPrivacy(site._id));
+    if (latest !== retention) {
+      await this.leads.setPublicExpiry(
+        stored._id,
+        latest === null ? null : addMonthsUtc(now, latest),
+      );
     }
     return { replayed: false };
   }

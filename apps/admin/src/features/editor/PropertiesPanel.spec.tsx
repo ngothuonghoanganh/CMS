@@ -111,6 +111,20 @@ describe('PropertiesPanel', () => {
     expect(getAtPath(sectionById(store, HERO).content, 'image.decorative')).toBe(true);
   });
 
+  it('keeps the focus on the image button after "Gỡ ảnh" removes itself', async () => {
+    const user = userEvent.setup();
+    const store = makeStore();
+    store
+      .getState()
+      .updateContent(HERO, 'image', { assetId: ASSET_ID, alt: 'Bác sĩ', decorative: false });
+    store.getState().select(HERO);
+    renderEditor(<PropertiesPanel />, { store });
+    const image = within(fieldBox('image'));
+    await user.click(image.getByRole('button', { name: 'Gỡ ảnh' }));
+    expect(image.getByRole('button', { name: 'Chọn ảnh' })).toHaveFocus();
+    expect(getAtPath(sectionById(store, HERO).content, 'image.assetId')).toBeNull();
+  });
+
   it('switches variants, hiding fields the variant does not use', async () => {
     const user = userEvent.setup();
     const store = makeStore();

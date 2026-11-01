@@ -4,6 +4,8 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import type { DestinationStream } from 'pino';
+import type { Options as PinoHttpOptions } from 'pino-http';
 import type { Env } from './config/env.js';
 import { HealthModule } from './health/health.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
@@ -27,27 +29,33 @@ import { OriginGuard } from './shared/origin.guard.js';
 import { PersistenceModule } from './shared/persistence/persistence.module.js';
 import { ProblemFilter } from './shared/problem.filter.js';
 
+/** The request log: one line per request, with its id and without secrets or personal data. */
+function requestLogOptions(env: Env): PinoHttpOptions {
+  return {
+    level: env.LOG_LEVEL,
+    genReqId: (req, res) => {
+      const incoming = req.headers['x-request-id'];
+      const id = typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
+      res.setHeader('x-request-id', id);
+      return id;
+    },
+    redact: [...LOG_REDACT_PATHS],
+    // `req.url` and the route params of /public/preview/{token} carry a preview token.
+    serializers: { req: serializeRequest },
+  };
+}
+
 @Module({})
 export class AppModule {
-  static forRoot(env: Env): DynamicModule {
+  /** `logDestination` replaces stdout as the log's output, so a test can read what is logged. */
+  static forRoot(env: Env, logDestination?: DestinationStream): DynamicModule {
+    const requestLog = requestLogOptions(env);
     return {
       module: AppModule,
       imports: [
         EnvModule.forRoot(env),
         LoggerModule.forRoot({
-          pinoHttp: {
-            level: env.LOG_LEVEL,
-            genReqId: (req, res) => {
-              const incoming = req.headers['x-request-id'];
-              const id =
-                typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
-              res.setHeader('x-request-id', id);
-              return id;
-            },
-            redact: [...LOG_REDACT_PATHS],
-            // `req.url` and the route params of /public/preview/{token} carry a preview token.
-            serializers: { req: serializeRequest },
-          },
+          pinoHttp: logDestination ? [requestLog, logDestination] : requestLog,
         }),
         MongooseModule.forRoot(env.MONGODB_URI),
         ThrottlerModule.forRoot([

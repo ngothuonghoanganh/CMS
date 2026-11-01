@@ -91,6 +91,15 @@ function withinPageLimit<T>(siteId: ObjectId, pages: T[]): T[] {
 const LIVE_FILTER = { publishedSlug: { $type: 'string' } } as const;
 const LIVE_PROJECTION = { title: 1, publishedSlug: 1, publishedReleaseId: 1 } as const;
 
+/**
+ * The page live at `slug`. The type check is what lets `pages_published_slug_unique`, partial on
+ * live pages, serve the lookup: MongoDB uses a partial index only for a query that implies its
+ * filter, and without it every page of the site is read (each view the renderer relays included).
+ */
+function liveAt(slug: string) {
+  return { publishedSlug: { $eq: slug, $type: 'string' } } as const;
+}
+
 @Injectable()
 export class PagesRepository {
   constructor(@InjectModel(PAGE_MODEL) private readonly pages: Model<PageRecord>) {}
@@ -197,7 +206,7 @@ export class PagesRepository {
     slug: string,
   ): Promise<Pick<PageRecord, '_id' | 'title'> | null> {
     return this.pages
-      .findOne({ workspaceId: scope.workspaceId, siteId, publishedSlug: slug }, { title: 1 })
+      .findOne({ workspaceId: scope.workspaceId, siteId, ...liveAt(slug) }, { title: 1 })
       .lean<Pick<PageRecord, '_id' | 'title'>>()
       .exec();
   }
@@ -356,7 +365,7 @@ export class PagesRepository {
 
   findPublicLiveBySlug(siteId: ObjectId, slug: string): Promise<LivePageRow | null> {
     return this.pages
-      .findOne({ siteId, publishedSlug: slug }, LIVE_PROJECTION)
+      .findOne({ siteId, ...liveAt(slug) }, LIVE_PROJECTION)
       .lean<LivePageRow>()
       .exec();
   }

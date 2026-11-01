@@ -1,17 +1,26 @@
-import { type Asset, endpoints, type PageDetailResponse } from '@plp/contracts';
+import {
+  type Asset,
+  endpoints,
+  type PageDetailResponse,
+  type SaveDraftRequest,
+  type SaveDraftResponse,
+} from '@plp/contracts';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import type * as ApiModule from '../../lib/api';
 import { useLatestServerDraft } from './server-draft';
 import { asset, makeStore, pageDetail, sampleComposition } from './test-fixtures';
+import { createDraftSaver } from './use-draft-saver';
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
   return { ...actual, api: vi.fn() };
 });
 
-const apiMock = vi.mocked(api) as unknown as Mock<(endpoint: unknown) => Promise<unknown>>;
+const apiMock = vi.mocked(api) as unknown as Mock<
+  (endpoint: unknown, args?: unknown, options?: { body?: SaveDraftRequest }) => Promise<unknown>
+>;
 
 const HERO = 'hero00000001';
 const NEW_ASSET: Asset = { ...asset, id: '64b0000000000000000000ab' };
@@ -152,5 +161,63 @@ describe('useLatestServerDraft', () => {
       );
     });
     expect(store.getState().baseRevision).toBe(3);
+  });
+
+  it('reads the page after the save another screen sent on leaving, so the next save fits', async () => {
+    // The server answers a read at once but writes a save only once the test lets it through, as
+    // it validates the draft and looks up its images first. A save needs the current revision.
+    let server = pageDetail();
+    let saveReachesServer: () => void = () => undefined;
+    const held = new Promise<void>((done) => {
+      saveReachesServer = done;
+    });
+    apiMock.mockImplementation(async (endpoint, _args, options) => {
+      if (endpoint === endpoints.getPage) {
+        return structuredClone(server);
+      }
+      const body = options?.body;
+      if (endpoint !== endpoints.saveDraft || body === undefined) {
+        throw new Error('Unexpected request');
+      }
+      await held;
+      if (body.baseRevision !== server.draft.revision) {
+        throw new ApiError(409, {
+          type: 'about:blank',
+          title: 'Xung đột',
+          status: 409,
+          code: 'revision_conflict',
+        });
+      }
+      const { baseRevision, ...draft } = body;
+      server = { ...server, draft: { ...server.draft, ...draft, revision: baseRevision + 1 } };
+      const saved: SaveDraftResponse = {
+        revision: server.draft.revision,
+        updatedAt: server.draft.updatedAt,
+        page: server.page,
+        checks: server.checks,
+      };
+      return saved;
+    });
+
+    // "SEO & chia sẻ": a new search title, then Back before its autosave ran.
+    const seo = makeStore();
+    const stopSeoSaver = createDraftSaver(seo).start();
+    seo.getState().updateSeo({ title: 'Niềng răng trong suốt' });
+    stopSeoSaver();
+
+    // The editor comes back from the router's cache and reads the page while that save is sent.
+    const editor = makeStore();
+    renderHook(() => {
+      useLatestServerDraft(editor);
+    });
+    saveReachesServer();
+
+    await waitFor(() => {
+      expect(editor.getState().baseRevision).toBe(4);
+    });
+    expect(editor.getState().draft.seo.title).toBe('Niềng răng trong suốt');
+    editor.getState().setSpacing(HERO, 'compact');
+    await expect(createDraftSaver(editor).ensureSaved()).resolves.toMatchObject({ revision: 5 });
+    expect(editor.getState().saveState).toBe('saved');
   });
 });

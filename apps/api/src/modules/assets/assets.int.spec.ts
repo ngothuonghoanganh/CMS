@@ -67,7 +67,81 @@ describe('assets', () => {
       const object = await fetch(asset.url);
       expect(object.status).toBe(200);
       expect(object.headers.get('content-type')).toBe('image/png');
-      expect(Buffer.from(await object.arrayBuffer()).equals(png)).toBe(true);
+      const served = Buffer.from(await object.arrayBuffer());
+      expect(served).toHaveLength(asset.bytes);
+      expect(await sharp(served).metadata()).toMatchObject({
+        format: 'png',
+        width: 32,
+        height: 20,
+      });
+    });
+
+    it('publishes a photo without its GPS position, camera or author', async () => {
+      const photo = await sharp({
+        create: { width: 30, height: 12, channels: 3, background: '#f2a33a' },
+      })
+        .jpeg()
+        .withExif({
+          IFD0: { Make: 'QA-Phone', Artist: 'Nguyen Van QA' },
+          IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '10/1 46/1 30/1' },
+        })
+        .withXmp(
+          '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+            '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+            '<dc:creator><rdf:Seq><rdf:li>Tran Thi XMP</rdf:li></rdf:Seq></dc:creator>' +
+            '</rdf:Description></rdf:RDF></x:xmpmeta>',
+        )
+        .withMetadata({ orientation: 6 })
+        .toBuffer();
+      const response = await uploadRequest(
+        owner,
+        siteId,
+        photo,
+        { alt: 'Khách hàng tại nhà' },
+        'IMG_0042.jpg',
+      ).expect(201);
+      const asset = assetSchema.parse(response.body);
+      expect(asset).toMatchObject({ mimeType: 'image/jpeg', width: 12, height: 30 });
+
+      const served = Buffer.from(await (await fetch(asset.url)).arrayBuffer());
+      const metadata = await sharp(served).metadata();
+      expect(metadata).toMatchObject({ width: 12, height: 30 });
+      expect(metadata.exif).toBeUndefined();
+      expect(metadata.xmp).toBeUndefined();
+      expect(served.toString('latin1')).not.toContain('Nguyen Van QA');
+      expect(served.toString('latin1')).not.toContain('Tran Thi XMP');
+    });
+
+    it('stores a large photo scaled down to fit 2560 px, with the size it is stored at', async () => {
+      const photo = await sharp({
+        create: { width: 3000, height: 2000, channels: 3, background: '#0f5e55' },
+      })
+        .jpeg()
+        .toBuffer();
+      const response = await uploadRequest(owner, siteId, photo, { alt: 'Phòng khám' }).expect(201);
+      const asset = assetSchema.parse(response.body);
+      expect(asset).toMatchObject({ width: 2560, height: 1707 });
+      const served = Buffer.from(await (await fetch(asset.url)).arrayBuffer());
+      expect(served).toHaveLength(asset.bytes);
+      expect(await sharp(served).metadata()).toMatchObject({ width: 2560, height: 1707 });
+    });
+
+    it('refuses an image of too many pixels before decoding it, and stores nothing', async () => {
+      const { client, workspaceId: ownWorkspace } = await signedUpClient(t.app);
+      const site = await createSite(client, ownWorkspace);
+      // A few kilobytes that would decode to 25 million pixels and more.
+      const huge = await sharp({
+        create: { width: 5001, height: 5000, channels: 3, background: '#0f5e55' },
+      })
+        .jpeg({ quality: 20 })
+        .toBuffer();
+      const response = await uploadRequest(client, site.id, huge, { alt: 'Quá lớn' }).expect(413);
+      expect(problemSchema.parse(response.body)).toMatchObject({
+        code: 'payload_too_large',
+        title: 'Ảnh tối đa 25 megapixel (khoảng 6000 × 4000 điểm ảnh)',
+      });
+      const list = await client.get(`/sites/${site.id}/assets`).expect(200);
+      expect(assetListResponseSchema.parse(list.body).items).toEqual([]);
     });
 
     it('reads the size of other supported formats', async () => {

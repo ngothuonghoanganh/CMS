@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { PageContainer, PageHeader } from '../shell/PageHeader';
 import { problemMessage } from '../shell/problem-message';
+import { adoptServerRender } from '../shell/server-render';
 import { periodLabel } from './analytics-presentation';
 import { DeviceSplit, PageBreakdown, SourceTable } from './Breakdowns';
 import { DailyVisitorsChart } from './DailyVisitorsChart';
@@ -76,14 +77,12 @@ export function AnalyticsScreen({
   // Coming back to "Hiệu quả" renders it again on the server. That report is newer than one the
   // app may have kept from an earlier visit (a lead moved to spam since), so it takes its place.
   useEffect(() => {
-    const key = analyticsQueryKeys.report(site.id, initialFilters);
-    if ((queryClient.getQueryState(key)?.dataUpdatedAt ?? 0) < loadedAt) {
-      queryClient.setQueryData<ShownReport>(
-        key,
-        { filters: initialFilters, report: initialReport },
-        { updatedAt: loadedAt },
-      );
-    }
+    adoptServerRender(
+      queryClient,
+      analyticsQueryKeys.report(site.id, initialFilters),
+      { filters: initialFilters, report: initialReport } satisfies ShownReport,
+      loadedAt,
+    );
   }, [queryClient, site.id, initialFilters, initialReport, loadedAt]);
 
   const report = useQuery({

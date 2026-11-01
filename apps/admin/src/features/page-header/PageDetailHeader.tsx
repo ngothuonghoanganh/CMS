@@ -42,6 +42,11 @@ export interface PageDetailHeaderProps {
   link?: LinkComponent | undefined;
   /** After "Gỡ xuất bản" succeeded; the site's page and activity queries are refreshed already. */
   onUnpublished?: ((result: PointerMoveResponse) => void) | undefined;
+  /**
+   * After "Gỡ xuất bản" answered that the live page changed meanwhile. The site's queries are
+   * refreshed already; a screen that keeps its page elsewhere reads it again here.
+   */
+  onUnpublishConflict?: (() => void) | undefined;
 }
 
 /** The tabs of one page: "Nội dung" (the editor), "SEO & chia sẻ", "Lịch sử phiên bản". */
@@ -68,11 +73,15 @@ export function PageDetailHeader({
   now,
   link = Link,
   onUnpublished,
+  onUnpublishConflict,
 }: PageDetailHeaderProps) {
   const LinkAs = link;
   const presentation = presentPageStatus(page, now);
   const live = unpublishable(page);
   const menuTrigger = useRef<HTMLButtonElement>(null);
+  // "Tùy chọn khác" exists for a live page only: once unpublished, focus goes to the link beside it.
+  const editorLink = useRef<HTMLAnchorElement>(null);
+  const menuTriggerFocused = useRef(false);
   const [unpublishTarget, setUnpublishTarget] = useState<UnpublishablePage | null>(null);
   const [unpublishOpen, setUnpublishOpen] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
@@ -94,6 +103,32 @@ export function PageDetailHeader({
     };
   }, [unpublishOpen]);
 
+  useEffect(() => {
+    // Focus that moves anywhere fires `focusin` there; the removal of the focused button does not.
+    const forget = (event: FocusEvent) => {
+      if (event.target !== menuTrigger.current) {
+        menuTriggerFocused.current = false;
+      }
+    };
+    document.addEventListener('focusin', forget);
+    return () => {
+      document.removeEventListener('focusin', forget);
+    };
+  }, []);
+
+  // The page can stop being live while "Tùy chọn khác" has the focus: unpublishing answered that a
+  // teammate did it first, and the page read since caught up. The button goes, and its focus with it.
+  const isLive = live !== null;
+  useEffect(() => {
+    if (isLive || !menuTriggerFocused.current) {
+      return;
+    }
+    menuTriggerFocused.current = false;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      editorLink.current?.focus();
+    }
+  }, [isLive]);
+
   return (
     <header className={styles.header}>
       <nav aria-label="Đường dẫn" className={styles.breadcrumb}>
@@ -110,7 +145,7 @@ export function PageDetailHeader({
           <span className={styles.subtext}>{presentation.subtext}</span>
         </div>
         <div className={styles.actions}>
-          <ButtonLink as={LinkAs} href={pageHref(siteId, page.id, 'edit')}>
+          <ButtonLink ref={editorLink} as={LinkAs} href={pageHref(siteId, page.id, 'edit')}>
             Mở editor
           </ButtonLink>
           {live === null ? null : (
@@ -118,6 +153,9 @@ export function PageDetailHeader({
               trigger={
                 <IconButton
                   ref={menuTrigger}
+                  onFocus={() => {
+                    menuTriggerFocused.current = true;
+                  }}
                   aria-label="Tùy chọn khác"
                   variant="secondary"
                   icon={<MoreHorizontalIcon size={18} />}
@@ -160,6 +198,8 @@ export function PageDetailHeader({
           open={unpublishOpen}
           onOpenChange={setUnpublishOpen}
           onUnpublished={onUnpublished}
+          onConflict={onUnpublishConflict}
+          fallbackFocusRef={editorLink}
         />
       )}
     </header>

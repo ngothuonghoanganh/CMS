@@ -111,6 +111,13 @@
   color: #ffffff;
 }
 
+/* The canvas placeholder of an empty text stays white as well: muted is far below AA here. */
+.overPhoto .heading:empty::before,
+.overPhoto .subheading:empty::before,
+.overPhoto .eyebrow:empty::before {
+  color: inherit;
+}
+
 /* Over a photo the eyebrow is plain white text, like the heading. */
 .overPhoto .eyebrow {
   padding-inline: 0;
@@ -120,7 +127,7 @@
 /*
  * The scheme's link color (a dark teal, indigo or orange in the light and soft schemes) is far
  * below AA on the overlay, so the outlined button and every focus ring turn white there. White on
- * the overlay is at least 5.5:1 whatever the photo.
+ * the overlay is at least 5.4:1 whatever the photo (a white one is the worst case).
  */
 .overPhoto .secondaryOverPhoto {
   color: #ffffff;

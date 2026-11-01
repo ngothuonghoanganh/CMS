@@ -24,6 +24,21 @@ export function sameSiteLocation(location: string): string {
   return location;
 }
 
+/**
+ * The query of a page request as `?a=1&b=2` (or nothing), to carry over a redirect: an ad's utm
+ * tags and click ids must still reach the page the old address now points to (ADR-016, ADR-019).
+ */
+export function queryOf(searchParams: Record<string, string | string[] | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(searchParams)) {
+    for (const item of value === undefined ? [] : [value].flat()) {
+      query.append(name, item);
+    }
+  }
+  const text = query.toString();
+  return text === '' ? '' : `?${text}`;
+}
+
 /** Signed preview tokens are compact JWS strings; anything else is rejected without an API call. */
 export function isPlausiblePreviewToken(token: string): boolean {
   return token.length <= 4096 && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);

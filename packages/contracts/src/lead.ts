@@ -99,6 +99,9 @@ export const CONSENT_REQUIRED_MESSAGE = 'Bạn cần đồng ý để gửi đă
 /** A form filled in faster than this is likely a bot (ADR-016); the lead is kept as spam. */
 export const LEAD_SPAM_MIN_FILL_MS = 3000;
 
+/** The longest fill time sent; a page left open longer reports this much. */
+export const LEAD_FILL_MS_MAX = 86_400_000;
+
 /** Generated once per form by the page script; a retry with the same id is not a new lead. */
 export const submissionIdSchema = z.string().regex(/^[A-Za-z0-9-]{16,64}$/);
 
@@ -118,8 +121,11 @@ export const publicLeadRequestSchema = z.object({
   marketing: z.boolean(),
   /** A field people never see; bots fill it. */
   honeypot: z.string().max(500),
-  /** Time from showing the form to sending it, set by the page script; null without script. */
-  elapsedMs: z.number().int().nonnegative().max(86_400_000).nullable(),
+  /**
+   * Time from the page's navigation start to sending, set by the page script; null without script.
+   * The form can be seen no earlier, so a person is never measured faster than they were.
+   */
+  elapsedMs: z.number().int().nonnegative().max(LEAD_FILL_MS_MAX).nullable(),
   source: z.object({
     utmSource: sourceValueSchema,
     utmMedium: sourceValueSchema,

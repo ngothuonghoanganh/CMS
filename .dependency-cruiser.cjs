@@ -1,5 +1,5 @@
 /**
- * Module boundaries from docs/ARCHITECTURE.md (§3.3, ADR-003, ADR-013).
+ * Module boundaries from docs/ARCHITECTURE.md (§3, ADR-003, ADR-013).
  * Run with `pnpm governance`.
  * @type {import('dependency-cruiser').IConfiguration}
  */
@@ -32,6 +32,13 @@ module.exports = {
       to: { path: '^apps/' },
     },
     {
+      name: 'contracts-import-no-package',
+      comment: 'Every other package and app builds on @plp/contracts, never the other way round.',
+      severity: 'error',
+      from: { path: '^packages/contracts/' },
+      to: { path: '^packages/', pathNot: '^packages/contracts/' },
+    },
+    {
       name: 'admin-ui-stays-in-admin',
       comment: 'Admin tokens and components never reach the renderer or customer sections.',
       severity: 'error',
@@ -39,18 +46,28 @@ module.exports = {
       to: { path: '^packages/ui/' },
     },
     {
+      name: 'section-views-serve-admin-and-renderer',
+      comment: 'Only the admin and the renderer import @plp/sections/react, type-only included.',
+      severity: 'error',
+      from: { pathNot: '^(apps/admin|apps/renderer|packages/sections/src/react)/' },
+      to: { path: '^packages/sections/src/react/' },
+    },
+    {
       name: 'section-schemas-have-no-react',
       comment:
-        'The API validates content with @plp/sections/schema, which must stay framework-free.',
+        'The API validates content with @plp/sections/schema, which must stay framework-free: ' +
+        'no chain of imports from it reaches React, type-only ones included. A .tsx file counts: ' +
+        'its JSX imports react/jsx-runtime where no source line shows it.',
       severity: 'error',
       from: { path: '^packages/sections/src/schema/' },
-      to: { path: 'node_modules/(react|react-dom|next)/' },
+      to: { reachable: true, path: ['node_modules/(react|react-dom|next)/', '\\.tsx$'] },
     },
     {
       name: 'api-has-no-react',
+      comment: 'Not even through a package, a type-only import or a .tsx file.',
       severity: 'error',
       from: { path: '^apps/api/' },
-      to: { path: ['node_modules/(react|react-dom|next)/', '^packages/sections/src/react/'] },
+      to: { reachable: true, path: ['node_modules/(react|react-dom|next)/', '\\.tsx$'] },
     },
     {
       name: 'no-free-form-builders-or-antd',
@@ -81,6 +98,10 @@ module.exports = {
     doNotFollow: { path: 'node_modules' },
     exclude: { path: ['(^|/)(dist|\\.next|coverage)/', 'next-env\\.d\\.ts$'] },
     tsPreCompilationDeps: true,
+    // @plp/contracts and @plp/sections export their dist/, which is excluded above: every import
+    // through those names would vanish from the graph, unseen by the rules. Resolve the workspace
+    // packages to their sources instead; scripts/check-governance.mjs keeps the paths complete.
+    tsConfig: { fileName: 'tsconfig.governance.json' },
     enhancedResolveOptions: {
       exportsFields: ['exports'],
       conditionNames: ['import', 'require', 'node', 'default', 'types'],

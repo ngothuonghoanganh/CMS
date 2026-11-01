@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { Editor } from '../support/editor.js';
-import { setUpSite, uniqueId } from '../support/setup.js';
+import {
+  createSiteViaApi,
+  newAccount,
+  setUpSite,
+  signUpViaApi,
+  uniqueId,
+} from '../support/setup.js';
 
 test.describe('S6 · create a page by goal', () => {
   test('a goal and a brief open the editor on the generated page', async ({ page }) => {
@@ -84,5 +90,31 @@ test.describe('S6 · create a page by goal', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Giới thiệu phòng khám' }),
     ).toBeVisible();
+  });
+
+  test('the path stays readable on a phone, however long the site’s address', async ({ page }) => {
+    const me = await signUpViaApi(page.request, newAccount());
+    const workspace = me.memberships[0]?.workspace;
+    if (workspace === undefined) {
+      throw new Error('Sign-up returned no workspace');
+    }
+    // The longest subdomain a site may have: 40 characters.
+    const subdomain = `p${uniqueId()}`.padEnd(40, 'x');
+    const site = await createSiteViaApi(page.request, workspace.id, {
+      name: 'Nha khoa Smile Care',
+      subdomain,
+    });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(`/sites/${site.id}/pages/new`);
+    await page.getByRole('button', { name: 'Tiếp tục' }).click();
+    const path = page.getByLabel('Đường dẫn');
+    await path.fill('dich-vu-tay-trang-rang');
+
+    expect((await path.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(120);
+    const widths = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   });
 });

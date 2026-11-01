@@ -1,11 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../../../test/app.js';
 import { signedUpClient } from '../../../test/client.js';
+import { explainFindOne, indexScans, recordCalls } from '../../../test/explain.js';
 import { insertLeads, storedLead } from '../../../test/leads.js';
 import { scopeOf } from '../../../test/resources.js';
 import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import type { LeadCriteria } from './domain/lead-filters.js';
+import { LEADS_SUBMISSION_INDEX } from './lead.schema.js';
 import { LeadsRepository } from './leads.repository.js';
 
 const EVERY_INBOX_LEAD: LeadCriteria = {
@@ -146,5 +149,62 @@ describe('LeadsRepository.countPeople', () => {
 
     expect(counts).toEqual([5, 1, 0]);
     expect(await leads.countPeople(scope, siteId, [], 5)).toEqual([]);
+  });
+});
+
+/**
+ * Intake's replay check (ADR-016) runs for every lead from the page script, before the rate limit:
+ * one probe of the partial unique index, however many leads the site has.
+ */
+describe('LeadsRepository.existsPublicSubmission', () => {
+  let t: TestApp;
+
+  beforeAll(async () => {
+    t = await createTestApp('plp_test_leads_submission');
+  });
+
+  afterAll(async () => {
+    await t.close();
+  });
+
+  it('looks a submission up in its unique index, without reading the leads of the site', async () => {
+    const siteId = new Types.ObjectId();
+    const ids = {
+      workspaceId: new Types.ObjectId().toHexString(),
+      siteId: siteId.toHexString(),
+      pageId: new Types.ObjectId().toHexString(),
+      releaseId: new Types.ObjectId().toHexString(),
+    };
+    const submissionId = randomUUID();
+    const elsewhere = randomUUID();
+    await insertLeads(t, [
+      // Leads sent without the page script have no submission id.
+      ...Array.from({ length: 30 }, (_, index) => ({
+        ...storedLead(ids),
+        submissionId: index % 3 === 0 ? null : randomUUID(),
+      })),
+      { ...storedLead(ids), submissionId },
+      // The same id on another site is that site's submission, not this one's.
+      {
+        ...storedLead({ ...ids, siteId: new Types.ObjectId().toHexString() }),
+        submissionId: elsewhere,
+      },
+    ]);
+    const leads = t.app.get(LeadsRepository);
+
+    const sent = await recordCalls(t.connection, 'leads', async () => {
+      expect(await leads.existsPublicSubmission(siteId, submissionId)).toBe(true);
+      expect(await leads.existsPublicSubmission(siteId, randomUUID())).toBe(false);
+      expect(await leads.existsPublicSubmission(siteId, elsewhere)).toBe(false);
+    });
+
+    // Each lookup explained exactly as it was sent.
+    expect(sent.map((call) => call.method)).toEqual(['findOne', 'findOne', 'findOne']);
+    for (const call of sent) {
+      const explained = await explainFindOne(t.connection, call);
+      expect(indexScans(explained.queryPlanner.winningPlan)).toEqual([LEADS_SUBMISSION_INDEX]);
+      expect(explained.executionStats.totalKeysExamined).toBeLessThanOrEqual(1);
+      expect(explained.executionStats.totalDocsExamined).toBeLessThanOrEqual(1);
+    }
   });
 });

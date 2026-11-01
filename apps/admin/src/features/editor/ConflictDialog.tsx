@@ -3,7 +3,7 @@
 import { endpoints } from '@plp/contracts';
 import { Button, Callout } from '@plp/ui';
 import { AlertDialog } from 'radix-ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { problemMessage, reportUnexpected } from '../shell/problem-message';
 import styles from './ConflictDialog.module.css';
@@ -21,6 +21,7 @@ export function ConflictDialog() {
   const pageId = useEditor((state) => state.page.id);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reloadRef = useRef<HTMLButtonElement>(null);
 
   async function reload() {
     setPending(true);
@@ -45,6 +46,12 @@ export function ConflictDialog() {
           onEscapeKeyDown={(event) => {
             event.preventDefault();
           }}
+          // An alert dialog focuses its cancel button, and this one has none: focus would stay in
+          // the field behind it, where typing goes on editing a draft that cannot be saved.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            reloadRef.current?.focus();
+          }}
         >
           <AlertDialog.Title className={styles.title}>
             Trang vừa được cập nhật ở nơi khác
@@ -62,6 +69,7 @@ export function ConflictDialog() {
           <div className={styles.footer}>
             <AlertDialog.Action asChild>
               <Button
+                ref={reloadRef}
                 loading={pending}
                 onClick={(event) => {
                   // Keep the dialog until the new draft is in place.

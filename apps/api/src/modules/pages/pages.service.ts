@@ -39,7 +39,7 @@ import type { WorkspaceScope } from '../workspaces/workspace-scope.js';
 import { PAGE_NOT_FOUND, PageAccessService } from './page-access.service.js';
 import { revisionConflict } from './page-errors.js';
 import { PageEvaluator } from './page-evaluator.service.js';
-import { attentionOf, countPages, filterPages, paginatePages } from './page-list.js';
+import { attentionOf, countPages, filterPages, liveSiteUrlOf, paginatePages } from './page-list.js';
 import type { PageRecord } from './page.schema.js';
 import { type DraftContent, PagesRepository } from './pages.repository.js';
 import { newSectionId } from './section-id.js';
@@ -118,6 +118,7 @@ export class PagesService {
       })),
       nextCursor: page.nextCursor,
       counts: countPages(listed),
+      liveSiteUrl: liveSiteUrlOf(listed),
       attention: attentionOf(listed),
     };
   }

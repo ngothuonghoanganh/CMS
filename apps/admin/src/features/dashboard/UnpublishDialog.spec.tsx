@@ -1,7 +1,7 @@
 import { endpoints } from '@plp/contracts';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api';
 import { apiError, createTestQueryClient, renderWithProviders } from '../shell/test-utils';
@@ -33,6 +33,39 @@ function Harness({ page, onUnpublished }: { page: UnpublishablePage; onUnpublish
         open={open}
         onOpenChange={setOpen}
         onUnpublished={onUnpublished}
+      />
+    </>
+  );
+}
+
+/** Opened from a button that only a live page shows, as in a page's header. */
+function LiveOnlyOpener({ page }: { page: UnpublishablePage }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [live, setLive] = useState(true);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <h1 ref={titleRef} tabIndex={-1}>
+        {page.title}
+      </h1>
+      {live ? (
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(true);
+          }}
+        >
+          Gỡ trang này
+        </button>
+      ) : null}
+      <UnpublishDialog
+        page={page}
+        open={open}
+        onOpenChange={setOpen}
+        onUnpublished={() => {
+          setLive(false);
+        }}
+        fallbackFocusRef={titleRef}
       />
     </>
   );
@@ -139,5 +172,26 @@ describe('UnpublishDialog', () => {
       'Không kết nối được máy chủ. Kiểm tra kết nối mạng rồi thử lại.',
     );
     expect(screen.getByText('dialog open')).toBeInTheDocument();
+  });
+
+  it('hands the focus to the fallback when unpublishing removed what opened the dialog', async () => {
+    const user = userEvent.setup();
+    apiMock.mockResolvedValueOnce({ activityId: '64b000000000000000000401', revalidation: 'ok' });
+    renderWithProviders(<LiveOnlyOpener page={livePage()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Gỡ trang này' }));
+    await user.type(
+      screen.getByRole('textbox', { name: 'Lý do · ghi vào nhật ký hoạt động' }),
+      'Hết ưu đãi',
+    );
+    await user.click(confirmButton());
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+    expect(screen.queryByRole('button', { name: 'Gỡ trang này' })).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Tri ân khách hàng 2025' })).toHaveFocus();
+    });
   });
 });

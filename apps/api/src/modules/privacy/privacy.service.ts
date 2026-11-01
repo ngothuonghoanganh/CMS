@@ -93,6 +93,12 @@ export class PrivacyService {
     // Outside the transaction: a site can hold many leads. The update is idempotent, so saving
     // again repairs leads a failed attempt left behind (ADR-017).
     await this.leads.recomputeExpiry(scope, site._id, input.retentionMonths);
+    // Two saves at once may recompute out of order: the leads follow the period saved last.
+    const saved = await this.sites.findById(scope, site._id);
+    const retention = saved === null ? null : sitePrivacyOf(saved);
+    if (retention !== null && retention.retentionMonths !== input.retentionMonths) {
+      await this.leads.recomputeExpiry(scope, site._id, retention.retentionMonths);
+    }
     return this.settingsOf(updated, await this.versions.findCurrent(scope, site._id));
   }
 

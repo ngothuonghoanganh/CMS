@@ -113,6 +113,9 @@ export function LeadRecipientsDialog({
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (full) {
+      return;
+    }
     if (email.trim() === '') {
       setEmailError('Nhập email nhận lead');
       emailRef.current?.focus();
@@ -198,14 +201,23 @@ export function LeadRecipientsDialog({
                 autoComplete="email"
                 placeholder="ten@congty.vn"
                 value={email}
-                disabled={full}
+                // Unavailable at the limit, yet still focusable: the address just added may be
+                // the fifth while focus is here, and a disabled field would drop it out of the
+                // dialog.
+                readOnly={full}
+                aria-disabled={full || undefined}
                 onChange={(event) => {
                   setEmail(event.target.value);
                   setEmailError(null);
                 }}
               />
             </Field>
-            <Button type="submit" variant="secondary" loading={add.isPending} disabled={full}>
+            <Button
+              type="submit"
+              variant="secondary"
+              loading={add.isPending}
+              aria-disabled={full || undefined}
+            >
               Thêm
             </Button>
           </form>

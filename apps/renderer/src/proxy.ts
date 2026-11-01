@@ -35,8 +35,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       return NextResponse.rewrite(new URL(NOT_FOUND_ROUTE, request.url), { status: 404 });
     }
     if (decision.kind === 'redirect') {
-      // Next sends a same-host Location as a relative path, as the page's own redirect does.
-      return NextResponse.redirect(new URL(decision.location, request.url), 308);
+      // Next sends a same-host Location as a relative path, as the page's own redirect does. The
+      // visitor's query goes along: an ad's utm tags and click ids still reach the page.
+      const location = new URL(decision.location, request.url);
+      location.search = request.nextUrl.search;
+      return NextResponse.redirect(location, 308);
     }
     forwarded.set(LIVE_RELEASE_HEADER, decision.liveReleaseId);
   } catch (error) {

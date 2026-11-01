@@ -85,6 +85,16 @@ describe('proxy', () => {
     expect(getPathStatusMock).toHaveBeenCalledWith('smilecare', 'cu');
   });
 
+  it('keeps the visitor’s query on the redirect: utm tags and click ids reach the new slug', async () => {
+    getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '/moi' });
+    const response = await proxy(request('/cu?utm_source=zalo&utm_campaign=t11&gclid=abc123'));
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe(
+      'http://smilecare.localhost:3101/moi?utm_source=zalo&utm_campaign=t11&gclid=abc123',
+    );
+    expect(getPathStatusMock).toHaveBeenCalledWith('smilecare', 'cu');
+  });
+
   it('lets the page decide when the API names a redirect off the site', async () => {
     getPathStatusMock.mockResolvedValue({ kind: 'redirect', location: '//evil.example/x' });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);

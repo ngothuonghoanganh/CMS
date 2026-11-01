@@ -4,6 +4,7 @@ import { endpoints, type LeadCounts } from '@plp/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { api } from '../../lib/api';
+import { adoptServerRender } from '../shell/server-render';
 import type { LeadInboxFilters } from './filters';
 
 /**
@@ -45,12 +46,8 @@ export const leadQueryKeys = {
 export function useLeadCounts(siteId: string, serverCounts: LeadCounts, loadedAt?: number) {
   const queryClient = useQueryClient();
   useEffect(() => {
-    if (loadedAt === undefined) {
-      return;
-    }
-    const key = leadQueryKeys.counts(siteId);
-    if ((queryClient.getQueryState(key)?.dataUpdatedAt ?? 0) < loadedAt) {
-      queryClient.setQueryData(key, serverCounts, { updatedAt: loadedAt });
+    if (loadedAt !== undefined) {
+      adoptServerRender(queryClient, leadQueryKeys.counts(siteId), serverCounts, loadedAt);
     }
   }, [queryClient, siteId, serverCounts, loadedAt]);
   return useQuery({

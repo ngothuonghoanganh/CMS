@@ -128,8 +128,27 @@ export class ActivityRepository {
    * aggregation. Pages without any pointer event are absent from the map. Pass `tx` to read
    * inside a transaction (e.g. the undo re-check right before it moves the pointer).
    */
-  async latestPointerEvents(
+  latestPointerEvents(
     scope: WorkspaceScope,
+    pageIds: readonly ObjectId[],
+    tx?: Tx,
+  ): Promise<Map<string, ActivityRecord>> {
+    return this.latestPointerEventsWhere({ workspaceId: scope.workspaceId }, pageIds, tx);
+  }
+
+  /**
+   * The same for live pages of a site that public delivery resolved from its host (the sitemap):
+   * there is no member, so the site bounds the read.
+   */
+  latestPublicPointerEvents(
+    siteId: ObjectId,
+    pageIds: readonly ObjectId[],
+  ): Promise<Map<string, ActivityRecord>> {
+    return this.latestPointerEventsWhere({ siteId }, pageIds);
+  }
+
+  private async latestPointerEventsWhere(
+    owner: { workspaceId: ObjectId } | { siteId: ObjectId },
     pageIds: readonly ObjectId[],
     tx?: Tx,
   ): Promise<Map<string, ActivityRecord>> {
@@ -141,7 +160,7 @@ export class ActivityRepository {
       .aggregate<{ _id: ObjectId; latest: ActivityRecord }>([
         {
           $match: {
-            workspaceId: scope.workspaceId,
+            ...owner,
             pageId: { $in: unique },
             type: { $in: [...POINTER_EVENT_TYPES] },
           },

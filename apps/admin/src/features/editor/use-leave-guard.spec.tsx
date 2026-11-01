@@ -6,7 +6,7 @@ import { installHistoryGuard } from '../shell/history-guard';
 import { currentSaveResponse, type EditorStore } from './store';
 import { makeStore } from './test-fixtures';
 import { DraftConflictError } from './use-draft-saver';
-import { useLeaveGuard } from './use-leave-guard';
+import { useBeforeUnloadGuard, useLeaveGuard } from './use-leave-guard';
 
 const HERO = 'hero00000001';
 
@@ -56,8 +56,60 @@ function pressBack() {
   });
 }
 
+/** An edit whose autosave failed (network): "Chưa lưu được" until a retry or the next edit. */
+function failSave(store: EditorStore) {
+  store.getState().setSpacing(HERO, 'compact');
+  store.getState().markSaveFailed({ kind: 'retryable', message: 'Không kết nối được máy chủ' });
+}
+
+function BeforeUnloadGuarded({ store }: { store: EditorStore }) {
+  useBeforeUnloadGuard(store);
+  return null;
+}
+
+/** Closing or reloading the tab; returns whether the page asked the browser to confirm. */
+function closeTab(): boolean {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('useBeforeUnloadGuard', () => {
+  it.each([
+    [
+      'an edit waiting for autosave',
+      (store: EditorStore) => {
+        store.getState().setSpacing(HERO, 'compact');
+      },
+    ],
+    [
+      'a save on its way',
+      (store: EditorStore) => {
+        store.getState().setSpacing(HERO, 'compact');
+        store.getState().markSaving();
+      },
+    ],
+    ['a failed save', failSave],
+  ])('asks before the tab closes with %s', (_state, reach) => {
+    const store = makeStore();
+    render(<BeforeUnloadGuarded store={store} />);
+    reach(store);
+    expect(closeTab()).toBe(true);
+  });
+
+  it('lets the tab close when everything is saved, and stops asking once unmounted', () => {
+    const store = makeStore();
+    const { unmount } = render(<BeforeUnloadGuarded store={store} />);
+    expect(closeTab()).toBe(false);
+
+    store.getState().setSpacing(HERO, 'compact');
+    unmount();
+    expect(closeTab()).toBe(false);
+  });
 });
 
 describe('useLeaveGuard with the browser Back button', () => {
@@ -178,5 +230,29 @@ describe('useLeaveGuard with links', () => {
       'Saving the draft before leaving the editor failed',
       expect.any(TypeError),
     );
+  });
+});
+
+describe('useLeaveGuard after a failed save', () => {
+  it('asks before following a link', async () => {
+    const user = userEvent.setup();
+    const { store, push } = setup();
+    failSave(store);
+    await user.click(screen.getByRole('button', { name: 'Lịch sử phiên bản' }));
+    expect(screen.getByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeVisible();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('keeps the router from going Back and asks', () => {
+    vi.spyOn(window.history, 'pushState');
+    const router = vi.fn();
+    window.addEventListener('popstate', router);
+    const { store, push } = setup();
+    failSave(store);
+    pressBack();
+    expect(router).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Rời editor khi chưa lưu xong?' })).toBeVisible();
+    expect(push).not.toHaveBeenCalled();
+    window.removeEventListener('popstate', router);
   });
 });
